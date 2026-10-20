@@ -16,6 +16,7 @@ public class CreditSeekKeyTest {
     private static final String AUTHOR = "https://rezics.com/id/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2";
     private static final String DIRECTOR = "https://rezics.com/id/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3";
     private static final String UNKNOWN = "https://rezics.com/id/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4";
+    private static final String PERFORMER = "https://rezics.com/id/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa5";
     private static final String SCHEMA = "https://schema.org/";
 
     private static Node uri(String value) { return NodeFactory.createURI(value); }
@@ -39,9 +40,17 @@ public class CreditSeekKeyTest {
         String studio = TemplateIndexService.creditSeekKey("animation-studio", "0", AUTHOR);
         String translator = TemplateIndexService.creditSeekKey("translator", "99", AUTHOR);
         String editor = TemplateIndexService.creditSeekKey("editor", "0", AUTHOR);
+        String transcriber = TemplateIndexService.creditSeekKey("transcriber", "0", AUTHOR);
+        String performer = TemplateIndexService.creditSeekKey("performer", "0", PERFORMER);
         assertEquals("0:000:" + AUTHOR, author);
         assertEquals("0:002:" + AUTHOR, laterAuthor);
         assertEquals("1:000:" + DIRECTOR, director);
+        assertEquals("2:000:" + AUTHOR, artist);
+        assertEquals("3:000:" + AUTHOR, studio);
+        assertEquals("4:099:" + AUTHOR, translator);
+        assertEquals("5:000:" + AUTHOR, editor);
+        assertEquals("6:000:" + AUTHOR, transcriber);
+        assertEquals("7:000:" + PERFORMER, performer);
         assertTrue(author.compareTo(laterAuthor) < 0);
         assertTrue(laterAuthor.compareTo(sameOrdinal) < 0);
         assertTrue(sameOrdinal.compareTo(director) < 0);
@@ -49,6 +58,8 @@ public class CreditSeekKeyTest {
         assertTrue(artist.compareTo(studio) < 0);
         assertTrue(studio.compareTo(translator) < 0);
         assertTrue(translator.compareTo(editor) < 0);
+        assertTrue(editor.compareTo(transcriber) < 0);
+        assertTrue(transcriber.compareTo(performer) < 0);
         assertNull(TemplateIndexService.creditSeekKey("cast", "0", AUTHOR));
         assertNull(TemplateIndexService.creditSeekKey("author", "", AUTHOR));
         assertNull(TemplateIndexService.creditSeekKey("author", "1000", AUTHOR));
@@ -76,6 +87,16 @@ public class CreditSeekKeyTest {
             assertEquals(Set.of(new TemplateIndexService.Key(TemplateIndexService.CURRENT, TemplateIndexService.RV + "work",
                 WORK, TemplateIndexService.RV + "NativeAgentCredit")), TemplateIndexService.keys(director));
             assertTrue(author.terms().get("creditKey").get(0).compareTo(director.terms().get("creditKey").get(0)) < 0);
+
+            add(data, PERFORMER, RDF.type.asNode(), uri(TemplateIndexService.RV + "NativeAgentCredit"));
+            add(data, PERFORMER, uri(TemplateIndexService.RV + "work"), uri(WORK));
+            add(data, PERFORMER, uri(SCHEMA + "roleName"), NodeFactory.createLiteralString("performer"));
+            TemplateIndexService.Entity performer = TemplateIndexService.entity(data, TemplateIndexService.CURRENT, PERFORMER);
+            assertEquals(List.of("7:000:" + PERFORMER), performer.terms().get("creditKey"));
+            assertEquals(List.of("performer"), performer.terms().get("roleName"));
+            assertEquals(Set.of(new TemplateIndexService.Key(TemplateIndexService.CURRENT, TemplateIndexService.RV + "work",
+                WORK, TemplateIndexService.RV + "NativeAgentCredit")), TemplateIndexService.keys(performer));
+            assertTrue(director.terms().get("creditKey").get(0).compareTo(performer.terms().get("creditKey").get(0)) < 0);
 
             add(data, UNKNOWN, RDF.type.asNode(), uri(TemplateIndexService.RV + "NativeAgentCredit"));
             add(data, UNKNOWN, uri(TemplateIndexService.RV + "work"), uri(WORK));

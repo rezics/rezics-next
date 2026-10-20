@@ -1,0 +1,182 @@
+{
+  "profile": "retained-media-use-denial-diagnosis-v1",
+  "worker": "G-2748",
+  "goal": "audit-remediation-20261019",
+  "scope": "Stack-free inspection of one retained genuine Use403; additive diagnosis only",
+  "verdict": {
+    "sourceContractMismatch": "ESTABLISHED: the request omits context; the frozen route supplies the default context, but Content persisted a non-null origin Realm and Media requires that exact Realm",
+    "historicalRejectingBoundary": "UNCONFIRMED: the retained 403 body is unreadable and the retained logs do not identify the throwing boundary",
+    "productFix": "None proposed or implemented in this cut",
+    "findingClosure": "None; original D2-003 image outcomes were not reached"
+  },
+  "pins": {
+    "workerBase": "4f3e044cbb6debd2ab6ae77f95f8d199a5de1ef3",
+    "instructionReadAtMain": "ae07565e3252c5487c211097a5e50cd4b30f2b38",
+    "decision": "docs/goals/audit-remediation-20261019/tasks/G-2748.md, final Decision dated 2026-10-20T11:26:32Z",
+    "frontend": "e9cf1b02b6d941e6dfab82272c24b3716b786774",
+    "frontendTree": "92f014675dbf1db2b98e5e25cdb65b47a2887b32",
+    "backendProduct": "76c5955006dbea2016e84465d8f3e79fdf4fc979",
+    "backendProductTree": "296f4df5e406447b59ec4c693b6fd19ef9201539",
+    "backendSupport": "d2f04140fe615eadef0379a52c26291e6e083217",
+    "backendSupportTree": "593cb2702b13ddbe019297c882ea62cc4ba8bbb3",
+    "independentReport": "e1d976585c",
+    "acceptedConsumer": [
+      "7d3e19b7d37ee7dfcd57d55dbe9bcdc07aaa5488",
+      "f610f1da0061bb7dda9b05552e715daf15a5411f"
+    ],
+    "acceptedSourceReports": ["fa812c2e9df7", "32d5e97f0d89"]
+  },
+  "evidence": {
+    "mainBundle": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/current-main-e9cf1b02b6d9/",
+    "artifactManifest": {
+      "path": "artifact-manifest.json",
+      "sha256": "8a4aac5168d54f42b8d525299da9fe9c4de3420d6bc93c7ccbaeae3e34e79d78",
+      "verifiedFiles": 39,
+      "mismatches": 0
+    },
+    "files": [
+      {"path": "actual-product-result.json", "sha256": "1b79832dfacbeaa53284edb81c3d5fd249a6802dd0470bd94826799085ddfb69"},
+      {"path": "actual-product-proof-record.json", "sha256": "c6f717e128caed9e6601141658e0e59a5e9d01c24091e1ddc29d2e20f2c15bae"},
+      {"path": "consumer-manifest.json", "sha256": "e1277855013cc7a5ad0668fc79c253cbab522649b1cd33b3645fee20894e5aac"},
+      {"path": "backend-handoff.md", "sha256": "58eab88bd98ae147fb3d2f91b04d9db6b18ae4d382dabb2fae2cf2682e0c242a"},
+      {"path": "cleanup-and-lease-release.json", "sha256": "f4568678e12829ec377040e4f314a52bc370ce8030ff758442788bd30775ff6a"}
+    ],
+    "retainedSubstantiveJob": "4124543b-79f9-4eb9-bf8c-997a7d95070a",
+    "logLimits": [
+      "frontend.log:53-57 records draft201, upload201, activation201, inference201, Use403; it contains no owner exception",
+      "jobs/4124543b-79f9-4eb9-bf8c-997a7d95070a.log records the 540000ms browser timeout and failed child status; it contains no owner rejection decision",
+      "The frozen launch's existing start.ts:7 uses ignored stdout/stderr; owner.ts:21 suppresses console methods. This establishes a retention limit, not a new instrumentation request"
+    ],
+    "backendCustodyFiles": {
+      "handoff": ".temp/worktrees/g-2823/.temp/lifecycle/site-image-backend-handoff.md",
+      "preflight": ".temp/worktrees/g-2823/.temp/lifecycle/released-copy-20261020/preflight.json",
+      "frozenCheckout": ".temp/worktrees/g-2791/.temp/corpus-transition/book-current-20261020-r1/checkout",
+      "supportDelta": [
+        "tests/qa/fixtures/audit-corpus-contract.ts",
+        "tests/qa/fixtures/catalogue-public-domain.ts",
+        "tests/qa/support/audit-execution.ts",
+        "tests/qa/support/catalogue-public-domain.ts"
+      ],
+      "productionSourceChangedBySupport": false
+    }
+  },
+  "retainedOperation": {
+    "at": "2026-10-20T11:00:51.051Z",
+    "method": "POST",
+    "path": "/api/main/v1/media/uses",
+    "status": 403,
+    "idempotencyKey": "c02ed85c-27b4-45f6-8e57-4f1b8ae2f856:use",
+    "responseBody": "unreadable; no problem code or error message inferred",
+    "request": {
+      "actingSubject": "https://rezics.com/id/5c4e27f1-4e3d-40da-89e6-e248d38fdf0a",
+      "target": "https://rezics.com/id/50a491a1-9281-40dd-ac73-6b500d9fc6da",
+      "memberReplyDraft": {
+        "profile": "member-reply-draft-image-v1",
+        "variantId": "urn:rezics:variant:59b62618-5a98-4f0a-9714-ded084194f9e",
+        "expectedHead": "276f7cbe-c882-4362-a8ba-59943327dc7b",
+        "rootTarget": "https://rezics.com/id/01a15329-a5c8-760d-b1d5-22382dba559b",
+        "rootRevision": "https://rezics.com/id/01a15329-a5c8-760f-a3ba-d094775a7c6d"
+      },
+      "representation": "9951f037-3f84-44a0-b9e8-f1e439b7d63b",
+      "occurrence": "51170971-a226-447f-b414-cbbe54322ed7",
+      "conceal": false
+    },
+    "outcomeAssertionReached": false
+  },
+  "acknowledgedComparisons": {
+    "receiptIndexConvention": "Zero-based actual-product-result.json receipts",
+    "actingSubject": "Use request, session-agent PUT200 (receipt0), draft201 (receipt8), reserve201 (receipt9), and inference201 (receipt11) carry the same actor",
+    "account": "Normal PKCE sign-in200 returns the expected Account reference dDlG0fQ9UK3CKu6XB342VxNbPraY64wC; this is not a retained Access principal/authority decision for Use",
+    "replyVariantHead": "Use target/variantId/expectedHead equal receipt8 body reply/variantId/revisionId exactly",
+    "root": "Use rootTarget/rootRevision equal the acknowledged draft request and selected retained Work revision exactly",
+    "originRealm": "https://rezics.com/id/01a15329-8fb1-70b5-ab3e-a07479b4bc0d",
+    "originEvidence": "Receipt8 request.originRealm; reply-draft.ts:153-163 serializes it, core.ts:869-887 persists the revision and reply_author.origin_realm before returning success; core.ts:810-819 makes that origin immutable",
+    "activation": "Receipt10 body acknowledges status activated, clearance cleared, and the exact Use representation",
+    "inference": "Receipt11 has status201 and the same actor/representation/digest; its body is unreadable, so no additional inference outcome is asserted",
+    "context": "The exact retained Use request has no context property"
+  },
+  "sourcePredicate": {
+    "requiredEquality": "input.context === (draft.origin_realm ?? DEFAULT_MEDIA_CONTEXT)",
+    "rejectingCondition": "input.context !== (draft.origin_realm ?? DEFAULT_MEDIA_CONTEXT)",
+    "normalizedRequestContext": "urn:rezics:media:context:default",
+    "persistedDraftOriginRealm": "https://rezics.com/id/01a15329-8fb1-70b5-ab3e-a07479b4bc0d",
+    "requiredEqualityValue": false,
+    "rejectingConditionValue": true,
+    "derivation": [
+      "The public documentUseCommand permits context omission",
+      "routes/media.ts:504-511 supplies body.context ?? DEFAULT_MEDIA_CONTEXT",
+      "media/contract.ts:8 defines that default as urn:rezics:media:context:default",
+      "The non-replayed draft201 acknowledges the submitted immutable origin Realm",
+      "media/presentation.ts:376-380 compares that origin to the normalized context and throws MediaFenced('reply image basis differs') if unequal"
+    ],
+    "consumerSourceTrace": [
+      "post-composer/image-draft.ts:31-32 returns reply/head/root coordinates while omitting the origin Realm; lines52-57 sent that Realm to the acknowledged draft operation",
+      "document-editor/image-target.ts:8-9 and17-29 carry those coordinates into a Use binding without context",
+      "document-editor/local-image.ts:14,31-34 sends that binding for this upload; image-uses.ts:44-46 consumes the same binding for reconciliation"
+    ],
+    "historicalAttributionLimit": "This proves the request cannot satisfy the frozen Media context contract if execution reaches that comparison. It does not establish that the historical request reached it: Account verification, Access register/claim and final authority fencing execute first and may also map to403. No denied body, Access decision or Media exception is reconstructed"
+  },
+  "authorityTrace": {
+    "selectedAction": "media.member-reply.use",
+    "selectedScope": "content:draft:https://rezics.com/id/50a491a1-9281-40dd-ac73-6b500d9fc6da",
+    "accountScope": "comment:create",
+    "rootMetadata": "baselineRelatedWork and baselineSourceRevision are taken from the supplied memberReplyDraft root coordinates",
+    "syntacticIntent": "The retained native reply/root/revision forms satisfy admission.ts:126-136; they select rooted Person reply authority, not the ordinary Work publish branch",
+    "runtimeAuthority": "Unobserved for this Use; the earlier draft201 and upload201 do not prove the later Use register/claim/final-fence decision",
+    "statusAmbiguity": "routes/media.ts:59-76 maps AdmissionDenied/Expired, MediaDenied and MediaFenced to403, including the context mismatch. A generic readable authority_denied response alone would not distinguish those sites",
+    "oldTargetDiagnosis": "The older Work-publish mismatch diagnosis is not reused for this exact native-reply request"
+  },
+  "sourceReferences": [
+    {"pin": "backendProduct", "path": "services/main/src/routes/media.ts", "lines": "59-76,504-513"},
+    {"pin": "backendProduct", "path": "services/main/src/modules/media/contract.ts", "lines": "8"},
+    {"pin": "backendProduct", "path": "services/main/src/modules/media/presentation-contract.ts", "lines": "58-63"},
+    {"pin": "backendProduct", "path": "services/main/src/modules/media/commands.ts", "lines": "78-150,363-379"},
+    {"pin": "backendProduct", "path": "services/main/src/modules/media/presentation.ts", "lines": "346-413"},
+    {"pin": "backendProduct", "path": "services/main/src/modules/content-publication/reply-draft.ts", "lines": "153-174,203-247"},
+    {"pin": "backendProduct", "path": "services/content/src/core.ts", "lines": "810-819,869-889"},
+    {"pin": "backendProduct", "path": "services/main/src/modules/access/admission.ts", "lines": "113-136,1561-1575,1923-1936"},
+    {"pin": "backendProduct", "path": "services/main/src/modules/access/baseline.ts", "lines": "107-122,306-314,384-400"},
+    {"pin": "frontend", "path": "apps/web/features/post-composer/image-draft.ts", "lines": "21-73"},
+    {"pin": "frontend", "path": "apps/web/features/document-editor/image-target.ts", "lines": "7-38"},
+    {"pin": "frontend", "path": "apps/web/features/document-editor/local-image.ts", "lines": "9-37"},
+    {"pin": "frontend", "path": "apps/web/features/document-editor/image-uses.ts", "lines": "38-52"}
+  ],
+  "oneMissingExistingOwnerObservation": {
+    "observation": "The rejecting owner boundary and exception class for c02ed85c-27b4-45f6-8e57-4f1b8ae2f856:use at 2026-10-20T11:00:51.051Z: was it Media's immutable reply/context comparison, or a preceding Account/Access check?",
+    "owner": "G-2823, through goal-audit-remediation-20261019",
+    "nextExecutableOwnerOperation": "Inspect only already retained owner-side decision/error evidence for that exact operation, timestamp, actor and native reply at backend 76c5955006dbea2016e84465d8f3e79fdf4fc979 / support d2f04140fe615eadef0379a52c26291e6e083217. Return the rejecting boundary/class if retained; otherwise explicitly return 'not retained'. No write replay, API probe, new observation mechanism or instrumentation is requested",
+    "afterOwnerReturn": "Manager decides a separate admitted correction using the established context-contract counterexample and any retained owner attribution. G-2830 then receives a repaired source/runtime pin for the unchanged original image proof"
+  },
+  "preservedEvidenceAndCustody": {
+    "nineFileComposition": "All nine worktree files byte-match consumer-manifest.json; no product or test source changed",
+    "mainTitleInputFocusRemovals": "All FOUR preserved; composer.tsx retains manifest SHA256 8e087e1bd308bf58eb808d4b5ebf099ba7055db28e2414665ab24444a00e2e95",
+    "unitReceiptReused": {
+      "job": "69f2a482-a3b3-4ae7-9d5b-fd060fa9f156",
+      "pin": "f610f1da0061bb7dda9b05552e715daf15a5411f",
+      "result": "16 tests / 80 assertions PASS, reused without replay",
+      "files": [
+        "apps/web/features/document-editor/member-reply-images.test.ts",
+        "apps/web/features/post-composer/image-draft.test.ts"
+      ]
+    },
+    "currentMainStaticReceiptReused": "e2751930-9bb3-48a5-922e-bbf4732b20ad at 15914e4a00eac303136bd7d55b0e3f7083cafb3a; types/lint/ast/guards/canonical inference PASS; no baseline relaxation",
+    "waveStaticHistory": "f550ae56-80f9-4dfa-99fc-d93a9f7050c7: types/lint/ast/canonical inference PASS; 124/125 guards PASS with the three unchanged out-of-slice production projection findings retained in consumer-manifest.json",
+    "originalAssertions": "Unchanged; no original browser assertions executed in this turn",
+    "D2-002": "Accepted evidence retained",
+    "D2-003": "OPEN: genuine bound image, current complete save/reopen, preview/metadata failure, Retry/Remove/export, and recovery focus at 1440/390 in en/zh-Hans remain due",
+    "originalLowLevelUploadException": "Unresolved; not reinterpreted as this 403",
+    "singleCharacterRestorationMismatch": "Unconfirmed; no repair claimed",
+    "imageLease": "site-image-book-current-20261020-r1 released in the retained cleanup receipt",
+    "defaultLease": "default-capture-book-current-20261020-r1 remains protected; no runtime custody action taken",
+    "oauthRevocation": "Final attempt unconfirmed; no authentication action taken",
+    "backendAuthStopOwner": "G-2823",
+    "sourceReviewReplayed": false,
+    "serverBrowserOrStackStarted": false,
+    "sharedDataWrites": false
+  },
+  "instructionEffect": {
+    "file": "docs/goals/audit-remediation-20261019/tasks/G-2748.md at ae07565e3252c5487c211097a5e50cd4b30f2b38",
+    "quote": "Inspect existing source and retained logs only. State the exact failing predicate if established, otherwise the one missing existing-owner observation. Do not infer a denied response body.",
+    "effect": "Published an additive source/evidence diagnosis and one owner observation. No consumer repair, accepted-review replay, runtime/API/OAuth operation or historical evidence edit was authorized by this cut"
+  }
+}

@@ -333,3 +333,9 @@ export const contentEligibilityWriteResult = t.Object({
   decision: nullableRef, receipt: ref, graphDataEpoch: ref,
   graphSequence: ref, replayed: t.Boolean(),
 });
+
+export const contentEligibilityWithdrawalResult = t.Object({
+  profile: t.Literal('content-search-eligibility-withdrawal-v1'), outcome: t.Literal('succeeded'),
+  resourceId: ref, variantId: ref, publicationDecision: ref, withdrawnEligibilityHead: ref,
+  decision: ref, receipt: ref, graphDataEpoch: ref, graphSequence: ref, replayed: t.Boolean(),
+});

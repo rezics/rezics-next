@@ -5,7 +5,8 @@ import { Value } from 'typebox/value';
 import { closedStringEnum, templateParameters, templateRequest } from '../src/modules/query/template-schema.ts';
 import { template } from '../src/modules/query/templates/work-credits.schema.ts';
 import { CREDIT_SEEK_ROLES, creditSeekKey } from '../src/modules/query/seek-index.ts';
-import { creditItem, NATIVE_CREDIT_ROLES, WORK_CREDIT_ROLES } from '../src/modules/work/read-contract.ts';
+import { creditItem, nativeCreditRole, NATIVE_CREDIT_ROLES, WORK_CREDIT_ROLES } from '../src/modules/work/read-contract.ts';
+import { nativeCreditDigest } from '../src/modules/profiles/credits.ts';
 
 const root = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
 const credit = 'https://rezics.com/id/00000000-0000-4000-8000-000000000002';
@@ -18,8 +19,8 @@ const request = {
 
 test('work credit roles are a closed list in public order and an unknown role is refused', () => {
   expect(closedStringEnum(template.request, 'role')).toEqual([...WORK_CREDIT_ROLES]);
-  expect(CREDIT_SEEK_ROLES.filter(role => (WORK_CREDIT_ROLES as readonly string[]).includes(role))).toEqual([...WORK_CREDIT_ROLES]);
-  expect(CREDIT_SEEK_ROLES.filter(role => role !== 'transcriber').sort()).toEqual([...NATIVE_CREDIT_ROLES].sort());
+  expect<string[]>(CREDIT_SEEK_ROLES.filter(role => (WORK_CREDIT_ROLES as readonly string[]).includes(role))).toEqual([...WORK_CREDIT_ROLES]);
+  expect<string[]>(CREDIT_SEEK_ROLES.filter(role => role !== 'transcriber').sort()).toEqual([...NATIVE_CREDIT_ROLES].sort());
   const open = templateRequest('https://rezics.com/query/example', t.Object({
     roots: templateParameters.roots, role: t.Optional(t.String()),
   }, { additionalProperties: false }));
@@ -45,7 +46,13 @@ test('credit seek keys rank author, director, artist and animation studio before
     creditSeekKey('translator', 99, first),
     creditSeekKey('editor', 0, second),
     creditSeekKey('transcriber', 0, first),
+    creditSeekKey('performer', 0, first),
   ];
+  expect(WORK_CREDIT_ROLES).toEqual(['author', 'director', 'artist', 'animation-studio', 'translator', 'editor', 'transcriber', 'performer']);
+  expect(keys).toEqual([
+    `0:000:${first}`, `0:002:${second}`, `1:000:${second}`, `2:000:${first}`,
+    `3:000:${second}`, `4:099:${first}`, `5:000:${second}`, `6:000:${first}`, `7:000:${first}`,
+  ]);
   expect(keys).toEqual([...keys].sort());
   expect(creditSeekKey('author', 2, first)! < creditSeekKey('author', 2, second)!).toBe(true);
   expect(creditSeekKey('cast', 0, first)).toBeNull();
@@ -92,4 +99,22 @@ test('a credit item accepts an Open Library author and a native animation studio
   expect(Value.Check(creditItem, studio)).toBe(true);
   expect(Value.Check(creditItem, { ...studio, role: 'cast' })).toBe(false);
   expect(Value.Check(creditItem, { ...studio, participantKind: 'external-reference' })).toBe(false);
+});
+
+test('native Performer admits either exact participant alternative without inferring an Agent', () => {
+  const common = { work: root, credit, role: 'performer' as const, expectedWorkHead: root, actingSubject: root };
+  const external = { kind: 'external-reference' as const, provider: 'vndb', namespace: 'staff', key: 's17' };
+  const agentDigest = nativeCreditDigest({ ...common, agent: root });
+  const externalDigest = nativeCreditDigest({ ...common, participant: external, ordinal: 2 });
+  expect(Value.Check(nativeCreditRole, 'performer')).toBe(true);
+  expect(agentDigest).toMatch(/^[0-9a-f]{64}$/);
+  expect(externalDigest).toMatch(/^[0-9a-f]{64}$/);
+  expect(agentDigest).not.toBe(externalDigest);
+  expect(externalDigest).not.toBe(nativeCreditDigest({ ...common, participant: { ...external, namespace: 'person' }, ordinal: 2 }));
+  expect(() => nativeCreditDigest({ ...common, agent: root, participant: external })).toThrow();
+  expect(Value.Check(creditItem, { id: credit, role: 'performer', participantKind: 'agent',
+    provider: null, key: null, ordinal: null, agent: root, displayName: null, handle: null })).toBe(true);
+  expect(Value.Check(creditItem, { id: credit, role: 'performer', participantKind: 'external-reference',
+    provider: external.provider, namespace: external.namespace, key: 's17', ordinal: 2,
+    agent: null, displayName: null, handle: null })).toBe(true);
 });

@@ -78,6 +78,7 @@ export default {
 
   // The list
   posts: '게시물', loadMore: '게시물 더 보기', loadingMore: '게시물을 더 불러오는 중…',
+  refreshing: '게시물을 새로고침하는 중…',
   newPosts: plural({ one: insert('새 게시물 {{count}}개'), other: insert('새 게시물 {{count}}개') },
     { count: asValue(number()) }),
   newPostsAtLeast: plural({ one: insert('새 게시물 {{count}}개 이상'), other: insert('새 게시물 {{count}}개 이상') },

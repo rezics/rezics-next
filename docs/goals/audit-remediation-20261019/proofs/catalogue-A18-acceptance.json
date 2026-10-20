@@ -1,0 +1,127 @@
+{
+  "format": "catalogue-original-A18-product-proof-v1",
+  "observedAt": "2026-10-19T10:44:39.555959+00:00",
+  "finding": "A18",
+  "originalFinding": "C2-002",
+  "originalSource": ".temp/catalogue-audit-20261018/books-recipes/report.md:97",
+  "status": "CLOSED-original-applicable-assertions-passed-and-landed",
+  "classClosed": true,
+  "frontend": "5a99c7d18979ebed15fca6ac6ef60b55ec9d68f4",
+  "backendProduct": "4a616b079a364b8f5ac7fe4d4ff56bc99849e766",
+  "backendSupportOverlay": "1f1032cc60369a69bb07695b1b37e6a409c0ac56",
+  "ownerReady": {
+    "path": ".temp/worktrees/g-2791/.temp/goal/a18-retained-owner-ready.json",
+    "sha256": "66c90d17130bb8ecb8a6354caace08ddc374e63f40bbc847e4a2d6588734359e"
+  },
+  "positive": {
+    "desktop": {
+      "directory": ".temp/audit-remediation-20261019/two-hour-sprint/trace/a18-positive-v2/run-5a99c7d18979-desktop-1792406419475",
+      "runReceiptSha256": "6ad34b835f68b618d3c3b02d6e290df05c148b2358120fbe9b1a85239c5c5460",
+      "resultSha256": "32a46d6918a4d7c74f4a1e6fbb50fb37c00fb1b133f0396ec53b1c2024979393",
+      "stats": {
+        "startTime": "2026-10-19T10:41:10.517Z",
+        "duration": 33608.572,
+        "expected": 1,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "screenshotsActuallyViewed": true,
+      "screenshots": {
+        "genuine-cooking-open": "09a4cbb1a0b88338a4f3dae5cd2b44076fd8640d454b2f18bab6f0e137a6cb46",
+        "genuine-cooking-closed": "ffd001a6989dfd673245d0c029e65afce5cf1f11708ff9374d0049da1ae75f9b"
+      },
+      "prerequisites": [
+        {
+          "path": "/v1/works/01a1532a-2e60-7260-9f3a-d6aa69f61c4b",
+          "status": 200,
+          "sha256": "bd83ac17c303ca96617d5e2ce0f6d80406c757f3aefc67f94a480e7f3c878e91",
+          "bytes": 3057,
+          "file": "header.response.json"
+        },
+        {
+          "path": "/v1/recipes/works/01a1532a-2e60-7260-9f3a-d6aa69f61c4b",
+          "status": 200,
+          "sha256": "0a5a425dee266f3521689cc777ed446106c4ff8798700249001daa6f94728d92",
+          "bytes": 12820,
+          "file": "recipe.response.json"
+        }
+      ],
+      "frontendStopped": true
+    },
+    "phone": {
+      "directory": ".temp/audit-remediation-20261019/two-hour-sprint/trace/a18-positive-v2/run-5a99c7d18979-phone-1792406528269",
+      "runReceiptSha256": "e721d180247cc38bd44972fd49b868551e716112789915fbbd93383f2c67fe89",
+      "resultSha256": "250ac0e8960b3cd3202626bacf0fc259a648ed63e167e693028c7e55b76e8a5b",
+      "stats": {
+        "startTime": "2026-10-19T10:43:07.404Z",
+        "duration": 22063.373,
+        "expected": 1,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "screenshotsActuallyViewed": true,
+      "screenshots": {
+        "genuine-cooking-open": "9e7c2cc03aa04fd25d3fc78a2c778bb7f17445dcc3114b192749c54c9e43eea8",
+        "genuine-cooking-closed": "b7c7da9c44e09823789816bc2ba14a2ffdcce3ef7bbd58fe3611d9c53b4e887d"
+      },
+      "prerequisites": [
+        {
+          "path": "/v1/works/01a1532a-2e60-7260-9f3a-d6aa69f61c4b",
+          "status": 200,
+          "sha256": "bd83ac17c303ca96617d5e2ce0f6d80406c757f3aefc67f94a480e7f3c878e91",
+          "bytes": 3057,
+          "file": "header.response.json"
+        },
+        {
+          "path": "/v1/recipes/works/01a1532a-2e60-7260-9f3a-d6aa69f61c4b",
+          "status": 200,
+          "sha256": "0a5a425dee266f3521689cc777ed446106c4ff8798700249001daa6f94728d92",
+          "bytes": 12820,
+          "file": "recipe.response.json"
+        }
+      ],
+      "frontendStopped": true
+    }
+  },
+  "negativeCarryReceipt": "catalogue-C28-progress-A18-proof-carry.json",
+  "negativeCarry": {
+    "actual200nullDesktopPhone": "a636f3b460aa89d80e4a454bef2ececa9dedf128 on genuine75409 backend, original selected C31 body/helpers unchanged; disabled Cook/useful unavailable explanation",
+    "actual503Phone": "c66950b774beef9727ad5f1a9142cf425b992fb8, real Recipe identity/useful failure/Retry/disabled Cook",
+    "dependencyEquivalence": "recipeWorkFrame/RecipeReadFailure/null branch byte identical through65f74 to2cc223; eligibility/actions/RegionFailure/Retry65f74 to2cc. Recorded exact carry receipt, no unchanged rerun."
+  },
+  "productAudit": {
+    "skill": ".agents/skills/product-audit/SKILL.md",
+    "reviewedBeforeAcceptance": true,
+    "invariant": "Advertised Cook availability follows actual same-Work/public Recipe readiness; usable content has perceivable open/close, missing content explains disabled operation, failed read offers Retry.",
+    "api": "Real anonymous Work200 published Recipe and current structure/revision, 8original ingredient lines/8actual methods match retained source/publication/preparation/execution byte hashes. Frontend BFF exact same API200/identity.",
+    "ui": "1440x900 desktop and390x844 phone, enabled Cook opens actual dialog with all8ingredients and8method steps in order; dialog exactWork/structure/revision; Close removesdialog/focusreturnsCook/identityretained. No mocks/response overrides/business writes.",
+    "surfaces": "Common Recipe readiness/actions/Cook owner and negative failure branch, body unchanged; no parallel native/conversion authority.",
+    "unchangedChecks": "Actual G2841fd09 reviewed22productionpaths, WORK-REVIEW-07 only2fixturecallers corrected5a99/types1812+5tests PASS.",
+    "remainingOutsideOriginalA18": [
+      "C27 full servings/nutrition/substitution rich domain",
+      "C28 Book release correspondence/return progress",
+      "A08 sameidentityfault-to-Retry recovery",
+      "A16 all six header families"
+    ],
+    "closureSweepAt": "2026-10-19T11:08:30.507994Z",
+    "scopeDisposition": "Original C2-002 public nonnull, null and read-failure states checked across shared Recipe readiness/action/Cook owner, desktop and phone. Native API/publication/source truth preserved. Null/failed branches plus exact unchanged dependencies reused; no unrelated C27, A08, A11 or whole-catalogue prerequisite."
+  },
+  "independentReview": "fd09b3f8b597bd5ddc321058074862b91f83c0f0 actualcodex1/xhigh22productionpaths; targeted caller correction5a99 as requested",
+  "integration": {
+    "currentMain": "6430441893f5c3609efd97b3921a21a85eab0707",
+    "landing": "e5dd6c7f62898ca1d3dc5e6702d6eaa2ea341d47",
+    "manager": "manager-43785512-a42d-4297-9f12-755582404e31",
+    "status": "actual-main-ancestor-verified",
+    "frontendPathsCompared": 22,
+    "allCandidateBlobsEqualMain": true,
+    "equivalenceReceipt": {
+      "path": ".temp/audit-remediation-20261019/two-hour-sprint/catalogue-A18-main-equivalence.json",
+      "sha256": "95dce62ff7930c3c03e14441273457a2bac7542acd974301827fae1b4022e0cc"
+    },
+    "normalCumulativeGates": "Actual main integration passed types, affected unit/guard files, inference616.0s, lint and AST; normal snapshot status landed."
+  },
+  "preservedSetupFailure": "First run1792406312127 Playwright CommonJS import.meta rejected precollection. Scratchpackage type module corrected, assertionsSHA unchangedade0709d. No productfailure claimed.",
+  "closedAt": "2026-10-19T11:08:30.507994Z"
+}

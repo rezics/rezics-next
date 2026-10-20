@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import { signInPath } from '../../../features/auth/paths.ts';
 import { ProposalsFailure } from '../../../features/proposals/failure.tsx';
-import { listHref, ProposalList, parseListView } from '../../../features/proposals/proposal-list.tsx';
+import { listHref, parseListView } from '../../../features/proposals/list-state.ts';
+import { ProposalList } from '../../../features/proposals/proposal-list.tsx';
 import { readProposals, readTargetNames } from '../../../features/proposals/read.ts';
 import { PageContainer, PageHeader } from '../../../features/shell/page.tsx';
 import { shellReader } from '../../../features/shell/communities-read.ts';

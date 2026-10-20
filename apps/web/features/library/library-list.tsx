@@ -54,7 +54,7 @@ function RowMeta({ row, now, locale, t }: { row: LibraryRow; now: number; locale
     {row.customShelves.length ? <ul className="flex flex-wrap items-center gap-1.5">
       <TagIcon aria-hidden="true" className="size-3.5" />
       {row.customShelves.map(shelf => <li key={shelf.id}>
-        <Link href={shelfHref(shelf.id)} className="rounded-full bg-muted px-2 py-0.5 text-foreground outline-none
+        <Link href={shelfHref(shelf.id)} className="inline-flex min-h-8 items-center rounded-full bg-muted px-2 py-0.5 text-foreground outline-none
           hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring">{shelf.name}</Link>
       </li>)}
     </ul> : null}

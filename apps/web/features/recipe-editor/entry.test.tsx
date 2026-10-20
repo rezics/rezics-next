@@ -20,7 +20,7 @@ const created = 'https://rezics.com/id/00000000-0000-4000-8000-0000000000aa';
 
 test('a recipe with no composition still offers Edit recipe to someone who may edit', () => {
   const html = renderToStaticMarkup(createElement(RecipeExperience, {
-    initial: null, href: '/v1/recipes/works/example', actingSubject: null, text: 'A few notes.',
+    resource: created, initial: null, href: `/v1/recipes/works/${idOf(created)}`, actingSubject: null, text: 'A few notes.',
     edit: { href: editorHref, label: 'Edit recipe' }, locale: 'en', messages: englishMessages,
   }));
   expect(html).toContain('Edit recipe');
@@ -30,7 +30,7 @@ test('a recipe with no composition still offers Edit recipe to someone who may e
 
 test('a recipe with no composition offers no editor to someone who may not edit', () => {
   const html = renderToStaticMarkup(createElement(RecipeExperience, {
-    initial: null, href: '/v1/recipes/works/example', actingSubject: null, text: null,
+    resource: created, initial: null, href: `/v1/recipes/works/${idOf(created)}`, actingSubject: null, text: null,
     edit: null, locale: 'en', messages: englishMessages,
   }));
   expect(html).not.toContain('Edit recipe');

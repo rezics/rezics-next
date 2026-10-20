@@ -1,0 +1,100 @@
+{
+  "format": "catalogue-A02-original-acceptance-v1",
+  "goal": "audit-remediation-20261019",
+  "acceptedAt": "2026-10-19T12:50:30.431051+00:00",
+  "finding": "A02",
+  "status": "CLOSED",
+  "canonicalScope": "Raw elected-root slice preservation before native projection; original two-stage diagram separates this from A01 downstream native facts.",
+  "mainCommit": "b11cf331812e384935b45dd5c77019dc6c227f0d",
+  "implementationLanding": "b11cf331812e384935b45dd5c77019dc6c227f0d",
+  "acceptedCandidate": "aa535290b435aefc98020dd432bc6676e8b95e46",
+  "sourcePins": [
+    {
+      "path": "scripts/datasets/import.ts",
+      "mainBlob": "483048d88d1d0b5d316f98d3bf931973f07768c0",
+      "matchesExecutedProof": true
+    },
+    {
+      "path": "tests/qa/unit/dataset-import.test.ts",
+      "mainBlob": "fe2536db1cc2b7dbba92880b55bc9dccea4a5069",
+      "matchesExecutedProof": true
+    },
+    {
+      "path": "scripts/datasets/selection.ts",
+      "mainBlob": "c22ba75edd5a9ba0d6ec06c8562c78070ab7c05d",
+      "matchesExecutedProof": true
+    },
+    {
+      "path": "tests/qa/unit/dataset-selection.test.ts",
+      "mainBlob": "dda7cd4727c6b8112f7bd36ba0de0b151c224ebc",
+      "matchesExecutedProof": true
+    },
+    {
+      "path": "tests/qa/unit/dataset-vndb.test.ts",
+      "mainBlob": "e3cc1b179e59618cd7c3bfef600a15718dfc4596",
+      "matchesExecutedProof": true
+    }
+  ],
+  "independentReview": {
+    "task": "G-2857",
+    "engine": "codex-1",
+    "model": "gpt-6.1-sol",
+    "effort": "xhigh",
+    "commit": "432a8d7f89c40eacf3b1c8cc9df3334b7482bd75",
+    "report": "docs/goals/audit-remediation-20261019/proofs/catalogue-A02-importer-consumer-review.json",
+    "mainBlob": "4be44115789b166027571e3c9afd65dd39ec6a15",
+    "result": "accepted",
+    "blockingFindings": [],
+    "nonblockingObservation": "A02-REQUEST-ASSERTION-COVERAGE retained, not a demonstrated runtime defect"
+  },
+  "evidence": [
+    {
+      "path": ".temp/worktrees/g-2779/.temp/goal/jobs/0e3c4760-28df-439b-80f1-7b1d157fdd4c.3.log",
+      "kind": "executed real retained VNDBv11/Bangumi975 elected-root preservation",
+      "passed": 20,
+      "failed": 0,
+      "assertions": 43241,
+      "claims": "Every parent incident occurrence/index/endpoints, cast roles/traits/voices, releases/tags/credits/qualifiers, >1000 episodes, images and parent immutability; explicit budget refusal. No native adoption claim."
+    },
+    {
+      "path": ".temp/worktrees/g-2778/.temp/goal/jobs/59b89d62-1715-4aa0-97dc-707991f92f34.1.log",
+      "kind": "actual importer module with controlled API fixtures",
+      "passed": 30,
+      "failed": 0,
+      "assertions": 351,
+      "claims": "Accepted full view consumed without prefix recap; refusal before API/session; unchanged parent intake/custody/replay and selected native adjacency. Not live backend/CLI proof."
+    },
+    {
+      "path": ".temp/audit-remediation-20261019/two-hour-sprint/a02-original-class-assessment/receipt.json",
+      "sha256": "9a39e69355f610a1fff2b63b7498ca7a413dbbd3d135a8ff2a5dbd5a3ae41e29",
+      "kind": "original assertion/evidence map; historical receipt preserved"
+    }
+  ],
+  "productAudit": {
+    "skill": ".agents/skills/product-audit/SKILL.md",
+    "originalPrinciple": "Selecting meaningful Work roots must preserve their complete admitted task neighborhood rather than shared lexical kind caps.",
+    "surfacesSwept": [
+      "root selector and coverage manifest",
+      "actual importer consumer/recovery/intake/media loops",
+      "VNDB elected cast/role/tag/staff/release/image neighborhoods",
+      "long Bangumi episodes/voices/staff and occurrence multiplicity",
+      "immutable parent and existing113 native/source associations"
+    ],
+    "guard": "Exact real-parent adjacency equality and actual importer no-recap/refusal/custody/replay regression.",
+    "noBroadRerun": "Existing genuine proof reused only after exact five-blob equality on actual MAIN; no repeated whole-tier or historical baseline."
+  },
+  "preservedCustody": {
+    "originalNativeSourceAssociations": 113,
+    "sourceIntakeParts": 206,
+    "fateRetainedParts": 72,
+    "fateReconstructionSha256": "2be016929311d7c06ae5489cdba9d7c5cce7a14985d6edb5ecefcd362c855887",
+    "originalFateOutgoingEdges": 10418
+  },
+  "limits": [
+    "Original IF-01 imported-queryable-facts clause remains unproved under native/query classes; no shared whole C scenario marked complete.",
+    "Media acquisition/rights/native delivery/decode remain A03; manifests explicitly report media incomplete.",
+    "No positive current genuine CLI import or live backend result claimed.",
+    "No conversion-dependent citation, mapper registration or raw-byte requirement for native manual citation."
+  ],
+  "acceptanceDenominator": "2/18 original canonical classes with existing A18; A14 is A16 reporting sub-item, not nineteenth class."
+}

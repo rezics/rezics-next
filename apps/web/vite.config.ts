@@ -69,7 +69,32 @@ function usedUiSources(): Plugin {
 }
 
 export default defineConfig({
-  optimizeDeps: { include: browserDependencies() },
+  // Vinext propagates top-level includes into RSC. Keep client packages in the
+  // browser graph, where their React hooks and client boundaries are valid.
+  environments: {
+    client: { optimizeDeps: { include: browserDependencies() } },
+    // A first-request SSR rebundle reloads the Worker while React is rendering.
+    // Prepare the pure helpers both server graphs consume before that request.
+    rsc: { optimizeDeps: { include: ['native-i18n', 'tailwind-variants'] } },
+    // Discovering editor dependencies mid-render replaces the SSR module cache
+    // between React's preload and require. Prepare them only in the SSR graph.
+    ssr: { optimizeDeps: { include: [
+      '@tiptap/core',
+      '@tiptap/extension-image',
+      '@tiptap/extension-list',
+      '@tiptap/extension-placeholder',
+      '@tiptap/extension-table',
+      '@tiptap/extension-text-align',
+      '@tiptap/extension-text-style',
+      '@tiptap/extension-unique-id',
+      '@tiptap/pm/model',
+      '@tiptap/pm/state',
+      '@tiptap/starter-kit',
+      '@tiptap/suggestion',
+      'native-i18n',
+      'tailwind-variants',
+    ] } },
+  },
   plugins: [usedUiSources(), vinext({}), cloudflare({ viteEnvironment: { name: 'rsc', childEnvironments: ['ssr'] },
     // Web, Accounts and every worktree's dev servers run at once; the default
     // inspector port 9229 made whichever started second crash. Opt in per run.

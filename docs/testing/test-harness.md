@@ -69,6 +69,73 @@ Fault, recovery, load and browser tests use their registered isolation paths;
 do not reset another file's project. For background data, restore a stopped,
 compatible backup into a separate project rather than reseeding online.
 
+### Retained untracked QA history
+
+New QA Access and relay bootstraps use the same migration receipts and lock as
+owner upgrades. Retained backups made by either inspected untracked bootstrap
+need an explicit transition before `task dev:prepare` can apply later SQL:
+
+| Source pin | Historical Access / relay files |
+| --- | --- |
+| `759244e365ad64bcb97fac0ea7d7b9caebe144b2` | 299 / 23 |
+| `4a616b079a364b8f5ac7fe4d4ff56bc99849e766` (Book/Recipe) | 303 / 23 |
+
+Ordinary startup never adopts history. No other source is accepted.
+
+Restore the original backup through its compatible historical source into a
+distinct disposable persistent QA project under normal Goal admission. Keep
+strict restore compatibility checks and its original engines, stop all owner clients
+and retain the independent source pin and backup SHA-256. Within the same
+600-second preparation budget, verify the copy:
+
+```sh
+task goal -- slot -- bun scripts/qa/history-transition.ts verify \
+  --stack .temp/stack/rezics-qa-<restored-run> \
+  --backup .temp/<retained-input>/backup.json \
+  --backup-sha256 <independently-recorded-backup-sha256> \
+  --source <one-of-the-two-source-pins-above> \
+  --receipt .temp/<evidence>/qa-history-verified.json
+```
+
+The command checks the retained manifest's complete byte inventory against the
+pinned Git source, checks the owned PostgreSQL container and compares both
+owner schemas and frozen bootstrap templates against a fresh pinned SQL replay.
+The [schema dump](https://www.postgresql.org/docs/18/app-pgdump.html) includes
+owners, grants, functions, triggers, constraints and indexes; separate template
+row and populated-copy seed checks verify data effects. Missing templates,
+unknown or partial history, changed bytes, schema drift and missing data effects
+refuse adoption. A manifest's SQL filenames alone cannot prove completion.
+
+For the Book/Recipe source, this same verification checks every historical
+Access/relay SQL file against current SQL, including the exact inspected bytes
+on both sides of these three filename changes:
+
+| Historical Access filename | Canonical receipt filename |
+| --- | --- |
+| `2045_standing_rating_components.sql` | `2606_standing_rating_components.sql` |
+| `2077_standing_rating_publication.sql` | `2607_standing_rating_publication.sql` |
+| `2606_standing_rating_affected_cuts.sql` | `2608_standing_rating_affected_cuts.sql` |
+
+Only after schema and seed replay succeeds are canonical names recorded. This
+avoids repeating their component-ledger, publication-fence and affected-cut
+DDL/backfills. New receipts retain the historical names, rename hashes and
+backup/restored project identities; conflicting or transplanted receipts refuse
+retry. Equal SQL bytes alone never prove applied history.
+
+After successful verification, use `adopt` in place of `verify` with a fresh
+receipt output. Both owners are verified before either gains receipts. Only
+migration metadata is written in the restored owners; temporary empty reference
+databases are removed. The original backup and all application rows remain
+unchanged. Retrying recognizes committed per-owner evidence, including an
+interrupted cross-database commit. Apply later SQL through the usual owner
+runner, then continue the original proof. Retain the credential-free JSON
+receipts with that proof; they contain pins, project identities, migration names
+and schema/effect digests. A successful tooling test does not certify a retained
+copy that has not run this verification. This operation qualifies only the
+Access/relay SQL history boundary. The copy custodian must still perform current
+native/model alignment, owner readiness and a qualified backup/restore before
+the launch owner uses that copy; the immutable source backup remains unchanged.
+
 ## Writing tests
 
 Name tests `<ID>: <behavior>` using an owner case ID. Exercise the real owner

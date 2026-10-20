@@ -1,6 +1,17 @@
 import type { PostMessages } from '../messages.ts';
 
 export default {
+  unwritten: "尚未在伺服器上寫入任何內容。你可以編輯草稿、更換目標或取消本次嘗試。",
+  writeUnknown: "上次寫入結果尚未確認。請繼續同一次嘗試，安全地確認結果。",
+  writeAcknowledged: "部分貼文內容已儲存在伺服器上。請繼續同一次嘗試，避免重複發文。",
+  cancelAttempt: "取消本次嘗試",
+  retryPost: "重試發佈",
+  exportDraft: "匯出草稿",
+  retrySave: "重試儲存",
+  draftIncomplete: "目前的變更尚未儲存。重新開啟會還原上次儲存的版本。離開前請重試或匯出。",
+  draftSaveFailed: "無法儲存到此裝置。請保持頁面開啟或匯出草稿。",
+  draftSaving: "正在儲存草稿…",
+
   banned: '你已被這個社群封禁，無法發布貼文。草稿仍保留在此。',
   title: '建立貼文', intro: '在社群中開啟一場對話。', community: '社群',
   communitySearch: '尋找社群', communityChange: '更換社群', work: '作品',

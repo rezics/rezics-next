@@ -1,25 +1,35 @@
 import { expect, test } from 'bun:test';
+import { Elysia } from 'elysia';
+import { workContentsRoutes } from '../src/routes/work-contents.ts';
 import { createHash } from 'node:crypto';
+import type { Pool } from 'pg';
+import { ContentCore } from '../../content/src/core.ts';
+import { RightsStore } from '../src/modules/rights/store.ts';
+import { configureDisclosure } from '../src/modules/disclosure/read.ts';
+import { disclosureContent } from '../src/modules/disclosure/assembly.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 import { treaty } from '@elysia/eden';
 import type { MainApp } from '@rezics/main/app';
 import { createMainApp } from '../src/app.ts';
-import { FusekiClient } from '../src/infrastructure/fuseki.ts';
+import { FusekiClient, FusekiHttpError } from '../src/infrastructure/fuseki.ts';
 import { WORK_CONTENTS_COST } from '../src/modules/work-contents/read-contract.ts';
 
-import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects }
+import { ObjectIntegrityError, ObjectNotFound, ObjectUnavailable, type ImmutableObjects }
   from '../src/infrastructure/immutable-objects.ts';
 import { orderTree, recordTree } from '../src/modules/structure/change.ts';
 import { STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT, STRUCTURE_PROFILE,
   type OccurrenceRecord, type OrderEntry, type StructureManifest } from '../src/modules/structure/format.ts';
-import { CompositionCorrupt, CompositionUnavailable, orderTreeKey, type CompositionHeader }
+import { CompositionCorrupt, CompositionUnavailable, orderTreeKey, readCompositionHeader, type CompositionHeader }
   from '../src/modules/structure/graph.ts';
 import { seekChapter } from '../src/modules/structure/reading-order.ts';
 import { readCompositionPage, readCompositionSnapshot, type CompositionSnapshot }
   from '../src/modules/structure/read.ts';
 import { newCost, StructureObjectCorrupt, StructureObjectUnavailable }
   from '../src/modules/structure/tree.ts';
-import { WorkReadLimit, WorkReadSession } from '../src/modules/work/read-session.ts';
-import { chapterStoryNumber } from '../src/modules/work-contents/read.ts';
+import { WorkReadLimit, WorkReadMissing, WorkReadMoved, WorkReadSession, WorkReadUnavailable }
+  from '../src/modules/work/read-session.ts';
+import { readWorkBasis } from '../src/modules/work/read-header.ts';
+import { chapterStoryNumber, readChapter, readContents } from '../src/modules/work-contents/read.ts';
 import { structureProfileFor } from '../src/modules/structure/profiles.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 
@@ -71,7 +81,7 @@ class CountedChapterObjects implements ImmutableObjects {
   async get(digest: string): Promise<Uint8Array> {
     this.gets++;
     const bytes = this.values.get(digest);
-    if (!bytes) throw new ObjectUnavailable('missing test immutable page');
+    if (!bytes) throw new ObjectNotFound('missing test immutable page');
     this.bytes += bytes.byteLength;
     if (createHash('sha256').update(bytes).digest('hex') !== digest) {
       throw new ObjectIntegrityError('test immutable page digest differs');
@@ -92,7 +102,7 @@ const placedChapterRecord = (n: number, parent: string, at: number,
 });
 
 async function chapterTreeFixture(records: OccurrenceRecord[], includeTopGroups = true,
-  profile: 'book-composition' | 'work-composition' = 'book-composition') {
+  profile: 'book-composition' | 'work-composition' | 'recipe-composition' = 'book-composition') {
   const objects = new CountedChapterObjects();
   const cost = newCost();
   const recordRoot = await recordTree(objects).apply(await recordTree(objects).empty(cost),
@@ -544,4 +554,472 @@ test('Missing, corrupt and order/record-mismatched immutable neighbourhoods fail
     manifest: { ...snapshot.manifest, records } };
   await expect(seekChapter(f.env, { structure: f.header.structure, snapshot: brokenSnapshot,
     from: f.volumeChapters[0], canReadTarget: readableChapterTarget })).rejects.toBeInstanceOf(StructureObjectCorrupt);
+});
+
+/** Public graph/SQL boundaries around the real composition, tree and Content
+ * owners. No development writer or retained-population enumeration participates. */
+async function readerOwnerFixture(records: OccurrenceRecord[], profile: 'book-composition' | 'recipe-composition' = 'book-composition') {
+  const f = await chapterTreeFixture(records, true, profile);
+  const published = { ...f.header };
+  const state = { public: true, publication: true, visible: true, structureVisible: true, target: true,
+    graphFailure: null as Error | null, contentFailure: null as Error | null,
+    rightsFailure: null as Error | null, assessment: 'current' as 'current' | 'withdrawn' | 'replaced',
+    publicDomain: false, bodyVisible: true, hydrated: false, afterHydration: null as (() => void) | null,
+    metadataAvailability: 'available', metadataDigest: null as string | null, metadataReads: 0, bodyReads: 0, rightsReads: 0,
+    publicationRevision: null as string | null,
+    representation: 'available' as 'available' | 'erased' | 'unavailable' | 'missing' | 'corrupt',
+    wrongResource: false, revokeAfterBody: false, headerAbsent: false, headerBroken: false };
+  const originalQuery = f.env.fuseki.query.bind(f.env.fuseki);
+  const uri = (value: string) => ({ type: 'uri' as const, value });
+  const literal = (value: string) => ({ type: 'literal' as const, value });
+  const contentRows = new Map(records.filter(r => r.target).map((record, index) => {
+    const id = chapterTestId(200_000 + index).slice(-36), variant = chapterTestId(300_000 + index);
+    const body = { body: `Chapter ${index + 1}\nThe exact public chapter beside the river.` };
+    const bytes = Buffer.from(JSON.stringify(body));
+    return [record.target!, { id, variant_id: variant, resource_id: record.target!, body,
+      serialized_bytes: bytes, byte_digest: createHash('sha256').update(bytes).digest('hex'), byte_length: bytes.length,
+      total_bytes: bytes.length, model: 'content-shape-v1', availability: 'available', language_kind: 'tag',
+      language_tag: 'en', original_language_tag: 'en', direction: 'ltr', source_revision: null, predecessor: null, provenance: [] }];
+  }));
+  const content = new ContentCore({ query: async (_sql: string, values: [string[]]) => {
+    if (state.contentFailure) throw state.contentFailure;
+    if (_sql.includes('SELECT id,availability,byte_digest')) {
+      state.metadataReads++;
+      return { rows: [...contentRows.values()].filter(row => values[0].includes(row.id)).map(row => ({
+        id: row.id, availability: state.metadataAvailability, byte_digest: state.metadataDigest ?? row.byte_digest,
+      })) };
+    }
+    state.bodyReads++;
+    const rows = [...contentRows.values()].filter(row => values[0].includes(row.id)).flatMap(row =>
+      state.representation === 'missing' ? [] : [{ ...row,
+        availability: state.representation === 'corrupt' ? 'available' : state.representation,
+        byte_digest: state.representation === 'corrupt' ? '0'.repeat(64) : row.byte_digest,
+        resource_id: state.wrongResource ? chapterTestId(999) : row.resource_id,
+        provenance: state.publicDomain ? { kind: 'admitted-public-domain-v1', rightsAssessmentId: chapterTestId(900).slice(-36) } : row.provenance }]);
+    if (state.revokeAfterBody) state.target = false;
+    state.hydrated = true;
+    return { rows };
+  } } as unknown as Pool);
+  configureFixtureDisclosureAncestry(f.env, target => target.work
+    ? { resource: target.work, head: chapterTestId(6), protectedRevision: target.workRevision } : undefined);
+  configureDisclosure(f.env, fixtureDisclosureReader(async targets => targets.map(target =>
+    target.component === 'body' && !state.bodyVisible ? 'hidden' : 'visible')));
+  f.session.deps.content = disclosureContent(content, f.env);
+  f.session.deps.contentAuthoring = content;
+  const rightsPool = { query: async (_sql: string, values: [string | string[], string | string[]]) => {
+    state.rightsReads++;
+    if (state.rightsFailure) throw state.rightsFailure;
+    const row = { assessment_head: chapterTestId(state.assessment === 'current' ? 900 : 901).slice(-36), basis: 'public_domain', outcome: 'supported' };
+    return { rows: state.assessment === 'withdrawn' ? [] : Array.isArray(values[0])
+      ? values[0].map((work, index) => ({ ...row, work_id: work, assessment_id: values[1][index] })) : [row] };
+  } } as unknown as Pool;
+  f.session.deps.rights = { store: new RightsStore(rightsPool, rightsPool) } as WorkReadSession['deps']['rights'];
+  Object.assign(f.env.fuseki, {
+    commandHealth: async () => ({ profiles: { 'work-metadata-v1': 'owner-fixture' } }),
+    query: async (query: string) => {
+      if (state.graphFailure) throw state.graphFailure;
+      if (query.includes('SELECT ?epoch ?sequence ?hold ?r')) return { results: { bindings: [{
+        epoch: literal('chapter-fixture'), sequence: literal('7'), r: uri(f.header.work), type: literal('work'),
+        work: uri(f.header.work), head: uri(chapterTestId(6)), public: literal(String(state.public)),
+        label: { ...literal('Public Work'), 'xml:lang': 'en' },
+      }] } };
+      if (query.includes('SELECT ?epoch ?sequence')) return { results: { bindings: [{ epoch: literal('chapter-fixture'), sequence: literal('7') }] } };
+      if (query.includes('SELECT ?head ?main ?mainHead')) return { results: { bindings: [{
+        head: uri(chapterTestId(6)), main: uri(f.header.component), mainHead: uri(chapterTestId(7)),
+        public: literal(String(state.public)), type: uri('https://schema.org/Book'),
+      }] } };
+      if (query.includes('SELECT ?structuredDecision')) return { results: { bindings: profile === 'recipe-composition' && state.publication ? [{
+        structuredDecision: uri(chapterTestId(8)), structuredSource: uri('urn:rezics:work-source:owner-fixture'),
+        structuredStructure: uri(published.structure), structuredProfile: uri(structureProfileFor(profile).graphProfile),
+        structuredRevision: uri(published.head), structuredGeneration: uri(published.generation),
+        structuredRoot: uri(published.manifest), structuredExact: literal('true'),
+      }] : [] } };
+      if (query.includes('SELECT ?selection ?language')) return { results: { bindings: state.publication
+        ? [{ selection: uri(chapterTestId(9)), language: literal('en') }] : [] } };
+      if (query.includes('SELECT ?work ?parent')) return { results: { bindings: [{ work: uri(f.header.work) }] } };
+      if (query.includes('SELECT ?resource ?head')) return { results: { bindings: [{ resource: uri(f.header.work), head: uri(chapterTestId(6)) }] } };
+      if (query.includes('SELECT ?target WHERE') && query.includes('VALUES ?target')) return { results: { bindings: [] } };
+      if (query.includes('SELECT ?component ?profile ?head')) return { results: { bindings: state.headerAbsent ? []
+        : state.headerBroken ? [{}] : [{ component: uri(f.header.component), profile: uri(structureProfileFor(profile).graphProfile),
+          head: uri(f.header.head), generation: uri(f.header.generation), count: literal(String(f.header.placementCount)),
+          manifest: uri(f.header.manifest) }] } };
+      if (query.includes('SELECT ?owner')) return { results: { bindings: [{ owner: uri(f.header.work) }] } };
+      if (query.includes('SELECT ?structure')) return { results: { bindings: [{ structure: uri(f.header.structure) }] } };
+      if (query.includes('SELECT DISTINCT ?target')) return { results: { bindings: state.target ? [{ target: uri(records[0]?.target ?? f.header.work) }] : [] } };
+      if (query.includes('SELECT DISTINCT ?variant ?revision')) {
+        const row = [...contentRows.values()].find(row => query.includes(`<${row.resource_id}>`));
+        return { results: { bindings: row && state.target ? [{ variant: uri(row.variant_id),
+          revision: uri(state.publicationRevision ?? `urn:rezics:content:revision:${row.id}`) }] : [] } };
+      }
+      return originalQuery(query);
+    },
+  });
+  f.session.summaries = async resources => resources.map(reference => ({ reference, status: state.visible ? 'available' : 'unavailable',
+    type: 'work', name: { value: 'Public Work', language: 'en', direction: 'ltr' }, avatar: null })) as Awaited<ReturnType<WorkReadSession['summaries']>>;
+  const bodyDisclosure = f.session.disclosure.bind(f.session);
+  f.session.disclosure = async (targets, channel) => targets.every(target => target.owner === 'content' && target.component === 'body')
+    ? bodyDisclosure(targets, channel) : targets.map(target => state.visible
+      && (target.component !== 'structure' || state.structureVisible) ? 'visible' : 'hidden');
+  // The real delivery adapter first permits the body. Mutations occur in the
+  // subsequent Work fence, after native hydration and that adapter's own cut.
+  const summaries = f.session.summaries.bind(f.session);
+  f.session.summaries = async resources => {
+    const mutation = state.afterHydration;
+    if (mutation && state.hydrated) { state.afterHydration = null; mutation(); }
+    return summaries(resources);
+  };
+  return { ...f, state, contentRows };
+}
+
+test('the public Book chain selects exact chapters and native bytes through one real immutable composition', async () => {
+  const records = [placedChapterRecord(10, chapterTestId(1), 1), placedChapterRecord(11, chapterTestId(1), 2)];
+  const f = await readerOwnerFixture(records);
+  expect(await readWorkBasis(f.session, f.header.work)).toMatchObject({ disclosure: 'public', publicationState: 'published', selectedLanguage: 'en' });
+  const contents = await readContents(f.session, f.header.work, {});
+  expect(contents.compositionRevision).toBe(f.header.head);
+  expect(contents.items.map(item => item.occurrence)).toEqual(records.map(item => item.occurrence));
+  const chapter = await readChapter(f.session, records[0]!.occurrence, {});
+  expect(chapter).toMatchObject({ compositionRevision: f.header.head, selectedRevision: contents.items[0]!.selectedRevision,
+    previous: null, next: records[1]!.occurrence, number: 1,
+    content: { body: { body: 'Chapter 1\nThe exact public chapter beside the river.' } } });
+  const exact = await f.session.deps.content!.readExactBatch([chapter.content.reference.revisionId], async ids => new Set(ids));
+  expect(exact[0]).toMatchObject({ status: 'available', serializedJson: chapter.content.serializedJson, reference: chapter.content.reference });
+  // Two chapters need no population replay, native write, or preparation fallback.
+  expect(f.objects.gets).toBeLessThan(32);
+});
+
+for (const surface of ['contents', 'chapter'] as const) {
+  test(`an Account without an acting Agent reads public ${surface} through its normal route`, async () => {
+    const record = placedChapterRecord(10, chapterTestId(1), 1);
+    const f = await readerOwnerFixture([record]);
+    let verifications = 0, choices = 0; const viewers: boolean[] = [];
+    f.session.deps.account = { verify: async (_request, scopes) => {
+      expect(scopes).toEqual(['work:read']); verifications++;
+      return { issuer: 'account', subject: 'empty-account' };
+    } };
+    f.session.deps.access = { assertRecoveryOpen: async () => undefined,
+      activePrincipalId: async () => { throw new Error('public read must not require Agent eligibility'); } } as never;
+    f.session.deps.sessionAgents = { readMain: async () => { choices++; return null; },
+      readSession: async () => { choices++; return null; } } as never;
+    configureDisclosure(f.env, fixtureDisclosureReader(async (targets, viewer) => {
+      viewers.push(viewer.signedIn); return targets.map(() => 'visible');
+    }));
+    const path = surface === 'contents' ? `/v1/works/${f.header.work.slice(-36)}/contents`
+      : `/v1/chapters/${record.occurrence.slice(-36)}`;
+    const app = new Elysia().use(workContentsRoutes(f.session.deps));
+    const response = await app.handle(new Request(`http://main.test${path}`, { headers: { authorization: 'Bearer reader' } }));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    if (surface === 'contents') expect(body).toMatchObject({ items: [{ occurrence: record.occurrence, availability: 'available' }] });
+    else expect(body).toMatchObject({ occurrence: record.occurrence, content: { body: { body: expect.stringContaining('exact public chapter') } } });
+    expect(verifications).toBe(1); expect(choices).toBe(0);
+    expect(viewers.length).toBeGreaterThan(0); expect(viewers.every(Boolean)).toBe(true);
+  });
+}
+
+test('catalogue-visible Book metadata does not admit contents or chapters without a current public Main text selection', async () => {
+  const record = placedChapterRecord(10, chapterTestId(1), 1);
+  for (const explicitLanguage of [false, true]) {
+    const f = await readerOwnerFixture([record]); f.state.publication = false;
+    const options = explicitLanguage ? { language: 'en' } : {};
+    expect(await readWorkBasis(f.session, f.header.work)).toMatchObject({ disclosure: 'public', publicationState: 'unpublished' });
+    await expect(readContents(f.session, f.header.work, options)).rejects.toBeInstanceOf(WorkReadMissing);
+    await expect(readChapter(f.session, record.occurrence, { language: 'en' })).rejects.toBeInstanceOf(WorkReadMissing);
+  }
+  const otherLanguage = await readerOwnerFixture([record]);
+  otherLanguage.session.options.language = 'fr';
+  await expect(readContents(otherLanguage.session, otherLanguage.header.work, { language: 'fr' })).rejects.toBeInstanceOf(WorkReadMissing);
+  await expect(readChapter(otherLanguage.session, record.occurrence, { language: 'fr' })).rejects.toBeInstanceOf(WorkReadMissing);
+  const preview = await readerOwnerFixture([record]); preview.state.publication = false;
+  preview.session.principal = { issuer: 'account', subject: 'owner' };
+  preview.session.options.actingSubject = chapterTestId(800);
+  preview.session.deps.access = { canPreviewWork: async () => true, canReadWork: async () => false } as never;
+  expect((await readContents(preview.session, preview.header.work, { language: 'en' })).items).toHaveLength(1);
+});
+
+for (const assessment of ['withdrawn', 'replaced'] as const) {
+  test(`a ${assessment} public-domain assessment suppresses exact chapter bytes and body-derived titles`, async () => {
+    const record = { ...placedChapterRecord(10, chapterTestId(1), 1), labels: [] };
+    const chapter = await readerOwnerFixture([record]);
+    chapter.state.publicDomain = true; chapter.state.assessment = assessment;
+    await expect(readChapter(chapter.session, record.occurrence, {})).rejects.toBeInstanceOf(WorkReadMissing);
+    const contents = await readerOwnerFixture([record]);
+    contents.state.publicDomain = true; contents.state.assessment = assessment;
+    expect((await readContents(contents.session, contents.header.work, {})).items[0]?.label).toBeNull();
+  });
+}
+
+test('the rights owner failure keeps its SQL cause and recovers without changing the selected chapter', async () => {
+  const record = placedChapterRecord(10, chapterTestId(1), 1);
+  const f = await readerOwnerFixture([record]); f.state.publicDomain = true;
+  const cause = Object.assign(new Error('rights transport lost'), { code: '08006' });
+  f.state.rightsFailure = cause;
+  const error = await readChapter(f.session, record.occurrence, {}).catch((error: unknown) => error);
+  expect(error).toBeInstanceOf(WorkReadUnavailable);
+  let current = error; const causes: unknown[] = [];
+  while (current instanceof Error) { causes.push(current); current = current.cause; }
+  expect(causes).toContain(cause);
+  f.state.rightsFailure = null;
+  expect((await readChapter(f.session, record.occurrence, {})).content.body).toMatchObject({ body: expect.stringContaining('exact public chapter') });
+});
+
+test('current public-domain chapters and titles stay readable while original text does not depend on rights availability', async () => {
+  const record = { ...placedChapterRecord(10, chapterTestId(1), 1), labels: [] };
+  for (const publicDomain of [false, true]) {
+    const f = await readerOwnerFixture([record]); f.state.publicDomain = publicDomain;
+    if (!publicDomain) f.state.rightsFailure = new Error('unrelated rights outage');
+    expect((await readContents(f.session, f.header.work, {})).items[0]?.label).toEqual({ value: 'Chapter 1', language: 'en' });
+    expect((await readChapter(f.session, record.occurrence, {})).content.body).toMatchObject({ body: expect.stringContaining('exact public chapter') });
+    expect(f.state.metadataReads).toBe(2);
+  }
+});
+
+test('a full page of body-derived public-domain titles uses bounded hydration and shared delivery probes', async () => {
+  const records = Array.from({ length: 20 }, (_, index) => ({
+    ...placedChapterRecord(10 + index, chapterTestId(1), index + 1), labels: [],
+  }));
+  const f = await readerOwnerFixture(records); f.state.publicDomain = true;
+  const contents = await readContents(f.session, f.header.work, {});
+  expect(contents.items.map(item => item.label?.value)).toEqual(records.map((_record, index) => `Chapter ${index + 1}`));
+  expect(f.state.bodyReads).toBe(5); expect(f.state.metadataReads).toBe(1); expect(f.state.rightsReads).toBe(2);
+  await f.session.fenceDependencies();
+  expect(f.state.bodyReads).toBe(5); expect(f.state.metadataReads).toBe(2); expect(f.state.rightsReads).toBe(3);
+});
+
+test('the shared title rights probe preserves a recoverable SQL failure', async () => {
+  const records = [10, 11].map((number, index) => ({
+    ...placedChapterRecord(number, chapterTestId(1), index + 1), labels: [],
+  }));
+  const f = await readerOwnerFixture(records); f.state.publicDomain = true;
+  const cause = Object.assign(new Error('batch rights transport lost'), { code: '08006' });
+  f.state.rightsFailure = cause;
+  const error = await readContents(f.session, f.header.work, {}).catch((error: unknown) => error);
+  expect(error).toBeInstanceOf(WorkReadUnavailable);
+  const causes: unknown[] = []; let current = error;
+  while (current instanceof Error) { causes.push(current); current = current.cause; }
+  expect(causes).toContain(cause);
+  f.state.rightsFailure = null;
+  expect((await readContents(f.session, f.header.work, {})).items.map(item => item.label?.value)).toEqual(['Chapter 1', 'Chapter 2']);
+});
+
+test('derived titles retain a rights owner failure instead of becoming a successful empty label', async () => {
+  const record = { ...placedChapterRecord(10, chapterTestId(1), 1), labels: [] };
+  const f = await readerOwnerFixture([record]); f.state.publicDomain = true;
+  const cause = Object.assign(new Error('rights unavailable for title'), { code: '08006' });
+  f.state.rightsFailure = cause;
+  const error = await readContents(f.session, f.header.work, {}).catch((error: unknown) => error);
+  expect(error).toBeInstanceOf(WorkReadUnavailable);
+  const causes: unknown[] = []; let current = error;
+  while (current instanceof Error) { causes.push(current); current = current.cause; }
+  expect(causes).toContain(cause);
+});
+
+for (const change of ['rights', 'disclosure', 'erased'] as const) {
+  test(`a body-derived title is discarded after a later ${change} revocation`, async () => {
+    const record = { ...placedChapterRecord(10, chapterTestId(1), 1), labels: [] };
+    const f = await readerOwnerFixture([record]); f.state.publicDomain = true;
+    f.state.afterHydration = () => {
+      if (change === 'rights') f.state.assessment = 'withdrawn';
+      if (change === 'disclosure') f.state.bodyVisible = false;
+      if (change === 'erased') f.state.metadataAvailability = 'erased';
+    };
+    const contents = await readContents(f.session, f.header.work, {});
+    expect(contents.items[0]?.label ?? null).toBeNull();
+    expect(f.state.hydrated).toBe(true);
+  });
+}
+
+for (const change of ['rights', 'disclosure', 'erased'] as const) {
+  test(`the Work read envelope retains the requested body's ${change} fence after hydration returns`, async () => {
+    const record = placedChapterRecord(10, chapterTestId(1), 1);
+    const f = await readerOwnerFixture([record]); f.state.publicDomain = true;
+    expect((await readChapter(f.session, record.occurrence, {})).content.body).toMatchObject({ body: expect.stringContaining('exact public chapter') });
+    if (change === 'rights') f.state.assessment = 'withdrawn';
+    if (change === 'disclosure') f.state.bodyVisible = false;
+    if (change === 'erased') f.state.metadataAvailability = 'erased';
+    await expect(f.session.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
+  });
+}
+
+test('the requested single chapter body passes a final disclosure fence after later Work awaits', async () => {
+  const record = placedChapterRecord(10, chapterTestId(1), 1);
+  const f = await readerOwnerFixture([record]);
+  f.state.afterHydration = () => { f.state.bodyVisible = false; };
+  await expect(readChapter(f.session, record.occurrence, {})).rejects.toBeInstanceOf(WorkReadMissing);
+  expect(f.state.hydrated).toBe(true);
+  expect(f.state.visible).toBe(true); expect(f.state.target).toBe(true);
+});
+
+test('the requested chapter also repeats its public-domain rights fence after later Work awaits', async () => {
+  const record = placedChapterRecord(10, chapterTestId(1), 1);
+  const f = await readerOwnerFixture([record]); f.state.publicDomain = true;
+  f.state.afterHydration = () => { f.state.assessment = 'withdrawn'; };
+  await expect(readChapter(f.session, record.occurrence, {})).rejects.toBeInstanceOf(WorkReadMissing);
+  expect(f.state.hydrated).toBe(true);
+});
+
+test('the exact representation metadata failure retains its cause and recovers without a body fallback', async () => {
+  const record = placedChapterRecord(10, chapterTestId(1), 1);
+  const f = await readerOwnerFixture([record]);
+  const owner = f.session.deps.contentAuthoring!, read = owner.readExactMetadataBatch.bind(owner);
+  const cause = Object.assign(new Error('metadata statement lost'), { code: '08006' }); let unavailable = true;
+  owner.readExactMetadataBatch = async (...args) => {
+    if (unavailable) throw cause;
+    return read(...args);
+  };
+  await expect(readChapter(f.session, record.occurrence, {})).rejects.toMatchObject({ cause });
+  unavailable = false;
+  expect((await readChapter(f.session, record.occurrence, {})).content.body).toMatchObject({ body: expect.stringContaining('exact public chapter') });
+});
+
+for (const change of ['erased', 'digest'] as const) {
+  test(`the exact native metadata fence discards chapter bytes after a concurrent ${change} transition`, async () => {
+    const record = placedChapterRecord(10, chapterTestId(1), 1);
+    const f = await readerOwnerFixture([record]);
+    f.state.afterHydration = () => {
+      if (change === 'erased') f.state.metadataAvailability = 'erased';
+      else f.state.metadataDigest = '0'.repeat(64);
+    };
+    await expect(readChapter(f.session, record.occurrence, {})).rejects.toBeInstanceOf(change === 'erased' ? WorkReadMissing : WorkReadUnavailable);
+    expect(f.state.metadataReads).toBeGreaterThan(0);
+  });
+}
+
+test('published Recipe contents retain the publication revision when a private edit advances its head', async () => {
+  const record = placedChapterRecord(10, chapterTestId(1), 1, 'part');
+  delete record.qualifier;
+  const f = await readerOwnerFixture([record], 'recipe-composition');
+  const published = f.header.head;
+  const privateRoot = await chapterTreeFixture([], true, 'recipe-composition');
+  for (const [digest, bytes] of privateRoot.objects.values) f.objects.values.set(digest, bytes);
+  f.header.head = chapterTestId(50);
+  f.header.manifest = privateRoot.header.manifest;
+  f.header.placementCount = 0;
+  f.revisions.set(f.header.head, { manifest: f.header.manifest, count: 0 });
+  const page = await readContents(f.session, f.header.work, {});
+  expect(page.compositionRevision).toBe(published);
+  expect(page.items.map(item => item.occurrence)).toEqual([record.occurrence]);
+});
+
+test('a catalogue-visible Recipe cannot expose its current composition after publication or exact disclosure is revoked', async () => {
+  for (const withheld of ['publication', 'structureVisible'] as const) {
+    const record = placedChapterRecord(10, chapterTestId(1), 1, 'part');
+    delete record.qualifier;
+    const f = await readerOwnerFixture([record], 'recipe-composition');
+    f.state[withheld] = false;
+    expect((await readWorkBasis(f.session, f.header.work)).disclosure).toBe('public');
+    await expect(readContents(f.session, f.header.work, {})).rejects.toBeInstanceOf(WorkReadMissing);
+    expect(f.objects.gets).toBe(0);
+  }
+});
+
+for (const failure of ['missing', 'integrity', 'dependency', 'format'] as const) {
+  test(`the chapter chain distinguishes immutable ${failure} with its original cause`, async () => {
+    const record = placedChapterRecord(10, chapterTestId(1), 1);
+    const f = await readerOwnerFixture([record]);
+    const digest = f.header.manifest.slice(-64);
+    const original = f.objects.values.get(digest)!;
+    let cause: Error | null = null;
+    if (failure === 'missing') f.objects.values.delete(digest);
+    if (failure === 'integrity') f.objects.values.set(digest, chapterTestBytes({ changed: true }));
+    if (failure === 'dependency') {
+      cause = new ObjectUnavailable('owner offline', { status: 503 });
+      f.objects.get = async () => { throw cause; };
+    }
+    if (failure === 'format') {
+      const invalid = await f.objects.put(chapterTestBytes({ unsupported: true }));
+      f.header.manifest = `urn:rezics:sha256:${invalid}`;
+      f.revisions.set(f.header.head, { manifest: f.header.manifest, count: 1 });
+    }
+    const error = await readChapter(f.session, record.occurrence, {}).catch((failure: unknown) => failure);
+    expect(error).toBeInstanceOf(WorkReadUnavailable);
+    expect((error as WorkReadUnavailable).code).toBe({ missing: 'composition_object_missing', integrity: 'composition_integrity_mismatch',
+      dependency: 'composition_dependency_unavailab', format: 'composition_is_corrupt' }[failure]);
+    expect((error as Error).cause).toBeInstanceOf(Error);
+    if (cause) expect(((error as Error).cause as Error).cause).toBe(cause);
+    expect(original.length).toBeGreaterThan(0);
+  });
+}
+
+for (const representation of ['missing', 'corrupt', 'unavailable', 'erased'] as const) {
+  test(`a published chapter distinguishes ${representation} from a readable exact body`, async () => {
+    const record = placedChapterRecord(10, chapterTestId(1), 1);
+    const f = await readerOwnerFixture([record]);
+    f.state.representation = representation;
+    const error = await readChapter(f.session, record.occurrence, {}).catch((failure: unknown) => failure);
+    expect(error).toBeInstanceOf(representation === 'erased' ? WorkReadMissing : WorkReadUnavailable);
+    if (error instanceof WorkReadUnavailable) expect(error.code).toBe({ missing: 'published_chapter_object_missing',
+      corrupt: 'chapter_integrity_mismatch', unavailable: 'chapter_dependency_unavailable' }[representation as 'missing' | 'corrupt' | 'unavailable']);
+  });
+}
+
+test('the public chapter chain rechecks revocation and exact representation ownership', async () => {
+  const record = placedChapterRecord(10, chapterTestId(1), 1);
+  const f = await readerOwnerFixture([record]);
+  f.state.wrongResource = true;
+  await expect(readChapter(f.session, record.occurrence, {})).rejects.toThrow('Content and publication disagree');
+  f.state.wrongResource = false;
+  f.state.revokeAfterBody = true;
+  await expect(readChapter(f.session, record.occurrence, {})).rejects.toBeInstanceOf(WorkReadMoved);
+  const revoked = await readerOwnerFixture([record]);
+  revoked.state.target = false;
+  await expect(readChapter(revoked.session, record.occurrence, {})).rejects.toBeInstanceOf(WorkReadMissing);
+  f.state.revokeAfterBody = false;
+  f.state.target = true;
+  f.state.visible = false;
+  await expect(readChapter(f.session, record.occurrence, {})).rejects.toBeInstanceOf(WorkReadMissing);
+});
+
+test('chapter and title-body dependencies retain their causes and reject another exact revision', async () => {
+  const record = placedChapterRecord(10, chapterTestId(1), 1);
+  record.labels = [];
+  const f = await readerOwnerFixture([record]);
+  const database = Object.assign(new Error('exact owner unavailable'), { code: '08006' });
+  f.state.contentFailure = database;
+  await expect(readChapter(f.session, record.occurrence, {})).rejects.toMatchObject({ code: 'content_owner_is_unavailable', cause: database });
+  await expect(readContents(f.session, f.header.work, {})).rejects.toMatchObject({ code: 'content_owner_is_unavailable', cause: database });
+  f.state.contentFailure = null;
+  const read = f.contentRows.values().next().value!;
+  expect((await readChapter(f.session, record.occurrence, {})).content.reference.revisionId).toBe(read.id);
+  const owner = f.session.deps.content!;
+  const actual = owner.readExactBatch.bind(owner);
+  f.session.deps.content = {
+    owningResourceForRevision: owner.owningResourceForRevision.bind(owner),
+    readExactBatch: async (...args) => (await actual(...args)).map(exact =>
+      exact.status === 'available' ? { ...exact, revisionId: chapterTestId(999).slice(-36) } : exact),
+  };
+  await expect(readChapter(f.session, record.occurrence, {})).rejects.toThrow('Content and publication disagree');
+  await expect(readContents(f.session, f.header.work, {})).rejects.toThrow('Chapter publication differs from its Content');
+  f.session.deps.content!.readExactBatch = async () => [];
+  await expect(readChapter(f.session, record.occurrence, {})).rejects.toThrow('Content owner result is incomplete');
+  await expect(readContents(f.session, f.header.work, {})).rejects.toThrow('Content owner result is incomplete');
+  const graph = new FusekiHttpError('graph held', 503, 'Unavailable');
+  f.state.graphFailure = graph;
+  await expect(readContents(f.session, f.header.work, {})).rejects.toMatchObject({ code: 'composition_graph_unavailable', cause: graph });
+});
+
+test('a corrupt publication pointer cannot read bytes from another revision namespace', async () => {
+  const record = placedChapterRecord(10, chapterTestId(1), 1);
+  record.labels = [];
+  let reads = 0;
+  for (const revision of [chapterTestId(200_000), 'urn:rezics:content:revision:invalid']) {
+    const f = await readerOwnerFixture([record]);
+    f.session.deps.content!.readExactBatch = async () => { reads++; return []; };
+    f.state.publicationRevision = revision;
+    await expect(readChapter(f.session, record.occurrence, {})).rejects.toThrow('Chapter publication is corrupt');
+    await expect(readContents(f.session, f.header.work, {})).rejects.toThrow('Chapter publication is corrupt');
+  }
+  expect(reads).toBe(0);
+});
+
+test('corrupt composition metadata is distinct from an absent Structure and a missing occurrence', async () => {
+  const record = placedChapterRecord(10, chapterTestId(1), 1);
+  const f = await readerOwnerFixture([record]);
+  f.state.headerAbsent = true;
+  expect(await readCompositionHeader(f.env, f.header.structure)).toBeNull();
+  f.state.headerAbsent = false;
+  f.state.headerBroken = true;
+  await expect(readContents(f.session, f.header.work, {})).rejects.toMatchObject({ code: 'composition_is_corrupt' });
+  f.state.headerBroken = false;
+  await expect(readChapter(f.session, chapterTestId(999), {})).rejects.toBeInstanceOf(WorkReadMissing);
 });

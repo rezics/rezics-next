@@ -21,5 +21,5 @@ export async function loadRecipeReading(main: MainClient, actingSubject: string 
     reads.readText(work.mainVersion, work.selectedLanguage ?? undefined),
     readSuppliedAllowedActions(main, work.id.slice(-36), actingSubject),
   ]);
-  return { recipe, text: text.ok ? text.data.body : null, allowed };
+  return { resource: work.id, recipe, text: text.ok ? text.data.body : null, allowed };
 }

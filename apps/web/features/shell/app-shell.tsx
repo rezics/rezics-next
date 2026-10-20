@@ -31,6 +31,8 @@ export interface AppShellProps {
   notifications?: ReactNode;
   /** Followed and official communities below the main items, normally <ShellCommunities />. */
   communities?: ReactNode;
+  /** Server-composed page-end content, such as source attribution, outside the route's main landmark. */
+  pageEnd?: ReactNode;
   children: ReactNode;
 }
 
@@ -40,7 +42,7 @@ export interface AppShellProps {
  * navigation in a drawer. Routes render their content, not a second <main>.
  */
 export function AppShell({ locale, messages, theme, navCollapsed, signedIn, platformAccess, account, notifications,
-  communities, children }: AppShellProps) {
+  communities, pageEnd, children }: AppShellProps) {
   return <ShellProvider locale={locale} messages={messages} initialTheme={theme} initialCollapsed={navCollapsed}
     signedIn={signedIn} platformAccess={platformAccess ?? NO_PLATFORM_ACCESS}>
     {/* The interface face, requested with the stylesheet rather than after it (React hoists this into <head>):
@@ -69,8 +71,10 @@ export function AppShell({ locale, messages, theme, navCollapsed, signedIn, plat
         border-border/60 border-e bg-sidebar/90 md:block md:group-data-[nav=collapsed]/shell:w-18">
         <SideNav variant="rail" communities={communities} />
       </aside>
-      <main id={MAIN_CONTENT_ID} tabIndex={-1} className="min-w-0 flex-1 outline-none
-        pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">{children}</main>
+      <div className="flex min-w-0 flex-1 flex-col pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">
+        <main id={MAIN_CONTENT_ID} tabIndex={-1} className="min-w-0 flex-1 outline-none">{children}</main>
+        {pageEnd}
+      </div>
     </div>
     <BottomNav />
     <ThemeNotice />

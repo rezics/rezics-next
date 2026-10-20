@@ -153,6 +153,8 @@ const workCoverVariants = tv({
   variants: {
     size: {
       xs: 'w-10 rounded-[0.1875rem]', sm: 'w-16 rounded-[0.25rem]', md: 'w-28 rounded-[0.375rem]',
+      // Browse previews keep a book at 128 × 192, even in a wide or sparse list.
+      preview: 'w-32 max-w-full rounded-[0.375rem]',
       lg: 'w-40 rounded-[0.5rem]', xl: 'w-56 rounded-[0.5rem]', fill: 'w-full rounded-[0.5rem]',
     },
     // Recipe cards and package tiles round further; books and documents take the size's radius.

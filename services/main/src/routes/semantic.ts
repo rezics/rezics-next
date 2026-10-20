@@ -65,6 +65,9 @@ export function semanticError(error: unknown): Response {
     'Semantic change is not admitted', undefined,
     { itemIndex: error.itemIndex, pointer: error.pointer, reference: error.reference });
   if (error instanceof SemanticChangeRejected) {
+    if (error.code === 'immutable-meaning' || error.code === 'unsupported-model-revision') {
+      return problem(409, error.code.replaceAll('-', '_'), error.message);
+    }
     if (error.code === 'invalid' || error.code === 'unsupported') {
       return problem(400, `${error.code}_semantic_change`, 'Semantic change does not match its profile');
     }

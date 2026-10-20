@@ -69,7 +69,7 @@ export function RealmRankingPage({ page, path, sort, window, cursor, locale, fee
     </EmptyState>
     : <EmptyState icon={MessagesSquareIcon} headingLevel={3} title={t.emptyDiscussions}
       description={t.emptyDiscussionsBody} className="m-3 sm:m-4" />;
-  return <DiscussionList items={page.data.items} realmPath={path} sort={sort} window={window} hrefs={hrefs}
+  return <DiscussionList items={page.data.items} realmPath={path} realmId={page.data.realm} sort={sort} window={window} hrefs={hrefs}
     next={page.data.nextCursor ? rankingHref(path, sort, window, page.data.nextCursor) : null}
     first={cursor ? top : null} empty={empty} />;
 }

@@ -1,3 +1,4 @@
+import type { WorkAt } from '../work-page/route.ts';
 import { buttonVariants } from '@rezics/ui/button';
 import { LocalizedText } from '@rezics/ui/localized-text';
 import { ArrowRightIcon } from 'lucide-react';
@@ -60,15 +61,16 @@ export function PartsPreviewView({
   parts: Loaded<PartsPage>;
   wholes: Loaded<WholesPage> | null;
   names: Names;
-  workRef: string;
+  workRef: WorkAt;
   pageMessages: WorkPageMessages;
   t: Copy;
 }) {
   const shown = parts.ok ? parts.data.parts.slice(0, PREVIEW_COUNTS.parts) : [];
   const hasWholes = wholes?.ok && wholes.data.wholes.length > 0;
-  const failure = !parts.ok && parts.failure !== 'missing' ? parts.failure : null;
-  const wholeFailure = wholes && !wholes.ok && wholes.failure !== 'missing';
-  if (!shown.length && !hasWholes && !failure && !wholeFailure) return null;
+  const failure = !parts.ok ? parts.failure : null;
+  const wholeFailure = wholes && !wholes.ok;
+  const continues = parts.ok && parts.data.next || wholes?.ok && wholes.data.next;
+  if (!shown.length && !hasWholes && !continues && !failure && !wholeFailure) return null;
   return (
     <Region id="parts-preview" title={t.parts}>
       <WholesLines wholes={wholes} names={names} t={t} messages={pageMessages} />
@@ -91,13 +93,14 @@ export function PartsPreviewView({
                   names={names}
                   unavailable={t.unavailable}
                   unnamed={t.unnamed}
+                  undisclosed={t.nameNotShown}
                 />
               ) : null}
             </li>
           ))}
         </ol>
       ) : null}
-      {shown.length || hasWholes ? (
+      {shown.length || hasWholes || continues ? (
         <ViewAll href={connectionsHref(workRef, {}, anchors.parts)} label={t.allParts} />
       ) : null}
     </Region>
@@ -115,13 +118,13 @@ export function ConnectionsPreviewView({
 }: {
   relations: Loaded<RelationsPage>;
   people?: People;
-  workRef: string;
+  workRef: WorkAt;
   locale: UiLocale;
   pageMessages: WorkPageMessages;
   t: Copy;
 }) {
   if (!relations.ok) {
-    return relations.failure === 'missing' ? null : (
+    return (
       <Region id="connections-preview" title={t.connections}>
         <RegionFailure
           title={t.connectionsUnavailable}
@@ -133,7 +136,7 @@ export function ConnectionsPreviewView({
   }
   const rows = relationRows(relations.data.items).slice(0, PREVIEW_COUNTS.relations);
   const franchises = franchisesOf(relations.data.items);
-  if (!rows.length && !franchises.length) return null;
+  if (!rows.length && !franchises.length && !relations.data.next) return null;
   return (
     <Region id="connections-preview" title={t.connections}>
       {franchises.length ? (
@@ -168,19 +171,20 @@ export function EditionsPreviewView({
 }: {
   realizations: Loaded<RealizationPage>;
   releases: Loaded<ReleasePage>;
-  workRef: string;
+  workRef: WorkAt;
   locale: UiLocale;
   pageMessages: WorkPageMessages;
   t: Copy;
 }) {
-  const languages = realizations.ok
-    ? [...new Set(realizations.data.items.map((item) => item.language))]
-    : [];
-  const listed = releases.ok ? releases.data.items.slice(0, PREVIEW_COUNTS.releases) : [];
+  const texts = realizations.ok ? { entries: realizations.data.items, nextCursor: realizations.data.nextCursor } : null;
+  const editions = releases.ok ? { entries: releases.data.items, nextCursor: releases.data.nextCursor } : null;
+  const languages = [...new Set(texts?.entries.map(item => item.language) ?? [])];
+  const listed = editions?.entries.slice(0, PREVIEW_COUNTS.releases) ?? [];
+  const continues = texts?.nextCursor || editions?.nextCursor;
   const realizationsFailure =
-    !realizations.ok && realizations.failure !== 'missing' ? realizations.failure : null;
-  const releasesFailure = !releases.ok && releases.failure !== 'missing' ? releases.failure : null;
-  if (!languages.length && !listed.length && !realizationsFailure && !releasesFailure) return null;
+    !realizations.ok ? realizations.failure : null;
+  const releasesFailure = !releases.ok ? releases.failure : null;
+  if (!languages.length && !listed.length && !continues && !realizationsFailure && !releasesFailure) return null;
   return (
     <Region id="editions-preview" title={t.editions}>
       {realizationsFailure ? (
@@ -223,7 +227,7 @@ export function EditionsPreviewView({
           ))}
         </ul>
       ) : null}
-      {languages.length || listed.length ? (
+      {languages.length || listed.length || continues ? (
         <ViewAll href={editionsHref(workRef, {}, anchors.realizations)} label={t.allEditions} />
       ) : null}
     </Region>

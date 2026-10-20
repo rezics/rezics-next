@@ -40,9 +40,9 @@ export function WikiSectionView({ wiki, locale, messages }: {
   }
   const realm = wiki.zone.data;
   if (!realm) {
-    return <Region id="work-wiki" title={title}>
-      <p className="text-muted-foreground text-sm">{t.wikiNone}</p>
-    </Region>;
+    return <section id="work-wiki" aria-label={title} data-hub-empty className="text-muted-foreground text-sm">
+      <p>{t.wikiNone}</p>
+    </section>;
   }
   const characters = wiki.characters?.ok ? mainCharacters(wiki.characters.data, MAIN_CHARACTERS) : [];
   const levels = copyOf(locale);
@@ -56,6 +56,7 @@ export function WikiSectionView({ wiki, locale, messages }: {
           {characters.map(character => <li key={character.reference}
             className="rounded-full border border-border/70 px-3 py-1 text-sm">
             <SummaryLink summary={character} unavailable={levels.unavailable} unnamed={levels.unnamed}
+              undisclosed={levels.nameNotShown}
               hrefFor={summary => entityHref(summary.reference)} /></li>)}
         </ul> : <p data-wiki-withheld className="text-muted-foreground text-sm">{t.wikiWithheld}</p>}
         <p className="text-muted-foreground text-xs">{t.wikiPosition}</p>

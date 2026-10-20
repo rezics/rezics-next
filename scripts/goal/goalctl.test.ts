@@ -27,6 +27,7 @@ import { reviewPrompt } from './land.ts';
 import { POSTGRES_SOCKET_LIMIT, postgresSocketPath, postgresSocketRefusal } from './postgres-socket.ts';
 import { fixtureSpawns } from './fixtures/spawn-deadline.ts';
 import { fixtureProcessScope } from './fixtures/process-scope.ts';
+import type { TypecheckBudget } from './typecheck-gate.ts';
 import { withTestAccounts, writeTestAccounts } from './fixtures/accounts.ts';
 
 isolateTestSettings();
@@ -4579,6 +4580,12 @@ process.exit(0);
       const refused = r.run(['resume', id, '-m', 'third fix', '--fresh', '--force-usage']);
       expect(refused.status).toBe(1); expect(refused.stderr).toContain('two fix rounds exhausted');
       expect(r.ledger().tasks[id]!.attempts).toHaveLength(5);
+      const resumed = r.run(['resume', id, '--class', 'sameScope', '-m',
+        'Same claims, outcome, authority and acceptance. Correct the retained focus failure.']);
+      expect(resumed.status, resumed.stderr).toBe(0);
+      r.workers.set(id, await waitForWorkerReady(join(r.dir, '.temp/ready', id), r.workers.get(id)!.worker));
+      await r.stopFixture(id);
+      expect(r.ledger().tasks[id]!.attempts.at(-1)).toMatchObject({ round: 'fix', resumeClass: 'sameScope' });
       // Landing that partial fix authorizes the next step even though no further fix is authorized.
       const ledger = r.ledger(); const task = ledger.tasks[id]!;
       task.state = 'merged';
@@ -6634,18 +6641,26 @@ describe('pre-merge type check', () => {
     expect(main).toContain('type check on main is inconclusive');
   });
 
-  test('every main-side comparison shares one deadline, as every branch run does', async () => {
+  test('every main-side comparison shares one active budget, as every branch run does', async () => {
     let clock = 0;
-    const deadlines: string[] = [];
-    const run = async (workspace: string, side: 'branch' | 'main', deadline: number): Promise<TypecheckRun> => {
-      deadlines.push(`${workspace}:${side}:${deadline}`);
+    const budgets: TypecheckBudget[] = [];
+    const remaining: number[] = [];
+    const run = async (workspace: string, side: 'branch' | 'main', budget: TypecheckBudget): Promise<TypecheckRun> => {
+      budgets.push(budget);
+      clock += 1000; // Queued admission does not spend the side's budget.
+      remaining.push(budget.remainingMs());
+      const finish = budget.start();
       clock += 100;
+      finish();
       return side === 'branch' ? fail(error(`${workspace}.ts`, 1, 'x')) : fail(error(`${workspace}.ts`, 1, 'x'));
     };
     expect(await typecheckGate(['main', 'web', 'model'], run, 500, () => clock)).toBeUndefined();
-    // Branch runs start together at 0; the first main run starts at 300 and the next two inherit its deadline.
-    expect(deadlines).toEqual(['main:branch:500', 'web:branch:500', 'model:branch:500',
-      'main:main:800', 'web:main:800', 'model:main:800']);
+    expect(remaining).toEqual([500, 400, 300, 500, 400, 300]);
+    expect(budgets[1]).toBe(budgets[0]);
+    expect(budgets[2]).toBe(budgets[0]);
+    expect(budgets[3]).not.toBe(budgets[0]);
+    expect(budgets[4]).toBe(budgets[3]);
+    expect(budgets[5]).toBe(budgets[3]);
   });
 
   test('no touched workspace runs nothing', async () => {

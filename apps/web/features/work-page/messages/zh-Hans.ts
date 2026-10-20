@@ -2,6 +2,27 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkPageMessages } from '../messages.ts';
 
 export default {
+  primaryActions: '主要操作', reactions: '互动',
+  moreActions: insert('“{{title}}”的更多操作', { title: String }),
+  editionsView: '版本与发行',
+  connectionsView: '关联',
+  sourcesAndEvidence: '来源、许可与证据',
+  sourceRecord: '来源记录',
+  fieldEvidence: '字段证据',
+  recordRevision: '记录修订',
+  evidence: '证据',
+  evidenceSource: '来源作品',
+  evidenceRepresentation: '来源的确切表示（SHA-256）',
+  evidenceLocation: '来源位置',
+  evidenceMethod: '证据方法',
+  evidenceModality: '来源形式',
+  evidenceSubmitter: '提交者',
+  evidenceRights: '权利依据',
+  evidenceQuoteWithheld: '来源引文不可显示。',
+  recipeCookNeedsMore: '请先加载剩余步骤，再开始烹饪模式。',
+  fieldEvidenceUnavailable: '此项资料未提供字段级证据。',
+  sourceFacts: '作品资料',
+  sourceDescription: '简介',
   openRecording: "打开录制内容",
   recordingMasked: "此录制内容已遮蔽。打开后即可播放。",
   instructionTransformation: "转换",
@@ -18,13 +39,19 @@ export default {
   regionDenied: '请使用有权访问此作品的账户登录后查看此部分。',
 
   recipeMethod: '食谱', viewRecipe: '查看食谱', recipeYield: '产量', servings: '份数',
+  // Machine-drafted; needs native review.
+  recipeNutrition: '营养信息', recipeNutritionNotProvided: '未提供营养信息',
   totalTime: '总用时', prepTime: '准备', cookTime: '烹煮', ingredients: '食材', method: '做法',
   scaleRecipe: '换算', scaling: '正在换算…', scaleFailed: '用量换算失败，请重试。',
   scaleByTaste: '份数变化超过一倍时，盐、香料和发酵剂不宜按比例照加。此用量保持原文，请试味。',
   scaleUnparsed: '这一行读不出用量，因此保持原文。',
   scaleHeld: '此用量保持原文。',
   unitSystem: '单位', unitWritten: '照原写法', unitUs: '美制', unitMetric: '公制',
-  cookThis: '开始烹饪', cookMode: '烹饪模式', closeCookMode: '退出烹饪模式',
+  cookThis: "烹饪", cookMode: "烹饪", closeCookMode: "关闭",
+  cookUnavailableAction: '烹饪',
+  cookNextStep: "下一步", cookFinish: "完成烹饪", cookComplete: "烹饪完成",
+  cookStep: insert("第 {{current}} 步，共 {{total}} 步", { current: String, total: String }),
+  recipeUnavailable: '暂时无法提供烹饪步骤。',
   startTimer: '开始计时', pauseTimer: '暂停计时', restartTimer: '重新计时',
   recipeNotes: '备注', recipeUnstructured: '此食谱尚未添加可换算的食材用量。',
   // Machine-drafted; needs native review.
@@ -76,6 +103,7 @@ export default {
 
   sections: '作品栏目', overview: '概览', contents: '目录', versions: '版本',
   discussion: '讨论', history: '历史',
+  postMoreActions: '帖子的更多操作', replyMoreActions: '回复的更多操作',
 
   scope: '社区', global: '所有人', realm: '社区', mine: '我', chooseRealm: '选择社区',
   adoptingRealms: '推荐此作品的社区', noAdoptingRealms: '尚无社区推荐此作品。',

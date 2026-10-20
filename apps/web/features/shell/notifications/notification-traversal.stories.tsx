@@ -235,6 +235,7 @@ export const SaveSucceedsAfterPollStarts: Story = {
   })(),
   async play({ canvasElement, args }) {
     const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Actions' }));
     await userEvent.click(canvas.getByRole('button', { name: 'Save' }));
     const poll = spyOn(window, 'fetch').mockResolvedValueOnce(Response.json({
       profile: 'notification-unread-count-v1', generation: '1', count: 1, overflow: false }));
@@ -247,6 +248,53 @@ export const SaveSucceedsAfterPollStarts: Story = {
       await expect(canvas.queryByRole('alert')).toBeNull();
       await expect(args.calls.filter(call => call === 'triage')).toHaveLength(2);
     } finally { poll.mockRestore(); }
+  },
+};
+
+/** Busy and rejected commands keep their target, unread state and a local retry. */
+export const TriageFailureRecovery: Story = {
+  args: (() => {
+    const pending = deferred();
+    let attempts = 0;
+    return { ...base, initial: windowOf([notice(100)]),
+      ...scripted({ page: () => page(windowOf([])), triage: () => ++attempts === 1 ? pending.promise
+        : answer({ saved: true, done: false, revision: '1' }) }),
+      release: () => pending.release({ data: null, error: { status: 503, value: null } }) };
+  })(),
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    const row = canvas.getByRole('listitem');
+    const local = within(row);
+    await userEvent.click(local.getByRole('button', { name: 'Actions' }));
+    await userEvent.click(local.getByRole('button', { name: 'Save' }));
+    await expect(row).toHaveAttribute('aria-busy', 'true');
+    await expect(local.getByRole('button', { name: 'Save' })).toBeDisabled();
+    await expect(local.getByRole('button', { name: 'Mark done' })).toBeDisabled();
+    await expect(local.getByRole('status')).toHaveTextContent('Loading…');
+    await args.release!();
+    await expect(await local.findByRole('alert')).toHaveTextContent('Couldn’t update this notification. Try again.');
+    await expect(local.getByRole('button', { name: 'Save' })).toHaveAttribute('aria-pressed', 'false');
+    await expect(local.getByText('Unread')).toBeVisible();
+    await userEvent.click(local.getByRole('button', { name: 'Try again' }));
+    await expect(await local.findByRole('status')).toHaveTextContent('Saved.');
+    await expect(local.getByRole('button', { name: 'Unsave' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(local.queryByRole('alert')).toBeNull();
+    await expect(local.getByText('Unread')).toBeVisible();
+    await expect(canvas.getByRole('listitem')).toBe(row);
+    await expect(args.calls).toEqual(['triage', 'triage']);
+  },
+};
+
+export const TriageBusy: Story = {
+  args: { ...base, initial: windowOf([notice(100)]),
+    ...scripted({ page: () => page(windowOf([])), triage: () => new Promise<Answer>(() => {}) }) },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Actions' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Save' }));
+    await expect(canvas.getByRole('listitem')).toHaveAttribute('aria-busy', 'true');
+    await expect(canvas.getByRole('button', { name: 'Save' })).toBeDisabled();
+    await expect(canvas.getByText('Loading…')).toBeVisible();
   },
 };
 
@@ -264,6 +312,7 @@ export const ResetCountSurvivesSave: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
     await waitFor(() => expect(args.calls).toContain('count'));
+    await userEvent.click(canvas.getByRole('button', { name: 'Actions' }));
     await userEvent.click(canvas.getByRole('button', { name: 'Save' }));
     await expect(await canvas.findByRole('button', { name: 'Unsave' })).toBeVisible();
     await args.release!();
@@ -299,10 +348,12 @@ export const StaleRestartKeepsTriageRevision: Story = {
   })(),
   async play({ canvasElement, args }) {
     const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Actions' }));
     await userEvent.click(canvas.getByRole('button', { name: 'Save' }));
     await expect(await canvas.findByRole('button', { name: 'Unsave' })).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
     await waitFor(() => expect(canvas.queryByRole('button', { name: 'Show more' })).toBeNull());
+    await userEvent.click(canvas.getByRole('button', { name: 'Actions' }));
     await expect(canvas.getByRole('button', { name: 'Unsave' })).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: 'Unsave' }));
     await expect(await canvas.findByRole('button', { name: 'Save' })).toBeEnabled();
@@ -337,11 +388,13 @@ export const LateTriageAfterReset: Story = {
   })(),
   async play({ canvasElement, args }) {
     const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Actions' }));
     await userEvent.click(canvas.getByRole('button', { name: 'Save' }));
     await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
     await resetVisible(canvas);
     await args.release!();
     await expect(canvas.queryByText('Saved.')).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: 'Actions' }));
     await expect(canvas.getByRole('button', { name: 'Save' })).toBeEnabled();
   },
 };

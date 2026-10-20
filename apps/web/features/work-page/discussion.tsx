@@ -7,6 +7,8 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { markedSpoiler } from '../feed/discussion.ts';
 import { SpoilerVeil } from '../feed/discussion-card.tsx';
 import { messages as defaultFeedMessages, type FeedMessages } from '../feed/messages.ts';
+import { ReportMenu } from '../safety/report-action.tsx';
+import { safetyText } from '../safety/messages.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import { formatDate, mintedAt, paragraphs } from './format.ts';
 import type { WorkPageMessages } from './messages.ts';
@@ -30,6 +32,7 @@ export function DiscussionList({ items, realmLabel: label, realmHref, locale, me
 }) {
   const t = materializeData(messages, { locale });
   const feedCopy = materializeData(feedMessages, { locale });
+  const moreActions = { post: t.postMoreActions, reply: t.replyMoreActions };
   const spoilerLabels = { spoilerAnnounced: feedCopy.spoilerAnnounced, showSpoiler: feedCopy.showSpoiler };
   return <ol className="grid gap-3">
     {items.map(item => {
@@ -46,12 +49,19 @@ export function DiscussionList({ items, realmLabel: label, realmHref, locale, me
           <UsersRoundIcon aria-hidden="true" className="size-3.5" />{t.replyIn({ realm: name })}</Link>
         : <span className="flex items-center gap-1.5 font-medium">
           <UsersRoundIcon aria-hidden="true" className="size-3.5" />{t.replyIn({ realm: name })}</span>;
-      return <li key={item.placement} id={reply ?? undefined} className="scroll-mt-24">
+      return <li key={item.placement} id={reply ?? undefined} data-discussion-object={item.kind}
+        data-resource={item.reply} className="scroll-mt-24">
         <article className="grid gap-3 rounded-xl border border-border/60 bg-background/60 p-4">
           <header className="flex flex-wrap items-center justify-between gap-2 text-xs">
             {replyIn}
-            {placed ? <time dateTime={placed.toISOString()} className="text-muted-foreground tabular-nums">
-              {formatDate(placed, locale)}</time> : null}
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+              {placed ? <time dateTime={placed.toISOString()} className="text-muted-foreground tabular-nums">
+                {formatDate(placed, locale)}</time> : null}
+              <ReportMenu targets={[{ target: item.reply, kind: item.kind, realm: item.realm,
+                selection: { component: 'body', revision: `urn:rezics:content:revision:${item.revisionId}`, locator: null },
+                label: safetyText.report[locale] }]}
+                name={item.kind} locale={locale} moreAccessibleLabel={moreActions[item.kind]} />
+            </div>
           </header>
           <div className="grid gap-2 text-pretty break-words text-sm/7">
             {markedSpoiler(item.spoiler) ? <SpoilerVeil labels={spoilerLabels}>{words}</SpoilerVeil> : words}

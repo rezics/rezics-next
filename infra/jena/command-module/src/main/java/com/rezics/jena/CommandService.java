@@ -85,6 +85,7 @@ final class CommandService extends ActionService {
             operation.equals(Operation.Query) || operation.getId().getURI().equals("https://rezics.com/fuseki/command"));
     }
     @Override public void execGet(HttpAction action) {
+        QueryWorkService.ReadBoundary.checkCurrent();
         long epoch = publicSearchWriteEpoch.get();
         boolean deltaExclusive = deltaExclusive(action.getDataService());
         boolean textIndexUncertain = SearchDeltaJournal.textIndexUncertain(action.getDataService().getDataset());
@@ -99,7 +100,7 @@ final class CommandService extends ActionService {
                 respond(action, 200, proof);
             } catch (IOException | IllegalStateException ex) {
                 var data = action.getDataService().getDataset();
-                SearchDeltaJournal.invalidate(data, "committed reader unavailable", "deltaProof");
+                SearchDeltaJournal.invalidateRead(data, "committed reader unavailable", "deltaProof");
                 respond(action, 200, SearchDeltaJournal.unavailable(data,
                     SearchDeltaJournal.UnavailableReason.COMMITTED_READER_UNAVAILABLE));
             } catch (IllegalArgumentException ex) {
@@ -123,8 +124,12 @@ final class CommandService extends ActionService {
             Map.entry("profiles", profiles.digests())));
     }
     private static boolean prefixWalkAvailable(DatasetGraph data) {
+        QueryWorkService.ReadBoundary.checkCurrent();
         data.begin(ReadWrite.READ);
-        try { return prefixIndex(data) != null && PublicNameProjection.prefixWalkAvailable(data); }
+        try {
+            QueryWorkService.ReadBoundary.checkCurrent();
+            return prefixIndex(data) != null && PublicNameProjection.prefixWalkAvailable(data);
+        }
         finally { data.end(); }
     }
     @Override public void execPost(HttpAction action) {
@@ -137,6 +142,7 @@ final class CommandService extends ActionService {
             String requestJSON = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
             TitleControlPolicy.commandJSONDepth(requestJSON);
             JsonObject body = JSON.parse(requestJSON);
+            QueryWorkService.ReadBoundary.checkCurrent();
             if (body.get("alsoEnjoyedCandidates") != null) {
                 if (!authorized(action, admittedCapability)) {
                     respond(action, 403, Map.of("status", "forbidden")); return;
@@ -541,7 +547,8 @@ final class CommandService extends ActionService {
                 && shape.equals("https://rezics.com/definition/work-derivation-v1/derivation-shape");
             boolean fixedReleaseShape = profileId.equals("fixed-native-text-release-v1")
                 && shape.equals("https://rezics.com/definition/fixed-native-text-release-v1/release-shape");
-            boolean authorCreditShape = profileId.equals("work-author-credit-v1");
+            boolean authorCreditShape = profileId.equals("work-author-credit-v1")
+                || profileId.equals("work-author-credit-v2");
             if (graphs.stream().anyMatch(graph -> !graph.equals(CommandPolicy.CURRENT)
                 && !graph.equals(CommandPolicy.REVISIONS)
                 && !((translationLinkShape || workDerivationShape || fixedReleaseShape || authorCreditShape) && (graph.equals(CommandPolicy.RECEIPTS)
@@ -1168,7 +1175,7 @@ final class CommandService extends ActionService {
      * long command monitor remains outside; a captured query executes outside both. */
     void commitPublished(DatasetGraph dataset, boolean tracksIndex, boolean touchesPublicIndex,
                          boolean rebuild, boolean qualifyGeneration) {
-        synchronized (SearchDeltaJournal.publicationMonitor()) {
+        try (var publication = SearchDeltaJournal.publicationFence()) {
             CommitHalt.commit(dataset);
             dataset.end();
             CommandWork.enter("qualification");
@@ -1583,7 +1590,8 @@ final class CommandService extends ActionService {
                 String link = workStructurePublicationSourceLinks(dataset, subject);
                 if (link != null) return invalid(link);
             }
-            if (hasType(dataset, CommandPolicy.REVISIONS, subject, "ContentSearchEligibilityDecision")) {
+            if (hasType(dataset, CommandPolicy.REVISIONS, subject, "ContentSearchEligibilityDecision")
+                || hasType(dataset, CommandPolicy.REVISIONS, subject, "ContentSearchEligibilityWithdrawalDecision")) {
                 String profile = contentEligibilityProfile(dataset, subject);
                 if (profile == null || !hasNamedFocus(validations, profile, "decision-shape",
                     subject, CommandPolicy.REVISIONS))
@@ -1605,7 +1613,7 @@ final class CommandService extends ActionService {
             Node node = NodeFactory.createURI(subject);
             for (String type : List.of("PublicationDecision", "ContentPublicationDecision", "ContentWithdrawalDecision",
                 "WorkStructurePublicationDecision",
-                "ContentSearchEligibilityDecision", "ContentProjection", "PublicationSelection",
+                "ContentSearchEligibilityDecision", "ContentSearchEligibilityWithdrawalDecision", "ContentProjection", "PublicationSelection",
                 "RealmPublicationRejection", "ClassificationDecision", "RatingObservationRevision",
                 "TranslationLink", "WorkDerivation", "AuthorCreditRevision", "NativeChildRevision",
                 "EditorialFieldRevision", "EditorialFieldControlRevision", "EditorialControlRevision")) {
@@ -1975,6 +1983,7 @@ final class CommandService extends ActionService {
         return switch (revision.getURI()) {
             case "https://rezics.com/definition/content-search-eligibility-v1" -> "content-search-eligibility-v1";
             case "https://rezics.com/definition/content-search-eligibility-v2" -> "content-search-eligibility-v2";
+            case "https://rezics.com/definition/content-search-eligibility-withdrawal-v1" -> "content-search-eligibility-withdrawal-v1";
             default -> null;
         };
     }
@@ -1983,6 +1992,7 @@ final class CommandService extends ActionService {
         Node current = NodeFactory.createURI(CommandPolicy.CURRENT);
         Node revisions = NodeFactory.createURI(CommandPolicy.REVISIONS);
         Node decision = NodeFactory.createURI(subject);
+        boolean withdrawal = hasType(dataset, CommandPolicy.REVISIONS, subject, "ContentSearchEligibilityWithdrawalDecision");
         Node variant = exactlyOne(dataset, revisions, decision, "variant");
         Node component = exactlyOne(dataset, revisions, decision, "component");
         Node resource = exactlyOne(dataset, revisions, decision, "resource");
@@ -1992,23 +2002,38 @@ final class CommandService extends ActionService {
             || !hasType(dataset, CommandPolicy.CURRENT, variant.getURI(), "ContentVariant")
             || !contentPublicationPublishable(dataset, publication)
             || !decision.equals(exactlyOne(dataset, current, variant, "publicSearchEligibilityHead"))
-            || !publication.equals(exactlyOne(dataset, current, variant, "contentPublicationHead"))
+            || !withdrawal && !publication.equals(exactlyOne(dataset, current, variant, "contentPublicationHead"))
             || !resource.equals(exactlyOne(dataset, current, variant, "resource"))
             || !resource.equals(exactlyOne(dataset, revisions, publication, "resource"))
             || !variant.equals(exactlyOne(dataset, revisions, publication, "component")))
             return "Content search eligibility current publication link mismatch: " + subject;
         String profile = contentEligibilityProfile(dataset, subject);
         boolean publicDomain = "content-search-eligibility-v2".equals(profile);
-        if (profile == null || !NodeFactory.createURI(RV + (publicDomain ? "PublicDomain" : "OriginalContribution")).equals(
+        if (!withdrawal && (profile == null || !NodeFactory.createURI(RV + (publicDomain ? "PublicDomain" : "OriginalContribution")).equals(
                 exactlyOne(dataset, revisions, decision, "rightsBasis"))
             || !NodeFactory.createURI(RV + "Public").equals(
-                exactlyOne(dataset, revisions, decision, "disclosure")))
+                exactlyOne(dataset, revisions, decision, "disclosure"))))
             return "Content search eligibility rights/disclosure mismatch: " + subject;
         Node assessment = exactlyOne(dataset, revisions, decision, "rightsAssessment");
         if (publicDomain ? assessment == null || !assessment.isURI()
                 || !assessment.getURI().matches("urn:rezics:rights:assessment:[0-9a-f-]{36}")
             : assessment != null)
             return "Content search eligibility assessment mismatch: " + subject;
+        if (withdrawal) {
+            Node previous = exactlyOne(dataset, revisions, decision, "withdrawnEligibilityHead");
+            Node actor = exactlyOne(dataset, revisions, decision, "actingSubject");
+            if (!"content-search-eligibility-withdrawal-v1".equals(profile) || previous == null || !previous.isURI()
+                || exactlyOne(dataset, revisions, decision, "rightsBasis") != null
+                || exactlyOne(dataset, revisions, decision, "disclosure") != null
+                || !NodeFactory.createURI("https://rezics.com/definition/" + profile).equals(
+                    exactlyOne(dataset, revisions, decision, "shapeRevision"))
+                || !hasType(dataset, CommandPolicy.REVISIONS, previous.getURI(), "ContentSearchEligibilityDecision")
+                || actor == null || !actor.equals(exactlyOne(dataset, revisions, previous, "actingSubject"))
+                || !variant.equals(exactlyOne(dataset, revisions, previous, "component"))
+                || !resource.equals(exactlyOne(dataset, revisions, previous, "resource"))
+                || !publication.equals(exactlyOne(dataset, revisions, previous, "publicationDecision")))
+                return "Content qualification withdrawal publisher/source mismatch: " + subject;
+        }
         Node scope = exactlyOne(dataset, revisions, decision, "admittedScope");
         if (scope == null || !scope.isLiteral()
             || !(scope.getLiteralLexicalForm().equals("content:search-eligibility:" + resource.getURI())
@@ -2027,11 +2052,18 @@ final class CommandService extends ActionService {
                 exactlyOne(dataset, receipts, receiptNode, "outcome")))
             return "Content search eligibility receipt identity/outcome mismatch: " + subject;
         for (String property : List.of("variant", "resource", "publicationDecision",
-            "rightsBasis", "disclosure", "admissionId", "authorityEpoch", "admittedScope",
+            "admissionId", "authorityEpoch", "admittedScope",
             "actingSubject", "datasetId", "dataEpoch", "sequence")) {
             if (!same(dataset, revisions, decision, receipts, receiptNode, property))
                 return "Content search eligibility receipt field mismatch: " + property;
         }
+        for (String property : withdrawal ? List.of("withdrawnEligibilityHead") : List.of("rightsBasis", "disclosure")) {
+            if (!same(dataset, revisions, decision, receipts, receiptNode, property))
+                return "Content eligibility receipt policy field mismatch: " + property;
+        }
+        if (withdrawal && !exactlyOne(dataset, revisions, decision, "withdrawnEligibilityHead").equals(
+            exactlyOne(dataset, receipts, receiptNode, "expectedHead")))
+            return "Content qualification withdrawal expected head mismatch: " + subject;
         if (publicDomain && !same(dataset, revisions, decision, receipts, receiptNode, "rightsAssessment"))
             return "Content search eligibility receipt assessment mismatch: " + subject;
         return null;

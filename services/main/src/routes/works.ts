@@ -22,6 +22,7 @@ import { commandError, problem } from './problems.ts';
 import { groupUuid } from './shared.ts';
 import { workRead } from '../modules/work/read-session.ts';
 import { readWorkHeader } from '../modules/work/read-header.ts';
+import { readPost } from '../modules/post/read.ts';
 import { wikiDisplayObligations } from '../modules/work/read-contract.ts';
 import { operationPolicies } from './operation-policies.ts';
 import { workScalarModels, workScalarOperation } from './work-scalar.contract.ts';
@@ -331,8 +332,14 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       query: t.Object({ actingSubject: t.String({
         pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$',
       }) }, { additionalProperties: false }),
-      response: transportResponses(openApiOperations["/v1/revisions/{revision}"].get, { 200: t.Object({ ...exactWorkRevision.properties,
-        factObligations: t.Optional(wikiDisplayObligations), descriptionObligations: t.Optional(wikiDisplayObligations) }), 400: problemResult(400),
+      response: transportResponses(openApiOperations["/v1/revisions/{revision}"].get, { 200: t.Union([
+        t.Object({ ...exactWorkRevision.properties,
+          factObligations: t.Optional(wikiDisplayObligations), descriptionObligations: t.Optional(wikiDisplayObligations) }),
+        t.Object({ ...t.Pick(exactWorkRevision, ['resolution', 'revision', 'work', 'predecessor', 'operation',
+          'title', 'language', 'sourcePosition']).properties,
+          profile: t.Literal('post-v1'), publisher: t.String(),
+          labels: t.Array(t.Object({ value: t.String(), language: t.String() }), { minItems: 1, maxItems: 24 }) }),
+      ]), 400: problemResult(400),
         401: problemResult(401), 403: problemResult(403),
         404: problemResult(404), 500: problemResult(500),
         503: problemResult(503) }, 'GET'),
@@ -340,14 +347,17 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         const principal = await work.account.verify(request, ['work:read']);
-        const revision = await readExactWorkRevision(work.environment,
-          `https://rezics.com/id/${params.revision}`, async workId => {
-            if (!await work.access.canReadWork(principal, query.actingSubject, workId)) return false;
-            const current = await fuseki.query(`PREFIX schema: <https://schema.org/>
-              ASK { GRAPH <urn:rezics:graph:current> { ${iri(workId)} a schema:CreativeWork } }`);
-            return current.boolean === true;
-          }, { resolveMerges: true });
         const delivered = await workRead(work, request, { actingSubject: query.actingSubject }, async session => {
+          const read = () => readExactWorkRevision(work.environment,
+            `https://rezics.com/id/${params.revision}`, workId =>
+              work.access.canReadWork(principal, query.actingSubject, workId), { resolveMerges: true });
+          const revision = await read();
+          session.observeDependency(`exact-work-revision:${revision.revision}`, revision, read);
+          if (revision.profile === 'post-v1') {
+            const header = await readPost(session, revision.work);
+            if (header.publisher !== revision.publisher) throw new RevisionCorrupt('Post publisher differs from retained custody');
+            return revision;
+          }
           const header = await readWorkHeader(session, revision.work);
           const synopsis = (await session.disclosure([{ owner: 'graph', resource: revision.work, component: 'synopsis' }]))[0];
           return { ...revision, ...(synopsis === 'visible' ? {} : { description: undefined }),

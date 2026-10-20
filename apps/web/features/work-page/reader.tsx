@@ -107,6 +107,7 @@ function ProgressPanel({
           markUnread: t.markUnread,
           saving: t.saving,
           progressFailed: t.progressFailed,
+          retry: t.retry,
         }}
       />
     );
@@ -414,8 +415,10 @@ export function ChapterReader({
       }
     >
       <article
+        key={JSON.stringify([chapter.occurrence, chapter.content.reference.revisionId])}
         lang={chapter.language}
         dir={direction === 'none' ? undefined : direction}
+        data-content-revision={chapter.content.reference.revisionId}
         className="mx-auto grid w-full max-w-(--reader-width) gap-6"
       >
         <header className="grid gap-2 border-border/60 border-b pb-4">

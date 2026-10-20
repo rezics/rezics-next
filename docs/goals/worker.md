@@ -87,7 +87,10 @@ the brief adds its required checks.
 A finding that blocks arrives with a test that fails on your branch. Make it
 pass, name the class of the defect, search your whole change for every other
 site of that class and fix them all. Then read the diff of your fix as a reviewer before handing off. A task gets two fix rounds; say plainly when the second cannot
-close it.
+close it. When claims, outcome, authority and acceptance remain unchanged, the
+manager may use `resume --class sameScope` with the exact failure and correction
+in its recorded message. This permits continued authorized repair without a
+repeated brief commit; a changed contract still needs a coherent brief.
 
 The landing runs a review test on the reviewed head before committing it as a
 blocker. Its runner stack must locate the failure at an outcome assertion in

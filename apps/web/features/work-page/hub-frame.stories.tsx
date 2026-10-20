@@ -73,10 +73,16 @@ export const PhoneFirstScreen: Story = {
     const action = canvas.getByRole('link', { name: /^Continue/ });
     await expect(action).toHaveAttribute('href', localizedPath(workHref(`${fixture.workRef}-2`), 'en'));
     await expect(canvas.getByText('Next: Volume 2')).toBeVisible();
-    // Reporting the Work is in the action column, after the shelf and the rating, and does not lead.
-    const report = canvas.getByRole('link', { name: 'Report this work' });
+    // The one subject menu belongs to the light reactions at the top, and owns reporting.
+    await expect(canvas.queryByRole('link', { name: 'Report this work' })).toBeNull();
+    const reactions = canvasElement.querySelector<HTMLElement>('[data-work-reactions]')!;
+    const more = within(reactions).getByRole('button', { name: `More actions for ${fixture.work.title.value}` });
+    await expect(more.getBoundingClientRect().top).toBeLessThan(heading.getBoundingClientRect().top);
+    await userEvent.click(more);
+    const report = await within(document.body).findByRole('menuitem', { name: 'Report this work' });
     await expect(report).toHaveAttribute('href', expect.stringContaining('/report'));
-    await expect(report.getBoundingClientRect().top).toBeGreaterThan(action.getBoundingClientRect().bottom);
+    await userEvent.keyboard('{Escape}');
+    await expect(more).toHaveFocus();
     const status = canvas.getByRole('list', { name: 'Your edition' });
     await expect(status).toHaveTextContent('Your edition: Sword Art Online 1: Aincrad');
     await expect(status).toHaveTextContent('2 of 4 required parts finished');
@@ -105,8 +111,8 @@ export const OnThisPageMenu: Story = {
     const menu = canvas.getByRole('navigation', { name: 'On this page' });
     const names = within(menu).getAllByRole('link').map(link => link.textContent);
     await expect(names).toEqual(['About', 'Your edition and availability', 'Parts and connections', 'Explore the wiki',
-      'Ratings and reviews', 'Discussion and communities', 'Lists and discovery', 'Contents', 'Versions', 'Discussion',
-      'History']);
+      'Ratings and reviews', 'Discussion and communities', 'Lists and discovery', 'Overview', 'Contents', 'Versions',
+      'Editions', 'Connections', 'Discussion', 'History']);
     await expect(within(menu).getByRole('link', { name: 'Parts and connections' }))
       .toHaveAttribute('href', localizedPath(`${workHref(fixture.workRef)}#parts`, 'en'));
     // A story page has nowhere to go: follow the link's click without leaving it.

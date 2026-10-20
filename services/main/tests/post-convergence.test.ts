@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test';
+import { createMainApp } from '../src/app.ts';
+import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import {
   postBookPlaceFromRows,
   postBookPlaceQuery,
@@ -47,6 +49,13 @@ test('Work header hydration stays a Work read and rejects a Post without a Work 
   expect(header).toMatchObject({ profile: 'work-read-v1', id: work, title: { value: 'Book' },
     publicationState: 'unpublished' });
   expect(header).not.toHaveProperty('partOf');
+  const graph = new FusekiClient('http://127.0.0.1:1/rezics');
+  const app = createMainApp(graph, { environment: { fuseki: graph,
+    lineage: { dataEpoch: 'one', routingEpoch: 'one' }, objectDirectory: '.temp/work-read' },
+  account: {} as never, access: {} as never });
+  const getPaths = app.routes.filter(route => route.method === 'GET')
+    .map(route => route.path.replace(':resource', work.slice(-36)));
+  expect(getPaths).toContain(header.links.ratings);
   expect(queries).toHaveLength(2);
   expect(queries[1]).toContain('schema:description ?text');
   expect(queries[0]).not.toContain('rv:OccurrencePlacement');

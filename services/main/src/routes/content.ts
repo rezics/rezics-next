@@ -14,11 +14,11 @@ import { EmptyContentPublicationBody } from '../modules/content-publication/publ
 import { publishAdmittedContent } from '../modules/content-publication/publish-admitted.ts';
 import { selectAdmittedPublicContentSearch }
   from '../modules/content-publication/eligibility-admitted.ts';
-import type { ContentSearchEligibilityInput }
+import type { ContentSearchEligibilityCommand }
   from '../modules/content-publication/eligibility.ts';
 import { pendingOperation, problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, contentCommentPageResult, contentCommentResult,
-  contentDraftWriteResult, contentEditWriteResult, contentEligibilityWriteResult,
+  contentDraftWriteResult, contentEditWriteResult, contentEligibilityWriteResult, contentEligibilityWithdrawalResult,
   contentPublicationWriteResult, exactContentRevision, writeProblems } from '../api-responses.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
@@ -357,13 +357,18 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
     })
     .post('/v1/content-search-eligibility', {
       body: t.Union([
+        t.Object({ profile: t.Literal('content-search-eligibility-withdrawal-v1'),
+          resourceId: eligibilityFields.resourceId, variantId: eligibilityFields.variantId,
+          publicationDecision: t.String({ minLength: 1 }), expectedEligibilityHead: t.String({ minLength: 1 }),
+          actingSubject: eligibilityFields.actingSubject }, { additionalProperties: false }),
         t.Object({ profile: t.Literal('content-search-eligibility-v1'), ...eligibilityFields,
           rightsBasis: t.Literal('original-contribution') }, { additionalProperties: false }),
         t.Object({ profile: t.Literal('content-search-eligibility-v2'), ...eligibilityFields,
           rightsBasis: t.Literal('public-domain'),
           assessmentId: t.String({ pattern: '^[0-9a-f-]{36}$' }) }, { additionalProperties: false }),
       ]),
-      response: transportResponses(openApiOperations["/v1/content-search-eligibility"].post, { 200: contentEligibilityWriteResult, 201: contentEligibilityWriteResult,
+      response: transportResponses(openApiOperations["/v1/content-search-eligibility"].post, { 200: t.Union([contentEligibilityWithdrawalResult, contentEligibilityWriteResult]),
+        201: t.Union([contentEligibilityWithdrawalResult, contentEligibilityWriteResult]),
         ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       if (!work.contentAuthoring || !work.access.verifyContentDraftProof
@@ -375,7 +380,7 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
       }
       try {
-        const input: ContentSearchEligibilityInput = body;
+        const input: ContentSearchEligibilityCommand = body;
         const result = await selectAdmittedPublicContentSearch(work.environment,
           work.contentAuthoring, work.account,
           work.access as Required<MainWorkDependencies['access']>, request,
@@ -435,20 +440,28 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
           return problem(404, 'revision_unavailable', 'Revision is unavailable');
         }
         let target;
+        let memberReply = false;
         try { target = await resolveContentTarget(work.environment, resourceId); }
         catch (error) {
           if (!(error instanceof ContentDraftUnavailable)) throw error;
-          return problem(404, 'revision_unavailable', 'Revision is unavailable');
+          if (!await work.realmReplies?.hasRevision(resourceId, params.revision)) {
+            return problem(404, 'revision_unavailable', 'Revision is unavailable');
+          }
+          memberReply = true;
+          target = { type: 'member-reply-v1', zone: null };
         }
-        const published = target.zone
+        const published = memberReply
+          ? await work.realmReplies!.canReadRevision(resourceId, params.revision)
+          : target.zone
           ? await isZonePublishedPageRevision(work.environment, target.zone, resourceId, params.revision)
           : await isPublicContentRevision(work.environment, resourceId, params.revision);
         let principal = null;
         if (!published) {
           if (!query.actingSubject) return problem(404, 'revision_unavailable', 'Revision is unavailable');
           principal = await work.account.verify(request, [target.zone ? 'zone:edit' : 'work:read']);
-          if (!await canReadContentTarget(work.environment, work.access, principal,
-            query.actingSubject, resourceId, target)) {
+          if (!(memberReply ? await work.realmReplies!.canReadRevision(resourceId, params.revision, principal, query.actingSubject)
+            : await canReadContentTarget(work.environment, work.access, principal,
+              query.actingSubject, resourceId, target))) {
             return problem(404, 'revision_unavailable', 'Revision is unavailable');
           }
         } else if (request.headers.has('authorization')) {
@@ -465,7 +478,9 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
           && await revisionDeliverable(params.revision)) {
           // Rights and delivery checks can await while publication or private
           // preview authority moves. Recheck the same path before bytes leave.
-          const readable = published
+          const readable = memberReply
+            ? await work.realmReplies!.canReadRevision(resourceId, params.revision, principal ?? undefined, query.actingSubject)
+            : published
             ? target.zone ? await isZonePublishedPageRevision(work.environment, target.zone, resourceId, params.revision)
               : await isPublicContentRevision(work.environment, resourceId, params.revision)
             : principal && query.actingSubject && await canReadContentTarget(work.environment,
@@ -487,7 +502,7 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
 export const openApiOperations = {
   '/v1/content-revisions/{revision}': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: 'optional' } },
   '/v1/content-edits': { post: { exposure: 'public', rateLimitFamily: 'write' } },
-  '/v1/content-search-eligibility': { post: { exposure: 'public', rateLimitFamily: 'write' } },
+  '/v1/content-search-eligibility': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
   '/v1/content-publications': { post: { exposure: 'public', rateLimitFamily: 'write' } },
   '/v1/content-revisions/{revision}/comments': { get: { exposure: 'public', rateLimitFamily: 'read' } },
   '/v1/content-comments/{comment}': { get: { exposure: 'public', rateLimitFamily: 'read' } },

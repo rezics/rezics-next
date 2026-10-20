@@ -102,7 +102,7 @@ export function RankingModule({ module, data, card, locale, messages }: ModulePr
 export function EditorialModule({ module, data, card, messages }: ModuleProps<'editorial-list'>) {
   return <ModuleFrame module={module} more={messages.more}>
     <div className="grid grid-cols-1 gap-6">
-      {data.lists.map((list, index) => <section key={list.id} aria-labelledby={`${module.id}-${list.id}`}
+      {data.lists.map((list, index) => <div key={list.id} role="group" aria-labelledby={`${module.id}-${list.id}`}
         className={cn('grid grid-cols-1 gap-3', index > 0 && 'border-border/60 border-t pt-5')}>
         <header className="flex items-start justify-between gap-3">
           <div className="min-w-0 space-y-1">
@@ -115,7 +115,7 @@ export function EditorialModule({ module, data, card, messages }: ModuleProps<'e
             hover:underline">{messages.more}</LocalizedLink> : null}
         </header>
         <RowGrid items={list.items.map(work => card(work, { layout: 'row' }))} />
-      </section>)}
+      </div>)}
     </div>
   </ModuleFrame>;
 }

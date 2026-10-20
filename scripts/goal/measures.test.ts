@@ -219,9 +219,10 @@ test('explicit baseline-red and environment resumes exclude only those causes', 
     f.attempt(t, 'done', { resumeClass: 'baselineRed' });
     f.attempt(t, 'done', { resumeClass: 'environment' });
     f.attempt(t, 'done', { resumeClass: 'fixRound' });
+    f.attempt(t, 'done', { resumeClass: 'sameScope' });
     const m = (await f.report()).api!;
-    expect(m.attempts.run).toMatchObject({ baselineRed: 1, environment: 1, fixRound: 1, unclassified: 0 });
-    expect(m.firstAttemptShare.run.share).toBe(0.5);
+    expect(m.attempts.run).toMatchObject({ baselineRed: 1, environment: 1, fixRound: 2, unclassified: 0 });
+    expect(m.firstAttemptShare.run.share).toBe(1 / 3);
     expect(measureLines('api', m)[0]).toContain('1 baseline-red, 1 environment');
   } finally { f.cleanup(); }
 });

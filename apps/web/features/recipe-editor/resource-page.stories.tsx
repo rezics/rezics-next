@@ -147,7 +147,7 @@ function RetargetRecipe() {
   const page = record.personas.visitor.find(sample => sample.label === 'public-recipe')!.answer as RecipeWorkPage;
   return <PageContainer>
     <Button onClick={() => setEmpty(true)}>Open empty recipe</Button>
-    <RecipeExperience initial={empty ? null : page} href={`/v1/recipes/works/${work.slice(-36)}`}
+    <RecipeExperience resource={work} initial={empty ? null : page} href={`/v1/recipes/works/${work.slice(-36)}`}
       actingSubject={null} text={null} locale="en" messages={englishMessages} />
   </PageContainer>;
 }

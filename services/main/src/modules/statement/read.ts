@@ -23,6 +23,7 @@ import {
   normalizeStatementRetainedClaimProvenance,
   type StatementQualification,
 } from './qualification.ts';
+import { STATEMENT_V2_PROFILE, StatementV2Rejected } from './v2-schema.ts';
 
 const RDF = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#';
 const PROV = 'http://www.w3.org/ns/prov#';
@@ -85,10 +86,11 @@ export async function readStatementRevisionSnapshot(
   const rows =
     (
       await env.fuseki.query(`PREFIX rv: <${RV}>
-    SELECT ?manifest ?state ?operation ?recordedBy ?epoch ?sequence WHERE {
+    SELECT ?manifest ?state ?operation ?recordedBy ?epoch ?sequence ?model WHERE {
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:StatementRevision, rv:RevisionAnchor ;
         rv:component ${iri(statement)} ; rv:manifest ?manifest ; rv:statementState ?state ;
         rv:operation ?operation ; rv:recordedBy ?recordedBy ; rv:dataEpoch ?epoch ; rv:sequence ?sequence .
+        OPTIONAL { ${iri(revision)} rv:modelRevision ?model }
         FILTER NOT EXISTS { ${iri(revision)} a rv:ErasedRevision } }
     } LIMIT 2`)
     ).results?.bindings ?? [];
@@ -106,6 +108,9 @@ async function statementRevisionSnapshot(
     { type: string; value: string; datatype?: string; 'xml:lang'?: string } | undefined
   >,
 ) {
+  if (row.model?.value === STATEMENT_V2_PROFILE) {
+    throw new StatementV2Rejected('unsupported_model_revision', 'this Statement requires statement-v2');
+  }
   const stored = await readComponent(env, row.manifest!.value, statement, STATEMENT_PROFILE);
   if (
     stored.revision !== revision ||
@@ -248,12 +253,13 @@ export async function readStatement(env: WorkActivationEnvironment, statement: s
     SELECT ?epoch ?sequence ?subject ?predicate ?object ?relation ?definition ?applicability ?speaker ?key
       ?state ?head ?headRevision ?operation ?recordedBy ?pin ?context ?disclosure
       ?qualificationDefinition ?qualificationContext ?precision ?qualifier ?validFrom ?validUntil ?edition ?manifest
-      ?subjectIsWork ?subjectPublic WHERE {
+      ?subjectIsWork ?subjectPublic ?model WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence . }
       FILTER(?epoch = ${lit(env.lineage.dataEpoch)})
       GRAPH ${iri(GRAPHS.current)} { ${iri(statement)} a rdf:Statement ; rdf:subject ?subject ;
         rdf:predicate ?predicate ; rdf:object ?object ; rv:relationDefinition ?relation ; rv:speaker ?speaker ;
         rv:meaningKey ?key ; rv:statementState ?state ; rv:head ?head .
+        OPTIONAL { ${iri(statement)} rv:modelRevision ?model }
         OPTIONAL { ${iri(statement)} rv:interpretationDefinition ?definition }
         OPTIONAL { ${iri(statement)} rv:applicability ?applicability }
         OPTIONAL { ${iri(statement)} rv:qualificationDefinition ?qualificationDefinition }
@@ -284,6 +290,9 @@ export async function readStatement(env: WorkActivationEnvironment, statement: s
   if (canReadWorkSubject && row.subjectIsWork?.value === 'true' && row.subjectPublic?.value !== 'true'
     && !await canReadWorkSubject(row.subject.value)) {
     throw new StatementNotFound('Statement is unavailable');
+  }
+  if (row.model?.value === STATEMENT_V2_PROFILE) {
+    throw new StatementV2Rejected('unsupported_model_revision', 'this Statement requires statement-v2');
   }
   if (['predicate', 'object', 'relation', 'speaker', 'key', 'state', 'head', 'headRevision',
     'operation', 'recordedBy'].some(key => !row[key])) {
@@ -458,7 +467,7 @@ export async function readPublicStatementsAt(env: WorkActivationEnvironment,
   if (unique.length === 0) return new Map();
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const body = `PREFIX rv: <${RV}> PREFIX rdf: <${RDF}>
-    SELECT ?epoch ?sequence ?statement ?subject ?predicate ?object ?relation ?speaker ?key ?head
+    SELECT ?epoch ?sequence ?statement ?subject ?predicate ?object ?relation ?speaker ?key ?head ?model
       ?pin ?context ?disclosure ?manifest ?qualificationDefinition ?qualificationContext ?precision ?validFrom ?validUntil ?edition
       (GROUP_CONCAT(DISTINCT STR(?definition); separator="|") AS ?definitions)
       (GROUP_CONCAT(DISTINCT STR(?qualifier); separator="|") AS ?valueQualifiers)
@@ -471,6 +480,7 @@ export async function readPublicStatementsAt(env: WorkActivationEnvironment,
         ?statement a rdf:Statement ; rv:statementState rv:Active ; rdf:subject ?subject ;
           rdf:predicate ?predicate ; rdf:object ?object ; rv:relationDefinition ?relation ;
           rv:speaker ?speaker ; rv:meaningKey ?key ; rv:head ?head .
+        OPTIONAL { ?statement rv:modelRevision ?model }
         OPTIONAL { ?statement rv:interpretationDefinition ?definition }
         OPTIONAL { ?statement rv:applicability ?app }
         OPTIONAL { ?statement rv:qualificationDefinition ?qualificationDefinition }
@@ -487,7 +497,7 @@ export async function readPublicStatementsAt(env: WorkActivationEnvironment,
       OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} {
         ?pin a rv:ContextSemanticRevision ; rv:component ?context . }
         GRAPH ${iri(GRAPHS.current)} { ?context rv:disclosure ?disclosure . } }
-    } GROUP BY ?epoch ?sequence ?statement ?subject ?predicate ?object ?relation ?speaker ?key ?head
+    } GROUP BY ?epoch ?sequence ?statement ?subject ?predicate ?object ?relation ?speaker ?key ?head ?model
       ?pin ?context ?disclosure ?manifest ?qualificationDefinition ?qualificationContext ?precision ?validFrom ?validUntil ?edition
     LIMIT ${MAX_PUBLIC_STATEMENT_BATCH + 1}`;
   const rows = session?.fencesSelectedUnits
@@ -500,6 +510,9 @@ export async function readPublicStatementsAt(env: WorkActivationEnvironment,
   const parsed = new Map<string, PublicStatementBatchRow>();
   const scopeReferences = new Set<string>();
   for (const row of rows) {
+    if (row.model?.value === STATEMENT_V2_PROFILE) {
+      throw new StatementV2Rejected('unsupported_model_revision', 'a V1 batch cannot decode a V2 Statement');
+    }
     const qualification = statementQualificationFromBindings([row]);
     for (const reference of qualification
       ? [

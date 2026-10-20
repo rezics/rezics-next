@@ -18,7 +18,7 @@ import { mainApiWithToken, readPlatformAccess } from '../api/main.ts';
 import { operationOpen, platformClosed } from '../api/platform-access.ts';
 import { ACCESS_COOKIE } from '../auth/cookies.ts';
 import { BrowseReadError, discoveryApi, type ListPage, type RatingPopulation } from '../discover/api.ts';
-import { sessionAgentState } from '../auth/session.ts';
+import { sessionAgentRead } from '../auth/session.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { type ReaderSeed, readerEntry } from '../catalogue/reader-store.ts';
 import { localizedPath } from '../../i18n/locale.ts';
@@ -45,9 +45,11 @@ import type { AdoptionPage, AgentCreditPage, AgentWorksPage, AlsoEnjoyedPage, Ch
  */
 export const reader = cache(async () => {
   const token = (await cookies()).get(ACCESS_COOKIE)?.value;
-  const state = token ? await sessionAgentState() : null;
+  const identity = token ? await sessionAgentRead() : null;
+  const state = identity?.kind === 'ready' ? identity.state : null;
   const acting = state?.sessionAgent.eligible ? state.sessionAgent.actingSubject ?? undefined : undefined;
-  return { main: mainApiWithToken(acting ? token : undefined), actingSubject: acting, signedIn: Boolean(token) };
+  return { main: mainApiWithToken(acting ? token : undefined), actingSubject: acting, signedIn: Boolean(token),
+    identityUnavailable: identity?.kind === 'unavailable' };
 });
 
 /** Main ranks rating populations by current votes and supplies the reader-community flag. */
@@ -355,7 +357,7 @@ export const oneTextLanguage = cache(async (id: string, locale: UiLocale, select
  * starts at chapter 1, found by descending the first parts of the contents
  * (at most three levels, one page each). A Work with no contents but a
  * selected text is read as that one text. Null when the Work has nothing to
- * read; `contents` when Main could not say, so Contents explains.
+ * read. A refused contents read remains unavailable, with its owner refusal.
  */
 export const readStart = cache(async (id: string, work: string, locale: UiLocale, selected: string | null,
   client?: SuppliedClient): Promise<ReadStart> => {
@@ -378,6 +380,7 @@ export const readEditionPreference = cache(async (id: string, client?: SuppliedC
 export type ReadStart =
   | { kind: 'start' | 'continue'; href: string; chapter: string | null }
   | { kind: 'contents' }
+  | ({ kind: 'unavailable' } & Extract<Loaded<never>, { ok: false }>)
   | null;
 
 /**

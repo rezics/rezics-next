@@ -9,7 +9,7 @@ import type { FusekiClient, SparqlResult } from '../src/infrastructure/fuseki.ts
 import type { VerifiedPrincipal } from '../src/modules/access/admission.ts';
 import { StudioAccess } from '../src/modules/studio/access.ts';
 import { readStudioWork, readStudioWorks } from '../src/modules/studio/works.ts';
-import type { ReadRow, WorkReadSession } from '../src/modules/work/read-session.ts';
+import { WorkReadInvalid, type ReadRow, type WorkReadSession } from '../src/modules/work/read-session.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const native = () => `https://rezics.com/id/${randomUUID()}`;
@@ -272,17 +272,20 @@ test('large transferred inventory remains bounded and pages by current membershi
   expect((await r.access.studioWorks(creator.principal, creator.actor, '', 201)).rows).toEqual([]);
 }, 30_000);
 
-test('stale or erased receipt evidence denies list and exact read while bounded empty pages can continue', async () => {
+test('stale or erased receipt evidence denies list and exact read while later admissible Works reach the first page', async () => {
   const owner = await controller(), targets = await works(owner, 203), r = reader(targets);
   const sorted = [...targets].sort((left, right) => left.resource.localeCompare(right.resource));
   for (const target of sorted.slice(0, 200)) target.erased = true;
-  const first = await readStudioWorks(session(owner, r).value, owner.actor, {});
-  expect(first.items).toEqual([]);
-  expect(first.nextCursor).not.toBeNull();
-  const next = await readStudioWorks(session(owner, r, { cursor: first.nextCursor! }).value, owner.actor, {});
-  expect(next.items.map(item => item.id)).toEqual(sorted.slice(200).map(work => work.resource));
+  const first = await readStudioWorks(session(owner, r).value, owner.actor, { sort: 'title' });
+  expect(first.items.map(item => item.id)).toEqual(sorted.slice(200).map(work => work.resource));
+  expect(first.count).toEqual({ value: 3, kind: 'exact-page', total: null });
+  expect(first.nextCursor).toBeNull();
   expect((await r.access.studioWork(owner.principal, owner.actor, sorted[0]!.resource)).row).toBeNull();
   r.library.get(sorted[200]!.resource)!.digest = digest('stale receipt');
+  const afterStale = await readStudioWorks(session(owner, r).value, owner.actor, { sort: 'title' });
+  expect(afterStale.items.map(item => item.id)).toEqual(sorted.slice(201).map(work => work.resource));
+  expect(afterStale.count).toEqual({ value: 2, kind: 'exact-page', total: null });
+  expect(afterStale.nextCursor).toBeNull();
   expect((await r.access.studioWork(owner.principal, owner.actor, sorted[200]!.resource)).row).toBeNull();
   expect((await r.access.studioWorks(owner.principal, owner.actor, sorted[199]!.resource, 20)).rows[0]!.generation).toBeNull();
 });
@@ -384,17 +387,61 @@ test('ordinary catalogue Works stay curated and original native writer credits c
   }
 });
 
-test('catalogue classification can produce a bounded empty authored page without hiding later authored Works', async () => {
+test('catalogue classification filters the full inventory before authored and curated pagination', async () => {
   const owner = await controller(), targets = await works(owner, 201), r = reader(targets);
   const sorted = [...targets].sort((left, right) => left.resource.localeCompare(right.resource));
   for (const target of sorted.slice(0, 200)) target.nativeCredit = false;
-  const first = await readStudioWorks(session(owner, r).value, owner.actor, { view: 'authored' });
-  expect(first.items).toEqual([]);
-  expect(first.nextCursor).not.toBeNull();
-  const next = await readStudioWorks(session(owner, r, { cursor: first.nextCursor! }).value, owner.actor, { view: 'authored' });
-  expect(next.items.map(item => item.id)).toEqual([sorted[200]!.resource]);
-  expect(next.nextCursor).toBeNull();
-  const curated = await readStudioWorks(session(owner, r).value, owner.actor, { view: 'curated' });
+  const first = await readStudioWorks(session(owner, r).value, owner.actor, { view: 'authored', sort: 'title' });
+  expect(first.items.map(item => item.id)).toEqual([sorted[200]!.resource]);
+  expect(first.items[0]!.relationship).toBe('authored');
+  expect(first.count).toEqual({ value: 1, kind: 'exact-page', total: null });
+  expect(first.nextCursor).toBeNull();
+  const curated = await readStudioWorks(session(owner, r).value, owner.actor, { view: 'curated', sort: 'title' });
   expect(curated.items.map(item => item.id)).toEqual(sorted.slice(0, 20).map(work => work.resource));
+  expect(curated.items.every(item => item.relationship === 'curated')).toBe(true);
+  expect(curated.count).toEqual({ value: 20, kind: 'exact-page', total: null });
   expect(curated.nextCursor).not.toBeNull();
 });
+
+test('Studio recent, created and title orders traverse 105 Works without losing microsecond order', async () => {
+  const owner = await controller(), targets = await works(owner, 105), r = reader(targets);
+  await pool.query(`UPDATE access.admission a SET registered_at =
+    timestamptz '2026-09-01 12:00:00+00' + seed.ordinal * interval '1 microsecond'
+    FROM unnest($1::uuid[]) WITH ORDINALITY AS seed(id, ordinal) WHERE a.id = seed.id`,
+  [targets.map(work => work.admission)]);
+  for (const sort of ['recent', 'created', 'title'] as const) {
+    const found: string[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await readStudioWorks(session(owner, r, { cursor }).value, owner.actor, { sort });
+      found.push(...page.items.map(item => item.id));
+      cursor = page.nextCursor ?? undefined;
+      if (found.length > targets.length) throw new Error('Studio ordering repeated a Work');
+    } while (cursor);
+    const expected = sort === 'title'
+      ? [...targets].sort((a, b) => a.resource < b.resource ? -1 : a.resource > b.resource ? 1 : 0)
+      : [...targets].reverse();
+    expect(found).toEqual(expected.map(work => work.resource));
+    expect(new Set(found).size).toBe(105);
+  }
+  const first = await readStudioWorks(session(owner, r).value, owner.actor, { sort: 'created' });
+  for (const filters of [{ sort: 'title' as const }, { sort: 'created' as const, q: 'another title' }]) {
+    await expect(readStudioWorks(session(owner, r, { cursor: first.nextCursor! }).value, owner.actor, filters))
+      .rejects.toBeInstanceOf(WorkReadInvalid);
+  }
+  const scope = `work:edit:${targets[0]!.resource}`;
+  await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
+  const edit = randomUUID();
+  await pool.query(`INSERT INTO access.admission (id,principal_id,acting_subject,scope_id,action,
+    idempotency_key,request_digest,authority_epoch,expires_at,state,graph_receipt,graph_outcome,
+    graph_data_epoch,graph_sequence,sealed_at) VALUES ($1::uuid,$2,$3,$4,'work.edit',$1::text,$5,0,
+    now(),'sealed',$6,'succeeded','fixture',1,timestamptz '2026-09-02 12:00:00+00')`,
+  [edit, owner.id, owner.actor, scope, digest(edit), `urn:rezics:receipt:${digest(edit).slice(0, 32)}`]);
+  expect((await readStudioWorks(session(owner, r).value, owner.actor, { sort: 'recent' }))
+    .items[0]!.id).toBe(targets[0]!.resource);
+  expect((await readStudioWorks(session(owner, r).value, owner.actor, { sort: 'created' }))
+    .items[0]!.id).toBe(targets.at(-1)!.resource);
+  await transfer(targets[0]!.resource, (await controller()).actor);
+  expect((await readStudioWorks(session(owner, r).value, owner.actor, { sort: 'recent' }))
+    .items.some(item => item.id === targets[0]!.resource)).toBe(false);
+}, 30_000);

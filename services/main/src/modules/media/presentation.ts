@@ -47,9 +47,25 @@ export interface ImageInferenceInput {
 }
 export interface DocumentImageUseInput {
   representation: string; target: string; occurrence: string; context: string; conceal: boolean;
+  memberReplyDraft?: MemberReplyImageBasis;
+}
+export interface MemberReplyImageBasis {
+  profile: 'member-reply-draft-image-v1';
+  variantId: string; expectedHead: string; rootTarget: string; rootRevision: string;
 }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const NATIVE = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
+export function validateDocumentImageUse(input: DocumentImageUseInput): void {
+  if (!UUID.test(input.representation) || !UUID.test(input.occurrence) || !NATIVE.test(input.target)
+    || input.context !== DEFAULT_MEDIA_CONTEXT && !NATIVE.test(input.context) || typeof input.conceal !== 'boolean')
+    throw new MediaInvalid('invalid document image occurrence');
+  const basis = input.memberReplyDraft;
+  if (basis !== undefined && (!basis || basis.profile !== 'member-reply-draft-image-v1'
+    || !/^urn:rezics:variant:[0-9a-f-]{36}$/.test(basis.variantId) || !UUID.test(basis.expectedHead)
+    || !NATIVE.test(basis.rootTarget) || !NATIVE.test(basis.rootRevision)
+    || Object.keys(basis).some(key => !['profile', 'variantId', 'expectedHead', 'rootTarget', 'rootRevision'].includes(key))))
+    throw new MediaInvalid('invalid member reply image basis');
+}
 const IRI = (value: string | null) => value ? assetIri(value) : null;
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const fieldTarget = (field: ImageField, representation: string, use?: string,
@@ -328,17 +344,42 @@ export class MediaPresentationStore {
     },{digest:admission.requestDigest,action:'media.inference.record'});
   }
   async createDocumentUse(admission: MediaAdmission, input: DocumentImageUseInput) {
-    if (!UUID.test(input.representation) || !UUID.test(input.occurrence) || !NATIVE.test(input.target)
-      || input.context !== DEFAULT_MEDIA_CONTEXT && !NATIVE.test(input.context) || typeof input.conceal !== 'boolean')
-      throw new MediaInvalid('invalid document image occurrence');
+    validateDocumentImageUse(input);
     const operation = `media-document-use:${admission.admissionId}`;
     return this.transaction(operation, async client => {
       const prior = await this.replay(client,operation,admission.requestDigest,'media.use.create');
       if (prior) {
+        if (prior.outcome === 'stale_head') throw new MediaStale(prior.reason);
         if (prior.outcome !== 'succeeded') throw new MediaFenced('media admission was fenced');
         const use = (await client.query('SELECT id,asset_id FROM media.use WHERE operation_id = $1',[operation])).rows[0]!;
         return {use:use.id as string,asset:use.asset_id as string,representation:input.representation,
           occurrence:input.occurrence,replayed:true};
+      }
+      let draftOperation: string | undefined;
+      if (input.memberReplyDraft) {
+        const basis = input.memberReplyDraft;
+        // Content owns authorship and its CAS head. Hold those exact rows until
+        // the Use commits; a readable root or caller-generated reply ID is no proof.
+        const draft = (await client.query(`SELECT a.author,a.variant_id,a.root_target,a.root_revision,a.origin_realm,
+          v.resource_id,v.draft_head,r.model,r.availability,r.body,r.provenance,r.source_revision,
+          receipt.operation_id AS draft_operation
+          FROM content.reply_author a JOIN content.variant v ON v.id = a.variant_id
+          JOIN content.revision r ON r.id = v.draft_head
+          JOIN content.receipt receipt ON receipt.operation_id = r.operation_id
+            AND receipt.action = 'draft.save' AND receipt.outcome = 'succeeded'
+            AND receipt.variant_id = v.id AND receipt.revision_id = r.id
+          WHERE a.reply = $1 FOR SHARE OF a,v,r,receipt`, [input.target])).rows[0];
+        if (!draft || draft.author !== admission.actingSubject || draft.resource_id !== input.target
+          || draft.model !== 'member-reply-v1' || draft.availability !== 'available'
+          || draft.provenance.author !== admission.actingSubject || draft.body.deleted !== false)
+          throw new MediaMissing('reply draft is unavailable');
+        if (draft.variant_id !== basis.variantId || draft.root_target !== basis.rootTarget
+          || draft.root_revision !== basis.rootRevision || draft.body.rootTarget !== basis.rootTarget
+          || draft.source_revision !== basis.rootRevision || draft.body.rootRevision !== basis.rootRevision
+          || input.context !== (draft.origin_realm ?? DEFAULT_MEDIA_CONTEXT))
+          throw new MediaFenced('reply image basis differs');
+        if (draft.draft_head !== basis.expectedHead) throw new MediaStale('reply draft head changed');
+        draftOperation = draft.draft_operation;
       }
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[
         `media-document-occurrence:${input.target}:${input.occurrence}`]);
@@ -353,7 +394,9 @@ export class MediaPresentationStore {
       [input.representation,admission.actingSubject])).rows[0];
       if (!resource) throw new MediaMissing('image is unavailable');
       await advanceContentSequence(client,{operationId:operation,requestDigest:admission.requestDigest,
-        action:'media.use.create',outcome:'succeeded',eventType:'media.use.created',recipe:'media-v1',payload:{target:input.target}});
+        action:'media.use.create',outcome:'succeeded',eventType:'media.use.created',recipe:'media-v1',
+        payload:{target:input.target,...(input.memberReplyDraft
+          ? {memberReplyDraft:{...input.memberReplyDraft,draftOperation}} : {})}});
       const use = randomUUID();
       await client.query(`INSERT INTO media.use(id,asset_id,asset_variant_id,asset_revision_id,representation_id,
         target,context,role,crop,actor,operation_id,occurrence) VALUES ($1,$2,$3,$4,$5,$6,$7,'document-image',NULL,$8,$9,$10)`,

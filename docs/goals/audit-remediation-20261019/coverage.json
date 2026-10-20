@@ -79,9 +79,19 @@
       "severity": "P1",
       "sourceConfidence": "confirmed",
       "title": "Discovery刷新对持续失败无限期重试，无用户仍持续消耗共享读取",
-      "status": "build-briefed",
+      "status": "closed",
       "owner": "G-2766",
-      "proof": []
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "D5-004",
+          "assessedMain": "0a0733dcbf73028e8d84e6ddfdf443473d3ecc90",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "disposition": "Original3+3 workload assertions passed: unchanged native40 boundary/recovery proof plus genuine MediaInvalid22 and owner3/10, independently reviewed and exact normal source landing.",
+      "remainingValidation": []
     },
     {
       "id": "D6-002",
@@ -169,9 +179,18 @@
       "severity": "P1",
       "sourceConfidence": "intermittent",
       "title": "一次 SSR useState 异常使开发错误遮罩盖住 Discover",
-      "status": "build-dispatched",
+      "status": "closed",
       "owner": "G-2747",
-      "proof": []
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "AUD-006",
+          "assessedMain": "6430441893f5c3609efd97b3921a21a85eab0707",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "remainingValidation": []
     },
     {
       "id": "D2-003",
@@ -223,18 +242,36 @@
       "severity": "P1",
       "sourceConfidence": "injected",
       "title": "一次游标冲突后 Refresh 在三次 30 秒等待内都不能恢复",
-      "status": "build-dispatched",
+      "status": "closed",
       "owner": "G-2749",
-      "proof": []
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "AUD-005",
+          "assessedMain": "32400992a4879132812a83d9e6a0bd1cd5d996bf",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "remainingValidation": []
     },
     {
       "id": "D2-002",
       "severity": "P1",
       "sourceConfidence": "confirmed",
       "title": "发帖把一次尝试当作已提交内容，写入前失败也锁死草稿",
-      "status": "build-dispatched",
+      "status": "closed",
       "owner": "G-2748",
-      "proof": []
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "D2-002",
+          "assessedMain": "6430441893f5c3609efd97b3921a21a85eab0707",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "remainingValidation": []
     },
     {
       "id": "D3-001",
@@ -250,9 +287,11 @@
       "severity": "P1",
       "sourceConfidence": "confirmed",
       "title": "服务端路由调用客户端模块的普通函数，Proposals 列表在身份检查前崩溃",
-      "status": "build-dispatched",
+      "status": "closed",
       "owner": "G-2747",
-      "proof": []
+      "proof": [
+        "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json#D3-002"
+      ]
     },
     {
       "id": "D5-003",
@@ -277,9 +316,11 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "开发切片丢失已选作品的核心邻接资料",
-      "status": "pending",
-      "owner": null,
-      "proof": []
+      "status": "closed",
+      "owner": "G-2778",
+      "proof": [
+        "docs/goals/audit-remediation-20261019/proofs/catalogue-A02-acceptance.json"
+      ]
     },
     {
       "id": "A12",
@@ -295,9 +336,11 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "描述类型保留却没有绑定实体页面注册表",
-      "status": "pending",
-      "owner": null,
-      "proof": []
+      "status": "closed",
+      "owner": "G-2758",
+      "proof": [
+        "docs/goals/audit-remediation-20261019/proofs/catalogue-A15-acceptance.json"
+      ]
     },
     {
       "id": "A17",
@@ -331,9 +374,18 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "一次候选配额成为全业务人口上限，超出即整份正常读取失败",
-      "status": "pending",
+      "status": "closed",
       "owner": null,
-      "proof": []
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "D5-006",
+          "assessedMain": "7538d1970f49ae3e11f0d462e9d2295a26b1d4ab",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "remainingValidation": []
     },
     {
       "id": "D6-005",
@@ -349,9 +401,11 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "公开结构未就绪时仍提供无反馈的做菜主操作",
-      "status": "pending",
-      "owner": null,
-      "proof": []
+      "status": "closed",
+      "owner": "G-2757",
+      "proof": [
+        "docs/goals/audit-remediation-20261019/proofs/catalogue-A18-acceptance.json"
+      ]
     },
     {
       "id": "AUD-007",
@@ -367,9 +421,18 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "断点叠加使视口变宽 1px、卡片反而骤缩",
-      "status": "build-briefed",
+      "status": "closed",
       "owner": "G-2754",
-      "proof": []
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "AUD-008",
+          "assessedMain": "979903033fc6d32f3adf74db4dbb22d65973df4a",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "remainingValidation": []
     },
     {
       "id": "AUD-009",
@@ -421,9 +484,18 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "手机详情导航浮层缺少 Escape、外点关闭与一致的焦点行为",
-      "status": "build-briefed",
+      "status": "closed",
       "owner": "G-2757",
-      "proof": []
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "D1-002",
+          "assessedMain": "6430441893f5c3609efd97b3921a21a85eab0707",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "remainingValidation": []
     },
     {
       "id": "D1-003",
@@ -439,25 +511,43 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "非书籍散文正文沿用全宽容器，指南缺少阅读行宽",
-      "status": "build-briefed",
+      "status": "closed",
       "owner": "G-2757",
-      "proof": []
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "D1-005",
+          "assessedMain": "6430441893f5c3609efd97b3921a21a85eab0707",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "remainingValidation": []
     },
     {
       "id": "D2-005",
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "设置共用 busy 状态，却让可操作的语言控件静默丢弃输入",
-      "status": "build-briefed",
+      "status": "closed",
       "owner": "G-2751",
-      "proof": []
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "D2-005",
+          "assessedMain": "979903033fc6d32f3adf74db4dbb22d65973df4a",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "remainingValidation": []
     },
     {
       "id": "D4-001",
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "中性装饰色同时承担输入控件识别，空字段和亮色关闭开关对比不足",
-      "status": "implemented-main",
+      "status": "closed",
       "owner": "G-2756 + G-2824",
       "proof": [
         {
@@ -484,83 +574,158 @@
           "head": "6c260a353cafdee57f54004ab58aa1ae50c5a04e",
           "complete": true,
           "findings": 0
+        },
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "D4-001",
+          "source": "2f99ee87a0c037c6298bd916bf9d0e9e418c1dd4",
+          "runtimeFrontend": "e96e4846d049d3958695e30ff7e67dacc1af93e9",
+          "assessedMain": "82df58d2ba1d9d377b591126e7f4dfa42f27f02e",
+          "originalAssertionsChanged": false
         }
       ],
-      "remainingValidation": [
-        "Authenticated Settings acceptance on the repaired, correctly configured Web frontend. Full finding closure is still pending."
-      ]
+      "remainingValidation": []
     },
     {
       "id": "D4-002",
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "横向导航在整页进入时丢掉当前选项的位置",
-      "status": "build-dispatched",
+      "status": "closed",
       "owner": "G-2747",
-      "proof": []
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "D4-002",
+          "assessedMain": "8d5a550fc6ca47f756a347165bb61f89156ac18a",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "disposition": "Original applicable3+3 assertions passed; genuine Discover/Studio/Library and independent Site component inspection kept distinct; root accepted.",
+      "remainingValidation": []
     },
     {
       "id": "D4-003",
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "Library以目标、统计和搬运工具占据首屏，正在读的作品最后出现",
-      "status": "build-briefed",
+      "status": "closed",
       "owner": "G-2752",
-      "proof": []
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "D4-003",
+          "assessedMain": "32400992a4879132812a83d9e6a0bd1cd5d996bf",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "remainingValidation": []
     },
     {
       "id": "D4-004",
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "手机通知偏好矩阵滚动后失去通道含义",
-      "status": "build-briefed",
+      "status": "closed",
       "owner": "G-2751",
-      "proof": []
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "D4-004",
+          "source": "2f99ee87a0c037c6298bd916bf9d0e9e418c1dd4",
+          "runtimeFrontend": "e96e4846d049d3958695e30ff7e67dacc1af93e9",
+          "assessedMain": "82df58d2ba1d9d377b591126e7f4dfa42f27f02e",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "remainingValidation": []
     },
     {
       "id": "D4-005",
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "自动保存反馈放在45个开关之后，操作结果在手机屏外",
-      "status": "build-briefed",
+      "status": "closed",
       "owner": "G-2751",
-      "proof": []
+      "proof": [
+        "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json#D4-005"
+      ]
     },
     {
       "id": "D4-011",
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "Home把获客横幅与空侧栏放在内容之前，首屏没有证明值得关注什么",
-      "status": "build-briefed",
+      "status": "closed",
       "owner": "G-2752",
-      "proof": []
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "D4-011",
+          "assessedMain": "6430441893f5c3609efd97b3921a21a85eab0707",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "remainingValidation": []
     },
     {
       "id": "D4-014",
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "Studio用展示卡管理作品，却缺少定位和排序，状态与元数据挤成高卡",
-      "status": "build-briefed",
+      "status": "closed",
       "owner": "G-2753",
-      "proof": []
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "D4-014",
+          "assessedMain": "653c9c18a6d4577717dfd4af26f63f2c6eadf996",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "remainingValidation": []
     },
     {
       "id": "D4-015",
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "通知把每条两枚分拣按钮放在事件与时间之间，正文对象没有稳定视觉焦点",
-      "status": "pending",
+      "status": "closed",
       "owner": null,
-      "proof": []
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "D4-015",
+          "assessedMain": "32400992a4879132812a83d9e6a0bd1cd5d996bf",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "remainingValidation": []
     },
     {
       "id": "D4-016",
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "Feed预览复述刚读过的标题，有限预览空间没有新增判断信息",
-      "status": "build-dispatched",
+      "status": "closed",
       "owner": "G-2749",
-      "proof": []
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "D4-016",
+          "assessedMain": "653c9c18a6d4577717dfd4af26f63f2c6eadf996",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "remainingValidation": []
     },
     {
       "id": "D6-003",
@@ -576,9 +741,18 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "有效筛选条件不可见，编辑当前查询会隐性清空范围",
-      "status": "pending",
+      "status": "closed",
       "owner": null,
-      "proof": []
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "D6-004",
+          "assessedMain": "32400992a4879132812a83d9e6a0bd1cd5d996bf",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "remainingValidation": []
     }
   ]
 }

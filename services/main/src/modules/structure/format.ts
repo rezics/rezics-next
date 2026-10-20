@@ -114,6 +114,8 @@ const text = (maxLength: number, minLength = 1) => Type.Object({
   value: Type.String({ minLength, maxLength }),
   language: Type.String({ pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }),
 }, { additionalProperties: false });
+/** Transport callers retain the immutable field syntax without reinterpreting it. */
+export const structureQualifierText = text;
 const bounded = (minimum: number) => Type.Integer({ minimum, maximum: 1_000_000_000_000 });
 /** Exact non-negative rational; writers store it reduced (see recipe/quantity.ts). */
 const rational = Type.Object({ numerator: bounded(0), denominator: bounded(1) },

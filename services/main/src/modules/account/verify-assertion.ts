@@ -1,4 +1,5 @@
 import { requestToResourceInput, verifyJwsAccessToken } from 'better-auth/oauth2';
+import { assertFusekiReadActive, withFusekiReadWait } from '../../infrastructure/fuseki.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 
 export interface AccountAssertionConfig {
@@ -36,6 +37,11 @@ interface RequestAdmission { scopes: readonly string[]; principal: VerifiedAccou
  * between attempts is seen. Nothing is keyed by the bearer. */
 const requestAdmissions = new WeakMap<Request, RequestAdmission>();
 
+function assertAdmissionActive(request: Request): void {
+  assertFusekiReadActive();
+  request.signal.throwIfAborted();
+}
+
 /** A command verifies its full consent now, then hands that same admission to
  * its effect-free Work read. The read consumes it once; another request or a
  * retry verifies again. No budget-attribution cache authorizes the command. */
@@ -44,9 +50,11 @@ export async function verifyCommandAccount(
   request: Request,
   requiredScopes: readonly string[],
 ): Promise<VerifiedAccountAssertion> {
+  assertAdmissionActive(request);
   // A failed command must not leave an earlier rate-limit grant available.
   requestAdmissions.delete(request);
   const principal = await account.verify(request, requiredScopes);
+  assertAdmissionActive(request);
   requestAdmissions.set(request, { scopes: requiredScopes, principal });
   return principal;
 }
@@ -66,6 +74,7 @@ export async function verifyRequestAccount(
   request: Request,
   requiredScopes: readonly string[],
 ): Promise<VerifiedAccountAssertion> {
+  assertAdmissionActive(request);
   const existing = requestAdmissions.get(request);
   if (existing) {
     if (grantCovers(existing, requiredScopes)) {
@@ -77,6 +86,7 @@ export async function verifyRequestAccount(
     }
   }
   const principal = await account.verify(request, requiredScopes);
+  assertAdmissionActive(request);
   // This path stores only rate-limit checks. Commands explicitly hand off
   // their admission above; a read's verification cannot cover its next attempt.
   if (requiredScopes.length === 0 && !requestAdmissions.has(request)) {
@@ -122,6 +132,12 @@ export class AccountAssertionVerifier {
   }
 
   async verify(request: Request, requiredScopes: readonly string[]): Promise<VerifiedAccountAssertion> {
+    return withFusekiReadWait(request.signal, signal => this.verifyCurrent(request, requiredScopes, signal));
+  }
+
+  private async verifyCurrent(request: Request, requiredScopes: readonly string[],
+    signal: AbortSignal): Promise<VerifiedAccountAssertion> {
+    signal.throwIfAborted();
     const input = requestToResourceInput(request);
     // The first profile accepts bearer JWTs. DPoP needs a shared, persistent
     // proof replay store across Main replicas before it can be admitted.
@@ -133,12 +149,19 @@ export class AccountAssertionVerifier {
       // Own the refresh clock: the provider's kid-driven cache lets arbitrary
       // forged key IDs trigger outbound work. Account publishes staged keys
       // for this cache lifetime before activation; introspection enforces retirement.
-      signed = await verifyJwsAccessToken(token, { jwksFetch: () => this.fetchJwks(),
+      signed = await verifyJwsAccessToken(token, {
+        // Stop this verifier's key wait too: releasing only its outer caller
+        // would let signature work resume after the shared refresh completes.
+        jwksFetch: () => withFusekiReadWait(signal, () => this.fetchJwks()),
         verifyOptions: { issuer: this.config.issuer, audience: this.config.audience } });
     } catch (error) {
+      signal.throwIfAborted();
+      assertFusekiReadActive();
       if (error instanceof AccountAssertionUnavailable) throw error;
       throw new AccountAssertionDenied('invalid Account assertion');
     }
+    signal.throwIfAborted();
+    assertFusekiReadActive();
     const now = Math.floor(Date.now() / 1000);
     if (signed.iss !== this.config.issuer || typeof signed.sub !== 'string' || signed.sub.length === 0
       || !Number.isSafeInteger(signed.iat) || !Number.isSafeInteger(signed.exp)
@@ -148,7 +171,13 @@ export class AccountAssertionVerifier {
       throw new AccountAssertionDenied('Account assertion identity or expiry is missing');
     }
 
-    const current = await this.introspect(token);
+    // A shared signing-key refresh may drain for other readers. This request
+    // must not start introspection after its caller has left.
+    signal.throwIfAborted();
+    assertFusekiReadActive();
+    const current = await this.introspect(token, signal);
+    signal.throwIfAborted();
+    assertFusekiReadActive();
     if (current.active !== true || current.iss !== signed.iss || current.sub !== signed.sub
       || !audienceIncludes(current.aud, this.config.audience)
       || !Number.isSafeInteger(current.exp) || (current.exp as number) <= now
@@ -165,7 +194,8 @@ export class AccountAssertionVerifier {
     return { issuer: signed.iss!, subject: signed.sub, accountExpiresAt: signed.exp,
       ...(signed.rezics_auth_mode !== 'workload'
         ? { contentEvidence: parseContentEvidence(current.rezics_content_evidence) } : {}),
-      currentAssertion: () => this.verify(request, requiredScopes),
+      // Retain this operation even if a recheck escapes its async-local scope.
+      currentAssertion: () => withFusekiReadWait(signal, next => this.verifyCurrent(request, requiredScopes, next)),
       ...(current.email_verified === true && signed.rezics_auth_mode !== 'workload'
         ? { emailVerified: true } : {}),
       accountAuthMode: typeof signed.rezics_auth_mode === 'string' ? signed.rezics_auth_mode : undefined,
@@ -196,8 +226,9 @@ export class AccountAssertionVerifier {
     return entry.pending;
   }
 
-  private introspect(token: string): Promise<Record<string, unknown>> {
+  private introspect(token: string, signal: AbortSignal): Promise<Record<string, unknown>> {
     return this.exchange(this.config.introspectUrl, { method: 'POST',
+      signal,
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ client_id: this.config.clientId,
         client_secret: this.config.clientSecret, token, token_type_hint: 'access_token' }) },
@@ -205,7 +236,8 @@ export class AccountAssertionVerifier {
   }
 
   private async exchange(url: string, init: RequestInit, unavailable: string): Promise<Record<string, unknown>> {
-    const signal = AbortSignal.timeout(this.timeoutMs);
+    const timeout = AbortSignal.timeout(this.timeoutMs);
+    const signal = init.signal ? AbortSignal.any([timeout, init.signal]) : timeout;
     try {
       const response = await fetch(url, { ...init, redirect: 'manual', signal,
         headers: { ...init.headers as Record<string, string>, accept: 'application/json' } });
@@ -219,6 +251,9 @@ export class AccountAssertionVerifier {
       }
       return body as Record<string, unknown>;
     } catch (error) {
+      // Only caller-owned exchanges carry this signal. A shared key refresh
+      // keeps its independent timeout/cache policy when a waiter leaves.
+      init.signal?.throwIfAborted();
       if (error instanceof AccountAssertionUnavailable) throw error;
       throw new AccountAssertionUnavailable(unavailable);
     }

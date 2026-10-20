@@ -5,7 +5,7 @@ import { PREVIEW_COUNTS } from '../work-levels/previews.tsx';
 import type { Franchise } from '../work-levels/connections.tsx';
 import { agentsOf, franchisesOf, relationRows } from '../work-levels/relation-rows.ts';
 import type { ConnectionsQuery } from '../work-levels/route.ts';
-import type { CollectionMember, CollectionMembers, Loaded, Names, PartsPage, People, RelationEntry, Summary } from '../work-levels/types.ts';
+import type { CollectionMember, CollectionMembers, Loaded, Names, NameSummary, PartsPage, People, RelationEntry, Summary } from '../work-levels/types.ts';
 import { readWorkParts, readWorkWholes, readWorkRelations } from './anime-hub-recorded-page.ts';
 import { settle } from './books-edition-page.read.ts';
 import { iriOf, mainScope, type WorkScope } from './route.ts';
@@ -14,15 +14,20 @@ import type { Loaded as WorkLoaded, RatingContextPage, RatingRead } from './type
 type Host = { main: MainClient; actingSubject?: string; signedIn?: boolean };
 
 /** Client boundary shared by the production connections readers and recorded visits. */
-export function animeRelationsReads({ main, actingSubject, signedIn }: Host) {
+export function animeRelationsReads({ main, actingSubject }: Host) {
   const readNames = async (resources: string, position?: string): Promise<Names> => {
     const refs = [...new Set(resources.split(' ').filter(Boolean))];
-    const names = new Map<string, Summary>();
+    const names = new Map<string, NameSummary>();
     for (let offset = 0; offset < refs.length; offset += 64) {
       const answer = await settle(() => main.v1.resources.summaries.post({ profile: 'resource-summary-batch-v1',
         resources: refs.slice(offset, offset + 64), ...(position ? { position } : {}),
         ...(actingSubject ? { actingSubject } : {}) }));
-      if (answer.ok) for (const summary of answer.data.summaries) names.set(summary.reference, summary);
+      const batch = refs.slice(offset, offset + 64);
+      // A failed or partial batch cannot say that nobody has named these resources.
+      for (const reference of batch) names.set(reference, { reference, status: 'unavailable-read' });
+      if (answer.ok) for (const summary of answer.data.summaries) {
+        if (batch.includes(summary.reference)) names.set(summary.reference, summary);
+      }
     }
     return names;
   };
@@ -44,7 +49,6 @@ export function animeRelationsReads({ main, actingSubject, signedIn }: Host) {
     namesOf: (resources: readonly string[], position?: string) => readNames([...new Set(resources)].sort().join(' '), position),
     readPeople,
     readCollectionMembers: async (collection: string, query: { after?: string; limit?: number }): Promise<Loaded<CollectionMembers>> => {
-      if (!actingSubject) return { ok: false, failure: signedIn ? 'identity' : 'sign-in' };
       const page = await settle(() => main.v1.collections({ id: collection }).get({ query: {
         actingSubject, after: query.after, limit: query.limit } }), query.after);
       if (!page.ok) return page;

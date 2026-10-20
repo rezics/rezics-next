@@ -32,7 +32,7 @@ SELECT ?id ?key ?ordinal ?confirmation ?role ?participantKind ?provider ?namespa
     }
     FILTER NOT EXISTS { GRAPH <urn:rezics:graph:current> { ?id rv:retiredBy ?retirement } }
     BIND("agent" AS ?participantKind)
-    FILTER(?role IN ("author", "director", "artist", "animation-studio", "translator", "editor"))
+    FILTER(?role IN ("author", "director", "artist", "animation-studio", "translator", "editor", "performer"))
     FILTER(!BOUND(?_role) || ?role = ?_role)
   } UNION {
     VALUES (?id ?key ?ordinal ?_work_iri ?_source_confirmed ?_source_role ?_source_provider ?_source_agent ?_source_name) {}

@@ -68,3 +68,11 @@ test('empty and oversized lines are caught before they are sent', () => {
   expect(partsProblem({ quantity: '', unit: '', name: 'x'.repeat(1001), note: '' })).toBe('long');
   expect(partsProblem(parseLine('1 cup milk'))).toBeNull();
 });
+
+test('a legacy whole ingredient line has one quantity even without a retained amount lexeme', () => {
+  const qualifier = qualifierOf(parseLine('2 cups flour'), 'en');
+  delete qualifier.amountLexical;
+  expect(readingLine(qualifier)).toBe('2 cups flour');
+  expect(readingLine({ ...qualifier, amount: { numerator: 3, denominator: 1 } })).toBe('3 cups flour');
+  expect(readingLine({ ...qualifier, originalText: { value: 'flour', language: 'en' } })).toBe('2 cups flour');
+});

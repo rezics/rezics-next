@@ -12,6 +12,8 @@ import { useFeed } from './feed-context.tsx';
 import type { MetaLead } from './lead.ts';
 import { type AttachedWork, barAction, MetaLine, PostRow, PostTime, rowLink, useIdentity, WorkAttachment } from './post-row.tsx';
 import type { FeedItem } from './types.ts';
+import { ReplyAuthorActions } from './author-actions.tsx';
+import type { AuthorReplyTarget } from './author-api.ts';
 
 /** A discussion or a reply as a post, wherever it is listed: Home, a Realm's Discussions, a Work's. */
 export interface DiscussionPost {
@@ -24,6 +26,7 @@ export interface DiscussionPost {
   /** Who the meta line leads with, as Home decides it; elsewhere the Realm, where it is shown. */
   lead?: MetaLead;
   author: { id: string; name: string; handle: string | null } | null;
+  authorTarget?: AuthorReplyTarget;
   time: string;
   /** A discussion's title, its author's first line as Main reads it; a reply has none. */
   title: string | null;
@@ -110,6 +113,7 @@ export function DiscussionCard({ post, menu, position, total }: { post: Discussi
   const identity = useIdentity({ lead: post.lead ?? 'realm', realm: post.realm,
     people: post.author ? [post.author] : [], someone: t.someone });
   return <PostRow kind={post.kind} href={post.href} report={discussionTarget(post.href)} position={position} total={total}
+    authorActions={post.authorTarget ? <ReplyAuthorActions target={post.authorTarget} /> : null}
     meta={<MetaLine icon={identity.icon} parts={[
       ...identity.parts, { keep: true, node: <PostTime time={post.time} /> },
       post.kind === 'reply' ? { node: t.replied } : null,

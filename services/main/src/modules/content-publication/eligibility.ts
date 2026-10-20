@@ -4,7 +4,7 @@ import { contentDraftIntentDigest, type ContentCore, type PublicDomainTextSource
 import type { CommandValidation } from '../../infrastructure/fuseki.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import type { AccessAdmissionRegistry } from '../access/admission.ts';
-import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
+import { DATASET, GRAPHS, ID, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import type { RightsStore } from '../rights/store.ts';
 import { assertTranslationOriginalBasis, resolveTranslationOriginalPublicDomainBases,
   translationOriginalBasisConflictPattern, type TranslationSourcePublicDomainBasis }
@@ -20,7 +20,9 @@ const DECIMAL = /^(0|[1-9][0-9]*)$/;
 export class InvalidContentEligibility extends Error {}
 export class ContentEligibilityDenied extends Error {}
 export class ContentEligibilityUnavailable extends Error {}
-export class ContentEligibilityStale extends Error {}
+export class ContentEligibilityStale extends Error {
+  constructor(message: string, readonly terminal?: ContentSearchEligibilityResult) { super(message); }
+}
 export class ContentEligibilityConflict extends Error {}
 export class ContentEligibilityPending extends Error {}
 export class ContentEligibilityProfileUnavailable extends Error {}
@@ -37,13 +39,38 @@ export interface ContentSearchEligibilityInput {
   disclosure: 'public';
 }
 
-function profileId(input: ContentSearchEligibilityInput): string {
-  return input.rightsBasis === 'public-domain' ? 'content-search-eligibility-v2' : PROFILE_ID;
+export interface ContentSearchEligibilityWithdrawalInput {
+  profile: 'content-search-eligibility-withdrawal-v1';
+  resourceId: string;
+  variantId: string;
+  publicationDecision: string;
+  expectedEligibilityHead: string;
+  actingSubject: string;
+  rightsBasis?: never;
+  assessmentId?: never;
+  disclosure?: never;
 }
-function rightsTerm(input: ContentSearchEligibilityInput): string {
+export type ContentSearchEligibilityCommand = ContentSearchEligibilityInput | ContentSearchEligibilityWithdrawalInput;
+export interface ContentSearchEligibilityWithdrawalResult extends ContentSearchEligibilityResult {
+  profile: 'content-search-eligibility-withdrawal-v1';
+  outcome: 'succeeded';
+  decision: string;
+  resourceId: string;
+  variantId: string;
+  publicationDecision: string;
+  withdrawnEligibilityHead: string;
+}
+const withdrawing = (input: ContentSearchEligibilityCommand): input is ContentSearchEligibilityWithdrawalInput =>
+  input.profile === 'content-search-eligibility-withdrawal-v1';
+
+function profileId(input: ContentSearchEligibilityCommand): string {
+  return withdrawing(input) ? input.profile
+    : input.rightsBasis === 'public-domain' ? 'content-search-eligibility-v2' : PROFILE_ID;
+}
+function rightsTerm(input: ContentSearchEligibilityCommand): string {
   return input.rightsBasis === 'public-domain' ? 'rv:PublicDomain' : 'rv:OriginalContribution';
 }
-function assessmentTerm(input: ContentSearchEligibilityInput): string {
+function assessmentTerm(input: ContentSearchEligibilityCommand): string {
   return input.rightsBasis === 'public-domain'
     ? `rv:rightsAssessment ${iri(`urn:rezics:rights:assessment:${input.assessmentId}`)} ; ` : '';
 }
@@ -69,12 +96,20 @@ interface EligibilityReceipt extends Omit<ContentSearchEligibilityResult, 'repla
   expectedHead: string | null;
   rightsBasis: string;
   assessmentId: string | null;
+  withdrawnHead: string | null;
 }
 
-function checkedInput(input: ContentSearchEligibilityInput): void {
+function checkedInput(input: ContentSearchEligibilityCommand): void {
   for (const value of [input.resourceId, input.variantId, input.publicationDecision,
     input.actingSubject, ...(input.expectedEligibilityHead ? [input.expectedEligibilityHead] : [])]) {
     try { iri(value); } catch { throw new InvalidContentEligibility('invalid Content eligibility IRI'); }
+  }
+  if (withdrawing(input)) {
+    if (!input.expectedEligibilityHead || input.rightsBasis !== undefined
+      || input.disclosure !== undefined || input.assessmentId !== undefined) {
+      throw new InvalidContentEligibility('exact qualification withdrawal required');
+    }
+    return;
   }
   if (input.resourceId === input.variantId || input.disclosure !== 'public'
     || (input.rightsBasis === 'original-contribution'
@@ -100,10 +135,16 @@ export const RETAINED_DIGEST_FORMS = [
     fields: [...DIGEST_IDENTITY_FIELDS, 'rightsBasis', 'disclosure', 'profile', 'assessmentId'] },
 ] as const;
 
-export function contentSearchEligibilityDigest(input: ContentSearchEligibilityInput,
+export function contentSearchEligibilityDigest(input: ContentSearchEligibilityCommand,
   retainedForm?: typeof RETAINED_DIGEST_FORMS[number]['name']): string {
   checkedInput(input);
   const family = profileId(input);
+  if (withdrawing(input)) {
+    if (retainedForm !== undefined) throw new InvalidContentEligibility('withdrawal has no retained digest form');
+    return hash(JSON.stringify({ family, resourceId: input.resourceId, variantId: input.variantId,
+      publicationDecision: input.publicationDecision, expectedEligibilityHead: input.expectedEligibilityHead,
+      actingSubject: input.actingSubject }));
+  }
   // Canonical API receipt order: family, resourceId, variantId, publicationDecision,
   // expectedEligibilityHead, actingSubject, disclosure, rightsBasis; v2 appends
   // assessmentId, profile. V1 omits profile, including when explicitly supplied.
@@ -126,16 +167,16 @@ export function contentSearchEligibilityReceiptIri(admissionId: string): string 
   return `urn:rezics:receipt:${hash(`${admissionId}\0content-search-eligibility`)}`;
 }
 
-export function contentSearchEligibilityDecisionIri(admissionId: string): string {
+export function contentSearchEligibilityDecisionIri(admissionId: string, withdrawal = false): string {
   if (!UUID.test(admissionId)) throw new InvalidContentEligibility('invalid eligibility admission ID');
-  return `urn:rezics:content-search-eligibility:${hash(admissionId)}`;
+  return withdrawal ? ID + admissionId : `urn:rezics:content-search-eligibility:${hash(admissionId)}`;
 }
 
-function expected(input: ContentSearchEligibilityInput): string {
+function expected(input: ContentSearchEligibilityCommand): string {
   return iri(input.expectedEligibilityHead ?? NONE);
 }
 
-function admissionMatches(admission: RegisteredAdmission, input: ContentSearchEligibilityInput,
+function admissionMatches(admission: RegisteredAdmission, input: ContentSearchEligibilityCommand,
   digest: string): void {
   if (!UUID.test(admission.id) || !DECIMAL.test(admission.authorityEpoch)
     || admission.action !== 'content.search-eligibility'
@@ -217,7 +258,7 @@ async function assertPublishedRights(env: WorkActivationEnvironment, content: Co
   }
 }
 
-async function validations(env: WorkActivationEnvironment, input: ContentSearchEligibilityInput,
+async function validations(env: WorkActivationEnvironment, input: ContentSearchEligibilityCommand,
   decision: string): Promise<CommandValidation[]> {
   const registry = profileRegistry as Record<string, { sha256: string; shapes: readonly string[] }>;
   const id = profileId(input);
@@ -243,14 +284,16 @@ async function readReceipt(env: WorkActivationEnvironment, admissionId: string):
   const receipt = contentSearchEligibilityReceiptIri(admissionId);
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT
     ?outcome ?reason ?digest ?id ?authority ?scope ?actor ?resource ?variant
-    ?publication ?expected ?decision ?rights ?assessment ?disclosure ?epoch ?sequence WHERE {
+    ?publication ?expected ?decision ?rights ?assessment ?disclosure ?withdrawn ?epoch ?sequence WHERE {
       GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
         rv:outcome ?outcome ; rv:requestDigest ?digest ; rv:admissionId ?id ;
         rv:authorityEpoch ?authority ; rv:admittedScope ?scope ;
         rv:actingSubject ?actor ; rv:resource ?resource ; rv:variant ?variant ;
         rv:publicationDecision ?publication ; rv:expectedHead ?expected ;
-        rv:rightsBasis ?rights ; rv:disclosure ?disclosure ;
         rv:dataEpoch ?epoch ; rv:sequence ?sequence .
+        OPTIONAL { ${iri(receipt)} rv:rightsBasis ?rights }
+        OPTIONAL { ${iri(receipt)} rv:disclosure ?disclosure }
+        OPTIONAL { ${iri(receipt)} rv:withdrawnEligibilityHead ?withdrawn }
         OPTIONAL { ${iri(receipt)} rv:rightsAssessment ?assessment }
         OPTIONAL { ${iri(receipt)} rv:reason ?reason }
         OPTIONAL { ${iri(receipt)} rv:eligibilityDecision ?decision }
@@ -266,8 +309,9 @@ async function readReceipt(env: WorkActivationEnvironment, admissionId: string):
     || !DECIMAL.test(value('authority') ?? '') || !value('scope') || !value('actor')
     || !value('resource') || !value('variant') || !value('publication')
     || !value('expected') || !value('epoch') || !DECIMAL.test(value('sequence') ?? '')
-    || ![`${RV}OriginalContribution`, `${RV}PublicDomain`].includes(value('rights') ?? '')
-    || value('disclosure') !== `${RV}Public`
+    || (value('withdrawn') ? value('withdrawn') !== value('expected') || value('rights') || value('disclosure')
+      : ![`${RV}OriginalContribution`, `${RV}PublicDomain`].includes(value('rights') ?? '')
+        || value('disclosure') !== `${RV}Public`)
     || (outcome === 'succeeded' && (!value('decision') || value('reason')))
     || (outcome === 'stale' && value('decision'))) {
     throw new ContentEligibilityConflict('eligibility receipt is incomplete');
@@ -278,31 +322,37 @@ async function readReceipt(env: WorkActivationEnvironment, admissionId: string):
     scope: value('scope')!, actingSubject: value('actor')!, resourceId: value('resource')!,
     variantId: value('variant')!, publicationDecision: value('publication')!,
     expectedHead: value('expected') === NONE ? null : value('expected')!,
-    rightsBasis: value('rights')!, assessmentId: value('assessment') ?? null };
+    rightsBasis: value('rights') ?? '', assessmentId: value('assessment') ?? null,
+    withdrawnHead: value('withdrawn') ?? null };
 }
 
 function checkedReceipt(receipt: EligibilityReceipt, env: WorkActivationEnvironment,
-  admission: RegisteredAdmission, input: ContentSearchEligibilityInput,
+  admission: RegisteredAdmission, input: ContentSearchEligibilityCommand,
   digest: string): ContentSearchEligibilityResult {
   if (receipt.digest !== digest || receipt.admissionId !== admission.id
     || receipt.authorityEpoch !== admission.authorityEpoch || receipt.scope !== admission.scope
     || receipt.actingSubject !== input.actingSubject || receipt.resourceId !== input.resourceId
     || receipt.variantId !== input.variantId || receipt.publicationDecision !== input.publicationDecision
     || receipt.expectedHead !== input.expectedEligibilityHead
-    || receipt.rightsBasis !== `${RV}${input.rightsBasis === 'public-domain' ? 'PublicDomain' : 'OriginalContribution'}`
+    || receipt.withdrawnHead !== (withdrawing(input) ? input.expectedEligibilityHead : null)
+    || receipt.rightsBasis !== (withdrawing(input) ? ''
+      : `${RV}${input.rightsBasis === 'public-domain' ? 'PublicDomain' : 'OriginalContribution'}`)
     || receipt.assessmentId !== (input.rightsBasis === 'public-domain'
       ? `urn:rezics:rights:assessment:${input.assessmentId}` : null)
     || receipt.graphDataEpoch !== env.lineage.dataEpoch
     || (receipt.outcome === 'succeeded'
-      && receipt.decision !== contentSearchEligibilityDecisionIri(admission.id))) {
+      && receipt.decision !== contentSearchEligibilityDecisionIri(admission.id, withdrawing(input)))) {
     throw new ContentEligibilityConflict('eligibility receipt differs from exact admitted request');
   }
   return { outcome: receipt.outcome, decision: receipt.decision, receipt: receipt.receipt,
-    graphDataEpoch: receipt.graphDataEpoch, graphSequence: receipt.graphSequence, replayed: true };
+    graphDataEpoch: receipt.graphDataEpoch, graphSequence: receipt.graphSequence, replayed: true,
+    ...(withdrawing(input) ? { profile: input.profile, resourceId: input.resourceId,
+      variantId: input.variantId, publicationDecision: input.publicationDecision,
+      withdrawnEligibilityHead: input.expectedEligibilityHead } : {}) };
 }
 
 async function currentHead(env: WorkActivationEnvironment,
-  input: ContentSearchEligibilityInput): Promise<string | null> {
+  input: ContentSearchEligibilityCommand): Promise<string | null> {
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     SELECT ?head WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
@@ -311,7 +361,7 @@ async function currentHead(env: WorkActivationEnvironment,
       }
       GRAPH ${iri(GRAPHS.current)} { ${iri(input.resourceId)} a ?kind . VALUES ?kind { schema:CreativeWork rv:Post }
         ${iri(input.variantId)} a rv:ContentVariant ; rv:resource ${iri(input.resourceId)} ;
-          rv:contentPublicationHead ${iri(input.publicationDecision)} .
+          rv:contentPublicationHead ${withdrawing(input) ? '?currentPublication' : iri(input.publicationDecision)} .
         OPTIONAL { ${iri(input.variantId)} rv:publicSearchEligibilityHead ?head }
       }
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(input.publicationDecision)}
@@ -325,14 +375,15 @@ async function currentHead(env: WorkActivationEnvironment,
 }
 
 function receiptTriples(env: WorkActivationEnvironment, admission: RegisteredAdmission,
-  input: ContentSearchEligibilityInput, digest: string, outcome: 'succeeded' | 'stale',
+  input: ContentSearchEligibilityCommand, digest: string, outcome: 'succeeded' | 'stale',
   decision: string): string {
   return `a rv:OperationReceipt ; rv:requestDigest ${lit(digest)} ;
     rv:admissionId ${lit(admission.id)} ; rv:authorityEpoch ${lit(admission.authorityEpoch)} ;
     rv:admittedScope ${lit(admission.scope)} ; rv:actingSubject ${iri(input.actingSubject)} ;
     rv:resource ${iri(input.resourceId)} ; rv:variant ${iri(input.variantId)} ;
     rv:publicationDecision ${iri(input.publicationDecision)} ; rv:expectedHead ${expected(input)} ;
-    rv:rightsBasis ${rightsTerm(input)} ; ${assessmentTerm(input)}rv:disclosure rv:Public ;
+    ${withdrawing(input) ? `rv:withdrawnEligibilityHead ${expected(input)} ;`
+      : `rv:rightsBasis ${rightsTerm(input)} ; ${assessmentTerm(input)}rv:disclosure rv:Public ;`}
     ${outcome === 'succeeded' ? `rv:eligibilityDecision ${iri(decision)} ; rv:outcome rv:Succeeded ;`
       : 'rv:reason rv:StaleHead ; rv:outcome rv:Cancelled ;'}
     rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next`;
@@ -340,11 +391,11 @@ function receiptTriples(env: WorkActivationEnvironment, admission: RegisteredAdm
 
 /** The update is guarded by the exact publication and expected eligibility head. */
 export function buildContentEligibilityUpdate(env: WorkActivationEnvironment,
-  admission: RegisteredAdmission, input: ContentSearchEligibilityInput,
+  admission: RegisteredAdmission, input: ContentSearchEligibilityCommand,
   translationBases: readonly TranslationSourcePublicDomainBasis[] = []): string {
   const digest = contentSearchEligibilityDigest(input);
   const receipt = contentSearchEligibilityReceiptIri(admission.id);
-  const decision = contentSearchEligibilityDecisionIri(admission.id);
+  const decision = contentSearchEligibilityDecisionIri(admission.id, withdrawing(input));
   const batch = `urn:rezics:outbox:${hash(`${receipt}\0eligibility`)}`;
   const event = `urn:rezics:event:${hash(`${receipt}\0eligibility`)}`;
   const profile = `https://rezics.com/definition/${profileId(input)}`;
@@ -354,11 +405,12 @@ export function buildContentEligibilityUpdate(env: WorkActivationEnvironment,
   } INSERT {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
     GRAPH ${iri(GRAPHS.current)} { ${iri(input.variantId)} rv:publicSearchEligibilityHead ${iri(decision)} }
-    GRAPH ${iri(GRAPHS.revisions)} { ${iri(decision)} a rv:ContentSearchEligibilityDecision, rv:RevisionAnchor ;
+    GRAPH ${iri(GRAPHS.revisions)} { ${iri(decision)} a ${withdrawing(input) ? 'rv:ContentSearchEligibilityWithdrawalDecision' : 'rv:ContentSearchEligibilityDecision'}, rv:RevisionAnchor ;
       rv:component ${iri(input.variantId)} ; rv:variant ${iri(input.variantId)} ;
       rv:resource ${iri(input.resourceId)} ;
       rv:publicationDecision ${iri(input.publicationDecision)} ;
-      rv:rightsBasis ${rightsTerm(input)} ; ${assessmentTerm(input)}rv:disclosure rv:Public ;
+      ${withdrawing(input) ? `rv:withdrawnEligibilityHead ${expected(input)} ;`
+      : `rv:rightsBasis ${rightsTerm(input)} ; ${assessmentTerm(input)}rv:disclosure rv:Public ;`}
       rv:admissionId ${lit(admission.id)} ; rv:authorityEpoch ${lit(admission.authorityEpoch)} ;
       rv:admittedScope ${lit(admission.scope)} ; rv:actingSubject ${iri(input.actingSubject)} ;
       rv:modelRevision ${iri(profile)} ; rv:shapeRevision ${iri(profile)} ;
@@ -368,7 +420,7 @@ export function buildContentEligibilityUpdate(env: WorkActivationEnvironment,
     GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch)} a rv:OutboxBatch ;
       rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next ;
       rv:eventCount 1 ; rv:event ${iri(event)} .
-      ${iri(event)} a rv:ContentSearchEligibilityEvent ; rv:ordinal 0 ;
+      ${iri(event)} a ${withdrawing(input) ? 'rv:ContentSearchEligibilityWithdrawalEvent' : 'rv:ContentSearchEligibilityEvent'} ; rv:ordinal 0 ;
         rv:action "content.search-eligibility" ; rv:receipt ${iri(receipt)} ;
         rv:variant ${iri(input.variantId)} ; rv:publicationDecision ${iri(input.publicationDecision)} . }
   } WHERE {
@@ -376,7 +428,7 @@ export function buildContentEligibilityUpdate(env: WorkActivationEnvironment,
       rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
     GRAPH ${iri(GRAPHS.current)} { ${iri(input.resourceId)} a ?kind . VALUES ?kind { schema:CreativeWork rv:Post }
       ${iri(input.variantId)} a rv:ContentVariant ; rv:resource ${iri(input.resourceId)} ;
-        rv:contentPublicationHead ${iri(input.publicationDecision)} .
+        rv:contentPublicationHead ${withdrawing(input) ? '?currentPublication' : iri(input.publicationDecision)} .
       OPTIONAL { ${iri(input.variantId)} rv:publicSearchEligibilityHead ?prior }
     }
     GRAPH ${iri(GRAPHS.revisions)} { ${iri(input.publicationDecision)}
@@ -384,6 +436,10 @@ export function buildContentEligibilityUpdate(env: WorkActivationEnvironment,
       rv:component ${iri(input.variantId)} ; rv:resource ${iri(input.resourceId)} ;
       rv:modelRevision ${iri('https://rezics.com/definition/content-publication-v1')} . }
     FILTER(COALESCE(?prior, ${iri(NONE)}) = ${expected(input)})
+    ${withdrawing(input) ? `GRAPH ${iri(GRAPHS.revisions)} {
+      ?prior a rv:ContentSearchEligibilityDecision ; rv:component ${iri(input.variantId)} ;
+        rv:resource ${iri(input.resourceId)} ; rv:publicationDecision ${iri(input.publicationDecision)} ;
+        rv:actingSubject ${iri(input.actingSubject)} . }` : ''}
     ${input.rightsBasis === 'original-contribution' ? `FILTER NOT EXISTS {
       ${translationOriginalBasisConflictPattern(input.resourceId, input.actingSubject, translationBases)}
     }` : ''}
@@ -395,7 +451,7 @@ export function buildContentEligibilityUpdate(env: WorkActivationEnvironment,
 }
 
 function staleUpdate(env: WorkActivationEnvironment, admission: RegisteredAdmission,
-  input: ContentSearchEligibilityInput, digest: string): string {
+  input: ContentSearchEligibilityCommand, digest: string): string {
   const receipt = contentSearchEligibilityReceiptIri(admission.id);
   const batch = `urn:rezics:outbox:${hash(`${receipt}\0stale`)}`;
   const event = `urn:rezics:event:${hash(`${receipt}\0stale`)}`;
@@ -404,7 +460,7 @@ function staleUpdate(env: WorkActivationEnvironment, admission: RegisteredAdmiss
   } INSERT {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
     GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ${receiptTriples(env, admission, input,
-      digest, 'stale', contentSearchEligibilityDecisionIri(admission.id))} . }
+      digest, 'stale', contentSearchEligibilityDecisionIri(admission.id, withdrawing(input)))} . }
     GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch)} a rv:OutboxBatch ;
       rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next ;
       rv:eventCount 1 ; rv:event ${iri(event)} .
@@ -415,7 +471,7 @@ function staleUpdate(env: WorkActivationEnvironment, admission: RegisteredAdmiss
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
       rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
     GRAPH ${iri(GRAPHS.current)} { ${iri(input.variantId)} rv:resource ${iri(input.resourceId)} ;
-      rv:contentPublicationHead ${iri(input.publicationDecision)} .
+      rv:contentPublicationHead ${withdrawing(input) ? '?currentPublication' : iri(input.publicationDecision)} .
       OPTIONAL { ${iri(input.variantId)} rv:publicSearchEligibilityHead ?prior }
     }
     FILTER(COALESCE(?prior, ${iri(NONE)}) != ${expected(input)})
@@ -425,10 +481,24 @@ function staleUpdate(env: WorkActivationEnvironment, admission: RegisteredAdmiss
   }`;
 }
 
+/** The retained decision names the publisher. Work edit, membership and moderation
+ * authority cannot transfer ownership of someone else's qualification. */
+async function assertQualificationWithdrawalOwner(env: WorkActivationEnvironment,
+  input: ContentSearchEligibilityWithdrawalInput): Promise<void> {
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+    GRAPH ${iri(GRAPHS.revisions)} {
+      ${expected(input)} a rv:ContentSearchEligibilityDecision ;
+        rv:component ${iri(input.variantId)} ; rv:resource ${iri(input.resourceId)} ;
+        rv:publicationDecision ${iri(input.publicationDecision)} ;
+        rv:actingSubject ${iri(input.actingSubject)} . }
+  }`);
+  if (result.boolean !== true) throw new ContentEligibilityDenied('qualification publisher authority is required');
+}
+
 /** A fresh claim dispatches; a sealed admission may only replay its exact receipt. */
 export async function selectPublicContentSearch(env: WorkActivationEnvironment,
   content: ContentCore, access: Pick<AccessAdmissionRegistry, 'verifyContentDraftProof'>,
-  admission: RegisteredAdmission, input: ContentSearchEligibilityInput,
+  admission: RegisteredAdmission, input: ContentSearchEligibilityCommand,
   rights?: Pick<RightsStore, 'currentPublicDomainAssessment'>): Promise<ContentSearchEligibilityResult> {
   const digest = contentSearchEligibilityDigest(input);
   admissionMatches(admission, input, digest);
@@ -437,10 +507,11 @@ export async function selectPublicContentSearch(env: WorkActivationEnvironment,
   const prior = await readReceipt(env, admission.id);
   if (prior) {
     const checked = checkedReceipt(prior, env, admission, input, digest);
-    if (checked.outcome === 'stale') throw new ContentEligibilityStale('eligibility head is stale');
+    if (checked.outcome === 'stale') throw new ContentEligibilityStale('eligibility head is stale', checked);
     return checked;
   }
-  await assertPublishedRights(env, content, access, input, rights);
+  if (withdrawing(input)) await assertQualificationWithdrawalOwner(env, input);
+  else await assertPublishedRights(env, content, access, input, rights);
   if (!admission.dispatchEligible || admission.state !== 'claimed'
     || !Number.isFinite(Date.parse(admission.expiresAt))
     || Date.parse(admission.expiresAt) <= Date.now()) {
@@ -451,7 +522,7 @@ export async function selectPublicContentSearch(env: WorkActivationEnvironment,
   if (input.rightsBasis === 'original-contribution') {
     await assertTranslationOriginalBasis(env, input.resourceId, input.actingSubject, translationBases);
   }
-  const decision = contentSearchEligibilityDecisionIri(admission.id);
+  const decision = contentSearchEligibilityDecisionIri(admission.id, withdrawing(input));
   const candidate = await validations(env, input, decision);
   const head = await currentHead(env, input);
   const receipt = contentSearchEligibilityReceiptIri(admission.id);
@@ -462,7 +533,7 @@ export async function selectPublicContentSearch(env: WorkActivationEnvironment,
     const terminal = await readReceipt(env, admission.id);
     if (terminal) {
       const checked = checkedReceipt(terminal, env, admission, input, digest);
-      if (checked.outcome === 'stale') throw new ContentEligibilityStale('eligibility head is stale');
+      if (checked.outcome === 'stale') throw new ContentEligibilityStale('eligibility head is stale', checked);
       return checked;
     }
     throw new ContentEligibilityPending('stale eligibility outcome is unknown');
@@ -477,7 +548,7 @@ export async function selectPublicContentSearch(env: WorkActivationEnvironment,
   const committed = await readReceipt(env, admission.id);
   if (committed) {
     const checked = checkedReceipt(committed, env, admission, input, digest);
-    if (checked.outcome === 'stale') throw new ContentEligibilityStale('eligibility head is stale');
+    if (checked.outcome === 'stale') throw new ContentEligibilityStale('eligibility head is stale', checked);
     return { ...checked, replayed: false };
   }
   if (commandStatus === 'guard-unmatched') {
@@ -492,7 +563,7 @@ export async function selectPublicContentSearch(env: WorkActivationEnvironment,
       const terminal = await readReceipt(env, admission.id);
       if (terminal) {
         const checked = checkedReceipt(terminal, env, admission, input, digest);
-        if (checked.outcome === 'stale') throw new ContentEligibilityStale('eligibility head is stale');
+        if (checked.outcome === 'stale') throw new ContentEligibilityStale('eligibility head is stale', checked);
         return checked;
       }
     }

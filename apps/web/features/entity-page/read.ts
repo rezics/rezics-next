@@ -4,10 +4,28 @@ import { readLinkedStatements, readResourcePage } from '../work-page/anime-hub-r
 import { reader, settle, type SuppliedClient } from '../work-page/read.ts';
 import { followHref } from './href.ts';
 import type { EntityProjection, EntitySection, RelationsPage, StatementPage } from './types.ts';
+import type { AvailableSummary } from '../work-levels/types.ts';
 
 // Server reads for the generic resource page. Each returns a `Loaded` result so
 // one section's failure never takes down another, and every section read
 // follows the link the projection gave it.
+
+/** Select the admitted resource grain before requesting a page capability.
+ * Collections own their members read, not the generic discussion target page. */
+export const readEntityEntry = cache(async (id: string, position?: string, client?: SuppliedClient):
+  Promise<Loaded<AvailableSummary>> => {
+  const current = client ?? await reader();
+  if ('identityUnavailable' in current && current.identityUnavailable)
+    return { ok: false, failure: 'identity', status: 503 };
+  const { main, actingSubject } = current;
+  const reference = id.startsWith('https://rezics.com/id/') ? id : `https://rezics.com/id/${id}`;
+  const read = await settle(() => main.v1.resources.summaries.post({ profile: 'resource-summary-batch-v1',
+    resources: [reference],
+    actingSubject, ...(position ? { position } : {}) }));
+  if (!read.ok) return read;
+  const summary = read.data.summaries[0];
+  return summary?.status === 'available' ? { ok: true, data: summary } : { ok: false, failure: 'missing' };
+});
 
 /**
  * `entity-page-v1` for a resource, once per request; a hidden and a missing resource answer alike (`missing`).
@@ -26,11 +44,11 @@ export function sectionOf(page: EntityProjection, id: EntitySection['id']): Enti
  * A page of accepted statements about the resource, in the reader's Context. `frame` restricts it to what holds within those
  * coordinates (a continuity the reader chose): Main decides what is covered, the browser never filters.
  */
-export async function readStatements(section: EntitySection, cursor: string | undefined, position?: string,
-  frame?: readonly string[], client?: SuppliedClient): Promise<Loaded<StatementPage>> {
+export const readStatements = cache(async (section: EntitySection, cursor: string | undefined, position?: string,
+  frame?: readonly string[], client?: SuppliedClient): Promise<Loaded<StatementPage>> => {
   const { main, actingSubject } = client ?? await reader();
   return readLinkedStatements(main, actingSubject, section.href, { cursor, position, frame });
-}
+});
 
 /**
  * A page of relation occurrences where the resource takes any role. Relations are public data: an anonymous

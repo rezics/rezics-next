@@ -463,7 +463,7 @@ export interface ContentBoundaryCloudEvent {
   source: typeof SOURCE;
   type: 'com.rezics.content.published.v1' | 'com.rezics.content.publication-rejected.v1'
     | 'com.rezics.content.search-eligible.v1' | 'com.rezics.content.search-eligibility-rejected.v1'
-    | 'com.rezics.content.projected.v1';
+    | 'com.rezics.content.search-eligibility-withdrawn.v1' | 'com.rezics.content.projected.v1';
   datacontenttype: 'application/json';
   data: { batchId: string; sourcePosition: { datasetId: 'product'; dataEpoch: string;
     sequence: string }; routingEpoch: string; ordinal: number; receipt: {
@@ -471,7 +471,7 @@ export interface ContentBoundaryCloudEvent {
       outcome: 'succeeded' | 'cancelled'; requestDigest: string;
       admission?: { id: string; authorityEpoch: string; scope: string; actingSubject?: string };
       resource: string; variant: string; publicationDecision?: string;
-      contentRevision?: string; eligibilityDecision?: string; eligibility?: string;
+      contentRevision?: string; eligibilityDecision?: string; eligibility?: string; withdrawnEligibilityHead?: string;
       projection?: string; matchUnit?: string; ownerDataEpoch?: string;
       ownerSequence?: string; rightsBasis?: 'original-contribution';
       disclosure?: 'public'; reason?: 'stale-head';
@@ -650,6 +650,7 @@ const contentEventTypes: Record<string, ContentBoundaryCloudEvent['type']> = {
   [`${RV}ContentPublicationEvent`]: 'com.rezics.content.published.v1',
   [`${RV}ContentPublicationRejectedEvent`]: 'com.rezics.content.publication-rejected.v1',
   [`${RV}ContentSearchEligibilityEvent`]: 'com.rezics.content.search-eligible.v1',
+  [`${RV}ContentSearchEligibilityWithdrawalEvent`]: 'com.rezics.content.search-eligibility-withdrawn.v1',
   [`${RV}ContentSearchEligibilityRejectedEvent`]: 'com.rezics.content.search-eligibility-rejected.v1',
   [`${RV}ContentProjectionEvent`]: 'com.rezics.content.projected.v1',
 };
@@ -666,6 +667,7 @@ export function mapContentOutboxEvent(batch: MainOutboxBatch, eventId: string,
   const publicationDecision = value('publicationDecision');
   const contentRevision = value('contentRevision');
   const eligibilityDecision = value('eligibilityDecision');
+  const withdrawnEligibilityHead = value('withdrawnEligibilityHead');
   const eligibility = value('eligibility');
   const projection = value('projection');
   const matchUnit = value('matchUnit');
@@ -691,7 +693,7 @@ export function mapContentOutboxEvent(batch: MainOutboxBatch, eventId: string,
     ...(publicationDecision ? [publicationDecision] : []),
     ...(contentRevision ? [contentRevision] : []), ...(eligibilityDecision ? [eligibilityDecision] : []),
     ...(eligibility ? [eligibility] : []), ...(projection ? [projection] : []),
-    ...(matchUnit ? [matchUnit] : [])]) iri(term);
+    ...(matchUnit ? [matchUnit] : []), ...(withdrawnEligibilityHead ? [withdrawnEligibilityHead] : [])]) iri(term);
   if (type === 'com.rezics.content.published.v1'
     ? action !== 'content.publish' || outcome !== `${RV}Succeeded`
       || !publicationDecision || !contentRevision || reason
@@ -707,12 +709,17 @@ export function mapContentOutboxEvent(batch: MainOutboxBatch, eventId: string,
           || value('disclosure') !== `${RV}Public` || reason
           || value('eventVariant') !== variant
           || value('eventPublicationDecision') !== publicationDecision
+        : type === 'com.rezics.content.search-eligibility-withdrawn.v1'
+          ? action !== 'content.search-eligibility' || outcome !== `${RV}Succeeded`
+            || !publicationDecision || !eligibilityDecision || !withdrawnEligibilityHead || !value('actingSubject')
+            || value('rightsBasis') || value('disclosure') || reason
+            || value('eventVariant') !== variant || value('eventPublicationDecision') !== publicationDecision
         : type === 'com.rezics.content.search-eligibility-rejected.v1'
           ? action !== 'content.search-eligibility' || outcome !== `${RV}Cancelled`
             || reason !== `${RV}StaleHead` || !publicationDecision || eligibilityDecision
             || !value('actingSubject')
-            || !eligibleRightsBasis(value('rightsBasis'))
-            || value('disclosure') !== `${RV}Public`
+            || (withdrawnEligibilityHead ? value('rightsBasis') || value('disclosure')
+              : !eligibleRightsBasis(value('rightsBasis')) || value('disclosure') !== `${RV}Public`)
             || value('eventVariant') !== variant
           : action !== 'content.project' || outcome !== `${RV}Succeeded`
             || !publicationDecision || !contentRevision || !eligibility || !projection
@@ -736,6 +743,7 @@ export function mapContentOutboxEvent(batch: MainOutboxBatch, eventId: string,
         ...(publicationDecision ? { publicationDecision } : {}),
         ...(contentRevision ? { contentRevision } : {}),
         ...(eligibilityDecision ? { eligibilityDecision } : {}),
+        ...(withdrawnEligibilityHead ? { withdrawnEligibilityHead } : {}),
         ...(eligibility ? { eligibility } : {}),
         ...(projection ? { projection } : {}), ...(matchUnit ? { matchUnit } : {}),
         ...(value('ownerDataEpoch') ? { ownerDataEpoch: value('ownerDataEpoch')! } : {}),
@@ -1023,7 +1031,7 @@ async function readMainOutboxGraphEnvelope(fuseki: FusekiClient, batch: MainOutb
     ?eventRatingContext ?eventRatingObservation
     ?eventVariant ?eventContentRevision ?eventPublicationDecision
     ?resource ?variant ?contentRevision ?ownerDataEpoch ?ownerSequence
-    ?eligibilityDecision ?eligibility ?projection ?actingSubject ?rightsBasis ?disclosure
+    ?eligibilityDecision ?eligibility ?projection ?actingSubject ?rightsBasis ?disclosure ?withdrawnEligibilityHead
     ?eventTranslationLink ?translationLink ?eventWorkDerivation ?workDerivation
     ?eventFixedRelease ?fixedRelease ?eventRouteBinding ?routeBinding
     ?routeRevision ?normalizedSlug ?eventSourceAddress ?eventNewAddress
@@ -1116,6 +1124,7 @@ async function readMainOutboxGraphEnvelope(fuseki: FusekiClient, batch: MainOutb
       OPTIONAL { ?receipt rv:ownerDataEpoch ?ownerDataEpoch }
       OPTIONAL { ?receipt rv:ownerSequence ?ownerSequence }
       OPTIONAL { ?receipt rv:eligibilityDecision ?eligibilityDecision }
+      OPTIONAL { ?receipt rv:withdrawnEligibilityHead ?withdrawnEligibilityHead }
       OPTIONAL { ?receipt rv:eligibility ?eligibility }
       OPTIONAL { ?receipt rv:projection ?projection }
       OPTIONAL { ?receipt rv:actingSubject ?actingSubject }

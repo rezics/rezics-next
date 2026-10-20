@@ -1,3 +1,4 @@
+import type { WorkAt } from '../work-page/route.ts';
 import { Badge } from '@rezics/ui/badge';
 import { buttonVariants } from '@rezics/ui/button';
 import { LocalizedText } from '@rezics/ui/localized-text';
@@ -37,7 +38,7 @@ export function WholesLines({
   pages?: { first: string | null; next: (cursor: string) => string };
   messages?: WorkPageMessages;
 }) {
-  if (wholes && !wholes.ok) return wholes.failure === 'missing' ? null : messages
+  if (wholes && !wholes.ok) return messages
     ? <RegionFailure title={t.wholesUnavailable} failure={wholes.failure} messages={messages}
       restartHref={pages?.first ?? undefined} />
     : <p role="alert">{t.wholesUnavailable}</p>;
@@ -54,6 +55,7 @@ export function WholesLines({
               names={names}
               unavailable={t.unavailable}
               unnamed={t.unnamed}
+              undisclosed={t.nameNotShown}
             />
           </li>
         ))}
@@ -94,7 +96,7 @@ function Completion({ completion, t }: { completion: PartsPage['completion']; t:
           <a
             href={href}
             rel="noreferrer"
-            className="break-all text-primary underline-offset-4 hover:underline"
+            className="break-all text-primary underline underline-offset-4"
           >
             {t.evidence}
             {evidence.length > 1 ? ` ${index + 1}` : ''}
@@ -114,7 +116,7 @@ function PartRow({
 }: {
   part: Part;
   names: Names;
-  workRef: string;
+  workRef: WorkAt;
   query: ConnectionsQuery;
   t: Copy;
 }) {
@@ -139,6 +141,7 @@ function PartRow({
             names={names}
             unavailable={t.unavailable}
             unnamed={t.unnamed}
+            undisclosed={t.nameNotShown}
           />
         ) : (
           <Link documentNavigation
@@ -177,7 +180,7 @@ export function PartsSection({
   parts: Loaded<PartsPage>;
   wholes: Loaded<WholesPage> | null;
   names: Names;
-  workRef: string;
+  workRef: WorkAt;
   query: ConnectionsQuery;
   locale: UiLocale;
   t: Copy;
@@ -187,7 +190,7 @@ export function PartsSection({
   // Main answers 404 for a Work that has no composition: the page already showed the Work, so it has no parts.
   const page = parts.ok ? parts.data : null;
   const body =
-    !parts.ok && parts.failure !== 'missing' ? (
+    !parts.ok ? (
       <RegionFailure
         title={t.partsUnavailable}
         failure={parts.failure}

@@ -2,18 +2,17 @@ import { publicWork } from '../work/public-patterns.ts';
 import { searchablePlacement } from '../structure/searchable-placements.ts';
 import { canonicalContentLanguage, type ContentCore } from '../../../../content/src/core.ts';
 import { ContentProjectionCursor } from '../../../../content/src/projection-cursor.ts';
-import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { DATASET, GRAPHS, RV, iri, lit, PUBLIC_SEARCH_ANCHOR,
   type WorkActivationEnvironment } from '../work/activate.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
-import { assertPublicTextReady, assertQuerySnapshotMoved, assertSameTextInstance, MAX_PUBLIC_UNITS,
+import { assertPublicTextReady, assertQuerySnapshotMoved, assertSameTextInstance,
   MAX_SEARCH_RESPONSE_BYTES, PHRASE_HIT_PROBE,
-  SearchSnapshotMoved, type PublicTextPosition } from '../work/search-readiness.ts';
+  SearchSnapshotMoved } from '../work/search-readiness.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
 import { assertContentProjectionProfiles, ContentProjectionUnavailable } from './relay.ts';
 import type { RightsStore } from '../rights/store.ts';
 import { discloseSearchMatches } from '../disclosure/search.ts';
-import { readContentEligibilityInventory } from './eligibility-state.ts';
+import { observeSearchPhase } from '../search/operation-evidence.ts';
 
 export class InvalidContentPhrase extends Error {}
 export class ContentSearchBudgetExceeded extends Error {}
@@ -46,137 +45,31 @@ export async function visibleContentSearchRights<T extends {
   });
 }
 
-type SourcePosition = Awaited<ReturnType<ContentCore['ownerPosition']>>;
-interface ContentQualification { population: number; sequence: string }
-const qualified = new WeakMap<FusekiClient, Map<string, Promise<ContentQualification>>>();
-
-async function qualifyContent(env: WorkActivationEnvironment, index: PublicTextPosition,
-  source: SourcePosition): Promise<ContentQualification> {
-  const key = `${index.serverInstanceId}\0${index.publicSearchWriteEpoch}\0${index.dataEpoch}\0${index.sequence}\0${index.generation}\0${source.dataEpoch}\0${source.sequence}`;
-  let entries = qualified.get(env.fuseki);
-  if (!entries) { entries = new Map(); qualified.set(env.fuseki, entries); }
-  const existing = entries.get(key);
-  if (existing) return existing;
-  const proof = auditContent(env, index, source);
-  entries.clear();
-  entries.set(key, proof);
-  try { return await proof; }
-  catch (error) { if (entries.get(key) === proof) entries.delete(key); throw error; }
-}
-
-/** Full source/projection inventory is read once per joint graph/Content position. */
-async function auditContent(env: WorkActivationEnvironment,
-  index: PublicTextPosition, source: SourcePosition): Promise<ContentQualification> {
-  const inventory = await readContentEligibilityInventory(env, source, { maxUnits: MAX_PUBLIC_UNITS });
-  if (inventory.states.some(state => state.kind === 'unresolved')) {
-    throw new ContentProjectionUnavailable('Content eligibility inventory is unresolved');
-  }
-  const requiredProfiles = [...new Set(inventory.states.flatMap(state => state.kind === 'public-current'
-    ? [state.rightsBasis === `${RV}PublicDomain` ? 'content-search-eligibility-v2' : 'content-search-eligibility-v1']
-    : []))];
-  await assertContentProjectionProfiles(env, requiredProfiles);
-  const publicCurrent = inventory.states.filter(state => state.kind === 'public-current').length;
-  const result = await env.fuseki.query(`PREFIX rv: <${RV}>
-    SELECT ?epoch ?sequence ?generation ?declared ?heads ?missing ?eligible ?contentUnits WHERE {
-      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ;
-        rv:sequence ?sequence ; rv:textIndexGeneration ?generation . }
-      FILTER(?epoch = ${lit(index.dataEpoch)} && ?generation = ${iri(index.generation)})
-      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
-      GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
-        ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . }
-      { SELECT (COUNT(DISTINCT ?declaredVariant) AS ?declared) WHERE {
-        { SELECT DISTINCT ?declaredVariant WHERE { GRAPH ${iri(GRAPHS.current)} {
-          ?declaredVariant a rv:ContentVariant ;
-            rv:publicSearchEligibilityHead ?declaredEligibility .
-        } } LIMIT ${MAX_PUBLIC_UNITS + 1} }
-      } }
-      { SELECT (COUNT(DISTINCT ?headVariant) AS ?heads) WHERE {
-        { SELECT DISTINCT ?headVariant WHERE {
-          GRAPH ${iri(GRAPHS.current)} { ?headVariant a rv:ContentVariant ;
-            rv:contentPublicationHead ?headDecision ;
-            rv:publicSearchEligibilityHead ?headEligibility . }
-          GRAPH ${iri(GRAPHS.revisions)} { ?headEligibility a rv:ContentSearchEligibilityDecision ;
-            rv:variant ?headVariant ; rv:publicationDecision ?headDecision ;
-            rv:disclosure rv:Public . }
-        } LIMIT ${MAX_PUBLIC_UNITS + 1} }
-      } }
-      { SELECT (COUNT(DISTINCT ?missingVariant) AS ?missing) WHERE {
-        { SELECT DISTINCT ?missingVariant WHERE {
-          GRAPH ${iri(GRAPHS.current)} { ?missingVariant a rv:ContentVariant ;
-            rv:contentPublicationHead ?missingDecision ;
-            rv:publicSearchEligibilityHead ?missingEligibility . }
-          GRAPH ${iri(GRAPHS.revisions)} { ?missingEligibility a rv:ContentSearchEligibilityDecision ;
-            rv:variant ?missingVariant ; rv:publicationDecision ?missingDecision ;
-            rv:disclosure rv:Public . }
-          FILTER NOT EXISTS { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
-            ?coveredUnit a rv:MatchUnit ; rv:variant ?missingVariant ;
-              rv:publicationDecision ?missingDecision ; rv:eligibility ?missingEligibility ;
-              rv:projection ?coveredProjection . } }
-        } LIMIT 1 }
-      } }
-      { SELECT (COUNT(DISTINCT ?eligibleUnit) AS ?eligible) WHERE {
-        { SELECT DISTINCT ?eligibleUnit WHERE {
-          GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?eligibleUnit a rv:MatchUnit ;
-            rv:variant ?eligibleVariant ; rv:publicationDecision ?eligibleDecision ;
-            rv:eligibility ?eligibleEligibility ; rv:projection ?projection .
-            FILTER(STRSTARTS(STR(?eligibleUnit), "urn:rezics:content:match-unit:")) }
-          GRAPH ${iri(GRAPHS.current)} { ?eligibleVariant a rv:ContentVariant ;
-            rv:contentPublicationHead ?eligibleDecision ;
-            rv:publicSearchEligibilityHead ?eligibleEligibility . }
-          GRAPH ${iri(GRAPHS.revisions)} { ?eligibleEligibility a rv:ContentSearchEligibilityDecision ;
-            rv:variant ?eligibleVariant ; rv:publicationDecision ?eligibleDecision ;
-            rv:disclosure rv:Public . }
-        } LIMIT ${MAX_PUBLIC_UNITS + 1} }
-      } }
-      { SELECT (COUNT(DISTINCT ?contentUnit) AS ?contentUnits) WHERE {
-        { SELECT DISTINCT ?contentUnit WHERE { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
-          ?contentUnit a rv:MatchUnit .
-          FILTER(STRSTARTS(STR(?contentUnit), "urn:rezics:content:match-unit:"))
-        } } LIMIT ${MAX_PUBLIC_UNITS + 1} }
-      } }
-    }`, MAX_SEARCH_RESPONSE_BYTES);
-  const rows = result.results?.bindings ?? [];
-  const row = rows[0];
-  if (!rows.length) await assertQuerySnapshotMoved(env.fuseki, index, rows, 'generation');
-  const sequence = row?.sequence?.value;
-  if (rows.length !== 1 || row?.epoch?.value !== index.dataEpoch
-    || !sequence || !/^(0|[1-9][0-9]*)$/.test(sequence)
-    || sequence !== inventory.snapshot.sequence || BigInt(sequence) < BigInt(index.sequence)
-    || row.generation?.value !== index.generation) {
-    throw new ContentProjectionUnavailable('Content search graph snapshot is unavailable');
-  }
-  const counts = ['declared', 'heads', 'missing', 'eligible', 'contentUnits']
-    .map(key => Number(row[key]?.value));
-  if (counts.some(value => !Number.isSafeInteger(value) || value < 0)) {
-    throw new ContentProjectionUnavailable('Content search population is invalid');
-  }
-  const [declared, heads, missing, eligible, contentUnits] = counts;
-  if ([declared!, heads!, missing!, eligible!, contentUnits!].some(value => value > MAX_PUBLIC_UNITS)) {
-    throw new ContentSearchBudgetExceeded('Content search population exceeds admitted bound');
-  }
-  if (eligible !== publicCurrent || contentUnits !== publicCurrent) {
-    throw new ContentProjectionUnavailable('Content publication has unprojected or stale search units');
-  }
-  return { population: publicCurrent, sequence };
-}
-
 async function prepareContentSearch(env: WorkActivationEnvironment,
   content: ContentCore, cursor: ContentProjectionCursor, consumer: string) {
-  const [source, checkpoint] = await Promise.all([
+  const [source, checkpoint] = await observeSearchPhase('content-readiness-source-checkpoint', () => Promise.all([
     content.ownerPosition(), cursor.read(consumer),
-  ]);
+  ]));
   if (source.dataEpoch !== checkpoint.dataEpoch || source.sequence !== checkpoint.sequence) {
     throw new ContentProjectionUnavailable('Content projection is behind its source');
   }
-  await assertContentProjectionProfiles(env);
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const index = await assertPublicTextReady(env.fuseki, env.lineage);
-  const proof = await qualifyContent(env, index, source);
+  const witness = index.contentQualification;
+  // The generation owner audits all publication/approval receipts and complete
+  // projection coverage in maintenance. Never let a reader synthesize a missing
+  // witness, including an empty relation, or reuse one from another owner epoch.
+  const proof = await observeSearchPhase('content-readiness-qualified-checkpoint', async () => {
+    if (!witness || witness.population > index.population
+      || !/^(0|[1-9][0-9]*)$/.test(source.sequence)
+      || witness.ownerDataEpoch !== undefined && witness.ownerDataEpoch !== source.dataEpoch
+      || BigInt(witness.ownerSequence) > BigInt(source.sequence)) {
+      throw new ContentProjectionUnavailable('Content generation qualification is unavailable at its source');
+    }
+    await assertContentProjectionProfiles(env, witness.publicDomain ? ['content-search-eligibility-v2'] : []);
+    return { population: witness.population };
+  });
   await assertSameTextInstance(env.fuseki, index);
-  // The full Content audit may see a later metadata-only graph cut. Its
-  // complete source/eligibility inventory belongs to that cut, so pin the
-  // phrase relation to it while the native index epoch remains unchanged.
-  const auditedIndex = { ...index, sequence: proof.sequence };
   const [sourceAfter, checkpointAfter] = await Promise.all([
     content.ownerPosition(), cursor.read(consumer),
   ]);
@@ -185,7 +78,7 @@ async function prepareContentSearch(env: WorkActivationEnvironment,
     || checkpointAfter.sequence !== checkpoint.sequence) {
     throw new SearchSnapshotMoved('Content source moved during readiness');
   }
-  return { source, index: auditedIndex, proof };
+  return { source, index, proof };
 }
 
 export async function queryPublicContentPhrase(env: WorkActivationEnvironment,

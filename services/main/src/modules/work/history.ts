@@ -17,21 +17,44 @@ export class RevisionCorrupt extends Error {}
 export class RevisionReadBudgetExceeded extends Error {}
 export interface RevisionReadBudget { bytesLeft: number; signal: AbortSignal }
 
-export interface ExactWorkRevision {
+interface ExactRevisionBase {
   resolution?: MergedIdentity;
   revision: string;
   work: string;
   predecessor?: string;
   operation: string;
-  mainVersion: string;
   title: string;
   language: string;
+  sourcePosition: { datasetId: 'product'; dataEpoch: string; sequence: string };
+}
+
+export interface ExactMetadataWorkRevision extends ExactRevisionBase {
+  mainVersion: string;
+  profile?: never;
+  publisher?: never;
+  labels?: never;
   localizedTitle?: { value: string; language: string };
   description?: { value: string; language: string };
   semanticTypes: string[];
   scalarValue?: WorkScalarValue;
-  sourcePosition: { datasetId: 'product'; dataEpoch: string; sequence: string };
 }
+
+export const POST_REVISION_PROFILE = 'https://rezics.com/definition/post-v1';
+export interface PostRevisionPayload {
+  publisher: string;
+  labels: { value: string; language: string }[];
+}
+
+export interface ExactPostRevision extends ExactRevisionBase, PostRevisionPayload {
+  profile: 'post-v1';
+  mainVersion?: never;
+  semanticTypes?: never;
+  localizedTitle?: never;
+  description?: never;
+  scalarValue?: never;
+}
+
+export type ExactWorkRevision = ExactMetadataWorkRevision | ExactPostRevision;
 
 export interface ExactMainRevision {
   resolution?: MergedIdentity;
@@ -374,7 +397,27 @@ export function readMainPayloadFromManifest(
   }
 }
 
-/** The caller must supply a current authority/disclosure decision for the owning Work. */
+/** Post custody has no MainVersion. Read the same verified component envelope
+ * used by standalone Post and chapter creation, retaining the authored label order. */
+export async function readPostPayloadForRevision(env: WorkActivationEnvironment,
+  manifest: string, post: string): Promise<PostRevisionPayload> {
+  const state = await readWorkComponentState(env, manifest, post, POST_REVISION_PROFILE);
+  const labels = state.labels;
+  if (Object.keys(state).some(key => key !== 'publisher' && key !== 'labels')
+    || typeof state.publisher !== 'string' || !Array.isArray(labels) || !labels.length || labels.length > 24
+    || labels.some(label => !label || typeof label !== 'object' || Array.isArray(label)
+      || Object.keys(label).some(key => key !== 'value' && key !== 'language')
+      || typeof label.value !== 'string' || !label.value.length || label.value.length > 200
+      || /[\u0000-\u001f\u007f]/.test(label.value) || typeof label.language !== 'string'
+      || !canonicalLanguage(label.language) || canonicalLanguage(label.language) !== label.language)
+    || new Set(labels.map(label => (label as { language: string }).language)).size !== labels.length) {
+    throw new RevisionCorrupt('Post component is invalid');
+  }
+  try { iri(state.publisher); } catch { throw new RevisionCorrupt('Post publisher is invalid'); }
+  return { publisher: state.publisher, labels: labels.map(label => ({ value: label.value as string, language: label.language as string })) };
+}
+
+/** The caller must supply a current authority/disclosure decision for the owning Work or Post. */
 export async function readExactWorkRevision(
   env: WorkActivationEnvironment,
   revision: string,
@@ -399,14 +442,22 @@ export async function readExactWorkRevision(
   if (!work || !await canReadWork(work)) throw new RevisionNotFound('revision is unavailable');
   if (rows.length !== 1) throw new RevisionCorrupt('revision anchor is ambiguous');
   const row = rows[0]!;
-  if (!work.startsWith('https://rezics.com/id/') || row.model?.value !== PROFILE
-    || row.shape?.value !== PROFILE || row.dataset?.value !== DATASET
+  const profile = row.model?.value;
+  if (!work.startsWith('https://rezics.com/id/') || ![PROFILE, POST_REVISION_PROFILE].includes(profile ?? '')
+    || row.shape?.value !== profile || row.dataset?.value !== DATASET
     || !row.operation?.value || !row.epoch?.value || !/^[0-9]+$/.test(row.sequence?.value ?? '')) {
     throw new RevisionCorrupt('revision anchor is incomplete');
   }
-  const state = await readWorkPayloadForRevision(env, row.manifest?.value ?? '', work);
   const resolution = options.resolveMerges && row.mergedInto
     ? await disclosedRevisionMerge(env, work, canReadWork) : null;
+  if (profile === POST_REVISION_PROFILE) {
+    const state = await readPostPayloadForRevision(env, row.manifest?.value ?? '', work);
+    return { revision, work, ...(resolution ? { resolution } : {}),
+      ...(row.predecessor ? { predecessor: row.predecessor.value } : {}), operation: row.operation!.value,
+      profile: 'post-v1', ...state, title: state.labels[0]!.value, language: state.labels[0]!.language,
+      sourcePosition: { datasetId: 'product', dataEpoch: row.epoch!.value, sequence: row.sequence!.value } };
+  }
+  const state = await readWorkPayloadForRevision(env, row.manifest?.value ?? '', work);
   return { revision, work, ...(resolution ? { resolution } : {}), ...(row.predecessor ? { predecessor: row.predecessor.value } : {}),
     operation: row.operation.value, mainVersion: state.mainVersion, title: state.title,
     language: state.language, semanticTypes: state.semanticTypes,

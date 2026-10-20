@@ -21,7 +21,7 @@ import type { WorkHeader } from './types.ts';
 const record = hub as AnswerRecord;
 type Persona = 'visitor' | 'stranger' | 'member' | 'owner' | 'moderator' | 'operator';
 type Kind = 'dated' | 'undated' | 'loading';
-type Mode = 'visit' | 'conflict' | 'replay';
+type Mode = 'visit' | 'conflict' | 'replay' | 'saved';
 interface Args { persona: Persona; kind: Kind; mode: Mode; locale: UiLocale }
 const sample = (persona: Persona, label: string) => {
   const found = record.personas[persona].find(item => item.label === label);
@@ -47,8 +47,17 @@ function selectionsFor(persona: Persona, kind: Kind, mode: Mode): RecordedSelect
     { label: 'hub-releases', state: 'populated' }, { label: 'hub-availability-parts', state: 'populated' },
   ];
   if (persona === 'visitor') return selections;
-  selections.push({ label: 'hub-reader-state', state: 'populated' }, { label: 'edition-preference-empty', state: 'empty' });
+  selections.push({ label: 'hub-reader-state', state: 'populated' },
+    { label: mode === 'saved' ? 'hub-status-preference' : 'edition-preference-empty', state: mode === 'saved' ? 'populated' : 'empty' });
+  if (mode === 'visit' || mode === 'saved') selections.push({ label: 'hub-status-progress', state: 'populated' });
   if (mode === 'visit') return selections;
+  if (mode === 'saved') {
+    const preference = sample(persona, 'hub-status-preference').answer as { edition: { resource: string } };
+    const detail = ['broadcast-edition', 'restored-edition'].find(label =>
+      (sample(persona, label).answer as { id: string }).id === preference.edition.resource)!;
+    selections.push({ label: detail, state: 'populated' });
+    return selections;
+  }
   const winner = ['broadcast-edition-choice', 'restored-edition-choice'].find(label => sample(persona, label).status === 200)!;
   const release = (sample(persona, winner).body as { edition: { resource: string } }).edition.resource;
   const detail = ['broadcast-edition', 'restored-edition'].find(label =>
@@ -134,7 +143,9 @@ async function showHub(canvasElement: HTMLElement, args: Args) {
       await expect(canvas.getByRole('link', { name: messages[args.locale].signInForEdition })).toBeVisible();
       await expect(canvas.queryByRole('button', { name: tracking.savePreference })).not.toBeInTheDocument();
     } else {
-      await userEvent.click(await canvas.findByRole('combobox', { name: tracking.edition }));
+      const chooser = await canvas.findByRole('combobox', { name: tracking.edition });
+      await waitFor(() => expect(chooser).toBeEnabled());
+      await userEvent.click(chooser);
       for (const release of releases.items) {
         const name = releaseChoiceName(release, args.locale, tracking);
         await waitFor(async () => {
@@ -168,6 +179,8 @@ async function saveChoice(canvas: ReturnType<typeof within>, canvasElement: HTML
   await expect(saved).toHaveAttribute('role', 'status');
   await expect(saved).toBeVisible();
   await waitFor(() => expect(canvas.getByRole('list', { name: messages[args.locale].yourEdition })).toHaveTextContent(name));
+  await waitFor(() => expect(within(canvasElement.querySelector<HTMLElement>('[data-work-identity]')!)
+    .queryByRole('link', { name: messages[args.locale].chooseRelease })).not.toBeInTheDocument());
   await fits(canvasElement);
 }
 
@@ -209,6 +222,18 @@ export const Stranger: Story = view('stranger', 'dated', 'visit', 'desktop', 'en
 export const StrangerPhone: Story = view('stranger', 'dated', 'visit', 'phone', 'en', visit);
 export const Member: Story = view('member', 'dated', 'visit', 'desktop', 'en', visit);
 export const MemberPhone: Story = view('member', 'dated', 'visit', 'phone', 'en', visit);
+const saved: Story['play'] = async ({ canvasElement, args }) => {
+  const canvas = await showHub(canvasElement, args);
+  const preference = sample(args.persona, 'hub-status-preference').answer as { edition: { resource: string } };
+  const release = (sample(args.persona, 'hub-releases').answer as { items: Release[] }).items
+    .find(item => item.id === preference.edition.resource)!;
+  await waitFor(() => expect(canvas.getByRole('list', { name: messages[args.locale].yourEdition }))
+    .toHaveTextContent(releaseChoiceName(release, args.locale, copyOf(args.locale))));
+  await expect(within(canvasElement.querySelector<HTMLElement>('[data-work-identity]')!)
+    .queryByRole('link', { name: messages[args.locale].chooseRelease })).not.toBeInTheDocument();
+};
+export const MemberSavedEdition: Story = view('member', 'dated', 'saved', 'desktop', 'en', saved);
+export const MemberSavedEditionPhone: Story = view('member', 'dated', 'saved', 'phone', 'en', saved);
 export const Owner: Story = view('owner', 'dated', 'visit', 'desktop', 'en', visit);
 export const OwnerPhone: Story = view('owner', 'dated', 'visit', 'phone', 'en', visit);
 export const Moderator: Story = view('moderator', 'dated', 'visit', 'desktop', 'en', visit);

@@ -10,6 +10,8 @@ import { browserMainApi } from '../api/browser.ts';
 import { idOf, iriOf } from '../discover/scope.ts';
 import { type DiscoverState, discoverHref } from '../discover/state.ts';
 import { browseHref, changeBrowse, type BrowseState } from '../discover/browse-state.ts';
+import { BrowseSelectionControls } from '../discover/selection-controls.tsx';
+import { selectionMessages } from '../discover/selection-messages.ts';
 import type { ConceptChoice } from '../discover/api.ts';
 import { TopicPicker, type TopicItem } from '../discover/topic-picker.tsx';
 import Link from '../shell/localized-link.tsx';
@@ -316,15 +318,25 @@ export function DiscoverBrowseConditions({
   }));
   const initialLoad = load ?? undefined;
   return (
+    <div className="grid min-w-0 gap-3">
+      <BrowseSelectionControls state={state} locale={locale} />
+      <details key={state.conditions.include.join(',') + ':' + state.conditions.exclude.join(',')}
+        open={state.conditions.include.length + state.conditions.exclude.length > 0}>
+        <summary className="w-fit cursor-pointer rounded-sm text-sm underline underline-offset-4 outline-none
+          focus-visible:ring-2 focus-visible:ring-ring">{selectionMessages[locale].topics}</summary>
+        <div className="mt-3">
     <ConditionBar
       selection={state.conditions}
       locale={locale}
       actingSubject={actingSubject}
       values={values}
-      suggestions={values}
+      suggestions={state.q ? [] : values}
       load={initialLoad}
       realm={state.scope.kind === 'realm' ? state.scope.realm : null}
       href={(conditions) => browseHref(changeBrowse(state, { conditions }))}
     />
+        </div>
+      </details>
+    </div>
   );
 }

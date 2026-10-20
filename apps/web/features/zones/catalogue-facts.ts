@@ -93,7 +93,7 @@ function literalOf(item: StatementItem): { lexical: string; datatype: string } |
 }
 
 async function statementPages(id: string): Promise<Loaded<StatementPage[]>> {
-  const projection = await readEntityProjection(id);
+  const projection = await readEntityProjection(id, undefined);
   if (!projection.ok) return projection;
   const section = sectionOf(projection.data, 'statements');
   if (!section) return { ok: true, data: [] };

@@ -129,6 +129,7 @@ export const messages = {
 
   // The list
   posts: 'Posts', loadMore: 'Show more posts', loadingMore: 'Loading more posts…',
+  refreshing: 'Refreshing posts…',
   newPosts: plural({ one: insert('{{count}} new post'), other: insert('{{count}} new posts') },
     { count: asValue(number()) }),
   newPostsAtLeast: plural({ one: insert('{{count}}+ new post'), other: insert('{{count}}+ new posts') },

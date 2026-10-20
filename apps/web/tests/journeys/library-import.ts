@@ -4,6 +4,7 @@ import { materializeData } from 'native-i18n';
 import { messages } from '../../features/library/messages.ts';
 import ko from '../../features/library/messages/ko.ts';
 import { clean, credentials, signIn } from '../g-855-library.ts';
+import { openLibraryTools } from '../library-tools.ts';
 
 export function registerLibraryImportJourney(combos: readonly { locale: 'en' | 'ko'; viewport: { width: number; height: number } }[] = [
     { locale: 'en', viewport: { width: 1440, height: 900 } },
@@ -47,7 +48,8 @@ export function registerLibraryImportJourney(combos: readonly { locale: 'en' | '
   }
 
   /** Open the section once the page has hydrated; a press before hydration opens nothing. */
-  async function openSection(page: Page, title: string) {
+  async function openSection(page: Page, title: string, toolsLabel: string) {
+    await openLibraryTools(page, toolsLabel);
     const summary = page.getByRole('heading', { name: title }).first();
     await expect(async () => {
       await summary.click();
@@ -65,7 +67,7 @@ export function registerLibraryImportJourney(combos: readonly { locale: 'en' | '
       await signIn(page, '/en/library', account.member);
       await page.goto(`/${locale}/library`);
       if (await page.getByRole('heading', { name: t.deniedTitle }).isVisible()) return;
-      await openSection(page, t.importTitle);
+      await openSection(page, t.importTitle, t.libraryTools);
       await expect(page.getByText(t.importAnilist)).toBeVisible();
       await page.locator('#library-import-file').setInputFiles({ name: 'goodreads_library_export.csv', mimeType: 'text/csv', buffer: goodreads(viewport.width) });
 
@@ -97,7 +99,7 @@ export function registerLibraryImportJourney(combos: readonly { locale: 'en' | '
       expect(calls).toBe(2);
       await page.unroute(applies);
       await page.reload();
-      await openSection(page, t.importTitle);
+      await openSection(page, t.importTitle, t.libraryTools);
       await expect(page.getByRole('heading', { name: t.importUnfinishedTitle })).toBeVisible();
       await page.getByRole('button', { name: new RegExp(`^${t.importContinue}`) }).click();
       await expect(page.getByText(new RegExp(t.importApplyDone({ done: '(\\d+)', total: '11' }).replace(/\s+/g, '\\s+')))).toBeVisible({ timeout: 240_000 });
@@ -107,7 +109,7 @@ export function registerLibraryImportJourney(combos: readonly { locale: 'en' | '
       await clean(page, info, `finished-${locale}-${viewport.width}`);
       // Finished, so it is no longer listed as unfinished.
       await page.reload();
-      await openSection(page, t.importTitle);
+      await openSection(page, t.importTitle, t.libraryTools);
       await expect(page.getByRole('heading', { name: t.importUnfinishedTitle })).toHaveCount(0);
     });
   }

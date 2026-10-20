@@ -1,5 +1,7 @@
 import { afterEach, expect, spyOn, test } from 'bun:test';
 import { createServer, type Server, type ServerResponse } from 'node:http';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   workAsyncStorage,
   type WorkStore,
@@ -16,6 +18,8 @@ import {
 import { mainApiWithToken } from '../features/api/main.ts';
 import { forwardToMain } from '../features/api/bff.ts';
 import { readAddress, type ResolvedAddress } from '../features/address/client.ts';
+import { resourceHref, spaceHref } from '../features/address/path.ts';
+import { localizedPath } from '../i18n/locale.ts';
 import { refreshTokens } from '../features/auth/account.ts';
 import { forgetServedTypes, readTypes } from '../features/catalogue/types-read.ts';
 import { servedTypes } from '../features/catalogue/type-fixtures.ts';
@@ -38,6 +42,7 @@ import { NextRequest } from 'next/server';
 import { proxy } from '../proxy.ts';
 import { mainBodyRead } from '../features/api/main-read-operation.ts';
 import { isOfflineError } from '../features/feed/types.ts';
+import { serverDocumentResponse, serverRead, serverSignal, setServerDocumentStatus, withServerRequest } from '../features/api/server-read.ts';
 
 const nativeFetch = globalThis.fetch;
 const mainOrigin = process.env.MAIN_ORIGIN;
@@ -46,6 +51,442 @@ afterEach(() => {
   if (mainOrigin === undefined) delete process.env.MAIN_ORIGIN;
   else process.env.MAIN_ORIGIN = mainOrigin;
   forgetServedTypes();
+});
+
+async function workerEntry() {
+  // Vinext's virtual renderer exists only inside Vite. Substitute that external
+  // framework seam in this bundle; run the real entry and shared request owners.
+  const built = await Bun.build({
+    entrypoints: [fileURLToPath(new URL('../worker/index.ts', import.meta.url))], target: 'bun',
+    plugins: [{ name: 'worker-renderer-fixture', setup(build) {
+      build.onResolve({ filter: /^vinext\/server\/fetch-handler$/ }, () => ({
+        path: 'renderer', namespace: 'worker-renderer-fixture',
+      }));
+      build.onLoad({ filter: /.*/, namespace: 'worker-renderer-fixture' }, () => ({ loader: 'js',
+        contents: 'export default { fetch(request, env, context) { return context.render(request); } };',
+      }));
+      build.onResolve({ filter: /^\.\.?\// }, args => ({
+        path: resolve(args.resolveDir, args.path), external: true,
+      }));
+    } }],
+  });
+  if (!built.success) throw new Error(built.logs.join('\n'));
+  const module = await import(`data:text/javascript;base64,${Buffer.from(await built.outputs[0]!.text()).toString('base64')}`) as {
+    default: { fetch(request: Request, env: object, context: {
+      render(request: Request): Response | Promise<Response>;
+    }): Promise<Response> };
+  };
+  return module.default;
+}
+
+test('Worker Site documents wait for their late whole-page status at localized root and nested paths', async () => {
+  const worker = await workerEntry();
+  for (const [locale, tail] of [['zh-Hans', []], ['ja', ['contents']]] as const) {
+    const path = localizedPath(spaceHref('recipes', 'site', tail), locale);
+    const request = new Request(new URL(path + '?q=rice&language=en&language=ja', 'https://web.test'));
+    let release!: () => void;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    let completed = false;
+    const pending = worker.fetch(request, {}, { render(incoming) {
+      expect(incoming).toBe(request);
+      expect(serverSignal()).toBe(request.signal);
+      return new Response(new ReadableStream<Uint8Array>({
+        start(controller) { controller.enqueue(new TextEncoder().encode('<html><body>Loading…')); },
+        async pull(controller) {
+          await held;
+          setServerDocumentStatus(503);
+          controller.enqueue(new TextEncoder().encode('<div role="alert">Retry</div></body></html>'));
+          controller.close();
+        },
+      }), { headers: { 'content-type': 'text/html', 'cache-control': 'public', 'set-cookie': 'session=renewed; HttpOnly' } });
+    } }).then(response => { completed = true; return response; });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const headersSentEarly = completed;
+    release();
+    const response = await pending;
+    expect(headersSentEarly).toBe(false);
+    expect(response.status).toBe(503);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(response.headers.get('retry-after')).toBe('5');
+    expect(response.headers.get('set-cookie')).toBe('session=renewed; HttpOnly');
+    expect(await response.text()).toContain('role="alert"');
+  }
+});
+
+test('Worker Site status handling keeps healthy and optional reads successful and other responses streaming', async () => {
+  const worker = await workerEntry();
+  const site = localizedPath(spaceHref('recipes', 'site'), 'en');
+  globalThis.fetch = (async () => Response.json({ code: 'optional_metadata_unavailable' }, { status: 503 })) as unknown as typeof fetch;
+  const healthy = await worker.fetch(new Request(new URL(site, 'https://web.test')), {}, { async render() {
+    // An optional owner's refusal is not a whole-page status decision.
+    expect((await serverRead('https://main.test/v1/optional-metadata')).status).toBe(503);
+    return new Response('<h1>Recipes</h1>', { headers: { 'content-type': 'text/html', 'cache-control': 'private' } });
+  } });
+  expect(healthy.status).toBe(200);
+  expect(healthy.headers.get('cache-control')).toBe('private');
+  expect(healthy.headers.has('retry-after')).toBe(false);
+  expect(await healthy.text()).toBe('<h1>Recipes</h1>');
+  for (const [path, method, contentType] of [
+    [site, 'GET', 'text/x-component'], [site, 'POST', 'text/html'],
+    ['/en/discover', 'GET', 'text/html'], [spaceHref('recipes', 'site'), 'GET', 'text/html'],
+  ] as const) {
+    const response = new Response(new ReadableStream(), { headers: { 'content-type': contentType } });
+    const result = await worker.fetch(new Request(new URL(path, 'https://web.test'), { method }), {}, { render() {
+      setServerDocumentStatus(503);
+      return response;
+    } });
+    expect(result).toBe(response);
+    expect(result.status).toBe(200);
+    await result.body!.cancel();
+  }
+});
+
+test('Worker Site document holding preserves cancellation and the original deadline with localized recovery', async () => {
+  const worker = await workerEntry();
+  for (const reason of ['abort', 'deadline']) {
+    const controller = new AbortController();
+    const path = localizedPath(spaceHref('recipes', 'site'), 'zh-Hans') + '?q=rice&language=en&language=ja';
+    const request = new Request(new URL(path, 'https://web.test'), { signal: controller.signal });
+    let cancelled = false;
+    const initial = Date.now();
+    const clock = reason === 'deadline' ? spyOn(Date, 'now').mockReturnValue(initial) : undefined;
+    try {
+      const pending = worker.fetch(request, {}, { render() {
+        expect(serverSignal()).toBe(request.signal);
+        if (reason === 'deadline') clock!.mockReturnValue(initial + 15_001);
+        return new Response(new ReadableStream({ cancel() { cancelled = true; } }),
+          { headers: { 'content-type': 'text/html' } });
+      } });
+      if (reason === 'abort') controller.abort();
+      const response = await pending;
+      if (response.status !== 503) await response.body?.cancel();
+      expect(response.status).toBe(503);
+      expect(cancelled).toBe(true);
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      const body = await response.text();
+      expect(body).toContain('lang="zh-Hans"');
+      expect(body).toContain('role="alert"');
+      expect(body).toContain(path.replaceAll('&', '&amp;'));
+    } finally { clock?.mockRestore(); }
+  }
+});
+
+test('request cancellation reaches sequential server reads and stops later work under one absolute deadline', async () => {
+  const controller = new AbortController();
+  const hops: { signal: AbortSignal; deadline: string | null }[] = [];
+  globalThis.fetch = (async (_input, init) => {
+    hops.push({ signal: init!.signal!, deadline: new Headers(init?.headers).get(SERVER_DEADLINE_HEADER) });
+    return Response.json({ ok: true });
+  }) as typeof fetch;
+  const request = new Request('https://web.test/en/discover', { signal: controller.signal });
+  await withServerRequest(request, async () => {
+    await serverRead('https://main.test/v1/me/session-agent', {}, { timeoutMs: 4_000 });
+    await serverRead('https://main.test/v1/query', {}, { timeoutMs: 8_000 });
+    controller.abort();
+    await expect(serverRead('https://main.test/v1/feed')).rejects.toMatchObject({ reason: 'cancelled', attempts: 0 });
+  });
+  expect(hops).toHaveLength(2);
+  expect(hops[0]!.deadline).toBe(hops[1]!.deadline);
+  expect(Number(hops[0]!.deadline)).toBeGreaterThan(Date.now() + 10_000);
+});
+
+test('a late whole-page refusal determines document headers before its loading shell is sent', async () => {
+  const request = new Request(new URL(resourceHref('/e/', '0199a0fe-0b21-7000-8000-123456789abc'), 'https://web.test'));
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  let completed = false;
+  const pending = withServerRequest(request, () => serverDocumentResponse(request, new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(new TextEncoder().encode('<html><body>Loading…')); },
+      async pull(controller) {
+        await held;
+        setServerDocumentStatus(503);
+        controller.enqueue(new TextEncoder().encode('<div role="alert">Retry</div></body></html>'));
+        controller.close();
+      },
+    }), { headers: { 'content-type': 'text/html', 'set-cookie': 'session=renewed; HttpOnly', 'cache-control': 'public' } },
+  ))).then(response => { completed = true; return response; });
+  await Promise.resolve();
+  expect(completed).toBe(false);
+  release();
+  const response = await pending;
+  expect(response.status).toBe(503);
+  expect(response.headers.get('cache-control')).toBe('no-store');
+  expect(response.headers.get('set-cookie')).toBe('session=renewed; HttpOnly');
+  expect(await response.text()).toContain('role="alert"');
+});
+
+test('holding resource document headers cancels its renderer on caller abort or the original deadline', async () => {
+  for (const reason of ['abort', 'deadline']) {
+    const controller = new AbortController();
+    const request = new Request(new URL(resourceHref('/e/', '0199a0fe-0b21-7000-8000-123456789abc'), 'https://web.test'),
+      { signal: controller.signal });
+    let cancelled = false;
+    let clock: ReturnType<typeof spyOn> | undefined;
+    try {
+      const initial = Date.now();
+      if (reason === 'deadline') clock = spyOn(Date, 'now').mockReturnValue(initial);
+      const pending = withServerRequest(request, () => {
+        if (reason === 'deadline') clock!.mockReturnValue(initial + 15_001);
+        return serverDocumentResponse(request, new Response(new ReadableStream({
+          cancel() { cancelled = true; },
+        }), { headers: { 'content-type': 'text/html' } }));
+      });
+      if (reason === 'abort') controller.abort();
+      await expect(pending).rejects.toMatchObject({ name: reason === 'abort' ? 'AbortError' : 'TimeoutError' });
+      expect(cancelled).toBe(true);
+    } finally { clock?.mockRestore(); }
+  }
+});
+
+test('BFF cancellation survives Request reconstruction, stops each pre-read and never schedules the requested operation', async () => {
+  for (const heldPhase of ['session-agent', 'person-preferences']) {
+    const controller = new AbortController();
+    const paths: string[] = [];
+    let entered!: () => void;
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    let pendingSignal: AbortSignal | null | undefined;
+    const send = (async (input, init) => {
+      const path = new URL(String(input)).pathname;
+      paths.push(path);
+      if (path.endsWith(heldPhase)) {
+        pendingSignal = init?.signal;
+        entered();
+        return new Promise<Response>(() => {});
+      }
+      return Response.json({ sessionAgent: { eligible: true, actingSubject: 'https://rezics.com/id/0199a0fe-0b21-7000-8000-123456789abc' } });
+    }) as typeof fetch;
+    const workerRequest = new Request('https://web.test/api/main/v1/works', { signal: controller.signal });
+    const routeRequest = new Request(workerRequest.url);
+    const result = withServerRequest(workerRequest, () => forwardToMain(routeRequest,
+      ['v1', 'works'], { mainOrigin: 'https://main.test', accessToken: `cancel-${heldPhase}`, fetch: send,
+        signal: serverSignal() }));
+    await started;
+    controller.abort();
+    const response = await result;
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ code: 'web_cancelled', phase: heldPhase,
+      transportPhase: 'connect', attempts: 1, retry: 'none', receipt: 'not-applicable' });
+    expect(pendingSignal?.aborted).toBe(true);
+    expect(routeRequest.signal.aborted).toBe(false);
+    expect(paths).toEqual(heldPhase === 'session-agent' ? ['/v1/me/session-agent']
+      : ['/v1/me/session-agent', '/v1/me/person-preferences']);
+  }
+});
+
+test('BFF language pre-reads and the Main operation forward one unchanged absolute deadline', async () => {
+  const deadlineAt = Date.now() + 2_000;
+  const deadlines: string[] = [];
+  const send = (async (input, init) => {
+    deadlines.push(new Headers(init?.headers).get(SERVER_DEADLINE_HEADER)!);
+    const path = new URL(String(input)).pathname;
+    return Response.json(path.endsWith('session-agent')
+      ? { sessionAgent: { eligible: true, actingSubject: 'reader' } }
+      : path.endsWith('person-preferences') ? { contentLanguages: ['ja'] } : { items: [] });
+  }) as typeof fetch;
+  const response = await forwardToMain(new Request('https://web.test/api/main/v1/works'), ['v1', 'works'],
+    { mainOrigin: 'https://main.test', accessToken: 'deadline-chain', deadlineAt, fetch: send });
+  expect(response.status).toBe(200);
+  expect(deadlines).toEqual(Array(3).fill(String(deadlineAt)));
+});
+
+test('BFF pre-read deadline aborts its transport and retains the failed phase', async () => {
+  let calls = 0;
+  let signal: AbortSignal | null | undefined;
+  const response = await forwardToMain(new Request('https://web.test/api/main/v1/works'), ['v1', 'works'], {
+    mainOrigin: 'https://main.test', accessToken: 'deadline-preread', deadlineAt: Date.now() + 40,
+    fetch: ((_input, init) => { calls++; signal = init?.signal; return new Promise<Response>(() => {}); }) as typeof fetch,
+  });
+  expect(response.status).toBe(503);
+  expect(await response.json()).toMatchObject({ phase: 'session-agent', transportPhase: 'connect',
+    code: 'web_deadline', retry: 'safe', receipt: 'not-applicable' });
+  expect(signal?.aborted).toBe(true);
+  expect(calls).toBe(1);
+});
+
+test('BFF refuses temporary pre-read failures with their phase and owner problem instead of silently continuing', async () => {
+  let calls = 0;
+  const response = await forwardToMain(new Request('https://web.test/api/main/v1/works'), ['v1', 'works'], {
+    mainOrigin: 'https://main.test', accessToken: 'refused-preread', fetch: (async () => {
+      calls++;
+      return Response.json({ code: 'owner_busy', receipt: 'not-sent' }, { status: 503, headers: { 'retry-after': '7' } });
+    }) as unknown as typeof fetch,
+  });
+  expect(response.status).toBe(503);
+  expect(response.headers.get('retry-after')).toBe('7');
+  expect(await response.json()).toMatchObject({ phase: 'session-agent', code: 'web_unavailable',
+    upstream: { status: 503, problem: { code: 'owner_busy', receipt: 'not-sent' } } });
+  expect(calls).toBe(1);
+});
+
+test('BFF preserves prerequisite identity, permission and rate-limit refusals without sending a read or write', async () => {
+  for (const [status, code, phase] of [
+    [401, 'session_expired', 'session-agent'],
+    [403, 'person_forbidden', 'person-preferences'],
+    [429, 'read_rate_limited', 'person-preferences'],
+  ] as const) for (const method of ['GET', 'POST']) {
+    let targets = 0;
+    const request = new Request('https://web.test/api/main/v1/works?intent=preserved', {
+      method, headers: { origin: 'https://web.test', 'idempotency-key': 'same-command-key' },
+      ...(method === 'POST' ? { body: '{"draft":"keep me"}' } : {}),
+    });
+    const response = await forwardToMain(request, ['v1', 'works'], {
+      mainOrigin: 'https://main.test', accessToken: `refusal-${status}-${method}`,
+      fetch: (async (input) => {
+        const path = new URL(String(input)).pathname;
+        if (path.endsWith(phase)) return Response.json({ error: code, code }, { status,
+          headers: { 'retry-after': '11', 'www-authenticate': 'Bearer error="invalid_token"' } });
+        if (path.endsWith('session-agent')) return Response.json({ sessionAgent: { eligible: true, actingSubject: 'reader' } });
+        targets++;
+        throw new Error('A refused prerequisite must stop before target dispatch');
+      }) as typeof fetch,
+    });
+    expect(response.status).toBe(status);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(await response.json()).toMatchObject({ code, phase,
+      retry: status === 429 ? 'safe' : 'none', receipt: method === 'POST' ? 'not-sent' : 'not-applicable' });
+    if (status === 429) expect(response.headers.get('retry-after')).toBe('11');
+    if (status === 401) expect(response.headers.get('www-authenticate')).toContain('invalid_token');
+    expect(targets).toBe(0);
+  }
+});
+
+test('a cached language basis does not turn a revoked session refusal into an outage', async () => {
+  let revoked = false, prerequisites = 0;
+  const send = (async (input) => {
+    const path = new URL(String(input)).pathname;
+    if (path.endsWith('session-agent')) {
+      prerequisites++;
+      return Response.json({ sessionAgent: { eligible: true, actingSubject: 'reader' } });
+    }
+    if (path.endsWith('person-preferences')) return Response.json({ contentLanguages: ['ja'] });
+    return revoked ? Response.json({ code: 'session_expired' }, { status: 401 }) : Response.json({ works: [] });
+  }) as typeof fetch;
+  const input = { mainOrigin: 'https://main.test', accessToken: 'cached-revoked-refusal', fetch: send };
+  expect((await forwardToMain(new Request('https://web.test/api/main/v1/works'), ['v1', 'works'], input)).status).toBe(200);
+  revoked = true;
+  const response = await forwardToMain(new Request('https://web.test/api/main/v1/works'), ['v1', 'works'], input);
+  expect(response.status).toBe(401);
+  expect(await response.json()).toMatchObject({ code: 'session_expired' });
+  expect(prerequisites).toBe(1);
+});
+
+test('BFF cancels a stalled inbound Query body before any upstream operation', async () => {
+  const controller = new AbortController();
+  let cancelled = false, calls = 0;
+  const body = neverClosing(() => { cancelled = true; }).body;
+  const request = new Request('https://web.test/api/main/v1/query', {
+    method: 'POST', body, signal: controller.signal, duplex: 'half',
+  } as RequestInit);
+  const pending = forwardToMain(request, ['v1', 'query'], { mainOrigin: 'https://main.test', accessToken: undefined,
+    fetch: (async () => { calls++; return Response.json({}); }) as unknown as typeof fetch });
+  await Promise.resolve();
+  controller.abort();
+  const response = await pending;
+  expect(response.status).toBe(503);
+  expect(await response.json()).toMatchObject({ phase: 'request-body', code: 'web_cancelled', retry: 'none' });
+  expect(cancelled).toBe(true);
+  expect(calls).toBe(0);
+});
+
+test('BFF interrupted writes retain an unknown receipt and never replay without explicit recovery', async () => {
+  for (const keyed of [true, false]) {
+    let calls = 0;
+    const response = await forwardToMain(new Request('https://web.test/api/main/v1/commands/work.create', {
+      method: 'POST', headers: keyed ? { 'idempotency-key': 'same-operation' } : {}, body: '{}',
+    }), ['v1', 'commands', 'work.create'], { mainOrigin: 'https://main.test', accessToken: undefined,
+      fetch: (async () => { calls++; throw new Error('Network connection lost.'); }) as unknown as typeof fetch });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ phase: 'main', code: 'web_connection', attempts: 1,
+      receipt: 'unknown', retry: keyed ? 'same-idempotency-key' : 'check-receipt' });
+    expect(calls).toBe(1);
+  }
+});
+
+test('BFF preserves the owner refusal, receipt and tracing headers unchanged', async () => {
+  const problem = { code: 'owner_unavailable', phase: 'transaction', retry: 'same-idempotency-key', receipt: 'unknown' };
+  const response = await forwardToMain(new Request('https://web.test/api/main/v1/commands/work.create', {
+    method: 'POST', body: '{}',
+  }), ['v1', 'commands', 'work.create'], { mainOrigin: 'https://main.test', accessToken: undefined,
+    fetch: (async () => Response.json(problem, { status: 503,
+      headers: { 'retry-after': '12', 'x-request-id': 'operation-receipt' } })) as unknown as typeof fetch });
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual(problem);
+  expect(response.headers.get('retry-after')).toBe('12');
+  expect(response.headers.get('x-request-id')).toBe('operation-receipt');
+});
+
+test('a cancelled refresh waiter releases promptly without aborting the shared token rotation', async () => {
+  let finish!: (response: Response) => void, entered!: () => void;
+  let signal: AbortSignal | null | undefined;
+  const started = new Promise<void>(resolve => { entered = resolve; });
+  const client = { accountOrigin: 'https://account.test', clientId: 'web', resource: 'main',
+    fetch: ((_input, init) => {
+      signal = init?.signal; entered();
+      return new Promise<Response>(resolve => { finish = resolve; });
+    }) as typeof fetch };
+  const controller = new AbortController();
+  const first = withServerRequest(new Request('https://web.test/en/discover', { signal: controller.signal }),
+    () => refreshTokens(client, 'cancel-one-waiter'));
+  await started;
+  const second = refreshTokens(client, 'cancel-one-waiter');
+  controller.abort();
+  expect(await first).toEqual({ status: 'unavailable' });
+  expect(signal?.aborted).toBe(false);
+  finish(Response.json({ access_token: 'issued-once' }));
+  expect(await second).toMatchObject({ status: 'issued' });
+});
+
+test('an already cancelled initiating reader cannot start a detached token rotation', async () => {
+  const controller = new AbortController();
+  controller.abort();
+  let posts = 0;
+  const result = await withServerRequest(new Request(new URL(resourceHref('/e/', '0199a0fe-0b21-7000-8000-123456789abc'),
+    'https://web.test'), { signal: controller.signal }),
+    () => refreshTokens({ accountOrigin: 'https://account.test', clientId: 'web', resource: 'main',
+      deadlineAt: Date.now() + 4_000, fetch: (async () => {
+        posts++;
+        return Response.json({ access_token: 'must-not-rotate' });
+      }) as unknown as typeof fetch }, 'already-aborted-unique-rotation'));
+  expect(result).toEqual({ status: 'unavailable' });
+  expect(posts).toBe(0);
+});
+
+test('a cancelled registry waiter releases its request while the shared owner completes for another reader', async () => {
+  const controller = new AbortController();
+  let finish!: (response: Response) => void, entered!: () => void;
+  const started = new Promise<void>(resolve => { entered = resolve; });
+  let ownerSignal: AbortSignal | null | undefined;
+  const fetcher = ((_input, init) => {
+    ownerSignal = init?.signal; entered();
+    return new Promise<Response>(resolve => { finish = resolve; });
+  }) as typeof fetch;
+  const first = withServerRequest(new Request('https://web.test/en/discover', { signal: controller.signal }),
+    () => readTypes(fetcher));
+  await started;
+  const second = readTypes(fetcher);
+  controller.abort();
+  expect(await first).toBeNull();
+  expect(ownerSignal?.aborted).toBe(false);
+  finish(Response.json(servedTypes));
+  expect(await second).toEqual(servedTypes);
+});
+
+test('the last cancelled registry waiter stops the upstream read and a new request can recover immediately', async () => {
+  const controller = new AbortController();
+  let entered!: () => void, ownerSignal: AbortSignal | null | undefined;
+  const started = new Promise<void>(resolve => { entered = resolve; });
+  const first = withServerRequest(new Request('https://web.test/en/discover', { signal: controller.signal }),
+    () => readTypes(((_input, init) => {
+      ownerSignal = init?.signal;
+      entered();
+      return new Promise<Response>(() => {});
+    }) as typeof fetch));
+  await started;
+  controller.abort();
+  expect(await first).toBeNull();
+  expect(ownerSignal?.aborted).toBe(true);
+  expect(await readTypes((async () => Response.json(servedTypes)) as unknown as typeof fetch)).toEqual(servedTypes);
 });
 
 async function pageRequest<T>(run: () => Promise<T>, budget = 150, signedIn = false): Promise<T> {

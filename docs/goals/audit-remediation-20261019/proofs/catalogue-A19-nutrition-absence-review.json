@@ -1,0 +1,682 @@
+{
+  "schema": "catalogue-A19-nutrition-absence-review-v1",
+  "review": {
+    "worker": "G-2859",
+    "goal": "audit-remediation-20261019",
+    "engine": "codex-1",
+    "model": "GPT-6.1 Sol",
+    "effort": "xhigh",
+    "reviewedAtUtc": "2026-10-19T12:43:38.299626+00:00",
+    "worktree": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2859",
+    "workerBase": "32400992a4879132812a83d9e6a0bd1cd5d996bf",
+    "decision": "accept-bounded-candidate",
+    "summary": "No actionable defect found in the 10-path known-empty Nutrition presentation. Source admission and existing callers preserve unknown/failure states. This is independent review of a partial candidate, not original C30 execution or complete A19 acceptance.",
+    "candidateLandedByReviewer": false
+  },
+  "candidate": {
+    "commit": "ff66943bbca61025aa79eea400baa36574f63374",
+    "parent": "ef9ae2b4db4d2a37f8644de322dc06724eeb08aa",
+    "tree": "8f2defdb6e8b24d37306032af271cb0b4549c775",
+    "isolatedCheckout": ".temp/worktrees/root-a19-recipe-nutrition-absence",
+    "reviewMethod": "Read immutable candidate Git objects and parent diff from this worker worktree; read shared evidence without modifying the candidate checkout or main.",
+    "changedPathCount": 10,
+    "diffSummary": {
+      "insertions": 147,
+      "deletions": 3
+    },
+    "paths": [
+      {
+        "path": "apps/web/features/work-page/messages.ts",
+        "blob": "9b44d2a1470777744624765c165d311b040914f1",
+        "sha256": "2d570f9ec4eefa5eb6ffd033b0bca103e12e0ad17ae3f699984f8d1999dcb507",
+        "bytes": 23892,
+        "parentBlob": "3d62242b382a356aeb404ee9ea478fd3d5a33614",
+        "change": "modified",
+        "inspected": true,
+        "review": "English defines the two new WorkPageMessages keys and their existing shared consumers; exact original C30 wording is retained."
+      },
+      {
+        "path": "apps/web/features/work-page/messages/de.ts",
+        "blob": "e69c8793fd6ba3b22612445f82b80a4877a3dcb0",
+        "sha256": "b6adce48e67d046410d421bfb3250d15f61f11988503a5032beb717a86c3db75",
+        "bytes": 26053,
+        "parentBlob": "9b86cf68c6b65963dd6e0d7883e49a90a99fd308",
+        "change": "modified",
+        "inspected": true,
+        "review": "Two German keys only, plus machine-draft annotation; no quantity or health assertion."
+      },
+      {
+        "path": "apps/web/features/work-page/messages/es.ts",
+        "blob": "53df0ff1877c855be467626e07eea4476420b6dc",
+        "sha256": "558f979a5e30a5cd2e1d78eec0f17daa16fde1e8b018c9447e0f42c1ad4cd04c",
+        "bytes": 25439,
+        "parentBlob": "fff5bd948e47568df0ef5251bbe30f4d0b022490",
+        "change": "modified",
+        "inspected": true,
+        "review": "Two Spanish keys only, plus machine-draft annotation; absence of provided information remains explicit."
+      },
+      {
+        "path": "apps/web/features/work-page/messages/fr.ts",
+        "blob": "d60a2887e9cbc3fae7221047ab725cabdb7cc1f4",
+        "sha256": "76133bd96c18ca448c472d8fb490f3e4d2befc491b5cdc91c063c21118ab9d0c",
+        "bytes": 26377,
+        "parentBlob": "280b3f59238cb56f144ab8d76e72262c1b7e45ae",
+        "change": "modified",
+        "inspected": true,
+        "review": "Two French keys only, plus machine-draft annotation; absence of provided information remains explicit."
+      },
+      {
+        "path": "apps/web/features/work-page/messages/ja.ts",
+        "blob": "64180b6787369e0881a4126b813e958161af464e",
+        "sha256": "e9fc46b0848689a52bc141aa0ff2b3ffe5ffd7c7af56b72ceb2fc0dc1ea90b9b",
+        "bytes": 27779,
+        "parentBlob": "3729593e4f38c1d9c27c40cc3f9b2be5dc94a3a5",
+        "change": "modified",
+        "inspected": true,
+        "review": "Two Japanese keys only, plus machine-draft annotation; no inferred nutrient content."
+      },
+      {
+        "path": "apps/web/features/work-page/messages/ko.ts",
+        "blob": "a62c5b191beefa97ce879e58c1d1ba28cd83480a",
+        "sha256": "7b5a5347316306c424954f0544ad6380b441f9028df6212298fa28e85e6b7d5d",
+        "bytes": 25926,
+        "parentBlob": "033fd2e0e52fc2099a6d02862b28e255c20cb699",
+        "change": "modified",
+        "inspected": true,
+        "review": "Two Korean keys only, plus machine-draft annotation; no inferred nutrient content."
+      },
+      {
+        "path": "apps/web/features/work-page/messages/zh-Hans.ts",
+        "blob": "4f243febcfa7eea6cb131428d7ce7814f307752c",
+        "sha256": "6f8a578c7c9513ee02766cabfab5f9b467b508755c40b503c43c60de0787b4dc",
+        "bytes": 22055,
+        "parentBlob": "6cfb5cee27fe674734812612bcb01de4289c4e8c",
+        "change": "modified",
+        "inspected": true,
+        "review": "Two Simplified Chinese keys only, plus machine-draft annotation; the actual 390px screenshot was viewed."
+      },
+      {
+        "path": "apps/web/features/work-page/messages/zh-Hant.ts",
+        "blob": "e848307e35596d2c8f2300c119160b7e6399cde7",
+        "sha256": "912d3f460c6fc5429ce9e194e20be3ead185807c77328f6fd56e48a98f7e572b",
+        "bytes": 22460,
+        "parentBlob": "ad326ec40a1845e91e06ace9e836b8c07c52dc2e",
+        "change": "modified",
+        "inspected": true,
+        "review": "Two Traditional Chinese keys only, plus machine-draft annotation; no inferred nutrient content."
+      },
+      {
+        "path": "apps/web/features/work-page/recipe-nutrition-absence.stories.tsx",
+        "blob": "472fa95b453448f3da7dd57eb581490c72b79c1a",
+        "sha256": "daf4ecb271cf0bdedda9e216aaff4deceb27083454bb8db4b08ccfed5f1d88c7",
+        "bytes": 7227,
+        "parentBlob": null,
+        "change": "added",
+        "inspected": true,
+        "review": "All 122 lines reviewed: eight isolated states, synthetic values explicitly distinguished from corpus proof, no backend reader, no accessibility bypass. Selectors identify the ingredient occurrence and links use recipeEditHref."
+      },
+      {
+        "path": "apps/web/features/work-page/types/recipe.tsx",
+        "blob": "093137939ab3ff24b2b7d84a4be4bd4804bb487f",
+        "sha256": "104aea0e2ccf65c19026872ad6c2dbe2f6283e3ab9a8c0aa0d42693d143cc097",
+        "bytes": 29098,
+        "parentBlob": "e85debe638bb5070189849b2144eefd999e1fcd5",
+        "change": "modified",
+        "inspected": true,
+        "review": "Optional nutritionKnown defaults false; one RecipeExperience caller opts in beneath its non-null page branch. useId names the nested Nutrition section. The only content predicate is absence of kind=nutrient; all facts, ingredient/method rendering and read/error flows retain parent behavior."
+      }
+    ],
+    "exactPatch": {
+      "path": ".temp/audit-remediation-20261019/two-hour-sprint/a19-recipe-nutrition-absence-candidate/candidate.patch",
+      "sha256": "4082373011cc4351256d8105152c206764849664b304178a899f4f41302c609f",
+      "bytes": 18159
+    }
+  },
+  "evidenceIntegrity": {
+    "candidateReceipt": {
+      "path": ".temp/ref/a19-recipe-nutrition-absence-candidate/receipt.json",
+      "sha256": "0f16ec9b1ad4751b0462aaab221111d1c085b11f1ca9a2228c2721a8887df755",
+      "bytes": 20619
+    },
+    "originalReceipt": ".temp/audit-remediation-20261019/two-hour-sprint/a19-recipe-nutrition-absence-candidate/receipt.json",
+    "stagedReferences": [
+      {
+        "path": ".temp/ref/catalogue-A19-C30-readonly-contract.json",
+        "sha256": "9fdd1fb034641a9e99e7a362e7cd2a83d16af1f5178662d1ce77418c41ca1f29",
+        "bytes": 19838
+      },
+      {
+        "path": ".temp/ref/catalogue-A19-C30-current-repair-readiness.json",
+        "sha256": "d07f3e89d8bbe94e7817189d19de558bb47478a85249caf1678c21366ad2aff7",
+        "bytes": 25745
+      }
+    ],
+    "verified": "All 10 candidate Git blobs, byte counts and SHA-256 values match the receipt. The entire patch equals git diff --binary parent candidate. All 5 final logs, 4 historical logs and 8 screenshot SHA-256 values/lengths match. Both staged references and the candidate accessibility setup match the receipt.",
+    "verifiedArtifactCount": 27,
+    "additionalVerification": [
+      "exact patch",
+      "both staged references",
+      "accessibility setup"
+    ],
+    "sharedEvidenceAccess": "Read-only main .temp evidence was copied beneath this worktree .temp/ref for inspection. No writes outside this worktree or permitted goalctl bookkeeping."
+  },
+  "acceptedFindings": [
+    {
+      "invariant": "Only a successful non-null structured Recipe page can establish known absence.",
+      "analysis": "The published boundaries reject failed Loaded results before RecipeExperience. A successful null bypasses its page branch. RecipeContent defaults nutritionKnown=false, so stateOf(null)/emptyRecipe and all existing editor/direct callers retain unknown nutrition. Only the non-null page branch passes the opt-in."
+    },
+    {
+      "invariant": "Nutrient presence is never described as absence.",
+      "analysis": "The predicate examines kind=nutrient, not array length or numeric truthiness. Non-nutrient measures allow the absence text; one nutrient of any value, coverage or basis suppresses it."
+    },
+    {
+      "invariant": "The added state has a useful, accessible and localized meaning.",
+      "analysis": "The Nutrition heading plus Nutrition not provided distinguishes absent supplied information from a failed read and from a zero nutrient value. section aria-labelledby points to a useId heading. English and all seven locale catalogs gain exactly the two keys through the existing catalog contract. Machine-draft annotations remain explicit."
+    },
+    {
+      "invariant": "Source data and existing experience behavior are preserved.",
+      "analysis": "No measure/value transformation, health inference, synthetic declared servings, author relation, backend scaling or read mutation is introduced. Facts, ingredient quantities/lines, instructions, notes, controls, editor and published callers preserve parent behavior; the passing isolated ingredient/method assertions and viewed yield output corroborate the bounded presentation."
+    }
+  ],
+  "actionableFindings": [],
+  "counterexampleAndAdverseStateReview": [
+    {
+      "case": "successful-empty-manifest",
+      "input": "Non-null RecipeWorkPage, measures: []",
+      "expected": "Named Nutrition region says Nutrition not provided; source ingredient/method remain intact.",
+      "evidence": [
+        "RecipeContent:329-350; RecipeExperience:505-513",
+        "KnownEmpty",
+        "KnownEmptyPhone",
+        "KnownEmptyChinesePhone"
+      ],
+      "result": "supported by source and reused browser assertions/screenshots"
+    },
+    {
+      "case": "successful-non-nutrient-manifest",
+      "input": "Non-null page with a declared yield and no nutrient measures",
+      "expected": "Yield remains 1 pot; Nutrition absence is displayed.",
+      "evidence": [
+        "RecipeFacts:310-325; RecipeContent:347",
+        "OtherMeasuresStillHaveNoNutrients"
+      ],
+      "result": "supported by source and reused browser assertions/screenshots"
+    },
+    {
+      "case": "nutrient-present-counterexample-to-array-empty-only-logic",
+      "input": "One declared partial per-serving nutrient, 42 kcal, isolated fixture only",
+      "expected": "Nutrition not provided never appears; ingredient line remains.",
+      "evidence": [
+        "RecipeContent:347",
+        "NutrientPresentIsNotAbsent"
+      ],
+      "result": "absence suppressed in reused browser evidence; positive nutrient rendering is unproved"
+    },
+    {
+      "case": "zero-or-unknown-coverage-nutrient",
+      "input": "Any kind=nutrient entry, including zero value or unknown coverage/provenance",
+      "expected": "No absence claim, independent of quantity/basis/coverage.",
+      "evidence": [
+        "RecipeContent:347 checks only item.kind"
+      ],
+      "result": "source inference only; no added runtime case"
+    },
+    {
+      "case": "null-unstructured-published-read",
+      "input": "Successful API null, RecipeExperience initial=null",
+      "expected": "Existing unstructured/unavailable text and optional editor link; no Nutrition claim.",
+      "evidence": [
+        "recipeReadingReads.readRecipe:125-139 uses settleNullable",
+        "RecipeRegionView:164-166; recipeRegion:180-188",
+        "RecipeExperience:505-535",
+        "UnstructuredIsUnknown"
+      ],
+      "result": "supported by source and reused isolated browser state"
+    },
+    {
+      "case": "unavailable-denied-missing-read",
+      "input": "Transport/server failure or owner refusal before any successful Recipe page",
+      "expected": "Genuine failure path; no conversion to an empty manifest.",
+      "evidence": [
+        "books-edition-page.read.ts:44-49",
+        "RecipeRegionView:164; recipeRegion:180",
+        "RecipeReadFailure:26-31",
+        "UnavailableIsUnknown"
+      ],
+      "result": "unavailable has reused browser evidence; denied/missing use the unchanged failure branch, source review only"
+    },
+    {
+      "case": "null-editor-authoring-preview",
+      "input": "stateOf(null) yields emptyRecipe with measures: []",
+      "expected": "The draft is unknown; no Nutrition claim.",
+      "evidence": [
+        "recipe-editor/model.ts:43-59",
+        "recipe-editor/preview.tsx:26 omits nutritionKnown",
+        "UnstructuredEditorPreviewIsUnknown"
+      ],
+      "result": "supported by source and reused browser assertions/screenshots"
+    },
+    {
+      "case": "failed-editor-authoring-read",
+      "input": "Recipe read failure while loading authoring",
+      "expected": "Return unavailable before an editor preview is admitted.",
+      "evidence": [
+        "recipe-editor/authoring-page.ts:81-92; 109-116",
+        "RecipeContent nutritionKnown defaults false"
+      ],
+      "result": "source review only; no failed-authoring runtime journey claimed"
+    },
+    {
+      "case": "existing-structured-editor-and-direct-callers",
+      "input": "Preview readingOf(state), direct RecipeContent callers, existing stories",
+      "expected": "Existing behavior remains; none opts into nutritionKnown, including a structured editor preview.",
+      "evidence": [
+        "git grep of every RecipeContent/RecipeExperience caller at the candidate pin",
+        "recipe-editor/reading.ts:5-29",
+        "recipe-editor/preview.tsx:26"
+      ],
+      "result": "source review only beyond the reused unstructured editor story; structured editor absence is explicitly outside this repair"
+    },
+    {
+      "case": "pagination-and-later-read-failure",
+      "input": "Pinned page with more occurrences, then continuation/scaling succeeds, fails, or becomes stale",
+      "expected": "Measure manifest determines absence independently of occurrence pagination; failed reads do not manufacture an empty replacement page.",
+      "evidence": [
+        "services/main/src/modules/recipe/work-page.ts:156-160,190-218 repeats the full manifest",
+        "recipe-editor/pages.ts:appendRecipePage and readRecipePage",
+        "RecipeExperience:422-486"
+      ],
+      "result": "source review only; old successfully loaded content may remain alongside a failure alert, as in the parent"
+    },
+    {
+      "case": "missing-or-null-measures-is-not-confirmed-empty",
+      "input": "Malformed object without an actual measure array",
+      "expected": "Must never be normalized into a known-empty nutrient manifest.",
+      "evidence": [
+        "ReadableRecipe:34-39 requires measures",
+        "RecipeWorkPage is derived from the API type in work-page/types.ts:11",
+        "RecipeExperience:419 and RecipeFacts:312-318 already access array methods",
+        "RecipeContent:347 has no ?? [] or fallback"
+      ],
+      "result": "No new false-empty fallback exists. Malformed transport validation is not established here; such an invalid object can already fail rendering in the parent and is not a supported successful Recipe input."
+    }
+  ],
+  "checks": {
+    "reusedCandidateChecks": [
+      {
+        "kind": "types",
+        "observedExitCode": 0,
+        "command": "task: [goal:type-files] bun scripts/qa/host-admission.ts --cpu --gib 1.5 -- bun check --no-pretty --threads 8 --project apps/web/tsconfig.json apps/web/features/work-page/types/recipe.tsx apps/web/features/work-page/messages.ts apps/web/features/work-page/messages/de.ts apps/web/features/work-page/messages/es.ts apps/web/features/work-page/messages/fr.ts apps/web/features/work-page/messages/ja.ts apps/web/features/work-page/messages/ko.ts apps/web/features/work-page/messages/zh-Hans.ts apps/web/features/work-page/messages/zh-Hant.ts apps/web/features/work-page/recipe-nutrition-absence.stories.tsx",
+        "detail": "Official affected-file type gate; all 10 changed files and imports, 1,788 files checked.",
+        "log": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/a19-recipe-nutrition-absence-candidate/types.log",
+          "sha256": "99ac676a4edf743a22aba51fd442056e5ef1da194594d96d19e79c48f7f88798",
+          "bytes": 877
+        },
+        "reused": true,
+        "rerunByReviewer": false,
+        "result": "pass",
+        "exitCodeSource": "candidate receipt; final log independently read and hash verified"
+      },
+      {
+        "kind": "i18n",
+        "observedExitCode": 0,
+        "command": "task: [i18n:check] bun scripts/i18n/check.ts",
+        "detail": "All discovered locale catalogs match; English and the seven locale additions are checked.",
+        "log": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/a19-recipe-nutrition-absence-candidate/i18n.log",
+          "sha256": "dde897b7057190b98d68ce0b4b95e62c9ff4dd9cfffdf285c1566a5b19d978ae",
+          "bytes": 61
+        },
+        "reused": true,
+        "rerunByReviewer": false,
+        "result": "pass",
+        "exitCodeSource": "candidate receipt; final log independently read and hash verified"
+      },
+      {
+        "kind": "lint",
+        "observedExitCode": 0,
+        "command": "task: [lint] node_modules/.bin/oxlint --format=unix apps/web/features/work-page/types/recipe.tsx apps/web/features/work-page/messages.ts apps/web/features/work-page/messages/de.ts apps/web/features/work-page/messages/editions.ts apps/web/features/work-page/messages/es.ts apps/web/features/work-page/messages/fr.ts apps/web/features/work-page/messages/ja.ts apps/web/features/work-page/messages/ko.ts apps/web/features/work-page/messages/zh-Hans.ts apps/web/features/work-page/messages/zh-Hant.ts apps/web/features/work-page/recipe-nutrition-absence.stories.tsx",
+        "detail": "Affected source and Work page locale files checked with the pinned Oxlint through scratch Task facade.",
+        "log": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/a19-recipe-nutrition-absence-candidate/lint.log",
+          "sha256": "54ce5310dc05a6c43224b3d323f204499e2e11ff03986bcfb3661a74e041e0e8",
+          "bytes": 562
+        },
+        "reused": true,
+        "rerunByReviewer": false,
+        "result": "pass",
+        "exitCodeSource": "candidate receipt; final log independently read and hash verified"
+      },
+      {
+        "kind": "ast",
+        "observedExitCode": 0,
+        "command": "task: [ast-grep] node_modules/.bin/ast-grep scan apps/web/features/work-page/types/recipe.tsx apps/web/features/work-page/messages.ts apps/web/features/work-page/messages/de.ts apps/web/features/work-page/messages/editions.ts apps/web/features/work-page/messages/es.ts apps/web/features/work-page/messages/fr.ts apps/web/features/work-page/messages/ja.ts apps/web/features/work-page/messages/ko.ts apps/web/features/work-page/messages/zh-Hans.ts apps/web/features/work-page/messages/zh-Hant.ts apps/web/features/work-page/recipe-nutrition-absence.stories.tsx",
+        "detail": "Affected source and Work page locale files checked with the repository AST rules through Task.",
+        "log": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/a19-recipe-nutrition-absence-candidate/ast.log",
+          "sha256": "beec0ee2725b10572b1209c793016087ed9f3d1444fd2afd27214d13c60d6159",
+          "bytes": 559
+        },
+        "reused": true,
+        "rerunByReviewer": false,
+        "result": "pass",
+        "exitCodeSource": "candidate receipt; final log independently read and hash verified"
+      },
+      {
+        "kind": "stories",
+        "observedExitCode": 0,
+        "command": "task: [storybook:test] STORYBOOK_MAX_WORKERS=\"${STORYBOOK_MAX_WORKERS-2}\" bun ../../scripts/goal/admission.ts -- ../../node_modules/.bin/vitest run --project storybook features/work-page/recipe-nutrition-absence.stories.tsx",
+        "detail": "One new isolated story file, 8/8 stories passed with real Chromium rendering and inherited accessibility sweep.",
+        "log": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/a19-recipe-nutrition-absence-candidate/stories.log",
+          "sha256": "93f5fc28945371a4bfa73e52e13e6b7ca88bf3e5f09a3cb0a06203d6e646d843",
+          "bytes": 1593
+        },
+        "reused": true,
+        "rerunByReviewer": false,
+        "result": "pass",
+        "exitCodeSource": "candidate receipt; final log independently read and hash verified"
+      }
+    ],
+    "reusedChecksAdequacy": "The immutable 10-path candidate was not edited; final logs cover the exact files, including 1,788-file import closure, all locale keys and all eight new stories. No concrete concern required rerunning product checks or broader tests.",
+    "performedByReviewer": [
+      {
+        "command": "git show / git diff / git grep at ff66943bbca61025aa79eea400baa36574f63374 and ef9ae2b4db4d2a37f8644de322dc06724eeb08aa",
+        "result": "pass",
+        "detail": "Verified exact parent/tree and all 10 changed paths; traced published read admission, all shared content callers, authoring failure/null boundaries and repeated measure manifests."
+      },
+      {
+        "command": "Python hashlib + git object/patch comparison in this worktree",
+        "result": "pass",
+        "detail": "27 artifact hash/length checks plus patch, staged-reference and a11y setup comparisons passed."
+      },
+      {
+        "command": "view_image for all eight archived final PNGs copied into this worktree",
+        "result": "pass",
+        "detail": "This reviewer actually viewed every reused screenshot; observations are listed below."
+      }
+    ],
+    "reportValidation": {
+      "status": "pass",
+      "recordedJob": "job:3a71aa5a-ba8a-4869-865a-b6864259f6d2",
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+      "steps": [
+        {
+          "command": "task docs:check",
+          "exitCode": 0,
+          "result": "13 checker tests passed; 259 Markdown files checked for links, fragments and navigation. This is the required documentation gate; it does not establish product/runtime behavior or a JSON schema guarantee.",
+          "log": {
+            "path": ".temp/goal/jobs/3a71aa5a-ba8a-4869-865a-b6864259f6d2.1.log",
+            "sha256": "c0172ebefe9fbc7c58a08cd881065b9f27d5338d98506336afae9a0577fd4d20",
+            "bytes": 348
+          }
+        },
+        {
+          "command": "task goal -- check",
+          "exitCode": 0,
+          "checks": {
+            "types": "skipped: no TypeScript workspace changed",
+            "lint": "skipped: no source file changed",
+            "ast": "pass",
+            "tests": "skipped: no test files named in brief",
+            "guards": "pass: 1/45 selected; scripts/static/one-language-parser-debt.test.ts, 2 tests passed"
+          },
+          "log": {
+            "path": ".temp/goal/jobs/3a71aa5a-ba8a-4869-865a-b6864259f6d2.2.log",
+            "sha256": "d9f0db886efbd65983cf3fdfd913d68ef4574696a4978fbeb096376001ca4c69",
+            "bytes": 574
+          },
+          "fullCheckLog": {
+            "path": ".temp/goal/check/run-1gtfLQ/output.log",
+            "sha256": "45bac0109791d433cd31d6b9ec095cf0841ae3d3ac1e3e1ffe8802c39c67a724",
+            "bytes": 2919
+          }
+        }
+      ],
+      "jsonParse": {
+        "command": "python3 -m json.tool docs/goals/audit-remediation-20261019/proofs/catalogue-A19-nutrition-absence-review.json",
+        "result": "pass"
+      },
+      "dependencyPreparation": "The required worker check automatically ran task install for this worktree. No tracked dependency/product source changed.",
+      "treeCurrency": "HEAD remained 32400992a4879132812a83d9e6a0bd1cd5d996bf during checks; no rebase or merge occurred.",
+      "finalization": "After successful validation, only this JSON evidence metadata was updated to record actual outcomes and log hashes; no Markdown links or candidate source changed."
+    },
+    "newProductTestsExecuted": 0,
+    "newBrowserRunsExecuted": 0,
+    "broadTiersExecuted": 0,
+    "unrunExistingConsumerTests": [
+      "apps/web/features/recipe-editor/entry.test.tsx",
+      "apps/web/features/recipe-editor/instruction-recorded-page.test.tsx",
+      "apps/web/features/recipe-editor/instructions.test.tsx",
+      "apps/web/features/recipe-editor/pages.test.ts",
+      "apps/web/features/recipe-editor/recipe-reading.test.tsx",
+      "apps/web/features/recipe-editor/authoring-page.test.ts",
+      "apps/web/features/work-page/work-detail-contract.test.tsx"
+    ],
+    "unrunExistingConsumerTestsNote": "Source-identified neighboring coverage, not a claim that the full affected-test selector was run. No product source changed on this worker branch; manager decides any later regression breadth."
+  },
+  "reusedBrowserAndAccessibility": {
+    "result": "8/8 isolated Storybook Chromium tests passed in the final supplied log",
+    "storyIds": {
+      "path": ".temp/audit-remediation-20261019/two-hour-sprint/a19-recipe-nutrition-absence-candidate/story-ids.json",
+      "sha256": "4f4d8f080411fd60e93886f6742658f2ed7256b6063c19602341b1323c42dba9",
+      "bytes": 1430
+    },
+    "accessibility": {
+      "method": "Repository story-accessibility.setup.ts afterEach sweep on each successful story; no story-local disabling.",
+      "viewports": [
+        {
+          "width": 390,
+          "height": 844
+        },
+        {
+          "width": 1280,
+          "height": 860
+        }
+      ],
+      "themes": [
+        "light",
+        "dark"
+      ],
+      "blockingLevels": [
+        "serious",
+        "critical"
+      ],
+      "setup": {
+        "path": ".temp/worktrees/root-a19-recipe-nutrition-absence/scripts/qa/story-accessibility.setup.ts",
+        "sha256": "2e5dbcabc65bf85f8e83338beb6ff6613bc92edd0e9bd8e10dc747209346a5e4",
+        "bytes": 3229
+      }
+    },
+    "setupIndependentlyInspected": true,
+    "interpretation": "vitest.config.ts registers the afterEach sweep for the story project; all eight final stories passed. The sweep checks light/dark at 390x844 and 1280x860, gates serious/critical axe violations and cannot be disabled by story-local addon settings. This supports that scoped automated gate, not an exhaustive accessibility claim.",
+    "screenshots": [
+      {
+        "exportName": "KnownEmpty",
+        "id": "work-page-recipe-nutrition-absence-isolated--known-empty",
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/a19-recipe-nutrition-absence-candidate/screenshots/apps-web-features-work-page-recipe-nutrition-absence.stories.tsx/KnownEmpty.png",
+        "sha256": "19fa10706046ed80923bf0de17da29bc98e3c4f71788f8342dd5827430768e6e",
+        "bytes": 21713,
+        "width": 1280,
+        "height": 860,
+        "reused": true,
+        "viewedByThisReviewer": true,
+        "localReadOnlyEvidenceCopy": ".temp/ref/a19-recipe-nutrition-absence-candidate/screenshots/apps-web-features-work-page-recipe-nutrition-absence.stories.tsx/KnownEmpty.png",
+        "observation": "Desktop: Nutrition follows the ingredient/method columns; heading and absence copy are readable without overlap."
+      },
+      {
+        "exportName": "KnownEmptyPhone",
+        "id": "work-page-recipe-nutrition-absence-isolated--known-empty-phone",
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/a19-recipe-nutrition-absence-candidate/screenshots/apps-web-features-work-page-recipe-nutrition-absence.stories.tsx/KnownEmptyPhone.png",
+        "sha256": "7beaaba6e62389a7dd7f1d8e65785c0e44ee29561c2ee40de24e3a97240f7dc9",
+        "bytes": 19259,
+        "width": 390,
+        "height": 844,
+        "reused": true,
+        "viewedByThisReviewer": true,
+        "localReadOnlyEvidenceCopy": ".temp/ref/a19-recipe-nutrition-absence-candidate/screenshots/apps-web-features-work-page-recipe-nutrition-absence.stories.tsx/KnownEmptyPhone.png",
+        "observation": "390px English: ingredient, method and Nutrition sections stack, all text fits the viewport."
+      },
+      {
+        "exportName": "KnownEmptyChinesePhone",
+        "id": "work-page-recipe-nutrition-absence-isolated--known-empty-chinese-phone",
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/a19-recipe-nutrition-absence-candidate/screenshots/apps-web-features-work-page-recipe-nutrition-absence.stories.tsx/KnownEmptyChinesePhone.png",
+        "sha256": "5b8f6c3c6f90c010c092f6b01564f384e4921024226a51b4a93977f1ca23151b",
+        "bytes": 19759,
+        "width": 390,
+        "height": 844,
+        "reused": true,
+        "viewedByThisReviewer": true,
+        "localReadOnlyEvidenceCopy": ".temp/ref/a19-recipe-nutrition-absence-candidate/screenshots/apps-web-features-work-page-recipe-nutrition-absence.stories.tsx/KnownEmptyChinesePhone.png",
+        "observation": "390px zh-Hans: 营养信息 and 未提供营养信息 fit and remain distinct from the English source recipe content."
+      },
+      {
+        "exportName": "OtherMeasuresStillHaveNoNutrients",
+        "id": "work-page-recipe-nutrition-absence-isolated--other-measures-still-have-no-nutrients",
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/a19-recipe-nutrition-absence-candidate/screenshots/apps-web-features-work-page-recipe-nutrition-absence.stories.tsx/OtherMeasuresStillHaveNoNutrients.png",
+        "sha256": "303822ea1027a9c1f443c64cfa0f6b5d1bd1f5385bbf9029ad76d4afb3fbee3d",
+        "bytes": 22942,
+        "width": 1280,
+        "height": 860,
+        "reused": true,
+        "viewedByThisReviewer": true,
+        "localReadOnlyEvidenceCopy": ".temp/ref/a19-recipe-nutrition-absence-candidate/screenshots/apps-web-features-work-page-recipe-nutrition-absence.stories.tsx/OtherMeasuresStillHaveNoNutrients.png",
+        "observation": "The actual yield remains 1 pot and the empty nutrient state remains visible; absence is about nutrients, not all measures."
+      },
+      {
+        "exportName": "NutrientPresentIsNotAbsent",
+        "id": "work-page-recipe-nutrition-absence-isolated--nutrient-present-is-not-absent",
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/a19-recipe-nutrition-absence-candidate/screenshots/apps-web-features-work-page-recipe-nutrition-absence.stories.tsx/NutrientPresentIsNotAbsent.png",
+        "sha256": "1f3e278048e16160eab9b855127b075d275036b11968476565e6f19ce3a61540",
+        "bytes": 18703,
+        "width": 1280,
+        "height": 860,
+        "reused": true,
+        "viewedByThisReviewer": true,
+        "localReadOnlyEvidenceCopy": ".temp/ref/a19-recipe-nutrition-absence-candidate/screenshots/apps-web-features-work-page-recipe-nutrition-absence.stories.tsx/NutrientPresentIsNotAbsent.png",
+        "observation": "The absence region/copy is omitted. The screenshot does not display the fixture nutrient; this only proves suppression and leaves positive nutrient rendering open."
+      },
+      {
+        "exportName": "UnstructuredIsUnknown",
+        "id": "work-page-recipe-nutrition-absence-isolated--unstructured-is-unknown",
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/a19-recipe-nutrition-absence-candidate/screenshots/apps-web-features-work-page-recipe-nutrition-absence.stories.tsx/UnstructuredIsUnknown.png",
+        "sha256": "b6a10cea7a346f9296aae2c2375c4ec3b99e322284f27bbd0b0496b3bb57c77e",
+        "bytes": 18695,
+        "width": 1280,
+        "height": 860,
+        "reused": true,
+        "viewedByThisReviewer": true,
+        "localReadOnlyEvidenceCopy": ".temp/ref/a19-recipe-nutrition-absence-candidate/screenshots/apps-web-features-work-page-recipe-nutrition-absence.stories.tsx/UnstructuredIsUnknown.png",
+        "observation": "Null page keeps Edit recipe and the existing unstructured/unavailable explanations; no Nutrition absence appears."
+      },
+      {
+        "exportName": "UnavailableIsUnknown",
+        "id": "work-page-recipe-nutrition-absence-isolated--unavailable-is-unknown",
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/a19-recipe-nutrition-absence-candidate/screenshots/apps-web-features-work-page-recipe-nutrition-absence.stories.tsx/UnavailableIsUnknown.png",
+        "sha256": "969c307507f7308c09982e94d03531af275804243649e33ebc37fd4e8b0a544f",
+        "bytes": 21619,
+        "width": 1280,
+        "height": 860,
+        "reused": true,
+        "viewedByThisReviewer": true,
+        "localReadOnlyEvidenceCopy": ".temp/ref/a19-recipe-nutrition-absence-candidate/screenshots/apps-web-features-work-page-recipe-nutrition-absence.stories.tsx/UnavailableIsUnknown.png",
+        "observation": "The failed read retains the red alert and Retry control; there is no Nutrition absence claim."
+      },
+      {
+        "exportName": "UnstructuredEditorPreviewIsUnknown",
+        "id": "work-page-recipe-nutrition-absence-isolated--unstructured-editor-preview-is-unknown",
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/a19-recipe-nutrition-absence-candidate/screenshots/apps-web-features-work-page-recipe-nutrition-absence.stories.tsx/UnstructuredEditorPreviewIsUnknown.png",
+        "sha256": "d3de2fc6a677d35f217d1b0b7909fc02fee7b9bc2558dc9a427ec5727a5f2d5d",
+        "bytes": 18824,
+        "width": 1280,
+        "height": 860,
+        "reused": true,
+        "viewedByThisReviewer": true,
+        "localReadOnlyEvidenceCopy": ".temp/ref/a19-recipe-nutrition-absence-candidate/screenshots/apps-web-features-work-page-recipe-nutrition-absence.stories.tsx/UnstructuredEditorPreviewIsUnknown.png",
+        "observation": "The titled draft preview keeps empty ingredient/method sections without a Nutrition claim."
+      }
+    ],
+    "visualLimit": "Archived screenshots are isolated final light-theme component states. Dark-theme accessibility is covered by the sweep, but no dark screenshots or full live Work page were visually reviewed."
+  },
+  "historicalCorrections": [
+    {
+      "log": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/a19-recipe-nutrition-absence-candidate/stories-initial-selector-failure.log",
+        "sha256": "158acb0e99775bb5f8b42849f087a2259ac2a4474defeb1cd61d4c4357218601",
+        "bytes": 42734
+      },
+      "reason": "Five ingredient-text queries were ambiguous because the method correctly echoes its linked ingredient; fixed by querying the tagged ingredient occurrence.",
+      "status": "historical-corrected",
+      "observedDiagnostic": "Five story failures reported multiple elements with text 2 carrots; both ingredient and linked method echo were real. Final queries use selector [data-ingredient]. Final 8/8 supersedes this diagnostic."
+    },
+    {
+      "log": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/a19-recipe-nutrition-absence-candidate/ast-initial-address-failure.log",
+        "sha256": "0364b1e8d3fff70726986a12e6a71a4fe5462e39fbcd1e54092a5e46014b4fc7",
+        "bytes": 1122
+      },
+      "reason": "Story edit link needed the established recipeEditHref address builder; corrected.",
+      "status": "historical-corrected",
+      "observedDiagnostic": "web-links-use-address-tsx rejected the literal editor path. The final story uses recipeEditHref and the final AST scan passed."
+    },
+    {
+      "log": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/a19-recipe-nutrition-absence-candidate/types-initial-story-role-options-failure.log",
+        "sha256": "8ef16f97b25189f74c05802c5e8409ccb88902d1ae31d852503699f6defda93f",
+        "bytes": 1759
+      },
+      "reason": "Testing Library role queries do not accept the Playwright exact option; removed it, preserving their default exact string matching.",
+      "status": "historical-corrected",
+      "observedDiagnostic": "Three TS2769 errors: exact is not a ByRoleOptions property. Final role queries omit it and the 1,788-file type gate passed."
+    },
+    {
+      "log": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/a19-recipe-nutrition-absence-candidate/types-workspace-superseded-admission-wait.log",
+        "sha256": "05c8b6ecd390e8f07cc8f077078c37d3afacaa97f4e8373fb89aeb332ef7aea2",
+        "bytes": 467
+      },
+      "reason": "Broad workspace typecheck never executed while queued on the shared 5.5-GiB serial lock. Only this candidate waiting wrapper was terminated and replaced with the standard affected-file gate, which passed.",
+      "status": "historical-superseded-no-type-verdict",
+      "observedDiagnostic": "The broad workspace wrapper ended by SIGTERM (exit status null), without a completed type verdict. The receipt attributes this to the serial-lock wait. The actual final successful evidence is the targeted 1,788-file check; a broad workspace pass is not claimed."
+    }
+  ],
+  "originalAcceptance": {
+    "originalAssertionsModified": false,
+    "source": {
+      "path": ".temp/worktrees/g-2774/apps/web/tests/catalogue-detail-contract.e2e.ts",
+      "sha256": "b6889bcde1f06083da74aa0507f85c35a91627a80dea75cb9e3f586b8ebfa2c3",
+      "bytes": 32565
+    },
+    "tailLines": [
+      408,
+      412
+    ],
+    "tailSha256": "f8b6e9388cef35930811e4ee2ae3f5d2e5040b6e3182a8d8269e137f7d6f3432",
+    "independentlyApplicableCut": "The original C30 tail requires genuine API nutrient absence, a named Nutrition region with Nutrition not provided, and no healthy/healthier/low-fat/zero-calories claim. The candidate provides a reviewed renderer for that cut.",
+    "genuineRetainedControl": "https://rezics.com/id/01a1532a-2e60-7260-9f3a-d6aa69f61c4b; the staged readonly contract records measures=[] and no declared substitutions. That saved observation is not a fresh read by this reviewer.",
+    "genuineOriginalBrowserSuccessEstablished": false,
+    "completeA19Accepted": false,
+    "positiveAssertionsStillOpen": [
+      "Genuine authorized public rich Recipe meeting original fixture premises: positive declared servings distinct from scaled servings, at least two ingredients and two steps, at least two source-backed nutrients and a declared exact substitution.",
+      "All Recipe pages: exact nutrient count, rational quantity, unit, per-serving/whole-recipe basis, declared/computed distinctions, partial/unknown coverage, provenance and evidence, with at least two fixture coverage values.",
+      "Visible Nutrition rows with exact values, labels, units, basis/coverage/provenance and data-source-key; exactly one Nutrition evidence link in the Sources and licenses footer and none repeated in the region.",
+      "Visible Author-declared substitutions: exact alternative line, declaring author and ordered links to exact substituteFor occurrence IDs; matching API qualifier.",
+      "Change Servings through the UI; original exact API/UI ratio assertions, invariant per-serving nutrients, scaled whole-recipe nutrients and retained units/basis/coverage/provenance/evidence/source keys.",
+      "Root execution of the unchanged independently applicable no-nutrition tail against an actual qualified Recipe and accepted frontend; this review adds no genuine-browser success."
+    ]
+  },
+  "limits": [
+    "This report accepts only the bounded known-empty published-reader candidate; synthetic Storybook fixtures do not prove original C30 or a current genuine Recipe page.",
+    "No services, corpus, source acquisition/network capture, account/client mutation, restore, original assertion edits, backend nutrient scaling edits, landing or new owner/framework occurred.",
+    "Loaded structured editor previews intentionally retain their prior behavior; source-backed positive nutrition/substitution presentation remains separate existing work.",
+    "Seven non-English additions remain machine drafts pending native review; catalog integrity is distinct from native-language acceptance.",
+    "Malformed transport schema validation, full page/browser navigation, denied/loading/expired identity interactions, continuation/scaling runtime transitions and dark visual layouts were not newly executed.",
+    "Unchanged existing tests outside the brief were not run; the parent candidate checks were reused rather than represented as new worker QA runs."
+  ],
+  "next": [
+    "Root may integrate the exact accepted 10-path candidate through its normal review/landing flow, preserving current accepted source and separate in-flight changes.",
+    "Root owns the separate genuine current Recipe proof of the unchanged original C30 absence tail after accepted source.",
+    "Keep full A19/C30 nutrition, sources, servings/scaling and declared-substitution assertions open with their existing owners; no second owner or framework is introduced."
+  ]
+}

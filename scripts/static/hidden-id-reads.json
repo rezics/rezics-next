@@ -2590,7 +2590,9 @@
     "operation": "GET /v1/works/{id}/credits",
     "ids": [
       "path:id",
-      "query:actingSubject"
+      "query:actingSubject",
+      "query:context",
+      "query:position"
     ],
     "status": "registered"
   },

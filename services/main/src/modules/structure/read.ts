@@ -107,8 +107,8 @@ export async function readCompositionOccurrenceByQualifierKey(env: WorkActivatio
   let manifest;
   try { manifest = checkStructureManifest(await objects.get(manifestRef!.slice(-64))); }
   catch (error) {
-    if (error instanceof ObjectUnavailable) throw new StructureObjectUnavailable(error.message);
-    if (error instanceof InvalidStructureObject || error instanceof ObjectIntegrityError) throw new StructureObjectCorrupt(error.message);
+    if (error instanceof ObjectUnavailable) throw new StructureObjectUnavailable(error.message, { cause: error });
+    if (error instanceof InvalidStructureObject || error instanceof ObjectIntegrityError) throw new StructureObjectCorrupt(error.message, { cause: error });
     throw error;
   }
   cost.pagesRead++;
@@ -126,8 +126,8 @@ export async function readCompositionOccurrenceByQualifierKey(env: WorkActivatio
       throw new StructureObjectCorrupt('Qualifier posting root differs from its descriptor');
     }
   } catch (error) {
-    if (error instanceof ObjectUnavailable) throw new StructureObjectUnavailable(error.message);
-    if (error instanceof InvalidStructureObject || error instanceof ObjectIntegrityError) throw new StructureObjectCorrupt(error.message);
+    if (error instanceof ObjectUnavailable) throw new StructureObjectUnavailable(error.message, { cause: error });
+    if (error instanceof InvalidStructureObject || error instanceof ObjectIntegrityError) throw new StructureObjectCorrupt(error.message, { cause: error });
     throw error;
   }
   if (parent !== input.structure) {
@@ -159,7 +159,7 @@ export async function readCompositionOccurrenceByQualifierKey(env: WorkActivatio
       try { checkOccurrenceRecord(record, header.profile, profile.catalogTargetTypes,
         profile.selectionRequiredRoles ?? profile.targetRoles, profile.selectionOptionalRoles); }
       catch (error) {
-        if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message);
+        if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message, { cause: error });
         throw error;
       }
       if (record.parent === parent) scoped.push(record);
@@ -250,14 +250,14 @@ export async function readCompositionSnapshot(env: WorkActivationEnvironment, in
   let bytes: Uint8Array;
   try { bytes = await objects.get(value('manifest')!.slice(-64)); }
   catch (error) {
-    if (error instanceof ObjectIntegrityError) throw new StructureObjectCorrupt(error.message);
-    if (error instanceof ObjectUnavailable) throw new StructureObjectUnavailable(error.message);
+    if (error instanceof ObjectIntegrityError) throw new StructureObjectCorrupt(error.message, { cause: error });
+    if (error instanceof ObjectUnavailable) throw new StructureObjectUnavailable(error.message, { cause: error });
     throw error;
   }
   let manifest;
   try { manifest = checkStructureManifest(bytes); }
   catch (error) {
-    if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message);
+    if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message, { cause: error });
     throw error;
   }
   if (manifest.structure !== input.structure || manifest.structureOf !== header.component
@@ -307,14 +307,14 @@ export async function readStructureMeasures(env: WorkActivationEnvironment, inpu
   let bytes: Uint8Array;
   try { bytes = await structureObjects(env).get(get('manifest')!.slice(-64)); }
   catch (error) {
-    if (error instanceof ObjectIntegrityError) throw new StructureObjectCorrupt(error.message);
-    if (error instanceof ObjectUnavailable) throw new StructureObjectUnavailable(error.message);
+    if (error instanceof ObjectIntegrityError) throw new StructureObjectCorrupt(error.message, { cause: error });
+    if (error instanceof ObjectUnavailable) throw new StructureObjectUnavailable(error.message, { cause: error });
     throw error;
   }
   let manifest;
   try { manifest = checkStructureManifest(bytes); }
   catch (error) {
-    if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message);
+    if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message, { cause: error });
     throw error;
   }
   if (manifest.structure !== input.structure || manifest.structureOf !== header.component
@@ -374,7 +374,7 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
     try { checkOccurrenceRecord(record, header.profile, profile.catalogTargetTypes,
       profile.selectionRequiredRoles ?? profile.targetRoles, profile.selectionOptionalRoles); }
     catch (error) {
-      if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message);
+      if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message, { cause: error });
       throw error;
     }
     const withheld = record.target && !isCatalogTarget(profile, record.target)
@@ -470,7 +470,7 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
       try { checkOccurrenceRecord(record, header.profile, profile.catalogTargetTypes,
         profile.selectionRequiredRoles ?? profile.targetRoles, profile.selectionOptionalRoles); }
       catch (error) {
-        if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message);
+        if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message, { cause: error });
         throw error;
       }
       return record;

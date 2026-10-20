@@ -1,7 +1,7 @@
 import { resourceHref } from '../address/path.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, within } from 'storybook/test';
+import { expect, userEvent, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
 import { messages as pageMessages } from '../work-page/messages.ts';
 import { EditionsSection } from './editions.tsx';
@@ -192,5 +192,28 @@ export const ReleasePage: Story = {
     await expect(canvas.getAllByText('Japanese')[0]).toBeVisible();
     // The release page lists what it covers once.
     await expect(canvas.queryByText('Covers 3 Works')).toBeNull();
+    const sources = canvas.getByRole('contentinfo', { name: 'Sources and licenses' });
+    await expect(sources.compareDocumentPosition(canvas.getByRole('region', { name: 'What it covers' })) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    await expect(canvasElement.querySelectorAll('[data-subject-actions]')).toHaveLength(1);
+    const anchors = [...canvasElement.querySelectorAll('[id^="coverage-"]')].map(item => item.id);
+    await expect(anchors).toHaveLength(3);
+    await expect(new Set(anchors).size).toBe(3);
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+
+export const ReleasePagePhone: Story = { ...ReleasePage, globals: { viewport: { value: 'phone' } } };
+export const ReleaseMenuKeyboard: Story = {
+  args: { view: 'release' },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.queryByRole('link', { name: 'Report this page' })).toBeNull();
+    const more = canvas.getByRole('button', { name: /^More actions/ });
+    more.focus();
+    await userEvent.keyboard('{Enter}');
+    const report = await within(document.body).findByRole('menuitem', { name: 'Report this page' });
+    await expect(new URL(report.getAttribute('href')!, location.origin).searchParams.get('target')).toBe(fixture.iri('c2'));
+    await userEvent.keyboard('{Escape}');
+    await expect(more).toHaveFocus();
   },
 };

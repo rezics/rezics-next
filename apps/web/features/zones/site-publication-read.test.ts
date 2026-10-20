@@ -8,9 +8,13 @@ import type { RealmView } from '../realm/realm-page.tsx';
 import type { ZonePresentationRead } from '../realm/types.ts';
 import { fictionZone, zoneMessagesFor } from './fixtures.ts';
 import { messages } from '../realm/messages.ts';
-import { addressKey } from '../address/path.ts';
+import { addressKey, spaceHref } from '../address/path.ts';
+import { localizedPath } from '../../i18n/locale.ts';
 import { ZoneHomeContent } from '../zone-editor/home-content.tsx';
 import { ZoneFrame } from './zone-frame.tsx';
+import { serverDocumentResponse, withServerRequest } from '../api/server-read.ts';
+import { RealmUnavailable } from '../realm/states.tsx';
+import LocalizedLink from '../shell/localized-link.tsx';
 
 const zone = '00000000-0000-4000-8000-000000000701';
 const canonical = { prefix: '/z/' as const, key: zone, suffixSource: 'Publication B' };
@@ -27,7 +31,11 @@ const presentation = {
 } as unknown as ZonePresentationRead;
 let attached = true;
 let refused = false;
+let missing = false;
+let routeRefused = false;
 let routeReads = 0;
+let mountProbe: 'mounted' | 'missing' | 'refused' | null = null;
+const mountCalls: { phase: string; args: unknown[] }[] = [];
 const view = () => ({ kind: 'view', publication: presentation, presentation: presentation.presentation,
   slideMedia: presentation.slideMedia, mounts: presentation.navigation, context,
   realm: { kind: 'realm', ref: context.ref, realm: zone, zone: { id: zone, segment: null },
@@ -45,28 +53,78 @@ const restoreOriginalHeaders = replaceModule(import.meta.resolve('next/headers')
 
 const restoreReads = replaceModule(import.meta.resolve('../realm/read.ts'), reads, {
   resolveSite: async () => ({ kind: 'site', zone, realm: attached ? zone : null, address: { canonical } }),
-  readZoneRoute: async () => {
+  resolveRealm: async () => view().realm,
+  readZoneRoute: async (...args: Parameters<typeof reads.readZoneRoute>) => {
     routeReads += 1;
+    if (mountProbe) {
+      mountCalls.push({ phase: 'browse-probe', args });
+      return mountProbe === 'missing' ? { ok: false, status: 404, failure: 'missing' }
+        : mountProbe === 'refused' ? { ok: false, status: 503, failure: 'unavailable' }
+        : { ok: true, data: { kind: 'detail' } };
+    }
+    if (routeRefused) return { ok: false, failure: 'unavailable' };
     return { ok: true, data: { kind: 'home', page: { document: fromPlainText('Publication A prose', 'blocks') } } };
   },
-  readCompletePresentation: async () => refused ? { ok: false, failure: 'unavailable' }
+  readCompletePresentation: async () => missing ? { ok: false, failure: 'missing' }
+    : refused ? { ok: false, failure: 'unavailable' }
     : { ok: true, data: presentation },
 });
 const restoreI18n = replaceModule(import.meta.resolve('../../i18n/server.ts'), i18n, {
   getMessages: async (namespace: string) => namespace === 'realm' ? messages : zoneMessagesFor('en'),
-  getTranslation: async () => ({ t: {} }),
+  getTranslation: async () => ({ t: messages }),
 });
 const frames = { ...(await import('../realm/realm-page.tsx')) };
 const restoreFrames = replaceModule(import.meta.resolve('../realm/realm-page.tsx'), frames, {
-  loadRealmView: async () => refused ? { kind: 'unavailable', failure: 'unavailable' } : view(),
+  loadRealmView: async () => {
+    if (mountProbe) mountCalls.push({ phase: 'view', args: [] });
+    return missing ? { kind: 'missing' }
+      : refused ? { kind: 'unavailable', failure: 'unavailable' } : view();
+  },
+});
+const selection = { ...(await import('../wiki/selection.ts')) };
+const restoreSelection = replaceModule(import.meta.resolve('../wiki/selection.ts'), selection, {
+  readingSelection: async (...args: Parameters<typeof selection.readingSelection>) => {
+    if (!mountProbe) return selection.readingSelection(...args);
+    mountCalls.push({ phase: 'selection', args });
+    return { choice: { kind: 'all' }, state: { main: 'all' }, reading: null };
+  },
+});
+const wiki = { ...(await import('../wiki/read.ts')) };
+const restoreWiki = replaceModule(import.meta.resolve('../wiki/read.ts'), wiki, {
+  readPositionedRoute: async (...args: Parameters<typeof wiki.readPositionedRoute>) => {
+    if (!mountProbe) return wiki.readPositionedRoute(...args);
+    mountCalls.push({ phase: 'positioned-route', args });
+    return { ok: true, data: { kind: 'detail', mount: { segment: 'mounted' },
+      resource: { id: `https://rezics.com/id/${zone}` } } };
+  },
+});
+const entities = { ...(await import('../entity-page/read.ts')) };
+const restoreEntities = replaceModule(import.meta.resolve('../entity-page/read.ts'), entities, {
+  readEntityProjection: async (...args: Parameters<typeof entities.readEntityProjection>) => {
+    if (!mountProbe) return entities.readEntityProjection(...args);
+    mountCalls.push({ phase: 'projection', args });
+    return { ok: false, failure: 'missing' };
+  },
+});
+const routes = { ...(await import('../realm/routes.tsx')) };
+const restoreRoutes = replaceModule(import.meta.resolve('../realm/routes.tsx'), routes, {
+  RealmBrowseRoute: (...args: Parameters<typeof routes.RealmBrowseRoute>) => {
+    if (!mountProbe) return routes.RealmBrowseRoute(...args);
+    mountCalls.push({ phase: 'starter-browse', args });
+    return 'starter-browse';
+  },
 });
 afterAll(async () => {
+  restoreRoutes();
+  restoreEntities();
+  restoreWiki();
+  restoreSelection();
   restoreFrames();
   restoreI18n();
   restoreReads();
   restoreOriginalHeaders();
 });
-const { ZoneSiteRoute, StandaloneZoneSiteFrame } = await import('./site-route.tsx');
+const { ZoneSiteRoute, StandaloneZoneSiteFrame, zoneSiteMetadata } = await import('./site-route.tsx');
 
 function find(node: ReactNode, type: unknown): ReactElement<Record<string, unknown>> | null {
   if (Array.isArray(node)) return node.map(child => find(child, type)).find(Boolean) ?? null;
@@ -85,7 +143,123 @@ test('both public frame boundaries retain the 51st link from the complete respon
     expect(site.links.at(-1)?.href).toContain('/b-50');
   }
 });
-beforeEach(() => { routeReads = 0; refused = false; });
+beforeEach(() => {
+  routeReads = 0; refused = false; missing = false; routeRefused = false;
+  mountProbe = null; mountCalls.length = 0;
+});
+
+test('a mounted detail skips the discarded Browse probe and retains positioned projection disclosure', async () => {
+  attached = true;
+  mountProbe = 'mounted';
+  const path = ['mounted', zone, 'connections'];
+  const search = { cursor: 'work-tab-cursor', position: 'all' };
+  await expect(ZoneSiteRoute({ params: Promise.resolve({ locale: 'en', space: zone, path }),
+    searchParams: Promise.resolve(search) })).rejects.toThrow('NEXT_HTTP_ERROR_FALLBACK;404');
+  expect(routeReads).toBe(0);
+  expect(mountCalls).toEqual([
+    { phase: 'view', args: [] },
+    { phase: 'selection', args: [null, zone, search] },
+    { phase: 'positioned-route', args: [zone, `/${path.join('/')}`, undefined, 'all'] },
+    { phase: 'projection', args: [zone, 'all'] },
+  ]);
+});
+
+test('a mount named browse precedes its starter and retains its cursor and positioned disclosure', async () => {
+  attached = true;
+  mountProbe = 'mounted';
+  const search = { cursor: 'mount-cursor', position: 'all' };
+  await expect(ZoneSiteRoute({ params: Promise.resolve({ locale: 'en', space: zone, path: ['browse'] }),
+    searchParams: Promise.resolve(search) })).rejects.toThrow('NEXT_HTTP_ERROR_FALLBACK;404');
+  expect(mountCalls).toEqual([
+    { phase: 'browse-probe', args: [zone, 'browse', 'mount-cursor'] },
+    { phase: 'view', args: [] },
+    { phase: 'selection', args: [null, zone, search] },
+    { phase: 'positioned-route', args: [zone, 'browse', 'mount-cursor', 'all'] },
+    { phase: 'projection', args: [zone, 'all'] },
+  ]);
+});
+
+test('only a genuine missing Browse mount selects the starter with its original task', async () => {
+  attached = true;
+  mountProbe = 'missing';
+  const search = { cursor: 'mount-cursor', position: 'all', language: ['en', 'ja'] };
+  const result = await ZoneSiteRoute({ params: Promise.resolve({ locale: 'en', space: zone, path: ['browse'] }),
+    searchParams: Promise.resolve(search) });
+  expect(result).toBe('starter-browse');
+  expect(mountCalls.map(call => call.phase)).toEqual(['browse-probe', 'starter-browse']);
+  expect(mountCalls[0]?.args).toEqual([zone, 'browse', 'mount-cursor']);
+  const [props, loadView, client] = mountCalls[1]!.args as Parameters<typeof routes.RealmBrowseRoute>;
+  expect(await props.params).toEqual({ locale: 'en', realm: zone });
+  expect(await props.searchParams).toBe(search);
+  expect(loadView).toBeUndefined();
+  expect(client).toBeUndefined();
+
+  mountProbe = 'refused';
+  refused = true;
+  mountCalls.length = 0;
+  await ZoneSiteRoute({ params: Promise.resolve({ locale: 'en', space: zone, path: ['browse'] }),
+    searchParams: Promise.resolve(search) });
+  expect(mountCalls.map(call => call.phase)).toEqual(['browse-probe', 'view']);
+});
+
+test('root metadata selects the same complete publication as the home, without an unused route prerequisite', async () => {
+  for (const realm of [true, false]) {
+    attached = realm;
+    routeRefused = true;
+    const props = { params: Promise.resolve({ locale: 'en', space: zone }), searchParams: Promise.resolve({}) };
+    const metadata = await zoneSiteMetadata(props);
+    const result = await ZoneSiteRoute(props);
+    expect(metadata.title).toBe('Publication B');
+    expect(find(result, ZoneHomeContent)?.props.page).toBe(presentation.home);
+    expect(routeReads).toBe(0);
+    refused = true;
+    expect((await zoneSiteMetadata(props)).title).toBe(messages.unavailableTitle);
+    refused = false;
+  }
+});
+
+test('whole-home publication failure determines the document status, while a failed framed region stays local', async () => {
+  const request = () => new Request(new URL(`${localizedPath(spaceHref(context.ref, 'site'), 'en')}?q=rice&language=en&language=ja`, 'https://web.test'));
+  const props = (path?: string[]) => ({ params: Promise.resolve({ locale: 'en', space: zone, path }),
+    searchParams: Promise.resolve({ q: 'rice', language: ['en', 'ja'] }) });
+  for (const realm of [true, false]) {
+    attached = realm;
+    refused = true;
+    await withServerRequest(request(), async () => {
+      const selected = await ZoneSiteRoute(props());
+      // Finish the selected server recovery view without invoking its client child.
+      const result = realm && isValidElement(selected)
+        ? (selected.type as (props: unknown) => ReactNode)(selected.props) : selected;
+      expect(find(result, ZoneHomeContent)).toBeNull();
+      const response = await serverDocumentResponse(request(), new Response('render completed', {
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }));
+      expect(response.status).toBe(503);
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      expect(response.headers.get('retry-after')).toBe('5');
+      if (realm) {
+        expect(find(result, RealmUnavailable)).not.toBeNull();
+        expect(find(result, LocalizedLink)?.props.href).toBe('/discover');
+      }
+    });
+  }
+  attached = true;
+  refused = false;
+  routeRefused = true;
+  await withServerRequest(request(), async () => {
+    const result = await ZoneSiteRoute(props(['mount']));
+    expect(find(result, RealmUnavailable)).toBeNull();
+    const response = await serverDocumentResponse(request(), new Response('frame and failed region', {
+      headers: { 'content-type': 'text/html' },
+    }));
+    expect(response.status).toBe(200);
+    expect(response.headers.has('retry-after')).toBe(false);
+  });
+  missing = true;
+  await withServerRequest(request(), async () => {
+    await expect(ZoneSiteRoute(props())).rejects.toThrow('NEXT_HTTP_ERROR_FALLBACK;404');
+  });
+});
 
 for (const realm of [true, false]) {
   test(`the ${realm ? 'Realm' : 'standalone'} home retains one complete presentation selection`, async () => {

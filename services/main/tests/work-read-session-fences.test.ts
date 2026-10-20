@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test';
+import { Elysia } from 'elysia';
+import { workReadRoutes } from '../src/routes/work-reads.ts';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -120,6 +122,26 @@ function headerFixture() {
   ]) } as unknown as SerialStatisticsProjection;
   return { ...f, header };
 }
+
+test('an Account without a selected Agent reads the public header with its Account disclosure viewer and no implicit choice', async () => {
+  const f = headerFixture(); f.header.selection = id(40);
+  let verifications = 0, choices = 0; const viewers: boolean[] = [];
+  f.deps.account.verify = async (request, scopes) => {
+    expect(request.headers.get('authorization')).toBe('Bearer reader');
+    expect(scopes).toEqual(['work:read']); verifications++;
+    return { issuer: 'account', subject: 'reader' };
+  };
+  f.deps.sessionAgents = { readMain: async () => { choices++; return null; }, readSession: async () => { choices++; return null; } } as never;
+  configureDisclosure(f.deps.environment, fixtureDisclosureReader(async (targets, viewer) => {
+    viewers.push(viewer.signedIn); return targets.map(() => 'visible');
+  }));
+  const app = new Elysia().use(workReadRoutes(f.deps));
+  const response = await app.handle(new Request(`http://main.test/v1/works/${work.slice(-36)}`, { headers: { authorization: 'Bearer reader' } }));
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ id: work, selectedLanguage: 'en', publicationState: 'published' });
+  expect(verifications).toBe(1); expect(choices).toBe(0);
+  expect(viewers.length).toBeGreaterThan(0); expect(viewers.every(Boolean)).toBe(true);
+});
 
 test('ordinary Work header dependencies ignore unrelated writes and keep a constant owner fence cost', async () => {
   const costs: number[] = [];

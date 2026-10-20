@@ -124,6 +124,16 @@ test('SEARCH19: retained delivery stops at the largest whole-batch prefix within
   expect(proofMock).toHaveBeenCalledTimes(60);
 });
 
+test('qualification withdrawal advances the retained delivery prefix without delivering another positive approval', async () => {
+  const f = fixture();
+  const withdrawal = { ...retainedEvent('1', 0), type: 'com.rezics.content.search-eligibility-withdrawn.v1' };
+  configureRange([batch('1', [withdrawal])]);
+  const result = await deliverRetainedContentEligibilityOnce(f.env, f.content, noRelayPool, 'withdrawal-test');
+  expect(result?.sequence).toBe('1');
+  expect(f.pages[0]!.batches[0]!.events).toEqual([]);
+  expect(proofMock).not.toHaveBeenCalled();
+});
+
 test('SEARCH20/OPS16: rebuild delivery commits only its frozen retained Main prefix', async () => {
   const f = fixture();
   configureRange([batch('1', []), batch('2', [retainedEvent('2', 0)]), batch('3', [])]);

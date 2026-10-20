@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "kind": "already-reviewed-source-selection",
+  "recordedAt": "2026-10-19T12:19:36.048177+00:00",
+  "findingId": "AUD-012",
+  "classClosed": false,
+  "mainAtSelection": "00173a35ca891faf6490f48392fed01cade01b43",
+  "path": "apps/web/features/shell/bottom-nav.tsx",
+  "selectedBlob": "01b5eb673c0fef2555727da9e634606596fb7fd3",
+  "priorMainBlob": "d95e0e43f953d5cda2fce9ade174c00194e1b16a",
+  "originalAuthorCommit": "4be822a3749a003c3d3e45b715bec86fabc29edf",
+  "originalReviewFrontend": "a27bcfc6bad849dd912cbd3f721de5defeba1c86",
+  "independentReview": {
+    "commit": "5d420db0091a82123e04500cb5a5767e9cb311f2",
+    "path": "docs/goals/audit-remediation-20261019/proofs/startup-navigation-review.json",
+    "section": "product_audit.classes[id=visible-localized-name]",
+    "exactAssessment": "Visible caption supplies link name; sr-only localized unread text augments Alerts. Updated shell expectation reflects the actual visible Alerts label.",
+    "sourceVerdict": "complete for the actual selective candidate; no new confirmed startup/navigation source defect found",
+    "classAcceptanceGranted": false
+  },
+  "originalCriterion": {
+    "canonical": ".temp/site-audit-2026-10-18/round-3/all-findings.json",
+    "canonicalSha256": "e2721c44e74305c694b02e81e757e4476c3a19de414d25b0689617316c5ebc3f",
+    "id": "AUD-012",
+    "verbatim": "手机导航的辅助名称包含对应可见标签；保留未读数等附加语义，覆盖八种UI语言及登录/匿名状态。重复axe检查并实际用语音或读屏验证；卡片的描述文本和状态不应因aria-label覆盖而不可获得。"
+  },
+  "sourceSelection": "Restore the exact previously authored and independently reviewed caption/unread hunk omitted from main. Preserve all unrelated current-main bytes.",
+  "existingHistoricalProof": {
+    "reportCommit": "5d65d09792a2bd83f23b085f330f5605ee9c02e8",
+    "retainedInLatestReport": "5d420db0091a82123e04500cb5a5767e9cb311f2",
+    "manifest": ".temp/audit-remediation-20261019/two-hour-sprint/site-G2847-existing-AT-evidence-manifest.json",
+    "manifestSha256": "4345528a28d8decafa1efb69757cb3fdc2ec5be6610d60506f9eb13d8d67c573",
+    "frontend": "a27bcfc6bad849dd912cbd3f721de5defeba1c86",
+    "captionOutcomes": 22,
+    "following": "1 passed test /14 expectations",
+    "retainedHistoricalOnly": true,
+    "noClaimOfCurrentRuntimeSpeechPass": true
+  },
+  "currentGraphQualification": "Other current-main dependencies differ; historical 22 anonymous caption outcomes are retained at their actual frontend pin, not relabeled as fresh current-main runtime outcomes.",
+  "remainingOriginalAssertions": [
+    "Qualified current-frontend startup and normal OAuth.",
+    "Missing signed-in actual AT across original locales/states.",
+    "Genuine populated Continue-card description and status remain available to actual AT."
+  ],
+  "preserved": [
+    "Original source authorship and independent codex-1/xhigh review.",
+    "All original acceptance and failed setup receipts.",
+    "G-2747 active footer implementation, G-2847 original AT ownership."
+  ],
+  "newRuntimeChecksRun": false
+}

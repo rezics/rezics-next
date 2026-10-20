@@ -12,9 +12,11 @@ import { PendingAdmittedWork } from '../work/create-admitted.ts';
 import { readWorkEditTerminalReceipt, sealMetadataWorkEditAdmission,
   workEditReceiptIri } from '../work/edit.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
+import { SYNOPSIS_TEXT_LIMIT, validSynopsisText, validSuppliedLanguage } from './field-control-language.ts';
+import type { SuppliedLanguage } from './field-support-contract.ts';
 
 export const SYNOPSIS_DEFINITION = 'https://rezics.com/definition/work-synopsis-v1';
-export const FIELD_PROFILE = 'https://rezics.com/definition/work-editorial-field-v1';
+export const FIELD_PROFILE = 'https://rezics.com/definition/work-editorial-field-v2';
 const CONTEXT = 'urn:rezics:context:global-native';
 const NATIVE = /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const KEY = /^[A-Za-z0-9:_./-]{1,128}$/;
@@ -30,7 +32,7 @@ export interface NativeFieldSourceBasis {
 export interface NativeFieldControlIntent {
   profile: 'work-editorial-field-control-v1'; work: string; field: 'synopsis';
   expectedWorkHead: string; basis: EditorialControlBasis & { contentHead: string | null };
-  value: string; origin: 'human' | 'source'; source: NativeFieldSourceBasis | null;
+  value: string; language?: SuppliedLanguage; origin: 'human' | 'source'; source: NativeFieldSourceBasis | null;
 }
 export interface NativeFieldControlState {
   profile: 'work-editorial-field-control-v1'; work: string; field: 'synopsis';
@@ -38,6 +40,7 @@ export interface NativeFieldControlState {
   controlEpoch: string; protectionHead: string | null;
   mode: 'unestablished' | 'human-controlled' | 'source-managed'; value: string | null;
   rightsStatus: 'undetermined' | null;
+  language?: SuppliedLanguage;
 }
 export interface NativeFieldControlReceipt {
   outcome: 'succeeded' | 'cancelled'; receipt: string; admissionId: string;
@@ -57,8 +60,8 @@ export function nativeFieldDigest(intent: NativeFieldControlIntent): string {
     || !NATIVE.test(intent.work) || !NATIVE.test(intent.expectedWorkHead)
     || !validEditorialControlBasis(intent.basis)
     || (intent.basis.contentHead !== null && !NATIVE.test(intent.basis.contentHead))
-    || intent.value.length < 1 || intent.value.length > 8000
-    || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(intent.value)
+    || !validSynopsisText(intent.value)
+    || (intent.language !== undefined && !validSuppliedLanguage(intent.language))
     || (intent.basis.head === null) !== (intent.basis.contentHead === null)
     || (intent.origin === 'human') !== (intent.source === null)
     || !['human', 'source'].includes(intent.origin)
@@ -69,7 +72,7 @@ export function nativeFieldDigest(intent: NativeFieldControlIntent): string {
     expectedWorkHead: intent.expectedWorkHead,
     basis: { contentHead: intent.basis.contentHead, head: intent.basis.head,
       epoch: intent.basis.epoch, protection: intent.basis.protection },
-    value: intent.value, origin: intent.origin,
+    value: intent.value, ...(intent.language === undefined ? {} : { language: intent.language }), origin: intent.origin,
     source: intent.source === null ? null : { record: intent.source.record,
       observation: intent.source.observation, conversion: intent.source.conversion,
       mapping: intent.source.mapping } }));
@@ -80,7 +83,7 @@ export async function readNativeFieldControl(env: WorkActivationEnvironment, wor
   Promise<NativeFieldControlState> {
   const slot = synopsisSlot(work);
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?workHead ?content ?control ?value
-    ?epoch ?mode ?protection ?protectionMode ?rights WHERE {
+    ?epoch ?mode ?protection ?protectionMode ?rights ?languageState ?sourceLanguage WHERE {
     GRAPH ${iri(GRAPHS.current)} { ${iri(work)} a <https://schema.org/CreativeWork> ; rv:head ?workHead .
       OPTIONAL { ${iri(slot)} a rv:EditorialFieldSlot ; rv:component ${iri(work)} ;
         rv:fieldDefinition ${iri(SYNOPSIS_DEFINITION)} ; rv:fieldHead ?content ;
@@ -90,10 +93,12 @@ export async function readNativeFieldControl(env: WorkActivationEnvironment, wor
       rv:component ${iri(slot)} ; rv:controlField "synopsis" ; rv:controlEpoch ?epoch ;
       rv:controlMode ?mode ; rv:fieldRevision ?content .
       ?content a rv:EditorialFieldRevision ; rv:component ${iri(slot)} ;
-        rv:fieldValue ?value ; rv:rightsStatus ?rights . } }
+        rv:fieldValue ?value ; rv:rightsStatus ?rights .
+      OPTIONAL { ?content rv:sourceLanguageState ?languageState }
+      OPTIONAL { ?content rv:sourceLanguage ?sourceLanguage } } }
     OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ${iri(slot)} rv:protectionHead ?protection }
       GRAPH ${iri(GRAPHS.revisions)} { ?protection rv:protectionMode ?protectionMode } }
-  } LIMIT 2`, 16_384);
+  } LIMIT 2`, SYNOPSIS_TEXT_LIMIT * 8 + 16_384);
   const rows = result.results?.bindings ?? [];
   if (rows.length !== 1 || !rows[0]?.workHead) throw new NativeFieldUnavailable('Work field is unavailable');
   const row = rows[0]!;
@@ -113,11 +118,16 @@ export async function readNativeFieldControl(env: WorkActivationEnvironment, wor
   const mode = row.mode.value === `${RV}HumanControlled` ? 'human-controlled'
     : row.mode.value === `${RV}SourceManaged` ? 'source-managed' : null;
   if (!mode) throw new NativeFieldUnavailable('field control mode is invalid');
+  const language = row.languageState?.value === 'value' ? { state: 'value' as const, value: row.sourceLanguage?.value }
+    : { state: row.languageState?.value ?? 'omitted' };
+  if (!validSuppliedLanguage(language) || (language.state !== 'value' && row.sourceLanguage)) {
+    throw new NativeFieldUnavailable('field source language is incomplete');
+  }
   return { profile: 'work-editorial-field-control-v1', work, field: 'synopsis', slot,
     workHead: row.workHead.value, contentHead: row.content.value,
     controlHead: row.control.value, controlEpoch: row.epoch.value,
     protectionHead: row.protection?.value ?? null, mode, value: row.value.value,
-    rightsStatus: 'undetermined' };
+    rightsStatus: 'undetermined', language };
 }
 
 export async function readNativeFieldReceipt(env: WorkActivationEnvironment, admissionId: string):
@@ -154,16 +164,22 @@ export async function nativeFieldCommand(env: WorkActivationEnvironment,
   const basis = intent.basis;
   const current = `${iri(slot)} rv:fieldHead ?priorContent ; rv:fieldControlHead ?priorControl ;
     rv:fieldValue ?priorValue .`;
+  const language = intent.language ?? { state: 'omitted' };
+  const languageTriples = `rv:sourceLanguageState ${lit(language.state)} ;
+    ${language.state === 'value' ? `rv:sourceLanguage ${lit(language.value)} ;` : ''}`;
   const update = `PREFIX rv: <${RV}>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
-      GRAPH ${iri(GRAPHS.current)} { ${current} } }
+      GRAPH ${iri(GRAPHS.current)} { ${current}
+        ${iri(slot)} rv:sourceLanguageState ?priorLanguageState ; rv:sourceLanguage ?priorSourceLanguage ;
+          rv:modelRevision ?priorModel . } }
     INSERT { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
       GRAPH ${iri(GRAPHS.current)} { ${iri(slot)} a rv:EditorialFieldSlot ;
         rv:component ${iri(intent.work)} ; rv:fieldDefinition ${iri(SYNOPSIS_DEFINITION)} ;
+        rv:modelRevision ${iri(FIELD_PROFILE)} ;
         rv:fieldHead ${iri(content)} ; rv:fieldControlHead ${iri(control)} ;
-        rv:fieldValue ${lit(intent.value)} . }
+        ${languageTriples} rv:fieldValue ${lit(intent.value)} . }
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(content)} a rv:RevisionAnchor, rv:EditorialFieldRevision ;
-        rv:component ${iri(slot)} ; rv:fieldValue ${lit(intent.value)} ; rv:rightsStatus rv:Undetermined ;
+        rv:component ${iri(slot)} ; ${languageTriples} rv:fieldValue ${lit(intent.value)} ; rv:rightsStatus rv:Undetermined ;
         ${basis.contentHead ? `rv:predecessor ${iri(basis.contentHead)} ;` : ''}
         rv:manifest <urn:rezics:sha256:${manifest}> ; rv:modelRevision ${iri(FIELD_PROFILE)} ;
         rv:shapeRevision ${iri(FIELD_PROFILE)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
@@ -197,6 +213,9 @@ export async function nativeFieldCommand(env: WorkActivationEnvironment,
       GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} a <https://schema.org/CreativeWork> ;
         rv:head ${iri(intent.expectedWorkHead)} .
         OPTIONAL { ${current} }
+        OPTIONAL { ${iri(slot)} rv:sourceLanguageState ?priorLanguageState }
+        OPTIONAL { ${iri(slot)} rv:sourceLanguage ?priorSourceLanguage }
+        OPTIONAL { ${iri(slot)} rv:modelRevision ?priorModel }
         OPTIONAL { ${iri(slot)} rv:protectionHead ?priorProtection } }
       FILTER(${basis.contentHead ? `?priorContent = ${iri(basis.contentHead)}` : '!BOUND(?priorContent)'})
       FILTER(${basis.head ? `?priorControl = ${iri(basis.head)}` : '!BOUND(?priorControl)'})
@@ -205,7 +224,7 @@ export async function nativeFieldCommand(env: WorkActivationEnvironment,
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       BIND(?n + 1 AS ?next) }`;
   const graphs = [GRAPHS.current, GRAPHS.revisions];
-  const validations = await profileValidations(env.fuseki, 'work-editorial-field-v1', [
+  const validations = await profileValidations(env.fuseki, 'work-editorial-field-v2', [
     { shape: `${FIELD_PROFILE}/slot-shape`, focus: [slot], graphs },
     { shape: `${FIELD_PROFILE}/value-shape`, focus: [content], graphs },
     { shape: `${FIELD_PROFILE}/control-shape`, focus: [control], graphs },

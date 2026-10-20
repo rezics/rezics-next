@@ -1,11 +1,11 @@
 'use client';
 
-import { normalizeDocument, serializeDocument, withDocumentIds, type DocumentNode, type DocumentSnapshot } from '@rezics/document';
+import { normalizeDocument, withDocumentIds, type DocumentNode, type DocumentSnapshot } from '@rezics/document';
 import { type Editor as TiptapEditor, type JSONContent } from '@tiptap/core';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
 import { ImageIcon, UnlinkIcon } from 'lucide-react';
-import { memo, useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { memo, useCallback, useEffect, useId, useImperativeHandle, useMemo, useRef, useState, type KeyboardEvent, type Ref } from 'react';
 import { cn } from '../utils.ts';
 import { Button } from './button.tsx';
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from './dialog.tsx';
@@ -28,11 +28,26 @@ import { Field, FieldGroup, FieldLabel } from './field.tsx';
 import { Input } from './input.tsx';
 import { NativeSelect, NativeSelectOption } from './native-select.tsx';
 import { SkeletonText } from './skeleton.tsx';
+import { editorSnapshot } from './rich-text-editor-snapshot.ts';
+import { editorUploads } from './rich-text-editor-uploads.ts';
+import { controlledEditorContent, removeEditorImages, sameEditorBlocks } from './rich-text-editor-recovery.tsx';
 
 export { richTextEditorLabels, type RichTextEditorLabels };
 
+export interface RichTextEditorRecovery {
+  document: () => DocumentNode | undefined;
+  text: () => string | undefined;
+  focus: () => void;
+  retrySnapshot: () => void;
+  retryUploads: () => void;
+  cancelUploads: () => void;
+  removeImages: (invalidOnly?: boolean) => void;
+}
+
 export interface RichTextEditorProps {
   value: DocumentSnapshot;
+  /** Raw editor-owned recovery takes precedence until its complete snapshot can be persisted. */
+  recoveryDocument?: DocumentNode;
   onChange: (document: DocumentSnapshot) => void;
   label: string;
   labels?: Partial<RichTextEditorLabels>;
@@ -64,39 +79,12 @@ export interface RichTextEditorProps {
   onSave?: () => void;
   onKeyDown?: (event: KeyboardEvent<HTMLDivElement>) => void;
   onSnapshotError?: (error: unknown) => void;
+  onSnapshotPending?: () => void;
+  onUploadStateChange?: (state: 'pending' | 'ready' | 'failed') => void;
+  recoveryRef?: Ref<RichTextEditorRecovery>;
 }
 
 type Selection = { from: number; to: number; content?: JSONContent[]; attrs?: JSONContent['attrs']; marks?: JSONContent['marks'] };
-
-/**
- * The editor's document as a snapshot. ProseMirror keeps unchanged nodes between transactions, so
- * each top-level node's normalized block is remembered and a keystroke converts and checks only the
- * block it changed: typing costs the same in a one-line reply and in a long chapter.
- */
-function snapshot(editor: TiptapEditor, profile: DocumentSnapshot['profile'], blocks: WeakMap<ProseMirrorNode, DocumentNode>): DocumentSnapshot {
-  const nodes: ProseMirrorNode[] = [];
-  const content: DocumentNode[] = [];
-  editor.state.doc.forEach(node => { nodes.push(node); content.push(blocks.get(node) ?? node.toJSON() as DocumentNode); });
-  let next: DocumentSnapshot;
-  try {
-    next = normalizeDocument({ version: 'rezics-document-v1', profile, doc: { type: 'doc', content } });
-  } catch {
-    // Identities are assigned within the same transaction; this repairs any node an extension left without one.
-    next = normalizeDocument({ version: 'rezics-document-v1', profile, doc: withDocumentIds(editor.getJSON() as DocumentNode) });
-  }
-  nodes.forEach((node, index) => blocks.set(node, next.doc.content![index]!));
-  return next;
-}
-
-function sameBlocks(a: DocumentSnapshot, b: DocumentSnapshot): boolean {
-  const left = a.doc.content ?? [], right = b.doc.content ?? [];
-  return a === b || (a.profile === b.profile && left.length === right.length && left.every((block, index) => block === right[index]));
-}
-
-/** Normalized blocks serialize from cache, so comparing a returned value with the last emitted one costs only what changed. */
-function sameDocument(a: DocumentSnapshot, b: DocumentSnapshot): boolean {
-  return sameBlocks(a, b) || serializeDocument(a) === serializeDocument(b);
-}
 
 function normalizeValue(value: DocumentSnapshot): DocumentSnapshot {
   try {
@@ -153,16 +141,16 @@ const ComposeActions = memo(function ComposeActions({ editor, labels, io }: { ed
 });
 
 /** A controlled Tiptap document editor. Initial hydration and controlled value updates never save a document. */
-export function RichTextEditor({ value, onChange, label, labels: labelOverrides, placeholder, lang, dir, className, compact = false, toolbarMode = 'contextual', pointerMode = 'auto', discussionKeyboardBar = false, onUploadImage, onEditImageLabels, resolveImageMetadata, imageMetadataScope,
-  disabled = false, readOnly = false, autoFocus = false, maxLength, onBlur, onFocus, onSave, onKeyDown, onSnapshotError }: RichTextEditorProps) {
+export function RichTextEditor({ value, recoveryDocument, onChange, label, labels: labelOverrides, placeholder, lang, dir, className, compact = false, toolbarMode = 'contextual', pointerMode = 'auto', discussionKeyboardBar = false, onUploadImage, onEditImageLabels, resolveImageMetadata, imageMetadataScope,
+  disabled = false, readOnly = false, autoFocus = false, maxLength, onBlur, onFocus, onSave, onKeyDown, onSnapshotError, onSnapshotPending, onUploadStateChange, recoveryRef }: RichTextEditorProps) {
   const labels = useMemo(() => ({ ...richTextEditorLabels, ...labelOverrides }), [labelOverrides]);
   const lastEmitted = useRef<DocumentSnapshot | null>(null);
   // A value the editor emitted comes back unchanged through its owner; it is already normalized.
   const initial = useMemo(() => value === lastEmitted.current ? value : normalizeValue(value), [value]);
   lastEmitted.current ??= initial;
   const blockCache = useRef(new WeakMap<ProseMirrorNode, DocumentNode>());
-  const latest = useRef({ onChange, onBlur, onFocus, onSave, onSnapshotError, profile: value.profile });
-  latest.current = { onChange, onBlur, onFocus, onSave, onSnapshotError, profile: value.profile };
+  const latest = useRef({ onChange, onBlur, onFocus, onSave, onSnapshotError, onSnapshotPending, onUploadStateChange, profile: value.profile });
+  latest.current = { onChange, onBlur, onFocus, onSave, onSnapshotError, onSnapshotPending, onUploadStateChange, profile: value.profile };
   const editable = !disabled && !readOnly;
   const coarse = useCoarsePointer(pointerMode);
   const blocks = value.profile === 'blocks';
@@ -183,6 +171,10 @@ export function RichTextEditor({ value, onChange, label, labels: labelOverrides,
   const [imageRequest, setImageRequest] = useState<ImageRequest | null>(null);
   const [uploads, setUploads] = useState(0);
   const [uploadFailed, setUploadFailed] = useState(false);
+  const uploadRecovery = useMemo(() => editorUploads((state, count) => {
+    setUploads(count); setUploadFailed(state === 'failed');
+    latest.current.onUploadStateChange?.(state);
+  }), []);
   const uploader = useRef(onUploadImage);
   uploader.current = onUploadImage;
   const imageLabelsEditor = useRef(onEditImageLabels);
@@ -198,21 +190,24 @@ export function RichTextEditor({ value, onChange, label, labels: labelOverrides,
     BlockActionShortcuts,
     ...(slashEnabled ? [slashExtension(slashHandlers)] : []),
   ], [placeholder, slashEnabled, labels.slashHint, labels.unknownComponent, maxLength, blocks, onEditImageLabels, editImageLabels]);
-  function publish(current: TiptapEditor) {
+  function publish(current: TiptapEditor, force = false) {
     if (current.view.composing) return;
     try {
-      const next = snapshot(current, latest.current.profile, blockCache.current);
+      const next = editorSnapshot(current.state.doc, latest.current.profile, blockCache.current);
       setSnapshotError(false);
-      if (lastEmitted.current && sameBlocks(next, lastEmitted.current)) return;
+      if (!force && lastEmitted.current && sameEditorBlocks(next, lastEmitted.current)) return;
+      latest.current.onSnapshotPending?.();
       lastEmitted.current = next;
       latest.current.onChange(next);
     } catch (error) {
       setSnapshotError(true);
       latest.current.onSnapshotError?.(error);
+    } finally {
+      uploadRecovery.snapshot(current.state.doc);
     }
   }
   const editor = useEditor({
-    extensions, content: initial.doc as JSONContent, immediatelyRender: false, shouldRerenderOnTransaction: false,
+    extensions, content: (recoveryDocument ?? initial.doc) as JSONContent, immediatelyRender: false, shouldRerenderOnTransaction: false,
     editable, autofocus: autoFocus, enableContentCheck: true,
     onUpdate: ({ editor: current }) => publish(current),
     onBlur: () => latest.current.onBlur?.(), onFocus: () => latest.current.onFocus?.(),
@@ -238,6 +233,41 @@ export function RichTextEditor({ value, onChange, label, labels: labelOverrides,
   const surface = useRef<HTMLDivElement>(null);
   const editorRef = useRef(editor);
   editorRef.current = editor;
+  const trackedUpload = useMemo<ImageUploader>(() => async (file, occurrence) => {
+    const upload = uploader.current;
+    if (!upload) throw new Error('image-upload-unavailable');
+    const position = editorRef.current?.state.selection.from ?? 0;
+    uploadRecovery.start(occurrence, file, position);
+    try {
+      const image = await upload(file, occurrence);
+      if (!safeDocumentUrl(image.src, true)) throw new Error('image-address-unavailable');
+      uploadRecovery.stored(occurrence);
+      return image;
+    } catch (error) {
+      uploadRecovery.failed(occurrence);
+      throw error;
+    }
+  }, [uploadRecovery]);
+  useImperativeHandle(recoveryRef, () => ({
+    document: () => editor?.getJSON() as DocumentNode | undefined,
+    text: () => editor?.getText(),
+    focus: () => { if (editor && editable) editor.view.focus(); },
+    retrySnapshot: () => { if (editor) publish(editor, true); },
+    retryUploads: () => {
+      if (!editor || !editable) return;
+      const pending = uploadRecovery.takeFailures();
+      for (const { file, position } of pending) void uploadImagesAt(editor, [file], position, trackedUpload);
+    },
+    cancelUploads: () => {
+      uploadRecovery.takeFailures();
+      if (editor) publish(editor, true);
+    },
+    removeImages: (invalidOnly = false) => {
+      if (!editor || !editable) return;
+      editor.view.dispatch(removeEditorImages(editor.state, invalidOnly));
+      publish(editor, true);
+    },
+  }));
   // With dependencies, Tiptap never reapplies options after creation; the view's attributes follow the props here.
   useEffect(() => {
     if (!editor) return;
@@ -251,16 +281,18 @@ export function RichTextEditor({ value, onChange, label, labels: labelOverrides,
   function startUploads(files: File[], position: number) {
     const current = editorRef.current, upload = uploader.current;
     if (!current || !upload) return;
-    setUploads(count => count + 1); setUploadFailed(false);
-    void uploadImagesAt(current, files, position, upload).then(ok => { setUploads(count => count - 1); if (!ok) setUploadFailed(true); });
+    void uploadImagesAt(current, files, position, trackedUpload);
   }
   useEffect(() => {
     if (!editor) return;
-    if (lastEmitted.current && sameDocument(initial, lastEmitted.current)) return;
-    lastEmitted.current = initial;
-    setSnapshotError(false);
-    editor.commands.setContent(initial.doc as JSONContent, { emitUpdate: false });
-  }, [editor, initial]);
+    const content = controlledEditorContent(initial, lastEmitted.current, editor.state.doc, recoveryDocument);
+    if (!content) return;
+    if (!recoveryDocument) {
+      lastEmitted.current = initial;
+      setSnapshotError(false);
+    }
+    editor.commands.setContent(content as JSONContent, { emitUpdate: false });
+  }, [editor, initial, recoveryDocument]);
   // An open link field belongs to the selection it was opened on.
   useEffect(() => {
     if (!editor) return;
@@ -371,7 +403,7 @@ export function RichTextEditor({ value, onChange, label, labels: labelOverrides,
           {compact && blocks ? <ComposeActions editor={editor} labels={labels} io={io} /> : null}
           {coarse && (!compact || discussionKeyboardBar) ? <TouchBar editor={editor} labels={labels} blocks={blocks} compact={compact} io={io} /> : null}
           {slashEnabled ? <SlashMenu editor={editor} labels={labels} blocks={blocks} io={io} handlers={slashHandlers} /> : null}
-          {imageRequest ? <ImageInsert editor={editor} labels={labels} request={imageRequest} upload={onUploadImage} onClose={closeImage} /> : null}
+          {imageRequest ? <ImageInsert editor={editor} labels={labels} request={imageRequest} upload={onUploadImage ? trackedUpload : undefined} onClose={closeImage} /> : null}
         </> : null}
       </> : <div role="status" aria-label={labels.loading}><SkeletonText lines={3} /></div>}
     </div>

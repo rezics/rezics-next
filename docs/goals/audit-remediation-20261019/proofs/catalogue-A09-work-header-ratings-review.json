@@ -1,0 +1,171 @@
+{
+  "format": "catalogue-A09-work-header-ratings-review-v1",
+  "goal": "audit-remediation-20261019",
+  "worker": "G-2857",
+  "managerSession": "goal-audit-remediation-20261019",
+  "reviewer": {
+    "engine": "codex-1",
+    "model": "GPT-6.1 Sol",
+    "effort": "xhigh",
+    "independentOfCandidateAuthor": true,
+    "reviewCount": 1,
+    "additionalReviewersUsed": false,
+    "accountOrModelFallbackUsed": false
+  },
+  "disposition": {
+    "result": "accepted",
+    "scope": "Exact two-path source-contract correction of the advertised Work-header ratings route only.",
+    "summary": "No blocking defect found. Only links.ratings changes in production, keeping the same Work UUID and pointing to Main's existing Resource ratings GET route. The regression assertion compares the actual readWorkHeader result with real Main route registrations, while the unchanged Work-read test checks canonical route presence, legacy route absence and the Eden consumer type contract.",
+    "blockingFindings": [],
+    "actionableCandidateFindings": [],
+    "implementationOrLandingPerformed": false,
+    "originalA09Closed": false,
+    "originalC16Closed": false,
+    "managerNext": "Manager may integrate this exact bounded correction through its normal gate. Original applicable API-discovery and product assertions remain a separate manager acceptance decision."
+  },
+  "pins": {
+    "reviewWorktreeInitialHead": "653c9c18a6d4577717dfd4af26f63f2c6eadf996",
+    "base": "b11cf331812e384935b45dd5c77019dc6c227f0d",
+    "candidate": "676a52c38008b56b27cddbc7489f7f7e23e95903",
+    "candidateTree": "fde35ade6c8e71a217bb0ddc3416e760318b5154",
+    "candidateParent": "b11cf331812e384935b45dd5c77019dc6c227f0d",
+    "candidateOrigin": ".temp/worktrees/root-a09-ratings-b11cf331812",
+    "inspectionMethod": "Read-only git objects at the exact candidate/base in the assigned G-2857 worktree. The candidate was not checked out, modified or executed by this reviewer.",
+    "combinedPatchSha256": "7c5b020fd9039241cd2bd776f5fbf1a4caff4c69819e605f0072dc2c1df22a15",
+    "patchVerification": "Staged candidate.patch and the independently recomputed git diff --binary BASE CANDIDATE have the exact supplied SHA256. Exactly two paths change: 10 insertions, 1 deletion. git diff --check BASE CANDIDATE passed.",
+    "checkedPaths": [
+      {
+        "path": "services/main/src/modules/work/read-header.ts",
+        "baseBlob": "a26c0b70b979c5653cced978ea7f797b3034f501",
+        "candidateBlob": "a7ab32c544f03028ea6647a4cb991a37a51ae886",
+        "candidateSha256": "c5079a1b4949f7dbba2d5261079dda6ed9cada925ddd09d60fcd67407bbd82a0",
+        "inspection": "Complete production diff, Work basis/admission, rights and header-return context. A whole-file byte comparison confirms the candidate equals the base with only the single ratings expression replaced."
+      },
+      {
+        "path": "services/main/tests/post-convergence.test.ts",
+        "baseBlob": "aec49b426b256244a38453c9783d4c68158ef4a0",
+        "candidateBlob": "91e708cc63c6354f91d6e10b92fe8f70068230e2",
+        "candidateSha256": "f1d11a542d76735101794100e5e41870491d6b3adb77326b0c8eba577204c914",
+        "inspection": "Complete file and added assertion, including the pre-existing session fixture and its Work-versus-Post negative control."
+      }
+    ],
+    "unchangedDependenciesInspectedAtCandidate": [
+      { "path": "services/main/src/app.ts", "blob": "92de922df6af3cf952ca608b47abf11265d9c71c", "lines": "225-236, 336-344, 407-426" },
+      { "path": "services/main/src/routes/work-reads.ts", "blob": "97443a6c90c5cddb1842270b6b456ee176415f3d", "lines": "27-54, 85-107" },
+      { "path": "services/main/src/routes/work-header.contract.ts", "blob": "e53899068f5f0bdc9b38c0928c79e2174d626871", "lines": "1-38" },
+      { "path": "services/main/src/routes/work-header.handler.ts", "blob": "b58ccae6e94e490a47da5a55228aa6404184a972", "lines": "1-33" },
+      { "path": "services/main/src/modules/work/read-contract.ts", "blob": "0df03eeb8d1a326636631642db1d69299e8175ea", "lines": "10-12, 63-68, 79-101" },
+      { "path": "services/main/tests/work-read.test.ts", "blob": "b39f0cc115c76bedecdf878255064a297ee878ac", "lines": "1-84" }
+    ]
+  },
+  "originalScope": {
+    "matrix": { "path": ".temp/ref/02-findings-and-capability-matrix.md", "line": 21, "sha256": "feb868056d39b9e660f41636d9bd2cecf9c33bb17b6a39f20f33352b6d54e7a7" },
+    "backlog": { "path": ".temp/ref/03-acceptance-and-investigation-backlog.md", "line": 37, "sha256": "4298c3194e13b41db04b2a2602bd0454d7a9979eafac8b08be20957ebea7c6b3" },
+    "originalFinding": "A09 identifies advertised capabilities that do not match query/navigation admission: a stale ratings link gives 404 while the canonical Resource route gives 200, and current relation-facet queries are rejected with 422. C16 also requires valid advertised navigation and discoverable template method/body with actual execution eligibility.",
+    "boundedCorrection": "Repair the stale ratings path at its Work-header producer and guard that output against the existing route owner. This review does not replay the original reported 404/200 or 422 observations.",
+    "remainingOpen": [
+      "Broader A09/C16 typed navigation and queryShapes contracts.",
+      "Template method/body discoverability and current-capability execution eligibility.",
+      "Relation-facet query admission and genuine original API-discovery assertions.",
+      "Original public fixture qualification and product journey proof."
+    ],
+    "ownership": "G-2764 remains the query owner. Existing query and product-proof owners retain the remaining work; no reassignment or new implementation mechanism is proposed."
+  },
+  "review": [
+    {
+      "invariant": "The advertised destination is the canonical Resource ratings GET for the same Work identity",
+      "evidence": "read-header.ts:222, 241-243 changes ratings from the Works path to /v1/resources/${work.slice(-36)}/ratings. work-reads.ts:100-107 registers that exact GET pattern, validates the resource UUID, reconstructs https://rezics.com/id/${path.resource}, and passes it to readResourceRating through workRead. app.ts:234 mounts workReadRoutes via extraRoutes1, which createMainApp mounts at line 418 when dependencies are supplied.",
+      "assessment": "Accepted. The route owner already exists; no alias, redirect, adapter or navigation framework is introduced. The UUID is the same suffix previously used by the Works link and comes from the same admitted Work argument, not a MainVersion, revision, chapter or new identity.",
+      "counterexample": "For Work https://rezics.com/id/00000000-0000-4000-8000-000000000001, the old advertised /v1/works/00000000-0000-4000-8000-000000000001/ratings has no registered GET. The corrected /v1/resources/00000000-0000-4000-8000-000000000001/ratings matches the registered Resource route after substituting the same fixture UUID."
+    },
+    {
+      "invariant": "Every other header value, admission, authority, query and session option stays unchanged",
+      "evidence": "The entire production file is byte-identical to the base after replacing exactly one ratings expression. The same basis read, serial-statistics read, description/disclosure processing, fence, rights obligations, canEditWork decision, sourcePosition and optional dependency token remain. Header profile, id, metadata and the seven other links are untouched. workHeaderHandler and workHeaderOperation are unchanged.",
+      "assessment": "Accepted. Versions, classifications, adoptions, history, credits, metadata and editions retain their existing values. No schema, HTTP method, request body, authorization, bearer/rate policy, read query or session forwarding changes. The original and corrected link are both bare relative paths; no language, actingSubject, scope, realm or context options are appended, removed or reinterpreted.",
+      "qualification": "The existing Resource route independently admits its readQuery, scopeQuery and optional context and applies workRead. A readable header or a registered path does not certify that every viewer, scope or RatingContext can execute a successful ratings read. The broader discoverability contracts remain open."
+    },
+    {
+      "invariant": "The regression assertion uses actual header output and the real route registry",
+      "evidence": "post-convergence.test.ts:48 calls the real readWorkHeader. Lines 52-58 construct createMainApp with dependencies, take app.routes entries whose method is GET, substitute :resource with the fixture Work's UUID, and assert containment of header.links.ratings. The expectation does not insert a copied canonical URL or fake route owner. Existing query-count, synopsis-query, no-placement and missing-Work assertions remain.",
+      "assessment": "Accepted. Before the production change, the same candidate test blob rejects the advertised Works ratings path. Afterward it accepts the Resource path. The unchanged work-read.test.ts:22-46 independently checks registered canonical route presence and legacy Works ratings route absence.",
+      "fixturePremises": "The header session is explicitly cast from a handcrafted WorkReadSession: unpublished Work basis, fake principal, permitted canReadWork, denied canEditWork, fake graph rows and summaries, and test epoch/sequence. Main is constructed with a non-serving Fuseki URL at 127.0.0.1:1, fake account/access dependencies and synthetic lineage. The added assertion inspects app.routes; it never calls app.handle, listens, fetches the advertised ratings route or validates a public corpus Work.",
+      "qualification": "Route inventory plus fixture output establishes a source contract. It does not establish HTTP routing through Elysia, a deployed GET 200, ratings contents, ordinary public admission, browser success or the original product journey."
+    },
+    {
+      "invariant": "The existing Eden consumer remains an independent typed contract check",
+      "evidence": "work-read.test.ts:25-35 contains an unused async closure that reads the Work header and calls client.v1.resources({ resource: UUID }).ratings.get with realm scope, then consumes the numeric count type. The runtime test checks that the closure is a function; compile-time checking owns validation of those inputs and response fields.",
+      "assessment": "Accepted as unchanged type-consumer and route-inventory evidence. The supplied successful Main typecheck supports the compile-time closure. Its runtime test does not issue those Eden requests. The file's separate localhost fake-Fuseki budget test exercises workRead HTTP metering, not an advertised ratings GET through Main."
+    }
+  ],
+  "reusedEvidence": {
+    "source": ".temp/ref/manifest.json",
+    "sha256": "369792ce032f9d1a51d894700c67bd9be6ee087aac2495ee316f2b3129af1ce1",
+    "verification": "The staged manifest hash, patch hash, candidate/base file blobs and exact patch were independently checked. Underlying logs/JUnit files were not staged here or independently reopened/rehashed by this reviewer; their recorded results and hashes below are reused as authorized, not new executions.",
+    "testPair": {
+      "files": ["services/main/tests/post-convergence.test.ts", "services/main/tests/work-read.test.ts"],
+      "red": {
+        "command": "task goal:unit-files -- ./services/main/tests/post-convergence.test.ts ./services/main/tests/work-read.test.ts --reporter=junit --reporter-outfile=.temp/a09-ratings-evidence/red.junit.xml",
+        "productionBlob": "a26c0b70b979c5653cced978ea7f797b3034f501",
+        "testBlob": "91e708cc63c6354f91d6e10b92fe8f70068230e2",
+        "result": "7 tests, 1 failure, 0 skipped; runner exit 1, Task exit 201",
+        "assertionReached": true,
+        "failure": "The advertised /v1/works/00000000-0000-4000-8000-000000000001/ratings is absent from Main GET inventory at the new header-path assertion.",
+        "log": { "name": "red.log", "sha256FromManifest": "1a8d6dead79b02f7a3a66ae79df5338be14623a8e589bacbd1c11f899324a60c" },
+        "junit": { "name": "red.junit.xml", "sha256FromManifest": "d91a750fd7d7d860fb1a22e8cf8507fb643c27c379958e4004b9b4ea34fe0528" }
+      },
+      "green": {
+        "command": "task goal:unit-files -- ./services/main/tests/post-convergence.test.ts ./services/main/tests/work-read.test.ts --reporter=junit --reporter-outfile=.temp/a09-ratings-evidence/green.junit.xml",
+        "productionBlob": "a7ab32c544f03028ea6647a4cb991a37a51ae886",
+        "testBlob": "91e708cc63c6354f91d6e10b92fe8f70068230e2",
+        "result": "7 tests passed, 0 failures, 0 skipped; exit 0",
+        "log": { "name": "green.log", "sha256FromManifest": "08b6addf54ba2761b47afa8100dd6d58fca9e93b1797838295418a0ace9246d3" },
+        "junit": { "name": "green.junit.xml", "sha256FromManifest": "105d6c7b92df14874f09a603d3530d07c48e804341965391f28017265ef1e7c2" }
+      }
+    },
+    "staticChecks": [
+      { "command": "task main:typecheck", "result": "Passed: no type errors in 4,030 files", "log": "main-typecheck.log", "sha256FromManifest": "fe7a9f595297edcc6156bd380990ed953483f08cb38c2c9946ba7af37bf6cf31" },
+      { "command": "task --taskfile .temp/a09-ratings-evidence/Taskfile.yml lint", "result": "Two-file oxlint passed", "log": "lint.log", "sha256FromManifest": "aa74b0555f7296e68e657f96c4ec57ee80426d6e794b682f2f27a7770574cd79", "taskfileSha256FromManifest": "a53f7dbff1673ba95ec945f018dd202964517877d50c4950bed8e7ece65d17ad" },
+      { "command": "task ast-grep -- scan services/main/src/modules/work/read-header.ts services/main/tests/post-convergence.test.ts", "result": "Passed", "log": "ast-grep.log", "sha256FromManifest": "f8ea880821dc0bafe5c750ea4c0aa2f8797f11aee55ca2ca08449a19f1c7b87b" }
+    ],
+    "selectedGuards": {
+      "command": "task guards -- scripts/api/response-coverage.guard.test.ts scripts/api/answer-records.guard.test.ts services/main/tests/api-contract.test.ts services/main/tests/platform-exposure.test.ts --reporter=junit --reporter-outfile=.temp/a09-ratings-evidence/guards.junit.xml",
+      "result": "30 tests passed, 0 failures, 0 skipped; exit 0",
+      "log": { "name": "guards.log", "sha256FromManifest": "05e0c9b5770d59298401f117175fd618052efad2297667d01d6e54da67ec9358" },
+      "junit": { "name": "guards.junit.xml", "sha256FromManifest": "368f4148c482d308eb12e519a2ae9e6755628fd783d49e6a6f4eaca9e190b361" }
+    },
+    "notExecutionProof": [
+      "The manifest's earlier task test selector rejected JUnit flags before any test execution. It is not the red reproduction; the goal:unit-files run reached the outcome assertion.",
+      "task test -- --affected b11cf331812e384935b45dd5c77019dc6c227f0d --list produced an inventory only. No transitive owner suites or whole tiers are counted as executed."
+    ],
+    "candidateRerunsByReviewer": "None: exact matching passing checks suffice for this one-expression correction and no concrete unresolved source concern required another run."
+  },
+  "reportValidation": {
+    "jsonAndPins": "Standard-library JSON parsing and read-only git/hash comparisons validate this report's exact pins, paths and staged evidence references.",
+    "docsCheck": {
+      "job": "dfbe500e-63f5-42b4-adfd-895dace913f7",
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task docs:check",
+      "result": "Passed, exit 0: 13 checker tests and 259 Markdown files; local links, fragments and design navigation. External URLs and runtime behavior were not tested.",
+      "log": ".temp/goal/jobs/dfbe500e-63f5-42b4-adfd-895dace913f7.log",
+      "scope": "Report worktree documentation validation only; no candidate or original product assertion executed."
+    },
+    "workerCheckSelection": {
+      "skill": ".agents/skills/goal-worker/SKILL.md",
+      "instruction": "Run the recorded check once before handing off `done`; it includes the repository-wide guards.",
+      "currentTaskConstraint": "No dependency installs/copies, unchanged passing-check reruns or broad/transitive suites are authorized by the current Decision.",
+      "observedMechanism": "scripts/goal/check.ts calls ensureDependencies before check selection; scripts/goal/dependencies.ts automatically runs task install if the dependency digest is stale. A read-only digest/stamp comparison found it stale in this rebased worktree.",
+      "decision": "The current task constraint takes precedence. Do not invoke the install-producing generic worker check, change dependency stamps or bypass the dependency owner. Complete the requested docs check and reuse the exact candidate checks above. No permission request or implementation blocker is introduced."
+    }
+  },
+  "preservationAndLimits": {
+    "completedA02": {
+      "historicalCommit": "432a8d7f89c40eacf3b1c8cc9df3334b7482bd75",
+      "path": "docs/goals/audit-remediation-20261019/proofs/catalogue-A02-importer-consumer-review.json",
+      "blob": "4be44115789b166027571e3c9afd65dd39ec6a15",
+      "sha256": "ca0b13bd35b854f66a0bec6c82b54b695d4341fed3e079510a745af1d0c03ae5",
+      "status": "No content difference between the historical commit and this worktree; staged reference matches. The accepted bounded disposition remains unchanged and was not reviewed again."
+    },
+    "classSweep": "Within the exact two-path delta, checked identity-preserving route construction, real GET registration, sibling header fields, admission/options noninterference, actual-output assertion, unchanged typed consumer and negative controls. Other advertised links were checked for unchanged source, not certified as complete product journeys.",
+    "noExpandedAuthority": "Only this new report is authored. Candidate, independent assertions, source rights, captured identities, original product baseline, retained data and peer work remain unchanged. No implementation, API redesign, adapter/framework, stack/browser/lifecycle, corpus/data operation, dependency install/copy, additional reviewer or main/wave landing was performed.",
+    "acceptanceBoundary": "This is accepted source-contract evidence for the ratings URL correction. Route inventory, fixture output and type checks are not HTTP/Elysia execution, a deployed GET 200, original API discovery proof, public fixture qualification or browser proof. Original A09/C16 remain OPEN with their existing owners."
+  }
+}

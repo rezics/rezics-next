@@ -10,6 +10,8 @@ import { DATASET, GRAPHS, RV, hash, iri, lit, IdempotencyConflict,
 import { PendingAdmittedWork } from './create-admitted.ts';
 import { readWorkEditTerminalReceipt, sealMetadataWorkEditAdmission, workEditReceiptIri } from './edit.ts';
 import { assertGraphAdmissionOpen } from './restore-lineage.ts';
+import manifest from '../../../../../generated/model/manifest.json';
+import { selectCommandProfile } from '../../../../../model/compiler/registry.ts';
 
 export const AUTHOR_CREDIT_PROFILE = 'work-author-credit-v1';
 export const AUTHOR_CREDIT_SHAPE = `https://rezics.com/definition/${AUTHOR_CREDIT_PROFILE}`;
@@ -23,6 +25,8 @@ export interface AuthorCreditValue {
   sourceKey: string; sourceRoleKey: string | null; nativeOrdinal: number;
   actingSubject: string;
   provider?: string; namespace?: string; role?: NativeCreditRole; agent?: string;
+  /** Owner-resolved authored pin; the public command retains its V1 transport envelope. */
+  modelRevision?: string;
 }
 export interface NativeAuthorCredit extends AuthorCreditValue {
   profile: 'work-author-credit-v1'; role: NativeCreditRole; participantKind: 'external-reference';
@@ -44,7 +48,8 @@ export function authorCreditDigest(value: AuthorCreditValue, sourceIntent: strin
       || /[\u0000-\u001f\u007f]/.test(value.sourceRoleKey)))) {
     throw new AuthorCreditInvalid('invalid native author credit');
   }
-  return hash(JSON.stringify({ profile: AUTHOR_CREDIT_PROFILE, ...(value.provider === undefined ? {} : {
+  const profile = creditProfile(value);
+  return hash(JSON.stringify({ profile: profile.endsWith('-v2') ? profile : AUTHOR_CREDIT_PROFILE, ...(value.provider === undefined ? {} : {
     provider: value.provider, namespace: value.namespace, role: value.role }), work: value.work, credit: value.credit,
     revision: value.revision, expectedHead: value.expectedHead, sourceKey: value.sourceKey,
     sourceRoleKey: value.sourceRoleKey, nativeOrdinal: value.nativeOrdinal,
@@ -59,8 +64,17 @@ export function validExternalReference(value: { provider: string; namespace: str
 export function creditReference(value: AuthorCreditValue) {
   return { provider: value.provider ?? 'open-library', namespace: value.namespace ?? 'author', key: value.sourceKey };
 }
-export function creditProfile(value: AuthorCreditValue) {
-  return value.agent ? 'native-agent-credit-v1' : AUTHOR_CREDIT_PROFILE;
+export function creditProfile(value: Pick<AuthorCreditValue, 'agent' | 'role' | 'modelRevision'>) {
+  const legacy = value.agent ? 'native-agent-credit-v1' : AUTHOR_CREDIT_PROFILE;
+  const successor = value.agent ? 'native-agent-credit-v2' : 'work-author-credit-v2';
+  const pin = value.modelRevision ?? (value.role === 'performer' ? `https://rezics.com/definition/${successor}` : undefined);
+  const selected = selectCommandProfile(manifest, [`${RV}${value.agent ? 'NativeAgentCredit' : 'AuthorCredit'}`],
+    path => path === `${RV}modelRevision` && pin ? [pin] : []);
+  const profile = pin === `https://rezics.com/definition/${successor}` ? successor : legacy;
+  if ((pin !== undefined && pin !== `https://rezics.com/definition/${profile}`)
+    || selected?.profile !== profile || (value.role === 'performer' && profile === legacy))
+    throw new AuthorCreditInvalid('credit model does not admit this native participant and role');
+  return profile;
 }
 /** Two exact subjects, independent of any Work's number of credits or revisions.
  * Historical profiles retain their identities; both participant alternatives use this owner. */
@@ -75,7 +89,8 @@ export function authorCreditTriples(value: AuthorCreditValue, epoch: string, seq
      rv:editControl rv:HumanConfirmed ; rv:rightsStatus rv:Undetermined
      ${value.sourceRoleKey === null ? '' : `; rv:sourceRoleKey ${lit(value.sourceRoleKey)}`}`;
   const common = `rv:work ${iri(value.work)} ; schema:roleName ${lit(role)} ; ${participant}`;
-  return { current: `${iri(value.credit)} a rv:${kind} ; rv:creditRevision ${iri(value.revision)} ; ${common} .`,
+  const currentPin = creditProfile(value).endsWith('-v2') ? `rv:modelRevision ${iri(profile)} ; ` : '';
+  return { current: `${iri(value.credit)} a rv:${kind} ; rv:creditRevision ${iri(value.revision)} ; ${currentPin}${common} .`,
     revision: `${iri(value.revision)} a rv:${kind}Revision, rv:RevisionAnchor ;
       rv:component ${iri(value.credit)} ; rv:workRevision ${iri(value.expectedHead)} ;
       rv:confirmedBy ${iri(value.actingSubject)} ; ${common} ;
@@ -103,18 +118,19 @@ export async function readAuthorCredit(env: WorkActivationEnvironment, credit: s
   revision: string): Promise<NativeAuthorCredit | null> {
   if (![credit, revision].every(item => NATIVE.test(item))) throw new AuthorCreditInvalid('invalid credit identity');
   const data = await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-    SELECT ?work ?head ?key ?role ?creditRole ?provider ?namespace ?ordinal ?actor ?epoch ?sequence WHERE {
+    SELECT ?work ?head ?key ?role ?creditRole ?provider ?namespace ?ordinal ?actor ?epoch ?sequence ?model ?shape ?currentModel WHERE {
       GRAPH ${iri(GRAPHS.current)} { ${iri(credit)} a rv:AuthorCredit ; rv:creditRevision ${iri(revision)} ;
         rv:work ?work ; rv:externalKey ?key ; schema:position ?ordinal ;
         schema:roleName ?creditRole ; rv:externalProvider ?provider ; rv:externalNamespace ?namespace ;
         rv:editControl rv:HumanConfirmed ; rv:rightsStatus rv:Undetermined .
         OPTIONAL { ${iri(credit)} rv:sourceRoleKey ?currentRole }
+        OPTIONAL { ${iri(credit)} rv:modelRevision ?currentModel }
         FILTER NOT EXISTS { ${iri(credit)} rv:agent|schema:author ?agent } }
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:AuthorCreditRevision, rv:RevisionAnchor ;
         rv:component ${iri(credit)} ; rv:work ?work ; rv:workRevision ?head ; rv:externalKey ?key ;
         schema:position ?ordinal ; schema:roleName ?creditRole ; rv:externalProvider ?provider ;
         rv:externalNamespace ?namespace ; rv:editControl rv:HumanConfirmed ; rv:rightsStatus rv:Undetermined ;
-        rv:modelRevision ${iri(AUTHOR_CREDIT_SHAPE)} ; rv:shapeRevision ${iri(AUTHOR_CREDIT_SHAPE)} ;
+        rv:modelRevision ?model ; rv:shapeRevision ?shape ;
         rv:confirmedBy ?actor ; rv:dataEpoch ?epoch ; rv:sequence ?sequence .
         OPTIONAL { ${iri(revision)} rv:sourceRoleKey ?role }
         FILTER NOT EXISTS { ${iri(revision)} rv:agent|schema:author ?agent }
@@ -131,10 +147,26 @@ export async function readAuthorCredit(env: WorkActivationEnvironment, credit: s
     sourceKey: row.key!.value, sourceRoleKey: row.role?.value ?? null,
     nativeOrdinal: Number(row.ordinal!.value), actingSubject: row.actor!.value,
     provider: row.provider!.value, namespace: row.namespace!.value, role: row.creditRole!.value as NativeCreditRole };
+  verifyCreditModelPins(value, row.model, row.shape, row.currentModel);
   authorCreditDigest(value, credit);
   return { ...value, profile: AUTHOR_CREDIT_PROFILE, role: value.role!, participantKind: 'external-reference',
     provider: value.provider!, namespace: value.namespace!, control: 'human-confirmed', rightsStatus: 'undetermined',
     dataEpoch: row.epoch!.value, sequence: row.sequence!.value };
+}
+
+/** Exact stored pins, including the current selector, are part of the owner witness. */
+export function verifyCreditModelPins(value: AuthorCreditValue,
+  model: { type: string; value: string } | undefined, shape: { type: string; value: string } | undefined,
+  current: { type: string; value: string } | undefined): void {
+  if (model?.type !== 'uri' || shape?.type !== 'uri' || model.value !== shape.value)
+    throw new AuthorCreditUnavailable('credit revision model pins are unavailable');
+  let profile: ReturnType<typeof creditProfile>;
+  try { profile = creditProfile({ ...value, modelRevision: model.value }); }
+  catch { throw new AuthorCreditUnavailable('credit revision model differs from participant and role'); }
+  if ((current && (current.type !== 'uri' || current.value !== model.value))
+    || (profile.endsWith('-v2') && !current))
+    throw new AuthorCreditUnavailable('credit current model differs from revision');
+  if (profile.endsWith('-v2')) value.modelRevision = model.value;
 }
 
 /** Retirement reads either historical representation without resolving an external reference to an Agent. */
@@ -143,22 +175,29 @@ export async function readCreditValue(env: WorkActivationEnvironment, credit: st
   const external = await readAuthorCredit(env, credit, revision);
   if (external) return external;
   const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-    SELECT ?work ?head ?agent ?role ?actor WHERE {
+    SELECT ?work ?head ?agent ?role ?actor ?model ?shape ?currentModel WHERE {
       GRAPH ${iri(GRAPHS.current)} { ${iri(credit)} a rv:NativeAgentCredit ; rv:creditRevision ${iri(revision)} ;
-        rv:work ?work ; rv:agent ?agent ; schema:roleName ?role }
+        rv:work ?work ; rv:agent ?agent ; schema:roleName ?role .
+        OPTIONAL { ${iri(credit)} rv:modelRevision ?currentModel } }
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:NativeAgentCreditRevision ; rv:component ${iri(credit)} ;
         rv:work ?work ; rv:workRevision ?head ; rv:agent ?agent ; schema:roleName ?role .
         OPTIONAL { ${iri(revision)} rv:confirmedBy ?actor }
+        OPTIONAL { ${iri(revision)} rv:modelRevision ?model }
+        OPTIONAL { ${iri(revision)} rv:shapeRevision ?shape }
         FILTER NOT EXISTS { ${iri(revision)} a rv:ErasedRevision } }
     } LIMIT 2`, 4096)).results?.bindings ?? [];
   const row = rows[0];
   if (!rows.length) return null;
   if (rows.length !== 1 || !row?.work || !row.head || !row.agent || !row.role || !isNativeCreditRole(row.role.value))
     throw new AuthorCreditUnavailable('native credit is ambiguous');
-  return { work: row.work.value, credit, revision, expectedHead: row.head.value, agent: row.agent.value,
+  const value: AuthorCreditValue = { work: row.work.value, credit, revision, expectedHead: row.head.value, agent: row.agent.value,
     role: row.role.value, sourceKey: '', sourceRoleKey: null, nativeOrdinal: 0,
     // Legacy Agent shapes do not bind an actor; no confirmer is inferred or written by retirement.
     actingSubject: row.actor?.value ?? retiringActor };
+  // Unpinned legacy V1 Agent records remain retireable; successor pins are exact.
+  if (row.model || row.shape || row.currentModel || value.role === 'performer')
+    verifyCreditModelPins(value, row.model, row.shape, row.currentModel);
+  return value;
 }
 
 export async function readAuthorCreditReceipt(env: WorkActivationEnvironment,

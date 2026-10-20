@@ -7,7 +7,7 @@ import { runWorkerTick } from '../../worker-tick.ts';
 import { FIRST_PUBLICATION_TYPE, invertedPublicationYear } from './year-fact.ts';
 
 /** Same sequence as TemplateIndexService.CREDIT_ROLES. Public roles retain their physical ranks. */
-export const CREDIT_SEEK_ROLES = ['author', 'director', 'artist', 'animation-studio', 'translator', 'editor', 'transcriber'] as const;
+export const CREDIT_SEEK_ROLES = ['author', 'director', 'artist', 'animation-studio', 'translator', 'editor', 'transcriber', 'performer'] as const;
 /** Role rank, then a three-digit ordinal, then the credit id. An unknown role or a non 1–3 digit ordinal is not posted. */
 export function creditSeekKey(role: string, ordinal: string | number | null | undefined, id: string): string | null {
   const rank = CREDIT_SEEK_ROLES.indexOf(role as typeof CREDIT_SEEK_ROLES[number]);

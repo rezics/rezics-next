@@ -5,9 +5,10 @@ import { signInPath } from '../../auth/paths.ts';
 import { globalWorkHref } from '../../work-page/route.ts';
 import { Button, buttonVariants } from '@rezics/ui/button';
 import { Checkbox } from '@rezics/ui/checkbox';
+import { Collapsible, CollapsibleContent, CollapsibleIndicator, CollapsibleTrigger } from '@rezics/ui/collapsible';
 import { Field, FieldLabel } from '@rezics/ui/field';
 import { cn } from '@rezics/ui/utils';
-import { ArrowUpDownIcon, BellIcon, CheckCheckIcon, CircleCheckIcon, FileCheckIcon, FilePenLineIcon, MessageSquareQuoteIcon, MessageSquareReplyIcon,
+import { ArrowUpDownIcon, BellIcon, BookmarkIcon, CheckIcon, CheckCheckIcon, CircleCheckIcon, FileCheckIcon, FilePenLineIcon, MessageSquareQuoteIcon, MessageSquareReplyIcon,
   RotateCwIcon, ShieldIcon, ThumbsUpIcon, TriangleAlertIcon, UserPlusIcon, UserRoundCogIcon, type LucideIcon }
   from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -34,6 +35,8 @@ import { inboxReasons, inboxViews, mergeNotificationTriage, type NotificationSel
 type T = ReturnType<typeof useShell>['t'];
 type Kind = NonNullable<StreamItem['display']>['kind'];
 type Traversal = { generation: string; head: string; revision: number };
+type TriageFeedback = { id: string; text: string; failed: boolean; stale?: boolean; patch: { saved?: boolean; done?: boolean } };
+type RowCopy = ReturnType<typeof materializeData<typeof newWorkMessages.en>>;
 
 const icons: Record<Kind, LucideIcon> = { reply: MessageSquareReplyIcon, submission_decision: FileCheckIcon,
   moderation_outcome: ShieldIcon, realm_role_change: UserRoundCogIcon, follow: UserPlusIcon,
@@ -110,12 +113,36 @@ function sentence(item: StreamItem, t: T, locale: UiLocale): string {
   }
 }
 
-/** Where it happened, for the kinds whose sentence does not already name the Realm. */
-function place(item: StreamItem, t: T): string | null {
-  const display = item.display;
-  if (!display?.realmName || item.state !== 'active'
-    || display.kind === 'realm_role_change' || display.kind === 'realm_invitation') return null;
-  return t.inRealm({ realm: display.realmName });
+/** Titles come only from the supplied display; an unavailable subject never reuses private facts. */
+function rowContent(item: StreamItem, t: T, copy: RowCopy, text: string) {
+  const display = item.state === 'active' ? item.display : null;
+  if (!display || item.proposal) return { title: text, event: null, language: undefined };
+  const realmTarget = display.kind === 'realm_role_change' || display.kind === 'realm_invitation';
+  const title = realmTarget ? display.realmName : display.kind === 'follow' ? display.actor?.name : display.target.title;
+  if (!title) return { title: text, event: null, language: undefined };
+  const language = realmTarget || display.kind === 'follow' ? undefined : display.target.language ?? undefined;
+  if (display.membershipAction) return { title, event: text, language };
+  let event: string;
+  switch (display.kind) {
+    case 'reply': event = item.topic === 'mention' ? copy.mentionedEvent : copy.repliedEvent; break;
+    case 'submission_decision': event = display.target.excerpt === 'accepted' ? copy.submissionAcceptedEvent
+      : display.target.excerpt === 'rejected' ? copy.submissionRejectedEvent
+        : display.target.excerpt === 'changes-requested' ? copy.submissionChangesEvent : t.submissionDecided; break;
+    case 'moderation_outcome': event = copy.moderationEvent; break;
+    case 'realm_role_change': event = display.roleName ? display.roleChange === 'given'
+      ? copy.roleGivenEvent({ role: display.roleName }) : display.roleChange === 'taken'
+        ? copy.roleTakenEvent({ role: display.roleName }) : copy.roleChangedEvent({ role: display.roleName })
+      : t.roleChanged; break;
+    case 'realm_invitation': event = copy.invitationEvent; break;
+    case 'follow': event = copy.followEvent; break;
+    case 'claim_correction': event = copy.correctionEvent; break;
+    case 'review': event = copy.reviewEvent; break;
+    case 'review_helpful': event = t.reviewHelpfulAny; break;
+    case 'new_work': event = copy.newWorkEvent; break;
+    case 'chapter': event = copy.chapterEvent; break;
+    case 'post_vote': event = copy.postVoteEvent; break;
+  }
+  return { title, event, language };
 }
 
 /** Where a notification leads, when its subject has a page: the Work decided on, or the Realm. */
@@ -144,16 +171,24 @@ function destination(item: StreamItem): string | null {
     || display.kind === 'reply') ? spaceHref(realm, 'community') : null;
 }
 
-function NotificationRow({ item, grouped, now, avatarQuery, onRead, onTriage, triageBusy, actingSubject, main, isCurrent }: { item: StreamItem;
+function NotificationRow({ item, grouped, now, avatarQuery, onRead, onTriage, triageBusy, feedback, actingSubject, main, isCurrent }: { item: StreamItem;
   grouped: number; now: number; avatarQuery: string; onRead: (item: StreamItem) => void;
   onTriage: (item: StreamItem, patch: { saved?: boolean; done?: boolean }) => void; triageBusy: boolean;
+  feedback: TriageFeedback | null;
   actingSubject?: string; main: () => MainClient; isCurrent: () => boolean }) {
   const { t, locale } = useShell();
+  const copy = materializeData(newWorkMessages[locale], { locale });
   const [listed, setListed] = useState(false);
   const [answer, setAnswer] = useState<'accept' | 'decline' | null>(null);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   const attempt = useRef<{ action: 'accept' | 'decline'; listed: boolean; key: string } | null>(null);
+  const rowRef = useRef<HTMLLIElement>(null);
+  const answerRef = useRef<HTMLParagraphElement>(null);
+  const focusAnswer = useRef(false);
+  useEffect(() => {
+    if (answer && focusAnswer.current) answerRef.current?.focus();
+  }, [answer]);
   const display = item.state === 'active' ? item.display : null;
   // A sanction never shows the person who recorded it.
   const actor = display?.membershipAction ? null : display?.actor;
@@ -161,7 +196,10 @@ function NotificationRow({ item, grouped, now, avatarQuery, onRead, onTriage, tr
     : item.state === 'active' && item.proposal ? FilePenLineIcon : BellIcon;
   const href = destination(item);
   const text = sentence(item, t, locale);
-  const where = place(item, t);
+  const content = rowContent(item, t, copy, text);
+  const source = actor && display?.kind !== 'follow' ? actor.name ?? t.someone : null;
+  const realm = display?.realmName && display.realmName !== content.title ? t.inRealm({ realm: display.realmName }) : null;
+  const topic = display?.kind === 'new_work' ? display.target.topicName : null;
   const because = item.state === 'active' && item.reason ? t[reasonLabel[item.reason]] : null;
   const excerpt = display?.kind === 'reply' || display?.kind === 'review' ? display.target.excerpt : null;
   const invitation = item.state === 'active' && display?.kind === 'realm_invitation' && actingSubject && item.subject?.ref
@@ -177,10 +215,12 @@ function NotificationRow({ item, grouped, now, avatarQuery, onRead, onTriage, tr
     if (!isCurrent()) return;
     setBusy(false);
     if (!result.ok) { setFailed(true); return; }
+    focusAnswer.current = rowRef.current?.contains(document.activeElement) === true;
     setAnswer(action);
     onRead(item);
   }
-  return <li className={cn('relative flex gap-3 px-4 py-3.5 transition-colors hover:bg-accent/30',
+  return <li ref={rowRef} data-notification-row={item.id} aria-busy={triageBusy || busy || undefined}
+    className={cn('relative flex gap-3 px-4 py-4 transition-colors hover:bg-accent/30',
     !item.read && 'bg-primary/4')}>
     <span className="relative mt-0.5 shrink-0">
       {actor ? <CommunityIcon name={actor.name ?? t.someone} size="md" avatarQuery={avatarQuery} person
@@ -190,20 +230,64 @@ function NotificationRow({ item, grouped, now, avatarQuery, onRead, onTriage, tr
       {actor ? <span className="absolute -end-1 -bottom-1 grid size-5 place-items-center rounded-full border
         border-background bg-card text-muted-foreground"><Icon aria-hidden="true" className="size-3" /></span> : null}
     </span>
-    <div className="grid min-w-0 flex-1 gap-1">
-      <p className={cn('text-pretty text-sm', !item.read && 'font-semibold')}>
+    <div className="grid min-w-0 flex-1 gap-1.5">
+      <h2 className={cn('wrap-anywhere text-pretty text-base leading-snug font-medium', !item.read && 'font-semibold')}>
         {href ? <Link href={localizedPath(href, locale)} onClick={() => onRead(item)}
-          lang={display?.target.language ?? undefined}
-          className={cn('outline-none hover:underline focus-visible:underline',
-            invitation ? 'rounded-sm focus-visible:ring-2 focus-visible:ring-ring'
-              : 'after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset')}>
-          {text}</Link>
-          : <span lang={display?.target.language ?? undefined}>{text}</span>}
-        {grouped ? <span className="font-normal text-muted-foreground"> {t.moreLikeThis(grouped)}</span> : null}
-      </p>
-      {excerpt ? <p lang={display?.target.language ?? undefined} className="line-clamp-2 text-muted-foreground text-sm">
+          aria-label={text} lang={content.language}
+          className="rounded-sm outline-none hover:underline focus-visible:underline focus-visible:ring-2 focus-visible:ring-ring">
+          {content.title}</Link>
+          : <span lang={content.language}>{content.title}</span>}
+      </h2>
+      {content.event || grouped ? <p className="wrap-anywhere text-sm leading-snug">
+        {content.event}
+        {grouped ? <span className="text-muted-foreground">{content.event ? <span aria-hidden="true"> · </span> : null}
+          <span>{t.moreLikeThis(grouped)}</span></span> : null}
+      </p> : null}
+      <Collapsible className="grid gap-1.5">
+        <div className="flex items-start justify-between gap-2">
+          <p className="min-w-0 text-xs leading-relaxed text-muted-foreground">
+            {[source, realm, topic, because].filter(Boolean).map((part, index) => <span key={index}>
+              <bdi className="wrap-anywhere">{part}</bdi><span aria-hidden="true"> · </span>
+            </span>)}
+            <time className="inline-block" dateTime={item.createdAt} suppressHydrationWarning>
+              {relativeTime(item.createdAt, now, locale, 'long')}</time>
+          </p>
+          <CollapsibleTrigger asChild>
+            <Button data-notification-actions size="sm" variant="ghost"
+              className="-me-2 -mt-1 h-7 shrink-0 gap-1 px-2 text-xs text-muted-foreground">
+              {copy.notificationActions}<CollapsibleIndicator className="[&_svg]:size-3" />
+            </Button>
+          </CollapsibleTrigger>
+        </div>
+        <CollapsibleContent className="flex flex-wrap gap-2 pt-1">
+          <Button size="sm" variant={item.saved ? 'soft' : 'outline'} aria-pressed={item.saved} disabled={triageBusy}
+            onClick={() => onTriage(item, { saved: !item.saved })}>
+            <BookmarkIcon aria-hidden="true" />{item.saved ? t.unsaveNotification : t.saveNotification}</Button>
+          <Button size="sm" variant={item.done ? 'soft' : 'outline'} aria-pressed={item.done} disabled={triageBusy}
+            onClick={() => onTriage(item, { done: !item.done })}>
+            <CheckIcon aria-hidden="true" />{item.done ? t.undoDone : t.markDone}</Button>
+        </CollapsibleContent>
+      </Collapsible>
+      {!item.read || item.saved || item.done ? <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+        {!item.read ? <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
+          <span aria-hidden="true" className="size-1.5 rounded-full bg-brand" />{t.unread}</span> : null}
+        {item.saved ? <span className="inline-flex items-center gap-1 text-muted-foreground">
+          <BookmarkIcon aria-hidden="true" className="size-3" />{t.viewSaved}</span> : null}
+        {item.done ? <span className="inline-flex items-center gap-1 text-muted-foreground">
+          <CheckIcon aria-hidden="true" className="size-3" />{t.viewDone}</span> : null}
+      </p> : null}
+      {triageBusy ? <p role="status" className="text-sm text-muted-foreground">{t.loading}</p> : null}
+      {feedback ? <div className="flex flex-wrap items-center gap-2 text-sm">
+        <p role={feedback.failed ? 'alert' : 'status'}
+          className={feedback.failed ? 'text-destructive-foreground' : 'text-muted-foreground'}>{feedback.text}</p>
+        {feedback.failed ? <Button size="sm" variant="outline" disabled={triageBusy}
+          onClick={() => feedback.stale ? location.reload() : onTriage(item, feedback.patch)}>
+          {feedback.stale ? copy.reloadNotifications : t.retry}</Button> : null}
+      </div> : null}
+      {excerpt ? <p lang={display?.target.language ?? undefined} className="line-clamp-2 wrap-anywhere text-muted-foreground text-sm">
         {excerpt}</p> : null}
-      {invitation ? answer ? <p role="status" className="text-sm">{answer === 'accept'
+      {invitation ? answer ? <p ref={answerRef} tabIndex={-1} role="status"
+        className="rounded-sm text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">{answer === 'accept'
         ? t.joinedRealm({ realm: display?.realmName ?? t.yourRealms })
         : t.declinedInvitation({ realm: display?.realmName ?? t.yourRealms })}</p>
         : <div className="grid gap-2">
@@ -219,24 +303,8 @@ function NotificationRow({ item, grouped, now, avatarQuery, onRead, onTriage, tr
           </div>
           {failed ? <p role="alert" className="text-destructive-foreground text-sm">{t.invitationFailed}</p> : null}
         </div> : null}
-      <div className="relative z-10 flex flex-wrap gap-2">
-        <Button size="sm" variant={item.saved ? 'soft' : 'outline'} aria-pressed={item.saved} disabled={triageBusy}
-          onClick={() => onTriage(item, { saved: !item.saved })}>
-          {item.saved ? t.unsaveNotification : t.saveNotification}</Button>
-        <Button size="sm" variant={item.done ? 'soft' : 'outline'} aria-pressed={item.done} disabled={triageBusy}
-          onClick={() => onTriage(item, { done: !item.done })}>
-          {item.done ? t.undoDone : t.markDone}</Button>
-      </div>
       <NotificationDeliveries item={item} main={main} isCurrent={isCurrent} />
-      <p className="text-muted-foreground text-xs">
-        {because ? <><span>{because}</span><span aria-hidden="true"> · </span></> : null}
-        {where ? <><span>{where}</span><span aria-hidden="true"> · </span></> : null}
-        <time dateTime={item.createdAt} suppressHydrationWarning>{relativeTime(item.createdAt, now, locale, 'long')}</time>
-      </p>
     </div>
-    {!item.read ? <span className="mt-2 flex shrink-0 items-center gap-1">
-      <span aria-hidden="true" className="size-2 rounded-full bg-brand" />
-      <span className="sr-only">{t.unread}</span></span> : null}
   </li>;
 }
 
@@ -285,8 +353,7 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
   const [readHere, setReadHere] = useState<ReadonlySet<string>>(new Set());
   const [state, setState] = useState<'idle' | 'loading' | 'older-failed' | 'mark-failed' | 'marked'>('idle');
   const [busy, setBusy] = useState<string | null>(null);
-  const [triageNote, setTriageNote] = useState<string | null>(null);
-  const [triageError, setTriageError] = useState<string | null>(null);
+  const [triageFeedback, setTriageFeedback] = useState<TriageFeedback | null>(null);
   const [countRead, setCountRead] = useState<Loaded<NotificationCount> | undefined>(initial.unreadCount);
   const [olderFailure, setOlderFailure] = useState<Extract<Loaded<NotificationWindow>, { ok: false }> | null>(null);
   const initialCount = useRef(initial.unreadCount);
@@ -296,6 +363,8 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
   const loadingMore = useRef<Traversal | null>(null);
   const restartRequired = useRef(false);
   const triageBusy = useRef<string | null>(null);
+  const rowsRegion = useRef<HTMLDivElement>(null);
+  const focusAfterTriage = useRef<HTMLElement | null>(null);
   const displayed = traversal.current;
   useEffect(() => {
     mounted.current = true;
@@ -307,6 +376,11 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
       setUnreadGeneration(null);
     };
   }, []);
+  useEffect(() => {
+    // Removing the focused row continues at its neighbour, or the empty result.
+    focusAfterTriage.current?.focus();
+    focusAfterTriage.current = null;
+  }, [windows]);
   const isCurrent = (request: Traversal) => mounted.current && traversal.current === request;
   const lastWindow = windows.at(-1)!;
   const isRead = (item: StreamItem) => item.read || readHere.has(item.id)
@@ -354,7 +428,7 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
     traversal.current = { generation: window.generation, head: window.head, revision: traversal.current.revision + 1 };
     setUnreadGeneration(window.generation);
     triageBusy.current = null;
-    setBusy(null); setTriageError(null); setTriageNote(null);
+    setBusy(null); setTriageFeedback(null);
     setWindows(current => [{ ...window, items: mergePageTriage(window.items, sameGeneration ? current : []) }]);
     setReadThrough(window.readThrough);
     setReadHere(new Set());
@@ -386,7 +460,7 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
       traversal.current = request;
       loadingMore.current = request;
       triageBusy.current = null;
-      setBusy(null); setTriageError(null); setTriageNote(null);
+      setBusy(null); setTriageFeedback(null);
       setUnreadGeneration(request.generation);
       fence = beginNotificationRequest('page');
       next = await readWindow(client(), null, selection);
@@ -414,14 +488,26 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
     const request = displayed;
     if (!isCurrent(request) || restartRequired.current || triageBusy.current) return;
     triageBusy.current = item.id;
-    setBusy(item.id); setTriageError(null); setTriageNote(null);
+    setBusy(item.id); setTriageFeedback(null);
     const result = await settle(() => client().v1.me.notifications({ item: item.id }).triage.put({
       profile: 'notification-item-triage-v1', ...patch, expectedRevision: item.triageRevision }));
     if (!isCurrent(request)) return;
     triageBusy.current = null;
     setBusy(null);
-    if (!result.ok) { setTriageError(result.failure === 'moved' ? t.triageStale : t.triageFailed); return; }
+    if (!result.ok) {
+      setTriageFeedback({ id: item.id, text: result.failure === 'moved' ? t.triageStale : t.triageFailed,
+        failed: true, stale: result.failure === 'moved', patch });
+      return;
+    }
     const next = result.data;
+    const leaves = (selection.view === 'inbox' && next.done) || (selection.view === 'saved' && !next.saved)
+      || (selection.view === 'done' && !next.done);
+    const focused = document.activeElement;
+    const row = focused instanceof HTMLElement ? focused.closest('[data-notification-row]') : null;
+    if (leaves && row?.getAttribute('data-notification-row') === item.id && rowsRegion.current?.contains(row)) {
+      const neighbour = row.nextElementSibling ?? row.previousElementSibling;
+      focusAfterTriage.current = neighbour?.querySelector<HTMLElement>('[data-notification-actions]') ?? rowsRegion.current;
+    }
     setWindows(current => current.map(window => ({ ...window, items: window.items.flatMap(entry => {
       if (entry.id !== item.id) return [entry];
       const merged = mergeNotificationTriage(entry, { saved: next.saved, done: next.done, triageRevision: next.revision });
@@ -429,8 +515,9 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
         || (selection.view === 'done' && !merged.done);
       return leaves ? [] : [merged];
     }) })));
-    setTriageNote(patch.done === true ? t.triageDone : patch.done === false ? t.triageUndone
-      : patch.saved ? t.triageSaved : t.triageUnsaved);
+    setTriageFeedback({ id: item.id, failed: false, patch,
+      text: patch.done === true ? t.triageDone : patch.done === false ? t.triageUndone
+        : patch.saved ? t.triageSaved : t.triageUnsaved });
   }
 
   const rows = windows.flatMap(window => collapse(window));
@@ -465,19 +552,23 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
     {state === 'marked' ? <p role="status" className="sr-only">{t.markedAllRead}</p> : null}
     {state === 'mark-failed' ? <p role="alert" className="text-destructive-foreground text-sm">{t.markReadFailed}</p>
       : null}
-    {triageNote ? <p role="status" className="sr-only">{triageNote}</p> : null}
-    {triageError ? <p role="alert" className="text-destructive-foreground text-sm">{triageError}</p> : null}
+    {triageFeedback && !rows.some(({ item }) => item.id === triageFeedback.id)
+      ? <p role="status" className="text-sm text-muted-foreground">{triageFeedback.text}</p> : null}
     {countRead && !countRead.ok && countRead.failure !== 'closed' ? <div className="grid justify-items-start gap-2">
       <NotificationReadFailure read={countRead} kind="count" />
       <Button size="sm" variant="outline" onClick={() => void refreshCount(displayed)}>{t.retry}</Button>
     </div> : null}
     {invitations}
+    <div ref={rowsRegion} tabIndex={-1} role="region" aria-label={t.notifications}
+      className="rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-ring">
     {rows.length ? <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/60
       bg-card shadow-(--aura-shadow-card)">
       {rows.map(({ item, grouped }) => <NotificationRow key={`${displayed.revision}:${item.id}`} item={{ ...item, read: isRead(item) }}
         grouped={grouped} now={now} avatarQuery={avatarQuery} onRead={markOne} onTriage={(entry, patch) => void triage(entry, patch)}
+        feedback={triageFeedback?.id === item.id ? triageFeedback : null}
         triageBusy={busy === item.id} actingSubject={actingSubject} main={client} isCurrent={() => isCurrent(displayed)} />)}
     </ul> : <EmptyState icon={BellIcon} title={empty.title} description={empty.description} />}
+    </div>
     {lastWindow.next !== null ? <div className="flex flex-col items-center gap-2">
       {state === 'older-failed' ? olderFailure ? <NotificationReadFailure read={olderFailure} kind="older" />
         : <p role="alert" className="text-muted-foreground text-sm">{t.olderFailed}</p> : null}

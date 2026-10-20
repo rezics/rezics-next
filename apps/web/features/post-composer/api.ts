@@ -35,8 +35,18 @@ export interface PostProgress {
   revisionId?: string;
   identified?: boolean;
   digest?: string;
+  /** Persisted before dispatch. Missing on old drafts, whose unacknowledged writes are uncertain. */
+  writeState?: 'none' | 'acknowledged' | 'unknown';
+  pendingStep?: 'draft' | 'identity' | 'place';
   /** A confirmed refusal seals this attempt. The next Post needs a new operation key. */
   restartRequired?: true;
+}
+
+export function postWriteState(progress: PostProgress | null): 'none' | 'acknowledged' | 'unknown' {
+  if (!progress) return 'none';
+  if (progress.writeState === 'unknown') return 'unknown';
+  if (progress.revisionId || progress.identified) return 'acknowledged';
+  return progress.writeState ?? (progress.restartRequired ? 'none' : 'unknown');
 }
 export type PostOutcome =
   | { kind: 'posted'; reply: string }
@@ -72,6 +82,7 @@ async function placedReplyIsVisible(
 
 export function newPostProgress(): PostProgress {
   return {
+    writeState: 'none',
     key: crypto.randomUUID(),
     reply: `https://rezics.com/id/${crypto.randomUUID()}`,
     variantId: `urn:rezics:variant:${crypto.randomUUID()}`,
@@ -122,6 +133,7 @@ export async function submitPost(
   onPlaced?: (reply: string) => void,
   onProjection?: (visible: boolean) => void,
   operationOpen: OperationGate = gateFor(null),
+  expectedDraftHead: string | null = null,
 ): Promise<PostOutcome> {
   const step = { ...original };
   if (step.restartRequired) {
@@ -130,8 +142,21 @@ export async function submitPost(
     onProgress({ ...step });
   }
   const keyed = (suffix: string) => ({ headers: { 'idempotency-key': `${step.key}:${suffix}` } });
+  const beforeWrite = (pendingStep: NonNullable<PostProgress['pendingStep']>) => {
+    const pending: PostProgress = { ...step, writeState: 'unknown', pendingStep };
+    // The caller must finish the device write before a request can leave the browser.
+    onProgress(pending);
+    Object.assign(step, pending);
+  };
+  const acknowledged = () => {
+    step.writeState = 'acknowledged';
+    delete step.pendingStep;
+    onProgress({ ...step });
+  };
   const refuseAttempt = () => {
     step.restartRequired = true;
+    step.writeState = step.revisionId ? 'acknowledged' : 'none';
+    delete step.pendingStep;
     onProgress({ ...step });
   };
   const terminalRefusal = (error: { status?: number; value?: unknown } | undefined) => {
@@ -201,20 +226,25 @@ export async function submitPost(
       );
     if (!step.revisionId || !step.digest) {
       // Replay also recovers older saved progress that retained the revision without its digest.
-      const { data, error } = await draft(false, null, 'draft');
+      beforeWrite('draft');
+      const { data, error } = await draft(false, expectedDraftHead, 'draft');
       if (!data) {
         // A denied new draft can be sealed as cancelled. A known successful revision
         // still needs its original receipt when recovering a missing digest.
         if (terminalRefusal(error) && !step.revisionId) refuseAttempt();
         return { kind: (await banned(error?.status)) ? 'banned' : 'failed', progress: step };
       }
-      if (step.revisionId && step.revisionId !== data.revisionId)
-        return { kind: 'failed', progress: step };
+      if (step.revisionId && step.revisionId !== data.revisionId) {
+        // A mismatched replay is no receipt for this draft. Retain its last trusted revision.
+        onProgress({ ...original });
+        return { kind: 'failed', progress: original };
+      }
       step.revisionId = data.revisionId;
       step.digest = data.revisionDigest;
-      onProgress({ ...step });
+      acknowledged();
     }
     if (!step.identified) {
+      beforeWrite('identity');
       const { data, error } = await main.v1['realm-replies'].post(
         {
           profile: 'realm-reply-identity-v1',
@@ -236,8 +266,9 @@ export async function submitPost(
         return { kind: (await banned(error?.status)) ? 'banned' : 'failed', progress: step };
       }
       step.identified = true;
-      onProgress({ ...step });
+      acknowledged();
     }
+    beforeWrite('place');
     const { data, error } = await main.v1['realm-reply-placements'].post(
       {
         profile: 'realm-reply-placement-v1',
@@ -252,6 +283,10 @@ export async function submitPost(
       keyed('place'),
     );
     if (data) {
+      // Navigation and projection reads follow the authoritative receipt, even if device storage fails.
+      step.writeState = 'acknowledged';
+      delete step.pendingStep;
+      try { onProgress({ ...step }); } catch { /* The pending same-key retry is still durable. */ }
       try {
         onPlaced?.(data.reply);
       } catch {

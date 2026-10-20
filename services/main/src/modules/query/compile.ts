@@ -19,7 +19,7 @@ export const QUERY_COST = {
   zonePageSize: ZONE_BROWSE_COST.pageSize, responseBytes: 8 * 1024 * 1024,
 } as const;
 
-export type QueryRefusal = 'invalid_query' | 'unsupported_query_shape' | 'query_budget_exceeded'
+export type QueryRefusal = 'invalid_query' | 'misplaced_facet' | 'unsupported_query_shape' | 'query_budget_exceeded'
   | 'unsupported_query_source' | 'stale_query_meaning' | 'stale_query_result';
 
 export class QueryRejected extends Error {
@@ -71,8 +71,9 @@ function admit(filter: FilterDocument | undefined, zone = false): { conditions: 
   try { facets = checkedFilter(filter as Parameters<typeof checkedFilter>[0]); }
   catch (error) {
     if (error instanceof InvalidFilter) {
-      throw new QueryRejected(error.refusal === 'filter_too_large' ? 'query_budget_exceeded' : 'invalid_query',
-        `${error.refusal}: ${error.message}`);
+      const refusal = error.refusal === 'filter_too_large' ? 'query_budget_exceeded'
+        : error.refusal === 'misplaced_facet' ? error.refusal : 'invalid_query';
+      throw new QueryRejected(refusal, `${error.refusal}: ${error.message}`);
     }
     throw error;
   }

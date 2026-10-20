@@ -53,15 +53,15 @@ export class StructureTree<T> {
     let bytes: Uint8Array;
     try { bytes = await this.objects.get(page.slice(7)); }
     catch (error) {
-      if (error instanceof ObjectIntegrityError) throw new StructureObjectCorrupt(error.message);
-      if (error instanceof ObjectUnavailable) throw new StructureObjectUnavailable(error.message);
+      if (error instanceof ObjectIntegrityError) throw new StructureObjectCorrupt(error.message, { cause: error });
+      if (error instanceof ObjectUnavailable) throw new StructureObjectUnavailable(error.message, { cause: error });
       throw error;
     }
     cost.pagesRead++;
     let parsed: ReturnType<typeof checkStructurePage>;
     try { parsed = checkStructurePage(bytes); }
     catch (error) {
-      if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message);
+      if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message, { cause: error });
       throw error;
     }
     if (parsed.tree !== this.kind) throw new StructureObjectCorrupt('page belongs to another tree');

@@ -81,11 +81,36 @@ function valueTest(condition: FilterCondition, node: string, facet: AdmittedFace
 }
 
 type CoverageBinding = { predicate: string; entry: string; legacy?: 'v1' | 'v2' };
+
+function translatorTest(condition: FilterCondition, coverage: CoverageBinding | undefined, key: string): string {
+  // Frozen v1/v2 release projections cannot establish this entry correlation.
+  // Missing evidence is unknown even for a negative translator Condition.
+  if (!coverage || coverage.legacy) return 'false';
+  const values = (condition.any ?? condition.all ?? condition.none)! as string[];
+  const test = values.map(value => `CONTAINS(CONCAT(" ", ?translators${key}, " "), ${lit(` ${value} `)})`)
+    .join(condition.all ? ' && ' : ' || ');
+  return `EXISTS {
+    GRAPH ${iri(GRAPHS.current)} {
+      ${coverage.entry} rv:realization ?text${key} ; rv:revision ?textRevision${key} .
+      ?text${key} a rv:Realization ; rv:work ?work .
+      FILTER NOT EXISTS { ?text${key} rv:protectionHead ?textProtection${key} }
+    }
+    GRAPH ${iri(GRAPHS.revisions)} {
+      ?textRevision${key} a rv:RealizationRevision ; rv:component ?text${key} ;
+        rv:modelRevision <https://rezics.com/definition/realization-v1> ; rv:realizationState ?textState${key} .
+      FILTER NOT EXISTS { ?textRevision${key} a rv:ErasedRevision }
+    }
+    BIND(rv:realizationTranslators(?textState${key}, ?text${key}, ?work) AS ?translators${key})
+    FILTER(BOUND(?translators${key}) && ${condition.none ? '!' : ''}(${test}))
+  }`;
+}
+
 function groupTest(group: FilterGroup, release: string, key: string, coverage?: CoverageBinding): string {
   const all = 'all' in group;
   return '(' + (all ? group.all : group.any).map((node: FilterNode, index) => {
     if (!('facet' in node)) return groupTest(node, release, `${key}_${index}`, coverage);
     const facet = resolveFacet(node.facet)!;
+    if (facet.name === 'releaseTranslator') return translatorTest(node, coverage, `${key}_${index}`);
     const scoped = facet.path[0]?.kind === 'triple' && facet.path[0].predicate === coverage?.predicate;
     const target = scoped && !coverage?.legacy ? coverage!.entry : release;
     if (scoped && coverage?.legacy === 'v1') {
