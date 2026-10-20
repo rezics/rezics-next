@@ -13517,5 +13517,683 @@
       "result": "Documentation:13 tests/249 Markdown files PASS. Goal:AST and1/44 changed-path report guards PASS. Product TypeScript/lint/tests not selected for report-only diff.",
       "limits": "No new product unit/types/story/native/whole-guard run. The five-commits-behind harness notice was informational; no rebase or main mutation. Only completion receipt metadata was inserted after successful recorded checks."
     }
+  },
+  "boundedRecipeRecoveryFirstSourceReview": {
+    "observedAt": "2026-10-20T11:46:51.379910Z",
+    "reviewer": {
+      "worker": "G-2841",
+      "engine": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "independent": true,
+      "fallback": false,
+      "delegated": false
+    },
+    "authority": "Latest committed Decision, 2026-10-20T11:38:04Z: first source review of exactly G-2757 Recipe recovery 49c33b1c..09a9c1d587 and actual read-only callers. No earlier accepted source batch selected again; no nested agent, runtime or original outcome edit.",
+    "verdict": "SOURCE APPROVE: bounded three-file Recipe recovery delta; no new actionable introduced source defect identified.",
+    "acceptance": {
+      "sourceApproved": true,
+      "nativeOriginalFourCellRecoveryAccepted": false,
+      "classClosed": false,
+      "meaning": "The inspected source removes specific supplemental-read gates while preserving genuine identity, failures and complete-method Cook. Reused owner/component checks do not prove native RSC delivery, the original 5000ms outcome or native attempt count."
+    },
+    "pins": {
+      "base": "49c33b1c0b3333d084d6dd4e5853ccdb7ef10a79",
+      "candidate": "09a9c1d5874a753904bb20eb644d4fe7e4e9e3a3",
+      "candidateParent": "49c33b1c0b3333d084d6dd4e5853ccdb7ef10a79",
+      "branchAtPackaging": "goal/g-2757-recipe-current-main",
+      "workerReportHeadBeforeAppend": "8265f69e0033915ae7c629d13c969aa09c3af879",
+      "selectedChangedPaths": 3,
+      "scope": "Exactly this immutable parent-to-child diff; no moving-main or prior-wave product review."
+    },
+    "inputs": {
+      "packageReadOnlyOrigin": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2757/.temp/goal/recipe-recovery/current-main-09a9c1d587",
+      "localCopy": ".temp/goal/recipe-recovery-first-review/evidence",
+      "manifestSha256": "82c75d318e97b7fe324cead71ea1a5e848cedf7ad7fc6e80a3ea9d9ffb6cf194",
+      "handoffSha256": "5764e90b938489df094ea643c50581031d42093f5f5c45b17a341d1430665c65",
+      "candidatePatchSha256": "63dec6cc35a28ba52734252eaaadc24b68bd7dabf23f1bdd721d5b5fd9115435",
+      "candidatePatchEqualsGitFormatPatch": true,
+      "priorWaveCandidate": "81607425ebb10ab9182408409699ae3de9af7387 retained as historical evidence only; not selected for this verdict."
+    },
+    "inspectedChangedPaths": [
+      {
+        "path": "apps/web/features/work-page/recipe-reading-recorded-page.test.ts",
+        "before": {
+          "gitBlob": "9df291bba70919d4520c4d73e64bd16abaacebb1",
+          "sha256": "7dd6f97c0b8be65449f7fe9f763f3dbc63850bf0938e305f685775f1cc6201a5"
+        },
+        "after": {
+          "gitBlob": "65161f0888f8ab759f36c7a48558f31d1626faee",
+          "sha256": "1e7eff94799f4cb5fdd4742db8867f0b7a80db844ecf6ee128e9df5e4006ce2e"
+        }
+      },
+      {
+        "path": "apps/web/features/work-page/recipe-reading-recorded-page.tsx",
+        "before": {
+          "gitBlob": "8b36d7c01be38ca1e0c01077a0012108bee7895d",
+          "sha256": "1ef6ca2fead2b3a24f1862ed702911f9c11f7664dde41cf8eb9b6b6987d70095"
+        },
+        "after": {
+          "gitBlob": "a218056c0d80098968969453988c76bde833087e",
+          "sha256": "c398545da8f50ffc493a4dc8b7536fd9d536b207397f37326650ae5d989e27dd"
+        }
+      },
+      {
+        "path": "apps/web/features/work-page/recipe-recovery.stories.tsx",
+        "before": null,
+        "after": {
+          "gitBlob": "1fb87dc1e90ac95bc42df6b8d8d6c243932499e6",
+          "sha256": "eee6a0a3dde1fdc8c2f606b8239fac250c096153f09d3ed02c565a36327a0dc3"
+        }
+      }
+    ],
+    "inspectedMaterialDependencies": [
+      {
+        "path": "apps/web/features/work-page/work-views.tsx",
+        "gitBlob": "cd1e3094b6f005ed54daf30857e7068e50c693fd",
+        "sha256": "1e65dd739a5247d8961824c262aa0fd880d8839d0323982afeb5da3c50481092",
+        "unchangedFromBase": true,
+        "role": "Production recipePageHost and WorkFrameView/TypeExperience/WorkOverview dispatch; host uses the request reader and has no replay function props."
+      },
+      {
+        "path": "apps/web/features/work-page/read.ts",
+        "gitBlob": "9b8211c2ba87a9c159c4686de4a9f2992a42b2a0",
+        "sha256": "01248ed321e11c3b46a6d68d4c3f3b01602bd3d79ae0c8aefcf68ddf85d90f9d",
+        "unchangedFromBase": true,
+        "role": "Request-cached reader: eligible session Agent, bearer/public client and admitted Work header; no new identity inference."
+      },
+      {
+        "path": "apps/web/features/work-page/recipe-reading-recorded-page.ts",
+        "gitBlob": "d4071bdc400a7e177ee40d7b91725a84b19ec337",
+        "sha256": "76b1423f3c89c7e952efc45148c756e89208610360e7713cecd34d4bb5a70d99",
+        "unchangedFromBase": true,
+        "role": "Unchanged supplied-href method reader, actor/cursor/servings selection, instruction hydration, nullable/error reads and native-author owner."
+      },
+      {
+        "path": "apps/web/features/entity-page/experience.ts",
+        "gitBlob": "22ef2165b46470fd54d3cadef98c3f2eb321ece1",
+        "sha256": "5aa0fe7208563c015a9c1aff1d5b4742e0f315390b596c0a555fc727881d06c9",
+        "unchangedFromBase": true,
+        "role": "Consumes supplied registry/section href; fallback presentation does not fabricate a Recipe destination."
+      },
+      {
+        "path": "apps/web/features/work-page/work-frame.tsx",
+        "gitBlob": "e37a1cc6e224d42825cabf6a6b670c0b7a851879",
+        "sha256": "7564b24a3c5bd526234af1303f375b51f737f669bbd23d97a76c74bedf5552fd",
+        "unchangedFromBase": true,
+        "role": "Resolved frame prop contract, stable shelf/ReaderActionsProvider, primary-action slot, authority/menu and one existing WorkSources owner."
+      },
+      {
+        "path": "apps/web/features/work-page/work-sources.tsx",
+        "gitBlob": "806aa2cd690e05581823e3627da0800877a692c5",
+        "sha256": "c3ce0cce5e7e28555332297e3cfa537edf2d5436f7ef33bacd2371a758e22160",
+        "unchangedFromBase": true,
+        "role": "Existing pageUrl/statement cursor continuity, retained rights, cover attribution, evidence and page-end source contract."
+      },
+      {
+        "path": "apps/web/features/work-page/types/recipe.tsx",
+        "gitBlob": "093137939ab3ff24b2b7d84a4be4bd4804bb487f",
+        "sha256": "104aea0e2ccf65c19026872ad6c2dbe2f6283e3ab9a8c0aa0d42693d143cc097",
+        "unchangedFromBase": true,
+        "role": "Unchanged native recipe rendering, failure, resource/structure/revision-bound Cook, readiness events, generation-isolated scale/continuation and reader scope."
+      },
+      {
+        "path": "apps/web/features/work-page/types/actions.tsx",
+        "gitBlob": "28de595a8b64092721295f00fdaac9a37566f72c",
+        "sha256": "fed931416455739e84d5d467f65ae9923d0d0febecd06e5d2d7c11d4ef15f73e",
+        "unchangedFromBase": true,
+        "role": "Unchanged canCook and exact recipeHref readiness event consumer; no independent permission or retry policy."
+      },
+      {
+        "path": "apps/web/features/recipe-editor/instructions.ts",
+        "gitBlob": "206eaf6f163ad30a478988c57608e6228cb892f5",
+        "sha256": "0d3dbb42e69a7dd28889600a6ced41ac5e6516fe4a28dc67ffa96d265e2995de",
+        "unchangedFromBase": true,
+        "role": "Complete method predicate: no continuation, actual loaded native document/text/recording or legacy qualifier; exact selectors retained."
+      },
+      {
+        "path": "apps/web/features/recipe-editor/instruction-reads.ts",
+        "gitBlob": "f8bcae1fee8648ed0d519be184ffac926e7f30aa",
+        "sha256": "4711fb93d072745f6481f614e823f9532a2e9028fee0754c967c2a5b0dbbf59f",
+        "unchangedFromBase": true,
+        "role": "Exact selected revision and caller actingSubject for instruction provenance/derivations/references/media; refusals retained."
+      },
+      {
+        "path": "apps/web/features/recipe-editor/instruction-recorded-fixture.ts",
+        "gitBlob": "35478b2b83dccc6aac9695bc11a6ca518ad095f5",
+        "sha256": "9a19f9b4b206d902e6ff6dc9ee8cc07f5336d5c41554621caa17b0a63b51ae5a",
+        "unchangedFromBase": true,
+        "role": "Captured visitor/owner Work, supplied projections and native instruction transport; actual recording asset binding."
+      },
+      {
+        "path": "apps/web/features/recipe-editor/resource-page.tsx",
+        "gitBlob": "2759911eba1810c60fe6023ae0603aec34c1dc43",
+        "sha256": "6f61f2d926a6f947a03103638a85c2f8d374f8815abfee628bcea3c1ddf25bff",
+        "unchangedFromBase": true,
+        "role": "Existing client editor caller still uses unchanged RecipeRegionView props/content and supplied edit authority/export behavior."
+      },
+      {
+        "path": "apps/web/features/work-page/anime-hub-recorded-page.ts",
+        "gitBlob": "302eb3ea165b369b61aeb4a2ef51af6d07b04619",
+        "sha256": "c5059618f1b41bca2565f42f2d1b9c45dc0779cb5794b81b3573ee2fb21a93a5",
+        "unchangedFromBase": true,
+        "role": "Existing same-object projection, linked statements, reader-state denial semantics, Parts and realizations reads."
+      },
+      {
+        "path": "apps/web/features/work-levels/previews.tsx",
+        "gitBlob": "aeb11e78c774a6d4cf6c4ade3c177888a5cad1fd",
+        "sha256": "d5de5a427f34e4f582bef42aae65cb882537f508995bff6b4f23e931993d53b0",
+        "unchangedFromBase": true,
+        "role": "Existing Parts/wholes/connections/availability rendering preserves failed Loaded results instead of substituting empty lists."
+      },
+      {
+        "path": "apps/web/features/work-page/credits.tsx",
+        "gitBlob": "3547f430c4d037214cf9272bca864be078e92dc3",
+        "sha256": "72809353cf4a2146599dada40d2347413b42156b3d0fe4492e17748386b9b867",
+        "unchangedFromBase": true,
+        "role": "Existing named Credits region, role preservation, partial failures, continuation disclosure and skeleton used by new slots."
+      },
+      {
+        "path": "apps/web/features/work-page/region.tsx",
+        "gitBlob": "e91e187a1a9ddde408a399a042fda3ed6546c80b",
+        "sha256": "7360ed5a56c4d27b3156302efdb1a5c21167915f759e84deeee080ff18087e9c",
+        "unchangedFromBase": true,
+        "role": "Existing failure states and retry owner; missing is explicit status, unavailable/denied remain failures."
+      },
+      {
+        "path": "apps/web/features/work-page/retry-button.tsx",
+        "gitBlob": "fdce17cfa966a582ded3179753f2b5a546b36174",
+        "sha256": "fa3ccf6b30c00d924caf78b4401aa902b80262bf2ac0f206c325363f4378006e",
+        "unchangedFromBase": true,
+        "role": "Existing router.refresh transition; unchanged, no added automatic retry layer."
+      },
+      {
+        "path": "apps/web/features/work-page/types.ts",
+        "gitBlob": "d8d9e31adf25b2e899b819fec37923f3d60d1723",
+        "sha256": "9f7890fd5134e88d9a43bd23cd1bd95d4ec4340206c43960168c08a8429240fd",
+        "unchangedFromBase": true,
+        "role": "WorkHeader, RecipeWorkPage and WorkText remain aliases of actual owner operation results."
+      },
+      {
+        "path": "services/main/src/routes/recipes.ts",
+        "gitBlob": "b5dadc6b09dcc5e1b0362703d1d65f0b716d31e2",
+        "sha256": "3bb77fd67aa855e5ba5642870ae3b31b0c6aa37f384822b608d13e807d63d055",
+        "unchangedFromBase": true,
+        "role": "Read-only GET /v1/recipes/works/:id owner schema: nullable page, Structure/revision, supplied instructions, bounded cursor and existing errors. No API delta."
+      }
+    ],
+    "sourceObservations": [
+      {
+        "principle": "Exact Work and supplied destination establish the method; supplemental identity does not.",
+        "source": "recipe-reading-recorded-page.tsx:229-234,305-311; work-views.tsx:92-103,232,410,443",
+        "disposition": "Frame/overview consume the already-admitted Work and the resource projection read for the same id. workExperience supplies section.href. Method resource stays work.id, not Structure id/title/provider inference. Projection failure remains failure; absent section supplies unavailable method and false Cook. No fabricated navigation introduced."
+      },
+      {
+        "principle": "Preserve captured session and reader state.",
+        "source": "recipe-reading-recorded-page.tsx:68-75,176,196-198,220-224,237-257; read.ts:45-52",
+        "disposition": "Production host retains the request-cached Main client, eligible actingSubject and signedIn state. React caches are scoped to the request and keyed by client, actor and id/href; no module-global result cache is added. Seed, actingSubject, workRef, rating context/mainVersion and return address remain passed through the same owners. A denied seed is not replaced with invented saved state. Browser replay-only readPage/recordingFetch are absent from production recipePageHost, so new optional replay wiring does not serialize a production closure."
+      },
+      {
+        "principle": "Method and sibling completion remain independent within the existing outer frame.",
+        "source": "recipe-reading-recorded-page.tsx:176-211,225-234,259-290,305-422",
+        "disposition": "recipeRegion awaits only the actual initial method. Notes and edit authority have separate Suspense slots. Credits, rating line/stats, method facts and primary action stream in their existing ReactNode slots. Overview no longer awaits an aggregate of all siblings before returning: method, availability, Parts/wholes/connections, wiki, populations/scope, ratings, classification, discussion, adoption, recommendations and author shelf each settle under their corresponding boundary. Group-internal dependencies still wait together (for example Parts/wholes/connections and ratings/scope); no claim of independence inside each such group."
+      },
+      {
+        "principle": "Failures stay failures and notes keep the supplied language.",
+        "source": "recipe-reading-recorded-page.tsx:178-191,195-208,306-317,377-422; region.tsx; work-levels/previews.tsx",
+        "disposition": "503/denied/budget/etc. method answers remain RecipeReadFailure with existing RetryButton, not a null/empty successful recipe. A genuine nullable method remains nullable with canCook false. Only missing notes are omitted; other note failures now have their own explicit RegionFailure. Successful notes retain body and owner text.data.language, selected with work.mainVersion and work.selectedLanguage. Edit link still depends on supplied projection actions and mayEdit. Parts 404 and other Loaded failures continue to existing views unchanged. Credits roles and source selection are retained without making credit failure a method identity failure."
+      },
+      {
+        "principle": "Cook requires the complete actual selected method.",
+        "source": "recipe-reading-recorded-page.tsx:249-251,270-271,287-290; instructions.ts:20-41; types/recipe.tsx:368-418; types/actions.tsx:18-42",
+        "disposition": "Pending/failed/null method keeps Cook disabled; success uses the unchanged recipeMethodReady predicate. Available selection metadata alone, incomplete continuation or unavailable instruction cannot enable Cook. Existing content/representation revision hydration, legacy qualifier handling, selected Work resource, Structure/revision-bound Cook, scale/continuation generation isolation and exact recipeHref readiness events are consumed unchanged. No native instruction/qualifier/timer/media rendering was rewritten."
+      },
+      {
+        "principle": "A method failure or later supplemental arrival must preserve the task and shelf.",
+        "source": "recipe-reading-recorded-page.tsx:202-211,252-296; work-frame.tsx:122-174; recipe-recovery.stories.tsx:104-138",
+        "disposition": "Supplied Work title/type and the ReaderActionsProvider/ShelfButton stay in the existing outer frame; method/credits/action slots do not move the shelf under a failure boundary. The lower-tier signed-in test retains the actual seed, actor and rating target. Visitor story assertions retain the same title and Want to cook DOM nodes across the composed refresh and exercise enabled Cook plus Escape/focus return. That story snapshot replacement is component evidence only."
+      },
+      {
+        "principle": "Shared existing callers and source disclosure keep their owner contracts.",
+        "source": "recipe-reading-recorded-page.tsx:161-170,252-285; recipe-editor/resource-page.tsx:14-22; work-frame.tsx; work-sources.tsx",
+        "disposition": "RecipeRegionView and its editor preview props are unchanged. The server recipeRegion owns only its new supplemental slots; it supplies actual authority rather than frontend edit policy. Header/menu/resource, facts cursor/href/obligations, selected art, credits, rights and the existing single page-end WorkSources path are retained. No shared primitive, API, schema, converter or source inventory is edited by this candidate."
+      },
+      {
+        "principle": "Keep the native retry bound intact without inferring it from direct calls.",
+        "source": "Unchanged recipe-reading-recorded-page.ts:65-81; retry-button.tsx; recipe-recovery.stories.tsx:15-77",
+        "disposition": "recipePageReader still has only its existing one fresh read for the specific cancelled/unavailable answer, retaining href/query/actor; the ordinary UI RetryButton remains router.refresh. No retry/budget/transport owner changes or new automatic loop. The direct unit attempt count and StoryRouteContext recomposition cannot establish the original at-most-three-native-attempt contract."
+      }
+    ],
+    "actionableFindings": [],
+    "findingClassification": {
+      "sourceInference": "Independent source inspection supports this exact bounded source approval. The still-resolved outer-frame inputs are a known shared-owner limit, not a reproduced completed-payload defect or a new introduced finding.",
+      "newReproducedAssertionFailure": "None: no new product test or runtime was run in this review.",
+      "reusedOwnerTestPremiseFailure": "Job 9bbc4ad2 initially failed only the new test expecting unhydrated selection metadata to satisfy recipeMethodReady; the production predicate correctly returned false. The author corrected that newly authored test via the captured production reader. Original owner tests and all original acceptance assertions are retained. The failed run is not erased.",
+      "newSetupFailure": "None affecting the review. The new story has no base blob because it is added; source extraction was adjusted accordingly. No runtime setup was attempted.",
+      "historicalNativeFailure": "All four V3 failures below remain failed. Separate the desktop-network healthy-before-fault premise failure from the three reached original recovered-method assertion failures; none was reproduced against 09a9c1d587 here."
+    },
+    "sourceAndEvidenceBinding": {
+      "integrityReceipt": ".temp/goal/recipe-recovery-first-review/integrity.json",
+      "verifiedPins": [
+        {
+          "path": "apps/web/features/work-page/recipe-reading-recorded-page.test.ts",
+          "blob": "65161f0888f8ab759f36c7a48558f31d1626faee",
+          "sha256": "1e7eff94799f4cb5fdd4742db8867f0b7a80db844ecf6ee128e9df5e4006ce2e",
+          "unchangedFromBase": false
+        },
+        {
+          "path": "apps/web/features/work-page/recipe-reading-recorded-page.tsx",
+          "blob": "a218056c0d80098968969453988c76bde833087e",
+          "sha256": "c398545da8f50ffc493a4dc8b7536fd9d536b207397f37326650ae5d989e27dd",
+          "unchangedFromBase": false
+        },
+        {
+          "path": "apps/web/features/work-page/recipe-recovery.stories.tsx",
+          "blob": "1fb87dc1e90ac95bc42df6b8d8d6c243932499e6",
+          "sha256": "eee6a0a3dde1fdc8c2f606b8239fac250c096153f09d3ed02c565a36327a0dc3",
+          "unchangedFromBase": false
+        },
+        {
+          "path": "apps/web/features/work-page/recipe-reading-recorded-page.ts",
+          "blob": "d4071bdc400a7e177ee40d7b91725a84b19ec337",
+          "sha256": "76b1423f3c89c7e952efc45148c756e89208610360e7713cecd34d4bb5a70d99",
+          "unchangedFromBase": true
+        },
+        {
+          "path": "apps/web/features/work-page/work-frame.tsx",
+          "blob": "e37a1cc6e224d42825cabf6a6b670c0b7a851879",
+          "sha256": "7564b24a3c5bd526234af1303f375b51f737f669bbd23d97a76c74bedf5552fd",
+          "unchangedFromBase": true
+        },
+        {
+          "path": "apps/web/features/work-page/work-sources.tsx",
+          "blob": "806aa2cd690e05581823e3627da0800877a692c5",
+          "sha256": "c3ce0cce5e7e28555332297e3cfa537edf2d5436f7ef33bacd2371a758e22160",
+          "unchangedFromBase": true
+        },
+        {
+          "path": "apps/web/features/work-page/types/recipe.tsx",
+          "blob": "093137939ab3ff24b2b7d84a4be4bd4804bb487f",
+          "sha256": "104aea0e2ccf65c19026872ad6c2dbe2f6283e3ab9a8c0aa0d42693d143cc097",
+          "unchangedFromBase": true
+        },
+        {
+          "path": "apps/web/features/work-page/types/actions.tsx",
+          "blob": "28de595a8b64092721295f00fdaac9a37566f72c",
+          "sha256": "fed931416455739e84d5d467f65ae9923d0d0febecd06e5d2d7c11d4ef15f73e",
+          "unchangedFromBase": true
+        },
+        {
+          "path": "apps/web/features/recipe-editor/instructions.ts",
+          "blob": "206eaf6f163ad30a478988c57608e6228cb892f5",
+          "sha256": "0d3dbb42e69a7dd28889600a6ced41ac5e6516fe4a28dc67ffa96d265e2995de",
+          "unchangedFromBase": true
+        },
+        {
+          "path": "apps/web/features/work-page/anime-hub-recorded-page.ts",
+          "blob": "302eb3ea165b369b61aeb4a2ef51af6d07b04619",
+          "sha256": "c5059618f1b41bca2565f42f2d1b9c45dc0779cb5794b81b3573ee2fb21a93a5",
+          "unchangedFromBase": true
+        },
+        {
+          "path": "apps/web/features/work-page/types.ts",
+          "blob": "d8d9e31adf25b2e899b819fec37923f3d60d1723",
+          "sha256": "9f7890fd5134e88d9a43bd23cd1bd95d4ec4340206c43960168c08a8429240fd",
+          "unchangedFromBase": true
+        },
+        {
+          "path": "apps/web/features/recipe-editor/instruction-recorded-fixture.ts",
+          "blob": "35478b2b83dccc6aac9695bc11a6ca518ad095f5",
+          "sha256": "9a19f9b4b206d902e6ff6dc9ee8cc07f5336d5c41554621caa17b0a63b51ae5a",
+          "unchangedFromBase": true
+        },
+        {
+          "path": "services/main/src/routes/recipes.ts",
+          "blob": "b5dadc6b09dcc5e1b0362703d1d65f0b716d31e2",
+          "sha256": "3bb77fd67aa855e5ba5642870ae3b31b0c6aa37f384822b608d13e807d63d055",
+          "unchangedFromBase": true
+        },
+        {
+          "path": "yarn.lock",
+          "blob": "e70dcbe4159d3fcab2585962a1cf3688937eb0e5",
+          "sha256": "026c93ddc3085e43b1ff6727a42f7c55b03a03cc1aa4c11cbf57438ce5b9d391",
+          "unchangedFromBase": true
+        },
+        {
+          "path": "package.json",
+          "blob": "4aed970288778fefd485dd2e401e6fdf458f7a2d",
+          "sha256": "487061c605dc753c9e60c657ecaa4dd7cf417a213ac65c2e906380367b98acaf",
+          "unchangedFromBase": true
+        },
+        {
+          "path": "apps/web/package.json",
+          "blob": "788bd74341217c9fb7f655e00ccd902d64210f5b",
+          "sha256": "f0b29308365ed08148f73ba83b3c5f6c5b5e890c1df2d547ece26b541ad7965f",
+          "unchangedFromBase": true
+        },
+        {
+          "path": "tests/qa/fixtures/outcomes/recipes/instructions-in-any-form.json",
+          "blob": "2f2e3cc46a6f4c4d1409863bc636627f8b7e59ea",
+          "sha256": "4cc931bc1ceff0f764642b2ee5c135dabb6c01469a47fa3f985b8cedeb338930",
+          "unchangedFromBase": true
+        },
+        {
+          "path": "tests/qa/fixtures/outcomes/recipes/read-a-recipe.json",
+          "blob": "11d2a4aa4db81ed1d2fde2f7b89497b834caa8c0",
+          "sha256": "cf1f7464f1072741d5178dcd5c88978c28bd9e4c5a89e217562d2946fb095893",
+          "unchangedFromBase": true
+        },
+        {
+          "path": "tests/fixtures/recipes/original-tomato-method.wav",
+          "blob": "7aa50e47f53680fc0b0bf480c9b3693582b1f378",
+          "sha256": "9c611d37e4fad860192b9e2ad1b2627a1e56746b5b003d6fb056271f276d6ead",
+          "unchangedFromBase": true
+        }
+      ],
+      "verifiedScreenshotCount": 3,
+      "verifiedLogCount": 8,
+      "originalEvidence": [
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/catalogue-recipe-recovery-v3-first-failures.json",
+          "sha256": "fdc4328786fe617f3d9e1d15ec677e066d7ce05801d836a7fc950b338dd5876a",
+          "readOnly": true
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2774/.temp/goal/recipe-recovery-original-v3/run-1792424632293/run-receipt.json",
+          "sha256": "a2cef0111ecb609721d065d3106d9a075c5be257f860d135c35e0a26e1ea4f91",
+          "readOnly": true
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2774/.temp/goal/recipe-recovery-original-v3/original-callback.ts.txt",
+          "sha256": "17989f3e7941a56341c979670e02741de12c064664af7fc15ec849957a95321e",
+          "readOnly": true
+        }
+      ],
+      "priorOwnerTestBodiesPreserved": true,
+      "retainedTestRegionSha256BothPins": "9657694acc090a2e1afaf00331f1054f8bd1cbf34163480dd26248a4fa3b677a",
+      "bindingLimit": "Checks and PNGs are reused from the exact supplied package, whose source pins, fixtures, asset, lockfile and log/image hashes were independently compared with Git/files. Owner packaging says product and story source stayed unchanged after the earlier three-story run; only the new unit premise was corrected before the final 15-test run. Logs do not provide a separate runner-generated full-tree digest. No new execution or native source attestation is claimed."
+    },
+    "reusedChecks": [
+      {
+        "job": "9bbc4ad2-b667-45b9-a49c-cb79f6269467",
+        "step": 1,
+        "result": "failed unit; stories passed",
+        "unit": "14 pass / 1 fail / 334 assertions; new readiness test incorrectly expected unhydrated selection metadata to be a loaded method. Corrected only this new test by using the captured production reader.",
+        "stories": "3 pass / 0 fail",
+        "qa": "20261019t170449-b3d108",
+        "warning": "Unresolved optimizeDeps include @storybook/react-dom-shim was nonfatal; actual all-three-story PASS retained. Harness reported dependency change and task install in own worktree.",
+        "laterSequenceSteps": "not run"
+      },
+      {
+        "job": "80768c69-cc4d-4a3a-a9d1-7b1e385d2128",
+        "step": 1,
+        "result": "pass",
+        "command": "bun scripts/goal/goalctl.ts test apps/web/features/work-page/recipe-reading-recorded-page.test.ts",
+        "tests": 15,
+        "assertions": 343
+      },
+      {
+        "job": "80768c69-cc4d-4a3a-a9d1-7b1e385d2128",
+        "step": 2,
+        "result": "pass",
+        "command": "task goal:type-files -- --project apps/web/tsconfig.json apps/web/features/work-page/recipe-reading-recorded-page.ts apps/web/features/work-page/recipe-reading-recorded-page.tsx apps/web/features/work-page/recipe-reading-recorded-page.test.ts apps/web/features/work-page/recipe-recovery.stories.tsx",
+        "filesChecked": 1884,
+        "durationSeconds": 10.56
+      },
+      {
+        "job": "80768c69-cc4d-4a3a-a9d1-7b1e385d2128",
+        "step": 3,
+        "result": "pass",
+        "command": "task goal -- check --only lint,guards",
+        "lint": "pass 1.3s",
+        "ast": "pass 0.3s",
+        "guards": "pass 17.0s; 10/45 selected for three changed paths"
+      },
+      {
+        "job": "ab09ff18-7cd6-41cb-a5e0-64f04b2828ae",
+        "result": "pass",
+        "command": "git commit",
+        "commit": "09a9c1d5874a753904bb20eb644d4fe7e4e9e3a3"
+      }
+    ],
+    "screenshotsActuallyViewed": [
+      {
+        "path": ".temp/goal/recipe-recovery/current-main-09a9c1d587/screenshots/UnavailableMethod.png",
+        "source": ".artifacts/qa/20261019t170449-b3d108/story-screenshots/apps-web-features-work-page-recipe-recovery.stories.tsx/UnavailableMethod.png",
+        "sha256": "3ed50368499b6a83c5245448bc451bdfcb0c7fcd94473a534e93a4baf3616b63",
+        "viewed": true,
+        "observation": "1280x860: exact captured title/Recipe identity, Want to cook, disabled Cook, explicit Recipe failure and Retry; independent Parts 404 remains visible; held credit skeleton. No empty-method substitution.",
+        "reviewerViewed": true,
+        "localPath": ".temp/goal/recipe-recovery-first-review/evidence/screenshots/UnavailableMethod.png"
+      },
+      {
+        "path": ".temp/goal/recipe-recovery/current-main-09a9c1d587/screenshots/RecoveredMethod.png",
+        "source": ".artifacts/qa/20261019t170449-b3d108/story-screenshots/apps-web-features-work-page-recipe-recovery.stories.tsx/RecoveredMethod.png",
+        "sha256": "91cb8fdea1e68c5c715aa9174da68ec9e3735b21e48c1b613d184f931865c320",
+        "viewed": true,
+        "observation": "1280x860: exact same captured title and Want to cook remain mounted (play assertions); genuine Stir tomato method, loaded native selections and enabled focused Cook. Dialog opens the real method, Escape closes/refocuses Cook (play assertions). Servings/Yield are visible in both header and section in this composition.",
+        "reviewerViewed": true,
+        "localPath": ".temp/goal/recipe-recovery-first-review/evidence/screenshots/RecoveredMethod.png"
+      },
+      {
+        "path": ".temp/goal/recipe-recovery/current-main-09a9c1d587/screenshots/RecoveredMethodPhone.png",
+        "source": ".artifacts/qa/20261019t170449-b3d108/story-screenshots/apps-web-features-work-page-recipe-recovery.stories.tsx/RecoveredMethodPhone.png",
+        "sha256": "82cd8abac0f7c26d423217b1f2a03110aa8f057498a7e15abc0b861662e634ef",
+        "viewed": true,
+        "observation": "390x844: real method in one column, readable wrapping, On this page control, enabled sticky Cook; no horizontal overflow by assertion. Sticky action occupies part of the lower viewport; no assistive-technology or complete occlusion audit claimed.",
+        "reviewerViewed": true,
+        "localPath": ".temp/goal/recipe-recovery-first-review/evidence/screenshots/RecoveredMethodPhone.png"
+      }
+    ],
+    "visualObservations": "Viewed all three actual supplied PNGs: explicit retryable method failure and independent Parts 404; recovered native Stir tomato method with enabled/focused Cook; 390px one-column method with sticky Cook. Servings/Yield appear in both header and body, and the sticky phone action occupies lower viewport space. Those inherited/shared presentation limits were already disclosed by the package; no new layout change, AT audit or complete occlusion proof is claimed.",
+    "originalAcceptancePreserved": {
+      "resource": "01a1532a-2e60-7260-9f3a-d6aa69f61c4b",
+      "method": "Il filetto pestatelo nel mortaio e passatelo dallo staccio.",
+      "callbackUnchanged": true,
+      "originalAssertions": 18,
+      "expectTimeoutMs": 5000,
+      "retryContract": "at most 3 native attempts, unchanged",
+      "ownerTestBodiesUnchanged": true,
+      "ownerTestBodiesSha256": "15bdce8606a0b92e670195f28630647b5b811e51d976aa98dd4572f47d378c9b",
+      "v3": "All four original cells failed. Desktop-network initial healthy 503 occurred before fault injection and never reached recovery. Other three reached recovered-method assertion and failed in unchanged 5000ms. Initial genuine methods in those three are not recovery proof.",
+      "oldFrontend": "05c9534e958f0c67de2e5662281ef22c2864fe95",
+      "retainedBackendPort": 46775,
+      "declaredBackend": "4a616b079a364b8f5ac7fe4d4ff56bc99849e766",
+      "backendPinIndependentlyAttestedByV3Runner": false,
+      "nativeCallbackRunInThisContinuation": false,
+      "recoveredMethodBearingRscObservedInThisContinuation": false,
+      "references": [
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/catalogue-recipe-recovery-v3-first-failures.json",
+          "sha256": "fdc4328786fe617f3d9e1d15ec677e066d7ce05801d836a7fc950b338dd5876a",
+          "readOnly": true
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2774/.temp/goal/recipe-recovery-original-v3/run-1792424632293/run-receipt.json",
+          "sha256": "a2cef0111ecb609721d065d3106d9a075c5be257f860d135c35e0a26e1ea4f91",
+          "readOnly": true
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2774/.temp/goal/recipe-recovery-original-v3/original-callback.ts.txt",
+          "sha256": "17989f3e7941a56341c979670e02741de12c064664af7fc15ec849957a95321e",
+          "readOnly": true
+        }
+      ],
+      "originalCallbackSha256Verified": "17989f3e7941a56341c979670e02741de12c064664af7fc15ec849957a95321e",
+      "allFourV3CellsRemainFailed": true,
+      "cells": [
+        {
+          "cell": "desktop-network",
+          "status": "failed",
+          "classification": "healthy-read qualification failure; fault not armed; recovery not reached",
+          "recoveredMethodAssertionReached": false,
+          "timeoutMs": 5000,
+          "firstFailure": {
+            "originalLine": null,
+            "runnerLine": 32,
+            "location": {
+              "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2774/.temp/goal/recipe-recovery-original-v3/control.ts",
+              "column": 7,
+              "line": 21
+            },
+            "message": "AssertionError: AssertionError [ERR_ASSERTION]: The genuine initial Recipe read must have traversed this relay successfully\n\n   at control.ts:21\n\n  19 |     catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }\n  20 |     if (answer?.id === id) {\n> 21 |       assert(!answer.error, answer.error ?? 'Owned relay command failed');\n     |       ^\n  22 |       return answer.reads;\n  23 |     }\n  24 |     await new Promise(resolve => setTimeout(resolve, 10));\n    at relayControl (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2774/.temp/goal/recipe-recovery-original-v3/control.ts:21:7)\n    at /home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2774/.temp/goal/recipe-recovery-original-v3/recipe-recovery.e2e.ts:32:5"
+          },
+          "diagnosis": "Both healthy real Recipe responses503,139bytes; relay arm rejected. Recovery assertions did not run."
+        },
+        {
+          "cell": "desktop-unavailable",
+          "status": "failed",
+          "classification": "original recovery assertion failure",
+          "recoveredMethodAssertionReached": true,
+          "timeoutMs": 5000,
+          "firstFailure": {
+            "originalLine": 461,
+            "runnerLine": 50,
+            "location": {
+              "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2774/.temp/goal/recipe-recovery-original-v3/recipe-recovery.e2e.ts",
+              "line": 50,
+              "column": 26
+            },
+            "message": "Error: expect(locator).toContainText(expected) failed\n\nLocator: getByRole('region', { name: 'Recipe', exact: true })\nExpected substring: \"Il filetto pestatelo nel mortaio e passatelo dallo staccio.\"\nReceived string:    \"RecipeCooking instructions are not available.RecipeThis part of the page could not load. The rest is unaffected.Retrying…\"\nTimeout: 5000ms\n\nCall log:\n  - Expect \"toContainText\" getByRole('region', { name: 'Recipe', exact: true }) with timeout 5000ms\n  - waiting for getByRole('region', { name: 'Recipe', exact: true })\n    13 × locator resolved to <section aria-labelledby=\"recipe-experience\" class=\"grid min-w-0 content-start gap-4\">…</section>\n       - unexpected value \"RecipeCooking instructions are not available.RecipeThis part of the page could not load. The rest is unaffected.Retrying…\"\n"
+          },
+          "diagnosis": "Recovered Recipe GET starts+8312ms, after expect failure+5034ms and observer stop+5183ms; teardown yields socket hang up, zero body. No recovered native200."
+        },
+        {
+          "cell": "phone-network",
+          "status": "failed",
+          "classification": "original recovery assertion failure",
+          "recoveredMethodAssertionReached": true,
+          "timeoutMs": 5000,
+          "firstFailure": {
+            "originalLine": 461,
+            "runnerLine": 50,
+            "location": {
+              "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2774/.temp/goal/recipe-recovery-original-v3/recipe-recovery.e2e.ts",
+              "line": 50,
+              "column": 26
+            },
+            "message": "Error: expect(locator).toContainText(expected) failed\n\nLocator: getByRole('region', { name: 'Recipe', exact: true })\nExpected substring: \"Il filetto pestatelo nel mortaio e passatelo dallo staccio.\"\nReceived string:    \"RecipeCooking instructions are not available.RecipeThis part of the page could not load. The rest is unaffected.Retrying…\"\nTimeout: 5000ms\n\nCall log:\n  - Expect \"toContainText\" getByRole('region', { name: 'Recipe', exact: true }) with timeout 5000ms\n  - waiting for getByRole('region', { name: 'Recipe', exact: true })\n    14 × locator resolved to <section aria-labelledby=\"recipe-experience\" class=\"grid min-w-0 content-start gap-4\">…</section>\n       - unexpected value \"RecipeCooking instructions are not available.RecipeThis part of the page could not load. The rest is unaffected.Retrying…\"\n"
+          },
+          "diagnosis": "Recovered Recipe GET starts+6224ms;12820-byte200 body completes+7796ms. Original expect fails+5022ms; observer stops+5093ms. RSC200 headers+1193ms do not establish completed payload."
+        },
+        {
+          "cell": "phone-unavailable",
+          "status": "failed",
+          "classification": "original recovery assertion failure",
+          "recoveredMethodAssertionReached": true,
+          "timeoutMs": 5000,
+          "firstFailure": {
+            "originalLine": 461,
+            "runnerLine": 50,
+            "location": {
+              "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2774/.temp/goal/recipe-recovery-original-v3/recipe-recovery.e2e.ts",
+              "line": 50,
+              "column": 26
+            },
+            "message": "Error: expect(locator).toContainText(expected) failed\n\nLocator: getByRole('region', { name: 'Recipe', exact: true })\nExpected substring: \"Il filetto pestatelo nel mortaio e passatelo dallo staccio.\"\nReceived string:    \"RecipeCooking instructions are not available.RecipeThis part of the page could not load. The rest is unaffected.Retrying…\"\nTimeout: 5000ms\n\nCall log:\n  - Expect \"toContainText\" getByRole('region', { name: 'Recipe', exact: true }) with timeout 5000ms\n  - waiting for getByRole('region', { name: 'Recipe', exact: true })\n    14 × locator resolved to <section aria-labelledby=\"recipe-experience\" class=\"grid min-w-0 content-start gap-4\">…</section>\n       - unexpected value \"RecipeCooking instructions are not available.RecipeThis part of the page could not load. The rest is unaffected.Retrying…\"\n"
+          },
+          "diagnosis": "No recovered Recipe GET recorded. RSC200 headers+689ms; no loadingFinished/body saved before observer stop. Named Recipe remains failure/Retrying with Cook disabled."
+        }
+      ],
+      "limits": "No completed method-bearing recovery RSC or post-completed-payload UI commit failure was established by V3. A native 200 or initial genuine method is not recovered UI acceptance. Keep original 18 assertions, 5000ms deadline and at-most-three-native-attempt requirement unchanged."
+    },
+    "existingOwnerDependencies": [
+      {
+        "owner": "Root / existing shared WorkFrame owner; G-2757 retains any new Recipe source fix",
+        "source": "recipe-reading-recorded-page.tsx:237-242 and work-frame.tsx:56-94",
+        "dependency": "Outer frame still awaits resolved readerState, showcase, linked facts and signed-in rating target. No fake unsaved state, dropped facts/failure or wrong rating target is an acceptable bypass. This source limit predates the bounded fix and is not evidence of a completed method-payload UI defect.",
+        "next": "Assess this existing shared typed contract only against the separately admitted native evidence; do not reopen accepted source reviews or create a new waiver."
+      },
+      {
+        "owner": "Root / retained G-2791 backend/operator",
+        "dependency": "Desktop-network V3 healthy initial method read returned 503 before fault injection; cause is not isolated by this source review.",
+        "next": "Retain genuine healthy-200 qualification and coordinate the existing premise; no fabricated success or weakened assertion."
+      },
+      {
+        "owner": "G-2774, through manager compatible composition and separate finite runtime admission",
+        "dependency": "Actual original desktop/phone × network/unavailable recovery, complete recovered RSC, header/shelf identity and Cook, 5000ms and native attempt bound remain open.",
+        "next": "After compatible composition of this exact reviewed delta with existing accepted dependencies, execute the unchanged original four-cell proof on retained genuine data with actual frontend/backend pins. This review does not authorize or start that runtime."
+      }
+    ],
+    "checksActuallyExecuted": [
+      {
+        "kind": "read-only source inspection",
+        "command": "git diff --unified=5 49c33b1c0b3333d084d6dd4e5853ccdb7ef10a79 09a9c1d5874a753904bb20eb644d4fe7e4e9e3a3 -- apps/web/features/work-page/recipe-reading-recorded-page.tsx; exact test/story diff and git show/git grep for listed callers",
+        "result": "PASS: exact three changed paths and read-only call chains inspected; no product edits."
+      },
+      {
+        "kind": "read-only provenance inspection",
+        "command": "Local Python hashlib/subprocess integrity inspection of supplied package against immutable Git blobs and existing files",
+        "result": "PASS: 19 pinned source/dependency/fixture entries, exact git format-patch bytes, 3 images, 8 logs and all 3 original callback/V3 reference digests; retained original unit test region byte-equal."
+      },
+      {
+        "kind": "actual image inspection",
+        "command": "view_image on UnavailableMethod.png, RecoveredMethod.png, RecoveredMethodPhone.png",
+        "result": "All three actual supplied images viewed; observations and limits recorded above."
+      },
+      {
+        "kind": "recorded Task report checks",
+        "job": "job:faf927a1-52ca-43b1-813b-faa11dc684e4",
+        "commands": [
+          {
+            "command": "task docs:check",
+            "exit": 0,
+            "log": ".temp/goal/jobs/faf927a1-52ca-43b1-813b-faa11dc684e4.1.log",
+            "sha256": "c48c13e7d7827927e754b9962893a5d513cf43c351ecff65722a02d9ad41abfc"
+          },
+          {
+            "command": "task goal -- check",
+            "exit": 0,
+            "log": ".temp/goal/jobs/faf927a1-52ca-43b1-813b-faa11dc684e4.2.log",
+            "sha256": "cd20cedc9fb811df99b10bbf62348a12344ebc6c66578051ab4f202a08cd583a"
+          }
+        ],
+        "result": "docs:check PASS: 13 tests, 249 Markdown files. Goal check PASS: AST and 1/44 changed-path report guards; types/lint/tests selected no product files or tests for this report-only diff."
+      }
+    ],
+    "historyPreservation": {
+      "priorReportCommit": "8265f69e0033915ae7c629d13c969aa09c3af879",
+      "priorReportSha256": "ada4c1d308b6ed1171d982ee3547b4287533da6cecf45e5552937b7c7b7b5715",
+      "priorTopLevelKeys": 37,
+      "onlyAddedTopLevelKey": "boundedRecipeRecoveryFirstSourceReview",
+      "allPriorKeyValuesEqual": true,
+      "priorBytesPreservedExceptRequiredTopLevelCommaAndClosingBrace": true,
+      "acceptedReviewsAndFailures": "Every prior report value and independent failure/disposition is retained. Completed Work, names/Parts, non-Work, footer, navigation, Cook and native approvals are not reopened, re-executed or relanded."
+    },
+    "limitations": [
+      "Source-only first review; no product unit/types/lint/AST/story/native tests rerun. Reused lower-tier receipts are not original Recipe recovery acceptance.",
+      "No runtime, service lifecycle, browser replay, HTTP/account/data/corpus mutation, prepare/restore/import, transport edit, implementation fix, second reviewer, account fallback or nested agent.",
+      "The report worktree remains at its authorized historical base; no rebase, changing-main product selection, integration or landing performed. Manager must preserve current peer report values when composing this append.",
+      "Request-cache sharing and browser mounted-node continuity are supported by source/component evidence only; actual request deadlines, RSC completion and native retry counts remain with G-2774."
+    ],
+    "reportValidation": {
+      "status": "PASS",
+      "job": "job:faf927a1-52ca-43b1-813b-faa11dc684e4",
+      "recordedWith": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+      "commands": [
+        {
+          "command": "task docs:check",
+          "exit": 0,
+          "log": ".temp/goal/jobs/faf927a1-52ca-43b1-813b-faa11dc684e4.1.log",
+          "sha256": "c48c13e7d7827927e754b9962893a5d513cf43c351ecff65722a02d9ad41abfc"
+        },
+        {
+          "command": "task goal -- check",
+          "exit": 0,
+          "log": ".temp/goal/jobs/faf927a1-52ca-43b1-813b-faa11dc684e4.2.log",
+          "sha256": "cd20cedc9fb811df99b10bbf62348a12344ebc6c66578051ab4f202a08cd583a"
+        }
+      ],
+      "result": "docs:check PASS: 13 tests, 249 Markdown files. Goal check PASS: AST and 1/44 changed-path report guards; types/lint/tests selected no product files or tests for this report-only diff.",
+      "limits": "Seven-commits-behind harness notice was informational; no rebase or main mutation. Only completion receipt metadata was inserted after the passing checks. No new product or native tests ran."
+    },
+    "resources": {
+      "startedServices": [],
+      "runtimeRequests": [],
+      "mutatedAccountsOrData": [],
+      "implementationChanges": [],
+      "otherWorktrees": "Read-only evidence access only; copied artifacts were written under this worker .temp."
+    },
+    "managerNext": "Consume this exact-delta source approval once. Compose 09a9c1d587 against compatible current owners while preserving peer changes and every prior report key/value. G-2757 owns any further source correction. G-2774 retains the unchanged original four-cell proof after separate finite runtime admission; original Recipe/A08 catalogue outcome and class remain open."
   }
 }
