@@ -9,7 +9,8 @@ import { CONTINUITY, DATASET, GRAPHS, ID, PROFILE, RV, hash, iri, lit,
   type WorkActivationEnvironment } from './activate.ts';
 import { checkedWorkTypes, WorkTypeConflict, WORK_TYPE_PROFILE } from './type-schema.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
-import { readWorkPayloadForRevision, RevisionCorrupt } from './history.ts';
+import { POST_REVISION_PROFILE, readPostPayloadForRevision, readWorkPayloadForRevision, RevisionCorrupt } from './history.ts';
+import { unerased } from './public-patterns.ts';
 import { checkedWorkScalarValue, sameScalar, scalarFromBinding, scalarRdfTerm,
   SCALAR_PREDICATE, type WorkScalarValue } from './scalar-value.ts';
 
@@ -239,8 +240,9 @@ export async function sealMetadataWorkEditAdmission(
 }
 
 /** Internal guarded Work title edit; Access binding is the next boundary. */
-export async function editMetadataWork(env: WorkActivationEnvironment, intent: EditMetadataWorkIntent): Promise<WorkEditReceipt> {
-  return editWorkRevision(env, intent, { kind: 'title', title: intent.title });
+export async function editMetadataWork(env: WorkActivationEnvironment, intent: EditMetadataWorkIntent,
+  fenceNativePost?: (commit: () => Promise<void>) => Promise<void>): Promise<WorkEditReceipt> {
+  return editWorkRevision(env, intent, { kind: 'title', title: intent.title }, fenceNativePost);
 }
 
 export async function setWorkScalar(env: WorkActivationEnvironment,
@@ -257,6 +259,7 @@ async function editWorkRevision(env: WorkActivationEnvironment,
   intent: EditMetadataWorkIntent | SetWorkScalarIntent | SetWorkTypesIntent,
   change: { kind: 'title'; title: string } | { kind: 'scalar'; value: WorkScalarValue | undefined }
     | { kind: 'types'; types: string[] },
+  fenceNativePost?: (commit: () => Promise<void>) => Promise<void>,
 ): Promise<WorkEditReceipt> {
   if (intent.admission.action !== 'work.edit' || !/^[0-9a-f-]{36}$/.test(intent.admission.id)
     || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(intent.work)
@@ -275,32 +278,43 @@ async function editWorkRevision(env: WorkActivationEnvironment,
   if (Date.parse(intent.admission.expiresAt) <= Date.now()) throw new PendingActivation('Work edit admission expired');
   const current = await env.fuseki.query(`PREFIX rv: <${RV}>
     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-    SELECT ?main ?head ?type ?title ?scalar ?manifest WHERE {
-    GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:mainVersion ?main ;
-      rv:head ?head ; rdfs:label ?title ; a ?type .
+    SELECT ?main ?head ?type ?title ?scalar ?manifest ?model ?shape ?publisher WHERE {
+    GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:head ?head ; rdfs:label ?title ; a ?type .
+      OPTIONAL { ${iri(intent.work)} rv:mainVersion ?main }
+      OPTIONAL { ${iri(intent.work)} rv:publisher ?publisher }
       OPTIONAL { ${iri(intent.work)} <${SCALAR_PREDICATE}> ?scalar } }
     GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:RevisionAnchor ;
       rv:component ${iri(intent.work)} ; rv:manifest ?manifest ;
-      rv:modelRevision ${iri(PROFILE)} ; rv:shapeRevision ${iri(PROFILE)} . }
-  }`);
+      rv:modelRevision ?model ; rv:shapeRevision ?shape .
+      FILTER NOT EXISTS { ?head a rv:ErasedRevision } }
+    ${unerased(iri(intent.work))}
+  } LIMIT 25`);
   const rows = current.results?.bindings ?? [];
-  if (!rows.length || rows.some(row => !row.main || !row.head || !row.type || !row.title || !row.manifest)) {
+  if (!rows.length || rows.some(row => !row.head || !row.type || !row.title || !row.manifest || !row.model || !row.shape)) {
     throw new WorkEditUnavailable('Work is unavailable');
   }
-  const mains = new Set(rows.map(row => row.main!.value));
+  const mains = new Set(rows.flatMap(row => row.main ? [row.main.value] : []));
   const heads = new Set(rows.map(row => row.head!.value));
   const types = new Set(rows.map(row => row.type!.value));
   const titles = new Set(rows.map(row => row.title!.value));
   const manifests = new Set(rows.map(row => row.manifest!.value));
+  const models = new Set(rows.map(row => row.model!.value));
+  const shapes = new Set(rows.map(row => row.shape!.value));
+  const publishers = new Set(rows.flatMap(row => row.publisher ? [row.publisher.value] : []));
+  const nativePost = models.size === 1 && models.has(POST_REVISION_PROFILE);
   const scalarBindings = rows.map(row => row.scalar).filter(binding => binding !== undefined);
   const scalarKeys = new Set(scalarBindings.map(binding => JSON.stringify(binding)));
-  if (mains.size !== 1 || heads.size !== 1 || types.size !== rows.length
-    || titles.size !== 1 || manifests.size !== 1 || scalarKeys.size > 1
-    || !types.has('https://schema.org/CreativeWork')) {
+  if (heads.size !== 1 || manifests.size !== 1 || models.size !== 1 || shapes.size !== 1
+    || !shapes.has([...models][0]!) || (nativePost
+      ? change.kind !== 'title' || types.size !== 1 || !types.has(`${RV}Post`) || mains.size !== 0
+        || publishers.size !== 1 || scalarBindings.length !== 0 || rows.length > 24
+      : !models.has(PROFILE) || mains.size !== 1 || rows.some(row => !row.main)
+        || types.size !== rows.length || titles.size !== 1 || scalarKeys.size > 1
+        || !types.has('https://schema.org/CreativeWork'))) {
     throw new WorkEditUnavailable('Work is unavailable');
   }
   let semanticTypes: string[];
-  try { semanticTypes = normalizeWorkSemanticTypes(
+  try { semanticTypes = nativePost ? [] : normalizeWorkSemanticTypes(
     [...types].filter(type => type !== 'https://schema.org/CreativeWork'), true); }
   catch { throw new WorkEditUnavailable('Work semantic types are unavailable'); }
   if (heads.values().next().value !== intent.expectedHead) {
@@ -309,14 +323,21 @@ async function editWorkRevision(env: WorkActivationEnvironment,
     throw new PendingActivation('stale Work edit outcome not sealed');
   }
   const main = mains.values().next().value!;
-  const prior = await readWorkPayloadForRevision(env, manifests.values().next().value!, intent.work);
+  const post = nativePost
+    ? await readPostPayloadForRevision(env, manifests.values().next().value!, intent.work) : undefined;
+  const metadata = nativePost ? undefined
+    : await readWorkPayloadForRevision(env, manifests.values().next().value!, intent.work);
+  const prior = metadata ?? { title: post!.labels[0]!.value, language: post!.labels[0]!.language,
+    semanticTypes: [], localizedTitle: undefined, description: undefined, scalarValue: undefined };
   let currentScalar: WorkScalarValue | undefined;
   try { currentScalar = scalarFromBinding(scalarBindings[0]); }
   catch { throw new RevisionCorrupt('Work scalar graph term is invalid'); }
-  if (prior.mainVersion !== main || prior.title !== titles.values().next().value
-    || prior.language !== rows[0]!.title!['xml:lang']
-    || !sameScalar(prior.scalarValue, currentScalar)
-    || JSON.stringify(prior.semanticTypes) !== JSON.stringify(semanticTypes)) {
+  const labelKeys = new Set(rows.map(row => JSON.stringify({ value: row.title!.value, language: row.title!['xml:lang'] })));
+  if (post ? post.publisher !== [...publishers][0] || labelKeys.size !== rows.length
+      || post.labels.length !== labelKeys.size || post.labels.some(label => !labelKeys.has(JSON.stringify(label)))
+    : metadata!.mainVersion !== main || prior.title !== titles.values().next().value
+      || prior.language !== rows[0]!.title!['xml:lang'] || !sameScalar(prior.scalarValue, currentScalar)
+      || JSON.stringify(prior.semanticTypes) !== JSON.stringify(semanticTypes)) {
     throw new RevisionCorrupt('Work graph differs from its retained head');
   }
   const typeGuard = change.kind === 'types'
@@ -324,7 +345,10 @@ async function editWorkRevision(env: WorkActivationEnvironment,
   const typeDependency = async () => typeGuard && !(await env.fuseki.query(`ASK { ${typeGuard} }`, 4096)).boolean;
   if (await typeDependency()) throw new WorkTypeConflict('An attached Structure profile requires its owner type');
   const revision = ID + Bun.randomUUIDv7();
-  const validations = await workMetadataValidations(env, intent.work, main);
+  const validations = post ? await profileValidations(env.fuseki, 'post-v1', [{
+    shape: `${POST_REVISION_PROFILE}/post-shape`, focus: [intent.work], graphs: [GRAPHS.current],
+  }], { post: intent.work, publisher: post.publisher, revision })
+    : await workMetadataValidations(env, intent.work, main);
   if (change.kind === 'types') validations.push(...await profileValidations(env.fuseki, 'work-type-v3', [
     { shape: `${WORK_TYPE_PROFILE}/work-shape`, focus: [intent.work], graphs: [GRAPHS.current] },
     { shape: `${WORK_TYPE_PROFILE}/work-revision-shape`, focus: [revision],
@@ -333,14 +357,16 @@ async function editWorkRevision(env: WorkActivationEnvironment,
   const nextTitle = change.kind === 'title' ? change.title : prior.title;
   const nextScalar = change.kind === 'scalar' ? change.value : prior.scalarValue;
   const nextTypes = change.kind === 'types' ? change.types : semanticTypes;
-  const state = { mainVersion: main, continuityProfile: CONTINUITY, title: nextTitle,
+  const state = post ? { ...post, labels: post.labels.map((label, index) => index === 0 ? { ...label, value: nextTitle } : label) }
+    : { mainVersion: main, continuityProfile: CONTINUITY, title: nextTitle,
     language: prior.language, ...(nextTypes.length ? { semanticTypes: nextTypes } : {}),
     ...(prior.localizedTitle ? { localizedTitle: prior.localizedTitle } : {}),
     ...(prior.description ? { description: prior.description } : {}),
     ...(nextScalar === undefined ? {} : { scalarValue: nextScalar }) };
+  const revisionProfile = post ? POST_REVISION_PROFILE : PROFILE;
   const manifest = env.workObjects
-    ? await prepareWorkComponent(env.workObjects, intent.work, state)
-    : prepareComponent(env.objectDirectory, intent.work, state);
+    ? await prepareWorkComponent(env.workObjects, intent.work, state, revisionProfile)
+    : prepareComponent(env.objectDirectory, intent.work, state, revisionProfile);
   if (Date.parse(intent.admission.expiresAt) <= Date.now()) throw new PendingActivation('Work edit admission expired before update');
   const operation = ID + Bun.randomUUIDv7();
   const receipt = workEditReceiptIri(intent.admission.id);
@@ -353,7 +379,7 @@ async function editWorkRevision(env: WorkActivationEnvironment,
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
       GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:head ${iri(intent.expectedHead)} .
         ${change.kind === 'title' ? `${iri(intent.work)} rdfs:label ?oldTitle .` : ''}
-        ${iri(intent.work)} <${SCALAR_PREDICATE}> ?oldScalar .
+        ${post ? '' : `${iri(intent.work)} <${SCALAR_PREDICATE}> ?oldScalar .`}
         ${change.kind === 'types' ? `${iri(intent.work)} a ?oldType .` : ''} }
     }
     INSERT {
@@ -365,8 +391,8 @@ async function editWorkRevision(env: WorkActivationEnvironment,
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:RevisionAnchor ; rv:component ${iri(intent.work)} ;
         rv:predecessor ${iri(intent.expectedHead)} ; rv:operation ${iri(operation)} ;
         ${intent.admission.actingSubject ? `rv:actor ${iri(intent.admission.actingSubject)} ;` : ''}
-        rv:manifest ${iri(`urn:rezics:sha256:${manifest}`)} ; rv:modelRevision ${iri(PROFILE)} ;
-        rv:shapeRevision ${iri(PROFILE)} ; rv:datasetId ${iri(DATASET)} ;
+        rv:manifest ${iri(`urn:rezics:sha256:${manifest}`)} ; rv:modelRevision ${iri(revisionProfile)} ;
+        rv:shapeRevision ${iri(revisionProfile)} ; rv:datasetId ${iri(DATASET)} ;
         rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }
       GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ; rv:operation ${iri(operation)} ;
         rv:requestDigest ${lit(digest)} ; rv:admissionId ${lit(intent.admission.id)} ;
@@ -382,25 +408,31 @@ async function editWorkRevision(env: WorkActivationEnvironment,
     }
     WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
-        rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n ;
-        rv:modelHead ${iri(PROFILE)} ; rv:shapeHead ${iri(PROFILE)} . }
+        rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n .
+        ${post ? '' : `${iri(DATASET)} rv:modelHead ${iri(PROFILE)} ; rv:shapeHead ${iri(PROFILE)} .`} }
       GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:head ${iri(intent.expectedHead)} ;
-        rv:mainVersion ${iri(main)} ; rdfs:label ?oldTitle .
-        OPTIONAL { ${iri(intent.work)} <${SCALAR_PREDICATE}> ?oldScalar }
+        ${post ? `a rv:Post ; rv:publisher ${iri(post.publisher)}` : `rv:mainVersion ${iri(main)}`} ; rdfs:label ?oldTitle .
+        ${post ? `FILTER(LANG(?oldTitle) = ${lit(prior.language)})` : `OPTIONAL { ${iri(intent.work)} <${SCALAR_PREDICATE}> ?oldScalar }`}
         ${change.kind === 'types' ? `OPTIONAL { ${iri(intent.work)} a ?oldType .
           FILTER(?oldType != <https://schema.org/CreativeWork>) }` : ''} }
       ${typeGuard}
+      ${post ? `${unerased(iri(intent.work))}
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:titleControlHead ?titleControl } }` : ''}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       BIND(?n + 1 AS ?next)
     }`;
-  try {
-    const result = await validatedCommand(env, { receipt, digest, update, validations, deadlineMs: 10_000 }, intent.admission);
-    if (result.status === 'invalid' || result.status === 'unknown-profile') throw new CommandRejected(result);
-  } catch (error) {
-    if (error instanceof CommandRejected) throw error;
-    /* resolve by receipt after a lost response */
-  }
+  const commit = async () => {
+    try {
+      const result = await validatedCommand(env, { receipt, digest, update, validations, deadlineMs: 10_000 }, intent.admission);
+      if (result.status === 'invalid' || result.status === 'unknown-profile') throw new CommandRejected(result);
+    } catch (error) {
+      if (error instanceof CommandRejected) throw error;
+      /* resolve by receipt after a lost response */
+    }
+  };
+  if (post && fenceNativePost) await fenceNativePost(commit);
+  else await commit();
   const committed = await readWorkEditTerminalReceipt(env, intent.admission.id);
   if (committed) {
     const result = checkedTerminal(committed, intent, digest);

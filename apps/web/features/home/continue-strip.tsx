@@ -4,7 +4,7 @@ import { Button } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
 import { Undo2Icon, XIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { CatalogueCover, CatalogueCoverCredit } from '../catalogue/cover.tsx';
 import { coverKindOf } from '../catalogue/work.ts';
@@ -23,6 +23,7 @@ export function ContinueStrip({ items, locale, messages }: { items: readonly Con
   messages: HomeMessages }) {
   const t = materializeData(messages, { locale });
   const { api, actingSubject, avatarQuery } = useFeed();
+  const descriptionId = useId();
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
   const [last, setLast] = useState<ContinueItem | null>(null);
   const [failed, setFailed] = useState(false);
@@ -50,17 +51,19 @@ export function ContinueStrip({ items, locale, messages }: { items: readonly Con
         const title = item.title.value;
         const unread = item.unreadCount.kind === 'exact' ? t.newChapters(item.unreadCount.value)
           : t.newChaptersAtLeast(item.unreadCount.value);
+        const description = `${descriptionId}-${item.work}`;
         return <li key={item.work} className="group/continue relative w-28 shrink-0 snap-start sm:w-32">
           <LocalizedLink href={item.nextUnread.href} aria-label={t.continueWork({ title })}
+            aria-describedby={`${description}-next ${description}-unread`}
             className="grid gap-2 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring">
             <span className="relative">
               <CatalogueCover work={{ id: item.work, title: { ...item.title, value: title }, cover: item.cover,
                 kind: coverKindOf(item.types), authors: [] }} avatarQuery={avatarQuery} size="fill" />
-              <span className="absolute start-1.5 bottom-1.5 z-20 rounded-full bg-primary px-2 py-0.5 font-semibold
+              <span id={`${description}-unread`} className="absolute start-1.5 bottom-1.5 z-20 rounded-full bg-primary px-2 py-0.5 font-semibold
                 text-[11px] text-primary-foreground shadow">{unread}</span>
             </span>
             <span lang={item.title.language} className="line-clamp-2 font-medium font-work-title text-sm/snug">{title}</span>
-            <span lang={item.title.language} className="line-clamp-1 text-muted-foreground text-xs">
+            <span id={`${description}-next`} lang={item.title.language} className="line-clamp-1 text-muted-foreground text-xs">
               {item.nextUnread.title ? t.nextChapter({ chapter: item.nextUnread.title }) : t.nextUp}</span>
           </LocalizedLink>
           <CatalogueCoverCredit work={{ id: item.work, title: item.title, cover: item.cover,

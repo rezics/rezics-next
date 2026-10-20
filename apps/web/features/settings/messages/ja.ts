@@ -65,7 +65,7 @@ export default {
   notificationRealmMembershipChange: 'コミュニティのメンバー資格の変更',
   notificationRealmInvitation: 'コミュニティへの招待', notificationClaimCorrection: '作品情報の修正',
   notificationSaved: '通知設定を保存しました。',
-  notificationUnavailable: '通知設定を読み込めませんでした。再読み込みしてもう一度お試しください。',
+  notificationUnavailable: '通知設定を読み込めませんでした。',
   privacyTitle: 'プライバシー',
   privacyHelp: 'ライブラリを見られる人を設定できます。非公開の本棚は公開プロフィールに表示されません。',
   libraryVisibility: 'ライブラリと本棚', libraryPublic: '公開', libraryPrivate: '非公開', libraryFollowers: 'フォロワー',

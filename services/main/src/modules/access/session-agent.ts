@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
-import { ActingContextDenied, ActingContextInvalid, ActingContextStale,
+import { ActingContextDenied, ActingContextInvalid, ActingContextStale, ActingContextUnavailable,
   type AccessActingContexts, identityReadFence, actableSubjects, transaction } from './contexts.ts';
 
 const agentId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -64,7 +64,10 @@ export class AccessSessionAgents {
       LEFT JOIN access.session_agent s ON s.principal_id = p.id AND s.session_key = $3
       LEFT JOIN access.main_agent_preference m ON m.principal_id = p.id
       WHERE p.account_issuer = $1 AND p.account_subject = $2 AND p.active`,
-    [principal.issuer, principal.subject, sessionKey]);
+    [principal.issuer, principal.subject, sessionKey]).catch((cause: unknown) => {
+      throw new ActingContextUnavailable('Saved identity choices are unavailable', {
+        cause, code: 'identity_choices_unavailable' });
+    });
     const row = result.rows[0];
     const eligible = (subject: string | null) => Boolean(subject &&
       discovery.items
@@ -86,7 +89,10 @@ export class AccessSessionAgents {
     const row = (await this.pool.query<SavedChoice>(`SELECT m.acting_subject, m.revision
       FROM access.principal p JOIN access.main_agent_preference m ON m.principal_id = p.id
       WHERE p.account_issuer = $1 AND p.account_subject = $2 AND p.active`,
-    [principal.issuer, principal.subject])).rows[0];
+    [principal.issuer, principal.subject]).catch((cause: unknown) => {
+      throw new ActingContextUnavailable('Saved identity choices are unavailable', {
+        cause, code: 'identity_choices_unavailable' });
+    })).rows[0];
     return { profile: 'main-agent-preference-v1', mainAgent: {
       actingSubject: row?.acting_subject ?? null, revision: row?.revision ?? null,
       eligible: Boolean(row?.acting_subject &&

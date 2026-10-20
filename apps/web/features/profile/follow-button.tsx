@@ -10,6 +10,7 @@ import { legacyFollowActions, mainRelationships } from '../relationships/api.ts'
 import { storyFollowApi } from '../relationships/legacy.ts';
 import { type FollowMessages, followerLabel } from './followers.ts';
 import type { FollowerCount } from './types.ts';
+import type { ReportMenuTarget } from '../safety/report-action.tsx';
 
 /** What a follow write came to: saved with Main's new revision, stale (changed elsewhere first) or failed. */
 export type FollowOutcome = { kind: 'saved'; following: boolean; revision: string } | { kind: 'stale' } | { kind: 'failed' };
@@ -45,10 +46,11 @@ export function FollowControl(props: Parameters<typeof FollowControlState>[0]) {
 }
 
 function FollowControlState({ target, kind = 'agent', name, following, revision, followers, signedIn, actingSubject,
-  signInHref, actions, locale, messages, className }: {
+  signInHref, actions, locale, messages, className, reports, moreAccessibleLabel, reactionsLabel }: {
   target: string; kind?: string; name: string; following: boolean | null; revision: string | null;
   followers: FollowerCount | null; signedIn: boolean; actingSubject?: string | null; signInHref: string;
   actions?: FollowActions; locale: UiLocale; messages: FollowMessages; className?: string;
+  reports?: readonly ReportMenuTarget[]; moreAccessibleLabel?: string; reactionsLabel?: string;
 }) {
   const [count, setCount] = useState(followers);
   const [before, setBefore] = useState(following);
@@ -61,7 +63,8 @@ function FollowControlState({ target, kind = 'agent', name, following, revision,
   return <div className={cn('flex flex-wrap items-center gap-x-4 gap-y-2', className)}>
     <RelationshipControl target={target} kind={kind} name={name} locale={locale} signedIn={signedIn}
       actingSubject={actions?.kind === 'unavailable' ? null : actingSubject}
-      signInHref={actions?.kind === 'signed-out' ? actions.signInHref : signInHref} initial={initial} api={api}
+      signInHref={actions?.kind === 'signed-out' ? actions.signInHref : signInHref} initial={initial} api={api} reports={reports}
+      moreAccessibleLabel={moreAccessibleLabel} reactionsLabel={reactionsLabel}
       onChange={state => {
         if (count?.kind === 'exact' && before !== null && before !== state.following)
           setCount({ ...count, value: Math.max(0, count.value + (state.following ? 1 : -1)) });

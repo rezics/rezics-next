@@ -20,6 +20,7 @@ import { resolveMediaMetadata } from '../api/media-metadata.ts';
 import type { ImageMetadataResolver } from '@rezics/ui/media-image';
 import { documentPublication, type DocumentSaveState } from './publication.ts';
 import type { ImageUploader } from '@rezics/ui/editor-image';
+import type { ImageUseTarget } from './image-target.ts';
 
 export interface BodyEditorProps extends Omit<
   RichTextEditorProps,
@@ -35,7 +36,7 @@ export interface BodyEditorProps extends Omit<
   /** Studio opens with the complete toolbar and can return to contextual controls; discussion writing uses contextual controls only. */
   allowAdvanced?: boolean;
   actingSubject?: string;
-  mediaTarget?: string;
+  mediaTarget?: ImageUseTarget;
   onSaveStateChange?: (state: DocumentSaveState) => void;
   /** A complete edit retained separately from the last successfully bound snapshot. */
   recoveryValue?: string;
@@ -85,8 +86,11 @@ export function BodyEditor({
   const callbacks = useRef({ onChange, onSaveStateChange, onRecoveryChange, onSnapshotError: props.onSnapshotError });
   callbacks.current = { onChange, onSaveStateChange, onRecoveryChange, onSnapshotError: props.onSnapshotError };
   const initialDocument = useRef(parseStoredDocument(value) ?? document);
+  const currentDocumentRef = useRef(document);
+  currentDocumentRef.current = document;
   const reconcile = useMemo(() => actingSubject && mediaTarget
-    ? imageUseReconciler(initialDocument.current, actingSubject, mediaTarget) : undefined, [actingSubject, mediaTarget]);
+    ? imageUseReconciler(typeof mediaTarget === 'string' ? initialDocument.current : currentDocumentRef.current,
+      actingSubject, mediaTarget) : undefined, [actingSubject, mediaTarget]);
   function reportState() {
     const state = saveState.current === 'failed' || uploadState.current === 'failed' ? 'failed'
       : uploadState.current === 'pending' ? 'pending' : saveState.current;

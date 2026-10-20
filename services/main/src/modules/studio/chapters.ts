@@ -11,6 +11,7 @@ import { fenceStudioVariantHeads } from './variant-heads.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import { WorkReadLimit, WorkReadMissing, WorkReadMoved, WorkReadUnavailable,
   unerased, type WorkReadSession } from '../work/read-session.ts';
+import type { ContentCore } from '../../../../content/src/core.ts';
 
 /** One contents page of one level, one placement batch, two Access owner batches, at
  * most forty indexed Content variant reads, five four-body batches for lengths,
@@ -114,6 +115,24 @@ export function manuscriptLength(body: Record<string, unknown>, language: string
   } catch { return null; }
 }
 
+/** Repeated placements share a body snapshot, but retain their own language and length. */
+export async function readStudioChapterLengths(content: Pick<ContentCore, 'readExactBatch'>,
+  texts: readonly { occurrence: string; revision: string; language: string }[]) {
+  const lengths = new Map<string, ReturnType<typeof manuscriptLength>>();
+  for (let start = 0; start < texts.length; start += STUDIO_CHAPTER_COST.bodyBatch) {
+    const batch = texts.slice(start, start + STUDIO_CHAPTER_COST.bodyBatch);
+    const revisions = [...new Set(batch.map(item => item.revision))];
+    const exact = await content.readExactBatch(revisions, async ids => new Set(ids));
+    const byRevision = new Map(exact.map(result => [result.revisionId, result]));
+    for (const item of batch) {
+      const result = byRevision.get(item.revision);
+      lengths.set(item.occurrence, result?.status === 'available'
+        ? manuscriptLength(result.body, item.language) : null);
+    }
+  }
+  return lengths;
+}
+
 export async function readStudioChapters(session: WorkReadSession, agent: string, book: string,
   options: { cursor?: string; language?: string; parent?: string }) {
   const access = session.deps.studioAccess;
@@ -209,18 +228,10 @@ export async function readStudioChapters(session: WorkReadSession, agent: string
     const revision = fact.state === null ? null : 'text' in fact && fact.text ? fact.text
       : page.items.find(item => item.occurrence === fact.occurrence)?.selectedRevision
         ?.slice('urn:rezics:content:revision:'.length) ?? null;
-    return revision ? [{ occurrence: fact.occurrence, revision }] : [];
+    return revision ? [{ occurrence: fact.occurrence, revision,
+      language: fact.language ?? options.language ?? page.language ?? 'und' }] : [];
   });
-  const lengths = new Map<string, ReturnType<typeof manuscriptLength>>();
-  for (let start = 0; start < texts.length; start += STUDIO_CHAPTER_COST.bodyBatch) {
-    const batch = texts.slice(start, start + STUDIO_CHAPTER_COST.bodyBatch);
-    const exact = await content.readExactBatch(batch.map(item => item.revision), async ids => new Set(ids));
-    for (const [index, result] of exact.entries()) {
-      const fact = facts.find(item => item.occurrence === batch[index]!.occurrence);
-      lengths.set(batch[index]!.occurrence, result?.status === 'available'
-        ? manuscriptLength(result.body, fact?.language ?? options.language ?? page.language ?? 'und') : null);
-    }
-  }
+  const lengths = await readStudioChapterLengths(content, texts);
   const again = await access.studioWork(principal, agent, book);
   if (again.stamp !== first.stamp) throw new WorkReadMoved('Studio Book authority changed');
   const finalWriters = await access.chapterWriters(principal, agent, targets);

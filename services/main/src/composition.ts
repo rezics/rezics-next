@@ -1,5 +1,6 @@
 import { OPEN_LIBRARY_RATE } from './modules/source/open-library.ts';
 import { createWorkActivationEnvironment } from './modules/work/activate.ts';
+import { creditAttributionOwner } from './modules/work/credit-attribution.ts';
 import { AccessExposure } from './modules/access/exposure.ts';
 import { PostgresReceiptCustodyStore, ReceiptCustody } from './modules/outbox/receipt-custody.ts';
 import { proofRetirementSender } from './modules/graph/slim-command.ts';
@@ -150,6 +151,9 @@ import { SourceAuthorCreditStore } from './modules/source/author-credit.ts';
 import { SourceFieldWithdrawalStore } from './modules/source/withdrawal.ts';
 import { SourceFieldAttachmentStore } from './modules/source/support-attach.ts';
 import { SourceFieldApplicationStore } from './modules/source/field-application.ts';
+import { SourceRetainedFieldSupportStore, retainedFieldEvidenceOwners, type RetainedFieldOwners } from './modules/source/field-support-retained.ts';
+import { acknowledgedSemanticSupportOwners } from './modules/source/field-support-acknowledged.ts';
+import { SourceRetainedRecordEvidenceOwner } from './modules/source/retained-evidence.ts';
 import { SourceNativeChildStore } from './modules/source/child-native-support.ts';
 import { ProviderIdentityStore } from './modules/source/provider-identity.ts';
 import { SourceScoreStore } from './modules/source/score.ts';
@@ -221,6 +225,7 @@ export interface ComposeMainOverrides {
   account?: SearchRouteDependencies['account'];
   media?: MediaDependencies;
   mediaAccess?: SearchRouteDependencies['mediaAccess'];
+  sourceRetainedOwners?: Partial<RetainedFieldOwners>;
   /** Replaces fields on the production dependency object. A new production field stays unless named here. */
   dependencies?: Partial<SearchRouteDependencies>;
 }
@@ -433,7 +438,15 @@ export async function composeMain(input: ComposeMainInput) {
   const sourceAdoptions = new SourceNativeWorkAdoptionStore(contentPool, sourceProposals,
     environment, account, access);
   const sourceCorrespondences = new SourceChildCorrespondenceStore(contentPool, sourceConversions);
-  const sourceFieldWithdrawals = new SourceFieldWithdrawalStore(contentPool, environment);
+  const retainedEvidence = new SourceRetainedRecordEvidenceOwner(contentPool,sourceIntake,access,
+    rightsStore,sourceConversions.retained,environment);
+  const relationAttribution = creditAttributionOwner(environment);
+  const sourceRetainedFieldSupports = new SourceRetainedFieldSupportStore(contentPool,environment,
+    access,sourceConversions.retained,{ ...retainedFieldEvidenceOwners(retainedEvidence),
+      ...acknowledgedSemanticSupportOwners({ environment,access,contextSelections: rankingContextSelections,
+        relationAttribution }),
+      ...input.overrides?.sourceRetainedOwners });
+  const sourceFieldWithdrawals = new SourceFieldWithdrawalStore(contentPool, environment,sourceRetainedFieldSupports);
   const correctionWorker = new VerificationCorrectionWorker(new VerificationCorrectionPublisher(
     new VerificationStore(contentPool), new NotificationStore(pool)));
   const accessOwners = composeAccess(pool, environment);
@@ -503,6 +516,7 @@ export async function composeMain(input: ComposeMainInput) {
     readingSettings: new ReadingSettingsStore(contentPool),
     access,
     contextSelections: rankingContextSelections,
+    relationAttribution,
     eventQueries,
     downloadLeases,
     protectionSigner: new ProtectionAdmissionSigner(pool, config.FUSEKI_TITLE_ADMISSION_KEY),
@@ -573,6 +587,7 @@ export async function composeMain(input: ComposeMainInput) {
     sourceAuthorCredits: new SourceAuthorCreditStore(contentPool, sourceProposals, sourceConversions,
       sourceCorrespondences, environment, account, access, sourceAuthorNames),
     sourceFieldWithdrawals,
+    sourceRetainedFieldSupports,
     sourceFieldApplications: new SourceFieldApplicationStore(contentPool, environment,
       account, access, sourceConversions, sourceAdoptions, sourceFieldWithdrawals, rightsStore),
     sourceNativeChildren: new SourceNativeChildStore(contentPool, sourceProposals, sourceConversions,

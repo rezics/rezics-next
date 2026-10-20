@@ -108,6 +108,7 @@ export function baselineTarget(action: string, scope: string): BaselineTarget | 
     'media.labels': { prefix: 'media:owner:', kind: 'personal' },
     'media.inference': { prefix: 'media:owner:', kind: 'personal' },
     'media.use': { prefix: 'content:publish:', kind: 'author-work' },
+    'media.member-reply.use': { prefix: 'content:draft:', kind: 'reply-draft' },
     'media.conceal': { prefix: 'media:owner:', kind: 'personal' },
     'media.avatar': { prefix: 'media:avatar:', kind: 'avatar' },
     'submission.submit': { prefix: 'submission:submit:', kind: 'submission' },
@@ -307,6 +308,9 @@ export async function newBaselineProof(client: PoolClient, graph: Pick<FusekiCli
   /** Only the caller holding this scope's SHARE gate may prove absence once. */
   scopePolicyAbsent = false): Promise<BaselineProof | null> {
   if (request.authorityPath === 'direct-principal') return null;
+  if (request.action === 'media.member-reply.use'
+    && (!native.test(request.baselineRelatedWork ?? '')
+      || !native.test(request.baselineSourceRevision ?? ''))) return null;
   const zonePage = resolveZonePageContent(request);
   if (zonePage.kind === 'refused') return null;
   if (zonePage.kind === 'zone') {
@@ -382,6 +386,10 @@ export async function baselineProofCurrent(client: PoolClient, graph: Pick<Fusek
     action: string }, replyRootDecision?: ReplyRootDecision): Promise<boolean> {
   const target = baselineTarget(admission.action, admission.scope_id);
   if (!target) return false;
+  // This action always requires a rooted Person proof, including old intents
+  // claimed directly without replay. Missing roots cannot select Work authority.
+  if (admission.action === 'media.member-reply.use'
+    && (!native.test(saved.related_work ?? '') || !native.test(saved.source_revision ?? ''))) return false;
   if ((await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [admission.scope_id])).rowCount) return false;
   const current = await controllerProofFor(target, saved.related_work ?? null)(
     client, admission.principal_id, admission.acting_subject);

@@ -76,7 +76,7 @@ export default {
   notificationRealmInvitation: "Community-Einladungen",
   notificationClaimCorrection: "Korrekturen an Angaben",
   notificationSaved: "Benachrichtigungseinstellung gespeichert.",
-  notificationUnavailable: "Benachrichtigungen konnten nicht geladen werden. Lade die Seite neu, um es erneut zu versuchen.",
+  notificationUnavailable: "Benachrichtigungen konnten nicht geladen werden.",
   privacyTitle: "Privatsphäre",
   privacyHelp: "Lege fest, wer deine Bibliothek sehen kann. Private Regale erscheinen nicht auf deinem öffentlichen Profil.",
   libraryVisibility: "Bibliothek und Regale",

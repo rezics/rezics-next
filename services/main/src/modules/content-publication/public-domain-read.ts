@@ -12,5 +12,21 @@ export async function publicDomainRevisionCurrent(
   const assessmentId = reference.provenance.rightsAssessmentId;
   if (typeof assessmentId !== 'string' || !rights) return false;
   try { return await rights.currentPublicDomainAssessment(reference.resourceId, assessmentId, client); }
-  catch { throw new ContentUnavailable('current public-domain assessment is unavailable'); }
+  catch (cause) { throw new ContentUnavailable('current public-domain assessment is unavailable', { cause }); }
+}
+
+/** Page delivery shares the Rights owner's bounded current-head probe. */
+export async function publicDomainRevisionsCurrent(
+  references: readonly ExactContentReference[],
+  rights?: Pick<RightsStore, 'currentPublicDomainAssessments'>,
+): Promise<boolean[]> {
+  const requests = references.flatMap(reference => reference.provenance.kind === 'admitted-public-domain-v1'
+    && typeof reference.provenance.rightsAssessmentId === 'string'
+    ? [{ work: reference.resourceId, assessmentId: reference.provenance.rightsAssessmentId }] : []);
+  try {
+    const current = rights && requests.length ? await rights.currentPublicDomainAssessments(requests) : new Set<string>();
+    return references.map(reference => reference.provenance.kind !== 'admitted-public-domain-v1'
+      || typeof reference.provenance.rightsAssessmentId === 'string'
+        && current.has(`${reference.resourceId}\0${reference.provenance.rightsAssessmentId}`));
+  } catch (cause) { throw new ContentUnavailable('current public-domain assessment is unavailable', { cause }); }
 }

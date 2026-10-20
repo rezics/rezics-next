@@ -27,7 +27,7 @@ final class TemplateIndexService {
     static final List<String> TYPES = List.of("TextContribution", "RealmPublicationSlot", "AuthorCredit", "FixedRelease", "NativeAgentCredit");
     /** Same sequence as CREDIT_SEEK_ROLES in the TypeScript seek index.
      * Translator and editor sort after the public credit page so that page completes first. */
-    static final List<String> CREDIT_ROLES = List.of("author", "director", "artist", "animation-studio", "translator", "editor", "transcriber");
+    static final List<String> CREDIT_ROLES = List.of("author", "director", "artist", "animation-studio", "translator", "editor", "transcriber", "performer");
     /** One sentinel for every accepted first-publication year. The key is the
      * fixed-width inverted calendar year, so the existing ascending seek is newest first. */
     static final String FIRST_PUBLICATION = RV + "FirstPublication",

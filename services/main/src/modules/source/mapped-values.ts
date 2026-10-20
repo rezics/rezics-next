@@ -1,7 +1,7 @@
 import type { OpenLibraryConversion } from './open-library-conversion.ts';
 import type { StagedSourceObservation } from './intake.ts';
 
-/** Adapter output, re-derived from the exact retained observation on every read. */
+/** Accepted explicit-conversion output; reads revalidate its retained byte binding. */
 export interface MappedSourceValue {
   grain: string; field: string; pointer: string; slot: string; value: unknown;
 }

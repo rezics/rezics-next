@@ -608,6 +608,18 @@ export const profileRegistry = {
       "revision"
     ]
   },
+  "native-agent-credit-v2": {
+    "sha256": "79a0b3b6a7bbf8314cbcc70b5178c94b3dc1ce7559e6eade873c2792d4b16b8b",
+    "file": "shapes/native-agent-credit-v2.ttl",
+    "shapes": [
+      "https://rezics.com/definition/native-agent-credit-v2/credit-shape",
+      "https://rezics.com/definition/native-agent-credit-v2/revision-shape"
+    ],
+    "focusRoles": [
+      "credit",
+      "revision"
+    ]
+  },
   "poll-allocation-v1": {
     "sha256": "c277302719c0570563b7889276e106b9a1cee676551b2932299ad7cf03910ae4",
     "file": "shapes/poll-allocation-v1.ttl",
@@ -1156,6 +1168,20 @@ export const profileRegistry = {
       "revision"
     ]
   },
+  "relation-occurrence-v2": {
+    "sha256": "f845f39cff9c253dafe3a267f10340e98e538bf0cf2bf210de0d5e68ffe18745",
+    "file": "shapes/relation-occurrence-v2.ttl",
+    "shapes": [
+      "https://rezics.com/definition/relation-occurrence-v2/occurrence-shape",
+      "https://rezics.com/definition/relation-occurrence-v2/participation-shape",
+      "https://rezics.com/definition/relation-occurrence-v2/revision-shape"
+    ],
+    "focusRoles": [
+      "occurrence",
+      "participation",
+      "revision"
+    ]
+  },
   "release-v1": {
     "sha256": "e0018a2144113c2c3cc6bfcdc3951f1ce282c919859950c0811aa018c4a1c92c",
     "file": "shapes/release-v1.ttl",
@@ -1234,6 +1260,18 @@ export const profileRegistry = {
     "shapes": [
       "https://rezics.com/definition/semantic-definition-v1/definition-shape",
       "https://rezics.com/definition/semantic-definition-v1/revision-shape"
+    ],
+    "focusRoles": [
+      "definition",
+      "revision"
+    ]
+  },
+  "semantic-definition-v2": {
+    "sha256": "fc4ed843cea04c13d9fac64b9056455cf316977d8ff7f4c40856ac5879cf6d7c",
+    "file": "shapes/semantic-definition-v2.ttl",
+    "shapes": [
+      "https://rezics.com/definition/semantic-definition-v2/definition-shape",
+      "https://rezics.com/definition/semantic-definition-v2/revision-shape"
     ],
     "focusRoles": [
       "definition",
@@ -1392,6 +1430,18 @@ export const profileRegistry = {
     "shapes": [
       "https://rezics.com/definition/statement-v1/statement-shape",
       "https://rezics.com/definition/statement-v1/revision-shape"
+    ],
+    "focusRoles": [
+      "statement",
+      "revision"
+    ]
+  },
+  "statement-v2": {
+    "sha256": "f491f13329de73fd3e216a94ef691692a92785553b718c19bbdfce2bd5ea5f2d",
+    "file": "shapes/statement-v2.ttl",
+    "shapes": [
+      "https://rezics.com/definition/statement-v2/statement-shape",
+      "https://rezics.com/definition/statement-v2/revision-shape"
     ],
     "focusRoles": [
       "statement",
@@ -1610,6 +1660,18 @@ export const profileRegistry = {
       "revision"
     ]
   },
+  "work-author-credit-v2": {
+    "sha256": "48e2f78abb9e38070c8a46d5d8b838ac141f6ce9e41a846079c79c3acf09989a",
+    "file": "shapes/work-author-credit-v2.ttl",
+    "shapes": [
+      "https://rezics.com/definition/work-author-credit-v2/credit-shape",
+      "https://rezics.com/definition/work-author-credit-v2/revision-shape"
+    ],
+    "focusRoles": [
+      "credit",
+      "revision"
+    ]
+  },
   "work-derivation-unresolved-v1": {
     "sha256": "d47d816b777674c9142e2b7b3238f6728d4e89a072268a46acc0303cb992ad52",
     "file": "shapes/work-derivation-unresolved-v1.ttl",
@@ -1647,6 +1709,20 @@ export const profileRegistry = {
       "https://rezics.com/definition/work-editorial-field-v1/slot-shape",
       "https://rezics.com/definition/work-editorial-field-v1/value-shape",
       "https://rezics.com/definition/work-editorial-field-v1/control-shape"
+    ],
+    "focusRoles": [
+      "slot",
+      "value",
+      "control"
+    ]
+  },
+  "work-editorial-field-v2": {
+    "sha256": "429d88dbbd5b58588b429de468905d5675fb31846743cac5e67c5c45fb235c97",
+    "file": "shapes/work-editorial-field-v2.ttl",
+    "shapes": [
+      "https://rezics.com/definition/work-editorial-field-v2/slot-shape",
+      "https://rezics.com/definition/work-editorial-field-v2/value-shape",
+      "https://rezics.com/definition/work-editorial-field-v2/control-shape"
     ],
     "focusRoles": [
       "slot",

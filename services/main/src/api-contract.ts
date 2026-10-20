@@ -87,6 +87,7 @@ export const pendingOperation = t.Object({
 function baseProblemResult<const Status extends number>(status: Status) {
   return t.Object({ type: t.String(), title: t.String(), status: t.Literal(status),
     code: t.String(), currentHead: t.Optional(t.Nullable(t.String())),
+    basis: t.Optional(t.String({ minLength: 1, maxLength: 128 })),
     detail: t.Optional(t.String({ maxLength: 512 })),
     validation: t.Optional(t.Object({
       path: t.Nullable(t.String({ maxLength: 180 })),

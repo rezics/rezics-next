@@ -1,11 +1,46 @@
 import { verifySnapshot } from './snapshot.ts';
 import type { DatasetSnapshot, DatasetSource } from './types.ts';
+import { DATASET_NATIVE_MAPPERS, datasetCoverage, datasetCoverageId,
+  type DatasetCoverageReport } from './native/coverage.ts';
+import { canonical } from './store.ts';
 
 function require(value: unknown, message: string): asserts value {
   if (!value) throw new Error(`Dataset conformance: ${message}`);
 }
 function kind(source: DatasetSource, value: string): number {
   return source.records.filter((record) => record.kind === value).length;
+}
+
+/** Offline consistency only. Public adoption, rights, consuming reads and bytes
+ * still need the wave's pinned real-stack proof. */
+export function testDatasetImportCoverage(snapshot: DatasetSnapshot, report: DatasetCoverageReport): void {
+  require(report.snapshot === snapshot.id && report.digest === snapshot.digest,
+    'coverage belongs to another immutable snapshot');
+  const keys = new Set(snapshot.sources.flatMap(source => source.records).map(record => record.key));
+  require(new Set(report.selectedRecords).size === report.selectedRecords.length
+    && report.selectedRecords.every(key => keys.has(key)), 'coverage has invalid selected source identities');
+  const inventory = datasetCoverage(snapshot, new Set(report.selectedRecords));
+  const observed = new Set<string>();
+  for (const entry of report.entries) {
+    const id = datasetCoverageId(entry), expected = inventory.entries.get(id);
+    require(!observed.has(id), 'coverage repeats an observed occurrence');
+    observed.add(id);
+    require(expected && entry.recordDigest === expected.recordDigest
+      && entry.valueDigest === expected.valueDigest && entry.observation === expected.observation,
+    `coverage changed or invented source evidence: ${id}`);
+    require(entry.acquisition === expected.acquisition, 'coverage changed source acquisition evidence');
+    inventory.retain(entry.record);
+    for (const mapping of entry.mappings ?? [])
+      inventory.disposition(entry, { status: 'mapped', reason: entry.disposition.reason, mapping });
+    inventory.disposition(entry, entry.disposition);
+  }
+  require(observed.size === inventory.entries.size, 'coverage omits observed source fields or occurrences');
+  require(new Set(report.pendingMappers).size === report.pendingMappers.length
+    && report.pendingMappers.every(id => DATASET_NATIVE_MAPPERS.includes(id)), 'coverage has unknown mapper phases');
+  const completed = new Set(DATASET_NATIVE_MAPPERS.filter(id => !report.pendingMappers.includes(id)));
+  const { entries: _entries, ...summary } = inventory.report(report.transportCompleted, completed);
+  const { entries: _reportedEntries, ...reportedSummary } = report;
+  require(canonical(summary) === canonical(reportedSummary), 'coverage readiness or counts disagree with dispositions');
 }
 
 /** Explicit real-data acceptance, never discovered by the default unit suite.

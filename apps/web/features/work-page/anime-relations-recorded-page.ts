@@ -5,7 +5,7 @@ import { PREVIEW_COUNTS } from '../work-levels/previews.tsx';
 import type { Franchise } from '../work-levels/connections.tsx';
 import { agentsOf, franchisesOf, relationRows } from '../work-levels/relation-rows.ts';
 import type { ConnectionsQuery } from '../work-levels/route.ts';
-import type { CollectionMember, CollectionMembers, Loaded, Names, PartsPage, People, RelationEntry, Summary } from '../work-levels/types.ts';
+import type { CollectionMember, CollectionMembers, Loaded, Names, NameSummary, PartsPage, People, RelationEntry, Summary } from '../work-levels/types.ts';
 import { readWorkParts, readWorkWholes, readWorkRelations } from './anime-hub-recorded-page.ts';
 import { settle } from './books-edition-page.read.ts';
 import { iriOf, mainScope, type WorkScope } from './route.ts';
@@ -17,12 +17,17 @@ type Host = { main: MainClient; actingSubject?: string; signedIn?: boolean };
 export function animeRelationsReads({ main, actingSubject }: Host) {
   const readNames = async (resources: string, position?: string): Promise<Names> => {
     const refs = [...new Set(resources.split(' ').filter(Boolean))];
-    const names = new Map<string, Summary>();
+    const names = new Map<string, NameSummary>();
     for (let offset = 0; offset < refs.length; offset += 64) {
       const answer = await settle(() => main.v1.resources.summaries.post({ profile: 'resource-summary-batch-v1',
         resources: refs.slice(offset, offset + 64), ...(position ? { position } : {}),
         ...(actingSubject ? { actingSubject } : {}) }));
-      if (answer.ok) for (const summary of answer.data.summaries) names.set(summary.reference, summary);
+      const batch = refs.slice(offset, offset + 64);
+      // A failed or partial batch cannot say that nobody has named these resources.
+      for (const reference of batch) names.set(reference, { reference, status: 'unavailable-read' });
+      if (answer.ok) for (const summary of answer.data.summaries) {
+        if (batch.includes(summary.reference)) names.set(summary.reference, summary);
+      }
     }
     return names;
   };

@@ -7,6 +7,39 @@ import org.apache.jena.query.ReadWrite;
 import org.junit.Test;
 
 public class ContentQualificationMaintenanceTest {
+    @Test public void incompleteContentAuditRetriesWithoutInventingCompletenessOrLosingPhysicalProof() throws Exception {
+        try (var fixture = new SearchDeltaJournalTest.ContentFixture()) {
+            var firstAttempt = new CountDownLatch(1);
+            var retry = new CountDownLatch(1);
+            var attempts = new java.util.concurrent.atomic.AtomicInteger();
+            var previous = SearchDeltaJournal.logged;
+            try {
+                SearchDeltaJournal.logged = line -> {
+                    if (!Thread.currentThread().getName().equals("public-text-requalification")
+                        || !line.equals("startup-audit failed: Content publication qualification is unresolved")) return;
+                    if (attempts.incrementAndGet() == 1) firstAttempt.countDown();
+                    else retry.countDown();
+                };
+                assertEquals("committed", fixture.deliver(1, "retained source awaiting owner evidence", "en").get("status"));
+                assertTrue("Content maintenance did not start", firstAttempt.await(5, TimeUnit.SECONDS));
+                assertTrue("general text qualification stopped recovery before a Content witness existed",
+                    retry.await(5, TimeUnit.SECONDS));
+                var proof = SearchDeltaJournal.qualifiedProof(fixture.data, -1, 0);
+                assertEquals(proof.toString(), true, proof.get("available"));
+                assertEquals("1", proof.get("qualifiedPopulation"));
+                assertNotNull(proof.get("generation"));
+                // Retrying the existing owner cannot turn absent publication
+                // receipts into a Content completeness witness.
+                assertFalse(proof.containsKey("contentQualification"));
+                try (var capture = SearchDeltaJournal.captureRead(fixture.data)) {
+                    assertEquals(capture.qualification().toString(), true, capture.qualification().get("available"));
+                    assertEquals(proof.get("generation"), capture.qualification().get("generation"));
+                    assertFalse(capture.qualification().containsKey("contentQualification"));
+                }
+            } finally { SearchDeltaJournal.logged = previous; }
+        }
+    }
+
     @Test public void contentMaintenanceKeepsPhysicalProofWhileCompletenessRemainsUnavailable() throws Exception {
         try (var fixture = new SearchDeltaJournalTest.ContentFixture()) {
             var auditing = new CountDownLatch(1);

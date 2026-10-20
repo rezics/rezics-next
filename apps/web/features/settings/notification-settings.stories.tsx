@@ -220,3 +220,97 @@ export const LastConflictDesktop: Story = saveScenario('proposal-reverted', 409,
 export const RetryFailure: Story = saveScenario('review', 503, true, true);
 export const ReviewConflictAndRetry: Story = saveScenario('proposal-reverted', 409, true, true);
 export const RefreshFailureAndRetry: Story = saveScenario('proposal-reverted', 409, true, true, false, true);
+
+/** Unknown choices stay unavailable through repeated reads; a retry never submits defaults. */
+function initialReadScenario(phone: boolean, outcome: 'pending' | 'failed' | 'recovered',
+  t: SettingsMessages = englishMessages): Story {
+  let requests: { url: string; method: string; cache: RequestCache | undefined }[];
+  let releaseFailure: () => void;
+  let releaseSuccess: () => void;
+  return {
+    args: { preview: false, t },
+    globals: { viewport: { value: phone ? 'phone' : 'desktop1440' } },
+    async beforeEach() {
+      requests = [];
+      const failureGate = new Promise<void>(resolve => { releaseFailure = resolve; });
+      const successGate = new Promise<void>(resolve => { releaseSuccess = resolve; });
+      const prior = globalThis.fetch;
+      globalThis.fetch = (async (url, init) => {
+        requests.push({ url: String(url), method: init?.method ?? 'GET', cache: init?.cache });
+        if (requests.length === 1) return new Response(null, { status: 503 });
+        if (requests.length === 2) {
+          await failureGate;
+          return new Response(null, { status: 503 });
+        }
+        await successGate;
+        return Response.json({ items: settingsNotificationTopics.flatMap(topic => notificationChannels.map(channel => ({
+          purpose: topic.startsWith('proposal') || topic.endsWith('requested') ? 'governance'
+            : ['new-work', 'new-release', 'followed-chapter', 'collection-change'].includes(topic) ? 'subscription' : 'social',
+          topic, channel, state: channel === 'inbox' ? 'disabled' : 'enabled', revision: '23',
+        }))) });
+      }) as typeof fetch;
+      return () => { releaseFailure(); releaseSuccess(); globalThis.fetch = prior; };
+    },
+    async play({ canvasElement }) {
+      const canvas = within(canvasElement);
+      const status = await canvas.findByRole('status');
+      await waitFor(() => expect(status).toHaveTextContent(t.notificationUnavailable));
+      const retry = canvas.getByRole('button', { name: t.reviewLatest });
+      await expect(retry).toHaveAccessibleDescription(t.notificationUnavailable);
+      await expect(status).toHaveAttribute('aria-live', 'polite');
+      await expect(status).toHaveAttribute('aria-atomic', 'true');
+      await expect(canvas.queryAllByRole('switch')).toHaveLength(0);
+      await expectFeedbackInViewport(status);
+      await userEvent.tab();
+      await expect(retry).toHaveFocus();
+      await userEvent.keyboard('{Enter}');
+      await waitFor(() => expect(status).toHaveTextContent(t.personRefreshing));
+      await expect(retry).toHaveAttribute('aria-busy', 'true');
+      await expect(retry).toHaveAttribute('aria-disabled', 'true');
+      await expect(retry).toHaveFocus();
+      await expect(canvas.queryAllByRole('switch')).toHaveLength(0);
+      await expectFeedbackInViewport(status);
+      // Repeated activation during the pending read must not start another request.
+      await userEvent.keyboard('{Enter}{Enter}');
+      await expect(requests).toEqual(Array.from({ length: 2 }, () => ({
+        url: '/api/main/v1/me/notification-preferences', method: 'GET', cache: 'no-store',
+      })));
+      if (outcome === 'pending') return;
+      releaseFailure();
+      await waitFor(() => expect(status).toHaveTextContent(t.notificationUnavailable));
+      await expect(retry).not.toHaveAttribute('aria-disabled', 'true');
+      await expect(retry).toBeEnabled();
+      await expect(retry).toHaveFocus();
+      await expect(canvas.queryAllByRole('switch')).toHaveLength(0);
+      await expectFeedbackInViewport(status);
+      if (outcome === 'failed') return;
+      await userEvent.keyboard('{Enter}');
+      await waitFor(() => expect(status).toHaveTextContent(t.personRefreshing));
+      await expect(retry).toHaveFocus();
+      releaseSuccess();
+      const first = await canvas.findByRole('switch', { name: `${t.notificationReply} · ${t.notificationInbox}` });
+      await expect(first).toBeEnabled();
+      await expect(first).not.toBeChecked();
+      await expect(first).toHaveFocus();
+      await expect(canvas.getAllByRole('switch')).toHaveLength(45);
+      await userEvent.tab();
+      const push = canvas.getByRole('switch', { name: `${t.notificationReply} · ${t.notificationPush}` });
+      await expect(push).toHaveFocus();
+      await expect(push).toBeChecked();
+      await expect(canvas.getByRole('switch', {
+        name: `${t.notificationReply} · ${t.notificationEmailDigest}`,
+      })).toBeChecked();
+      await expect(requests).toEqual(Array.from({ length: 3 }, () => ({
+        url: '/api/main/v1/me/notification-preferences', method: 'GET', cache: 'no-store',
+      })));
+      await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+    },
+  };
+}
+
+export const InitialReadPendingPhone: Story = initialReadScenario(true, 'pending');
+export const InitialReadPendingDesktop: Story = initialReadScenario(false, 'pending');
+export const InitialReadRepeatedFailurePhone: Story = initialReadScenario(true, 'failed', de);
+export const InitialReadRepeatedFailureDesktop: Story = initialReadScenario(false, 'failed');
+export const InitialReadRecoveryPhone: Story = initialReadScenario(true, 'recovered');
+export const InitialReadRecoveryDesktop: Story = initialReadScenario(false, 'recovered');

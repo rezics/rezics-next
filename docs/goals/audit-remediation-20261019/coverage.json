@@ -197,9 +197,19 @@
       "severity": "P1",
       "sourceConfidence": "confirmed",
       "title": "图片编辑失败没有传到草稿状态，显示已保存却在刷新后丢图",
-      "status": "build-dispatched",
-      "owner": "G-2748",
-      "proof": []
+      "status": "closed",
+      "owner": "G-2748 + G-2830",
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "D2-003",
+          "assessedMain": "7fe7466fd4c34b50e1e70b309b1591371e3025c8",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "disposition": "All three original image-draft criteria and regression assertions accepted from22 passing independent production-component Storybook interactions plus matching genuine normal-OAuth upload/Use, exact reload/readback and same-operation replay evidence; reviewed source and additive proof landed through normal gates. Historical failures retained.",
+      "remainingValidation": []
     },
     {
       "id": "D2-004",
@@ -316,9 +326,11 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "开发切片丢失已选作品的核心邻接资料",
-      "status": "pending",
-      "owner": null,
-      "proof": []
+      "status": "closed",
+      "owner": "G-2778",
+      "proof": [
+        "docs/goals/audit-remediation-20261019/proofs/catalogue-A02-acceptance.json"
+      ]
     },
     {
       "id": "A12",
@@ -334,9 +346,11 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "描述类型保留却没有绑定实体页面注册表",
-      "status": "pending",
-      "owner": null,
-      "proof": []
+      "status": "closed",
+      "owner": "G-2758",
+      "proof": [
+        "docs/goals/audit-remediation-20261019/proofs/catalogue-A15-acceptance.json"
+      ]
     },
     {
       "id": "A17",
@@ -397,9 +411,11 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "公开结构未就绪时仍提供无反馈的做菜主操作",
-      "status": "pending",
-      "owner": null,
-      "proof": []
+      "status": "closed",
+      "owner": "G-2757",
+      "proof": [
+        "docs/goals/audit-remediation-20261019/proofs/catalogue-A18-acceptance.json"
+      ]
     },
     {
       "id": "AUD-007",

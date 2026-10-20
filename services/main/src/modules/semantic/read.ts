@@ -1,6 +1,6 @@
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { RevisionCorrupt } from '../work/history.ts';
-import { checkedStoredState, readCurrentComponent, referencedResources, type ComponentState, type DefinitionState,
+import { checkedComponentProfile, checkedStoredState, readCurrentComponent, referencedResources, type ComponentState, type DefinitionState,
   type ResourceState, type StoredProperty } from './change.ts';
 import { readComponent } from './command.ts';
 import { PROFILES } from './schema.ts';
@@ -45,18 +45,19 @@ function exportOf(component: string, state: PublicState): Record<string, unknown
  */
 export async function readSemanticRevision(env: WorkActivationEnvironment, component: string, revision: string,
   disclose: ReferenceDisclosure, visibleRecords?: (records: readonly string[]) => Promise<ReadonlySet<string>>): Promise<SemanticRead | null> {
-  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?type ?manifest ?predecessor ?generation ?epoch ?sequence WHERE {
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?type ?manifest ?predecessor ?generation ?epoch ?sequence ?model WHERE {
     GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a ?type ; rv:component ${iri(component)} ; rv:manifest ?manifest ;
       rv:modelGeneration ?generation ; rv:dataEpoch ?epoch ; rv:sequence ?sequence .
       FILTER(?type IN (rv:SemanticRevision, rv:DefinitionRevision))
-      OPTIONAL { ${iri(revision)} rv:predecessor ?predecessor } } } LIMIT 2`);
+      OPTIONAL { ${iri(revision)} rv:predecessor ?predecessor }
+      OPTIONAL { ${iri(revision)} rv:modelRevision ?model } } } LIMIT 2`);
   const rows = result.results?.bindings ?? [];
   if (!rows.length) return null;
   if (rows.length !== 1) throw new RevisionCorrupt('semantic revision is ambiguous');
   const row = rows[0]!;
   const definition = row.type!.value === `${RV}DefinitionRevision`;
-  const state = checkedStoredState(await readComponent(env, row.manifest!.value, component,
-    definition ? PROFILES.definition : PROFILES.resource));
+  const profile = checkedComponentProfile(row.model?.value, definition ? 'definition' : 'resource');
+  const state = checkedStoredState(await readComponent(env, row.manifest!.value, component, profile), profile);
   if ((state.component === 'definition') !== definition) throw new RevisionCorrupt('revision names another component');
   const availability = await references(state, disclose);
   const disclosed = visibleRecords ? await visibleRecords([component,
@@ -81,7 +82,8 @@ export async function readSemanticRevision(env: WorkActivationEnvironment, compo
       ? { successor: null, successorUnavailable: true } : {}) };
   return { component, revision, predecessor: row.predecessor?.value ?? null, modelGeneration: row.generation!.value,
     state: visible, references: Object.fromEntries(Object.entries(availability)
-      .filter(([, value]) => value.state === 'available')), export: exportOf(component, visible),
+      .filter(([, value]) => value.state === 'available')), export: { ...exportOf(component, visible),
+        ...(profile === PROFILES.definitionV2 ? { [`${RV}modelRevision`]: { '@id': profile } } : {}) },
     sourcePosition: { datasetId: 'product', dataEpoch: row.epoch!.value, sequence: row.sequence!.value } };
 }
 

@@ -432,6 +432,11 @@
       "file": "shapes/native-agent-credit-v1.ttl"
     },
     {
+      "id": "native-agent-credit-v2",
+      "sha256": "79a0b3b6a7bbf8314cbcc70b5178c94b3dc1ce7559e6eade873c2792d4b16b8b",
+      "file": "shapes/native-agent-credit-v2.ttl"
+    },
+    {
       "id": "poll-allocation-v1",
       "sha256": "c277302719c0570563b7889276e106b9a1cee676551b2932299ad7cf03910ae4",
       "file": "shapes/poll-allocation-v1.ttl"
@@ -1052,6 +1057,11 @@
       "file": "shapes/relation-occurrence-v1.ttl"
     },
     {
+      "id": "relation-occurrence-v2",
+      "sha256": "f845f39cff9c253dafe3a267f10340e98e538bf0cf2bf210de0d5e68ffe18745",
+      "file": "shapes/relation-occurrence-v2.ttl"
+    },
+    {
       "id": "release-v1",
       "sha256": "e0018a2144113c2c3cc6bfcdc3951f1ce282c919859950c0811aa018c4a1c92c",
       "file": "shapes/release-v1.ttl"
@@ -1080,6 +1090,11 @@
       "id": "semantic-definition-v1",
       "sha256": "c4755adab864370f58a4b27067ecd9aa6e4d4923ef97249364b4b34a76147e3e",
       "file": "shapes/semantic-definition-v1.ttl"
+    },
+    {
+      "id": "semantic-definition-v2",
+      "sha256": "fc4ed843cea04c13d9fac64b9056455cf316977d8ff7f4c40856ac5879cf6d7c",
+      "file": "shapes/semantic-definition-v2.ttl"
     },
     {
       "id": "semantic-model-generation-v1",
@@ -1145,6 +1160,11 @@
       "id": "statement-v1",
       "sha256": "0456c753fb7f85c36a1c58664b1f763425b162382bc198f4e46c0656432fa953",
       "file": "shapes/statement-v1.ttl"
+    },
+    {
+      "id": "statement-v2",
+      "sha256": "f491f13329de73fd3e216a94ef691692a92785553b718c19bbdfce2bd5ea5f2d",
+      "file": "shapes/statement-v2.ttl"
     },
     {
       "id": "structure-book-v1",
@@ -1277,6 +1297,36 @@
       }
     },
     {
+      "id": "work-author-credit-v2",
+      "sha256": "48e2f78abb9e38070c8a46d5d8b838ac141f6ce9e41a846079c79c3acf09989a",
+      "file": "shapes/work-author-credit-v2.ttl",
+      "binding": {
+        "required": [
+          "credit",
+          "revision",
+          "work",
+          "work-head",
+          "key",
+          "ordinal",
+          "actor",
+          "receipt",
+          "scope",
+          "epoch",
+          "intent"
+        ],
+        "optional": [
+          "source-role",
+          "provider",
+          "namespace",
+          "role"
+        ],
+        "roles": [
+          "credit",
+          "revision"
+        ]
+      }
+    },
+    {
       "id": "work-derivation-unresolved-v1",
       "sha256": "d47d816b777674c9142e2b7b3238f6728d4e89a072268a46acc0303cb992ad52",
       "file": "shapes/work-derivation-unresolved-v1.ttl",
@@ -1359,6 +1409,11 @@
       "id": "work-editorial-field-v1",
       "sha256": "61a93b0c3f403a3450545c063cabfb8d12299586df48dbd4c9574d8831b30999",
       "file": "shapes/work-editorial-field-v1.ttl"
+    },
+    {
+      "id": "work-editorial-field-v2",
+      "sha256": "429d88dbbd5b58588b429de468905d5675fb31846743cac5e67c5c45fb235c97",
+      "file": "shapes/work-editorial-field-v2.ttl"
     },
     {
       "id": "work-kind-v1",
@@ -1481,6 +1536,16 @@
       "type": "https://rezics.com/vocab/AuthorCredit",
       "routes": [
         {
+          "profile": "work-author-credit-v2",
+          "shape": "https://rezics.com/definition/work-author-credit-v2/credit-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/modelRevision",
+              "value": "https://rezics.com/definition/work-author-credit-v2"
+            }
+          ]
+        },
+        {
           "profile": "work-author-credit-v1",
           "shape": "https://rezics.com/definition/work-author-credit-v1/credit-shape",
           "when": []
@@ -1490,6 +1555,16 @@
     {
       "type": "https://rezics.com/vocab/AuthorCreditRevision",
       "routes": [
+        {
+          "profile": "work-author-credit-v2",
+          "shape": "https://rezics.com/definition/work-author-credit-v2/revision-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/modelRevision",
+              "value": "https://rezics.com/definition/work-author-credit-v2"
+            }
+          ]
+        },
         {
           "profile": "work-author-credit-v1",
           "shape": "https://rezics.com/definition/work-author-credit-v1/revision-shape",
@@ -2114,6 +2189,16 @@
       "type": "http://www.w3.org/1999/02/22-rdf-syntax-ns#Statement",
       "routes": [
         {
+          "profile": "statement-v2",
+          "shape": "https://rezics.com/definition/statement-v2/statement-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/modelRevision",
+              "value": "https://rezics.com/definition/statement-v2"
+            }
+          ]
+        },
+        {
           "profile": "statement-v1",
           "shape": "https://rezics.com/definition/statement-v1/statement-shape",
           "when": []
@@ -2683,6 +2768,16 @@
       "type": "https://rezics.com/vocab/DefinitionRevision",
       "routes": [
         {
+          "profile": "semantic-definition-v2",
+          "shape": "https://rezics.com/definition/semantic-definition-v2/revision-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/modelRevision",
+              "value": "https://rezics.com/definition/semantic-definition-v2"
+            }
+          ]
+        },
+        {
           "profile": "semantic-definition-v1",
           "shape": "https://rezics.com/definition/semantic-definition-v1/revision-shape",
           "when": []
@@ -2722,6 +2817,16 @@
     {
       "type": "https://rezics.com/vocab/EditorialFieldSlot",
       "routes": [
+        {
+          "profile": "work-editorial-field-v2",
+          "shape": "https://rezics.com/definition/work-editorial-field-v2/slot-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/modelRevision",
+              "value": "https://rezics.com/definition/work-editorial-field-v2"
+            }
+          ]
+        },
         {
           "profile": "work-editorial-field-v1",
           "shape": "https://rezics.com/definition/work-editorial-field-v1/slot-shape",
@@ -3013,6 +3118,16 @@
       "type": "https://rezics.com/vocab/NativeAgentCredit",
       "routes": [
         {
+          "profile": "native-agent-credit-v2",
+          "shape": "https://rezics.com/definition/native-agent-credit-v2/credit-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/modelRevision",
+              "value": "https://rezics.com/definition/native-agent-credit-v2"
+            }
+          ]
+        },
+        {
           "profile": "native-agent-credit-v1",
           "shape": "https://rezics.com/definition/native-agent-credit-v1/credit-shape",
           "when": []
@@ -3022,6 +3137,16 @@
     {
       "type": "https://rezics.com/vocab/NativeAgentCreditRevision",
       "routes": [
+        {
+          "profile": "native-agent-credit-v2",
+          "shape": "https://rezics.com/definition/native-agent-credit-v2/revision-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/modelRevision",
+              "value": "https://rezics.com/definition/native-agent-credit-v2"
+            }
+          ]
+        },
         {
           "profile": "native-agent-credit-v1",
           "shape": "https://rezics.com/definition/native-agent-credit-v1/revision-shape",
@@ -3383,6 +3508,16 @@
       "type": "https://rezics.com/vocab/RelationOccurrence",
       "routes": [
         {
+          "profile": "relation-occurrence-v2",
+          "shape": "https://rezics.com/definition/relation-occurrence-v2/occurrence-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/modelRevision",
+              "value": "https://rezics.com/definition/relation-occurrence-v2"
+            }
+          ]
+        },
+        {
           "profile": "relation-occurrence-v1",
           "shape": "https://rezics.com/definition/relation-occurrence-v1/occurrence-shape",
           "when": []
@@ -3393,6 +3528,16 @@
       "type": "https://rezics.com/vocab/RelationOccurrenceRevision",
       "routes": [
         {
+          "profile": "relation-occurrence-v2",
+          "shape": "https://rezics.com/definition/relation-occurrence-v2/revision-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/modelRevision",
+              "value": "https://rezics.com/definition/relation-occurrence-v2"
+            }
+          ]
+        },
+        {
           "profile": "relation-occurrence-v1",
           "shape": "https://rezics.com/definition/relation-occurrence-v1/revision-shape",
           "when": []
@@ -3402,6 +3547,16 @@
     {
       "type": "https://rezics.com/vocab/RelationParticipation",
       "routes": [
+        {
+          "profile": "relation-occurrence-v2",
+          "shape": "https://rezics.com/definition/relation-occurrence-v2/participation-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/modelRevision",
+              "value": "https://rezics.com/definition/relation-occurrence-v2"
+            }
+          ]
+        },
         {
           "profile": "relation-occurrence-v1",
           "shape": "https://rezics.com/definition/relation-occurrence-v1/participation-shape",
@@ -3653,6 +3808,16 @@
       "type": "https://rezics.com/vocab/SemanticDefinition",
       "routes": [
         {
+          "profile": "semantic-definition-v2",
+          "shape": "https://rezics.com/definition/semantic-definition-v2/definition-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/modelRevision",
+              "value": "https://rezics.com/definition/semantic-definition-v2"
+            }
+          ]
+        },
+        {
           "profile": "semantic-definition-v1",
           "shape": "https://rezics.com/definition/semantic-definition-v1/definition-shape",
           "when": []
@@ -3712,6 +3877,16 @@
     {
       "type": "https://rezics.com/vocab/StatementRevision",
       "routes": [
+        {
+          "profile": "statement-v2",
+          "shape": "https://rezics.com/definition/statement-v2/revision-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/modelRevision",
+              "value": "https://rezics.com/definition/statement-v2"
+            }
+          ]
+        },
         {
           "profile": "statement-v1",
           "shape": "https://rezics.com/definition/statement-v1/revision-shape",
@@ -4359,6 +4534,7 @@
     "contexts/main-package-release-recommendation-v1.jsonld": "583eb256a54cade90585067b0cbb9659a6d2fb42052c0772f830de5c5f1a944a",
     "contexts/name-registry-cleanup-v1.jsonld": "beb63423f81a42c509b6202832e13b0dd99fb98a907cccbf76d1c71a361d215c",
     "contexts/native-agent-credit-v1.jsonld": "ff3c086f0ed4894a5f3ef9f365d2dceb2136f86014d5da82a21c2cd872c52b70",
+    "contexts/native-agent-credit-v2.jsonld": "3dfaf1974ae35ebaaafc48d2c5d1b2b52690a3027f0cacfaf00e357ef72ccf5f",
     "contexts/poll-allocation-v1.jsonld": "d9e2c115b4ede5d0d2e6e63bc246f59c90f17ce112d9047bc8c669f12aab9a57",
     "contexts/poll-resolution-v1.jsonld": "b2356c588847862a3fbdb887d87fb070c498e7ce38fb9f0af497ab696f6094c5",
     "contexts/poll-snapshot-v1.jsonld": "eaaa282f97a5751a7cab5ef9e673cc76312b4cfce4a9c9bfe82aed33a19d7f5a",
@@ -4398,12 +4574,14 @@
     "contexts/recipe-facts-v1.jsonld": "0513ee3f56b29fcbbc5cc1e326e68d68232e9dee1b5182b3cd6ea3368248d311",
     "contexts/recipe-structure-v1.jsonld": "008e021120755538e16f0301ba2bd145dd167854435f66b0d1adc278c58c2d64",
     "contexts/relation-occurrence-v1.jsonld": "11765223ec6529f75fde356cb678562299f257127321825a0a6d06bc91b0b84f",
+    "contexts/relation-occurrence-v2.jsonld": "9f909041be22b747a8114884858cbfe83fe3598affadecacb9affa2f740ba9ab",
     "contexts/release-v1.jsonld": "4e08a0411d5e3180f70f1f90939d7df0c9d797daceeda586ebf4f823f7120461",
     "contexts/release-v2.jsonld": "6f72516d1ca454a37af8e11df6339fee343e716bf0215bfe38ea6312eb4143f4",
     "contexts/release-v3.jsonld": "3ac63f8ab1e0b446ffb1d469248c262c95ea0e5e1e3d87e37c4042b9b8556789",
     "contexts/rights-offering-v1.jsonld": "833a3c951d2cced7d21996b567735a5005f8336b96b42735135633c11daa2355",
     "contexts/semantic-annotation-v1.jsonld": "15e08572d951513ddac7b9e3c1d1f2315d520a0b03c67d418271872d98b85f7d",
     "contexts/semantic-definition-v1.jsonld": "a455850c8e286d4953be2778e82b5d208e30ece15bf8fc33ee107eb9eb2ae77b",
+    "contexts/semantic-definition-v2.jsonld": "a455850c8e286d4953be2778e82b5d208e30ece15bf8fc33ee107eb9eb2ae77b",
     "contexts/semantic-model-generation-v1.jsonld": "7c41fe9b34d5c5703d5aac1881ee9372a8c3582b1b566356071251920d54e1d6",
     "contexts/semantic-resource-v1.jsonld": "1e4076b5fccc395826ee5cbb8c0336972f5d787dcb5be5c713ccdd87b1529541",
     "contexts/semantic-rule-v1.jsonld": "f275d7bc7a7fca4f1408e983e0dac046d98754cbd7de7ec74550360581be006f",
@@ -4417,6 +4595,7 @@
     "contexts/space-zone-v1.jsonld": "1406d146fda1f35aff2b9d3a79c2de4cbcec4048413af39b4b7423167651cfd1",
     "contexts/statement-decision-v1.jsonld": "6fde37ebce49b673eca2752de6e7041553b3d2f2a7fdcbf26b6466b2c6af32fd",
     "contexts/statement-v1.jsonld": "57c727b2d9fd498be2920ceed104b251965b24472248beb55cd804b9418cc22b",
+    "contexts/statement-v2.jsonld": "1d28d0ff2b7be89807cc71b0a35052a3693a30e23cfd1e316e918a4c36dea666",
     "contexts/structure-book-v1.jsonld": "eb28283f3d1f5f9325581a641f211f124d284707479cc7ef68830263079c54b2",
     "contexts/structure-composition-v1.jsonld": "ced94ccfdc446be7bdd7e030ef7df74854098a17aa91248d9f6b2896e5b0c81d",
     "contexts/structure-work-composition-v1.jsonld": "e4f9043b7b1dc4d1bb6d11cbb8ce0b2bd79b50597da0841f87d8b56aa0c940e3",
@@ -4433,10 +4612,12 @@
     "contexts/work-address-disposition-v1.jsonld": "6d19bf63e9535af917fd9a8404114f031ce83a24b212565559225c196e304e2e",
     "contexts/work-address-lifecycle-v1.jsonld": "9baa534891b117f48797b0b180b5dded93b594a16aa45380448af98a92dd74d5",
     "contexts/work-author-credit-v1.jsonld": "1fd534059e7dddc60845e915f4de70cf6a5ced2b710c21e007b3ac4430cec790",
+    "contexts/work-author-credit-v2.jsonld": "1fd534059e7dddc60845e915f4de70cf6a5ced2b710c21e007b3ac4430cec790",
     "contexts/work-derivation-unresolved-v1.jsonld": "d1fdd26fc0e2b347d986df2ecb6c7bc5e4ca3cc9b49864f855cf5f03857bf3d5",
     "contexts/work-derivation-v1.jsonld": "1361b50b75a374f9d6cd7e290a8ae5c4f440476ce19bbc79222935c4b2b1be30",
     "contexts/work-derivation-v2.jsonld": "611e74cfed2166276f58a98b6891f5f1abdb04ccbdae75c86fcf3ab79c32ba69",
     "contexts/work-editorial-field-v1.jsonld": "d03d8f877ae5a18aee81f0658b5cc0f7e86be1c929afd08e28dd62555bcaa3ef",
+    "contexts/work-editorial-field-v2.jsonld": "8394c641d2420dc6afa76ea07be95f1a37f1841fb45c6748b571edc9a56f7bc3",
     "contexts/work-kind-v1.jsonld": "b96f08b46aff848c5b56b15c2390955d3059562bc65282ea6bdc186dc74db802",
     "contexts/work-kind-v2.jsonld": "b96f08b46aff848c5b56b15c2390955d3059562bc65282ea6bdc186dc74db802",
     "contexts/work-kind-v3.jsonld": "b96f08b46aff848c5b56b15c2390955d3059562bc65282ea6bdc186dc74db802",
@@ -4504,6 +4685,7 @@
     "shapes/main-package-release-recommendation-v1.ttl": "2560da59cda40c7ac9fd0fb38b39e2d63666e6fdb06dccf250728d7d28faab60",
     "shapes/name-registry-cleanup-v1.ttl": "72c16910157a5eeaafe965a11817f926259c09bc79ae7d21cdbc978646a380bf",
     "shapes/native-agent-credit-v1.ttl": "307be7d1ac523958e6b5e9c83210288214ce2bf53a2046202b8c2f7e35d3c0de",
+    "shapes/native-agent-credit-v2.ttl": "79a0b3b6a7bbf8314cbcc70b5178c94b3dc1ce7559e6eade873c2792d4b16b8b",
     "shapes/poll-allocation-v1.ttl": "c277302719c0570563b7889276e106b9a1cee676551b2932299ad7cf03910ae4",
     "shapes/poll-resolution-v1.ttl": "47413e42bb40731c023a3129dd1c878b335e73ea20bc6e45204cb166bf2a4654",
     "shapes/poll-snapshot-v1.ttl": "f9471026df8866e1ce6379325f83fe20f7be7b3b68d160386e5a1319665b8214",
@@ -4543,12 +4725,14 @@
     "shapes/recipe-facts-v1.ttl": "89506c7a5adae8ae0298f50ebd38751895189e53ab6717699ed8874d0786d747",
     "shapes/recipe-structure-v1.ttl": "994a085c6ee2f10824cb29225d59076402db2cf4479d97e16a223d07323e2f16",
     "shapes/relation-occurrence-v1.ttl": "27269b50a2a7c632a6fa4a96bcc94d4e623f3b00e19b36926727c229bca099c6",
+    "shapes/relation-occurrence-v2.ttl": "f845f39cff9c253dafe3a267f10340e98e538bf0cf2bf210de0d5e68ffe18745",
     "shapes/release-v1.ttl": "e0018a2144113c2c3cc6bfcdc3951f1ce282c919859950c0811aa018c4a1c92c",
     "shapes/release-v2.ttl": "2f582286d19af2061cc01e2c80cc53813a9437a6b2a855ef578435e5261162f5",
     "shapes/release-v3.ttl": "1c6febcd2ce283307c8aaff5722e54b38e84dedb5a3151741d374516c420b83b",
     "shapes/rights-offering-v1.ttl": "dd10150cfac446923dbb9ac8501f47a0a24bb292dd0eb4ddbad9449ed1746f85",
     "shapes/semantic-annotation-v1.ttl": "d195472baf5db656b7086c576e95e0f17f057c95ebd766e3789bdecf033835a8",
     "shapes/semantic-definition-v1.ttl": "c4755adab864370f58a4b27067ecd9aa6e4d4923ef97249364b4b34a76147e3e",
+    "shapes/semantic-definition-v2.ttl": "fc4ed843cea04c13d9fac64b9056455cf316977d8ff7f4c40856ac5879cf6d7c",
     "shapes/semantic-model-generation-v1.ttl": "16d519183b325de019c55dc5ca2c5bf140b246ba4bb81609b16e386d431595f0",
     "shapes/semantic-resource-v1.ttl": "0ebbb7cd1f04b9adb75ecb0504013195561e38a8e59a398937b95e3c679bfd99",
     "shapes/semantic-rule-v1.ttl": "bf01a1cebd44c8ec698e408e49fe2bd08cb41aeccb8ffb88b2bf99fadbba29a2",
@@ -4562,6 +4746,7 @@
     "shapes/space-zone-v1.ttl": "dfe09fb0e4f2bc850e1f561f8f32dfdc3bf6f7070166c0b04fe8cd54ab273803",
     "shapes/statement-decision-v1.ttl": "f5d5c72e0473c6abd0816c0cddceb6c70c8075a47a4d2eeb81b28f9e598b2490",
     "shapes/statement-v1.ttl": "0456c753fb7f85c36a1c58664b1f763425b162382bc198f4e46c0656432fa953",
+    "shapes/statement-v2.ttl": "f491f13329de73fd3e216a94ef691692a92785553b718c19bbdfce2bd5ea5f2d",
     "shapes/structure-book-v1.ttl": "5598fd9d04b2729c3008a647c92c03c9f1580b5c103dbe2e1a84f10e226e6242",
     "shapes/structure-composition-v1.ttl": "1b6f33eae08a2779caee4b0335ad6f823be4f41ec3f6dd070a3c4ea70de5fd1c",
     "shapes/structure-work-composition-v1.ttl": "f8b3030ccf4b0bcc882dc360452ec471e4f9d2f9ea125a09120b990a2eda7566",
@@ -4578,10 +4763,12 @@
     "shapes/work-address-disposition-v1.ttl": "9c4f852c5ff565984ef8a1c228d2c580b58c98c8e397cfdfb5305800fdc676de",
     "shapes/work-address-lifecycle-v1.ttl": "4057be5cb9790c3aa94c846707224cbe7c211f1eb3b3f17f03ecb3b039715134",
     "shapes/work-author-credit-v1.ttl": "c24cb44e45b1b096f5a26862e4fe6ecd1aa862db2af26c33f1a6cb624bf1e732",
+    "shapes/work-author-credit-v2.ttl": "48e2f78abb9e38070c8a46d5d8b838ac141f6ce9e41a846079c79c3acf09989a",
     "shapes/work-derivation-unresolved-v1.ttl": "d47d816b777674c9142e2b7b3238f6728d4e89a072268a46acc0303cb992ad52",
     "shapes/work-derivation-v1.ttl": "27e4e0f2871f58bd1b7434dff809342721109220daec1b5b0f817da8abf176df",
     "shapes/work-derivation-v2.ttl": "629ed8a8a60013eecc334a84298687e02c57dbaf75d201f49bb9d3b597abd634",
     "shapes/work-editorial-field-v1.ttl": "61a93b0c3f403a3450545c063cabfb8d12299586df48dbd4c9574d8831b30999",
+    "shapes/work-editorial-field-v2.ttl": "429d88dbbd5b58588b429de468905d5675fb31846743cac5e67c5c45fb235c97",
     "shapes/work-kind-v1.ttl": "d1cfc2074299ba294307ed19b97c2641dd0197b759f06a43eb376584cbe2d1d2",
     "shapes/work-kind-v2.ttl": "83d22b37af19ca88386aa6767c96f94537e64614979b84db72fe9264dbdb1009",
     "shapes/work-kind-v3.ttl": "08d0d5879c1810708f0bbd7eb1bd0ecc0a14c124cddfe202c66dd236e3b59f90",
@@ -4601,8 +4788,8 @@
     "shapes/zone-capability-v1.ttl": "a7296e09f052999c0578caa2894ebdbd272cedd04357e4f291e2506e73eed611",
     "shapes/zone-presentation-v1.ttl": "6aecbd83013a8a9f9e2dc712d26b6450df29554f2f2c7d6174c2897b418bece7",
     "shapes/zone-presentation-v2.ttl": "e331efea63e2bfb3ce883fb4d005ab63d7dd976973e43fd1599f655eef3ea730",
-    "packages/model/src/generated/profiles.ts": "68ca50775d77f8805e4bc3e71860f4bc043b355a93f606267e43b1de55418619",
-    "packages/model/src/generated/schemas.ts": "abf8d86794c14b6ef8a4e75a3d9a19b8fa7933f605c938d8f90c979f66122b05",
-    "packages/model/src/generated/vocabulary.ts": "97b3818840272e0c9028bff09e502f5f38771b50bbac4d2992466f83daa8e6c3"
+    "packages/model/src/generated/profiles.ts": "0d9cd42e0b354429cef8c42197b3ca50eb5baf9932e2ed422100cffcc19b660b",
+    "packages/model/src/generated/schemas.ts": "4836b832e7a41b19dfcc705ae864f313c5467b875e702fac13e832408787fd12",
+    "packages/model/src/generated/vocabulary.ts": "144a54285e92bbb03936c04d7285821813001592b505f35e57f56d4e44c3ce26"
   }
 }

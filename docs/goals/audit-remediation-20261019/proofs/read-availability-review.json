@@ -732,74 +732,74 @@
   "originalCriteria": {
     "D5-001": [
       {
-        "criterion": "\u5728\u76ee\u6807\u5de5\u4f5c\u8d1f\u8f7d\u9884\u7b97\u5185\uff0c\u521b\u5efa\u5377\u7ae0\u548c\u53d1\u5e03\u83b7\u5f97\u6210\u529f\u56de\u6267\u540e\uff0c\u5237\u65b0\u3001\u8fd4\u56de\u76ee\u5f55\u3001\u518d\u5f00\u7f16\u8f91\u9875\u3001\u81ea\u5df1\u7684\u516c\u5f00\u8be6\u60c5\u53ca\u53e6\u4e00\u8d26\u53f7\u89c6\u56fe\u5747\u80fd\u8bfb\u53d6\u8be5\u786e\u5207\u5bf9\u8c61\uff1b\u4e0d\u80fd\u9760\u91cd\u65b0\u521b\u5efa\u6216\u91cd\u590d\u53d1\u5e03\u6062\u590d\u3002",
+        "criterion": "在目标工作负载预算内，创建卷章和发布获得成功回执后，刷新、返回目录、再开编辑页、自己的公开详情及另一账号视图均能读取该确切对象；不能靠重新创建或重复发布恢复。",
         "disposition": "pending-other-owner-outcomes",
         "evidenceAndResidual": "The creation/edit/navigation and exact-object read acceptance in this merged audit row is retained under its existing owners; this review adds no whole-suite gate."
       },
       {
-        "criterion": "\u540c\u4e00\u53d7\u652f\u6301\u8bfb\u53d6\u5728 Main \u6210\u529f\u6240\u9700\u7684\u65f6\u95f4\u5e94\u5904\u4e8e\u6574\u6761 Web \u8bfb\u53d6\u94fe\u7684\u5951\u7ea6\u5185\uff1b\u7ed9\u524d\u7f6e\u8bfb\u53d6\u3001\u76ee\u6807\u8bfb\u53d6\u548c\u9875\u9762\u603b\u671f\u9650\u5206\u914d\u53ef\u6267\u884c\u9884\u7b97\uff0c\u5e76\u7528\u6301\u7eed\u6d4b\u91cf\u9a8c\u8bc1\u3002\u4e0d\u80fd\u4ec5\u589e\u52a0\u4e00\u4e2a\u8d85\u65f6\u6216\u964d\u4f4e\u8bbf\u95ee\u6821\u9a8c\u3002",
+        "criterion": "同一受支持读取在 Main 成功所需的时间应处于整条 Web 读取链的契约内；给前置读取、目标读取和页面总期限分配可执行预算，并用持续测量验证。不能仅增加一个超时或降低访问校验。",
         "disposition": "partial-source-and-unit-only",
         "evidenceAndResidual": "Main notification allocation is shared, including Account. End-to-end BFF timing and normal successful pages on the retained corpus were not reached."
       },
       {
-        "criterion": "\u5bf9\u9884\u7b97\u8d85\u9650\u3001\u8eab\u4efd\u5f85\u6821\u9a8c\u3001\u4e0a\u6e38\u62d2\u7edd\u548c\u6682\u65f6\u4e0d\u53ef\u7528\u5206\u522b\u4fdd\u7559\u53ef\u8bca\u65ad\u7ed3\u679c\uff1b\u524d\u95e8\u4ecd\u63d0\u4f9b\u9519\u8bef\u8bf4\u660e\u53ca\u91cd\u8bd5\u5165\u53e3\uff0c\u7f16\u8f91\u5185\u5bb9\u548c\u5df2\u6210\u529f\u56de\u6267\u7ee7\u7eed\u53ef\u89c1\u3002",
+        "criterion": "对预算超限、身份待校验、上游拒绝和暂时不可用分别保留可诊断结果；前门仍提供错误说明及重试入口，编辑内容和已成功回执继续可见。",
         "disposition": "pending-public-outcomes",
         "evidenceAndResidual": "No current public diagnostic/error/retry assertion ran; a finite 503 is not success."
       },
       {
-        "criterion": "\u4e3e\u62a5\u539f\u5e42\u7b49\u952e\u91cd\u8bd5\u53ea\u751f\u6210\u4e00\u4e2a\u6848\u4ef6\u5e76\u8fd4\u56de\u53ef\u8bbf\u95ee\u7684\u79c1\u6709\u56de\u6267\uff1b\u4e34\u65f6\u8bfb\u53d6\u5931\u8d25\u4e0d\u5f97\u4e22\u5b57\u6bb5\u6216\u5f15\u5bfc\u7528\u6237\u91cd\u590d\u65b0\u5efa\u4e3e\u62a5\u3002",
+        "criterion": "举报原幂等键重试只生成一个案件并返回可访问的私有回执；临时读取失败不得丢字段或引导用户重复新建举报。",
         "disposition": "pending-other-owner-outcomes",
         "evidenceAndResidual": "The report idempotency/private receipt criterion remains with its existing owner."
       },
       {
-        "criterion": "stream/unread\u53ca\u6240\u6709\u5185\u5c42\u8bfb\u5171\u4eabwall\u3001RPC\u3001\u5b57\u8282\u548c\u5f15\u64ce\u5de5\u4f5c\u9884\u7b97\u3002",
+        "criterion": "stream/unread及所有内层读共享wall、RPC、字节和引擎工作预算。",
         "disposition": "partial-source-and-unit-only",
         "evidenceAndResidual": "Shared 10s/160 graph RPC/4MiB response allocation and bounded seeks are present; actual SQL/engine work and complete real pages remain unmeasured."
       },
       {
-        "criterion": "\u5ba2\u6237\u7aef\u4e2d\u6b62\u540e\u4e0d\u518d\u542f\u52a8\u540e\u7eedsubject/SQL/RPC\uff0c\u5b58\u91cf\u5de5\u4f5c\u5728\u660e\u786e\u5bbd\u9650\u5185\u91ca\u653e\u3002",
+        "criterion": "客户端中止后不再启动后续subject/SQL/RPC，存量工作在明确宽限内释放。",
         "disposition": "partial-source-and-unit-only",
         "evidenceAndResidual": "Existing unit doubles cover abort during Account, SQL checkout/statement and subject resolution; the five signed-in public 100ms-grace/300ms-observation cases hit setup failure."
       },
       {
-        "criterion": "1/2/4/8\u901a\u77e5\u4e0eWork\u3001Discover\u3001\u6b63\u6587\u641c\u7d22\u6df7\u5408\u4f1a\u8bdd\u5747\u80fd\u5b8c\u6210\uff1b\u505c\u6b62\u5ba2\u6237\u7aef\u540epending\u5f52\u96f6\u4e14\u4e0d\u6301\u7eed\u5360\u7528\u6838\u5fc3\u8bfb\u5bb9\u91cf\u3002",
+        "criterion": "1/2/4/8通知与Work、Discover、正文搜索混合会话均能完成；停止客户端后pending归零且不持续占用核心读容量。",
         "disposition": "pending-workload-premise",
         "evidenceAndResidual": "No original mixed 1/2/4/8 notification/Work/Discover/chapter-search selector or fifty-active-target-notification corpus was available through the supported retained restore. Native pending-to-zero and capacity recovery were not measured."
       },
       {
-        "criterion": "\u4fdd\u6301disclosure\u6b63\u786e\u6027\uff0c\u4e0d\u4ee5\u65e0\u754c\u5e76\u884c\u6216\u4e0d\u65ad\u63d0\u9ad8\u8d85\u65f6\u63a9\u76d6\u653e\u5927\u3002",
+        "criterion": "保持disclosure正确性，不以无界并行或不断提高超时掩盖放大。",
         "disposition": "pending-public-disclosure-with-source-concern",
         "evidenceAndResidual": "Recipient batches and final fences are present; original six-persona isolation assertions did not run. The inbox also discards sanitized process-notice fields from its final fence (unconfirmed public source counterexample below)."
       },
       {
-        "criterion": "\u5728\u540c\u7b49\u6570\u636e\u89c4\u6a21\u548c\u6b63\u5e38\u5e76\u53d1\u8bfb\u53d6\u4e0b\uff0cAll\u3001\u63a8\u8350\u3001\u6982\u5ff5/Realm \u641c\u7d22\u3001\u7ae0\u8282\u3001New feed \u548c\u77ed\u7eed\u9875\u5747\u80fd\u5b8c\u6210\uff1b\u5931\u8d25\u4fdd\u7559\u8bcd\u4e0e\u6761\u4ef6\uff0c\u660e\u786e\u53d6\u5f97/\u672a\u53d6\u5f97\u90e8\u5206\uff0c\u91cd\u8bd5\u6709\u53ef\u6d4b\u7ec8\u6001\u3002",
+        "criterion": "在同等数据规模和正常并发读取下，All、推荐、概念/Realm 搜索、章节、New feed 和短续页均能完成；失败保留词与条件，明确取得/未取得部分，重试有可测终态。",
         "disposition": "pending-other-owner-outcomes",
         "evidenceAndResidual": "The larger All/recommendation/Realm/search/chapter/New-feed/continuation acceptance stays with its existing owners; this proof does not claim those pages pass."
       },
       {
-        "criterion": "\u9884\u7b97\u4fdd\u6301\u6709\u754c\uff1b\u6bcf\u4e2a\u5931\u8d25\u7801\u5bf9\u5e94\u53ef\u8bca\u65ad\u9636\u6bb5\uff0c\u9519\u8bef\u548c\u672a\u5b8c\u6210\u626b\u63cf\u4e0d\u5f97\u8868\u793a\u6210\u96f6\u5339\u914d\uff1b\u4e0e AUD-010 \u7684 complete/scan \u9a8c\u6536\u4e00\u8d77\u8bc1\u660e\u3002",
+        "criterion": "预算保持有界；每个失败码对应可诊断阶段，错误和未完成扫描不得表示成零匹配；与 AUD-010 的 complete/scan 验收一起证明。",
         "disposition": "partial-source-only",
         "evidenceAndResidual": "Limits remain finite and unavailable unread subjects fail rather than lower the count. Native engine work and the broader complete/scan criteria are not proven here."
       },
       {
-        "criterion": "\u540c\u4e00\u672c\u5730\u8d26\u6237\u80fd\u591f\u8bfb\u53d6\u901a\u77e5\u53ca\u672a\u8bfb\u6570\uff1b\u63a7\u5236\u5176\u4ed6\u53ea\u8bfb\u9875\u9762\u53ef\u7528\u65f6\uff0c\u5217\u8868\u4e0e\u8ba1\u6570\u5747\u5728\u8bf7\u6c42\u9884\u7b97\u5185\u5b8c\u6210\uff1b\u4e00\u6b21\u771f\u5b9e\u6682\u65f6\u6545\u969c\u540eTry again\u53ef\u6062\u590d\u3002\u7528Main\u539f\u59cb\u8bf7\u6c42\u548cBFF\u8bf7\u6c42\u8fdb\u4e00\u6b65\u5b9a\u4f4d\uff0c\u4e0d\u9760\u5ef6\u957f\u8d85\u65f6\u6216\u9690\u85cf\u9519\u8bef\u89c6\u56fe\u901a\u8fc7\u3002",
+        "criterion": "同一本地账户能够读取通知及未读数；控制其他只读页面可用时，列表与计数均在请求预算内完成；一次真实暂时故障后Try again可恢复。用Main原始请求和BFF请求进一步定位，不靠延长超时或隐藏错误视图通过。",
         "disposition": "pending-public-outcomes",
         "evidenceAndResidual": "Original notification complete-page, admission and fresh retry selectors were pinned unchanged but not executed past corpus setup. No current Main/BFF success or failure was reproduced."
       }
     ],
     "D5-004": [
       {
-        "criterion": "\u6301\u7eed\u975e\u6cd5\u8f93\u5165\u7ec8\u6b62/\u9694\u79bb\u4e14\u539f\u56e0\u53ef\u8bca\u65ad\uff0c\u65e0source\u53d8\u5316\u4e0d\u91cd\u505a\u540c\u4e00\u5b8c\u6574\u5de5\u4f5c\u3002",
+        "criterion": "持续非法输入终止/隔离且原因可诊断，无source变化不重做同一完整工作。",
         "disposition": "partial-owner-composition-pass",
         "evidenceAndResidual": "The actual contradictory Work-revision sequence producer was quarantined once with a diagnosis and no unchanged population rereads. The obsolete invalid-media producer is absent and was not reproduced. Public diagnostic selection was rejected."
       },
       {
-        "criterion": "\u6682\u6001\u6545\u969c\u9000\u907f\u5e76\u5728\u6062\u590d\u540e\u63a8\u8fdbcheckpoint\uff0c\u7ef4\u62a4\u603b\u5de5\u4f5c\u548cscope\u516c\u5e73\u6027\u6709\u9884\u7b97\u3002",
+        "criterion": "暂态故障退避并在恢复后推进checkpoint，维护总工作和scope公平性有预算。",
         "disposition": "partial-owner-composition-pass",
         "evidenceAndResidual": "Durable owners demonstrated retained checkpoints/generations, transient retries/recovery, 21 parked scopes and one fleet probe in an allowance. Production-clock concurrent restart/lease races, prolonged idle rates, SQL/engine work and mixed core reads remain unmeasured."
       },
       {
-        "criterion": "\u9694\u79bbfixture\u9a8c\u8bc1invalid media\u91cd\u8bd5\u4e0a\u754c\u3001\u4fee\u590d\u540e\u6062\u590d\u53ca\u4e0e\u6838\u5fc3\u8bfb\u53d6\u5e76\u884c\u53ef\u7528\u3002",
+        "criterion": "隔离fixture验证invalid media重试上界、修复后恢复及与核心读取并行可用。",
         "disposition": "partial-current-producer-pass",
         "evidenceAndResidual": "Current malformed-source producer and an unreceipted graph repair rearmed the same generation using a runtime native version. This is a maintenance-owner case with personaJourney=false, not original public/mixed-load acceptance or an invalid-media reproduction."
       }
@@ -2129,20 +2129,20 @@
     },
     "originalCriteria": [
       {
-        "criterion": "\u6301\u7eed\u975e\u6cd5\u8f93\u5165\u7ec8\u6b62/\u9694\u79bb\u4e14\u539f\u56e0\u53ef\u8bca\u65ad\uff0c\u65e0source\u53d8\u5316\u4e0d\u91cd\u505a\u540c\u4e00\u5b8c\u6574\u5de5\u4f5c\u3002",
+        "criterion": "持续非法输入终止/隔离且原因可诊断，无source变化不重做同一完整工作。",
         "disposition": "proved for the actual current malformed-source owner path",
         "closure": "partial for the original class; no public-persona or refusal-witness-race proof",
         "evidence": "Retained native 32-assertion case and exact reviewed source: diagnosed basis-invalid, attempts reset, one full claim/read, zero unchanged rereads; source change rearms.",
         "limits": "Historical invalid-media trigger is not hydrated today. SRC-D5-004-001 remains unconfirmed; frozen public diagnostic was not executed."
       },
       {
-        "criterion": "\u6682\u6001\u6545\u969c\u9000\u907f\u5e76\u5728\u6062\u590d\u540e\u63a8\u8fdbcheckpoint\uff0c\u7ef4\u62a4\u603b\u5de5\u4f5c\u548cscope\u516c\u5e73\u6027\u6709\u9884\u7b97\u3002",
+        "criterion": "暂态故障退避并在恢复后推进checkpoint，维护总工作和scope公平性有预算。",
         "disposition": "partial",
         "evidence": "Retained real-owner 30/60-second transient backoff, generation/checkpoint preservation and successful activation; 21 parked scopes and one shared probe allowance. Source fairness/due-index bounds already reviewed.",
         "limits": "Fixture bounds only. No retained assertion measures healthy core reads or scope progress concurrently with malformed/transient work; no additional benchmark or scale requirement added."
       },
       {
-        "criterion": "\u9694\u79bbfixture\u9a8c\u8bc1invalid media\u91cd\u8bd5\u4e0a\u754c\u3001\u4fee\u590d\u540e\u6062\u590d\u53ca\u4e0e\u6838\u5fc3\u8bfb\u53d6\u5e76\u884c\u53ef\u7528\u3002",
+        "criterion": "隔离fixture验证invalid media重试上界、修复后恢复及与核心读取并行可用。",
         "disposition": "partial; concurrent core-read assertion unreached",
         "evidence": "Actual contradictory-source quarantine and unreceipted repair/recovery passed.",
         "limits": "Old invalid-media input is obsolete for this owner. The retained post-repair /v1/works read is sequential. No supported existing selector found for the original overlap assertion."
@@ -2973,7 +2973,7 @@
     },
     "originalCriteria": [
       {
-        "criterion": "\u6301\u7eed\u975e\u6cd5\u8f93\u5165\u7ec8\u6b62/\u9694\u79bb\u4e14\u539f\u56e0\u53ef\u8bca\u65ad\uff0c\u65e0source\u53d8\u5316\u4e0d\u91cd\u505a\u540c\u4e00\u5b8c\u6574\u5de5\u4f5c\u3002",
+        "criterion": "持续非法输入终止/隔离且原因可诊断，无source变化不重做同一完整工作。",
         "disposition": "proved for the actual current malformed-source owner path",
         "closure": "partial for the original class; no public-persona or refusal-witness-race proof",
         "evidence": "Retained native 32-assertion case and exact reviewed source: diagnosed basis-invalid, attempts reset, one full claim/read, zero unchanged rereads; source change rearms.",
@@ -2981,14 +2981,14 @@
         "thisContinuation": "Unchanged retained owner proof reused; no additional execution."
       },
       {
-        "criterion": "\u6682\u6001\u6545\u969c\u9000\u907f\u5e76\u5728\u6062\u590d\u540e\u63a8\u8fdbcheckpoint\uff0c\u7ef4\u62a4\u603b\u5de5\u4f5c\u548cscope\u516c\u5e73\u6027\u6709\u9884\u7b97\u3002",
+        "criterion": "暂态故障退避并在恢复后推进checkpoint，维护总工作和scope公平性有预算。",
         "disposition": "partial",
         "evidence": "Retained real-owner 30/60-second transient backoff, generation/checkpoint preservation and successful activation; 21 parked scopes and one shared probe allowance. Source fairness/due-index bounds already reviewed.",
         "limits": "Fixture bounds only. No retained assertion measures healthy core reads or scope progress concurrently with malformed/transient work; no additional benchmark or scale requirement added.",
         "thisContinuation": "Unchanged transient/fleet assertions reused; new overlap selector not executed because preparation prerequisites are absent."
       },
       {
-        "criterion": "\u9694\u79bbfixture\u9a8c\u8bc1invalid media\u91cd\u8bd5\u4e0a\u754c\u3001\u4fee\u590d\u540e\u6062\u590d\u53ca\u4e0e\u6838\u5fc3\u8bfb\u53d6\u5e76\u884c\u53ef\u7528\u3002",
+        "criterion": "隔离fixture验证invalid media重试上界、修复后恢复及与核心读取并行可用。",
         "disposition": "partial; original concurrent core-read assertion still unreached",
         "evidence": "Previously proved actual contradictory-source quarantine and repair/recovery reused. Original test owner now authored D5004C01 at 652e825ee2858d5370f9c654cfa5d8f2bbfff4bc; independently inspected, not executed.",
         "limits": "Historical invalid-media trigger remains obsolete. The retained post-repair read remains sequential. A compatible genuine queries projection/restore for exact ff5a214 product is not available; no concurrent API result or resource measurement is claimed."
@@ -3391,7 +3391,7 @@
     },
     "originalCriteria": [
       {
-        "criterion": "\u6301\u7eed\u975e\u6cd5\u8f93\u5165\u7ec8\u6b62/\u9694\u79bb\u4e14\u539f\u56e0\u53ef\u8bca\u65ad\uff0c\u65e0source\u53d8\u5316\u4e0d\u91cd\u505a\u540c\u4e00\u5b8c\u6574\u5de5\u4f5c\u3002",
+        "criterion": "持续非法输入终止/隔离且原因可诊断，无source变化不重做同一完整工作。",
         "disposition": "proved for the actual current malformed-source owner path",
         "closure": "partial for the original class; no public-persona or refusal-witness-race proof",
         "evidence": "Retained native 32-assertion case and exact reviewed source: diagnosed basis-invalid, attempts reset, one full claim/read, zero unchanged rereads; source change rearms.",
@@ -3399,14 +3399,14 @@
         "thisContinuation": "Original 32-assertion native malformed-source quarantine proof reused; no new native assertion executed."
       },
       {
-        "criterion": "\u6682\u6001\u6545\u969c\u9000\u907f\u5e76\u5728\u6062\u590d\u540e\u63a8\u8fdbcheckpoint\uff0c\u7ef4\u62a4\u603b\u5de5\u4f5c\u548cscope\u516c\u5e73\u6027\u6709\u9884\u7b97\u3002",
+        "criterion": "暂态故障退避并在恢复后推进checkpoint，维护总工作和scope公平性有预算。",
         "disposition": "partial",
         "evidence": "Retained real-owner 30/60-second transient backoff, generation/checkpoint preservation and successful activation; 21 parked scopes and one shared probe allowance. Source fairness/due-index bounds already reviewed.",
         "limits": "Fixture bounds only. No retained assertion measures healthy core reads or scope progress concurrently with malformed/transient work; no additional benchmark or scale requirement added.",
         "thisContinuation": "Original transient 30/60-second recovery and fleet/probe evidence reused; no replay or new benchmark."
       },
       {
-        "criterion": "\u9694\u79bbfixture\u9a8c\u8bc1invalid media\u91cd\u8bd5\u4e0a\u754c\u3001\u4fee\u590d\u540e\u6062\u590d\u53ca\u4e0e\u6838\u5fc3\u8bfb\u53d6\u5e76\u884c\u53ef\u7528\u3002",
+        "criterion": "隔离fixture验证invalid media重试上界、修复后恢复及与核心读取并行可用。",
         "disposition": "partial; original concurrent core-read assertion remains unreached",
         "evidence": "Root-authored additive case at exact 3e1181ca29016dfe8cd8e3331c5afaf75f3bb2a7 independently inspected. The supported recorded Task Goal invocation rejected its full-name selector before QA startup.",
         "limits": "Local existing native fixture is sufficient for these bindings; the old G-2750 query projection and all-six-persona preparation are not prerequisites for this narrow assertion. No Work response, held native delivery or quarantine state was observed in this continuation. Original post-repair read remains sequential."
@@ -3738,19 +3738,19 @@
     },
     "originalCriteria": [
       {
-        "criterion": "\u6301\u7eed\u975e\u6cd5\u8f93\u5165\u7ec8\u6b62/\u9694\u79bb\u4e14\u539f\u56e0\u53ef\u8bca\u65ad\uff0c\u65e0source\u53d8\u5316\u4e0d\u91cd\u505a\u540c\u4e00\u5b8c\u6574\u5de5\u4f5c\u3002",
+        "criterion": "持续非法输入终止/隔离且原因可诊断，无source变化不重做同一完整工作。",
         "disposition": "proved for actual malformed-source owner path; original class partial",
         "evidence": "Retained 32-assertion real-owner pass: one full claim/read, no unchanged population rereads, diagnosed basis-invalid and repair rearm. Not replayed to a pass in this run.",
         "limits": "Actual contradictory revision source, not obsolete media hydration. SRC-D5-004-001 remains an unconfirmed P2 source inference."
       },
       {
-        "criterion": "\u6682\u6001\u6545\u969c\u9000\u907f\u5e76\u5728\u6062\u590d\u540e\u63a8\u8fdbcheckpoint\uff0c\u7ef4\u62a4\u603b\u5de5\u4f5c\u548cscope\u516c\u5e73\u6027\u6709\u9884\u7b97\u3002",
+        "criterion": "暂态故障退避并在恢复后推进checkpoint，维护总工作和scope公平性有预算。",
         "disposition": "partial; retained bounded fixture proof unchanged",
         "evidence": "Retained real-owner 30/60-second transient backoff, checkpoint/generation preservation, activation, 21 parked populations and one shared fleet probe allowance.",
         "limits": "No new fleet/transient assertion passed here; injected clock and transport seam limits remain. No extra benchmark or concurrency matrix added."
       },
       {
-        "criterion": "\u9694\u79bbfixture\u9a8c\u8bc1invalid media\u91cd\u8bd5\u4e0a\u754c\u3001\u4fee\u590d\u540e\u6062\u590d\u53ca\u4e0e\u6838\u5fc3\u8bfb\u53d6\u5e76\u884c\u53ef\u7528\u3002",
+        "criterion": "隔离fixture验证invalid media重试上界、修复后恢复及与核心读取并行可用。",
         "disposition": "partial; original parallel core availability assertion still unreached",
         "evidence": "Retry/quarantine/repair proof remains retained. Corrected title selected exactly one real-native case, but budget-exit TypeError stopped the run before additive core overlap assertions.",
         "limits": "No claimed response-delivery overlap, Jena CPU saturation, mixed 1/2/4/8 workload, six-persona journey or cancellation proof."
@@ -4206,19 +4206,19 @@
     },
     "originalCriteria": [
       {
-        "criterion": "\u6301\u7eed\u975e\u6cd5\u8f93\u5165\u7ec8\u6b62/\u9694\u79bb\u4e14\u539f\u56e0\u53ef\u8bca\u65ad\uff0c\u65e0source\u53d8\u5316\u4e0d\u91cd\u505a\u540c\u4e00\u5b8c\u6574\u5de5\u4f5c\u3002",
+        "criterion": "持续非法输入终止/隔离且原因可诊断，无source变化不重做同一完整工作。",
         "disposition": "proved for actual current malformed-source isolated owner path",
         "evidence": "Original retained 32-assertion pass now also passes unchanged within this 40-assertion case: finite diagnosis/quarantine, one complete population read, no unchanged rereads, native source repair rearm.",
         "limits": "Does not claim the obsolete invalid-media producer was hydrated; SRC-D5-004-001 remains a separately retained unconfirmed P2 source inference with no reached failing outcome."
       },
       {
-        "criterion": "\u6682\u6001\u6545\u969c\u9000\u907f\u5e76\u5728\u6062\u590d\u540e\u63a8\u8fdbcheckpoint\uff0c\u7ef4\u62a4\u603b\u5de5\u4f5c\u548cscope\u516c\u5e73\u6027\u6709\u9884\u7b97\u3002",
+        "criterion": "暂态故障退避并在恢复后推进checkpoint，维护总工作和scope公平性有预算。",
         "disposition": "proved within original bounded owner fixture; source-only fairness review retained",
         "evidence": "30/60-second transient backoff and recovery, stable checkpoint/generation, 21 parked populations and one fleet probe allowance all reached and passed at current composition.",
         "limits": "Injected queue clock and authored transport seam retained; no new real-time benchmark, production scale or wider restart-race claim."
       },
       {
-        "criterion": "\u9694\u79bbfixture\u9a8c\u8bc1invalid media\u91cd\u8bd5\u4e0a\u754c\u3001\u4fee\u590d\u540e\u6062\u590d\u53ca\u4e0e\u6838\u5fc3\u8bfb\u53d6\u5e76\u884c\u53ef\u7528\u3002",
+        "criterion": "隔离fixture验证invalid media重试上界、修复后恢复及与核心读取并行可用。",
         "disposition": "proved within current isolated fixture; original missing parallel core assertion closed",
         "evidence": "Existing retry upper bounds and repair recovery pass with new real native-result delivery overlap: both real Main public200/exact-id and private404/no-id bodies answered in 387.0033ms, before response delivery release and while refresh unsettled, within original 10000ms bound.",
         "limits": "Response-delivery overlap only; native engine already returned its result. No Jena CPU saturation, mixed 1/2/4/8 sessions, BFF, six-persona or cancellation assertion claimed."
@@ -5076,18 +5076,18 @@
     },
     "originalCriteria": [
       {
-        "criterion": "\u6301\u7eed\u975e\u6cd5\u8f93\u5165\u7ec8\u6b62/\u9694\u79bb\u4e14\u539f\u56e0\u53ef\u8bca\u65ad\uff0c\u65e0source\u53d8\u5316\u4e0d\u91cd\u505a\u540c\u4e00\u5b8c\u6574\u5de5\u4f5c\u3002",
+        "criterion": "持续非法输入终止/隔离且原因可诊断，无source变化不重做同一完整工作。",
         "disposition": "proved for actual current malformed-source and MediaInvalid fixture paths",
         "evidence": "Prior32 owner assertions plus new22 native assertions: finite diagnosed quarantine, no unchanged full population rereads. Historical asset identity is not proved."
       },
       {
-        "criterion": "\u6682\u6001\u6545\u969c\u9000\u907f\u5e76\u5728\u6062\u590d\u540e\u63a8\u8fdbcheckpoint\uff0c\u7ef4\u62a4\u603b\u5de5\u4f5c\u548cscope\u516c\u5e73\u6027\u6709\u9884\u7b97\u3002",
+        "criterion": "暂态故障退避并在恢复后推进checkpoint，维护总工作和scope公平性有预算。",
         "disposition": "existing bounded owner-fixture assertions retained; no new prerequisite or rerun",
         "evidence": "Retained native32/40 cases cover transient30/60s backoff/recovery, checkpoint/generation preservation,21 parked populations and one shared probe allowance. New owner MediaUnavailable case remains transient.",
         "limits": "Controlled clocks and transport seam remain explicit; these assertions do not measure unrestricted production SQL/engine work or claim full persona/mixed-load success."
       },
       {
-        "criterion": "\u9694\u79bbfixture\u9a8c\u8bc1invalid media\u91cd\u8bd5\u4e0a\u754c\u3001\u4fee\u590d\u540e\u6062\u590d\u53ca\u4e0e\u6838\u5fc3\u8bfb\u53d6\u5e76\u884c\u53ef\u7528\u3002",
+        "criterion": "隔离fixture验证invalid media重试上界、修复后恢复及与核心读取并行可用。",
         "disposition": "original previously missing applicable MediaInvalid retry/repair assertion now proved; original core overlap already proved",
         "evidence": "D5004C02 genuine native22 assertions: one full claim,3 unchanged probes with0 population rereads, repaired source activates same retained generation. Reuse D5004C01 jobdb958b66 QA20261019t115726-ea25da,40 assertions with public200/private404 in387ms while real native result delivery and refresh remain held.",
         "limits": "Two complementary controlled fixture cases. Core overlap is response-delivery overlap, not Jena CPU saturation, mixed1/2/4/8 or six-persona journey proof."
@@ -5178,6 +5178,2240 @@
         }
       ],
       "qualification": "Report only; no product or runtime proof rerun. Only receipt metadata finalized afterward. Non-blocking harness-behind-main notice retained in raw output; both commands exited0."
+    }
+  },
+  "sourceAcknowledgementCompositionReview": {
+    "reviewedAt": "2026-10-19T13:35:51.425914+00:00",
+    "authority": "Second, separately qualified first independent review of only6b34ae composition/test delta after MediaInvalid review. Current brief authorizes receipt reuse, report checks only, no unchanged native/credit review or proof rerun.",
+    "reviewer": {
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "authoredProductChanges": false,
+      "independentReviewsOfThisDelta": 1,
+      "nestedAgentsUsed": false,
+      "accountFallbackUsed": false,
+      "unchangedSourceReviewOrPassingRuntimeReplayed": false
+    },
+    "decision": {
+      "sourceVerdict": "APPROVE",
+      "reviewedDelta": "6b34ae1833028628173880738ad3be4051a73b87",
+      "newBlockingSourceFindings": [],
+      "qualification": "Default production acknowledgement wiring and captured-transport/real-SQL owner composition only; not live-native public notification/query/persona acceptance.",
+      "dependenciesRequired": "Use the tested Source/native dependency composition and Source SQL2705 repair; do not infer these wave-owned dependencies are on main.",
+      "automaticLanding": false,
+      "originalAuditClassClosureClaimed": false,
+      "landing": "Manager composes the reviewed two-path delta with actual ready dependencies through a small normal gate, preserving current notification and other current-main bytes."
+    },
+    "immutablePins": {
+      "source": "6b34ae1833028628173880738ad3be4051a73b87",
+      "parent": "98995b69c021f4ec40e05c6d85116a6753485f41",
+      "tree": "195069dd0d7fc5d88e88bfb18dd3936b5e674751",
+      "changedPaths": [
+        "services/main/src/composition.ts",
+        "services/main/tests/composition-source-native-owners.test.ts"
+      ],
+      "manifest": [
+        {
+          "path": "services/main/src/composition.ts",
+          "blob": "0b22f552b1969ac08f2449b72daa163977266165",
+          "parentBlob": "2349f5848fefc99487ee40f4ff9e1a00de1a374d",
+          "sha256": "e6c7d892393e023db8cf6e60befbab17d9966d493e8969e8f961bfca887a82a0",
+          "testedWaveBlob": "0b22f552b1969ac08f2449b72daa163977266165"
+        },
+        {
+          "path": "services/main/tests/composition-source-native-owners.test.ts",
+          "blob": "d1ff1876aaef31ab715ae2f688cf1a127ecd2893",
+          "parentBlob": null,
+          "sha256": "05f673c90c644fe9aed6f8e92d38b07c6b7ffac28684e4025f917944e2ddac2a",
+          "testedWaveBlob": "d1ff1876aaef31ab715ae2f688cf1a127ecd2893"
+        }
+      ]
+    },
+    "dependencyManifest": {
+      "testedWave": "2f53317556f68b209bc82987093478e2b2e5ab71",
+      "sourceSqlRepair": "222d57ae9bb8886db39f42d7d76e7e3ea58aac7c",
+      "manifest": [
+        {
+          "path": "services/main/tests/support/source-field-native-fixture.ts",
+          "blob": "2cb63b82b92a7ecbe3292317154d0098f385405e",
+          "sha256": "d584fcab37edde02fafd966750ec97848adfad6b6d1b3228b1acdd21774a27bf"
+        },
+        {
+          "path": "services/main/src/modules/semantic/native-basis.ts",
+          "blob": "5361b74296d1bb8197c88477bca9470a4b3b8c09",
+          "sha256": "8350cd3509e0d076e23b8b6264b4dc967270e0aca1087be21a17c0b33e6866bd"
+        },
+        {
+          "path": "services/main/src/modules/source/field-support-acknowledged.ts",
+          "blob": "9e45319d4d5561f5fdc8f475364a1527d359f7b3",
+          "sha256": "515ec9ca32354049d898dcb7d896170a8354179773275a534e168209da188d60"
+        },
+        {
+          "path": "services/main/src/modules/source/field-support-retained.ts",
+          "blob": "811373af9c9c88b783edc4fdcc46aa9d7ac6faa7",
+          "sha256": "d5f6017fa7d9734498af94933b2029764922674bfc801afb12169795e5d5cc8c"
+        },
+        {
+          "path": "services/main/src/modules/source/field-support-native.ts",
+          "blob": "e113dbcbdacd2438d62d5d503f93086b22c684cf",
+          "sha256": "0016869b5c4a5164a22f5f3a4ee474cc28fae0e9dae566c45718d45f0b92b686"
+        },
+        {
+          "path": "services/main/src/modules/work/credit-attribution.ts",
+          "blob": "e73b1b4412fcec643bcebbbce7af722bd87e9fb6",
+          "sha256": "f1403de976ec0963362514c2954afd2cf5af7c6370d7676f99cf20a5c3483ba3"
+        },
+        {
+          "path": "services/content/migrations/2705_source_field_slot_bounds.sql",
+          "blob": "fda035ff91a4bc2183d255b6c0235eea83fc017c",
+          "sha256": "db09f0a63cf218120841daa46a6f8c8922228860f68de8bcbcb3d776b5e1b3ab"
+        }
+      ],
+      "landingState": "Wave-owned dependencies supplied for review; this review does not claim them landed on main."
+    },
+    "producerOutcomeRead": {
+      "path": ".temp/worktrees/g-2763/.temp/goal/composition-source-native-owners-rerun-receipt.json",
+      "copiedReceipt": ".temp/read-availability-review/media-invalid-ea0-source-6b34/source-composition/producer-receipt.json",
+      "sha256": "22d0070d56ae65d1c645e931c66114ec0129d7913ecb2a83ed4bc0450e3eafa4"
+    },
+    "sourceReview": [
+      {
+        "path": "services/main/src/composition.ts",
+        "line": 444,
+        "observation": "One actual creditAttributionOwner(environment) default instance is created; that same object is passed to acknowledgedSemanticSupportOwners and exposed in dependencies at line520. The focused spy proves Source verification reaches that exposed instance."
+      },
+      {
+        "path": "services/main/src/composition.ts",
+        "line": 445,
+        "observation": "Existing retainedFieldEvidenceOwners remains first in the owner spread. Added adapter supplies semantic/statement only; final sourceRetainedOwners spread preserves explicit named overrides. Real rights/evidence owners survive and Statement remains usable when only Semantic is overridden."
+      },
+      {
+        "path": "services/main/src/modules/source/field-support-acknowledged.ts",
+        "line": 25,
+        "observation": "Material dependency inspected only for the new handoff: calls actual verifyAcknowledgedSemanticBasis with selected retained value/current principal. Persists actual succeeded terminal receipt/admission/scope/operation/revision/epoch/sequence, validates correspondence, and retains independent occurrenceAdoption."
+      },
+      {
+        "path": "services/main/src/modules/source/field-support-retained.ts",
+        "line": 172,
+        "observation": "Existing attach resolves and rights-verifies retained evidence, then actual native acknowledgement, then Access owner authority and Source SQL settlement transaction. Failed/missing native or citation authority refuses before settlement; native acknowledgement is verified-before-commit, not atomic across native and Source owners."
+      }
+    ],
+    "actualFocusedTestReview": {
+      "path": "services/main/tests/composition-source-native-owners.test.ts",
+      "lines": "1-389",
+      "reviewed": "Read actual complete focused file, its captured native fixture and material adapter interfaces; not merely producer claims.",
+      "semanticAndStatement": "Real composition stores the actual native terminal acknowledgement with retained Source evidence; ordinary supplied ID alone cannot be an acknowledgement.",
+      "refusal": "Missing terminal, mismatched receipt revision/head/target/value, withdrawn Rights and failed owner authority each refuse without any Source settlement row.",
+      "overrides": "Explicit Semantic owner override replaces that named owner; Statement and authorizeReuse/publicEvidence functions remain and Statement attaches.",
+      "occurrence": "Real verifier consumes captured independent V2 occurrence assertion and receipt; removing its independent adoption causes503 with no new settlement.",
+      "citations": "A sealed historical source-binding attribution is not current citation authority. Without the independent citation delegate, the same exposed attribution owner is invoked and Source refuses503 with no settlement.",
+      "cleanup": "afterEach restores transport/visibility spies; afterAll ends both pools, stops the disposable host PostgreSQL cluster and removes test scratch objects.",
+      "limits": "Graph/object transports and native visibility are controlled captured fixtures. Real Semantic/Statement verifiers are not mocked, and Source/Access use real SQL. No live-native command, external provider, public API/persona or mixed-load outcome is asserted."
+    },
+    "retainedOriginalFailure": {
+      "qa": "20261019t120525-9084bc",
+      "job": "6d84878c-722d-4090-96db-b85ee85b246c step2",
+      "command": "bun scripts/goal/goalctl.ts test services/main/tests/composition-source-native-owners.test.ts",
+      "exitCode": 1,
+      "counts": {
+        "executed": 6,
+        "passed": 5,
+        "failed": 1,
+        "errors": 0,
+        "skippedOrFiltered": 0,
+        "assertions": 35
+      },
+      "source": {
+        "head": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+        "fingerprint": "3a40e7ac68b6afc4d26326f6024d605559be4bd56cd8659075d2d09c8270801c",
+        "clean": false
+      },
+      "sourceStable": true,
+      "acceptanceIdsCertified": 0,
+      "evidenceDirectory": ".temp/read-availability-review/media-invalid-ea0-source-6b34/source-composition/original-2201B-failure",
+      "failure": "Semantic success reached Source SQL settlement and failed inherited migration2702 regex with PostgreSQL2201B invalid repetition count(s).",
+      "repair": "Existing Source owner additive2705 at222d57ae preserves the URL-body1..512 constraint without unsupported bounded regex repetition. Original six-case assertion/test blob is unchanged; it passed at tested2f533175."
+    },
+    "retainedPassingOwnerProof": {
+      "qa": "20261019t130841-8d96bf",
+      "job": "eb6b3bce-070a-4d4a-b35a-d0ecdecaa9ee",
+      "command": "bun scripts/goal/goalctl.ts test services/main/tests/composition-source-native-owners.test.ts",
+      "exitCode": 0,
+      "counts": {
+        "executed": 6,
+        "passed": 6,
+        "failed": 0,
+        "errors": 0,
+        "skippedOrFiltered": 0,
+        "assertions": 36
+      },
+      "source": {
+        "head": "2f53317556f68b209bc82987093478e2b2e5ab71",
+        "fingerprint": "19371a401d87f75e732528027c704f76e614024709ff19bb3c35c5d9f42601c7",
+        "clean": true
+      },
+      "sourceStable": true,
+      "acceptanceIdsCertified": 0,
+      "evidenceDirectory": ".temp/read-availability-review/media-invalid-ea0-source-6b34/source-composition/corrected-outcome"
+    },
+    "runtime": {
+      "postgres": "postgres (PostgreSQL) 18.6",
+      "postgresBinary": "/usr/bin/postgres",
+      "postgresBinarySha256": "ab3f53fad9ac079ba36c85a13e6ff0f86d60d1c3bc5f9bb3142f73b9773cacfe",
+      "bun": "1.4.3",
+      "containerImagesUsed": [],
+      "imageDisposition": "No container image or shared stack used; disposable host-native PostgreSQL only"
+    },
+    "preparation": {
+      "testedSource": "2f53317556f68b209bc82987093478e2b2e5ab71",
+      "sourceStable": true,
+      "sourceClean": true,
+      "sourceSqlRepair": "222d57ae9bb8886db39f42d7d76e7e3ea58aac7c",
+      "migration": "services/content/migrations/2705_source_field_slot_bounds.sql",
+      "application": "Existing beforeAll migrateContent prepares fresh Content SQL including2705 and tracked Access schema files in its isolated host PostgreSQL cluster. No retained corpus or backup is needed; no manual SQL edit/adoption performed by reviewer.",
+      "sameTwoReviewedBlobsAtTestedWave": true,
+      "sameOriginalSixCaseTestBlobBeforeAndAfterSourceRepair": true,
+      "nativeImagesUsed": [],
+      "dependencyLandingClaim": "Not claimed on main"
+    },
+    "reusedAffectedChecks": [
+      {
+        "job": "6d84878c-722d-4090-96db-b85ee85b246c step1",
+        "command": "task goal -- check --only types,lint,guards",
+        "exitCode": 0,
+        "result": "types, inference, lint, AST and24 selected repository guards passed for the exact two reviewed paths before additive Source SQL repair"
+      },
+      {
+        "job": "ad12094e-6139-4cf5-8ed0-57d1c77ca85c",
+        "exitCode": 0,
+        "result": "Recorded6b34ae remained current; types and inference pass. Reviewer did not rebase any checkout or rerun checks.",
+        "recordedAction": "Existing owner rebase/type/inference receipt; exact originating CLI not retained in copied log"
+      }
+    ],
+    "originalAcceptanceDisposition": {
+      "D5004": "No change from the separately qualified MediaInvalid section and previously retained core-overlap proof.",
+      "notifications": "D5-001/D2-001/D6-001/AUD-004 public persona, complete allocation, cancellation and genuine50-notification mixed-load requirements remain as previously recorded; this Source wiring does not close them.",
+      "Zone": "Completeda4a253 source approval and actual G920180s timeout preserved; existingG-2790 owns localization. No Zone review/proof repeated.",
+      "otherSourceOwners": "Standalone converter and independent citation responsibilities remain authoritative; no invented converter, annotation or citation design, no review of unchanged credit implementation."
+    },
+    "evidence": {
+      "directory": ".temp/read-availability-review/media-invalid-ea0-source-6b34",
+      "rawManifest": ".temp/read-availability-review/media-invalid-ea0-source-6b34/raw-evidence-manifest.json",
+      "rawManifestSha256": "95831fe1ce9bbea8388233048a60f9b0dc7de3f4993ec38a58cb3d3925600e79",
+      "scope": "Private copied raw producer logs/JUnit/acceptance, original failures, exact diff/files, dependency and runner pins; no credentials or generated environment contents published."
+    },
+    "ownedReportChecks": {
+      "status": "passed",
+      "job": "ffad0f4a-b47b-4e69-b73c-a2292b0cae44",
+      "commands": [
+        {
+          "command": "task docs:check",
+          "exitCode": 0,
+          "executed": 13,
+          "passed": 13,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "markdownFiles": 249
+        },
+        {
+          "command": "task goal -- check",
+          "exitCode": 0,
+          "types": "not applicable; no TypeScript workspace changed",
+          "tests": "none named in brief",
+          "lint": "not applicable; no source file changed",
+          "ast": "passed (0.7s)",
+          "guards": {
+            "selected": "1/44 files",
+            "executed": 2,
+            "passed": 2,
+            "failed": 0,
+            "errors": 0,
+            "skipped": 0,
+            "assertions": 6
+          }
+        }
+      ],
+      "artifactDirectory": ".temp/read-availability-review/media-invalid-ea0-source-6b34/report-checks",
+      "rawHashes": [
+        {
+          "path": ".temp/read-availability-review/media-invalid-ea0-source-6b34/report-checks/ffad0f4a-b47b-4e69-b73c-a2292b0cae44.1.log",
+          "sha256": "f021e04c9500817cb7a51eb0c69756b2f2632f11c2810d0e78735e0076c850e5"
+        },
+        {
+          "path": ".temp/read-availability-review/media-invalid-ea0-source-6b34/report-checks/ffad0f4a-b47b-4e69-b73c-a2292b0cae44.2.log",
+          "sha256": "a01a29a7d2ef2f575c1464789dd650624278c747def26a64530cee5e482afebe"
+        },
+        {
+          "path": ".temp/read-availability-review/media-invalid-ea0-source-6b34/report-checks/ffad0f4a-b47b-4e69-b73c-a2292b0cae44.log",
+          "sha256": "2d6da1225d9c67b4723c8cf9b8d3f0325b42ba2bf50ce1c63ca5e9805bc48d99"
+        },
+        {
+          "path": ".temp/read-availability-review/media-invalid-ea0-source-6b34/report-checks/worker-check/ast-0.log",
+          "sha256": "a46e969b40ae4b0e34512e0ba50066c6839bcbf90405a20acca2abcd845d658f"
+        },
+        {
+          "path": ".temp/read-availability-review/media-invalid-ea0-source-6b34/report-checks/worker-check/guards-0-artifacts/unit.xml",
+          "sha256": "e41e0e9bc2c84407c2282cf28d7f272cf56fcb49f1c0d487153fac4f4aaade80"
+        },
+        {
+          "path": ".temp/read-availability-review/media-invalid-ea0-source-6b34/report-checks/worker-check/guards-0.log",
+          "sha256": "397dad28bd7a2561ce66b5dd4446e27bb3fe69dd97a26297982372aa8ef02cfb"
+        },
+        {
+          "path": ".temp/read-availability-review/media-invalid-ea0-source-6b34/report-checks/worker-check/output.log",
+          "sha256": "30dd1b06eb120e60b4e026a4291f79518b5200d326b766eaf7cb32a2d872afcb"
+        }
+      ],
+      "qualification": "Report only; no product or runtime proof rerun. Only receipt metadata finalized afterward. Non-blocking harness-behind-main notice retained in raw output; both commands exited0."
+    }
+  },
+  "boundedIdentityReaderCorrectionFirstReview": {
+    "reviewKind": "First independent source review of the bounded IR01–06 correction and current-main composition; no replay of accepted Zone or Source cuts.",
+    "reviewer": {
+      "worker": "G-2846",
+      "profile": "codex-1 / GPT-6.1 Sol / xhigh",
+      "authoredThisSource": false,
+      "nestedAgents": false,
+      "accountFallback": false
+    },
+    "observedAtUtc": "2026-10-19T15:03:52.971352+00:00",
+    "sourceVerdict": {
+      "decision": "APPROVE",
+      "scope": "Only the twelve boundedReviewPaths and the one publication-state integration hunk in work/read-header.ts at the immutable candidate below. No new blocking source defect found in this cut.",
+      "candidateEligibleForNormalManagerGate": true,
+      "automaticLandingAuthorized": false,
+      "findings": [],
+      "qualification": "Source approval of this correction is separate from original D4-007/D4-008 public API/browser acceptance. It neither approves a whole wave nor closes any audit class."
+    },
+    "immutableSource": {
+      "candidate": "81b412b2e2c6dfcd3989534fff2723aac322978f",
+      "parent": "7ca18eef390b8dbd4f0d65e78a11c64aa2e4a835",
+      "tree": "73fc30ecfc8ef689edc6bda9d65f068f5b69890c",
+      "candidateSourceTreeObservedClean": true,
+      "candidateCheckout": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2790/.temp/identity-reader-main-composition",
+      "authorCorrection": "1e5155f2ab1dd177e7be9cc357804542cf941d57",
+      "authorCorrectionParent": "715ef5caf6144d48f1608cd8018b03c86d59a05a",
+      "initialComposedTree": "1167acca6f018d01aa07e17d6a435cbaa1ebf844",
+      "candidateChangedPaths": 19,
+      "newReviewPaths": 13,
+      "interpretation": "beforeBlob is the actual current-main candidate parent. correctionBeforeBlob is the initial composed tree used by the bounded correction patch. Work contents/read and its tests include an earlier inspected delta; those earlier hunks are reused. The read-header publication-state hunk already exists in the initial composed tree and is checked here only for current-main integration.",
+      "pathManifest": [
+        {
+          "path": "services/main/src/modules/content-publication/public-domain-read.ts",
+          "beforeBlob": "5501c15af985f3c4b2ffc0cc52f5e65868a1fcab",
+          "beforeSha256": "b5756558f29f8793a49e7f96e919a7eafa10d420cf7004d960296e48eb69dcce",
+          "afterBlob": "a2d1185230f8603076c06abf54459720b1dc20f1",
+          "afterSha256": "92b9a3effd5b65ff3ebcde19912a9ac1a11c30dc98ef56807520d3579673ec33",
+          "correctionBeforeBlob": "5501c15af985f3c4b2ffc0cc52f5e65868a1fcab",
+          "correctionBeforeSha256": "b5756558f29f8793a49e7f96e919a7eafa10d420cf7004d960296e48eb69dcce"
+        },
+        {
+          "path": "services/main/src/modules/content-publication/reference.ts",
+          "beforeBlob": "2a910c3042ed2d193be37c71ea898575ec5b14bf",
+          "beforeSha256": "a1c626b0d4039e1914d739cb8b1717226a9a2004bd270c36198d066fa5582998",
+          "afterBlob": "da958f3dc129228a9b4f6a3cbb8a9329a177154f",
+          "afterSha256": "fb6b50d1a28b5b69dc7efb2a333330168e1db7a9683c90edabeb725e6f3a65fc",
+          "correctionBeforeBlob": "2a910c3042ed2d193be37c71ea898575ec5b14bf",
+          "correctionBeforeSha256": "a1c626b0d4039e1914d739cb8b1717226a9a2004bd270c36198d066fa5582998"
+        },
+        {
+          "path": "services/main/src/modules/rate-limit/hook.ts",
+          "beforeBlob": "ffc20b2afa0bb0775aeeffbb7b20c8b36b1cc019",
+          "beforeSha256": "45908e58659ac1910e63e7f2c81cbcf1def96e9a7e8b54d8586803e5ed78f366",
+          "afterBlob": "c44a4a945fe1899163b9a8a7d6c400aba9cf2193",
+          "afterSha256": "a4fdb9a681ba479771328cacd8057c0b5c89a98e2709d4c81ad5ee237b3fc6ae",
+          "correctionBeforeBlob": "ffc20b2afa0bb0775aeeffbb7b20c8b36b1cc019",
+          "correctionBeforeSha256": "45908e58659ac1910e63e7f2c81cbcf1def96e9a7e8b54d8586803e5ed78f366"
+        },
+        {
+          "path": "services/main/src/modules/rights/store.ts",
+          "beforeBlob": "7b93987957a7195f427d550ff49b746d8a496abb",
+          "beforeSha256": "3d40597a56b82e955f54ce945ec70468d96b7ae63b29cfbfa2b6fb5313ec334a",
+          "afterBlob": "753305cc839a5c78b394448dfe837a98073c55f0",
+          "afterSha256": "2b4b63d21f1bea265b5f69172284c7b0bda1543a1278d9fd45925d5649eb2425",
+          "correctionBeforeBlob": "7b93987957a7195f427d550ff49b746d8a496abb",
+          "correctionBeforeSha256": "3d40597a56b82e955f54ce945ec70468d96b7ae63b29cfbfa2b6fb5313ec334a"
+        },
+        {
+          "path": "services/main/src/modules/work-contents/read.ts",
+          "beforeBlob": "2597cae7feb03d5c33a06d48a8f01640c427a4df",
+          "beforeSha256": "dcb6b9b782f3ffe0842bf468e6af97d541a36e27b4a6c7bf843cbd861dd9efa4",
+          "afterBlob": "f0c93de96a3142512f4389adaf185d05c67affb8",
+          "afterSha256": "62ca3f1a54124bf6eb144f47e56ce4fbc7fcbfd6eecbcad392a9276d2b168f3b",
+          "correctionBeforeBlob": "fa6b73a1de2c3cfadb6badfbd77ec8d2c5d9312a",
+          "correctionBeforeSha256": "34a410c5f606b2cf1cd9f99b3df3e56811f5c8a4c189affbb97b9b396a7cfc2e"
+        },
+        {
+          "path": "services/main/src/routes/publication.ts",
+          "beforeBlob": "a62fa90dbcf96dd7bf2222ac4594a672125e389c",
+          "beforeSha256": "0d22dc57e9fc0a001cd75673ba2adee59672c1767086a8b81338afd353aedf26",
+          "afterBlob": "64bfbdf3611bff3ded643065170faf0dee32f6c2",
+          "afterSha256": "163ef08fc905d3f350ff51bf73264fb52e433283d5f835053387e037b9138783",
+          "correctionBeforeBlob": "a62fa90dbcf96dd7bf2222ac4594a672125e389c",
+          "correctionBeforeSha256": "0d22dc57e9fc0a001cd75673ba2adee59672c1767086a8b81338afd353aedf26"
+        },
+        {
+          "path": "services/main/src/routes/work-contents.ts",
+          "beforeBlob": "08d7821c6b06663c625f59892d04e060cff2c257",
+          "beforeSha256": "abcc4d35055cedc495a7bec698f457df381ac348637f1fe74bbdf301bd85e743",
+          "afterBlob": "3e8a63a4fd25876e8eb2d69152ba0b02c0b0b9d6",
+          "afterSha256": "52d307aea656ae890f5830592121903e73f083a15c0129c0dab96a1a82e8019f",
+          "correctionBeforeBlob": "08d7821c6b06663c625f59892d04e060cff2c257",
+          "correctionBeforeSha256": "abcc4d35055cedc495a7bec698f457df381ac348637f1fe74bbdf301bd85e743"
+        },
+        {
+          "path": "services/main/src/routes/work-header.handler.ts",
+          "beforeBlob": "b58ccae6e94e490a47da5a55228aa6404184a972",
+          "beforeSha256": "d1a051ac8442e27b63ba9d5f8ee58e346b78abcfa10c3e3c255e91cf6f130c58",
+          "afterBlob": "9137687c3417baccbc79687ce055728e0aedcac6",
+          "afterSha256": "03506d69e5f12b6ffbc9b861c1538802d32f9c55f6a4bcc902a1fda401a66745",
+          "correctionBeforeBlob": "b58ccae6e94e490a47da5a55228aa6404184a972",
+          "correctionBeforeSha256": "d1a051ac8442e27b63ba9d5f8ee58e346b78abcfa10c3e3c255e91cf6f130c58"
+        },
+        {
+          "path": "services/main/tests/public-reader-authentication.test.ts",
+          "beforeBlob": null,
+          "afterBlob": "dcbc507cbbfdfa54a25808815b483b950717e7e5",
+          "afterSha256": "b1196573b48325f59aeab01c2009c17225b16801f1c3345ab7e4ce81fcc4ac61",
+          "correctionBeforeBlob": null
+        },
+        {
+          "path": "services/main/tests/recipe-instruction-read.test.ts",
+          "beforeBlob": "88fe07cf87f97e8d5b7f2f388bde8c7737fe0dcd",
+          "beforeSha256": "888edcb27c132f7cb22b8549bcc3dcf6b01c91a8235a388f6750c97b2860ccac",
+          "afterBlob": "e980db1033aed19a68ad506be5acf359743ba222",
+          "afterSha256": "b8b22ea5dcd6934119b761482682ba71ff0620d554c6ba530aa044cfe5fc7a0f",
+          "correctionBeforeBlob": "88fe07cf87f97e8d5b7f2f388bde8c7737fe0dcd",
+          "correctionBeforeSha256": "888edcb27c132f7cb22b8549bcc3dcf6b01c91a8235a388f6750c97b2860ccac"
+        },
+        {
+          "path": "services/main/tests/work-contents.test.ts",
+          "beforeBlob": "f21ac5beb36db8ef56434be79e68383aa6a47ed2",
+          "beforeSha256": "2ad0c81f36830d068999f784eadb18c8feba9c4a6cfcb2d79514dab5e23d5af8",
+          "afterBlob": "0bdff956a4003368bca45a14e1e53bdaa2ddc80a",
+          "afterSha256": "eed353eeba951ad054b064ad90c982db1798f01b99a21d705b25e89ff4dbceff",
+          "correctionBeforeBlob": "6256021bc63decd189e4c0355c80a8e97782a4a7",
+          "correctionBeforeSha256": "9a53ac48b8f2bee6ed7d2c865f7e880a63d62b8132305126a04fbf07d6180b5e"
+        },
+        {
+          "path": "services/main/tests/work-read-session-fences.test.ts",
+          "beforeBlob": "cad332c2b2584c59a0d837e1bfbd73b531156492",
+          "beforeSha256": "9d4d04f5460f0de28c3203b27532302fa27daa7c1e47cd26e90a166605cb9d43",
+          "afterBlob": "f678de5f52660330db981c1235daf7a23281f60e",
+          "afterSha256": "5a14fa49ce3c7c0827c299377ca15ad1fd8b43cd8a30580a78cfcb93387476e1",
+          "correctionBeforeBlob": "cad332c2b2584c59a0d837e1bfbd73b531156492",
+          "correctionBeforeSha256": "9d4d04f5460f0de28c3203b27532302fa27daa7c1e47cd26e90a166605cb9d43"
+        },
+        {
+          "path": "services/main/src/modules/work/read-header.ts",
+          "beforeBlob": "a7ab32c544f03028ea6647a4cb991a37a51ae886",
+          "beforeSha256": "c5079a1b4949f7dbba2d5261079dda6ed9cada925ddd09d60fcd67407bbd82a0",
+          "afterBlob": "ea92b2a879154192aaa1fb713af3ade4aba39b6a",
+          "afterSha256": "0f35a3d4c02f26fc72f06206ab7a28cef90b6450d8f8939bf42f03ba7da619d1",
+          "correctionBeforeBlob": "ea92b2a879154192aaa1fb713af3ade4aba39b6a",
+          "correctionBeforeSha256": "0f35a3d4c02f26fc72f06206ab7a28cef90b6450d8f8939bf42f03ba7da619d1"
+        }
+      ],
+      "sixInitialInspectedFilesReusedWithoutNewReview": [
+        {
+          "path": "services/main/src/modules/access/contexts.ts",
+          "blob": "cb8f1a81c77d95f53adfbb8bfb30ac9ac1e5a524"
+        },
+        {
+          "path": "services/main/src/modules/access/session-agent.ts",
+          "blob": "a0b9c84dcceb50428cf5709a3b4668167b78204e"
+        },
+        {
+          "path": "services/main/src/modules/structure/graph.ts",
+          "blob": "ca6f9bdba18c0331e940b73c7406ac1b9e22e69b"
+        },
+        {
+          "path": "services/main/src/modules/structure/read.ts",
+          "blob": "67093e29eb9bb4196a48f4fe2bd4ec2f70b87814"
+        },
+        {
+          "path": "services/main/src/modules/structure/tree.ts",
+          "blob": "6fe83da56b4a58ff5432ccf9d8cddeac7333bfd3"
+        },
+        {
+          "path": "services/main/tests/identity-discovery-owner.test.ts",
+          "blob": "8fd365bb8933e6177d9f9046294e56b355f33411"
+        }
+      ],
+      "initialInspectionSource": "eeac26d5c755839d451351a29e9c753f41742d60",
+      "sharedOwnerComposition": {
+        "paths": [
+          "services/main/src/modules/rate-limit/hook.ts",
+          "services/main/src/modules/rights/store.ts",
+          "services/main/src/modules/work/read-header.ts"
+        ],
+        "observed": "The final rate-limit hunk changes only the 401 code, Rights hunks add nested causes, and read-header changes only the published-state predicate. Current-main budget, Rights and read-header peers remain in the composed files."
+      },
+      "currencyLimit": "The verdict is pinned to 81b412b2 on 7ca18eef. The owner records later a8e44a3372a7ed61a0d0124b5d5667bf7ddf9502 with the nineteen paths unchanged and a clean apply check. No mutable main checkout was changed or certified by this review."
+    },
+    "originalCounterexamples": {
+      "reportSha256": "9a7bd3fc58c9fc73d87e6c5550a31c0c6e74d2d5c94d86ce0037dba056c8a8c6",
+      "meaning": "Consumed six original static source counterexamples and one fixture guidance correction; the prior report is not correction approval or a runtime failure receipt. No review of another reviewer was performed.",
+      "originalExecutedFailingOutcomes": 0,
+      "historicalFindingsDeleted": false,
+      "IR01": {
+        "sourceDisposition": "Resolved in the bounded source correction.",
+        "evidence": [
+          "services/main/src/routes/work-header.handler.ts:17 chooses publicWorkRead when actingSubject is absent; services/main/src/routes/work-contents.ts:23 and :32 do the same for contents/chapter.",
+          "The unchanged publicWorkRead at modules/work/read-session.ts:477 verifies a supplied Account with work:read, retains its disclosure viewer, and calls the public language/read wrapper. The explicit actingSubject branch still uses workRead and its represented private authority. No implicit session/main Agent selection was introduced."
+        ],
+        "reusedAssertions": [
+          "work-read-session-fences.test.ts:126 sends a real Request bearer through the header route, expects 200/published/en, one verification, zero choice calls and signed-in disclosure viewers.",
+          "work-contents.test.ts:692 exercises both ordinary route handlers with an Account-only bearer, asserts exact available contents/body, zero choice calls and signed-in viewers; an activePrincipalId stub fails if Agent eligibility is consulted."
+        ],
+        "limit": "These are owner fixtures, not genuine eligible-account Library/Studio/relationships or six-persona journeys."
+      },
+      "IR02": {
+        "sourceDisposition": "Resolved in the bounded source correction.",
+        "evidence": [
+          "work-contents/read.ts:234 requires a selected Main language for a non-preview book-composition. It cannot substitute catalogue visibility or independently public chapter bytes for that selection.",
+          "The unchanged selection-heads.ts:20 eligible lookup requires the current contribution publication decision, public disclosure and unerased selected draft; chooseMainLanguage requires the requested language when supplied. readWorkBasis registers language heads as a selected dependency.",
+          "work/read-header.ts:160 reports published when either a structured publication or eligible text heads exist. This metadata predicate does not bypass the contents gate or change other owner fields."
+        ],
+        "reusedAssertions": [
+          "work-contents.test.ts:720 retains a catalogue-visible Work and independently eligible chapter, removes the Main selection, and expects missing on contents and chapter with/without explicit en; a requested fr without a head also refuses. Explicit represented preview remains available.",
+          "The existing successful Book chain still expects published/en and exact chapter bytes. The normal Work session closes the selected language-head dependency, so withdrawing that head after selection changes its token and requires retry/refusal."
+        ],
+        "limit": "The no-selection state and language mismatch are reached in owner fixtures. No new concurrent public command or browser publication-withdrawal outcome was executed."
+      },
+      "IR03": {
+        "sourceDisposition": "Resolved in the bounded source correction.",
+        "evidence": [
+          "work-contents/read.ts:38 chapterTextDelivery checks the exact hydrated reference through currentPublicDomainAssessment or its bounded shared-batch owner. It registers the result and repeats it before delivery.",
+          "Both exact chapter delivery and body-derived labels use this path. Withdrawn/replaced current assessments suppress bytes/derived labels; original-contribution text does not gain an unrelated Rights dependency.",
+          "content-publication/public-domain-read.ts:15/:34 and rights/store.ts:251/:270 preserve the original nested owner cause; chapter adapters map dependency failure to WorkReadUnavailable rather than a successful empty label."
+        ],
+        "reusedAssertions": [
+          "work-contents.test.ts:741 checks both withdrawn and replaced assessment states for chapter and derived title; :752 and :789/:805 check SQL cause preservation and recovery.",
+          ":766 covers supported public-domain text and original text during an unrelated Rights outage; :777 proves twenty labels use five bounded body batches, one metadata probe, and two opening/delivery Rights probes, followed by only one more metadata/Rights probe at session close."
+        ],
+        "limit": "Rights state transitions are injected at the owning SQL read boundary. These tests do not establish a public revocation-command journey or new wall/RPC/engine-load measurements."
+      },
+      "IR04": {
+        "sourceDisposition": "Resolved in the bounded source correction.",
+        "evidence": [
+          "work-contents/read.ts:47 registers current-body disclosure in the enclosing session; :54 uses the existing exact metadata owner for availability and byte digest without reloading body bytes, and :71 registers that closing dependency.",
+          "The final delivery closure at :72 repeats Rights, body disclosure and exact metadata. readChapter calls it after neighbors, groups, Work admission and publication recheck (:579). Contents calls the derived-label fence after its Work fence (:437), before applying those labels.",
+          "The unchanged read session fences all selected owner dependencies again before return; changed Rights/disclosure/erasure causes WorkReadMoved and bounded retry/refusal. A missing/unavailable/mismatched exact metadata result remains a typed recoverable failure."
+        ],
+        "reusedAssertions": [
+          "work-contents.test.ts:818 mutates only Rights, body disclosure or metadata erasure after hydration and confirms the derived title is discarded.",
+          ":833 verifies each dependency remains live after readChapter returns to the enclosing session; :844 isolates a no-neighbor body-only disclosure revocation with Work visibility and graph target still true; :853 checks a later Rights revocation.",
+          ":861 preserves a metadata SQL cause and recovers on retry; :876 asserts concurrent metadata erasure or digest mismatch rejects cached bytes."
+        ],
+        "limit": "The real ContentCore metadata method is used with an injected storage boundary. No supported public command to erase a pinned revision or alter an immutable digest was proved; that reachability remains unverified, as in the owner handoff."
+      },
+      "IR05": {
+        "sourceDisposition": "Resolved in the bounded source correction.",
+        "evidence": [
+          "content-publication/reference.ts:116 checks the selected public/adoption or private authority before locating native bytes. It requires exactly one result and exact revision/resource/variant identity.",
+          "Denied/erased or a failed current publication/Rights/disclosure authority returns an opaque absent reference. Corrupt, unavailable, missing published object, incomplete owner result and identity disagreement throw WorkReadUnavailable; transport/owner exceptions retain a cause.",
+          "The adapter registers its exact authority/representation closure in the Work session. resolveResourceReference and readNativeSelections do not swallow that error into an unavailable instruction, so it propagates to the existing recoverable route refusal."
+        ],
+        "reusedAssertions": [
+          "recipe-instruction-read.test.ts:63 runs corrupt, unavailable, missing, identity mismatch, variant mismatch and transport cases through the real ContentCore reader with an injected SQL boundary; all throw WorkReadUnavailable and the transport case retains its cause.",
+          "The retained owner test at :50 changes private authority, governance and Rights after an available exact reference and confirms the closing dependency refuses rather than settling cached authority. Duplicate selections retain order and share one initial read."
+        ],
+        "limit": "The six added cases execute the exact-reference adapter, not a whole public Recipe HTTP journey. No real-stack status success or withheld identifier claim is inferred from those tests alone."
+      },
+      "IR06": {
+        "sourceDisposition": "Resolved in the bounded source correction.",
+        "evidence": [
+          "rate-limit/hook.ts:84 now reports account_assertion_denied for invalid optional bearer authentication while leaving admission attribution, limits, deadlines and unavailable-owner handling intact.",
+          "publication.ts:739 verifies a supplied bearer even without optional rate-limit installation and runs the actual default selection owner under disclosureViewer(principal). Its existing commandError preserves typed Account refusal.",
+          "Header/contents/chapter reach the same optional Account verification through publicWorkRead. There is no anonymous fallback after a supplied bearer fails."
+        ],
+        "reusedAssertions": [
+          "public-reader-authentication.test.ts:17 executes seven original reader surfaces with budget middleware absent and installed: fourteen cases require 401 account_assertion_denied, no-store and one actual verifier call each.",
+          "The owner run also retains rate-limit response and route contract tests; no request/native budget source was replaced."
+        ],
+        "limit": "The default route signed-in viewer wiring is established by source; the new fourteen cases test invalid bearer refusal, not a valid Account default-text journey."
+      },
+      "IR07": {
+        "kind": "fixture guidance",
+        "disposition": "Not a product source acceptance requirement. The supported expectedSelectionHead/main-version-default/main-maintainer fixture guidance and owner responsibilities remain separate; no fixture or assertion was edited by this review."
+      }
+    },
+    "dependencies": [
+      {
+        "path": "services/main/src/modules/work/read-session.ts",
+        "candidateBlob": "85381184a0704f74645f97e0b0327a2b13d0d27d",
+        "baseBlob": "85381184a0704f74645f97e0b0327a2b13d0d27d",
+        "unchangedFromBase": true
+      },
+      {
+        "path": "services/main/src/modules/work/selection-heads.ts",
+        "candidateBlob": "43960ead4ed586d0ea9b6e1eb963440f2270e748",
+        "baseBlob": "43960ead4ed586d0ea9b6e1eb963440f2270e748",
+        "unchangedFromBase": true
+      },
+      {
+        "path": "services/main/src/modules/work-contents/read-contract.ts",
+        "candidateBlob": "60350850ca2ed61b13084edd2395b8e98ea7f8d4",
+        "baseBlob": "60350850ca2ed61b13084edd2395b8e98ea7f8d4",
+        "unchangedFromBase": true
+      },
+      {
+        "path": "services/main/src/modules/work/native-variants.ts",
+        "candidateBlob": "bb286612de57fb3e95fbfa3074148f6bf3132147",
+        "baseBlob": "bb286612de57fb3e95fbfa3074148f6bf3132147",
+        "unchangedFromBase": true
+      },
+      {
+        "path": "services/main/src/modules/work/read-problems.ts",
+        "candidateBlob": "e7f9227957db02b784f523a9c854a252be92a065",
+        "baseBlob": "e7f9227957db02b784f523a9c854a252be92a065",
+        "unchangedFromBase": true
+      },
+      {
+        "path": "services/main/src/modules/account/verify-assertion.ts",
+        "candidateBlob": "8e2e575f544236b6445a4d5ff7df3931b2c1b97b",
+        "baseBlob": "8e2e575f544236b6445a4d5ff7df3931b2c1b97b",
+        "unchangedFromBase": true
+      },
+      {
+        "path": "services/main/src/modules/disclosure/assembly.ts",
+        "candidateBlob": "84b39ecbbd2ee8e33719a8d7084ea3ce8a539159",
+        "baseBlob": "84b39ecbbd2ee8e33719a8d7084ea3ce8a539159",
+        "unchangedFromBase": true
+      },
+      {
+        "path": "services/main/src/modules/disclosure/read.ts",
+        "candidateBlob": "db1fc7c698b7e13ae5c02c6e2f99909728608604",
+        "baseBlob": "db1fc7c698b7e13ae5c02c6e2f99909728608604",
+        "unchangedFromBase": true
+      },
+      {
+        "path": "services/main/src/modules/disclosure/viewer.ts",
+        "candidateBlob": "fb95834e01f693c769e7b2c5f884d3e8ba675b71",
+        "baseBlob": "fb95834e01f693c769e7b2c5f884d3e8ba675b71",
+        "unchangedFromBase": true
+      },
+      {
+        "path": "services/content/src/core.ts",
+        "candidateBlob": "2e1c25587dcb1ec2a593d44306e3f19f0605ee77",
+        "baseBlob": "2e1c25587dcb1ec2a593d44306e3f19f0605ee77",
+        "unchangedFromBase": true
+      },
+      {
+        "path": "services/main/src/modules/zone/route.ts",
+        "candidateBlob": "d028d00dcd300dd5b70964f1463001b10f3bee31",
+        "baseBlob": "d028d00dcd300dd5b70964f1463001b10f3bee31",
+        "unchangedFromBase": true
+      },
+      {
+        "path": "services/main/tests/g-630-zone-route.test.ts",
+        "candidateBlob": "abcb09dc64458cd5d53901a815ff7e2613dd528e",
+        "baseBlob": "abcb09dc64458cd5d53901a815ff7e2613dd528e",
+        "unchangedFromBase": true
+      },
+      {
+        "path": "services/main/src/infrastructure/fuseki.ts",
+        "candidateBlob": "7aa4919f57f878348ecf1ba2a737dabbae456d72",
+        "baseBlob": "7aa4919f57f878348ecf1ba2a737dabbae456d72",
+        "unchangedFromBase": true
+      },
+      {
+        "path": "services/main/tests/request-read-budget.test.ts",
+        "candidateBlob": "52def96aaa632897d106e05f117c951b7c507733",
+        "baseBlob": "52def96aaa632897d106e05f117c951b7c507733",
+        "unchangedFromBase": true
+      }
+    ],
+    "reusedExactCandidateChecks": {
+      "job": "0463251a-d73e-4c14-93c2-81e942c9d040",
+      "qa": "20261019t143035-7512f5",
+      "source": {
+        "head": "81b412b2e2c6dfcd3989534fff2723aac322978f",
+        "fingerprint": "bb1dd68609bcbfed9c5b5fac1c7dfecc3fca2535b1a49868bfa72b025425a2bd",
+        "clean": true
+      },
+      "sourceStable": true,
+      "steps": [
+        {
+          "step": 1,
+          "command": "bun scripts/qa/host-admission.ts --cpu --gib 3 -- task --dir .temp/identity-reader-main-composition install",
+          "exitCode": 0
+        },
+        {
+          "step": 2,
+          "command": "/bin/sh -c task --dir .temp/identity-reader-main-composition goal -- test services/main/tests/identity-discovery-owner.test.ts services/main/tests/work-contents.test.ts services/main/tests/work-read-session-fences.test.ts services/main/tests/recipe-instruction-read.test.ts services/main/tests/public-reader-authentication.test.ts services/main/tests/rate-limit-response-contract.test.ts services/main/tests/route-rate-limit.test.ts",
+          "exitCode": 0
+        },
+        {
+          "step": 3,
+          "command": "/bin/sh -c task --dir .temp/identity-reader-main-composition goal -- check --only types,lint,guards",
+          "exitCode": 0
+        }
+      ],
+      "owner": {
+        "executed": 145,
+        "passed": 145,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 0,
+        "assertions": 1114,
+        "files": [
+          {
+            "file": "services/main/tests/rate-limit-response-contract.test.ts",
+            "tests": "3",
+            "assertions": "23",
+            "failures": "0",
+            "skipped": "0",
+            "time": "2.14047235"
+          },
+          {
+            "file": "services/main/tests/route-rate-limit.test.ts",
+            "tests": "9",
+            "assertions": "92",
+            "failures": "0",
+            "skipped": "0",
+            "time": "0.380209831"
+          },
+          {
+            "file": "services/main/tests/identity-discovery-owner.test.ts",
+            "tests": "6",
+            "assertions": "32",
+            "failures": "0",
+            "skipped": "0",
+            "time": "0.022201037"
+          },
+          {
+            "file": "services/main/tests/public-reader-authentication.test.ts",
+            "tests": "14",
+            "assertions": "56",
+            "failures": "0",
+            "skipped": "0",
+            "time": "3.347010063"
+          },
+          {
+            "file": "services/main/tests/recipe-instruction-read.test.ts",
+            "tests": "11",
+            "assertions": "34",
+            "failures": "0",
+            "skipped": "0",
+            "time": "0.043058519"
+          },
+          {
+            "file": "services/main/tests/work-contents.test.ts",
+            "tests": "59",
+            "assertions": "713",
+            "failures": "0",
+            "skipped": "0",
+            "time": "4.384901437"
+          },
+          {
+            "file": "services/main/tests/work-read-session-fences.test.ts",
+            "tests": "43",
+            "assertions": "164",
+            "failures": "0",
+            "skipped": "0",
+            "time": "2.609283627"
+          }
+        ],
+        "stackFree": true,
+        "acceptanceIdsQualified": 0,
+        "originalIntegrationOrBrowserAssertionsReached": 0
+      },
+      "static": {
+        "types": "passed",
+        "inference": "passed",
+        "lint": "passed",
+        "ast": "passed",
+        "guards": "passed",
+        "selectedGuardFiles": 25,
+        "availableGuardFiles": 45,
+        "retainedInitialFailures": "Two anti-silo cases exceeded ordinary child-process timeouts in the initial guard attempt. Their supported automatic timeout retries passed at 3.951s and 16.381s. The raw initial failure and retries remain in output.log and timeout-retries.jsonl; they are not erased or called initial passes."
+      },
+      "receiptVerification": "All seven producer artifact SHA-256 values in checks.json were independently recomputed and matched. The raw QA acceptance binds a clean stable candidate 81b412b2 with full source fingerprint bb1dd68609bcbfed9c5b5fac1c7dfecc3fca2535b1a49868bfa72b025425a2bd. JUnit totals and per-file counts were independently parsed.",
+      "rerunByReviewer": false
+    },
+    "productAuditWithinOriginalClass": {
+      "principles": [
+        "A signed-in public reader retains Account disclosure policy without a manufactured Agent choice or private authority.",
+        "Catalogue visibility cannot authorize a Book composition independently of the current language-specific Main text publication.",
+        "Exact bytes and text-derived labels share current publication, Rights, disclosure and metadata dependency fences.",
+        "Opaque denial/absence and recoverable owner failure remain distinct; malformed supplied authentication does not become anonymous success."
+      ],
+      "inScopeSurfaceInventory": [
+        "Work header",
+        "Book contents and body-derived chapter labels",
+        "exact chapter delivery",
+        "Recipe adopted exact instruction adapter",
+        "Main default selection optional Account handling",
+        "all seven invalid optional-bearer reader surfaces"
+      ],
+      "recommendation": "The bounded correction is ready for the manager normal source/proof gate with its exact existing dependencies. No new source repair, fixture, corpus or broader gate is proposed.",
+      "D4_007": "UNPROVED: genuine eligible-account Library/Studio/relationships discovery, return/recovery and matching titles remain with the original UI/data/proof owners.",
+      "D4_008": "UNPROVED: genuine Book browser entrances, body/navigation at 1440/390, unavailable metadata, matching titles and same-revision retry remain with the original UI/data/proof owners.",
+      "otherReadAvailabilityAcceptance": "All prior D5-001/D5-004 outcomes, original workload/persona limits, failures, migration/native observations and qualified source verdicts remain unchanged."
+    },
+    "executionThisReview": {
+      "sourceReviewCompleted": true,
+      "newProductOrOwnerTestsExecuted": 0,
+      "nativeOrBrowserReruns": 0,
+      "dataOrAccountChanges": false,
+      "productEdits": false,
+      "ownedReportOnly": true,
+      "documentationCheck": {
+        "job": "a159c3f7-7a4e-4202-9e47-2c0d39da6283",
+        "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task docs:check",
+        "exitCode": 0,
+        "passed": 13,
+        "failed": 0,
+        "markdownFiles": 249,
+        "scope": "Local links, fragments and design navigation; no external URLs or runtime behavior tested.",
+        "retainedLog": ".temp/read-availability-review/identity-reader-81b412/report-docs-check.log",
+        "logSha256": "cdd9c655355e603d582ee21612ebe302652ce3ac82f533f3613c313e443b7ebc"
+      },
+      "checkSelectionReason": "Current maintainer explicitly selected normal report docs checks only and reuse of exact-candidate owner/static receipts. No new concrete source concern required an extra focused check."
+    },
+    "evidence": {
+      "bundle": ".temp/read-availability-review/identity-reader-81b412",
+      "snapshotPriorReport": {
+        "path": ".temp/read-availability-review/identity-reader-81b412/report-before.json",
+        "bytes": 300053,
+        "sha256": "74551b133a0db02219dc8f051b8adff87199e446f28dd2b455bb263a7009da40"
+      },
+      "sourceManifest": {
+        "path": ".temp/read-availability-review/identity-reader-81b412/source-manifest.json",
+        "bytes": 8197,
+        "sha256": "4aabf1da3d43e08d2be8b5ab90a185b5f340fa464038430459bb5f105b40f9fa"
+      },
+      "provenance": {
+        "path": ".temp/read-availability-review/identity-reader-81b412/composition-provenance.json",
+        "bytes": 2685,
+        "sha256": "82b168206be4f1f5085a2e813276d223cf538194b866b1d9dc8b21f9e34dfd59"
+      },
+      "packetManifest": {
+        "path": ".temp/read-availability-review/identity-reader-81b412/packet-manifest.json",
+        "bytes": 18118,
+        "sha256": "c2f4a3e1427a9a9506c198c6da90fa7365a1481ddb57734ad007a4a39bb725a6"
+      },
+      "correctionPatch": {
+        "path": ".temp/read-availability-review/identity-reader-81b412/review-correction-on-main.patch",
+        "bytes": 56109,
+        "sha256": "174ee5543866991c97f60fb4b86841e91584816b8a9467ca9115210e3aefa256"
+      },
+      "sharedCompositionPatch": {
+        "path": ".temp/read-availability-review/identity-reader-81b412/current-main-composition-hunks.patch",
+        "bytes": 3277,
+        "sha256": "6a9da141f8b80117a861b2f6e1c35bee7f0f42bac43d41b1e4066014840de5d1"
+      },
+      "counterexamples": {
+        "path": ".temp/read-availability-review/identity-reader-81b412/original-source-counterexamples.json",
+        "bytes": 33031,
+        "sha256": "9a7bd3fc58c9fc73d87e6c5550a31c0c6e74d2d5c94d86ce0037dba056c8a8c6"
+      },
+      "producerCheckSummary": {
+        "path": ".temp/read-availability-review/identity-reader-81b412/checks.json",
+        "bytes": 5359,
+        "sha256": "a3cf8ed9872653de3641f3adf662ea5af6a76bd0c1cf33daaf8a16b9b1776e06"
+      },
+      "verifiedReceiptManifest": {
+        "path": ".temp/read-availability-review/identity-reader-81b412/reused-receipts.json",
+        "bytes": 2811,
+        "sha256": "12c4cef6b08e0d1459f63229acf01b39bad68b00517aabe630d267e8534770f3"
+      },
+      "namedReusedAssertionReach": {
+        "path": ".temp/read-availability-review/identity-reader-81b412/reviewed-assertion-reach.json",
+        "bytes": 9602,
+        "sha256": "8299265804b8335e006b372c58d2bef3fffaa279d74fbc30e4f0b1702fc3c702"
+      },
+      "rawEvidenceManifest": {
+        "path": ".temp/read-availability-review/identity-reader-81b412/raw-evidence-manifest.json",
+        "sha256": "697c79a47133a8766adcf8a2fbb3954832ccfe0258beb20b49694b364c4355fe",
+        "files": 36
+      }
+    },
+    "historyPreservation": {
+      "priorTopLevelFields": 32,
+      "allPriorTopLevelValuesUnchanged": true,
+      "priorReportCommit": "2715cba4c54380095bfe463cc0426e3e15feb682",
+      "acceptedZoneAndSourceCutsReplayed": false,
+      "historicalRuntimeFailuresRetained": true
+    }
+  },
+  "retainedBookRecipeHistoryExtensionFirstReview": {
+    "reviewedAt": "2026-10-19T16:54:25.035596+00:00",
+    "authority": "Maintainer continuation: first independent review of the finite second-source G-2842 retained Book/Recipe history extension; reuse exact producer checks and run report documentation checks only. No actual retained-copy adoption, implementation or landing by G-2846.",
+    "reviewer": {
+      "worker": "G-2846",
+      "engine": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "independentOfAuthor": true,
+      "reviewCount": 1,
+      "nestedAgents": false,
+      "accountFallback": false
+    },
+    "decision": {
+      "verdict": "approve",
+      "owner": "G-2842",
+      "canLandThisThreePathToolingDeltaAfterNormalGate": true,
+      "blockingFindings": [],
+      "reason": "The finite 4a616 source extension retains actual schema/template/seed replay before canonical receipt adoption. Exact historical/current SQL identities, copy-bound durable lineage, refusal cases, rollback and interrupted replay are checked; the producer exercised the real subsequent 2609 migration without repeating renamed DDL/backfills. No actionable source defect was found in this incremental boundary.",
+      "doesNotCertifyActualRetainedCopy": true,
+      "doesNotCloseOriginalProductFindings": true,
+      "doesNotRelandOrRereviewPriorAcceptedSource": true
+    },
+    "source": {
+      "candidate": "a43d318e10661e887b3fd831907bd63f52c80afc",
+      "parent": "a05621a0fd8bee0a98cea1744b271fb0c876fa29",
+      "candidateParentVerified": true,
+      "changedPathsExact": true,
+      "pathCount": 3,
+      "manifest": [
+        {
+          "path": "docs/testing/test-harness.md",
+          "before": {
+            "blob": "dd655e0a4aa19f6f1b8c610e75d9fac790303afd",
+            "sha256": "00f9cec5071388911b1375126be6001d68b3c443f6fb482b8972fba26cdba09a"
+          },
+          "after": {
+            "blob": "12f5da426b2434b6057748e5fde14de71c8c470a",
+            "sha256": "2e35d2128ffca2358c1d586fdf04d5b6d22b909b1a27f8ec84e038f1f8b4b0ee"
+          }
+        },
+        {
+          "path": "scripts/qa/history-transition.test.ts",
+          "before": {
+            "blob": "3d7b449b32e4af68c7577dfcc6d8643a2c7f0621",
+            "sha256": "c795f49f996764a342525dd6f7f896d7c860c3fafa223f75a94363f0cf00fa10"
+          },
+          "after": {
+            "blob": "7db895ff9734207b810b9af183792bc1a686547a",
+            "sha256": "3e2a7ec053b05627e4fd1e4dc7cf86c54fa9bb1b7adc79c44b4d5c0c062e59d6"
+          }
+        },
+        {
+          "path": "scripts/qa/history-transition.ts",
+          "before": {
+            "blob": "d2349d9e6797e8d8d7fe4cafc48463cad7b8fe57",
+            "sha256": "fdfe1af26418f26c04ea67a8b4a0e9580022ef5ba9daddc4cf28b416ab666363"
+          },
+          "after": {
+            "blob": "b80ae02d1cad5aa79968efb91f7b44411b4a8f70",
+            "sha256": "6ba2203c7c3a7f7d804e9a609b0c4fc80afe3ac70b7fc68cc63b9d2d14c9bf80"
+          }
+        }
+      ],
+      "authorCheckoutHead": "a43d318e10661e887b3fd831907bd63f52c80afc",
+      "authorCheckoutClean": true,
+      "mainAtPreimageRecheck": "49c33b1c0b3333d084d6dd4e5853ccdb7ef10a79",
+      "allThreeMainPreimagesStillEqualBase": true,
+      "rootPacket": ".temp/audit-remediation-20261019/two-hour-sprint/history-4a616-first-review/",
+      "rootCandidatePatchSha256": "02bfe2a7718ebdd32e21c415748cc0fa188f9bbf44fd00263d385171d6b6cdf0",
+      "rootManifestSha256": "e10540d23b2f1fbf56de4586cb41609d630e598d19ace8026ce7d047bb4e4819",
+      "sourceOrTestOrAssertionChangedByReviewer": false
+    },
+    "retainedInputs": {
+      "newSupportedSource": "4a616b079a364b8f5ac7fe4d4ff56bc99849e766",
+      "completeFrozenInventoryFiles": 534,
+      "everyInventoryPathAndHashVerifiedAgainstImmutableGit": true,
+      "sourceCompatibilityDigest": "eac0b47cf9ddb55c380ef50a880c1a98917d786b67f11dea26f6743670e54b82",
+      "currentBaseCompatibilityDigest": "69ae78b9ff640a2afc3c3089addb7cb15b2f802afef4355ce1600b1e97f46876",
+      "sourceOwnerCounts": {
+        "access": 303,
+        "relay": 23,
+        "content": 171,
+        "account": 32
+      },
+      "currentBaseOwnerCounts": {
+        "access": 304,
+        "relay": 23,
+        "content": 172,
+        "account": 32
+      },
+      "actualProducerManifestsVerified": [
+        {
+          "name": "book",
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2791/.temp/launch-corpus/book-recipes/backups/launch-book-recipe-aa32916c0c4d822307ea/backup.json",
+          "sha256": "7f6d8d7645e870959b050028d53ed1b7997c243065f236915af13db2720b09ca",
+          "project": "rezics-catalogue-work-profile-recipes-build-mveymfp0-c3acb7-launch-book-recipe-aa32916c0c4d822307ea-eac0b47cf9ddb55c",
+          "runId": "recipes-build-mveymfp0-c3acb7",
+          "compatibilityDigest": "eac0b47cf9ddb55c380ef50a880c1a98917d786b67f11dea26f6743670e54b82",
+          "inventoryFiles": 534,
+          "completeInventoryEqualGit": true
+        },
+        {
+          "name": "c27",
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2791/.temp/a15-retained/backups/recipe-measures-c27-measures-20261019-r1/backup.json",
+          "sha256": "dd34b7c94d6aa70bb78b3e09d653ee4a40e47293c51ee3a514d936007e8cd470",
+          "project": "rezics-catalogue-work-profile-c27-measures-20261019-r1-recipe-measures-c27-measures-20261019-r1-eac0b47cf9ddb55c",
+          "runId": "c27-measures-20261019-r1",
+          "compatibilityDigest": "eac0b47cf9ddb55c380ef50a880c1a98917d786b67f11dea26f6743670e54b82",
+          "inventoryFiles": 534,
+          "completeInventoryEqualGit": true
+        }
+      ],
+      "qualificationRefusal": {
+        "sha256": "8015dc790944b5703345dfd1482eb3b3499d51db27bbb347504ced303ebf29c2",
+        "job": "9023a0b9-5987-4784-bbef-959581d4561e",
+        "target": "510d591dd0d348176dd29a823c8f08c3cc657fef",
+        "result": "Retained full-backup strict compatibility refusal before copy allocation; historical evidence only, not rerun or waived."
+      },
+      "priorSourcePreserved": {
+        "source": "759244e365ad64bcb97fac0ea7d7b9caebe144b2",
+        "backupSha256": "d7059aeceef904aa9ccba02dfabb87f8a41f10756ccd4f56567841097d328a8c",
+        "accessFiles": 299,
+        "relayFiles": 23,
+        "acceptedReview": "transitionDependencyReview",
+        "acceptedCandidate": "b0b3a5e7cbf47f03eda24f53ee7ca3a492436aff",
+        "job": "bdbd6f7e-9d41-40ad-b699-fac2a6ee2ec7",
+        "qaRun": "20261019t072939-b7610f",
+        "executed": 8,
+        "passed": 8,
+        "assertions": 70,
+        "rerun": false
+      },
+      "manifestInventoryIsNotProofOfAppliedDatabaseHistory": true,
+      "actualRetainedVolumesInspectedOrTransitionedByReviewer": false
+    },
+    "canonicalMappings": [
+      {
+        "source": "services/main/migrations/access/2045_standing_rating_components.sql",
+        "current": "services/main/migrations/access/2606_standing_rating_components.sql",
+        "sha256": "65d2a75a859182d5808f7ad8ca3b197006c9d684a7c1bb41c005880e800314f5"
+      },
+      {
+        "source": "services/main/migrations/access/2077_standing_rating_publication.sql",
+        "current": "services/main/migrations/access/2607_standing_rating_publication.sql",
+        "sha256": "6583a1657afe45a3ee250a0ec4eb11fc244bf88820b05bf7a7e739ad5cce7b41"
+      },
+      {
+        "source": "services/main/migrations/access/2606_standing_rating_affected_cuts.sql",
+        "current": "services/main/migrations/access/2608_standing_rating_affected_cuts.sql",
+        "sha256": "7d1f1743e6b8c771b275fe8dd1afa601cab07fb62b553699bce52ab76f2b4677"
+      }
+    ],
+    "materialDependencyPins": [
+      {
+        "sourcePin": "a43d318e10661e887b3fd831907bd63f52c80afc",
+        "path": "scripts/ops/migrate.ts",
+        "blob": "9598c341d744c32c65d2a2568e72c1a22f5b2d8c",
+        "sha256": "344882de8e53bdea11e61b1f01458bd85a6cc533374558170015013e08300214"
+      },
+      {
+        "sourcePin": "a43d318e10661e887b3fd831907bd63f52c80afc",
+        "path": "scripts/load/compatibility.ts",
+        "blob": "82d4cf905b3db35a049440d0254da999a4bb3fe4",
+        "sha256": "2d89f8f7bfd5e85653e62896c3f2d2d6d46e7d1bd8f3edc3fc9e30bdb0dc7e23"
+      },
+      {
+        "sourcePin": "a43d318e10661e887b3fd831907bd63f52c80afc",
+        "path": "scripts/qa/bootstrap.ts",
+        "blob": "4404aa1c2c2087f44c0cba8eb4f000982c6ca96e",
+        "sha256": "a1ae68baba2446c09b573c981a0c7c75cf17e12d1f2376fe8d498513b8306d48"
+      },
+      {
+        "sourcePin": "4a616b079a364b8f5ac7fe4d4ff56bc99849e766",
+        "path": "scripts/qa/bootstrap.ts",
+        "blob": "2b9522085f430d2223ee9a4f32add3197cdad51d",
+        "sha256": "1035b33b6b5bf781f1b3eadc74a7de47483fb3c66c8fd6ffcdf27b5cacb392d1"
+      },
+      {
+        "sourcePin": "a43d318e10661e887b3fd831907bd63f52c80afc",
+        "path": "services/main/migrations/access/2609_standing_rating_bounded_progress.sql",
+        "blob": "92ca05e467c3b03be3570330e05508055286d71c",
+        "sha256": "96ee20fb3ce837f1f89354f7906974cb1cebc596b81fa50d94396ad24c25356a"
+      }
+    ],
+    "incrementalReviewCoverage": [
+      {
+        "path": "scripts/qa/history-transition.ts",
+        "lines": "11-30,77-118,120-135,311-320",
+        "finding": "Only the two fixed Git sources are accepted. Every retained manifest inventory entry must match the frozen archived source and independent backup digest. The new branch checks all historical Access/relay SQL bytes against current canonical files, requires all three old identities and exact reviewed hashes, refuses surviving aliases/missing or changed bytes, and rejects colliding mapped identities. Filename mapping alone never reaches adoption."
+      },
+      {
+        "path": "scripts/qa/history-transition.ts",
+        "lines": "138-182,252-267,318-334",
+        "finding": "The existing explicit transition retains checkout-local inputs, distinct persistent disposable QA project, matching PostgreSQL container/volume/loopback endpoints and stopped-owner-client checks. New owner lineage captures both backup project and restored project. Both release locks and SHARE table locks cover verification through receipt commits; no new migration owner or data-transform path is introduced."
+      },
+      {
+        "path": "scripts/qa/history-transition.ts",
+        "lines": "185-240,268-305,335-365",
+        "finding": "Before first adoption, actual owner schemas equal their frozen templates, indexes are valid, populated stable seed identities/fixed values remain, and a fresh replay of the immutable historical SQL matches definitions plus every normalized frozen template seed row. Schema/seed comparison is not an object count or a caller receipt. Only timestamp defaults and the existing volatile revision are normalized; mutable application counters/gates may advance."
+      },
+      {
+        "path": "scripts/qa/history-transition.ts",
+        "lines": "268-290",
+        "finding": "Unknown nonempty tracker history without a verified transition refuses. Retry requires one receipt with the exact source, independent backup SHA, canonical list, backup/restored project, historical source list and rename hashes; missing lineage, transplant/conflict and surviving old receipt names refuse. Previously committed owner evidence is trusted on matching retry, preserving later legitimate changes; this is not a fresh certification of arbitrary post-adoption schema/data drift."
+      },
+      {
+        "path": "scripts/qa/history-transition.ts",
+        "lines": "327-387",
+        "finding": "Both owners are verified before metadata insertion. Target writes are limited to migration/transition tables; historical application DDL/backfills execute only in temporary empty reference databases. Verify rolls back; precommit write failure rolls both owners back. Commits remain per-owner, explicitly non-atomic across databases. A matching committed Access receipt allows verification/adoption of the still-untracked relay after interruption. Reference databases and staged source are removed in finally."
+      },
+      {
+        "path": "scripts/qa/history-transition.test.ts",
+        "lines": "17-22,71-144,146-255",
+        "finding": "The selected eight-case second-source test uses real PostgreSQL 18.6 and the actual old untracked ordered SQL helper, freezing templates before any test application writes. It explicitly labels its synthetic history-test manifest separately from genuine retained Book/C27 manifests. Missing/drift/extra inventory, wrong source, each missing/changed rename, partial history, schema drift, missing seed effects, mutually corrupted target/template seeds, and receipt-write failure exercise refusals rather than fabricate completion."
+      },
+      {
+        "path": "scripts/qa/history-transition.test.ts",
+        "lines": "257-353",
+        "finding": "Real dump equality excluding only migration metadata proves read-only verify and preservation across adoption. Tests retain a principal ID, enforcement epoch, changed counter and closed fixture gate; reject conflicting lineage/source/digest/old names; construct the genuine durable interrupted-commit state; and preserve post-adoption mutation on retries. The normal owner runner skips adopted canonical names, applies only actual 2609, then no-ops. A separate test-only ALTER/DML upgrade exercises later state change and the enforcement trigger, rather than count renamed files as applied work."
+      },
+      {
+        "path": "docs/testing/test-harness.md",
+        "lines": "72-137",
+        "finding": "The procedure names both finite sources and exact renames, requires compatible historical restore/admitted stopped disposable copy and independent pins, explains replay before metadata adoption, and separates SQL history from current native/model alignment, owner readiness and qualified backup/restore. Ordinary startup has no transition import/call and never adopts historical state automatically."
+      }
+    ],
+    "producerChecksReused": {
+      "job": "dcdb23e1-c25d-45a3-8db7-835cd7d9bcd6",
+      "allFourRecordedStepsExitCode": 0,
+      "qaRun": "20261019t163725-945206",
+      "command": "bun scripts/goal/goalctl.ts test scripts/qa/history-transition.test.ts -t QAHISTORY02 --timeout 600000",
+      "exitCode": 0,
+      "admission": "Normal recorded Goal job and QA host memory/CPU admission; isolated actual PostgreSQL; no product stack or existing corpus access.",
+      "sourceQualification": {
+        "recordedSource": {
+          "head": "a05621a0fd8bee0a98cea1744b271fb0c876fa29",
+          "fingerprint": "260deed528ffd456b4d23e57c82d93f9e419d56d2d8798c2d47822f861fb0750",
+          "clean": false
+        },
+        "sourceStable": true,
+        "reconstructedFingerprint": "260deed528ffd456b4d23e57c82d93f9e419d56d2d8798c2d47822f861fb0750",
+        "exactCandidateBytesVerified": true,
+        "method": "SHA-256(parent HEAD plus newline and exact tracked binary diff), matching sourceIdentity; all three changed files were already tracked."
+      },
+      "nativeDependency": {
+        "image": "postgres:18.6-trixie@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722",
+        "kind": "PostgreSQL history tooling test; no Fuseki/native-model proof was executed or requalified."
+      },
+      "counts": {
+        "executed": 8,
+        "pass": 8,
+        "fail": 0,
+        "error": 0,
+        "skip": 7,
+        "skipReason": "Seven QAHISTORY01 cases filtered; previous first-source migration/history eight-case proof is reused, not rerun.",
+        "assertions": 101,
+        "elapsedSeconds": 302.242161899
+      },
+      "cases": [
+        {
+          "file": "scripts/qa/history-transition.test.ts",
+          "line": 146,
+          "name": "retained lineage requires both independently recorded bytes and every pinned migration byte",
+          "result": "pass",
+          "assertions": 9,
+          "elapsedSeconds": 42.715356
+        },
+        {
+          "file": "scripts/qa/history-transition.test.ts",
+          "line": 165,
+          "name": "canonical receipt names require each exact inspected old and new SQL identity",
+          "result": "pass",
+          "assertions": 33,
+          "elapsedSeconds": 40.704524
+        },
+        {
+          "file": "scripts/qa/history-transition.test.ts",
+          "line": 213,
+          "name": "partial or unknown historical receipts are refused without adopting the other owner",
+          "result": "pass",
+          "assertions": 3,
+          "elapsedSeconds": 21.799636
+        },
+        {
+          "file": "scripts/qa/history-transition.test.ts",
+          "line": 221,
+          "name": "an existing schema with a missing migration effect cannot gain receipts",
+          "result": "pass",
+          "assertions": 3,
+          "elapsedSeconds": 9.658396
+        },
+        {
+          "file": "scripts/qa/history-transition.test.ts",
+          "line": 227,
+          "name": "a populated owner missing a seeded data-only effect cannot gain receipts",
+          "result": "pass",
+          "assertions": 3,
+          "elapsedSeconds": 8.531452
+        },
+        {
+          "file": "scripts/qa/history-transition.test.ts",
+          "line": 233,
+          "name": "a template with matching object counts is checked against the actual pinned SQL effects",
+          "result": "pass",
+          "assertions": 3,
+          "elapsedSeconds": 46.63657
+        },
+        {
+          "file": "scripts/qa/history-transition.test.ts",
+          "line": 244,
+          "name": "a failed receipt write rolls back both verified owners without changing application state",
+          "result": "pass",
+          "assertions": 6,
+          "elapsedSeconds": 40.093585
+        },
+        {
+          "file": "scripts/qa/history-transition.test.ts",
+          "line": 257,
+          "name": "verification is read-only and adoption preserves all owner schema, data, identities and rights",
+          "result": "pass",
+          "assertions": 41,
+          "elapsedSeconds": 60.210772
+        }
+      ],
+      "otherSteps": [
+        {
+          "step": 2,
+          "command": "task docs:check",
+          "exitCode": 0,
+          "tests": 13,
+          "markdownFiles": 259
+        },
+        {
+          "step": 3,
+          "command": "task goal -- check",
+          "exitCode": 0,
+          "types": "PASS: 1675 files, 11.6 seconds",
+          "lint": "PASS",
+          "ast": "PASS",
+          "repositoryGuards": {
+            "selectedFiles": 17,
+            "availableFiles": 45,
+            "reportedSuite": {
+              "tests": "129",
+              "failures": "0",
+              "skipped": "4",
+              "time": "39.211194830000004"
+            },
+            "namedCases": 129,
+            "executed": 125,
+            "skipped": 4,
+            "fail": 0,
+            "assertions": 18374
+          },
+          "briefTests": "No tests named in brief; actual selected history tests are the separate first job step."
+        },
+        {
+          "step": 4,
+          "command": "bun scripts/goal/goalctl.ts test --affected --list",
+          "exitCode": 0,
+          "meaning": "Selection inventory only, not another test execution; the owner test plus 17 guard files are listed, native module COPY inputs not selected."
+        }
+      ],
+      "productAcceptance": {
+        "passed": 0,
+        "partialPass": 0,
+        "failed": 0,
+        "uncovered": 292,
+        "certifiesFull": false
+      },
+      "cleanup": "Producer reports removal of all owned history-test containers, volumes and reference databases. The positive test asserts no qa_history_% reference databases remain. G-2846 performed no lifecycle or retained-data operation."
+    },
+    "preservedNewSourceFailure": {
+      "job": "7280d7e2-23a7-4a76-bb22-8977e12ae198",
+      "qaRun": "20261019t162919-75a563",
+      "resultClass": "assertion",
+      "sourceHead": "a05621a0fd8bee0a98cea1744b271fb0c876fa29",
+      "sourceFingerprint": "df2c8a3a9738d80c1101ceb5abf47d79c03cb84aee795eef360bb82f9e3be21f",
+      "sourceStable": true,
+      "counts": {
+        "executed": 8,
+        "pass": 7,
+        "fail": 1,
+        "error": 0,
+        "skip": 7,
+        "assertions": 94,
+        "elapsedSeconds": 385.470061582
+      },
+      "file": "scripts/qa/history-transition.test.ts",
+      "line": 331,
+      "case": "verification is read-only and adoption preserves all owner schema, data, identities and rights",
+      "actualFailure": "Expected to_regclass text access.rating_standing_progress, received visible unqualified rating_standing_progress under the owner search path. The actual current migration had run; the failure was relation-name spelling in the existence assertion.",
+      "correction": "Final source checks to_regclass(...) IS NOT NULL AS present and true. Complete second-source verification/refusal/upgrade assertions remain; the final eight cases pass. This is an assertion correction, not a history-validation waiver."
+    },
+    "originalAcceptanceDisposition": {
+      "toolingSourceBoundary": "APPROVE finite second-source extension; exact normal three-path source plus report gate is ready.",
+      "actualBookC27Transition": "UNREACHED by this review. G-2791 alone performs compatible historical restore into a distinct admitted persistent QA copy, verifies/adopts exact history, then normal current owner upgrades and native/model alignment, readbacks/readiness and a stopped qualified current backup/restore. Preserve originals and independent backup hashes.",
+      "originalD5001D5004ZoneIdentitySourceEvidence": "All prior top-level keys/values retained exactly; no passing proof or unchanged source review repeated. Prior failures, setup errors and public workload/persona limits remain independently qualified.",
+      "classClosure": "None. Tooling source approval and synthetic PostgreSQL history verification do not establish original public read-availability, browser journeys, genuine corpus qualification, native/Source independent citation authority or another class acceptance."
+    },
+    "reviewerExecutedChecks": {
+      "sourceAndEvidenceVerification": "Read-only immutable source/diff, full 534-entry source inventory and actual retained manifest hash comparisons, exact three SQL identities, recorded fingerprint reconstruction, and raw XML/log assertion reach. No new test run or counterexample needed; no concrete blocking source concern remained.",
+      "documentation": {
+        "job": "7d845e9d-1ccc-4a1b-94df-6bdcd8475596",
+        "command": "task docs:check",
+        "exitCode": 0,
+        "result": "pass",
+        "tests": 13,
+        "markdownFiles": 249,
+        "limits": "Local links, fragments and design navigation only; external URLs and runtime behavior not tested.",
+        "log": ".temp/read-availability-review/history-4a616-a43d318/jobs/7d845e9d-1ccc-4a1b-94df-6bdcd8475596.log"
+      }
+    },
+    "evidence": {
+      "bundle": ".temp/read-availability-review/history-4a616-a43d318",
+      "verification": ".temp/read-availability-review/history-4a616-a43d318/verification.json",
+      "sourceManifest": ".temp/read-availability-review/history-4a616-a43d318/source-manifest.json",
+      "dependencyManifest": ".temp/read-availability-review/history-4a616-a43d318/dependency-pins.json",
+      "rawManifest": ".temp/read-availability-review/history-4a616-a43d318/raw-manifest.json",
+      "rawEvidenceContainsCredentials": false,
+      "rawManifestSha256": "35431957f9a703b34fbfdfb4bd6a89b41e8f93e49c3ec9291c13f938a809f836",
+      "rawEvidenceFiles": 43
+    },
+    "historyPreservation": {
+      "previousTopLevelKeys": 33,
+      "allPreviousValuesUnchanged": true,
+      "currentMainReportAtReviewIdenticalToPriorOwnReport": true,
+      "newKeyOnly": "retainedBookRecipeHistoryExtensionFirstReview"
+    }
+  },
+  "boundedProfileReaderFirstReview": {
+    "reviewedAt": "2026-10-20T10:34:07.216078+00:00",
+    "authority": "Maintainer decision 2026-10-20T10:26:35.178Z supersedes pending earlier assignments: first review of published G-2763 profile reader correction; reuse exact-source checks, inspect three retained native-basis failures once, documentation check only.",
+    "reviewer": {
+      "worker": "G-2846",
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "authoredCandidateChanges": false,
+      "independentReviewsPerformedForThisDelta": 1,
+      "nestedAgentsUsed": false,
+      "accountFallbackUsed": false,
+      "previousAcceptedReviewsReplayed": false
+    },
+    "candidate": {
+      "commit": "4bc710fb943053b0e8b4c074fdd9b102080be910",
+      "parent": "f1c42d420130d899605fcd06e1a6ab2b3e14faf7",
+      "paths": [
+        {
+          "path": "services/main/src/modules/composition/disclosure-read.ts",
+          "before": {
+            "blob": "5b081a7631a668a986300e231f64a4f7eb431b77",
+            "sha256": "a939f8287f832b493e09a903af8f80837495a883a05797028393adf627c2eeac"
+          },
+          "after": {
+            "blob": "f0331a5b00ddfee85e39af5c56645f2912936fd2",
+            "sha256": "d829380646a066f8032049b3b89df8d556aff314ce49936e2aa9bf56f8627e89"
+          }
+        },
+        {
+          "path": "services/main/tests/composition-target-batches.test.ts",
+          "before": {
+            "blob": "3897168ba6ca81e84b94ae20f3a86b1d6866b4f6",
+            "sha256": "ccca3007080c1082ba3268150899efa076a35a3cf5f894e09f30caf630b471c5"
+          },
+          "after": {
+            "blob": "cfb7d32a3bb53b0d1ae4bc6c27bde92bf2160328",
+            "sha256": "d68a84d82aa6fddbb5795416370106e9274258b345fa386911384d90963dbcbc"
+          }
+        }
+      ],
+      "immutableCommitVerified": true,
+      "changedPathsEqualAssignedTwoPaths": true,
+      "comparison": "git diff --no-renames f1c42d420130d899605fcd06e1a6ab2b3e14faf7 4bc710fb943053b0e8b4c074fdd9b102080be910",
+      "reviewMethod": "Read immutable Git objects and actual diff with owning-call context; no candidate checkout, source edit, rebase or branch mutation.",
+      "reviewerWorktreeHead": "3b3491ef32af0429730fde41083f8017430cd652",
+      "dependencyPin": "f1c42d420130d899605fcd06e1a6ab2b3e14faf7",
+      "dependencyDisposition": "The compatible Episode/native owner source in this parent is required by this delta; no claim that it is already on current main. Unchanged dependency context is not another candidate or review."
+    },
+    "sourceVerdict": {
+      "result": "changes-requested-for-acknowledgement-composition",
+      "readerProjection": "No additional defect found in the bounded public/granted reader projection, batch selection, movement fences, cancellation boundaries or independent retry source.",
+      "reason": "The new profile-filtering reader is also consumed as a pure visibility predicate by the unchanged acknowledged-occurrence owner. An independently readable resource that no longer satisfies the Episode profile is withheld before that caller can classify its native mismatch. Updating only the unsupported test transport does not resolve this source-level ordering problem.",
+      "unconditionalLandingApproval": false,
+      "requiredOwnerAction": "Return the classification concern to existing G-2763, coordinating its native-basis dependency with existing G-2799. Preserve disclosure-before-diagnostic privacy and the original mismatch assertions; support the actual batched/head query in the owned fixture and resolve the visibility/profile-validity composition. This review implements no repair.",
+      "runtimeFindingStatus": "Static owning-call counterexample; not represented as a newly reproduced public/runtime assertion failure or a confirmed runtime blocker consuming an owner fix round.",
+      "classClosure": false
+    },
+    "reviewCoverage": [
+      {
+        "path": "services/main/src/modules/composition/disclosure-read.ts",
+        "lines": "72-103,115-142",
+        "observation": "Distinct inputs are selected once, catalog proof is retained, and only episode-list-v1 uses the new reader. targetSummaries retains public/granted Semantic authority, erasure and disclosure. The registered current TVEpisode guard then excludes Work, realization, release, occurrence and other forbidden grains; a grant or historical Structure command is not a type/grain substitute. The empty owner argument is safe for this registered Episode guard, whose owner parameter is unused."
+      },
+      {
+        "path": "services/main/src/modules/composition/disclosure-read.ts",
+        "lines": "76-101",
+        "observation": "Selection uses existing TARGET_RESOLVE_COST.batch=64. Each nonempty disclosed batch invokes the existing guard probe and one bounded SELECT DISTINCT target/head, LIMIT batch.length+1 with session row cap batch.length. Non-URI, alien or duplicate identities refuse. Invalid neighbors are filtered by the correlated guard rather than admitting the whole batch from one valid item. The guard probe invalid flag is deliberately not used as an all-or-nothing batch admission.",
+        "limit": "The controlled transport emulates the predicate and does not establish native SPARQL execution, engine work, wall time or complete real-stack allocation."
+      },
+      {
+        "path": "services/main/src/modules/composition/disclosure-read.ts",
+        "lines": "79-93",
+        "observation": "targetSummaries records live summary/authority dependencies; session.query records the selected head plus current guard predicate. The enclosing WorkReadSession closes dependencies and authority. Type, forbidden-grain, head, grant, erasure and disclosure movement cannot reuse the opening decision. No module-global or cross-request result cache was added."
+      },
+      {
+        "path": "services/main/src/modules/composition/disclosure-read.ts",
+        "lines": "76-93,128-139",
+        "observation": "Deadline/abort checks precede each bounded batch and guard call; session.query checks again before the following selection probe. Existing transport allocation and enclosing close remain in force. The stricter branch does not acquire editing authority. Work/resource branches and catalog identities survive; only explicitly declared structure-target policy contributes a generic resource baseline, so Recipe and Zone continue to use their own target authority.",
+        "limit": "Source inspection plus controlled abort/retry coverage does not certify live transport cancellation grace, resource drain or mixed-load behavior."
+      },
+      {
+        "path": "services/main/tests/composition-target-batches.test.ts",
+        "lines": "55-71,177-188,239-367",
+        "observation": "Five added cases exercise public and granted current TVEpisode admission, mixed wrong types/grains and private controls, 100 distinct targets and duplicate/empty input, selected type/grain/head changes and fresh retry, grant/erasure/disclosure revocation, and abort before the selected-head probe followed by an independent retry. The original catalog/Recipe/Zone case is byte-identical against the parent.",
+        "preservedOriginalCase": "Composition profile batching preserves catalog targets and leaves other profile authorities in charge",
+        "preservedCaseExtractionSha256": "a6848c7f5ed7bf85e68fcd518e73bd5bf93926aa4a35a8d9c3252f498ccb8611",
+        "hashScope": "Whole test call from test( through closing });, excluding trailing newline; before and after equal.",
+        "limit": "Fixture overrides graph.query and simulates storage/Access. Its query counts and allocation envelope are useful controlled evidence; its pass is not measured native RPC/bytes/SQL/engine or public-persona acceptance."
+      }
+    ],
+    "nativeBasisFailureAnalysis": {
+      "selectionReplayed": false,
+      "retainedQa": "20261020t040533-108210",
+      "retainedJob": "5c40cd5e-c626-4089-ba50-7ce9e45a2f14",
+      "exitCode": 1,
+      "originalAssertionsChanged": false,
+      "unchangedTestBlob": "ec98cb0f2c7db08379ce48327252b149a542bd40",
+      "selectionCounts": {
+        "executed": 51,
+        "passed": 48,
+        "failed": 3,
+        "errorsOutsideCases": 0,
+        "skipped": 0,
+        "assertions": 609
+      },
+      "nativeBasisFileCounts": {
+        "executed": 19,
+        "passed": 16,
+        "failed": 3,
+        "skipped": 0,
+        "assertions": 158
+      },
+      "fixtureSupport": {
+        "path": "services/main/tests/structure-native-basis.test.ts",
+        "lines": "55-104",
+        "actualCause": "The controlled query dispatcher recognizes SELECT ?target WHERE but has no SELECT DISTINCT ?target ?head branch. It throws Unexpected owner query at line 103. native-basis.ts:204-208 wraps that transport exception as 503 structure_basis_unavailable. This is not evidence that a real native query rejected the product predicate.",
+        "smallestSetupCorrection": "Existing fixture owner must model the actual bounded per-target guard/head query, including current type/grain/head and the original mutation hooks. Do not replace or weaken any test assertion."
+      },
+      "cases": [
+        {
+          "name": "an acknowledged episode retains repeated uses but a later target type change cannot borrow its historical command",
+          "path": "services/main/tests/structure-native-basis.test.ts",
+          "lines": "235-254",
+          "observed": "Initial read at line 237 throws 503 from unsupported selected-head query.",
+          "outcomeAssertionReached": false,
+          "unreached": "Repeated-use identity, later Movie type change, expected structure_target_mismatch at line 247, unchanged receipt/head/write checks.",
+          "sourceConcernAfterSetupCorrection": "The later, readable Movie premise would be filtered by currentEpisodeTargets and hit native-basis.ts:178 before its profile check at line 179. Predicted 403 structure_basis_denied, not the original required 422. This prediction was not executed or relabelled as the retained observed 503."
+        },
+        {
+          "name": "a target grain change during acknowledgement refuses the current use without replacing a child",
+          "path": "services/main/tests/structure-native-basis.test.ts",
+          "lines": "256-265",
+          "observed": "The refused helper reaches its code assertion at line 200: expected structure_target_mismatch, received structure_basis_unavailable.",
+          "outcomeAssertionReached": true,
+          "intendedGrainMutationReached": false,
+          "explanation": "The unsupported query follows the first guard probe. The original hook mutates on the second guard probe, which was not reached. With valid initial query support this specific hook reaches the following targetsValid check; no claim that its eventual original assertion must still fail.",
+          "unreached": "Expected 422 status, two-check count, unchanged receipt count and writes."
+        },
+        {
+          "name": "the caller final fence rechecks the native target profile after returning an acknowledged child",
+          "path": "services/main/tests/structure-native-basis.test.ts",
+          "lines": "267-276",
+          "observed": "Initial read at line 269 throws 503 from unsupported selected-head query.",
+          "outcomeAssertionReached": false,
+          "unreached": "Successful acknowledgement, baseline final fence, later Movie mutation, WorkReadMoved assertion, repeated-check and unchanged-receipt assertions."
+        }
+      ],
+      "disposition": "Retain all three failed cases. Immediate recorded failures are fixture-support failures; the separate type-change classification ordering concern is real in source and still needs owner resolution. No newly reached native/public assertion and no invented fixed pass."
+    },
+    "actionableFindings": [
+      {
+        "id": "profile-reader-native-mismatch-classification",
+        "severity": "P2",
+        "owner": "G-2763",
+        "coordinateWithExistingOwner": "G-2799",
+        "path": "services/main/src/modules/composition/disclosure-read.ts",
+        "lines": "125-126",
+        "owningCall": {
+          "path": "services/main/src/modules/structure/native-basis.ts",
+          "lines": "165-186"
+        },
+        "regression": "Profile validity is now folded into the boolean returned to an acknowledgement caller that distinguishes disclosure denial from profile mismatch. The caller returns structure_basis_denied before targetsValid can classify an otherwise disclosed target.",
+        "smallestReproduction": "Use the unchanged native-basis case at lines 235-254: acknowledge a TVEpisode, retain both repeated children and command receipt, independently change its Semantic type to Movie while keeping it readable, then read the original acknowledgement. After supporting the actual selected-head query, preserve the original expected 422 structure_target_mismatch. The current source path returns an empty readable set and predicts 403 at native-basis.ts:178.",
+        "expected": "Disclosed-but-invalid native target is 422 structure_target_mismatch; inaccessible targets remain denied without leaking profile diagnostics, unavailable evidence remains 503, and no receipt or child is replaced.",
+        "evidenceKind": "source-control-flow counterexample, with original assertion retained but unreached after its current setup failure",
+        "runtimeReproduced": false,
+        "fixRoundConsumed": false,
+        "requestedCorrection": "Resolve the shared visibility/profile-validity composition in the existing owners and support the real batched fixture, retaining all original assertions and disclosure fences. A fixture-only adaptation cannot certify the later type-change assertion."
+      }
+    ],
+    "productAudit": {
+      "scope": "The new profile reader branch and its actual acknowledged-occurrence consumer only; unchanged Source/notification/Zone/native-request implementations were not re-reviewed.",
+      "invariant": "A stricter read projection must preserve an existing caller distinction between disclosure denial, unavailable dependency and a current native profile mismatch.",
+      "instances": [
+        "native-basis.ts:178-179 opening target checks",
+        "native-basis.ts:182-186 closing target checks"
+      ],
+      "evidence": "Both sites evaluate the new combined readable predicate before targetsValid. A move already visible at either read check can preempt mismatch classification. The caller final dependency fence still refuses movement; that refusal does not repair the opening/closing machine-readable classification.",
+      "guard": "Existing original native-basis type/grain/final-fence assertions; support their actual transport without changing the expected outcomes. Preserve denial-before-private-diagnostic behavior.",
+      "apiOrUiJourneyExecuted": false,
+      "closureRecommended": false
+    },
+    "checks": {
+      "reusePolicy": "Reused completed exact-source receipts; no product, native, corpus, integration or whole-domain check rerun.",
+      "sourceVerification": {
+        "fingerprintAlgorithm": "SHA256(parent HEAD with newline + git diff --binary --no-ext-diff parent candidate); no untracked additions",
+        "reconstructedFingerprint": "8752a27db8da3b1924818c915a4407c8c2fb5575db0aabbbc37d39dae4bc8ee6",
+        "qa": {
+          "20261020t040635-00ea4f": {
+            "source": {
+              "head": "f1c42d420130d899605fcd06e1a6ab2b3e14faf7",
+              "fingerprint": "8752a27db8da3b1924818c915a4407c8c2fb5575db0aabbbc37d39dae4bc8ee6",
+              "clean": false
+            },
+            "sourceStable": true,
+            "fingerprintEqualsExactParentPlusTwoFileDelta": true,
+            "suites": [
+              {
+                "name": "services/main/tests/composition-disclosure.test.ts",
+                "file": "services/main/tests/composition-disclosure.test.ts",
+                "tests": "4",
+                "assertions": "13",
+                "failures": "0",
+                "skipped": "0",
+                "time": "0.709341687",
+                "hostname": "ah-ipv6"
+              },
+              {
+                "name": "services/main/tests/composition-target-batches.test.ts",
+                "file": "services/main/tests/composition-target-batches.test.ts",
+                "tests": "17",
+                "assertions": "320",
+                "failures": "0",
+                "skipped": "0",
+                "time": "0.358256049",
+                "hostname": "ah-ipv6"
+              },
+              {
+                "name": "services/main/tests/structure-profile-data.test.ts",
+                "file": "services/main/tests/structure-profile-data.test.ts",
+                "tests": "2",
+                "assertions": "15",
+                "failures": "0",
+                "skipped": "0",
+                "time": "0.020321954",
+                "hostname": "ah-ipv6"
+              },
+              {
+                "name": "services/main/tests/structure-episode-profile.test.ts",
+                "file": "services/main/tests/structure-episode-profile.test.ts",
+                "tests": "9",
+                "assertions": "103",
+                "failures": "0",
+                "skipped": "0",
+                "time": "0.078226166",
+                "hostname": "ah-ipv6"
+              }
+            ],
+            "tiers": [
+              {
+                "name": "owner",
+                "status": "passed",
+                "elapsedMs": 1219
+              }
+            ]
+          },
+          "20261020t040533-108210": {
+            "source": {
+              "head": "f1c42d420130d899605fcd06e1a6ab2b3e14faf7",
+              "fingerprint": "8752a27db8da3b1924818c915a4407c8c2fb5575db0aabbbc37d39dae4bc8ee6",
+              "clean": false
+            },
+            "sourceStable": true,
+            "fingerprintEqualsExactParentPlusTwoFileDelta": true,
+            "suites": [
+              {
+                "name": "services/main/tests/composition-disclosure.test.ts",
+                "file": "services/main/tests/composition-disclosure.test.ts",
+                "tests": "4",
+                "assertions": "13",
+                "failures": "0",
+                "skipped": "0",
+                "time": "1.042001162",
+                "hostname": "ah-ipv6"
+              },
+              {
+                "name": "services/main/tests/composition-target-batches.test.ts",
+                "file": "services/main/tests/composition-target-batches.test.ts",
+                "tests": "17",
+                "assertions": "320",
+                "failures": "0",
+                "skipped": "0",
+                "time": "0.386031658",
+                "hostname": "ah-ipv6"
+              },
+              {
+                "name": "services/main/tests/structure-profile-data.test.ts",
+                "file": "services/main/tests/structure-profile-data.test.ts",
+                "tests": "2",
+                "assertions": "15",
+                "failures": "0",
+                "skipped": "0",
+                "time": "0.008363332",
+                "hostname": "ah-ipv6"
+              },
+              {
+                "name": "services/main/tests/structure-episode-profile.test.ts",
+                "file": "services/main/tests/structure-episode-profile.test.ts",
+                "tests": "9",
+                "assertions": "103",
+                "failures": "0",
+                "skipped": "0",
+                "time": "0.104801809",
+                "hostname": "ah-ipv6"
+              },
+              {
+                "name": "services/main/tests/structure-native-basis.test.ts",
+                "file": "services/main/tests/structure-native-basis.test.ts",
+                "tests": "19",
+                "assertions": "158",
+                "failures": "3",
+                "skipped": "0",
+                "time": "0.116792901",
+                "hostname": "ah-ipv6"
+              }
+            ],
+            "tiers": [
+              {
+                "name": "owner",
+                "status": "failed",
+                "elapsedMs": 1726,
+                "failureClass": "assertion"
+              }
+            ]
+          }
+        }
+      },
+      "focused": {
+        "job": "f40fd8f3-ac61-470d-b8e4-6eba09f89c8f",
+        "sequenceStep": 0,
+        "qa": "20261020t040635-00ea4f",
+        "exitCode": 0,
+        "result": "pass",
+        "command": "bun scripts/goal/goalctl.ts test services/main/tests/composition-target-batches.test.ts services/main/tests/composition-disclosure.test.ts services/main/tests/structure-episode-profile.test.ts services/main/tests/structure-profile-data.test.ts",
+        "counts": {
+          "executed": 32,
+          "passed": 32,
+          "failed": 0,
+          "errorsOutsideCases": 0,
+          "skipped": 0,
+          "assertions": 451
+        },
+        "changedTestFileCounts": {
+          "executed": 17,
+          "passed": 17,
+          "failed": 0,
+          "skipped": 0,
+          "assertions": 320
+        },
+        "scope": "Controlled owner/transport tests; no public-persona or native runtime acceptance."
+      },
+      "worker": {
+        "job": "f40fd8f3-ac61-470d-b8e4-6eba09f89c8f",
+        "sequenceStep": 1,
+        "command": "task goal -- check --only types,lint,guards",
+        "exitCode": 0,
+        "result": "pass",
+        "checks": [
+          "guards",
+          "types",
+          "inference",
+          "lint",
+          "ast"
+        ],
+        "changedPathsReportedByCheck": "services/main/src/modules/composition/disclosure-read.ts, services/main/tests/composition-target-batches.test.ts",
+        "log": ".temp/read-availability-review/profile-reader-4bc710/checks/output.log"
+      },
+      "mainTypecheck": {
+        "job": "7a66bd52-27ea-4c0c-b4cd-d42ff3b2171e",
+        "command": "task main:typecheck",
+        "exitCode": 0,
+        "result": "pass",
+        "files": 2839,
+        "log": ".temp/read-availability-review/profile-reader-4bc710/checks/main-typecheck.log"
+      },
+      "documentation": {
+        "job": "52836561-c71a-4d48-9188-12651cb4f986",
+        "command": "task docs:check",
+        "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task docs:check",
+        "exitCode": 0,
+        "result": "pass",
+        "tests": 13,
+        "markdownFiles": 249,
+        "limits": "Local links, fragments and design navigation; no external URL or runtime validation.",
+        "log": ".temp/read-availability-review/profile-reader-4bc710/checks/52836561-c71a-4d48-9188-12651cb4f986.log"
+      },
+      "newProductTestsExecuted": 0
+    },
+    "materialDependencyManifest": {
+      "sourcePin": "4bc710fb943053b0e8b4c074fdd9b102080be910",
+      "parent": "4bc710fb943053b0e8b4c074fdd9b102080be910^",
+      "purpose": "Material calls/test/runner context only; not a second source review or candidate",
+      "paths": [
+        {
+          "path": "services/main/src/modules/structure/native-basis.ts",
+          "blob": "6af834b2d903502e6eb8a0af03eb3b68ee04a796",
+          "unchangedAgainstParent": true,
+          "sha256": "98950f274622580471977a3f56b7cc2f2e51c8a9c3896483f762a578687725b8"
+        },
+        {
+          "path": "services/main/tests/structure-native-basis.test.ts",
+          "blob": "ec98cb0f2c7db08379ce48327252b149a542bd40",
+          "unchangedAgainstParent": true,
+          "sha256": "755f831f21af7e2111ef987f2aeb1400f81dabd376a8ee0b70c4652aee90dddc"
+        },
+        {
+          "path": "services/main/src/modules/structure/episode-profile.ts",
+          "blob": "941506974f4ff87d13f93da0e8d7ce00f199c400",
+          "unchangedAgainstParent": true,
+          "sha256": "8c3bbf9f76a2cb6586344e11cc5d4ce74caf5a25503815457ff3bdd6910817d0"
+        },
+        {
+          "path": "services/main/src/modules/target/resolve.ts",
+          "blob": "95ecab4fc79b8bf8c19a2797d67e584cc7be4f72",
+          "unchangedAgainstParent": true,
+          "sha256": "391197731d12257c71b65b8410e7b93b5c1c332bb59845cd2d189e4b3a4a1519"
+        },
+        {
+          "path": "services/main/src/modules/work/read-session.ts",
+          "blob": "85381184a0704f74645f97e0b0327a2b13d0d27d",
+          "unchangedAgainstParent": true,
+          "sha256": "1e057f09ae28386be2ee2a737826a5060bf67aabe3dd4ce8abe105183659b4db"
+        },
+        {
+          "path": "services/main/src/modules/work/read-contract.ts",
+          "blob": "d1aca76967ca4a564f0fd5908042ab99c7383a48",
+          "unchangedAgainstParent": true,
+          "sha256": "98b6f6e424dfc743f7f5a3d3a584270a46793861373bf0c77d29e471c5ec06f6"
+        },
+        {
+          "path": "services/main/src/modules/media/summary.ts",
+          "blob": "ec27f2faf4ef3e727185baabc928083a05c026f6",
+          "unchangedAgainstParent": true,
+          "sha256": "1c8fd2b69740566c2f705d9469215989d14ff6f8457fff91bcc8fcebb342f16c"
+        },
+        {
+          "path": "services/main/tests/composition-disclosure.test.ts",
+          "blob": "935f17764ba1a44e0de7bc63aa3bcb05958cfdc3",
+          "unchangedAgainstParent": true,
+          "sha256": "17279ab45fe73d26679fe3bf94ad858ba5609419651845c6977d58901aea6de3"
+        },
+        {
+          "path": "services/main/tests/structure-episode-profile.test.ts",
+          "blob": "817df488480b8c610d4906711efdec98661358c3",
+          "unchangedAgainstParent": true,
+          "sha256": "1368960a069d157ceaba1841d62d425f049b363a00ff3d2a47e824aa9ba92505"
+        },
+        {
+          "path": "services/main/tests/structure-profile-data.test.ts",
+          "blob": "715405e702537201a5b82229c781be20345702f8",
+          "unchangedAgainstParent": true,
+          "sha256": "333e4648528b85c85f2b2dabef86ab4ea1135d8e50c36b93288ab6d0805e8bf7"
+        },
+        {
+          "path": "scripts/qa/core.ts",
+          "blob": "7e73c7a7b25c09930781ef55fd0f837587c7a97f",
+          "unchangedAgainstParent": true,
+          "sha256": "c22fed1e7e7665bb18690864003b58563302e8c93e1884801a6a74973be8586c"
+        },
+        {
+          "path": "scripts/goal/check.ts",
+          "blob": "d6258d34c6a16f889561705939ce73a0bc019e05",
+          "unchangedAgainstParent": true,
+          "sha256": "eb83ef21a91f8089fa992334ffdc22130c0358ba1e38ab577b6069e6d9b9db92"
+        }
+      ]
+    },
+    "originalProofStillDue": [
+      "Three unchanged native-basis assertions remain unresolved at their original reach; no fixture change or source repair was performed by this reviewer.",
+      "Original public 100-distinct-Episode current/exact Composition case remains unexecuted in this review; native SPARQL execution, real allocation, runtime cancellation and mixed load remain with their existing proof owners.",
+      "No notification, query, Source or six-persona acceptance is gained from this source verdict or the 32 controlled tests; all earlier findings, failures and residuals retain their existing dispositions.",
+      "D4-007 eligible-account Library/Studio/relationships recovery and D4-008 genuine Book entrance, body/navigation at 1440/390, unavailable metadata and same-revision retry remain with existing UI/data/proof owners. They are not extra gates for this bounded source review."
+    ],
+    "evidence": {
+      "bundle": ".temp/read-availability-review/profile-reader-4bc710",
+      "producerReceipt": ".temp/read-availability-review/profile-reader-4bc710/producer-receipt.json",
+      "producerAttempt25Handoff": ".temp/read-availability-review/profile-reader-4bc710/producer-attempt-25-handoff.md",
+      "sourceManifest": ".temp/read-availability-review/profile-reader-4bc710/source-manifest.json",
+      "dependencyManifest": ".temp/read-availability-review/profile-reader-4bc710/dependency-manifest.json",
+      "sourceFingerprintVerification": ".temp/read-availability-review/profile-reader-4bc710/qa-source-verification.json",
+      "focusedRawLog": ".temp/read-availability-review/profile-reader-4bc710/focused/owner.log",
+      "retainedFailureRawLog": ".temp/read-availability-review/profile-reader-4bc710/native-basis/owner.log",
+      "rawEvidenceContainsCredentials": false,
+      "rawManifest": ".temp/read-availability-review/profile-reader-4bc710/raw-manifest.json",
+      "rawManifestSha256": "022abe9429e7e4c0110cf1e06c90e064b7dfae8e0ac48f6f4c053658bec3ffcb",
+      "rawEvidenceFiles": 50
+    },
+    "historyPreservation": {
+      "previousTopLevelKeys": 34,
+      "allPreviousValuesUnchanged": true,
+      "priorReportSha256": "092bf875bb7574d4c360b12b3e6b10464bd24685c6039582e16bb4a05c04a33e",
+      "newKeyOnly": "boundedProfileReaderFirstReview"
+    }
+  },
+  "boundedProfileAcknowledgementRepairReview": {
+    "reviewedAt": "2026-10-20T11:26:10.372865+00:00",
+    "authority": "Maintainer Decision 2026-10-20T11:16:27Z: same reviewer continuation of b3301f4; review only the new composed G-2763/G-2799 repairs against their exact named parents, reuse checks, documentation check, immutable report handoff.",
+    "reviewer": {
+      "worker": "G-2846",
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "authoredCandidateChanges": false,
+      "sameReviewerContinuation": true,
+      "independentReviewsPerformedForTheseNewDeltas": 1,
+      "nestedAgentsUsed": false,
+      "accountFallbackUsed": false,
+      "previousAcceptedSourceReviewsReplayed": false
+    },
+    "reviewScope": {
+      "productAndTestPaths": 4,
+      "candidateMutations": false,
+      "runtimeOrLifecycleActions": false,
+      "sourceMethod": "Read exact immutable commit objects, complete two-file diffs and their affected owning calls/tests; no checkout/rebase/source edit. Required signatures/session/guard/runner context is pinned separately, not a new review of those dependencies.",
+      "excludedUnchangedOwners": "A17 purpose/source, Source87, accepted Source/native/query/Zone and earlier batching deltas; no unrelated wave work reviewed.",
+      "reviewerWorktreeHead": "b3301f4fa268234146fdefd8eb2d476d8a4badf8"
+    },
+    "candidateManifest": [
+      {
+        "owner": "G-2763",
+        "parent": "0033d141eab06bb2a2daf3789c5ba07aa7b34e7d",
+        "commit": "dd5753e21e91468e6a9905ff0d5f7cfe67ed9850",
+        "parentVerified": true,
+        "changedPathsEqualAssignedPaths": true,
+        "paths": [
+          {
+            "path": "services/main/src/modules/composition/disclosure-read.ts",
+            "before": {
+              "blob": "f0331a5b00ddfee85e39af5c56645f2912936fd2",
+              "sha256": "d829380646a066f8032049b3b89df8d556aff314ce49936e2aa9bf56f8627e89",
+              "evidence": ".temp/read-availability-review/profile-acknowledgement-repair/G-2763/before/services/main/src/modules/composition/disclosure-read.ts"
+            },
+            "after": {
+              "blob": "95c50887b23ceeb4f8251d8dbaf727d5f812cba6",
+              "sha256": "40a1bb305c342bf8d2cb340c9f3ca8bf5db86ff2bf2b78f5bccc1dbc92ea8d8c",
+              "evidence": ".temp/read-availability-review/profile-acknowledgement-repair/G-2763/after/services/main/src/modules/composition/disclosure-read.ts"
+            },
+            "atComposedPin": "95c50887b23ceeb4f8251d8dbaf727d5f812cba6"
+          },
+          {
+            "path": "services/main/tests/composition-target-batches.test.ts",
+            "before": {
+              "blob": "cfb7d32a3bb53b0d1ae4bc6c27bde92bf2160328",
+              "sha256": "d68a84d82aa6fddbb5795416370106e9274258b345fa386911384d90963dbcbc",
+              "evidence": ".temp/read-availability-review/profile-acknowledgement-repair/G-2763/before/services/main/tests/composition-target-batches.test.ts"
+            },
+            "after": {
+              "blob": "673d981004d76782764948ff0746eb8f69c24dc8",
+              "sha256": "341dc7b45ba5ea55c57607263d41b11b48629353986ae6991e9e8074387003d3",
+              "evidence": ".temp/read-availability-review/profile-acknowledgement-repair/G-2763/after/services/main/tests/composition-target-batches.test.ts"
+            },
+            "atComposedPin": "673d981004d76782764948ff0746eb8f69c24dc8"
+          }
+        ]
+      },
+      {
+        "owner": "G-2799",
+        "parent": "08f385a2a2cbd9aa963f55428ae7c4bf0b01fa8f",
+        "commit": "f45b1f8b8ec0dd151a81ae80cc90302fa0e0c6b8",
+        "parentVerified": true,
+        "changedPathsEqualAssignedPaths": true,
+        "paths": [
+          {
+            "path": "services/main/src/modules/structure/native-basis.ts",
+            "before": {
+              "blob": "6af834b2d903502e6eb8a0af03eb3b68ee04a796",
+              "sha256": "98950f274622580471977a3f56b7cc2f2e51c8a9c3896483f762a578687725b8",
+              "evidence": ".temp/read-availability-review/profile-acknowledgement-repair/G-2799/before/services/main/src/modules/structure/native-basis.ts"
+            },
+            "after": {
+              "blob": "15f0721bdceaeb72c39b7e12ea52ec6bbe7b8d72",
+              "sha256": "f9341859e63991ebe9d52a408198965eb29e30daee445a031cb531fb1acd90e5",
+              "evidence": ".temp/read-availability-review/profile-acknowledgement-repair/G-2799/after/services/main/src/modules/structure/native-basis.ts"
+            },
+            "atComposedPin": "15f0721bdceaeb72c39b7e12ea52ec6bbe7b8d72"
+          },
+          {
+            "path": "services/main/tests/structure-native-basis.test.ts",
+            "before": {
+              "blob": "ec98cb0f2c7db08379ce48327252b149a542bd40",
+              "sha256": "755f831f21af7e2111ef987f2aeb1400f81dabd376a8ee0b70c4652aee90dddc",
+              "evidence": ".temp/read-availability-review/profile-acknowledgement-repair/G-2799/before/services/main/tests/structure-native-basis.test.ts"
+            },
+            "after": {
+              "blob": "d06e6ffa578e2648e30dd43534047251df0cd047",
+              "sha256": "dac62babab1d7f5ee7d591cb4dd7d67655496affea22f9103dc3522925a70347",
+              "evidence": ".temp/read-availability-review/profile-acknowledgement-repair/G-2799/after/services/main/tests/structure-native-basis.test.ts"
+            },
+            "atComposedPin": "d06e6ffa578e2648e30dd43534047251df0cd047"
+          }
+        ]
+      }
+    ],
+    "composedDependencies": {
+      "composedPin": "f45b1f8b8ec0dd151a81ae80cc90302fa0e0c6b8",
+      "nativeParent": "08f385a2a2cbd9aa963f55428ae7c4bf0b01fa8f",
+      "readerPin": "dd5753e21e91468e6a9905ff0d5f7cfe67ed9850",
+      "readerParent": "0033d141eab06bb2a2daf3789c5ba07aa7b34e7d",
+      "readerPinIsAncestor": true,
+      "readerBlobsUnchangedAtComposedPin": true,
+      "readerPreRebasePin": "fbfb7ef50f7991b059547e57df3d697e0accb7bf",
+      "nativeTestedBase": "dd5753e21e91468e6a9905ff0d5f7cfe67ed9850",
+      "nativePostRebaseBlobsEqualTestedTwoFileDelta": true,
+      "nativeBaseMovement": "Only preserved Studio publication-query peers intervene from the native tested base to its published parent. They are outside this review; no claim that QA ran the later full base. Post-rebase Main types passed.",
+      "landingDisposition": "Wave-owned source dependencies, not claimed already on main; manager composes the exact reviewed bytes with ready dependencies and runs the normal landing gate. No individual landing authorized or performed.",
+      "manifest": ".temp/read-availability-review/profile-acknowledgement-repair/dependency-manifest.json",
+      "runnerManifest": ".temp/read-availability-review/profile-acknowledgement-repair/runner-manifest.json",
+      "qaFingerprintVerification": ".temp/read-availability-review/profile-acknowledgement-repair/qa-source-verification.json",
+      "nativeConsumedReaderReceiptSha256": "5d91b7b4697e06667faa7b63d9806797be70b18b7e6e407486c80a218bd62a11"
+    },
+    "sourceVerdict": {
+      "result": "approved-for-the-bounded-composed-source-repair",
+      "sourceApproval": true,
+      "newActionableSourceDefects": 0,
+      "reason": "The acknowledgement caller now uses disclosure-only Episode selection before its independent native guard. Visible wrong types/grains, including no semantic head, reach the native mismatch diagnostic. Closing movement gets a bounded refusal-only current probe, preserving denial precedence and the opening selection. The original three failing owner cases pass their unchanged bodies at the exact repaired native blobs.",
+      "priorWithheldApproval": "boundedProfileReaderFirstReview at b3301f4fa268234146fdefd8eb2d476d8a4badf8 remains unchanged historical evidence. This verdict resolves only that bounded source-ordering concern in the NEW composed repair. It does not retrospectively approve 4bc710 alone.",
+      "unconditionalWholeCandidateLandingApproval": false,
+      "gateDisposition": "Source review is complete and supports the manager normal gated composition of these four paths with the exact dependencies. Native worker inference still has the nine G-2758 web diagnostics; do not mark that gate passed. No further reviewer or unchanged broad rerun is requested.",
+      "originalFindingClosure": false
+    },
+    "reviewCoverage": [
+      {
+        "invariant": "Separate reader projection and native disclosure",
+        "path": "services/main/src/modules/composition/disclosure-read.ts",
+        "lines": "74-114,126-168",
+        "finding": "Projection retains registered TVEpisode/type/grain and current semantic-head admission. Only the new acknowledgement disclosure reader skips profile filtering, after targetSummaries public/granted, erasure and live disclosure admission. Otherwise-visible wrong-grain targets use OPTIONAL semantic heads; exact row count/URI/duplicate checks refuse missing or ambiguous evidence. Catalog, Recipe and Zone branches are unchanged."
+      },
+      {
+        "invariant": "Bounded independent query fixture",
+        "path": "services/main/tests/structure-native-basis.test.ts",
+        "lines": "57-81,163-170,302-316",
+        "finding": "The dispatcher implements actual SELECT DISTINCT target/head VALUES with OPTIONAL current semantic head: every requested disclosed target once, with its real fixture current head or absent binding. Profile validity does not suppress disclosure rows. Separate SELECT target WHERE retains targetChecks, unavailable evidence and original grain/type mutation hooks. No bypassed query or weakened assertion."
+      },
+      {
+        "invariant": "Opening and closing denial/mismatch/unavailability precedence",
+        "path": "services/main/src/modules/structure/native-basis.ts",
+        "lines": "63-94,165-212,228-235",
+        "finding": "Current principal, Work owner and exact revision disclosure precede target diagnostics. Both opening and closing perform targetsReadable before targetsValid; denied disclosure is 403 structure_basis_denied, independently disclosed wrong type/grain is 422 structure_target_mismatch, and missing/throwing owner evidence remains 503 structure_basis_unavailable. The existing outer wrapper does not turn a thrown transport error into profile mismatch."
+      },
+      {
+        "invariant": "Movement refuses without replacing original acknowledgement",
+        "path": "services/main/src/modules/structure/native-basis.ts",
+        "lines": "174-203",
+        "finding": "Only WorkReadMoved invokes one existing selection probe. It rechecks active principal, current owner/revision/target disclosure and exact Structure header before the independent profile guard. Denial wins over profile diagnostics; a visible current mismatch remains 422. A valid moved target rethrows the original movement as 503 with WorkReadMoved cause. The probe never returns success or replaces original dependencies, receipt, child, identity or selected head."
+      },
+      {
+        "invariant": "Immutable receipt, child/path and final dependency authority",
+        "path": "services/main/src/modules/structure/native-basis.ts",
+        "lines": "61,96-164,206-220",
+        "finding": "Actual succeeded command receipt, exact revision/operation/source-position, immutable records/order, repeated occurrences and bounded ancestry remain intact. Final dependencies retain selected target heads/absence and summaries plus current Structure, owner, target disclosure and native validity. Final native-profile change remains the original caller WorkReadMoved refusal, not a newly promised uniform 422 response from fenceDependencies. Current principal/recovery authority remains in the same caller session fence."
+      },
+      {
+        "invariant": "Batching, deadline/cancellation and fresh request isolation",
+        "path": "services/main/src/modules/composition/disclosure-read.ts",
+        "lines": "78-101,140-168",
+        "finding": "Distinct targets retain existing 64-target resolver batches; selected-head queries cap rows at batch.length with LIMIT batch.length+1; empty input does no owner work. Each batch, guard and session query uses the existing deadline/cancellation envelope. The refusal probe uses existing session.selection/withWorkReadSession, with the same request/global budget and no workRead/budget reset, recursion, persistent cache or unbounded retry. Independent request/attempt sessions retain their original dependencies. Source reasoning and controlled cancellation/retry pass are not runtime drain or mixed-load measurements."
+      }
+    ],
+    "productAudit": {
+      "skill": ".agents/skills/product-audit/SKILL.md",
+      "affectedClass": "Audience disclosure must precede native type/grain diagnostics, while movement cannot convert historical acknowledgement into current authority.",
+      "instancesInspected": [
+        "public/granted Episode projection",
+        "native opening target classification",
+        "native closing target classification",
+        "summary/head/absent-head movement refusal",
+        "caller final target/profile/Structure/authority dependencies",
+        "catalog/Recipe/Zone preservation within the changed dispatcher"
+      ],
+      "adverseStates": [
+        "private/withdrawn",
+        "erased/hidden",
+        "wrong type/grain",
+        "absent/changed semantic head",
+        "unavailable native owner",
+        "cancelled request and independent retry"
+      ],
+      "result": "No additional source defect found within the authorized four paths. Static review and controlled owner assertions only; no API/browser, native/runtime, corpus or public-persona journey was executed or inferred."
+    },
+    "originalAssertionPreservation": {
+      "nativeOriginalBodies": 19,
+      "nativeOriginalBodiesByteIdentical": 19,
+      "readerOriginalBodies": 17,
+      "readerOriginalBodiesByteIdentical": 17,
+      "nativeBodiesEvidence": ".temp/read-availability-review/profile-acknowledgement-repair/original-test-body-verification.json",
+      "readerBodiesEvidence": ".temp/read-availability-review/profile-acknowledgement-repair/reader-test-body-verification.json",
+      "nativeNewCases": 8,
+      "readerNewCases": 2
+    },
+    "historicalFailureReachAndCurrentProof": {
+      "historicalReportCommit": "b3301f4fa268234146fdefd8eb2d476d8a4badf8",
+      "historicalQa": "20261020t040533-108210",
+      "historicalJob": "5c40cd5e-c626-4089-ba50-7ce9e45a2f14",
+      "historicalExitCode": 1,
+      "historicalSelectionCounts": {
+        "executed": 51,
+        "passed": 48,
+        "failed": 3,
+        "errorsOutsideCases": 0,
+        "skipped": 0,
+        "assertions": 609
+      },
+      "historicalNativeFileCounts": {
+        "executed": 19,
+        "passed": 16,
+        "failed": 3,
+        "skipped": 0,
+        "assertions": 158
+      },
+      "historicalFailureReceiptsRetained": true,
+      "retrospectivePassRelabel": false,
+      "cases": [
+        {
+          "name": "an acknowledged episode retains repeated uses but a later target type change cannot borrow its historical command",
+          "historicalLiteralObservation": "Initial read at line 237 throws 503 from unsupported selected-head query.",
+          "historicalOutcomeAssertionReached": false,
+          "historicalIntendedMutationReached": false,
+          "historicalSourcePrediction": "The later, readable Movie premise would be filtered by currentEpisodeTargets and hit native-basis.ts:178 before its profile check at line 179. Predicted 403 structure_basis_denied, not the original required 422. This prediction was not executed or relabelled as the retained observed 503.",
+          "originalTestBodySha256": "61f001eea47c00a639cfe9ef6ccfdd891b58997b5aa5f002d64d560ee4267df9",
+          "bodyByteIdentical": true,
+          "currentQa": "20261020t111019-156160",
+          "currentLine": 247,
+          "currentOutcomeAssertionsReached": true,
+          "currentOriginalMutationReached": true,
+          "result": "pass",
+          "assertions": 14,
+          "currentEvidence": ".temp/read-availability-review/profile-acknowledgement-repair/qa/20261020t111019-156160/owner.xml"
+        },
+        {
+          "name": "a target grain change during acknowledgement refuses the current use without replacing a child",
+          "historicalLiteralObservation": "The refused helper reaches its code assertion at line 200: expected structure_target_mismatch, received structure_basis_unavailable.",
+          "historicalOutcomeAssertionReached": true,
+          "historicalIntendedMutationReached": false,
+          "historicalSourcePrediction": null,
+          "originalTestBodySha256": "674057dd66bf7e13127a40d0dd56041bdd3b0ed437360246624fc8ca6942a824",
+          "bodyByteIdentical": true,
+          "currentQa": "20261020t111019-156160",
+          "currentLine": 268,
+          "currentOutcomeAssertionsReached": true,
+          "currentOriginalMutationReached": true,
+          "result": "pass",
+          "assertions": 6,
+          "currentEvidence": ".temp/read-availability-review/profile-acknowledgement-repair/qa/20261020t111019-156160/owner.xml"
+        },
+        {
+          "name": "the caller final fence rechecks the native target profile after returning an acknowledged child",
+          "historicalLiteralObservation": "Initial read at line 269 throws 503 from unsupported selected-head query.",
+          "historicalOutcomeAssertionReached": false,
+          "historicalIntendedMutationReached": false,
+          "historicalSourcePrediction": null,
+          "originalTestBodySha256": "f6a4c94723800b97cf90baa99dd9cf0871c4ea2d4ed6803c2429e5f8941b3c5a",
+          "bodyByteIdentical": true,
+          "currentQa": "20261020t111019-156160",
+          "currentLine": 279,
+          "currentOutcomeAssertionsReached": true,
+          "currentOriginalMutationReached": true,
+          "result": "pass",
+          "assertions": 3,
+          "currentEvidence": ".temp/read-availability-review/profile-acknowledgement-repair/qa/20261020t111019-156160/owner.xml"
+        }
+      ],
+      "limits": "New passes are the 27-case controlled owner selection. The old 51-case selection remains 48 pass/3 fail/609 assertions. No native server, public route or broader acceptance is inferred from either receipt."
+    },
+    "checks": {
+      "readerFocused": {
+        "job": "ec077566-393e-4cd2-8ce7-bfe5c14bbd36",
+        "sequenceStep": 0,
+        "command": "bun scripts/goal/goalctl.ts test services/main/tests/composition-target-batches.test.ts",
+        "qa": "20261020t104753-57f5a1",
+        "exitCode": 0,
+        "result": "pass",
+        "counts": {
+          "executed": 19,
+          "passed": 19,
+          "failed": 0,
+          "errorsOutsideCases": 0,
+          "skipped": 0,
+          "assertions": 342
+        },
+        "source": {
+          "head": "dc97b9ac7fe35aa3d5d7f234dd62ec3d1ac3ec2c",
+          "fingerprint": "61d39dea5ea5bfc4e77aee25686399bc9efe252da15ec7dcfb338981c5ab284a",
+          "clean": false
+        },
+        "sourceStable": true,
+        "exactTestedBlobsVerified": true,
+        "log": ".temp/read-availability-review/profile-acknowledgement-repair/jobs/ec077566-393e-4cd2-8ce7-bfe5c14bbd36.1.log"
+      },
+      "readerStatic": {
+        "job": "ec077566-393e-4cd2-8ce7-bfe5c14bbd36",
+        "sequenceStep": 1,
+        "command": "task goal -- check --only types,lint,guards",
+        "exitCode": 0,
+        "result": "pass",
+        "passed": [
+          "types",
+          "inference",
+          "lint",
+          "ast",
+          "guards (24/45 selected)"
+        ],
+        "log": ".temp/read-availability-review/profile-acknowledgement-repair/jobs/ec077566-393e-4cd2-8ce7-bfe5c14bbd36.2.log"
+      },
+      "readerPostRebaseMainTypes": {
+        "job": "13c8b1bf-8030-4d70-be81-89921acaa2ba",
+        "command": "task main:typecheck",
+        "source": "dd5753e21e91468e6a9905ff0d5f7cfe67ed9850",
+        "exitCode": 0,
+        "result": "pass",
+        "files": 2842,
+        "log": ".temp/read-availability-review/profile-acknowledgement-repair/jobs/13c8b1bf-8030-4d70-be81-89921acaa2ba.log"
+      },
+      "nativeFocused": {
+        "job": "c1fa0d05-33ab-4160-ba12-5356eea1938f",
+        "sequenceStep": 0,
+        "command": "bun scripts/goal/goalctl.ts test services/main/tests/structure-native-basis.test.ts",
+        "qa": "20261020t111019-156160",
+        "exitCode": 0,
+        "result": "pass",
+        "counts": {
+          "executed": 27,
+          "passed": 27,
+          "failed": 0,
+          "errorsOutsideCases": 0,
+          "skipped": 0,
+          "assertions": 234
+        },
+        "source": {
+          "head": "dd5753e21e91468e6a9905ff0d5f7cfe67ed9850",
+          "fingerprint": "5d5880b48dc1fd49bc0686bc6c4a5aed7b83a2425bb7b4fd4dc2cb5967d88555",
+          "clean": false
+        },
+        "sourceStable": true,
+        "exactTestedBlobsVerified": true,
+        "log": ".temp/read-availability-review/profile-acknowledgement-repair/jobs/c1fa0d05-33ab-4160-ba12-5356eea1938f.1.log"
+      },
+      "nativeStatic": {
+        "job": "c1fa0d05-33ab-4160-ba12-5356eea1938f",
+        "sequenceStep": 1,
+        "command": "task goal -- check --only types,lint,guards",
+        "exitCode": 201,
+        "result": "failed-in-existing-web-inference-consumer",
+        "passed": [
+          "types (1377 files)",
+          "guards (24/45 selected; 172 tests)",
+          "lint",
+          "ast"
+        ],
+        "failedGroup": "inference",
+        "compilerDiagnostics": 9,
+        "affectedWebFiles": 7,
+        "testBodyExecutedByFailedStep": false,
+        "existingOwner": "G-2758",
+        "diagnostics": [
+          "apps/web/features/entity-page/identity-read.ts:149:16 TS18047",
+          "apps/web/features/entity-page/identity-reads.test.ts:15:17 TS2531",
+          "apps/web/features/entity-page/identity-reads.test.ts:16:15 TS2531",
+          "apps/web/features/entity-page/identity-reads.test.ts:17:18 TS2531",
+          "apps/web/features/entity-page/identity-relations.test.ts:33:58 TS2531",
+          "apps/web/features/entity-page/identity-relations.ts:45:33 TS18047",
+          "apps/web/features/entity-page/sections.tsx:49:114 TS18047",
+          "apps/web/features/tracking/series-progress-panel.tsx:36:23 TS18047",
+          "apps/web/features/work-levels/relation-rows.ts:132:22 TS18047"
+        ],
+        "disposition": "Inherited nullable-meaning consumer dependency recorded by the assignment; not a backend test failure, not whole-worker PASS, and not evidence that this repair introduced a native failure. No frontend review or repair performed. Normal gate remains required.",
+        "log": ".temp/read-availability-review/profile-acknowledgement-repair/jobs/c1fa0d05-33ab-4160-ba12-5356eea1938f.2.log"
+      },
+      "composedPostRebaseMainTypes": {
+        "job": "c275b208-6d3d-47a9-a185-d1c39ae27bf4",
+        "command": "task main:typecheck",
+        "source": "f45b1f8b8ec0dd151a81ae80cc90302fa0e0c6b8",
+        "exitCode": 0,
+        "result": "pass",
+        "files": 2843,
+        "log": ".temp/read-availability-review/profile-acknowledgement-repair/jobs/c275b208-6d3d-47a9-a185-d1c39ae27bf4.log"
+      },
+      "priorFocusedCoverage": {
+        "qa": "20261020t040635-00ea4f",
+        "job": "f40fd8f3-ac61-470d-b8e4-6eba09f89c8f",
+        "source": "4bc710fb943053b0e8b4c074fdd9b102080be910",
+        "exitCode": 0,
+        "counts": {
+          "executed": 32,
+          "passed": 32,
+          "failed": 0,
+          "errorsOutsideCases": 0,
+          "skipped": 0,
+          "assertions": 451
+        },
+        "disposition": "Retained historical owner coverage; not rerun or added to current selection totals. All 17 original reader test bodies are unchanged and pass in the new 19-case selection. The other three focused test files are blob-identical at the composed pin.",
+        "unchangedTestFiles": [
+          {
+            "path": "services/main/tests/composition-disclosure.test.ts",
+            "priorAndComposedBlob": "935f17764ba1a44e0de7bc63aa3bcb05958cfdc3"
+          },
+          {
+            "path": "services/main/tests/structure-episode-profile.test.ts",
+            "priorAndComposedBlob": "817df488480b8c610d4906711efdec98661358c3"
+          },
+          {
+            "path": "services/main/tests/structure-profile-data.test.ts",
+            "priorAndComposedBlob": "715405e702537201a5b82229c781be20345702f8"
+          }
+        ],
+        "evidence": ".temp/read-availability-review/profile-reader-4bc710"
+      },
+      "executedByThisReviewer": {
+        "newProductTests": 0,
+        "newRuntimeTests": 0,
+        "reason": "Exact-source focused checks reused after fingerprint/blob verification, per current assignment; no concrete source concern required another focused check."
+      },
+      "documentation": {
+        "command": "task docs:check",
+        "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task docs:check",
+        "result": "pass",
+        "scope": "Only the additive owned report; broader worker gate not rerun under explicit documentation-only continuation.",
+        "job": "495f3182-ea12-481f-a6d4-ec014bd08b28",
+        "exitCode": 0,
+        "tests": 13,
+        "markdownFiles": 249,
+        "limits": "Local links, fragments and design navigation; no external URL or runtime validation.",
+        "log": ".temp/read-availability-review/profile-acknowledgement-repair/jobs/495f3182-ea12-481f-a6d4-ec014bd08b28.log"
+      }
+    },
+    "actionableFindings": [],
+    "originalProofStillDue": [
+      "Original public 100-distinct TVEpisode current/exact Composition outcome, real native SPARQL execution and native/runtime acknowledgement, cancellation/resource drain and mixed-load acceptance remain with their existing owners. This review starts no runtime or preparation and pins no newly executed native image.",
+      "Original A17/C29 authority/privacy/CAS/replay/repeated-membership API/browser outcomes remain open with their owners; no corpus, outcome, fixture generation or lifecycle work performed.",
+      "Nine nullable-meaning web inference diagnostics remain the separate active G-2758 consumer dependency; this source verdict does not certify whole-worker, whole-app or normal landing-gate success.",
+      "All prior D5-001/D5-004, notification, public/persona and workload dispositions remain unchanged, including prior genuine passes and literal failures. D4-007 Library/Studio/relationships and D4-008 Book entrance/body/navigation/recovery assertions remain with their existing UI/data/proof owners; no class closes from this dependency review."
+    ],
+    "evidence": {
+      "bundle": ".temp/read-availability-review/profile-acknowledgement-repair",
+      "sourceManifest": ".temp/read-availability-review/profile-acknowledgement-repair/source-manifest.json",
+      "qaArtifacts": ".temp/read-availability-review/profile-acknowledgement-repair/qa-artifact-extraction.json",
+      "jobResults": ".temp/read-availability-review/profile-acknowledgement-repair/job-result-extraction.json",
+      "readerReceipt": ".temp/read-availability-review/profile-acknowledgement-repair/G-2763/producer-receipt.json",
+      "nativeReceipt": ".temp/read-availability-review/profile-acknowledgement-repair/G-2799/producer-receipt.json",
+      "nativeAttempt93Handoff": ".temp/read-availability-review/profile-acknowledgement-repair/G-2799/attempt-93-handoff.md",
+      "historicalFailures": ".temp/read-availability-review/profile-acknowledgement-repair/historical-failure",
+      "rawEvidenceContainsCredentials": false,
+      "rawManifest": ".temp/read-availability-review/profile-acknowledgement-repair/raw-manifest.json",
+      "rawManifestSha256": "48eef743bd21de6cf4eaacb151ca406429d01bbd2dbb07e848b2107a318b3e0a",
+      "rawEvidenceFiles": 74
+    },
+    "historyPreservation": {
+      "priorReportCommit": "b3301f4fa268234146fdefd8eb2d476d8a4badf8",
+      "previousTopLevelKeys": 35,
+      "allPreviousValuesUnchanged": true,
+      "priorReportSha256": "8681f8a2d6f432ac5d10e52dff8f6516bec4d209d7135ac47ccc72b7368b21ad",
+      "newKeyOnly": "boundedProfileAcknowledgementRepairReview"
     }
   }
 }

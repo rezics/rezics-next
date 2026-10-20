@@ -21,11 +21,14 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   const language = parseReaderLanguage(query);
   const [work, { t }, read] = await Promise.all([resolveWork(ref, locale), getTranslation('workPage', [locale]),
     chapterId.test(chapter) && language !== null ? readChapter(chapter, language) : null]);
-  if (work.kind !== 'work') return { title: t.notFoundTitle };
+  if (work.kind === 'missing') return { title: t.notFoundTitle };
+  if (work.kind === 'unavailable') return { title: t.unavailableTitle, robots: { index: false } };
+  if (work.kind === 'moved') return {};
   // As in the page, a chapter address under another Work's ref is not this Work's chapter.
-  if (!read?.ok || read.data.work !== work.header.id) {
+  if (!read || (!read.ok && read.failure === 'missing') || (read.ok && read.data.work !== work.header.id)) {
     return { title: await workTitle(work, t.chapterNotFoundTitle), robots: { index: false } };
   }
+  if (!read.ok) return { title: await workTitle(work, t.chapterUnavailableTitle), robots: { index: false } };
   return { title: await workTitle(work), ...await workPageMetadata(work, { tab: 'read', chapter }, query, locale) };
 }
 

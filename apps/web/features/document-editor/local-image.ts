@@ -4,12 +4,14 @@ import { ImageLabelEditError } from '@rezics/ui/image-settings';
 import { BFF_PREFIX } from '../api/browser.ts';
 import { resolveMediaMetadata } from '../api/media-metadata.ts';
 import { recordImageInference } from './record-inference.ts';
+import { imageUseCommand, imageUseTarget, type ImageUseTarget } from './image-target.ts';
 
 /** Authenticated reserve → bytes → client evidence → stable occurrence Use. No blob address is saved. */
-export function storedImageUpload(actingSubject: string, target: string, send: typeof fetch = fetch): ImageUploader {
+export function storedImageUpload(actingSubject: string, target: ImageUseTarget, send: typeof fetch = fetch): ImageUploader {
   return async (file, occurrence) => {
     if (!['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'image/gif'].includes(file.type)
       || !file.size || file.size > 8 * 1024 * 1024) throw new Error('invalid-image');
+    const binding = await imageUseTarget(target);
     const bytes = new Uint8Array(await file.arrayBuffer());
     const sha256 = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), byte => byte.toString(16).padStart(2, '0')).join('');
     const key = crypto.randomUUID();
@@ -28,7 +30,7 @@ export function storedImageUpload(actingSubject: string, target: string, send: t
     await recordImageInference({ image: file, sha256, representation: stored.representation, actingSubject, key }, send);
     const linked = await send(`${BFF_PREFIX}/v1/media/uses`, { method: 'POST',
       headers: { ...jsonHeaders, 'idempotency-key': `${key}:use` },
-      body: JSON.stringify({ actingSubject, target, representation: stored.representation, occurrence, conceal: false }) });
+      body: JSON.stringify(imageUseCommand({ actingSubject, ...binding, representation: stored.representation, occurrence, conceal: false })) });
     if (!linked.ok) throw new Error('image-reference-failed');
     const use = await linked.json() as { use: string };
     return { src: `${BFF_PREFIX}/v1/media/representations/${stored.representation}/bytes?use=${encodeURIComponent(use.use)}`,

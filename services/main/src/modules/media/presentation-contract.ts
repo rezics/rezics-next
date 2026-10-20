@@ -56,4 +56,8 @@ export const inferenceCommand=t.Object({actingSubject:mediaNative,sha256:t.Strin
     Neutral:t.Number({minimum:0,maximum:1}),Porn:t.Number({minimum:0,maximum:1}),Sexy:t.Number({minimum:0,maximum:1})},{additionalProperties:false})),
 },{additionalProperties:false});
 export const documentUseCommand=t.Object({actingSubject:mediaNative,target:mediaNative,representation:mediaUuid,
-  occurrence:mediaUuid,context:t.Optional(mediaContextInput),conceal:t.Optional(t.Boolean())},{additionalProperties:false});
+  occurrence:mediaUuid,context:t.Optional(mediaContextInput),conceal:t.Optional(t.Boolean()),
+  memberReplyDraft:t.Optional(t.Object({profile:t.Literal('member-reply-draft-image-v1'),
+    variantId:t.String({pattern:'^urn:rezics:variant:[0-9a-f-]{36}$'}),expectedHead:mediaUuid,
+    rootTarget:mediaNative,rootRevision:mediaNative},{additionalProperties:false})),
+},{additionalProperties:false});

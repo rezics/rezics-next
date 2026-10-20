@@ -1,6 +1,9 @@
 import { expect, test } from 'bun:test';
+import { createHash } from 'node:crypto';
+import type { Pool } from 'pg';
+import { ContentCore } from '../../content/src/core.ts';
 import { readRecipeInstructions } from '../src/modules/recipe/instructions.ts';
-import { WorkReadSession, WorkReadMoved } from '../src/modules/work/read-session.ts';
+import { WorkReadSession, WorkReadMoved, WorkReadUnavailable } from '../src/modules/work/read-session.ts';
 import type { OccurrenceRecord } from '../src/modules/structure/format.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { configureDisclosure } from '../src/modules/disclosure/read.ts';
@@ -56,6 +59,31 @@ test('Content reference fencing repeats private authority, governance and public
     await expect(f.session.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
   }
 });
+
+for (const status of ['corrupt', 'unavailable', 'missing', 'identity', 'variant', 'transport'] as const) {
+  test(`a selected public Recipe instruction preserves the ${status} Content failure`, async () => {
+    const target = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
+    const revision = '00000000-0000-4000-8000-000000000002', variantId = `urn:rezics:variant:${revision}`;
+    const body = { body: 'Exact original method.' }, bytes = Buffer.from(JSON.stringify(body));
+    const f = contentPreview(target, revision, variantId);
+    f.session.principal = null; f.session.options.actingSubject = undefined;
+    const cause = Object.assign(new Error('Content transport lost'), { code: '08006' });
+    f.session.deps.content = new ContentCore({ query: async (sql: string) => {
+      if (sql.includes('SELECT v.resource_id')) return { rows: [{ resource_id: target }] };
+      if (status === 'transport') throw cause;
+      return { rows: status === 'missing' ? [] : [{ id: revision, variant_id: status === 'variant' ? 'urn:rezics:variant:other' : variantId,
+        resource_id: status === 'identity' ? target.replace(/001$/, '003') : target,
+        model: 'content-shape-v1', byte_digest: status === 'corrupt' ? '0'.repeat(64) : createHash('sha256').update(bytes).digest('hex'),
+        byte_length: bytes.length, total_bytes: bytes.length, availability: status === 'unavailable' ? 'unavailable' : 'available',
+        serialized_bytes: bytes, body, language_kind: 'tag', language_tag: 'en', original_language_tag: 'en', direction: 'ltr', provenance: {},
+      }] };
+    } } as unknown as Pool);
+    const error = await resolveContentReference(f.session,
+      { target, selector: { grain: 'content', revision, variantId } }, async () => true).catch((error: unknown) => error);
+    expect(error).toBeInstanceOf(WorkReadUnavailable);
+    if (status === 'transport') expect(error).toMatchObject({ cause });
+  });
+}
 
 function recordingPreview() {
   const actor = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';

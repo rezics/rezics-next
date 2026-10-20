@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { bigint, boolean, integer, jsonb, pgSchema, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { bigint, boolean, doublePrecision, integer, jsonb, pgSchema, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import type { LogoAnchor, ShowcaseSlot } from './showcase-contract.ts';
 
 // Media owner tables in Main's Content database. The SQL migration
@@ -103,6 +103,7 @@ const representation = media.table('representation', {
   mediaType: text('media_type').$type<MediaType>().notNull(),
   pixelWidth: integer('pixel_width').notNull(),
   pixelHeight: integer('pixel_height').notNull(),
+  durationSeconds: doublePrecision('duration_seconds'),
   availability: text('availability').$type<'available' | 'erased' | 'unavailable'>().notNull().default('available'),
   operationId: text('operation_id').notNull(),
   createdAt: createdAt(),

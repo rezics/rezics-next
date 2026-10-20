@@ -358,7 +358,7 @@ async function realmWalk(page: Page, mode: Mode, signedIn: boolean, locale: Loca
     await dialogCycle(page, `join dialog ${tag}`, mode, join, page.getByRole('dialog').first(), found, info);
   }
   // The follow options menu: a menu button beside Follow (signed in).
-  const options = page.getByRole('button', { name: /^(Relationship options|関係の設定|Notifications: |通知: )/ }).first();
+  const options = page.getByRole('button', { name: /^(More actions|その他の操作|Notifications: |通知: )/ }).first();
   if (signedIn && await options.isVisible().catch(() => false)) {
     await dialogCycle(page, `follow options ${tag}`, mode, options, page.getByRole('menu').first(), found, info, 6);
   } else if (signedIn) info.annotations.push({ type: 'note', description: `${tag}: no follow options button on the Realm front page` });

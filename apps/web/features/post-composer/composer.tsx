@@ -9,7 +9,7 @@ import { Checkbox } from '@rezics/ui/checkbox';
 import { Input } from '@rezics/ui/input';
 import { CircleAlertIcon, SearchIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { browserMainApi } from '../api/browser.ts';
@@ -24,7 +24,9 @@ import { parseStoredDocument } from '@rezics/document';
 import type { RealmHeader } from '../realm/types.ts';
 import Link from '../shell/localized-link.tsx';
 import { useOperationGate } from '../shell/shell-provider.tsx';
-import { newPostProgress, postWriteState, submitPost, type PostProgress } from './api.ts';
+import { newPostProgress, postWriteState, submitPost, type PostIntent, type PostProgress } from './api.ts';
+import { preparePostImageDraft, sameImageDraftContext, type PostImageDraft } from './image-draft.ts';
+import type { ImageUseTarget, ReplyImageDraft } from '../document-editor/image-target.ts';
 import type { DocumentSaveState } from '../document-editor/publication.ts';
 import { postText as words } from './messages.ts';
 import { persistDraftBody } from './draft-body.ts';
@@ -50,6 +52,7 @@ interface Draft {
   bodyFormat?: 'document';
   spoiler: boolean;
   progress: PostProgress | null;
+  imageDraft?: PostImageDraft;
   /** The language the writer chose for the post; null until they do, then the first reading language. */
   language: string | null;
 }
@@ -110,7 +113,49 @@ export function PostComposer({
   const locked = busy || checkingProjection || writeState !== 'none';
   const reading = useReadingLanguages(actingSubject);
   const language = writingLanguage({ chosen: draft.language, reading });
+  const currentLanguage = useRef(language);
+  currentLanguage.current = language;
+  const imageIntent = useRef(currentIntent);
+  imageIntent.current = currentIntent;
   const written = textAttributes(language, bodyText(draft.body));
+  const preparingImage = useRef<Promise<ReplyImageDraft> | null>(null);
+  const prepareImage = useRef<() => Promise<ReplyImageDraft>>(async () => { throw new Error('image-draft-unavailable'); });
+  prepareImage.current = async () => {
+    if (preparingImage.current) return preparingImage.current;
+    const intent = currentIntent();
+    if (!operationGate.current('postV1Member-reply-drafts')) throw new Error('image-draft-unavailable');
+    const pending = preparePostImageDraft(intent, draftRef.current.imageDraft ?? null, (imageDraft) => {
+      if (!sameImageDraftContext(imageIntent.current(), imageDraft)) throw new Error('image-draft-context-changed');
+      const next = { ...draftRef.current, imageDraft, language: imageDraft.intent.language };
+      try { persist(next); } catch (cause) { setStorageError(true); throw cause; }
+      draftRef.current = next; setDraft(next);
+    });
+    preparingImage.current = pending;
+    try { return await pending; } finally { preparingImage.current = null; }
+  };
+  const mediaTarget = useMemo<ImageUseTarget | undefined>(() => {
+    if (!hydrated || !draftRef.current.community || !draftRef.current.work) return undefined;
+    const intent = imageIntent.current();
+    const record = draftRef.current.imageDraft;
+    return {
+      retained: sameImageDraftContext(intent, record) && postWriteState(record?.progress ?? null) === 'acknowledged',
+      prepare: async () => {
+        if (!sameImageDraftContext(imageIntent.current(), { intent })) throw new Error('image-draft-context-changed');
+        const basis = await prepareImage.current();
+        if (!sameImageDraftContext(imageIntent.current(), { intent })) throw new Error('image-draft-context-changed');
+        return basis;
+      },
+    };
+    // Receipt and text edits keep the reconciler and its immutable occurrence receipts alive.
+  }, [hydrated, actingSubject, draft.community?.id, draft.work?.id, draft.work?.mainVersion, draft.work?.revision, language]);
+
+  function currentIntent(): PostIntent {
+    const current = draftRef.current;
+    if (!current.community || !current.work) throw new Error('image-draft-unavailable');
+    return { realm: current.community.id, work: current.work.id, mainVersion: current.work.mainVersion,
+      revision: current.work.revision, title: current.title, body: current.body, spoiler: current.spoiler,
+      language: currentLanguage.current, actingSubject };
+  }
 
   useEffect(() => {
     try {
@@ -314,21 +359,15 @@ export function PostComposer({
     setBusy(true);
     setError(null);
     let projectionVisible = false;
-    const progress = draft.progress ?? newPostProgress();
     try {
+      const intent = currentIntent();
+      const image = sameImageDraftContext(intent, draft.imageDraft) ? await prepareImage.current() : null;
+      const progress = draft.progress ?? { ...newPostProgress(), ...(image ? {
+        reply: image.reply, variantId: image.variantId, rootRevision: image.rootRevision,
+      } : {}) };
       saveProgress(progress);
       const result = await submitPost(
-        {
-          realm: draft.community.id,
-          work: draft.work.id,
-          mainVersion: draft.work.mainVersion,
-          revision: draft.work.revision,
-          title: draft.title,
-          body: draft.body,
-          spoiler: draft.spoiler,
-          language,
-          actingSubject,
-        },
+        intent,
         progress,
         saveProgress,
         undefined,
@@ -348,6 +387,7 @@ export function PostComposer({
           setCheckingProjection(false);
         },
         operation => operationGate.current(operation),
+        image?.revisionId,
       );
       if (result.kind === 'posted') {
         if (projectionVisible) router.push(discussionHref(result.reply));
@@ -553,7 +593,7 @@ export function PostComposer({
             </div>
             <BodyEditor
               actingSubject={actingSubject}
-              mediaTarget={draft.work?.id}
+              mediaTarget={mediaTarget}
               compact
               className="min-h-40"
               label={words.body[locale]}
@@ -598,8 +638,9 @@ export function PostComposer({
             <div className="grid gap-2 text-sm">
               <p role="status">{words[writeState === 'none' ? 'unwritten' : writeState === 'unknown' ? 'writeUnknown' : 'writeAcknowledged'][locale]}</p>
               {writeState === 'none' ? (
-                <Button type="button" variant="outline" className="justify-self-start" onClick={() => {
+                <Button type="button" variant="outline" className="justify-self-start" onClick={(event) => {
                   change({ progress: null }); setError(null);
+                  event.currentTarget.form?.querySelector<HTMLElement>('[contenteditable="true"]')?.focus();
                 }}>{words.cancelAttempt[locale]}</Button>
               ) : null}
             </div>
@@ -623,8 +664,11 @@ export function PostComposer({
               const link = document.createElement('a'); link.href = url; link.download = 'post-draft.json';
               link.click(); URL.revokeObjectURL(url);
             }}>{words.exportDraft[locale]}</Button> : null}
-            {storageError ? <Button type="button" variant="outline" onClick={() => {
-              try { persist(draft); } catch { setStorageError(true); }
+            {storageError ? <Button type="button" variant="outline" onClick={(event) => {
+              try {
+                persist(draft);
+                event.currentTarget.form?.querySelector<HTMLElement>('[contenteditable="true"]')?.focus();
+              } catch { setStorageError(true); }
             }}>{words.retrySave[locale]}</Button> : null}
             {hydrated && !postedHref ? (
               <span role="status" className="text-muted-foreground text-xs">

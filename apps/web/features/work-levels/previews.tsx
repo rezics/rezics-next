@@ -93,6 +93,7 @@ export function PartsPreviewView({
                   names={names}
                   unavailable={t.unavailable}
                   unnamed={t.unnamed}
+                  undisclosed={t.nameNotShown}
                 />
               ) : null}
             </li>

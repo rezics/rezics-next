@@ -113,7 +113,7 @@ export async function localDatasetSession(
   const accountService = local(env.ACCOUNT_SERVICE_ORIGIN ?? account);
   const webOrigin = local(process.env.REZICS_DATASET_WEB_ORIGIN ?? 'http://127.0.0.1:3000');
   const scope =
-    'openid agent:create work:create work:edit work:read source:intake source:read classification:define classification:decide statement:write semantic:read rights:assess';
+    'openid agent:create work:create work:edit work:read source:intake source:read source:convert source:adopt classification:define classification:decide statement:write semantic:read rights:assess';
   const redirectUri = publicConfig.redirectUris[0];
   if (!redirectUri) throw new Error('Local dataset import lacks its OAuth callback');
   const endpoints: SeedEndpoints = {

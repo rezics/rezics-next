@@ -1,3 +1,7 @@
+'use client';
+
+import { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { Checkbox } from '@rezics/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@rezics/ui/radio-group';
 import { Alert, AlertDescription } from '@rezics/ui/alert';
@@ -8,6 +12,7 @@ import { type AuthMessages, formatMessage } from './messages.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
+import { messages as workMessages } from '../work-page/messages.ts';
 
 export type AgentPickerNotice =
   | { kind: 'ineligible'; previous: string }
@@ -57,21 +62,43 @@ function kindText(kind: AgentOption['kind'], messages: AuthMessages): string | n
  * preference initializes later sessions; Main admits both choices. */
 export function AgentPicker({ options, current, preferred, preferenceRevision, sessionRevision, next, locale, notice,
   messages }: AgentPickerProps) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [retried, setRetried] = useState(false);
+  // RSC refresh preserves this component. Keep its form mounted during a failed
+  // discovery so the person's radio/default choices survive the next attempt.
+  const [knownOptions, setKnownOptions] = useState(options);
+  if (options !== null && options !== knownOptions) setKnownOptions(options);
+  const shownOptions = options ?? knownOptions;
   const checked = current ?? (sessionRevision === null
     ? preferred ?? (options?.length === 1 ? options[0]!.iri : null) : null);
-  return <section className="flex flex-col gap-5">
+  const [selection, setSelection] = useState({ value: checked, basis: checked });
+  if (selection.basis !== checked) setSelection({
+    value: selection.value === selection.basis ? checked : selection.value, basis: checked,
+  });
+  const unavailable = options === null;
+  const shownNotice = notice?.kind === 'unavailable' && retried && !unavailable ? null : notice;
+  const recovery = workMessages[locale];
+  return <section className="flex flex-col gap-5" aria-busy={pending}>
     <header className="flex flex-col gap-2">
       <h1 className="font-semibold text-2xl">{messages.chooseAgentHeading}</h1>
       <p className="text-muted-foreground">{messages.chooseAgentHelp}</p>
     </header>
-    {notice ? <Alert variant={notice.kind === 'default-not-saved' ? 'info' : 'warning'}>
-      <AlertDescription role="alert">{noticeText(notice, messages)}</AlertDescription></Alert> : null}
+    {shownNotice ? <Alert variant={shownNotice.kind === 'default-not-saved' ? 'info' : 'warning'}>
+      <AlertDescription role="alert">{noticeText(shownNotice, messages)}</AlertDescription></Alert> : null}
+    {unavailable || notice?.kind === 'unavailable' || retried ? <div className="grid justify-items-start gap-2">
+      <Button type="button" variant="outline" disabled={pending} onClick={() => {
+        setRetried(true);
+        startTransition(() => router.refresh());
+      }}>{pending ? recovery.retrying : recovery.retry}</Button>
+      <span role="status" className="sr-only">{pending ? recovery.retrying : retried && !unavailable ? messages.agentsLegend : ''}</span>
+    </div> : null}
     {options && options.length === 0 ? <div className="grid justify-items-start gap-3">
       <p role="status">{messages.noAgents}</p>
       <LocalizedLink href={`${localizedPath('/onboarding', locale)}?next=${encodeURIComponent(next)}`}
         className="font-medium text-primary underline underline-offset-4">{messages.setUpProfile}</LocalizedLink>
     </div> : null}
-    {options?.length ? <form method="post" action="/identity/select" className="flex flex-col gap-4">
+    {shownOptions?.length ? <form method="post" action="/identity/select" className="flex flex-col gap-4">
       <input type="hidden" name="next" value={next} />
       <input type="hidden" name="locale" value={locale} />
       <input type="hidden" name="preferenceRevision" value={preferenceRevision ?? ''} />
@@ -79,8 +106,9 @@ export function AgentPicker({ options, current, preferred, preferenceRevision, s
       {/* min-w-0: a fieldset is min-content wide by default, and a long IRI would widen the page. */}
       <fieldset className="flex min-w-0 flex-col gap-2">
         <legend className="mb-2 font-medium text-sm">{messages.agentsLegend}</legend>
-        <RadioGroup name="agent" defaultValue={checked ?? undefined} required aria-label={messages.agentsLegend}>
-          {options.map(option => <RadioGroupItem key={option.iri} className="flex cursor-pointer items-start gap-3
+        <RadioGroup name="agent" value={selection.value} onValueChange={change => setSelection({ ...selection, value: change.value })}
+          disabled={unavailable || pending} required aria-label={messages.agentsLegend}>
+          {shownOptions.map(option => <RadioGroupItem key={option.iri} className="flex cursor-pointer items-start gap-3
             rounded-xl border border-border p-3 hover:bg-accent/60 has-checked:border-primary
             has-checked:bg-primary/5 has-focus-visible:ring-[3px] has-focus-visible:ring-ring/32" value={option.iri}>
             <span className="flex min-w-0 flex-1 flex-col gap-1">
@@ -104,7 +132,7 @@ export function AgentPicker({ options, current, preferred, preferenceRevision, s
         <span className="flex flex-col gap-0.5"><span>{messages.saveDefault}</span>
           <span className="text-muted-foreground">{messages.saveDefaultHelp}</span></span>
       </Checkbox>
-      <Button type="submit" className="self-start">{messages.useAgent}</Button>
+      <Button type="submit" disabled={unavailable || pending || !options?.some(option => option.iri === selection.value)} className="self-start">{messages.useAgent}</Button>
     </form> : null}
   </section>;
 }

@@ -5112,5 +5112,1423 @@
       "blockers": [],
       "next": "Manager can accept the affected D2-005 focus delta with prior original evidence, copy the verified focused bundle to main, and route incidental SSR fallback observation to existing startup owners. No full regression or unchanged review required."
     }
-  ]
+  ],
+  "initialNotificationReadRecoveryFirstReview": {
+    "productPin": "8acbfa2abde8b79f885f5ed399405b0dca716ea0",
+    "parent": "c1a51d5f8476e2ebfec2dc99132d14a2997faec3",
+    "sourceReview": {
+      "productPin": "8acbfa2abde8b79f885f5ed399405b0dca716ea0",
+      "parent": "c1a51d5f8476e2ebfec2dc99132d14a2997faec3",
+      "review": "One first independent review of exactly11 changed paths and six new initial-read stories; no unchanged control or accepted-case review replay.",
+      "changedPaths": [
+        "apps/web/features/settings/messages.ts",
+        "apps/web/features/settings/messages/de.ts",
+        "apps/web/features/settings/messages/es.ts",
+        "apps/web/features/settings/messages/fr.ts",
+        "apps/web/features/settings/messages/ja.ts",
+        "apps/web/features/settings/messages/ko.ts",
+        "apps/web/features/settings/messages/zh-Hans.ts",
+        "apps/web/features/settings/messages/zh-Hant.ts",
+        "apps/web/features/settings/notification-settings.stories.tsx",
+        "apps/web/features/settings/notification-settings.tsx",
+        "apps/web/features/settings/use-recovery-focus.ts"
+      ],
+      "materialDependencies": [
+        {
+          "path": "yarn.lock",
+          "sha256": {
+            "c1a51d5f8476e2ebfec2dc99132d14a2997faec3": "5473e2ac8b308af7e28929652f8882e71e11d81728d567d6324ca7c65eb0ac30",
+            "8acbfa2abde8b79f885f5ed399405b0dca716ea0": "5473e2ac8b308af7e28929652f8882e71e11d81728d567d6324ca7c65eb0ac30",
+            "e96e4846d049d3958695e30ff7e67dacc1af93e9": "5473e2ac8b308af7e28929652f8882e71e11d81728d567d6324ca7c65eb0ac30"
+          },
+          "unchangedFromDeltaParent": true,
+          "sameAsPriorGenuineE96": true
+        },
+        {
+          "path": "package.json",
+          "sha256": {
+            "c1a51d5f8476e2ebfec2dc99132d14a2997faec3": "507787932c026b08db8c45a0673da53ee42a8668bda84cfc5e2d4a62d30afdb4",
+            "8acbfa2abde8b79f885f5ed399405b0dca716ea0": "507787932c026b08db8c45a0673da53ee42a8668bda84cfc5e2d4a62d30afdb4",
+            "e96e4846d049d3958695e30ff7e67dacc1af93e9": "507787932c026b08db8c45a0673da53ee42a8668bda84cfc5e2d4a62d30afdb4"
+          },
+          "unchangedFromDeltaParent": true,
+          "sameAsPriorGenuineE96": true
+        },
+        {
+          "path": "apps/web/package.json",
+          "sha256": {
+            "c1a51d5f8476e2ebfec2dc99132d14a2997faec3": "f0b29308365ed08148f73ba83b3c5f6c5b5e890c1df2d547ece26b541ad7965f",
+            "8acbfa2abde8b79f885f5ed399405b0dca716ea0": "f0b29308365ed08148f73ba83b3c5f6c5b5e890c1df2d547ece26b541ad7965f",
+            "e96e4846d049d3958695e30ff7e67dacc1af93e9": "f0b29308365ed08148f73ba83b3c5f6c5b5e890c1df2d547ece26b541ad7965f"
+          },
+          "unchangedFromDeltaParent": true,
+          "sameAsPriorGenuineE96": true
+        },
+        {
+          "path": ".yarnrc.yml",
+          "sha256": {
+            "c1a51d5f8476e2ebfec2dc99132d14a2997faec3": "3a5fa848917bb984a50f6fe6c270e3b8270b2c1a1b905c5c7727c9263e35dc7b",
+            "8acbfa2abde8b79f885f5ed399405b0dca716ea0": "3a5fa848917bb984a50f6fe6c270e3b8270b2c1a1b905c5c7727c9263e35dc7b",
+            "e96e4846d049d3958695e30ff7e67dacc1af93e9": "3a5fa848917bb984a50f6fe6c270e3b8270b2c1a1b905c5c7727c9263e35dc7b"
+          },
+          "unchangedFromDeltaParent": true,
+          "sameAsPriorGenuineE96": true
+        },
+        {
+          "path": "apps/web/features/api/preferences.ts",
+          "sha256": {
+            "c1a51d5f8476e2ebfec2dc99132d14a2997faec3": "3e467e033cc423ed9a4ae2b5022fcf7956e42944f6c5dd50edea9b01fb24227c",
+            "8acbfa2abde8b79f885f5ed399405b0dca716ea0": "3e467e033cc423ed9a4ae2b5022fcf7956e42944f6c5dd50edea9b01fb24227c",
+            "e96e4846d049d3958695e30ff7e67dacc1af93e9": "3e467e033cc423ed9a4ae2b5022fcf7956e42944f6c5dd50edea9b01fb24227c"
+          },
+          "unchangedFromDeltaParent": true,
+          "sameAsPriorGenuineE96": true
+        },
+        {
+          "path": "apps/web/features/api/platform-access.ts",
+          "sha256": {
+            "c1a51d5f8476e2ebfec2dc99132d14a2997faec3": "52f778399ed7051b884fc1273308ebd4dee3d5fb0ea42222ff303af44c84a22e",
+            "8acbfa2abde8b79f885f5ed399405b0dca716ea0": "52f778399ed7051b884fc1273308ebd4dee3d5fb0ea42222ff303af44c84a22e",
+            "e96e4846d049d3958695e30ff7e67dacc1af93e9": "52f778399ed7051b884fc1273308ebd4dee3d5fb0ea42222ff303af44c84a22e"
+          },
+          "unchangedFromDeltaParent": true,
+          "sameAsPriorGenuineE96": true
+        },
+        {
+          "path": "apps/web/tests/account-sign-in.ts",
+          "sha256": {
+            "c1a51d5f8476e2ebfec2dc99132d14a2997faec3": "a52d9c42a7fb4599a4b54bf7170f8f2747772a04506bcaa29537553135c3befb",
+            "8acbfa2abde8b79f885f5ed399405b0dca716ea0": "a52d9c42a7fb4599a4b54bf7170f8f2747772a04506bcaa29537553135c3befb",
+            "e96e4846d049d3958695e30ff7e67dacc1af93e9": "a52d9c42a7fb4599a4b54bf7170f8f2747772a04506bcaa29537553135c3befb"
+          },
+          "unchangedFromDeltaParent": true,
+          "sameAsPriorGenuineE96": true
+        },
+        {
+          "path": "scripts/dev/config.ts",
+          "sha256": {
+            "c1a51d5f8476e2ebfec2dc99132d14a2997faec3": "ac4141dc80ffbbae8b60a40cd8ab83f0f276be061a1d4f355065fa4736dc9396",
+            "8acbfa2abde8b79f885f5ed399405b0dca716ea0": "ac4141dc80ffbbae8b60a40cd8ab83f0f276be061a1d4f355065fa4736dc9396",
+            "e96e4846d049d3958695e30ff7e67dacc1af93e9": "ac4141dc80ffbbae8b60a40cd8ab83f0f276be061a1d4f355065fa4736dc9396"
+          },
+          "unchangedFromDeltaParent": true,
+          "sameAsPriorGenuineE96": true
+        }
+      ],
+      "verdict": "pass; no source blocker found in bounded delta",
+      "observations": [
+        "Initial choices remain null through read failure; no default switch or save path rendered while unknown.",
+        "Failure/local retry and pending share polite atomic status and describedBy. Pending handler ignores duplicate activation; each attempt uses no-store GET.",
+        "Retry-owned focus stays on retry through repeated failure, then targets first native switch after real choices load; existing moved-focus cancellation retained.",
+        "Generalized recovery hook changes only target type from button to HTMLElement, with existing button default.",
+        "All eight locale changes remove obsolete full-page reload instruction; existing localized retry/pending copy reused.",
+        "No Person preference API/payload, backend, display, control implementation or existing scenario assertion changed.",
+        "Six affected stories cover pending/repeated failure/success, aria states, no PUT/defaults, natural keyboard continuation and width at390/1440. Reused owner results are declared doubles."
+      ],
+      "ownerChecks": {
+        "pendingRun": "20261019t154135-371ff2: two pending stories passed; four later outcomes initially failed because the new assertion expected aria-disabled=false rather than omitted attribute; original failed output retained.",
+        "correctedRun": "20261019t154248-99beea: four repeated-failure/recovery stories passed after correcting only the new enabled-state assertion.",
+        "typesLintGuards": "run-apnfez; owner job0452a588-6674-4dde-b8d6-c954fe8bc05b step3 passed types/lint/AST/9of45guards.",
+        "inference": "Task delta within margins, inherited main baseline failure retained: base=head26951811 versus threshold26950993.650000002 (baseline25667613,+5%). Web38766048→38766382; eden17510437 unchanged. No guard weakened; merge still requires recorded baseline."
+      },
+      "sourceDefects": [],
+      "genuineProof": "pending; source/story evidence alone does not close AUD002 initial notification read recovery."
+    },
+    "reviewer": "G-2829; codex-1/GPT-6.1 Sol/xhigh; independent, no fallback or nested agents.",
+    "sourceVerdict": "pass: no blocker found in exactly11 changed Settings paths and six new affected initial-read stories. Independent of prior accepted genuine proof.",
+    "originalAcceptedClasses": "D2-005/D4-001/D4-004/D4-005 and prior22 genuine Settings cases remain accepted per latest manager continuation; not rerun or reopened.",
+    "ownerStoryScreenshots": {
+      "method": "All six retained owner PNGs opened with view_image during first independent source/story review; no new Storybook run.",
+      "imagesActuallyViewed": [
+        "owner-evidence/20261019t154135-371ff2/InitialReadPendingDesktop.png",
+        "owner-evidence/20261019t154135-371ff2/InitialReadPendingPhone.png",
+        "owner-evidence/20261019t154248-99beea/InitialReadRecoveryDesktop.png",
+        "owner-evidence/20261019t154248-99beea/InitialReadRecoveryPhone.png",
+        "owner-evidence/20261019t154248-99beea/InitialReadRepeatedFailureDesktop.png",
+        "owner-evidence/20261019t154248-99beea/InitialReadRepeatedFailurePhone.png"
+      ],
+      "observations": [
+        "Pending390/1440: local spinner, focus ring and loading status visible; no choices shown.",
+        "Repeated failure: focused localized retry visible; GermanPhone wraps within card.",
+        "Recovery390/1440: actual owner story double has loaded matrix with focus on second Replies Push control after native Tab. Story values are doubles, not API receipts."
+      ]
+    },
+    "genuineInitialReadProof": {
+      "status": "pass: both affected original AUD002 initial notification read recovery cases reached through real authenticated Settings and actual successful preference reads.",
+      "scope": "Only missing initial notification GET503→local retry/pending→repeated failure→unmodified genuine successful GET at390/1440; no PUT/default writes. Prior22/full Settings/contrast/400percent not rerun.",
+      "completedAt": "2026-10-19T16:17:09.485666+00:00",
+      "sourceReviewReceipt": "First independent source verdict published in report-only2f2cfe216152c7f356da6fd2022a710483c021a6; sourceReview object remains its original historical pending-runtime snapshot, not a repeated review.",
+      "productPin": "8acbfa2abde8b79f885f5ed399405b0dca716ea0",
+      "reportBranchBase": "f5da3b45b93dcd24bdfa9431e6a8e34bfaff6c5b",
+      "priorSourceVerdictCommit": "2f2cfe216152c7f356da6fd2022a710483c021a6",
+      "independentCaseCount": 2,
+      "caseResults": [
+        {
+          "id": "initial-notification-read-390",
+          "result": "passed",
+          "job": "adcd7085-1f1e-4c24-b06d-742b843e2b67",
+          "receipt": "live-initial-read-isolated.json",
+          "viewport": {
+            "width": 390,
+            "height": 844
+          },
+          "requests": [
+            "GET503: controlled initial fault",
+            "GET503: gated controlled repeated fault",
+            "GET200: unchanged genuine BFF/Main response"
+          ],
+          "actualSuccess": {
+            "status": 200,
+            "method": "GET",
+            "path": "/api/main/v1/me/notification-preferences",
+            "body": {
+              "profile": "notification-settings-v1",
+              "items": [
+                {
+                  "purpose": "social",
+                  "topic": "reply",
+                  "channel": "inbox",
+                  "state": "enabled",
+                  "revision": "14"
+                },
+                {
+                  "purpose": "social",
+                  "topic": "reply",
+                  "channel": "push",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "social",
+                  "topic": "reply",
+                  "channel": "email",
+                  "state": "disabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "social",
+                  "topic": "mention",
+                  "channel": "inbox",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "social",
+                  "topic": "mention",
+                  "channel": "push",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "social",
+                  "topic": "mention",
+                  "channel": "email",
+                  "state": "disabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "social",
+                  "topic": "post-vote",
+                  "channel": "inbox",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "social",
+                  "topic": "post-vote",
+                  "channel": "push",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "social",
+                  "topic": "post-vote",
+                  "channel": "email",
+                  "state": "disabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "subscription",
+                  "topic": "followed-chapter",
+                  "channel": "inbox",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "subscription",
+                  "topic": "followed-chapter",
+                  "channel": "push",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "subscription",
+                  "topic": "followed-chapter",
+                  "channel": "email",
+                  "state": "disabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "subscription",
+                  "topic": "new-work",
+                  "channel": "inbox",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "subscription",
+                  "topic": "new-work",
+                  "channel": "push",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "subscription",
+                  "topic": "new-work",
+                  "channel": "email",
+                  "state": "disabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "subscription",
+                  "topic": "new-release",
+                  "channel": "inbox",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "subscription",
+                  "topic": "new-release",
+                  "channel": "push",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "subscription",
+                  "topic": "new-release",
+                  "channel": "email",
+                  "state": "disabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "subscription",
+                  "topic": "collection-change",
+                  "channel": "inbox",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "subscription",
+                  "topic": "collection-change",
+                  "channel": "push",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "subscription",
+                  "topic": "collection-change",
+                  "channel": "email",
+                  "state": "disabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "social",
+                  "topic": "review-helpful",
+                  "channel": "inbox",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "social",
+                  "topic": "review-helpful",
+                  "channel": "push",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "social",
+                  "topic": "review-helpful",
+                  "channel": "email",
+                  "state": "disabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "social",
+                  "topic": "review",
+                  "channel": "inbox",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "social",
+                  "topic": "review",
+                  "channel": "push",
+                  "state": "enabled",
+                  "revision": "14"
+                },
+                {
+                  "purpose": "social",
+                  "topic": "review",
+                  "channel": "email",
+                  "state": "disabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "review-requested",
+                  "channel": "inbox",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "review-requested",
+                  "channel": "push",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "review-requested",
+                  "channel": "email",
+                  "state": "disabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "changes-requested",
+                  "channel": "inbox",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "changes-requested",
+                  "channel": "push",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "changes-requested",
+                  "channel": "email",
+                  "state": "disabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "proposal-revised",
+                  "channel": "inbox",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "proposal-revised",
+                  "channel": "push",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "proposal-revised",
+                  "channel": "email",
+                  "state": "disabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "proposal-decided",
+                  "channel": "inbox",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "proposal-decided",
+                  "channel": "push",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "proposal-decided",
+                  "channel": "email",
+                  "state": "disabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "proposal-withdrawn",
+                  "channel": "inbox",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "proposal-withdrawn",
+                  "channel": "push",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "proposal-withdrawn",
+                  "channel": "email",
+                  "state": "disabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "proposal-reverted",
+                  "channel": "inbox",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "proposal-reverted",
+                  "channel": "push",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "proposal-reverted",
+                  "channel": "email",
+                  "state": "disabled",
+                  "revision": "14"
+                }
+              ]
+            },
+            "provenance": "Actual unmodified BFF/Main preference read; browser did not synthesize or replace success."
+          },
+          "loadedSwitchCount": 45,
+          "all45EnabledStatesMatchActualApi": true,
+          "nativeTabsToRetry": 1,
+          "pendingActivationIgnored": "Two additional Enter keys while pending kept total GET count at2; zero actionable switches and zero Main preference commands.",
+          "focusSequence": [
+            "- button \"Load latest choices\"",
+            "- button \"Load latest choices\" [disabled]",
+            "- button \"Load latest choices\"",
+            "- switch \"Replies · In-app\" [checked]",
+            "- switch \"Replies · Push\" [checked]"
+          ],
+          "widths": {
+            "initialFailure": 390,
+            "retryFocused": 390,
+            "firstPending": 390,
+            "repeatedFailure": 390,
+            "successfulReadPending": 390,
+            "loadedFirstFocus": 390,
+            "keyboardContinues": 390
+          },
+          "focusedControlsVisibleAndUnoccluded": true,
+          "liveRegionChanges": [
+            {
+              "at": 1724.2000000029802,
+              "value": null
+            },
+            {
+              "at": 1862.2000000029802,
+              "value": {
+                "text": "Loading the latest preferences. Please wait.",
+                "role": "status",
+                "live": "polite",
+                "atomic": "true"
+              }
+            },
+            {
+              "at": 4155.5999999940395,
+              "value": {
+                "text": "Could not load notification choices.",
+                "role": "status",
+                "live": "polite",
+                "atomic": "true"
+              }
+            },
+            {
+              "at": 5505.29999999702,
+              "value": {
+                "text": "Loading the latest preferences. Please wait.",
+                "role": "status",
+                "live": "polite",
+                "atomic": "true"
+              }
+            },
+            {
+              "at": 5854.79999999702,
+              "value": {
+                "text": "Could not load notification choices.",
+                "role": "status",
+                "live": "polite",
+                "atomic": "true"
+              }
+            },
+            {
+              "at": 6063.899999991059,
+              "value": {
+                "text": "Loading the latest preferences. Please wait.",
+                "role": "status",
+                "live": "polite",
+                "atomic": "true"
+              }
+            },
+            {
+              "at": 6699.0999999940395,
+              "value": null
+            }
+          ],
+          "noMainPreferenceCommands": true,
+          "personPreferencesIncludingRevisionUnchanged": true,
+          "lease": {
+            "owner": "G-2829",
+            "kind": "Owned frontend42833 and own browser session, existing authorized person/notification proof scope",
+            "accountDisplayReservationRequired": false,
+            "preferenceWritesPermittedByThisHelper": false,
+            "acquiredAt": "2026-10-19T16:11:01.742Z",
+            "reference": "Existing site-auth-fixture.json plus released site-display-preference-serialization.json; no shared receipt mutation.",
+            "releasedAt": "2026-10-19T16:12:17.146Z",
+            "released": true
+          },
+          "frontendProcesses": [
+            {
+              "pid": "3425790",
+              "sourceDirectory": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2829/.temp/settings-initial-read-product",
+              "commandName": "task",
+              "checkoutHead": "8acbfa2abde8b79f885f5ed399405b0dca716ea0"
+            },
+            {
+              "pid": "3425927",
+              "sourceDirectory": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2829/.temp/settings-initial-read-product/apps/web",
+              "commandName": "node",
+              "checkoutHead": "8acbfa2abde8b79f885f5ed399405b0dca716ea0"
+            }
+          ],
+          "readiness": {
+            "command": [
+              "task",
+              "web:dev",
+              "--",
+              "--port",
+              "42833"
+            ],
+            "pid": 3425790,
+            "sourceClean": true,
+            "oauthMatchesFixture": true,
+            "status": 200,
+            "ready": true,
+            "image": "images/live-initial-read-isolated-readiness.png"
+          },
+          "signIn": {
+            "reached": true,
+            "method": "supported signInAtAccounts real OAuth PKCE",
+            "status": 200,
+            "sessionAgent": {
+              "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+              "revision": "7bf04085-a9e2-44aa-bc07-64d76f373f60",
+              "eligible": true
+            },
+            "cookieNames": [
+              "better-auth.session_token",
+              "rezics_access",
+              "rezics_session",
+              "rezics_refresh",
+              "rezics_session_key"
+            ],
+            "returnedPath": "/en/settings",
+            "privateStateMode": "0600; excluded from retained bundle"
+          },
+          "backend": {
+            "origin": "http://127.0.0.1:3001",
+            "health": {
+              "status": 200,
+              "body": {
+                "status": "ready",
+                "horizons": {
+                  "sampledAt": "2026-10-19T16:09:51.310Z",
+                  "writerVisibility": "all-sessions",
+                  "notification": {
+                    "oldestPendingRowAgeSeconds": null,
+                    "oldestWriterAgeSeconds": null
+                  },
+                  "reviewRank": {
+                    "oldestPendingRowAgeSeconds": null,
+                    "oldestPendingRowAgeBasis": "none",
+                    "oldestWriterAgeSeconds": null
+                  },
+                  "editorial": {
+                    "oldestPendingRowAgeSeconds": null,
+                    "oldestWriterAgeSeconds": null
+                  }
+                }
+              }
+            },
+            "processes": [
+              {
+                "pid": "1372265",
+                "sourceDirectory": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+                "checkoutHead": "75409ac3c379a9f84212e48a8abdc6540c5c44a2"
+              }
+            ],
+            "provenanceLimit": "Process source-directory pin recorded separately; health response does not attest an immutable build revision."
+          },
+          "sourceAfter": {
+            "head": "8acbfa2abde8b79f885f5ed399405b0dca716ea0",
+            "clean": true
+          },
+          "ownedServerStopped": true,
+          "runtimePageErrors": [],
+          "imagesActuallyViewed": [
+            "images/live-initial-read-isolated-390-initialFailure.png",
+            "images/live-initial-read-isolated-390-retryFocused.png",
+            "images/live-initial-read-isolated-390-firstPending.png",
+            "images/live-initial-read-isolated-390-repeatedFailure.png",
+            "images/live-initial-read-isolated-390-successfulReadPending.png",
+            "images/live-initial-read-isolated-390-loadedFirstFocus.png",
+            "images/live-initial-read-isolated-390-keyboardContinues.png"
+          ]
+        },
+        {
+          "id": "initial-notification-read-1440",
+          "result": "passed",
+          "job": "e10d933c-1564-430a-9f1d-beeed2397c44",
+          "receipt": "live-initial-read-desktop.json",
+          "viewport": {
+            "width": 1440,
+            "height": 1000
+          },
+          "requests": [
+            "GET503: controlled initial fault",
+            "GET503: gated controlled repeated fault",
+            "GET200: unchanged genuine BFF/Main response"
+          ],
+          "actualSuccess": {
+            "status": 200,
+            "method": "GET",
+            "path": "/api/main/v1/me/notification-preferences",
+            "body": {
+              "profile": "notification-settings-v1",
+              "items": [
+                {
+                  "purpose": "social",
+                  "topic": "reply",
+                  "channel": "inbox",
+                  "state": "enabled",
+                  "revision": "14"
+                },
+                {
+                  "purpose": "social",
+                  "topic": "reply",
+                  "channel": "push",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "social",
+                  "topic": "reply",
+                  "channel": "email",
+                  "state": "disabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "social",
+                  "topic": "mention",
+                  "channel": "inbox",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "social",
+                  "topic": "mention",
+                  "channel": "push",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "social",
+                  "topic": "mention",
+                  "channel": "email",
+                  "state": "disabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "social",
+                  "topic": "post-vote",
+                  "channel": "inbox",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "social",
+                  "topic": "post-vote",
+                  "channel": "push",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "social",
+                  "topic": "post-vote",
+                  "channel": "email",
+                  "state": "disabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "subscription",
+                  "topic": "followed-chapter",
+                  "channel": "inbox",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "subscription",
+                  "topic": "followed-chapter",
+                  "channel": "push",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "subscription",
+                  "topic": "followed-chapter",
+                  "channel": "email",
+                  "state": "disabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "subscription",
+                  "topic": "new-work",
+                  "channel": "inbox",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "subscription",
+                  "topic": "new-work",
+                  "channel": "push",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "subscription",
+                  "topic": "new-work",
+                  "channel": "email",
+                  "state": "disabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "subscription",
+                  "topic": "new-release",
+                  "channel": "inbox",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "subscription",
+                  "topic": "new-release",
+                  "channel": "push",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "subscription",
+                  "topic": "new-release",
+                  "channel": "email",
+                  "state": "disabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "subscription",
+                  "topic": "collection-change",
+                  "channel": "inbox",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "subscription",
+                  "topic": "collection-change",
+                  "channel": "push",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "subscription",
+                  "topic": "collection-change",
+                  "channel": "email",
+                  "state": "disabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "social",
+                  "topic": "review-helpful",
+                  "channel": "inbox",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "social",
+                  "topic": "review-helpful",
+                  "channel": "push",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "social",
+                  "topic": "review-helpful",
+                  "channel": "email",
+                  "state": "disabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "social",
+                  "topic": "review",
+                  "channel": "inbox",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "social",
+                  "topic": "review",
+                  "channel": "push",
+                  "state": "enabled",
+                  "revision": "14"
+                },
+                {
+                  "purpose": "social",
+                  "topic": "review",
+                  "channel": "email",
+                  "state": "disabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "review-requested",
+                  "channel": "inbox",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "review-requested",
+                  "channel": "push",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "review-requested",
+                  "channel": "email",
+                  "state": "disabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "changes-requested",
+                  "channel": "inbox",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "changes-requested",
+                  "channel": "push",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "changes-requested",
+                  "channel": "email",
+                  "state": "disabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "proposal-revised",
+                  "channel": "inbox",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "proposal-revised",
+                  "channel": "push",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "proposal-revised",
+                  "channel": "email",
+                  "state": "disabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "proposal-decided",
+                  "channel": "inbox",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "proposal-decided",
+                  "channel": "push",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "proposal-decided",
+                  "channel": "email",
+                  "state": "disabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "proposal-withdrawn",
+                  "channel": "inbox",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "proposal-withdrawn",
+                  "channel": "push",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "proposal-withdrawn",
+                  "channel": "email",
+                  "state": "disabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "proposal-reverted",
+                  "channel": "inbox",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "proposal-reverted",
+                  "channel": "push",
+                  "state": "enabled",
+                  "revision": null
+                },
+                {
+                  "purpose": "governance",
+                  "topic": "proposal-reverted",
+                  "channel": "email",
+                  "state": "disabled",
+                  "revision": "14"
+                }
+              ]
+            },
+            "provenance": "Actual unmodified BFF/Main preference read; browser did not synthesize or replace success."
+          },
+          "loadedSwitchCount": 45,
+          "all45EnabledStatesMatchActualApi": true,
+          "nativeTabsToRetry": 1,
+          "pendingActivationIgnored": "Two additional Enter keys while pending kept total GET count at2; zero actionable switches and zero Main preference commands.",
+          "focusSequence": [
+            "- button \"Load latest choices\"",
+            "- button \"Load latest choices\" [disabled]",
+            "- button \"Load latest choices\"",
+            "- switch \"Replies · In-app\" [checked]",
+            "- switch \"Replies · Push\" [checked]"
+          ],
+          "widths": {
+            "initialFailure": 1440,
+            "retryFocused": 1440,
+            "firstPending": 1440,
+            "repeatedFailure": 1440,
+            "successfulReadPending": 1440,
+            "loadedFirstFocus": 1440,
+            "keyboardContinues": 1440
+          },
+          "focusedControlsVisibleAndUnoccluded": true,
+          "liveRegionChanges": [
+            {
+              "at": 2333.5999999940395,
+              "value": null
+            },
+            {
+              "at": 2802.2000000029802,
+              "value": {
+                "text": "Loading the latest preferences. Please wait.",
+                "role": "status",
+                "live": "polite",
+                "atomic": "true"
+              }
+            },
+            {
+              "at": 4068.7000000029802,
+              "value": {
+                "text": "Could not load notification choices.",
+                "role": "status",
+                "live": "polite",
+                "atomic": "true"
+              }
+            },
+            {
+              "at": 5011,
+              "value": {
+                "text": "Loading the latest preferences. Please wait.",
+                "role": "status",
+                "live": "polite",
+                "atomic": "true"
+              }
+            },
+            {
+              "at": 5807.5999999940395,
+              "value": {
+                "text": "Could not load notification choices.",
+                "role": "status",
+                "live": "polite",
+                "atomic": "true"
+              }
+            },
+            {
+              "at": 6062.899999991059,
+              "value": {
+                "text": "Loading the latest preferences. Please wait.",
+                "role": "status",
+                "live": "polite",
+                "atomic": "true"
+              }
+            },
+            {
+              "at": 6451.70000000298,
+              "value": null
+            }
+          ],
+          "noMainPreferenceCommands": true,
+          "personPreferencesIncludingRevisionUnchanged": true,
+          "lease": {
+            "owner": "G-2829",
+            "kind": "Owned frontend42833 and own browser session, existing authorized person/notification proof scope",
+            "accountDisplayReservationRequired": false,
+            "preferenceWritesPermittedByThisHelper": false,
+            "acquiredAt": "2026-10-19T16:14:49.247Z",
+            "reference": "Existing site-auth-fixture.json plus released site-display-preference-serialization.json; no shared receipt mutation.",
+            "releasedAt": "2026-10-19T16:14:56.247Z",
+            "released": true
+          },
+          "frontendProcesses": [
+            {
+              "pid": "3497320",
+              "sourceDirectory": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2829/.temp/settings-initial-read-product",
+              "commandName": "task",
+              "checkoutHead": "8acbfa2abde8b79f885f5ed399405b0dca716ea0"
+            },
+            {
+              "pid": "3497365",
+              "sourceDirectory": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2829/.temp/settings-initial-read-product/apps/web",
+              "commandName": "node",
+              "checkoutHead": "8acbfa2abde8b79f885f5ed399405b0dca716ea0"
+            }
+          ],
+          "readiness": {
+            "command": [
+              "task",
+              "web:dev",
+              "--",
+              "--port",
+              "42833"
+            ],
+            "pid": 3497320,
+            "sourceClean": true,
+            "oauthMatchesFixture": true,
+            "status": 200,
+            "ready": true,
+            "image": "images/live-initial-read-desktop-readiness.png"
+          },
+          "signIn": {
+            "reached": true,
+            "method": "supported signInAtAccounts real OAuth PKCE",
+            "status": 200,
+            "sessionAgent": {
+              "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+              "revision": "0a05d1c1-6402-4e47-bee1-01f59e80a8f2",
+              "eligible": true
+            },
+            "cookieNames": [
+              "better-auth.session_token",
+              "rezics_access",
+              "rezics_session",
+              "rezics_refresh",
+              "rezics_session_key"
+            ],
+            "returnedPath": "/en/settings",
+            "privateStateMode": "0600; excluded from retained bundle"
+          },
+          "backend": {
+            "origin": "http://127.0.0.1:3001",
+            "health": {
+              "status": 200,
+              "body": {
+                "status": "ready",
+                "horizons": {
+                  "sampledAt": "2026-10-19T16:13:30.445Z",
+                  "writerVisibility": "all-sessions",
+                  "notification": {
+                    "oldestPendingRowAgeSeconds": null,
+                    "oldestWriterAgeSeconds": 0.082
+                  },
+                  "reviewRank": {
+                    "oldestPendingRowAgeSeconds": null,
+                    "oldestPendingRowAgeBasis": "none",
+                    "oldestWriterAgeSeconds": 0.082
+                  },
+                  "editorial": {
+                    "oldestPendingRowAgeSeconds": null,
+                    "oldestWriterAgeSeconds": 0.082
+                  }
+                }
+              }
+            },
+            "processes": [
+              {
+                "pid": "1372265",
+                "sourceDirectory": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+                "checkoutHead": "75409ac3c379a9f84212e48a8abdc6540c5c44a2"
+              }
+            ],
+            "provenanceLimit": "Process source-directory pin recorded separately; health response does not attest an immutable build revision."
+          },
+          "sourceAfter": {
+            "head": "8acbfa2abde8b79f885f5ed399405b0dca716ea0",
+            "clean": true
+          },
+          "ownedServerStopped": true,
+          "runtimePageErrors": [],
+          "imagesActuallyViewed": [
+            "images/live-initial-read-desktop-1440-initialFailure.png",
+            "images/live-initial-read-desktop-1440-retryFocused.png",
+            "images/live-initial-read-desktop-1440-firstPending.png",
+            "images/live-initial-read-desktop-1440-repeatedFailure.png",
+            "images/live-initial-read-desktop-1440-successfulReadPending.png",
+            "images/live-initial-read-desktop-1440-loadedFirstFocus.png",
+            "images/live-initial-read-desktop-1440-keyboardContinues.png"
+          ]
+        }
+      ],
+      "jobReceipts": [
+        {
+          "job": "b5cc7939-2b67-40dd-b854-e46228690564",
+          "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'bun .temp/settings-initial-read-8acbfa2abde8/live-proof.ts' -- sh -c 'cd .temp/settings-initial-read-product && task install'",
+          "exit": 1,
+          "classification": "harness",
+          "actualOutcome": "Install passed; first live helper stopped at pending because role=status also matched the aria-hidden spinner. No repeated failure or real success reached.",
+          "logs": [
+            "jobs/b5cc7939-2b67-40dd-b854-e46228690564.1.log",
+            "jobs/b5cc7939-2b67-40dd-b854-e46228690564.2.log",
+            "jobs/b5cc7939-2b67-40dd-b854-e46228690564.log"
+          ]
+        },
+        {
+          "job": "87330b8e-fdef-4ffa-94a8-416a2ead9e7a",
+          "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun .temp/settings-initial-read-8acbfa2abde8/live-proof.ts initial-read-corrected",
+          "exit": 1,
+          "classification": "harness",
+          "actualOutcome": "Pending focus/busy state actually held; raw textContent counted a hidden duplicate label. Corrected helper to assert the accessible-name locator owns focus.",
+          "logs": [
+            "jobs/87330b8e-fdef-4ffa-94a8-416a2ead9e7a.log"
+          ]
+        },
+        {
+          "job": "b3b0a272-8faa-4c04-8b03-2022ac26d5a8",
+          "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun .temp/settings-initial-read-8acbfa2abde8/live-proof.ts initial-read-accessible",
+          "exit": 1,
+          "classification": "harness",
+          "actualOutcome": "Phone: second initial GET gated before retry, no interaction assertion reached. Desktop: genuine200 reached with correct native switch focus, but helper hit-tested hidden1px input; viewed PNG shows visible switch focus. Corrected geometry to rendered switch ancestor.",
+          "logs": [
+            "jobs/b3b0a272-8faa-4c04-8b03-2022ac26d5a8.log"
+          ]
+        },
+        {
+          "job": "adcd7085-1f1e-4c24-b06d-742b843e2b67",
+          "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun .temp/settings-initial-read-8acbfa2abde8/live-proof.ts initial-read-isolated",
+          "exit": 1,
+          "classification": "harness",
+          "actualOutcome": "Phone complete affected case passed. Desktop stopped before retry with another initial GET; failure retained. No phone rerun.",
+          "logs": [
+            "jobs/adcd7085-1f1e-4c24-b06d-742b843e2b67.log"
+          ]
+        },
+        {
+          "job": "e10d933c-1564-430a-9f1d-beeed2397c44",
+          "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun .temp/settings-initial-read-8acbfa2abde8/live-proof.ts initial-read-desktop",
+          "exit": 0,
+          "classification": "passed",
+          "actualOutcome": "Only remaining desktop case passed after genuine warmup/full document load and a fresh authenticated tab. Original outcome assertions preserved.",
+          "logs": [
+            "jobs/e10d933c-1564-430a-9f1d-beeed2397c44.log"
+          ]
+        }
+      ],
+      "materialDependencies": "Exactly8 API/auth/dependency files SHA-256 equal at delta parent,8acb and prior genuine e96; exact paths/hashes remain in sourceReview.materialDependencies and first-source-review.json.",
+      "assertionMapping": [
+        {
+          "criterion": "Initial read unavailable has a local action, without full page reload",
+          "result": "pass",
+          "evidence": "Both cases initial503 → visible described Load latest choices; reached with natural Tab, activated with Enter."
+        },
+        {
+          "criterion": "Pending is accessible and cannot submit unknown/default choices",
+          "result": "pass",
+          "evidence": "Both firstPending/successfulReadPending: zero switches; retry retains native focus, aria-busy=true and aria-disabled=true; polite atomic described status; duplicate Enter does not issue another GET. Zero Main command requests."
+        },
+        {
+          "criterion": "Repeated failure remains recoverable in place",
+          "result": "pass",
+          "evidence": "Second controlled503 restores same focused enabled local retry and polite atomic failure text. Enter starts third read."
+        },
+        {
+          "criterion": "A real successful read displays actual stored choices and keeps keyboard continuation",
+          "result": "pass",
+          "evidence": "Third GET route.continue forwards real BFF/Main response200; all45 enabled switch states equal complete actual returned matrix. Focus is visible Replies In-app, then natural Tab visible Replies Push."
+        },
+        {
+          "criterion": "Fixture/claim/persona and prior accepted assertions remain intact",
+          "result": "pass",
+          "evidence": "Existing supported OAuth71473997; Main eligible session200; no Main preference command; before/after full Person preference read including revision equal; no display operation or new corpus; old617 manifest entries and all preexisting report keys preserved."
+        }
+      ],
+      "responseProvenance": "Only first two GET responses are injected503 browser faults. Third response is forwarded unchanged to genuine existing Main via actual BFF, and all45 states are checked. No successful product response mock. Owner six stories are separately identified doubles.",
+      "backendProvenance": "Both accepted cases: health200; Main PID1372265 source directory checkout75409ac3c379a9f84212e48a8abdc6540c5c44a2. Process source path and git HEAD recorded separately from frontend8acb. Neither health nor source-directory identity is an immutable served-build attestation.",
+      "visibleEvidence": {
+        "acceptedCasePngCountActuallyViewed": 14,
+        "imagesActuallyViewed": [
+          "images/live-initial-read-isolated-390-initialFailure.png",
+          "images/live-initial-read-isolated-390-retryFocused.png",
+          "images/live-initial-read-isolated-390-firstPending.png",
+          "images/live-initial-read-isolated-390-repeatedFailure.png",
+          "images/live-initial-read-isolated-390-successfulReadPending.png",
+          "images/live-initial-read-isolated-390-loadedFirstFocus.png",
+          "images/live-initial-read-isolated-390-keyboardContinues.png",
+          "images/live-initial-read-desktop-1440-initialFailure.png",
+          "images/live-initial-read-desktop-1440-retryFocused.png",
+          "images/live-initial-read-desktop-1440-firstPending.png",
+          "images/live-initial-read-desktop-1440-repeatedFailure.png",
+          "images/live-initial-read-desktop-1440-successfulReadPending.png",
+          "images/live-initial-read-desktop-1440-loadedFirstFocus.png",
+          "images/live-initial-read-desktop-1440-keyboardContinues.png"
+        ],
+        "diagnosticPngCountActuallyViewed": 3,
+        "diagnosticImagesActuallyViewed": [
+          "images/live-initial-read-corrected-390-firstPending.png",
+          "images/live-initial-read-accessible-390-failure.png",
+          "images/live-initial-read-accessible-1440-loadedFirstFocus.png"
+        ],
+        "ownerStoryPngCountActuallyViewedPreviouslyInThisFirstReview": 6,
+        "observations": [
+          "All14 accepted-case PNGs opened with view_image at original390x844 or1440x1000; no generated or simulated images.",
+          "Both widths: local error and repeated error fit card; native retry focus ring visible; pending text and spinner visible next to active retry; no choices displayed while unknown.",
+          "Real successful read: first Replies In-app switch has visible focus ring, then native Tab moves ring to Replies Push. Topic/channel names visible in phone stacked rows and desktop table.",
+          "Document width equals390/1440 at every captured stage; focused retry/rendered switch is within viewport and unoccluded. Visible switch wrapper, not hidden1px native input, supplies geometry.",
+          "Phone initialFailure PNG visibly has light page background/dark card/dark card text before later images settle to consistent dark. Timing suggests initial theme settlement; cause not established. This transient frame is retained, not used as a new contrast pass or to reopen accepted contrast classes."
+        ]
+      },
+      "setupFailuresRetained": [
+        {
+          "job": "b5cc7939-2b67-40dd-b854-e46228690564",
+          "cause": "Install passed; first live helper stopped at pending because role=status also matched the aria-hidden spinner. No repeated failure or real success reached.",
+          "evidence": [
+            "failed-helper-run/",
+            "helper-correction.json",
+            "live-initial-read.json"
+          ]
+        },
+        {
+          "job": "87330b8e-fdef-4ffa-94a8-416a2ead9e7a",
+          "cause": "Pending focus/busy state actually held; raw textContent counted a hidden duplicate label. Corrected helper to assert the accessible-name locator owns focus.",
+          "evidence": [
+            "raw-text-helper-run/",
+            "raw-text-correction.json",
+            "live-initial-read-corrected.json"
+          ]
+        },
+        {
+          "job": "b3b0a272-8faa-4c04-8b03-2022ac26d5a8",
+          "cause": "Phone: second initial GET gated before retry, no interaction assertion reached. Desktop: genuine200 reached with correct native switch focus, but helper hit-tested hidden1px input; viewed PNG shows visible switch focus. Corrected geometry to rendered switch ancestor.",
+          "evidence": [
+            "isolation-geometry-helper-run/",
+            "isolation-geometry-correction.json",
+            "live-initial-read-accessible.json"
+          ]
+        },
+        {
+          "job": "adcd7085-1f1e-4c24-b06d-742b843e2b67",
+          "cause": "Overall job failed desktop setup; actual phone case passed and is reused. Repeated desktop initial read root cause unestablished, possibly dev route lifecycle; no source defect inferred. Genuine warmup/full document load/fresh tab allowed desktop case to reach all unchanged outcome assertions.",
+          "evidence": [
+            "desktop-lifecycle-helper-run/",
+            "desktop-lifecycle-correction.json",
+            "live-initial-read-isolated.json",
+            "live-initial-read-desktop.json"
+          ]
+        }
+      ],
+      "runtimeObservationsOutsideBoundedVerdict": [
+        "First failed helper run has one SSR-to-client fallback pageerror at/en,2026-10-19T16:00:11.655Z, with undefined server detail. Later accepted-case runs errors=[]; no source cause established or startup fix attempted. Existing startup owners G2747/G2847 retain triage.",
+        "Original390 initialFailure screenshot has transient mixed theme colors; later interactive/error/pending/loaded captures settle dark. No display write, CSS spoof or fresh contrast assertion. Preserve for existing shell/startup owners; no new product fix within this claim.",
+        "Raw owned server diagnostics show the preexisting checked/defaultChecked React warning; no observed choice-state mismatch and no shared-control source edit/re-review."
+      ],
+      "sourceDefectsFound": [],
+      "confirmedAffectedRuntimeDefects": [],
+      "remainingAffectedProofPremises": [],
+      "limits": [
+        "Injected503s demonstrate controlled failure recovery, not actual backend outages.",
+        "Actual200 receipts and45 state comparisons prove this genuine read path; no new write/reload persistence run is claimed. Prior accepted22 cases remain their own pinned evidence.",
+        "Polite atomic DOM/live-region changes and accessible focus snapshots do not establish speech heard by a screen reader; no new heard-speech acceptance added.",
+        "Owner inference inherited baseline excess remains recorded in sourceReview.ownerChecks; no guard weakened or independently resolved here."
+      ],
+      "acceptance": {
+        "AUD002InitialNotificationReadRecovery": "Affected initial-read UI/error/retry/actual-success/keyboard criteria satisfied at both original widths by real authenticated product runtime plus bounded independent source review.",
+        "priorAcceptedClasses": "D2-005/D4-001/D4-004/D4-005 and original22 genuine cases remain accepted; all previous cumulative objects including latestEvidenceRun unchanged."
+      },
+      "cleanup": "Both retained accepted-case runs stop only their owned frontend42833, close browser, and record released read/session scope; product checkout clean at8acb before/after. Shared backend and other servers left running."
+    },
+    "retainedEvidence": {
+      "bundle": ".temp/settings-initial-read-8acbfa2abde8/",
+      "handoffBundle": ".temp/audit-remediation-20261019/proofs/settings-feedback-G-2829-initial-read-8acbfa2abde8/",
+      "mainCopyCompleted": false,
+      "managerCopyRequired": true
+    },
+    "administrativeReportChecks": {
+      "scope": "Administrative report branch only; genuine pin8acb and owner affected story/source checks have separate exact receipts.",
+      "job": "b2c45ada-f4b9-4694-b914-ae962df3acab",
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+      "exit": 0,
+      "steps": [
+        {
+          "command": "task docs:check",
+          "exit": 0,
+          "result": "13 checker tests passed;249 Markdown files checked for local links/fragments/design navigation. No external URL/runtime claim.",
+          "evidence": "jobs/b2c45ada-f4b9-4694-b914-ae962df3acab.1.log"
+        },
+        {
+          "command": "task goal -- check",
+          "exit": 0,
+          "checkId": "run-c9IPYF",
+          "result": "Types ok(no TypeScript workspace changed); tests ok(none named); lint ok(no source changed); AST ok;1of44 selected guards passed.",
+          "evidence": [
+            "jobs/b2c45ada-f4b9-4694-b914-ae962df3acab.2.log",
+            "administrative-check/run-c9IPYF/output.log"
+          ]
+        }
+      ],
+      "harnessNotice": "Five commits behind main notice retained; all selected checks passed. No rebase, product-source mutation, or unchanged product-test rerun."
+    },
+    "preservation": {
+      "cumulativeReportBase": "f5da3b45b93dcd24bdfa9431e6a8e34bfaff6c5b",
+      "allPreexistingCumulativeKeysIncludingLatestEvidenceRunEqualBase": true,
+      "firstSourceReviewObjectEqualEarlyReviewCommit": "2f2cfe216152c7f356da6fd2022a710483c021a6",
+      "priorBundles": "prior-evidence-integrity.json; all617 entries in five unchanged historical bundles verified by size and SHA-256.",
+      "noProductOrOriginalAssertionMutation": true
+    }
+  }
 }

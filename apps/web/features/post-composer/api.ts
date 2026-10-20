@@ -133,6 +133,7 @@ export async function submitPost(
   onPlaced?: (reply: string) => void,
   onProjection?: (visible: boolean) => void,
   operationOpen: OperationGate = gateFor(null),
+  expectedDraftHead: string | null = null,
 ): Promise<PostOutcome> {
   const step = { ...original };
   if (step.restartRequired) {
@@ -226,7 +227,7 @@ export async function submitPost(
     if (!step.revisionId || !step.digest) {
       // Replay also recovers older saved progress that retained the revision without its digest.
       beforeWrite('draft');
-      const { data, error } = await draft(false, null, 'draft');
+      const { data, error } = await draft(false, expectedDraftHead, 'draft');
       if (!data) {
         // A denied new draft can be sealed as cancelled. A known successful revision
         // still needs its original receipt when recovering a missing digest.

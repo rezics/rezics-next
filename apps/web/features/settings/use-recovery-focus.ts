@@ -1,8 +1,8 @@
 import { useLayoutEffect, useRef } from 'react';
 
 /** Keep a refresh's recovery action reachable after its button is disabled or replaced. */
-export function useRecoveryFocus(busy: boolean) {
-  const target = useRef<HTMLButtonElement>(null);
+export function useRecoveryFocus<T extends HTMLElement = HTMLButtonElement>(busy: boolean) {
+  const target = useRef<T>(null);
   const ownedFocus = useRef(false);
   useLayoutEffect(() => {
     if (!ownedFocus.current) return;

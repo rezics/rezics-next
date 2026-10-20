@@ -13,7 +13,8 @@ import {
 import type { FilterDocument } from '../../../../../model/definitions/filter-document-v1.ts';
 import { discoveryCredit, discoveryRating } from '../discovery/contract.ts';
 
-/** Page-only hydration of projected previews, never live credit or rating aggregation. */
+/** Page-only previews: projected data or one bounded current credit prefix,
+ * never live credit or rating aggregation. */
 export const RESOURCE_WORK_CARD_COST = {
   works: 64,
   credits: 3,

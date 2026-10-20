@@ -44,11 +44,11 @@ export function sectionOf(page: EntityProjection, id: EntitySection['id']): Enti
  * A page of accepted statements about the resource, in the reader's Context. `frame` restricts it to what holds within those
  * coordinates (a continuity the reader chose): Main decides what is covered, the browser never filters.
  */
-export async function readStatements(section: EntitySection, cursor: string | undefined, position?: string,
-  frame?: readonly string[], client?: SuppliedClient): Promise<Loaded<StatementPage>> {
+export const readStatements = cache(async (section: EntitySection, cursor: string | undefined, position?: string,
+  frame?: readonly string[], client?: SuppliedClient): Promise<Loaded<StatementPage>> => {
   const { main, actingSubject } = client ?? await reader();
   return readLinkedStatements(main, actingSubject, section.href, { cursor, position, frame });
-}
+});
 
 /**
  * A page of relation occurrences where the resource takes any role. Relations are public data: an anonymous

@@ -57,6 +57,7 @@ export default {
 
   sections: 'Rubriques de l’œuvre', overview: 'Présentation', contents: 'Sommaire', versions: 'Versions',
   discussion: 'Discussion', history: 'Historique',
+  postMoreActions: 'Autres actions pour la publication', replyMoreActions: 'Autres actions pour la réponse',
 
   scope: 'Communauté', global: 'Tout le monde', realm: 'Communauté', mine: 'Vous', chooseRealm: 'Choisir une communauté',
   adoptingRealms: 'Communautés qui mettent cette œuvre en avant', noAdoptingRealms: 'Aucune communauté ne met encore cette œuvre en avant.',

@@ -767,6 +767,59 @@ export const facetRegistry = {
     "digest": "ecfc69ba05556b2e65bf1cdc686e8bc7f9f682f01ff728ff369fa33d5e211971",
     "current": true
   },
+  "https://rezics.com/definition/facet-release-translator-v1": {
+    "id": "https://rezics.com/definition/facet-release-translator-v1",
+    "name": "releaseTranslator",
+    "version": 1,
+    "appliesTo": "participant",
+    "subject": "https://rezics.com/vocab/Release",
+    "path": [
+      {
+        "kind": "triple",
+        "predicate": "https://rezics.com/vocab/coverage"
+      },
+      {
+        "kind": "triple",
+        "predicate": "https://rezics.com/vocab/revision"
+      },
+      {
+        "kind": "triple",
+        "predicate": "https://rezics.com/vocab/translator"
+      }
+    ],
+    "values": [
+      {
+        "kind": "class",
+        "class": "https://rezics.com/vocab/Agent"
+      }
+    ],
+    "operators": [
+      "any",
+      "all",
+      "none"
+    ],
+    "source": "global",
+    "parameters": [],
+    "qualifiers": [],
+    "occurrence": false,
+    "within": "https://rezics.com/definition/facet-release-v1",
+    "labels": {
+      "en": "Release translator",
+      "zh-Hant": "發行譯者",
+      "zh-Hans": "发行译者",
+      "ja": "リリースの翻訳者",
+      "ko": "발매판 번역자",
+      "de": "Übersetzer der Ausgabe",
+      "fr": "Traducteur de l’édition",
+      "es": "Traductor de la edición"
+    },
+    "cost": {
+      "maxValues": 8,
+      "graphReads": 0
+    },
+    "digest": "61a11baa70f9156f70a0d4e3e91cfea792956951e0d013b450aa270981ab35db",
+    "current": true
+  },
   "https://rezics.com/definition/facet-role-v1": {
     "id": "https://rezics.com/definition/facet-role-v1",
     "name": "role",
@@ -1005,4 +1058,4 @@ export const facetRegistry = {
 } as const;
 export type FacetRef = keyof typeof facetRegistry;
 /** Changes whenever any admitted Facet does. */
-export const facetRegistryDigest = "67aa1dbfabeec816a2c859bbfe9f16f2df35dc4cafa6672c5b85d7cf8bb1ed82";
+export const facetRegistryDigest = "a2403479b5a2751b8f3815d3e23df589c46de24387f4ef179ba110f3f8825fd8";

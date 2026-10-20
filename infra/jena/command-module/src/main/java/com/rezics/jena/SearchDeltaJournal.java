@@ -345,7 +345,6 @@ final class SearchDeltaJournal {
             }
             try {
                 AuditResult audit = qualifyResult(data, true);
-                ready = audit.baseline() != null;
                 if (audit.inconsistent() && repairable(data)) {
                     synchronized (recovering) { recovery.rebuilds++; }
                     long started = System.nanoTime();
@@ -354,8 +353,12 @@ final class SearchDeltaJournal {
                         started + OccurrenceTextSchema.REBUILD_DEADLINE_MS * 1_000_000L);
                     record("public text rebuild completed: quads=" + quads
                         + " elapsedMs=" + (System.nanoTime() - started) / 1_000_000L, false);
-                    ready = qualify(data);
+                    audit = qualifyResult(data, true);
                 }
+                // Physical text can stay qualified while Content publication
+                // coverage is unresolved. Finish this owner only when its
+                // Content witness also exists, including after a rebuild.
+                ready = audit.baseline() != null && audit.baseline().content() != null;
             } catch (RuntimeException transientFailure) {
                 record("public text recovery failed: " + auditReason(transientFailure), true);
             }

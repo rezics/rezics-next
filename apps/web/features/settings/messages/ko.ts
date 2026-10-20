@@ -64,7 +64,7 @@ export default {
   notificationRealmRoleChange: '커뮤니티 역할 변경', notificationRealmMembershipChange: '커뮤니티 회원 자격 변경',
   notificationRealmInvitation: '커뮤니티 초대', notificationClaimCorrection: '작품 정보 정정',
   notificationSaved: '알림 설정을 저장했어요.',
-  notificationUnavailable: '알림 설정을 불러오지 못했어요. 새로고침한 뒤 다시 시도해 주세요.',
+  notificationUnavailable: '알림 설정을 불러오지 못했어요.',
   privacyTitle: '개인정보',
   privacyHelp: '내 서재를 볼 수 있는 사람을 설정하세요. 비공개 책장은 공개 프로필에 표시되지 않아요.',
   libraryVisibility: '서재와 책장', libraryPublic: '공개', libraryPrivate: '비공개', libraryFollowers: '팔로워',

@@ -3449,5 +3449,624 @@
     },
     "ownerChanges": [],
     "next": "Manager routes FEED-RSC-01 to G-2749/web router owner for the original no-whole-page-refresh criterion. Preserve the accepted focus correction and all prior valid proof; do not close AUD-005 or broaden the task into another review/matrix run."
+  },
+  "d3ReaderAuthoritySameRuntimeFinite1717Verdict": {
+    "result": "preparation-failure",
+    "summary": "Normal OAuth and same-browser saved eligible Org/revision succeeded; invalid bootstrap-field guard prevented removal and all eight original Feed cells. Both selected files attributed, missingFiles[]. All owned runtime closed. No product finding or class closure.",
+    "originalFeedCellsReached": 0,
+    "productFinding": false,
+    "classClosed": false,
+    "next": "Root adopts append and routes one invalid preparation-guard correction to existing coordinator staging, preserving all original Feed assertions and finite budgets. No live runtime retained; no old API23 replay or conversion to product pass."
+  },
+  "d3ReaderAuthoritySameRuntimeFinite1717Attempt": {
+    "recordedAt": "2026-10-19T17:30:37.370733+00:00",
+    "recordedBy": "G-2775",
+    "authority": "Manager same-scope original eight-cell finite execution release1717; one existing normal recorded launcher; original Feed assertions unchanged.",
+    "result": "failed preparation; original Feed assertions not reached",
+    "classClosed": false,
+    "productFinding": false,
+    "pendingDeclarationsChanged": false,
+    "job": {
+      "id": "24dd6c26-ee97-4218-9bb9-2e5425212504",
+      "exit": 201,
+      "runnerClassification": "assertion",
+      "semanticClassification": "coordinator preparation guard contradicts pinned saved-choice bootstrap semantics",
+      "log": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2775/.temp/goal/jobs/24dd6c26-ee97-4218-9bb9-2e5425212504.log",
+      "privateRelease": {
+        "file": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/site-D3001-qualified-finite-release-1717.private.json",
+        "mode": "0o600",
+        "sha256": "ba40773fec71ff157cf2bb8b6e323a040269d6fb458996766042fc2dab933db9",
+        "tokenOmitted": true
+      }
+    },
+    "source": {
+      "workerHead": "f1c42d420130d899605fcd06e1a6ab2b3e14faf7",
+      "runner": {
+        "directory": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/site-QA3-qualified-runner-b8b6f41c",
+        "revision": "b8b6f41cf918bca3a80d47e55bb58e634f6f79c5",
+        "tree": "42944e5739a28b0657d3a2125ad5859d03b0a93b",
+        "pins": [
+          {
+            "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/site-QA3-qualified-runner-b8b6f41c/scripts/qa/cli.ts",
+            "sha256": "9779ed6bb4dd927084c9496604ad572d7c80481d218110e0413af7fad19b5efd"
+          },
+          {
+            "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/site-QA3-qualified-runner-b8b6f41c/scripts/qa/file-results.ts",
+            "sha256": "1f27a5c48c1cdc4d336c4e9e3ae274a9dbb6e683aaa3c96bc90d3584519f2c46"
+          },
+          {
+            "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/site-QA3-qualified-runner-b8b6f41c/tests/qa/unit/file-results.test.ts",
+            "sha256": "2bf103761685bc58c85e9f0b73edb73741a367e376771766a88698ecdb8d2bf4"
+          },
+          {
+            "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/site-QA3-qualified-runner-b8b6f41c/scripts/qa/acceptance.ts",
+            "sha256": "f93eca85230d5aa39ac51c7ddd6809015c1575725328d7bcdfe06316c57eed0b"
+          },
+          {
+            "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/site-QA3-qualified-runner-b8b6f41c/scripts/qa/core.ts",
+            "sha256": "c22fed1e7e7665bb18690864003b58563302e8c93e1884801a6a74973be8586c"
+          },
+          {
+            "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/site-QA3-qualified-runner-b8b6f41c/scripts/qa/test.ts",
+            "sha256": "3f57d88efe82ff83e300594443f5c8bb824711003525ff3db615ef15a2165a80"
+          },
+          {
+            "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/site-QA3-qualified-runner-b8b6f41c/scripts/goal/goalctl.ts",
+            "sha256": "cf06b6b0727f466917913fc2a607194323c43037439b8636ce8bc84342d6ccac"
+          },
+          {
+            "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/site-QA3-qualified-runner-b8b6f41c/Taskfile.yml",
+            "sha256": "9ebb829d62cd74ab42b1fa2bd4ad2786cd9ef8d16e61ef4f3637d9a40693516f"
+          },
+          {
+            "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/site-QA3-qualified-runner-b8b6f41c/tests/qa/integration/.temp/d3001-browser-lease-owner-forward-G2775.test.ts",
+            "sha256": "4ebefabc32ff68063bbfd526a9b73ba7ca0d038b8bdb4b37471765e2cc8a63f2"
+          },
+          {
+            "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/site-QA3-qualified-runner-b8b6f41c/tests/qa/integration/.temp/feed-authority-ineligible-owner-forward-G2836.test.ts",
+            "sha256": "4b4dfa7bf81dd9021e3a90c01e83470c078f807a7b426154eb94d54859cbd9ca",
+            "bytes": 237
+          }
+        ]
+      },
+      "donor": "9da346a1ec56a7dc2417cb0a8662c2dea8b16900",
+      "producerProduct": "3d6097238d9bc63de4da2b8fb797774a3da31df2",
+      "generation": "rs-author-management-40bb7b7a324608c197999fcaee428285d7aa8a0d770ff53220d27ab59595359b",
+      "frontend": "ee32064fb70e0c79a294b704a388b915fd61395e",
+      "frontendTree": "fc2b9a4cda5fdfcb12c913595508c4086b168e8d",
+      "setupPins": [
+        {
+          "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2776/.temp/d3001-ineligible-agent-G2775/browser-lease.test.ts",
+          "sha256": "7928586510eb61bdcb52c606a157e396b3a15c60572dbf6d09c411c6cbb52116"
+        },
+        {
+          "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2776/.temp/d3001-ineligible-agent-G2775/browser-frontend.ts",
+          "sha256": "3de82f1314355c1b59af4a8a974be81f9fd015a3980bf75b4b16bf5bd1b75225"
+        },
+        {
+          "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2776/.temp/d3001-ineligible-agent-G2775/browser-tsconfig.json",
+          "sha256": "a6e6984ca4cda4b911633207f4164a97b0bb19e58a73559445b7fba4bf1649fb"
+        },
+        {
+          "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2775/.temp/d3001-browser-lease-preparation/d3001-browser-lease-owner-forward-G2775.test.ts",
+          "sha256": "4ebefabc32ff68063bbfd526a9b73ba7ca0d038b8bdb4b37471765e2cc8a63f2"
+        },
+        {
+          "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2775/.temp/d3001-browser-lease-preparation/run-released.py",
+          "sha256": "ba280f20560ff7de0cb664f83f77fa13d7e28352823c7451dc05bea36bf6cce0"
+        }
+      ],
+      "borrowerPins": [
+        {
+          "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-ineligible-coordinator/feed-authority-ineligible.test.ts",
+          "bytes": 38099,
+          "sha256": "8c4edf3acdabfefaf5e0ed043eb52d99d79c880da2923026ecc8da947087ce7e"
+        },
+        {
+          "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-ineligible-coordinator/run-borrower.py",
+          "sha256": "89f0bd392aa58a77c795ad3ef7683b9f3a2f1ed07609b3e7bd3dec6871dcb763",
+          "bytes": 4874
+        },
+        {
+          "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-ineligible-coordinator/Taskfile.yml",
+          "sha256": "1792a67b3a72fc06b3a607dff9404c3922113d7766847e32e3763d9067b3c70a",
+          "bytes": 278
+        },
+        {
+          "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/site-QA3-qualified-runner-b8b6f41c/tests/qa/integration/.temp/feed-authority-ineligible-owner-forward-G2836.test.ts",
+          "sha256": "4b4dfa7bf81dd9021e3a90c01e83470c078f807a7b426154eb94d54859cbd9ca",
+          "bytes": 237
+        },
+        {
+          "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-ineligible-coordinator/tsconfig.json",
+          "sha256": "404af61913405408f7401f74ed00d545dcd190aa496de9db790891e9c5525ef1"
+        }
+      ],
+      "originalFutureBaseline": "69eac3ceeaf885be70205a70248bc951e9d81cc9",
+      "historical79bePreparationUnchanged": true,
+      "compatibility": {
+        "comparedMain": "ee32064fb70e0c79a294b704a388b915fd61395e",
+        "backendEqual": "12/14",
+        "frontendRetainedEqual": "37/38",
+        "changedBackend": [
+          "services/main/src/modules/access/contexts.ts",
+          "services/main/src/modules/access/session-agent.ts"
+        ],
+        "disposition": "source inference: healthy session choice/revision/controller path unchanged; actual backend remains donor9da"
+      },
+      "mainAtReleaseFromManager": "c969 (manager-supplied; QA runner b8b6 actual attribution independently recorded)"
+    },
+    "checks": [
+      {
+        "role": "owner",
+        "qaRun": "20261019t171704-0d769c",
+        "exit": 201,
+        "source": {
+          "head": "b8b6f41cf918bca3a80d47e55bb58e634f6f79c5",
+          "fingerprint": "cedaba934d6a6e5afec4b05b743e0efd202a568364c0f7250443ee1f8faa5898",
+          "clean": true
+        },
+        "sourceStable": true,
+        "selectedFiles": [
+          "tests/qa/integration/.temp/d3001-browser-lease-owner-forward-G2775.test.ts"
+        ],
+        "missingFiles": [],
+        "fileFailures": {
+          "tests/qa/integration/.temp/d3001-browser-lease-owner-forward-G2775.test.ts": "assertion"
+        },
+        "stage": "test",
+        "elapsedMs": 354443,
+        "budgetMs": 480000,
+        "junit": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2775/.temp/d3001-ineligible-agent-G2775/execution-20261019t171704-0d769c/owner-junit.xml",
+        "originalFeedAssertionReached": false
+      },
+      {
+        "role": "borrower",
+        "qaRun": "20261019t172220-639d77",
+        "exit": 201,
+        "source": {
+          "head": "b8b6f41cf918bca3a80d47e55bb58e634f6f79c5",
+          "fingerprint": "cedaba934d6a6e5afec4b05b743e0efd202a568364c0f7250443ee1f8faa5898",
+          "clean": true
+        },
+        "sourceStable": true,
+        "selectedFiles": [
+          "tests/qa/integration/.temp/feed-authority-ineligible-owner-forward-G2836.test.ts"
+        ],
+        "missingFiles": [],
+        "fileFailures": {
+          "tests/qa/integration/.temp/feed-authority-ineligible-owner-forward-G2836.test.ts": "assertion"
+        },
+        "stage": "test",
+        "elapsedMs": 53555,
+        "budgetMs": 480000,
+        "junit": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2775/.temp/d3001-ineligible-agent-G2775/execution-20261019t171704-0d769c/borrower-junit.xml",
+        "originalFeedAssertionReached": false
+      }
+    ],
+    "failure": {
+      "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2776/.temp/d3001-ineligible-agent-G2775/browser-lease.test.ts",
+      "line": 333,
+      "case": "D3001I02 coordinates a finite same-runtime browser-owned ineligible Agent premise",
+      "assertion": "assert(before && before.initialActingSubject === A.actingSubject, 'Browser-selected eligible Account A readback missing');",
+      "actual": {
+        "status": 200,
+        "choice": {
+          "actingSubject": "https://rezics.com/id/6ea400ea-cb66-48a4-acac-ef30b13f46d8",
+          "revision": "c7d37ee2-55c0-41b5-9fcb-695949cd17bf",
+          "eligible": true
+        },
+        "initialActingSubject": null,
+        "sessionKeySHA256": "038509c00e765e808476a996b2a5d875d087c81a31c2ee295d0243d40a5b1ee0",
+        "responseSHA256": "defb39198221b2d62176f9f5bc095521d0534b26040116e39021e6d7e1fcb4fd"
+      },
+      "implementationReason": {
+        "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2776/services/main/src/modules/access/session-agent.ts",
+        "line": 79,
+        "expression": "initialActingSubject: sessionAgent.revision ? null : ...",
+        "meaning": "Bootstrap suggestion only before a saved revision; null deliberate after either Person or Organization selection."
+      },
+      "borrowerConsequence": {
+        "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-ineligible-coordinator/feed-authority-ineligible.test.ts",
+        "line": 469,
+        "error": "D3 setup/capture unavailable: removed within original45s and owner minimum bound; no Feed defect or success is implied",
+        "caseResult": "premise-setup-failure"
+      }
+    },
+    "actualPremise": {
+      "restoreId": "author-e9750b5f3caf4e1eb56df21",
+      "normalProvisionAndInvitationAcceptance": true,
+      "pairedControllers": {
+        "A": {
+          "authorityEpoch": "0",
+          "otherControllers": 1,
+          "you": [
+            {
+              "representationSHA256": "c531208eaecd8a982750a3c487024314506ef903423d9187d81557d34b22aa3f",
+              "generation": "0"
+            }
+          ]
+        },
+        "B": {
+          "authorityEpoch": "0",
+          "otherControllers": 1,
+          "you": [
+            {
+              "representationSHA256": "d3c36789db488adbf851715f25e719615e3e3462f7e0775c428d00052175cd6f",
+              "generation": "0"
+            }
+          ]
+        },
+        "aRepresentationSHA256": "c531208eaecd8a982750a3c487024314506ef903423d9187d81557d34b22aa3f",
+        "bRepresentationSHA256": "d3c36789db488adbf851715f25e719615e3e3462f7e0775c428d00052175cd6f",
+        "independentSessions": true,
+        "minControllers": 1,
+        "liveControllers": 2
+      },
+      "normalOAuth": true,
+      "sameBrowserSavedEligibleOrganization": "https://rezics.com/id/6ea400ea-cb66-48a4-acac-ef30b13f46d8",
+      "selectionRevision": "c7d37ee2-55c0-41b5-9fcb-695949cd17bf",
+      "accountSHA256": "6ca107d9e27f90facca43c53029baf298b5dddc0d8c007a2082b694a37d87421",
+      "sessionKeySHA256": "038509c00e765e808476a996b2a5d875d087c81a31c2ee295d0243d40a5b1ee0",
+      "earlierPersonReadbackIndex": 9,
+      "sameSessionDiscoveryIndex": 54,
+      "orgPutIndex": 57,
+      "orgReadbackIndexes": [
+        59,
+        60
+      ],
+      "controllerRemovalIssued": false,
+      "ineligibleReadbackEstablished": false,
+      "handshakesPresent": [
+        "selected",
+        "released"
+      ],
+      "handshakesAbsent": [
+        "removed",
+        "readback",
+        "premise-ready"
+      ]
+    },
+    "originalAcceptanceReach": {
+      "ownerCoordinatorCaseReached": true,
+      "borrowerCaseReached": true,
+      "borrowerSetupExpectations": 16,
+      "originalFeedRunCellReached": false,
+      "originalFeedAssertionsReached": false,
+      "missingEightCellsReached": 0,
+      "missingEightCellsPassed": 0,
+      "actualFeedRequests": 0,
+      "actualFeedBodyCursorDOMFocusEvidence": null,
+      "screenshotsCaptured": 0,
+      "screenshotsViewed": [],
+      "genuineBrowserEvidence": [
+        {
+          "phase": "own-normal-oauth",
+          "accountASHA256": "6ca107d9e27f90facca43c53029baf298b5dddc0d8c007a2082b694a37d87421",
+          "personA": "https://rezics.com/id/aa753fe2-e448-432a-8f0f-ca69746396f8",
+          "sessionKeySHA256": "038509c00e765e808476a996b2a5d875d087c81a31c2ee295d0243d40a5b1ee0",
+          "ownNormalOAuth": true,
+          "ownFreshContext": true,
+          "cookieNames": [
+            "rezics_access",
+            "rezics_session",
+            "rezics_refresh",
+            "rezics_session_key"
+          ]
+        },
+        {
+          "phase": "browser-save-eligible-live-Org",
+          "action": "supported own-session selection",
+          "actor": "https://rezics.com/id/6ea400ea-cb66-48a4-acac-ef30b13f46d8",
+          "status": 200,
+          "actualReceipt": {
+            "actingSubject": "https://rezics.com/id/6ea400ea-cb66-48a4-acac-ef30b13f46d8",
+            "revision": "c7d37ee2-55c0-41b5-9fcb-695949cd17bf",
+            "eligible": true
+          }
+        }
+      ],
+      "safeNavigationEvidence": [
+        {
+          "phase": "own-normal-oauth",
+          "capture": "own-coordinator-borrower-context",
+          "kind": "frame-navigation",
+          "frameId": "E05B1E06C46EFC2DED2420DE785A335E",
+          "parentId": null,
+          "loaderId": "46CD0DA84357A0328F77B3FE4933D901",
+          "url": "nullblank",
+          "at": "2026-10-19T17:22:52.479Z"
+        },
+        {
+          "phase": "own-normal-oauth",
+          "capture": "own-coordinator-borrower-context",
+          "kind": "frame-navigation",
+          "frameId": "E05B1E06C46EFC2DED2420DE785A335E",
+          "parentId": null,
+          "loaderId": "60B6E41BA6315267C25DBA06C5744538",
+          "url": "http://localhost:45745/auth/start",
+          "at": "2026-10-19T17:22:53.181Z"
+        },
+        {
+          "phase": "own-normal-oauth",
+          "capture": "own-coordinator-borrower-context",
+          "kind": "frame-navigation",
+          "frameId": "E05B1E06C46EFC2DED2420DE785A335E",
+          "parentId": null,
+          "loaderId": "1C19C27C3519C6650AE5FC66363CDA27",
+          "url": "http://127.0.0.1:36827/sign-in",
+          "at": "2026-10-19T17:22:54.974Z"
+        },
+        {
+          "phase": "own-normal-oauth",
+          "capture": "own-coordinator-borrower-context",
+          "kind": "frame-navigation",
+          "frameId": "E05B1E06C46EFC2DED2420DE785A335E",
+          "parentId": null,
+          "loaderId": "ABF582175F5CA98A506DB4399117E699",
+          "url": "http://localhost:45745/en/identity",
+          "at": "2026-10-19T17:22:58.005Z"
+        }
+      ],
+      "existing23ApiPassingEvidenceUnchangedAndNotReplayed": true,
+      "originalBodiesAndAcceptanceUnchanged": true
+    },
+    "preparationBudget": {
+      "limitMs": 600000,
+      "restore": {
+        "restoreMs": 9838,
+        "volumeCopyMs": {
+          "postgres_data": 4881,
+          "fuseki_data": 1535,
+          "rustfs_data": 2532
+        },
+        "objectCopyMs": 6,
+        "startupMs": 26567,
+        "readinessMs": 830,
+        "totalMs": 77161,
+        "admissionWaitMs": 2396
+      },
+      "remainingAtReady": {
+        "at": "2026-10-19T17:22:14.926Z",
+        "activeElapsedMs": 266146,
+        "remaining": {
+          "preparation": 301525,
+          "shard": 213854,
+          "selectedTest": 391458,
+          "lease": 863944,
+          "minimum": 213854
+        }
+      },
+      "ownerCaseElapsedMs": 352253.245,
+      "ownerShardElapsedMs": 354443,
+      "ownerShardBudgetMs": 480000,
+      "selectedBudgetMs": 660000,
+      "failureWasBudgetExhaustion": false
+    },
+    "cleanup": {
+      "recordedAt": "2026-10-19T17:30:37.370490+00:00",
+      "ownerReceipt": [
+        {
+          "name": "owned-browser",
+          "closed": true
+        },
+        {
+          "name": "owned-process-675203",
+          "closed": true,
+          "result": {
+            "pid": 675203,
+            "remaining": []
+          }
+        },
+        {
+          "name": "owned-process-671947",
+          "closed": true,
+          "result": {
+            "pid": 671947,
+            "remaining": []
+          }
+        },
+        {
+          "name": "owned-process-671213",
+          "closed": true,
+          "result": {
+            "pid": 671213,
+            "remaining": []
+          }
+        },
+        {
+          "name": "owned-process-629704",
+          "closed": true,
+          "result": {
+            "pid": 629704,
+            "remaining": []
+          }
+        },
+        {
+          "name": "owned-process-617176",
+          "closed": true,
+          "result": {
+            "pid": 617176,
+            "remaining": []
+          }
+        },
+        {
+          "name": "owned-process-617051",
+          "closed": true,
+          "result": {
+            "pid": 617051,
+            "remaining": []
+          }
+        },
+        {
+          "name": "owned-process-616738",
+          "closed": true,
+          "result": {
+            "pid": 616738,
+            "remaining": []
+          }
+        },
+        {
+          "name": "owned-observer",
+          "closed": true
+        },
+        {
+          "name": "issuer-reservation",
+          "closed": true
+        },
+        {
+          "name": "web-reservation",
+          "closed": true
+        },
+        {
+          "name": "owned-restore",
+          "closed": true
+        },
+        {
+          "name": "owned-restore-resource-inventory",
+          "closed": true,
+          "result": {
+            "containers": 0,
+            "networks": 0,
+            "volumes": 0
+          }
+        }
+      ],
+      "ownedPIDs": [
+        {
+          "pid": 616738,
+          "exists": false
+        },
+        {
+          "pid": 617051,
+          "exists": false
+        },
+        {
+          "pid": 617176,
+          "exists": false
+        },
+        {
+          "pid": 629704,
+          "exists": false
+        },
+        {
+          "pid": 671213,
+          "exists": false
+        },
+        {
+          "pid": 671947,
+          "exists": false
+        },
+        {
+          "pid": 674882,
+          "exists": false
+        },
+        {
+          "pid": 675203,
+          "exists": false
+        }
+      ],
+      "ownedPorts": {
+        "Accounts": {
+          "port": 36827,
+          "accepting": false
+        },
+        "Web": {
+          "port": 45745,
+          "accepting": false
+        },
+        "observer": {
+          "port": 41897,
+          "accepting": false
+        },
+        "Main": {
+          "port": 38251,
+          "accepting": false
+        },
+        "Account": {
+          "port": 38923,
+          "accepting": false
+        }
+      },
+      "borrower": {
+        "phase": "await-owner-B-only-removal",
+        "kind": "borrower-cleanup",
+        "cleanup": [
+          {
+            "name": "own-passive-captures",
+            "closed": true
+          },
+          {
+            "name": "own-delivery-interception",
+            "closed": false,
+            "errorClass": "Error"
+          },
+          {
+            "name": "own-browser-context",
+            "closed": true
+          },
+          {
+            "name": "own-browser-connection",
+            "closed": true
+          }
+        ],
+        "ownerRuntimeStoppedByBorrower": false,
+        "ownerHandlesSharedOwnedBrowserAndFrontendAndFixture": true,
+        "originalFeedAssertionReached": false,
+        "caseResult": "premise-setup-failure"
+      },
+      "sourceLeaseDisposition": "Owner await fixture.close() returned successfully. author-management-fixture.ts:413 delegates to selected.dispose(), whose retained-source.ts:422-435 disposes candidate, verifies unchanged source and awaits lease release. Source-backed inference from actual successful close receipt, not separately sampled OS lease state.",
+      "lifetime": {
+        "ownerFinishedAt": "2026-10-19T17:23:38.615Z",
+        "releasedAt": "2026-10-19T17:24:11.673233+00:00",
+        "retainedForBrowser": false,
+        "detachedCustody": false
+      },
+      "borrowerInterceptionCleanupNote": "Borrower recorded own-delivery-interception closed:false/Error; preserve it as a diagnostic. CDP delivery interception was installed in beforeAll at driver:275. Its cleanup error message was not retained, so exact cause is unestablished. Own context/connection closed; owner closed managed BrowserServer; no owned PID/port or restore resource remains."
+    },
+    "evidence": {
+      "localDirectory": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2775/.temp/d3001-ineligible-agent-G2775/execution-20261019t171704-0d769c",
+      "ownerReceipt": {
+        "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2776/.temp/d3001-ineligible-agent-G2775/browser-lease-1792430266384-d2c62c25/receipt.json",
+        "sha256": "95022acbb85dc71cd0a020a7aa1d9b3e2f10d94dfcc70166607bb67741096531",
+        "bytes": 56211
+      },
+      "borrowerEvidence": {
+        "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-ineligible-coordinator/live/author-e9750b5f3caf4e1eb56df21/observations.json",
+        "sha256": "ee9ff209813c9085aac1a01e9a0823c0101aa61e5546fdd480c2c055f4576909",
+        "bytes": 497485
+      },
+      "borrowerTaskResult": {
+        "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-ineligible-coordinator/live/author-e9750b5f3caf4e1eb56df21/task-result.json",
+        "sha256": "331310ab6f0511e34af3db4443cf32a773db612e8172ec16acfd5a9c9e48f420",
+        "bytes": 1311
+      }
+    },
+    "boundedCorrection": {
+      "status": "PROPOSED ONLY; not applied, compiled or executed; released pin unchanged",
+      "diff": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2775/.temp/d3001-ineligible-agent-G2775/execution-20261019t171704-0d769c/bounded-preparation-correction.diff",
+      "change": "Replace impossible post-selection initialActingSubject equality with a genuine prior eligible PersonA saved-choice GET receipt in the same hashed browser session, before genuine Org readback. Retain exact Org/revision/eligible:true, independent Account/OAuth, discovery, fresh session and PUT checks.",
+      "receiptBasis": [
+        9,
+        54,
+        57,
+        59,
+        60
+      ],
+      "originalOutcomeAssertionsUnchanged": true,
+      "noNewAPIProtocolOrRuntime": true,
+      "owner": "existing G2775 coordinator; root owns read-only donor staging and pinned admission"
+    },
+    "preservedHistory": "Append only. Every historical failed/preparation/pass field, source identity, original D4 declaration and original23 API passing proof stays unchanged. No class closure.",
+    "next": "Root adopts append and routes one invalid preparation-guard correction to existing coordinator staging, preserving all original Feed assertions and finite budgets. No live runtime retained; no old API23 replay or conversion to product pass.",
+    "runtime": {
+      "restoreId": "author-e9750b5f3caf4e1eb56df21",
+      "mainOrigin": "http://127.0.0.1:38251",
+      "accountServiceOrigin": "http://127.0.0.1:38923",
+      "accountOrigin": "http://127.0.0.1:36827",
+      "webOrigin": "http://localhost:45745",
+      "observerOrigin": "http://127.0.0.1:41897",
+      "frontendRevision": "ee32064fb70e0c79a294b704a388b915fd61395e"
+    }
   }
 }

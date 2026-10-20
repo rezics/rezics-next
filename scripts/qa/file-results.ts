@@ -1,5 +1,6 @@
 import { parseJUnit, UNEXECUTED_FILE_TEST } from './acceptance.ts';
 import { junitSuites, mergeJUnit, type Tier } from './core.ts';
+import { isAbsolute, relative } from 'node:path';
 
 const escapeXml = (value: string) =>
   value
@@ -18,14 +19,17 @@ export function completeFileResults(
   xml: string,
   files: readonly string[],
   tier: Tier,
-  options: { filtered?: boolean; interrupted?: boolean; reason?: string; elapsedMs?: number;
+  options: { root?: string; filtered?: boolean; interrupted?: boolean; reason?: string; elapsedMs?: number;
     incompleteFiles?: string[] } = {},
 ) {
-  const observed = new Set(parseJUnit(xml, tier).filter(test => !test.skipped)
+  const root = options.root ?? process.cwd();
+  const canonicalFile = (file: string) =>
+    (isAbsolute(file) ? relative(root, file) : file).replace(/^\.\//, '');
+  const observed = new Set(parseJUnit(xml, tier, { root }).filter(test => !test.skipped)
     .map((test) => test.file.replace(/^\.\//, '')));
-  for (const file of options.incompleteFiles ?? []) observed.delete(file.replace(/^\.\//, ''));
+  for (const file of options.incompleteFiles ?? []) observed.delete(canonicalFile(file));
   const missing =
-    options.filtered && !options.interrupted ? [] : files.filter((file) => !observed.has(file));
+    options.filtered && !options.interrupted ? [] : files.filter((file) => !observed.has(canonicalFile(file)));
   const suites = junitSuites(xml).map((suite) => suite.xml);
   for (const file of missing) {
     const reason = escapeXml(options.reason ?? 'Selected file produced no test results');
