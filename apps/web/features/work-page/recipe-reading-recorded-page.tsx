@@ -8,7 +8,8 @@ import { browserMainApi } from '../api/browser.ts';
 import { NO_PLATFORM_ACCESS, parsePlatformAccess } from '../api/platform-access.ts';
 import { signInPath } from '../auth/paths.ts';
 import Link from '../shell/localized-link.tsx';
-import type { ReaderActions } from '../catalogue/reader-actions.tsx';
+import { ReaderActionsProvider, ShelfButton, type ReaderActions } from '../catalogue/reader-actions.tsx';
+import { readerEntry } from '../catalogue/reader-store.ts';
 import { entryLabel, typeEntry } from '../catalogue/types.ts';
 import { classificationFacet, facetLabel } from '../concept/facets.ts';
 import type { FacetList } from '../concept/types.ts';
@@ -17,7 +18,7 @@ import { copyOf as entityCopy, inSentence } from '../entity-page/messages.ts';
 import { entityHref, standaloneHrefFor } from '../entity-page/route.ts';
 import type { EntityProjection, EntitySection } from '../entity-page/types.ts';
 import { DiscussionView } from '../entity-page/views.tsx';
-import { WorkFactsView, workFactsSelection } from './work-sources.tsx';
+import { WorkFactsView, WorkSources, workFactsSelection } from './work-sources.tsx';
 import type { DisplayObligations } from '../rights-mark/rights-mark.tsx';
 import type { RecipeExport, RecipeExportApi } from '../recipe-editor/export-api.ts';
 import { copyOf as recipeEditorCopy } from '../recipe-editor/messages.ts';
@@ -31,7 +32,7 @@ import { allowedActionsOf, mayEdit } from '../work-levels-edit/allowed.ts';
 import { copyOf as levelsCopy } from '../work-levels/messages.ts';
 import { ConnectionsPreviewView, EditionsPreviewView, PartsPreviewView, PREVIEW_COUNTS } from '../work-levels/previews.tsx';
 import type { Names } from '../work-levels/types.ts';
-import { readAnimeReaderState, readLinkedStatements, readResourcePage, readWorkParts, readWorkRealizations } from './anime-hub-recorded-page.ts';
+import { readLinkedStatements, readResourcePage, readWorkParts, readWorkRealizations } from './anime-hub-recorded-page.ts';
 import { AlsoEnjoyedSection } from './also-enjoyed.tsx';
 import { AuthorSection } from './author.tsx';
 import { booksEditionReads, settle, type BooksRead } from './books-edition-page.read.ts';
@@ -54,7 +55,8 @@ import { shelfWords } from './shelf-words.ts';
 import type { AdoptionPage, Loaded, RatingContextPage, RatingRead, ReadFailure, RecipeWorkPage, WorkHeader as Header } from './types.ts';
 import { WorkKindActions } from './types/actions.tsx';
 import { SeriesProgressPanel } from '../tracking/series-progress-panel.tsx';
-import { OverviewLayout, WorkFrame, WorkPageCover } from './work-frame.tsx';
+import { OverviewLayout, WorkFrame, WorkIdentity, WorkPageCover } from './work-frame.tsx';
+import { WorkRating } from './work-nav.tsx';
 import { WorkAbout } from './work-header.tsx';
 import { hubLabels, hubPlan, type HubSection } from './hub.ts';
 import { workExperience } from '../entity-page/experience.ts';
@@ -108,16 +110,17 @@ async function readPlatform(host: RecipeWorkHost) {
   }
 }
 
-async function readShowcase(host: RecipeWorkHost, work: string): Promise<WorkShowcase | null> {
+async function readShowcase(host: RecipeWorkHost, work: string): Promise<Loaded<WorkShowcase | null>> {
   const read = await settleOpen(() => browserMainApi(host.publicOrigin, {
     anonymous: true, fetcher: host.publicFetch,
   }).v1.resources.showcase.post({
     profile: 'work-showcase-batch-v1', targets: [work],
   }));
-  if (!read.ok || !read.data.complete) return null;
+  if (!read.ok) return read;
+  if (!read.data.complete) return { ok: false, failure: 'unavailable' };
   const item = read.data.items.find(entry => entry.reference === work && entry.status === 'available');
   // Eden's image-role union infers `never`. The header admits the recorded roles.
-  return item?.status === 'available' ? item as WorkShowcase : null;
+  return { ok: true, data: item?.status === 'available' ? item as WorkShowcase : null };
 }
 
 async function readRatings(host: RecipeWorkHost, id: string): Promise<Loaded<RatingRead>> {
@@ -220,7 +223,8 @@ export async function recipeWorkFrame({ host, workRef, id, work, locale, message
   const actingSubject = actor(host);
   const reads = recipeReadingReads({ main: host.main, actingSubject: host.actingSubject });
   const ratingRead = readRatings(host, id);
-  const readerState = readAnimeReaderState(host.main, actingSubject, id);
+  const readerState = actingSubject ? settleOpen(() => host.main.v1.works({ id })['reader-state'].get({ query: { actingSubject } }))
+    : Promise.resolve(null);
   const showcase = readShowcase(host, work.id);
   const credits = Promise.all([
     reads.readAgentCredits(id),
@@ -234,66 +238,104 @@ export async function recipeWorkFrame({ host, workRef, id, work, locale, message
   const recipe = experience.typeSection ? initialRecipe(host.main, host.actingSubject, experience.typeSection.href) : Promise.resolve(null);
   const statements = projection.ok ? sectionOf(projection.data, 'statements') : undefined;
   const selection = workFactsSelection(workRef, host.pageUrl);
-  const [seed, art, facts, rating] = await Promise.all([
-    readerState, showcase,
-    statements ? selection.invalid ? Promise.resolve({ ok: false as const, failure: 'invalid' as const })
-      : readLinkedStatements(host.main, actingSubject, statements.href, { cursor: selection.cursor }) : Promise.resolve(undefined),
-    host.actingSubject ? ratingRead : Promise.resolve(null),
-  ]);
-  const zone = wikiZoneRead(projection, facts);
+  const facts = statements ? selection.invalid ? Promise.resolve({ ok: false as const, failure: 'invalid' as const })
+    : readLinkedStatements(host.main, actingSubject, statements.href, { cursor: selection.cursor }) : Promise.resolve(undefined);
   const t = materializeData(messages, { locale });
   // A recipe does not render the cover rail. Native authors stay on the credit read; the cover
   // helper still needs a work-credits page, which this identity types as a byline.
   const avatarQuery = host.actingSubject ? `?actingSubject=${encodeURIComponent(host.actingSubject)}` : '';
-  const context = rating?.ok ? rating.data.context : null;
   const waitingForMethod = <WorkKindActions kind={experience.kind} workId={work.id} workRef={workRef}
     title={work.title.value} locale={locale} messages={messages} words={shelfWords(experience, messages)}
     canCook={false} recipeHref={experience.typeSection?.href} />;
-  return <WorkFrame workRef={workRef} work={work} experience={experience} locale={locale} messages={messages}
-    statementSources={facts} factObligations={factObligations}
-    signedIn={host.signedIn} actingSubject={seed ? host.actingSubject : null} readerSeed={seed ?? undefined}
-    readerActions={readerActions} relationships={relationships}
-    ratingTarget={context ? { work: work.id, context: context.context, mainVersion: work.mainVersion, max: context.scale.max } : null}
-    signInHref={signInPath(localizedPath(workHref(workRef), locale))} avatarQuery={avatarQuery}
-    showcase={workShowcaseHeader(art ?? undefined, showcaseMessages[locale])}
-    cover={<Suspense fallback={<WorkPageCover work={work} avatarQuery={avatarQuery} />}>
+  const signInHref = signInPath(localizedPath(workHref(workRef), locale));
+  const shelf = <ShelfButton work={work.id} title={work.title.value} locale={locale} size="sm" variant="outline"
+    words={shelfWords(experience, messages)} className="min-h-11" />;
+  const rating = <WorkRating work={work.id} locale={locale} label={messages.ratings} />;
+  const actions = <Suspense fallback={<SupplementLoading label={messages.savedStatus} messages={messages} />}>
+    {readerState.then(state => state && !state.ok
+      ? <RegionFailure title={messages.savedStatus} failure={state.failure} messages={messages} />
+      : <ReaderActionsProvider signedIn={host.signedIn} actingSubject={host.actingSubject} signInHref={signInHref}
+        seed={state?.ok ? { [state.data.work]: readerEntry(state.data) } : undefined} actions={readerActions}>
+        {shelf}
+      </ReaderActionsProvider>)}
+  </Suspense>;
+  const ratingAction = <Suspense fallback={<SupplementLoading label={messages.ratings} messages={messages} />}>
+    {Promise.all([readerState, host.actingSubject ? ratingRead : Promise.resolve(null)]).then(([state, ratings]) => {
+      if (ratings && !ratings.ok) return <RegionFailure title={messages.ratings} failure={ratings.failure} messages={messages} />;
+      if (state && !state.ok) return null; // The shelf already names this private-state failure.
+      const context = ratings?.ok ? ratings.data.context : null;
+      return <ReaderActionsProvider signedIn={host.signedIn} actingSubject={host.actingSubject} signInHref={signInHref}
+        seed={state?.ok ? { [state.data.work]: readerEntry(state.data) } : undefined} actions={readerActions}
+        ratingTarget={context ? { work: work.id, context: context.context, mainVersion: work.mainVersion, max: context.scale.max } : null}>
+        {rating}
+      </ReaderActionsProvider>;
+    })}
+  </Suspense>;
+  const cover = <Suspense fallback={<WorkPageCover work={work} avatarQuery={avatarQuery} />}>
       {credits.then(([agentCredits]) => <WorkPageCover work={work} avatarQuery={avatarQuery}
         authors={coverAuthors(agentCredits, { ok: false, failure: 'missing' }, key => t.openLibraryAuthor({ key }))} />)}
-    </Suspense>}
-    credits={<Suspense fallback={<WorkCreditsSkeleton label={messages.loadingRegion} />}>
+    </Suspense>;
+  const creditLine = <Suspense fallback={<WorkCreditsSkeleton label={messages.loadingRegion} />}>
       {credits.then(([agentCredits, byline]) => <WorkCredits agentCredits={agentCredits} credits={byline}
         source={publicationSource(work)} locale={locale} messages={messages} />)}
-    </Suspense>}
-    ratingLine={<Suspense fallback={null}>{ratingRead.then(async ratings => <RatingLine ratings={ratings}
+    </Suspense>;
+  const ratingLine = <Suspense fallback={<SupplementLoading label={messages.ratings} messages={messages} />}>{ratingRead.then(async ratings => <RatingLine ratings={ratings}
       stats={await readStats(host, id, ratings.ok ? ratings.data.context?.context : undefined)} experience={experience}
-      locale={locale} messages={messages} />)}</Suspense>}
-    domainFacts={<Suspense fallback={null}>{recipe.then(answer => answer?.ok && answer.data
-      ? <RecipeFacts page={answer.data} messages={messages} /> : null)}</Suspense>}
-    sources={<>
+      locale={locale} messages={messages} />)}</Suspense>;
+  const domainFacts = <Suspense fallback={null}>{recipe.then(answer => answer?.ok && answer.data
+      ? <RecipeFacts page={answer.data} messages={messages} /> : null)}</Suspense>;
+  const shortcuts = <>
+    <ProvisionalNotice verification={work.verification} provenance={work.fieldProvenance} locale={locale} />
+    {plan.includes('wiki') ? <Suspense fallback={<SupplementLoading label={messages.wikiShortcut} messages={messages} />}>
+      {facts.then(page => {
+        const zone = wikiZoneRead(projection, page);
+        return <WikiShortcutView realm={zone.ok ? zone.data : null} locale={locale} messages={messages} />;
+      })}
+    </Suspense> : null}
+  </>;
+  const identity = { workRef, work, credits: creditLine, domainFacts, ratingLine, cover, shortcuts, locale, messages };
+  return <WorkFrame workRef={workRef} work={work} experience={experience} locale={locale} messages={messages}
+    signedIn={host.signedIn} actingSubject={host.actingSubject} relationships={relationships}
+    readerActions={{ kind: 'unavailable' }} signInHref={signInHref} avatarQuery={avatarQuery}
+    shelfAction={actions} ratingAction={ratingAction} credits={creditLine}
+    identity={<>
+      <Suspense fallback={<><WorkIdentity {...identity} /><SupplementLoading label={messages.artwork} messages={messages} /></>}>
+        {showcase.then(art => <><WorkIdentity {...identity}
+          showcase={workShowcaseHeader(art.ok ? art.data ?? undefined : undefined, showcaseMessages[locale])} />
+          {!art.ok ? <RegionFailure title={messages.artwork} failure={art.failure} messages={messages} /> : null}</>)}
+      </Suspense>
+    </>}
+    evidence={<Suspense fallback={<SupplementLoading label={messages.sourcesAndEvidence} messages={messages} />}>
+      {facts.then(page => <WorkSources work={work} locale={locale} messages={messages} avatarQuery={avatarQuery}
+        statements={page} factObligations={factObligations}>
       {sources}
       {!projection.ok ? <RegionFailure title={messages.fullFacts} failure={projection.failure} messages={messages} /> : null}
-      {facts ? <details className="group min-w-0 border-border/70 border-y" data-full-facts>
+      {page ? <details className="group min-w-0 border-border/70 border-y" data-full-facts>
         <summary className="cursor-pointer rounded-sm py-4 font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring">
           {messages.fullFacts}</summary>
         <div className="grid gap-5 pb-6">
-          <WorkFactsView page={facts} names={new Map()}
+          <WorkFactsView page={page} names={new Map()}
             hrefFor={selection.hrefFor} cursor={selection.cursor} locale={locale} t={entityCopy(locale)} messages={messages} />
           <ProposeCorrectionSlot work={id} locale={locale} messages={messages} />
         </div>
       </details> : null}
       <WorkRecord work={work} locale={locale} messages={messages} />
-    </>}
+      </WorkSources>)}
+    </Suspense>}
     sections={hubLabels(messages, plan)}
     readAction={<Suspense fallback={waitingForMethod}>{recipe.then(answer =>
       <WorkKindActions kind={experience.kind} workId={work.id} workRef={workRef} title={work.title.value} locale={locale}
         messages={messages} words={shelfWords(experience, messages)} canCook={Boolean(answer?.ok && recipeMethodReady(answer.data))}
         recipeHref={experience.typeSection?.href} />)}</Suspense>}
-    shortcuts={<>
-      <ProvisionalNotice verification={work.verification} provenance={work.fieldProvenance} locale={locale} />
-      {plan.includes('wiki') ? <WikiShortcutView realm={zone.ok ? zone.data : null} locale={locale} messages={messages} /> : null}
-    </>}>
+    >
     {children}
   </WorkFrame>;
+}
+
+function SupplementLoading({ label, messages }: { label: string; messages: WorkPageMessages }) {
+  return <p role="status" aria-busy="true" aria-label={label} className="text-muted-foreground text-sm">
+    {label} · {messages.loadingRegion}
+  </p>;
 }
 
 /** The overview's method and sibling sections settle at their own boundaries. */
