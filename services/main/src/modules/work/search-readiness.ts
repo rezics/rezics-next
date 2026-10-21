@@ -30,6 +30,9 @@ export class SearchIndexUnavailable extends Error {
 export class SearchIndexBudgetExceeded extends Error {}
 /** A committed graph position changed between separate read snapshots. */
 export class SearchSnapshotMoved extends SearchIndexUnavailable {}
+/** A bounded reader can wait for the existing projection/qualification owner.
+ * This is pending evidence, not a qualified snapshot or a corrupt generation. */
+export class SearchReadinessPending extends SearchIndexUnavailable {}
 export class SearchRequestTimedOut extends SearchIndexUnavailable {
   readonly diagnostics?: FusekiReadDiagnosticSnapshot;
 
@@ -59,12 +62,15 @@ export const MAX_SEARCH_FUSEKI_BYTES = 8_388_608;
 // A proven movement already fences the old snapshot. Keep the retry pause short
 // so a subsequent native writer and its delta proof fit the same wall deadline.
 const RETRY_DELAYS_MS = [25, 50] as const;
+// The projection owner may be between its one-second idle ticks. Leave room
+// for that tick without spending the call budget on repeated readiness probes.
+const READINESS_RETRY_DELAY_MS = 100;
 
 export interface SearchAttemptDiagnostic {
   attempt: number;
   phase: FusekiReadPhase;
   elapsedMs: number;
-  result: 'snapshot-moved' | 'request-timed-out' | 'read-budget-exceeded'
+  result: 'snapshot-moved' | 'readiness-pending' | 'request-timed-out' | 'read-budget-exceeded'
     | 'response-too-large' | 'index-unavailable' | 'other';
 }
 
@@ -73,6 +79,7 @@ const MAX_SEARCH_ATTEMPT_DIAGNOSTICS = 8;
 function attemptResult(error: unknown): SearchAttemptDiagnostic['result'] {
   if (error instanceof SearchRequestTimedOut) return 'request-timed-out';
   if (error instanceof SearchSnapshotMoved) return 'snapshot-moved';
+  if (error instanceof SearchReadinessPending) return 'readiness-pending';
   if (error instanceof FusekiReadBudgetExceeded) return 'read-budget-exceeded';
   if (error instanceof FusekiQueryResponseTooLarge) return 'response-too-large';
   if (error instanceof SearchIndexUnavailable) return 'index-unavailable';
@@ -86,7 +93,7 @@ function reportAttempt(diagnostics: SearchAttemptDiagnostic[] | undefined,
   diagnostics.push({ attempt, phase, elapsedMs: Math.round(performance.now() - started), result: attemptResult(error) });
 }
 
-/** Retry only a proven position race; corruption and budget failures retain their typed outcome. */
+/** Retry position races and pending owner evidence within one request budget. */
 export async function withStableSearchSnapshot<T>(fuseki: FusekiClient | undefined, read: () => Promise<T>,
   deadlineMs = MAX_SEARCH_REQUEST_MS, diagnostics?: SearchAttemptDiagnostic[]): Promise<T> {
   if (!Number.isSafeInteger(deadlineMs) || deadlineMs < 1 || deadlineMs > MAX_SEARCH_REQUEST_MS) {
@@ -131,14 +138,17 @@ export async function withStableSearchSnapshot<T>(fuseki: FusekiClient | undefin
               cause: error, diagnostics: timeoutDiagnostics ?? snapshotFusekiReadDiagnostics(budget),
             });
           }
-          if (!(error instanceof SearchSnapshotMoved)) throw error;
-          budget.phase = 'writer-wait';
+          if (!(error instanceof SearchSnapshotMoved) && !(error instanceof SearchReadinessPending)) throw error;
+          const pending = error instanceof SearchReadinessPending;
+          budget.phase = pending ? 'read' : 'writer-wait';
           const waitStarted = performance.now();
           try {
-            await delay(RETRY_DELAYS_MS[attempt - 1] ?? 50, undefined, { signal: controller.signal });
+            await observeSearchPhase(pending ? 'readiness-owner-wait' : 'snapshot-writer-wait',
+              () => delay(pending ? READINESS_RETRY_DELAY_MS : RETRY_DELAYS_MS[attempt - 1] ?? 50,
+                undefined, { signal: controller.signal }));
             // A long native writer can outlive both fixed waits. Poll only after
             // a proven movement, with the same call and wall budgets as the read.
-            while (fuseki && (await serverState(fuseki)).publicSearchWriteActive) {
+            while (!pending && fuseki && (await serverState(fuseki)).publicSearchWriteActive) {
               await delay(75, undefined, { signal: controller.signal });
             }
           }
@@ -148,10 +158,10 @@ export async function withStableSearchSnapshot<T>(fuseki: FusekiClient | undefin
                 : new SearchRequestTimedOut('public search request exceeded wall deadline', {
                   cause, diagnostics: timeoutDiagnostics ?? snapshotFusekiReadDiagnostics(budget),
                 });
-              reportAttempt(diagnostics, attempt, 'writer-wait', waitStarted, timeout);
+              reportAttempt(diagnostics, attempt, budget.phase, waitStarted, timeout);
               throw timeout;
             }
-            reportAttempt(diagnostics, attempt, 'writer-wait', waitStarted, cause);
+            reportAttempt(diagnostics, attempt, budget.phase, waitStarted, cause);
             throw cause;
           }
         }
