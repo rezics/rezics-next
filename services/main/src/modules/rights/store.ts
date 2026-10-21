@@ -536,6 +536,21 @@ export class RightsStore {
     });
   }
 
+  /** Internal Media composition, called only after its disclosure gate. Database
+   * terms and another use's assessment cannot authorize artwork delivery. */
+  async currentMediaDelivery(material: MaterialScope): Promise<UseEvaluation> {
+    if (!validMaterial(material)) throw new RightsInvalid('invalid media material');
+    return this.transaction(async client => {
+      const found = await this.findMaterial(client, material);
+      if (!found) return { status: 'unassessed', materialId: null };
+      const head = (await client.query<{ assessment_id: string }>(`SELECT assessment_id
+        FROM rights.use_assessment_head WHERE material_id=$1 AND family='data_rights'
+          AND use_kind='media_delivery' AND use_scope='rezics:public-media'`, [found.id])).rows[0];
+      return head ? { status: 'assessed', assessment: await this.read(client, head.assessment_id) }
+        : { status: 'unassessed', materialId: found.id };
+    });
+  }
+
   /**
    * Current wiki-display obligations for a page of materials. One Content
    * statement for the whole batch, then one Access statement for disclosure
