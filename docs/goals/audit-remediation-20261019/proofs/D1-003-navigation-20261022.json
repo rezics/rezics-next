@@ -1,0 +1,103 @@
+{
+  "recordedAt": "2026-10-22T01:55:43.487707+08:00",
+  "finding": "D1-003",
+  "status": "closed",
+  "assessedMain": "fcfaf669e30d12bc40a1a0ec2f89eb9d289e4053",
+  "canonicalSource": ".temp/site-audit-2026-10-18/round-3/all-findings.json#D1-003",
+  "originalAcceptanceVerbatim": [
+    "为每个公开 Work 子视图定义真实的当前页；/connections、/editions 不得声称 Overview 是当前页面。可使用二级面包屑或所归属视图明确的父子关系。",
+    "桌面和手机都可直接去 Overview，视图导航与页内锚点分组明确；只有对应项目具有当前页标记。",
+    "各视图切换保留 scope/realm 和已支持的阅读位置；在全局 Work 及 Zone 挂载路径上验收。"
+  ],
+  "originalAssertionsChanged": false,
+  "independentReview": {
+    "session": "01a15f83-2150-7ae1-8b04-d0c1e4d23b1b",
+    "engine": "codex-1",
+    "model": "gpt-6.1-sol",
+    "effort": "xhigh",
+    "scope": "D1-003 whole canonical UI scope; I1-001/A16 remains open"
+  },
+  "criteria": [
+    {
+      "number": 1,
+      "canonical": "为每个公开 Work 子视图定义真实的当前页；/connections、/editions 不得声称 Overview 是当前页面。可使用二级面包屑或所归属视图明确的父子关系。",
+      "status": "PASS",
+      "receipts": [
+        "d1-contract.log",
+        "d1-final-stories.json",
+        "d1-open-final.json"
+      ]
+    },
+    {
+      "number": 2,
+      "canonical": "桌面和手机都可直接去 Overview，视图导航与页内锚点分组明确；只有对应项目具有当前页标记。",
+      "status": "PASS",
+      "receipts": [
+        "d1-contract.log",
+        "d1-final-stories.json",
+        "d1-open-final.json"
+      ]
+    },
+    {
+      "number": 3,
+      "canonical": "各视图切换保留 scope/realm 和已支持的阅读位置；在全局 Work 及 Zone 挂载路径上验收。",
+      "status": "PASS",
+      "receipts": [
+        "d1-contract.log",
+        "d1-final-stories.json",
+        "d1-open-final.json"
+      ]
+    }
+  ],
+  "tests": {
+    "passed": 21,
+    "failed": 0,
+    "assertions": 466,
+    "receipt": "d1-contract.log"
+  },
+  "browserEvidence": "Three production-navigation stories plus global/Zone opened phone menus, actual href/activation/current-item assertions and viewed screenshots. Manager also viewed all three cited D1 screenshots.",
+  "sourceQualification": ".temp/manager-peer-protocol-20261021/ui-original-acceptance-0129/final-source-qualification.json",
+  "limits": "UI navigation/route contract acceptance under maintainer Storybook direction; no new live API navigation, durable reading-progress or identity/privacy proof. No unrelated finding closure.",
+  "artifacts": [
+    {
+      "path": ".temp/manager-peer-protocol-20261021/ui-original-acceptance-0129/acceptance-receipt.json",
+      "sha256": "1f422b7b1de7b68d83c68956459bfad2f8647db0119f490ef5453b7e7bfe6321"
+    },
+    {
+      "path": ".temp/manager-peer-protocol-20261021/ui-original-acceptance-0129/acceptance-report.md",
+      "sha256": "6b2e47798197777cd9287a0c0183d8071ded25612cb96b0f3fca222288c2c316"
+    },
+    {
+      "path": ".temp/manager-peer-protocol-20261021/ui-original-acceptance-0129/artifact-manifest.json",
+      "sha256": "b2ef1531f9be4308121815769188317302c554c4059a07765da0a97a1cfe251f"
+    },
+    {
+      "path": ".temp/manager-peer-protocol-20261021/ui-original-acceptance-0129/final-source-qualification.json",
+      "sha256": "c1d167c0c3647ea5ab792d139ebb719bfa7b68b9621923ad1a6d48aa02a4861c"
+    },
+    {
+      "path": ".temp/manager-peer-protocol-20261021/ui-original-acceptance-0129/d1-contract.log",
+      "sha256": "8edf644acf3650ad681558107d610a24752066de06335106915a14a14ca8b4c1"
+    },
+    {
+      "path": ".temp/manager-peer-protocol-20261021/ui-original-acceptance-0129/d1-final-stories.json",
+      "sha256": "2c995427522967b328ace29306641801e4febdaeaae85dd1668e11adf8ca5d4e"
+    },
+    {
+      "path": ".temp/manager-peer-protocol-20261021/ui-original-acceptance-0129/d1-open-final.json",
+      "sha256": "e3ce677e3fde93b67910059a52f823262d4bcb9cac92282d0751d14b6d0ab558"
+    },
+    {
+      "path": ".temp/manager-peer-protocol-20261021/ui-original-acceptance-0129/screens/apps-web-features-work-page-work-detail-contract.stories.tsx/MobileConnectionsViews.png",
+      "sha256": "9bff968eef35b9bf11173d84da12c4109cba6c244225c2347cee7834342a69ae"
+    },
+    {
+      "path": ".temp/manager-peer-protocol-20261021/ui-original-acceptance-0129/screens/apps-web-features-work-page-work-detail-contract.stories.tsx/ZoneMobileConnectionsViews.png",
+      "sha256": "9bff968eef35b9bf11173d84da12c4109cba6c244225c2347cee7834342a69ae"
+    },
+    {
+      "path": ".temp/manager-peer-protocol-20261021/ui-original-acceptance-0129/screens/apps-web-features-work-page-work-detail-contract.stories.tsx/DesktopEditions.png",
+      "sha256": "a3d2bf56cb4315f841d0bd5eb1b21081ec5668d3f85fe43ae2752e95570d638f"
+    }
+  ]
+}

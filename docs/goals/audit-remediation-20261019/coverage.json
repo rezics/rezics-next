@@ -532,9 +532,19 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "Work 子视图没有统一导航模型，Connections 错标 Overview",
-      "status": "build-briefed",
+      "status": "closed",
       "owner": "G-2757",
-      "proof": []
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/D1-003-navigation-20261022.json",
+          "finding": "D1-003",
+          "assessedMain": "fcfaf669e30d12bc40a1a0ec2f89eb9d289e4053",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "remainingValidation": [],
+      "disposition": "All three canonical UI criteria independently passed: seven-view production route/navigation, desktop and phone Overview/current separation, and global/Zone scope/reading-position links. 21 tests/466 assertions, three authored stories, two opened phone-menu cases and actual screenshots. No unrelated backend premise added."
     },
     {
       "id": "D1-005",
