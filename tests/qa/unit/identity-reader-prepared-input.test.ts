@@ -1,9 +1,10 @@
 import { expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { selectTestGroups } from '../../../scripts/qa/test.ts';
-import { checkIdentityReaderPin, identityReaderFixture, identityReaderOriginals,
+import { outcomeTestViolations } from '../../../scripts/qa/repository-guards.ts';
+import { checkIdentityReaderPin, identityReaderFixture, identityReaderOriginals, identityReaderOutputDirectory,
   validatePreparedIdentityReaderCorpus, validatePreparedIdentityReaderInput, validateIdentityReaderLease,
   type PreparedIdentityReaderInput, type IdentityReaderLease } from '../support/identity-reader-fixture.ts';
 
@@ -106,8 +107,22 @@ test('explicit prepared opt-in never falls back to original corpus preparation',
     else Bun.env.REZICS_IDENTITY_READER_PREPARED_INPUT = previous;
   }
 });
+test('prepared output rejects peer-tree and symlink escapes before writing', () => {
+  mkdirSync('.temp', { recursive: true });
+  const dir = mkdtempSync(resolve('.temp/identity-reader-output-'));
+  try {
+    mkdirSync(resolve(dir, '.temp'));
+    symlinkSync(resolve(dir, '..'), resolve(dir, '.temp/peer'));
+    expect(identityReaderOutputDirectory(resolve(dir, '.temp/own/run'), dir)).toBe(resolve(dir, '.temp/own/run'));
+    expect(() => identityReaderOutputDirectory(resolve(dir, 'outside'), dir)).toThrow('without symlink escape');
+    expect(() => identityReaderOutputDirectory(resolve(dir, '.temp/peer/run'), dir)).toThrow('without symlink escape');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
 test('original assertion bytes remain frozen and loose wrappers start no hosted stack', () => {
-  for (const original of identityReaderOriginals) expect(checkIdentityReaderPin(original)).toBe(resolve(original.path));
+  for (const original of identityReaderOriginals) {
+    expect(checkIdentityReaderPin(original)).toBe(resolve(original.path));
+    expect(outcomeTestViolations(original.path, readFileSync(original.path, 'utf8'))).toEqual([]);
+  }
   mkdirSync('.temp', { recursive: true });
   const dir = mkdtempSync(resolve('.temp/identity-reader-selection-'));
   try {

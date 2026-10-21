@@ -1,7 +1,7 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Pool } from 'pg';
 import { readEnv } from '../../../scripts/dev/config.ts';
@@ -148,6 +148,15 @@ export function checkIdentityReaderPin(value: IdentityReaderPin): string {
   preparedRequired(createHash('sha256').update(readFileSync(path)).digest('hex') === value.sha256, 'retained file digest differs');
   return path;
 }
+export function identityReaderOutputDirectory(path: string, root = resolve(import.meta.dir, '../../..')) {
+  const target = resolve(path), suffix: string[] = [];
+  let ancestor = target;
+  while (!existsSync(ancestor)) { suffix.unshift(basename(ancestor)); ancestor = dirname(ancestor); }
+  const canonical = resolve(realpathSync(ancestor), ...suffix);
+  preparedRequired(relative(realpathSync(root), canonical).startsWith('.temp/'),
+    'output must remain in this checkout .temp without symlink escape');
+  return canonical;
+}
 function preparedInput() {
   const path = Bun.env.REZICS_IDENTITY_READER_PREPARED_INPUT;
   preparedRequired(path, 'REZICS_IDENTITY_READER_PREPARED_INPUT missing');
@@ -157,8 +166,7 @@ function preparedInput() {
     checkIdentityReaderPin(input[field]);
   const git = (revision: string) => execFileSync('git', ['rev-parse', revision], { cwd: input.sourceRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
   preparedRequired(git('HEAD') === input.productRevision && git('HEAD^{tree}') === input.productTree, 'live product checkout pin differs');
-  const local = relative(resolve(import.meta.dir, '../../..'), resolve(input.outputDirectory));
-  preparedRequired(local.startsWith('.temp/'), 'output must remain in this checkout .temp');
+  identityReaderOutputDirectory(input.outputDirectory);
   return input;
 }
 export function validateIdentityReaderLease(lease: IdentityReaderLease, input: PreparedIdentityReaderInput, now = Date.now()) {
@@ -181,6 +189,15 @@ async function preparedFixture() {
   const owner = await import(pathToFileURL(checkIdentityReaderPin(input.custodyModule)).href) as IdentityReaderCustody;
   const lease = await owner.attachIdentityReader(input);
   validateIdentityReaderLease(lease, input); checkIdentityReaderPin(lease.activation); lease.assertActive();
+  mkdirSync(input.outputDirectory, { recursive: true, mode: 0o700 });
+  appendFileSync(join(input.outputDirectory, 'attachments.ndjson'), JSON.stringify({
+    at: new Date().toISOString(), recordedJobId: lease.recordedJobId, leaseId: lease.id,
+    activatedAt: lease.activatedAt, expiresAt: lease.expiresAt, activation: lease.activation,
+    productRevision: lease.productRevision, productTree: lease.productTree,
+    mainOrigin: lease.mainOrigin, accountService: lease.accountService, accountOrigin: lease.accountOrigin,
+    corpus: input.corpus, qualification: input.qualification, sourceEquivalence: input.sourceEquivalence,
+    assertionsReached: false,
+  }) + '\n', { mode: 0o600 });
   const active = () => { validateIdentityReaderLease(lease, input); lease.assertActive(); };
   const visitor = personaSession(input.mainOrigin, input.accountService, null, undefined, undefined,
     undefined, 'visitor', undefined, undefined, input.accountOrigin);
@@ -335,51 +352,51 @@ async function withEnvironment<T>(values: Record<string, string>, fn: () => Prom
 function identityLogin(corpus: ReaderCorpus, visitor: PersonaSession, mainOrigin: string,
   accountService: string, resource = Bun.env.ACCOUNT_MAIN_RESOURCE, active: () => void = () => {}) {
   return async (name: SignedPersona | 'empty', next: string, scope?: string) => {
-        const identity = name === 'empty' ? corpus.emptyIdentity : corpus.realm.identities[name];
+    const identity = name === 'empty' ? corpus.emptyIdentity : corpus.realm.identities[name];
+    active();
+    const login = await visitor.account('POST', '/api/auth/sign-in/email', {
+      email: identity.email, password: identity.password,
+    });
+    const account = await fixtureCommand<{ user: { id: string } }>(Promise.resolve(login));
+    if (account.user.id !== identity.accountId) throw new Error('SETUP: sign-in changed Account identity');
+    const cookie = login.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
+    if (!cookie) throw new Error('SETUP: Account sign-in returned no cookie');
+    const state = JSON.stringify({ next, nonce: randomUUID() }), callbacks: string[] = [];
+    const auth = corpus.realm.auth;
+    const client: LocalOAuthClient = { account: auth.accountOrigin, service: accountService,
+      clientId: auth.clientId, redirectUri: auth.redirectUris[0]!, scope: scope ?? auth.scope,
+      resource,
+      async fetch(input, init) {
         active();
-        const login = await visitor.account('POST', '/api/auth/sign-in/email', {
-          email: identity.email, password: identity.password,
-        });
-        const account = await fixtureCommand<{ user: { id: string } }>(Promise.resolve(login));
-        if (account.user.id !== identity.accountId) throw new Error('SETUP: sign-in changed Account identity');
-        const cookie = login.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
-        if (!cookie) throw new Error('SETUP: Account sign-in returned no cookie');
-        const state = JSON.stringify({ next, nonce: randomUUID() }), callbacks: string[] = [];
-        const auth = corpus.realm.auth;
-        const client: LocalOAuthClient = { account: auth.accountOrigin, service: accountService,
-          clientId: auth.clientId, redirectUri: auth.redirectUris[0]!, scope: scope ?? auth.scope,
-          resource,
-          async fetch(input, init) {
-            active();
-            const response = await fetch(input, init);
-            const location = response.headers.get('location');
-            if (location) { const url = new URL(location, auth.accountOrigin);
-              if (url.searchParams.has('code')) callbacks.push(url.href); }
-            if (new URL(input).pathname === '/api/account/consent' && response.ok && !location) {
-              const body = await response.clone().json() as { url?: string; redirect_uri?: string };
-              const callback = body.url ?? body.redirect_uri;
-              if (callback) callbacks.push(new URL(callback, auth.accountOrigin).href);
-            }
-            return response;
-          } };
-        const oauth = await signIn(client, cookie, { state, attempts: 1 });
-        const person = personaSession(mainOrigin, accountService, identity.accountId, cookie, oauth,
-          undefined, name, undefined, undefined, auth.accountOrigin);
-        person.actingSubject = name === 'empty' ? null : corpus.realm.identities[name].actingSubject;
-        const sessionKey = randomUUID();
-        // A fixed captured bearer and one session key observe the first answer:
-        // no identity substitution, bearer renewal or automatic read retries.
-        const bearer = oauth.accessToken;
-        const request = (method: string, path: string, body?: unknown, key?: string) => { active(); return fetch(new URL(path, mainOrigin), {
-          method, redirect: 'manual', signal: AbortSignal.timeout(30_000),
-          headers: { authorization: `Bearer ${bearer}`, 'x-session-key': sessionKey,
-            ...(body === undefined ? {} : { 'content-type': 'application/json' }),
-            ...(key === undefined ? {} : { 'idempotency-key': key }) },
-          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-        }); };
-        const accountCall = person.account;
-        person.account = (...args) => { active(); return accountCall(...args); };
-        return { person, request, state, callbacks, next, redirectUri: client.redirectUri };
+        const response = await fetch(input, init);
+        const location = response.headers.get('location');
+        if (location) { const url = new URL(location, auth.accountOrigin);
+          if (url.searchParams.has('code')) callbacks.push(url.href); }
+        if (new URL(input).pathname === '/api/account/consent' && response.ok && !location) {
+          const body = await response.clone().json() as { url?: string; redirect_uri?: string };
+          const callback = body.url ?? body.redirect_uri;
+          if (callback) callbacks.push(new URL(callback, auth.accountOrigin).href);
+        }
+        return response;
+      } };
+    const oauth = await signIn(client, cookie, { state, attempts: 1 });
+    const person = personaSession(mainOrigin, accountService, identity.accountId, cookie, oauth,
+      undefined, name, undefined, undefined, auth.accountOrigin);
+    person.actingSubject = name === 'empty' ? null : corpus.realm.identities[name].actingSubject;
+    const sessionKey = randomUUID();
+    // A fixed captured bearer and one session key observe the first answer:
+    // no identity substitution, bearer renewal or automatic read retries.
+    const bearer = oauth.accessToken;
+    const request = (method: string, path: string, body?: unknown, key?: string) => { active(); return fetch(new URL(path, mainOrigin), {
+      method, redirect: 'manual', signal: AbortSignal.timeout(30_000),
+      headers: { authorization: `Bearer ${bearer}`, 'x-session-key': sessionKey,
+        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+        ...(key === undefined ? {} : { 'idempotency-key': key }) },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    }); };
+    const accountCall = person.account;
+    person.account = (...args) => { active(); return accountCall(...args); };
+    return { person, request, state, callbacks, next, redirectUri: client.redirectUri };
   };
 }
 
@@ -550,6 +567,10 @@ export async function runPreparedIdentityReader() {
     catch { releaseFailed = true; code = 1; }
     writeFileSync(join(input.outputDirectory, 'execution.json'), JSON.stringify({
       code, childExit, exceeded, release, releaseFailed, runId, originals: identityReaderOriginals,
+      originalSpecificationRevision: '8014f1fd4874f452a813554c5e5f2814c13f4b97',
+      historicalSupportSha256: '7074631465842ef948a9d44c8b297be38186e5a2bdccadb71d9c2a308fbc0407',
+      testRevision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+      testTree: execFileSync('git', ['rev-parse', 'HEAD^{tree}'], { encoding: 'utf8' }).trim(),
       supportSha256: createHash('sha256').update(readFileSync(import.meta.path)).digest('hex'),
       productRevision: input.productRevision, productTree: input.productTree,
       corpus: input.corpus, qualification: input.qualification, sourceEquivalence: input.sourceEquivalence,
