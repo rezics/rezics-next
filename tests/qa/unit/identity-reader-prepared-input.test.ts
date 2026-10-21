@@ -8,7 +8,7 @@ import { checkIdentityReaderPin, identityReaderFixture, identityReaderOriginals,
   validatePreparedIdentityReaderCorpus, validatePreparedIdentityReaderInput, validateIdentityReaderLease,
   validateIdentityReaderAdmission, validatePartialReaderCorpus, validatePartialReaderLease, validatePartialReaderReport,
   partialReaderSelection, partialReaderControls, readerInvalidBearerSurfaces,
-  type PartialReaderInput, type PartialReaderLease, type ReaderOriginalTest,
+  type PartialReaderInput, type PartialReaderLease, type PartialReaderCorpus, type ReaderOriginalTest,
   type PreparedIdentityReaderInput, type IdentityReaderLease } from '../support/identity-reader-fixture.ts';
 
 // These are stack-free shape examples, never live qualification or successful API answers.
@@ -148,8 +148,14 @@ function partialInput(): PartialReaderInput {
 function partialCorpus(): Record<string, any> {
   const { realm, publicBook, phrase } = corpus();
   // Five chapters are lawful for these seven refusal bodies, never for the two-chapter reader/search bodies.
-  publicBook.chapters = Array.from({ length: 5 }, (_, i) => ({ occurrence: `actual-occurrence-${i}`, revisionId: `actual-revision-${i}` }));
-  return { realm, publicBook, phrase };
+  const value: PartialReaderCorpus = {
+    realm: { ...realm, auth: { clientId: realm.auth.clientId, scope: realm.auth.scope,
+      accountOrigin: realm.auth.accountOrigin, redirectUris: realm.auth.redirectUris } },
+    publicBook: { work: publicBook.work, mainVersion: publicBook.mainVersion,
+      chapters: Array.from({ length: 5 }, (_, i) => ({ occurrence: `actual-occurrence-${i}`, revisionId: `actual-revision-${i}` })) },
+    phrase,
+  };
+  return value;
 }
 function partialLease(): PartialReaderLease {
   const { fault: _fault, ...bound } = lease();

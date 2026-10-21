@@ -75,12 +75,17 @@ export type PartialReaderInput = Omit<PreparedIdentityReaderInput, 'format'> & {
   format: 'identity-reader-partial-v1'; selectedOriginalTests: ReaderOriginalTest[]; requiredControls: ReaderControl[];
 };
 export type IdentityReaderAdmission = PreparedIdentityReaderInput | PartialReaderInput;
-type PublicReaderReferences = Pick<BookFixture, 'work' | 'mainVersion'> & {
-  chapters: Pick<ChapterFixture, 'occurrence' | 'revisionId'>[];
+type PublicReaderReferences = Pick<BookFixture, 'work' | 'mainVersion'>
+  & Partial<Omit<BookFixture, 'work' | 'mainVersion' | 'chapters'>> & {
+  chapters: (Pick<ChapterFixture, 'occurrence' | 'revisionId'> & Partial<ChapterFixture>)[];
 };
 export type PartialReaderCorpus = {
-  realm: RetainedPersonaRealm; publicBook?: PublicReaderReferences; phrase?: string; introduction?: string;
-  emptyBook?: BookFixture; privateBook?: BookFixture; unpublishedBook?: BookFixture; unpublishedRevision?: string;
+  realm: Omit<RetainedPersonaRealm, 'auth'> & {
+    auth: Pick<RetainedPersonaRealm['auth'], 'clientId' | 'scope' | 'accountOrigin' | 'redirectUris'>;
+  };
+  publicBook?: PublicReaderReferences; phrase?: string; introduction?: string;
+  emptyBook?: PublicReaderReferences; privateBook?: PublicReaderReferences;
+  unpublishedBook?: PublicReaderReferences; unpublishedRevision?: string;
 };
 export type PartialReaderSession = { accountId: string; cookie: string; oauth?: LocalOAuthSession };
 export type PartialReaderLease = Omit<IdentityReaderLease, 'fault'> & {
