@@ -378851,9 +378851,17 @@
             "name": "language",
             "required": false,
             "schema": {
-              "maxLength": 35,
-              "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
-              "type": "string"
+              "anyOf": [
+                {
+                  "maxLength": 35,
+                  "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                  "type": "string"
+                },
+                {
+                  "const": "null",
+                  "type": "string"
+                }
+              ]
             }
           },
           {
