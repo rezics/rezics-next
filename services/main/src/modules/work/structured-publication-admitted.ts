@@ -24,7 +24,10 @@ export async function changeAdmittedWorkStructurePublication(
   request: Request,
   input: WorkStructurePublicationInput & { idempotencyKey: string },
   publicationFence: <T>(dispatch: (allowed: boolean) => Promise<T>) => Promise<T>,
-  prepareDependencies?: (admissionId: string, principal: VerifiedPrincipal) => Promise<{ adoptions: readonly InstructionAdoption[]; attribution?: VerifiedPublicationAttribution }>,
+  prepareDependencies?: (admissionId: string, principal: VerifiedPrincipal) => Promise<{
+    adoptions: readonly InstructionAdoption[]; attribution?: VerifiedPublicationAttribution;
+    verifyAttribution?: () => Promise<void>;
+  }>,
 ): Promise<WorkStructurePublicationReceipt & { replayed: boolean }> {
   const digest = workStructurePublicationDigest(input);
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
@@ -60,13 +63,15 @@ export async function changeAdmittedWorkStructurePublication(
               throw new AdmissionUnavailable('Work publication dependencies are unavailable', { cause: error });
             }
           }
-          return !allowed
+          const result = await (!allowed
             ? denyWorkStructurePublicationAdmission(env, admission, input)
             : changeStructuredWorkPublication(env, admission, input,
             id => access.admittedActingSubject
               ? access.admittedActingSubject(id)
               : Promise.reject(new AdmissionDenied('Structure author provenance is unavailable')),
-            dependencies?.adoptions, dependencies?.attribution);
+            dependencies?.adoptions, dependencies?.attribution, dependencies?.verifyAttribution));
+          if (result.outcome === 'succeeded') await dependencies?.verifyAttribution?.();
+          return result;
         });
       }
     }

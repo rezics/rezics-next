@@ -78,8 +78,11 @@ export const workCard = t.Object({ id: readId, revision: readId, mainVersion: re
   wordCount: t.Nullable(t.Integer({ minimum: 0 })),
   lastUpdatedAt: t.Nullable(t.String({ format: 'date-time' })) });
 export const workHeader = t.Object({ rights: t.Optional(t.Object({ basis: t.Literal('public-domain'),
-  source: t.Object({ record: readId, observation: readId, provider: t.String(), externalId: t.String(),
-    url: t.String(), license: t.Nullable(t.String()), author: t.Nullable(t.String()), transcriber: readId }) })), profile: t.Literal('work-read-v1'), ...workCard.properties,
+  source: { ...t.Union([t.Object({ record: readId, observation: readId, provider: t.String(), externalId: t.String(),
+    url: t.String(), license: t.Nullable(t.String()), author: t.Nullable(t.String()), transcriber: readId }),
+  t.Object({ kind: t.Literal('manual-citation'), rightsAssessmentId: t.String({ format: 'uuid' }),
+    url: t.String(), license: t.Nullable(t.String()), author: t.Nullable(t.String()), transcriber: readId })]),
+    required: ['url', 'license', 'author', 'transcriber'] } })), profile: t.Literal('work-read-v1'), ...workCard.properties,
   fieldProvenance: t.Optional(t.Object({ basis: t.Literal('creation'), revision: readId,
     contributor: t.String(), admission: t.String(),
     candidateReceipt: t.String(), fields: t.Array(t.String()) })),

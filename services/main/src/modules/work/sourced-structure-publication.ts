@@ -1,5 +1,5 @@
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
-import type { VerifiedPrincipal } from '../access/admission.ts';
+import { AdmissionUnavailable, type VerifiedPrincipal } from '../access/admission.ts';
 import { discloseInventory } from '../disclosure/read.ts';
 import { ANONYMOUS_VIEWER } from '../suitability/policy.ts';
 import { PublicationUnavailable, StalePublicationHead } from '../contribution/publish.ts';
@@ -8,14 +8,46 @@ import { readCompositionHeader } from '../structure/graph.ts';
 import type { WorkStructurePublicationInput } from './structured-publication.ts';
 import { GRAPHS, iri, type WorkActivationEnvironment } from './activate.ts';
 import { WorkReadMissing, WorkReadUnavailable, type WorkReadSession } from './read-session.ts';
+import { WorkStructurePublicationRightsDenied } from './structured-publication.ts';
 
 export interface PublicationAttribution {
   record: string; observation: string; provider: string; externalId: string; url: string;
   license: string | null; author: string | null; transcriber: string;
 }
 
-export interface VerifiedPublicationAttribution extends PublicationAttribution {
-  structure: string; structureRevision: string;
+export interface ManualPublicationCitation {
+  url: string; license: string | null; author: string | null;
+}
+
+export interface ManualPublicationAttribution extends ManualPublicationCitation {
+  kind: 'manual-citation'; rightsAssessmentId: string; transcriber: string;
+}
+
+export type VerifiedPublicationAttribution = (PublicationAttribution | ManualPublicationAttribution)
+  & { structure: string; structureRevision: string };
+
+const assessmentId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
+function citationUrl(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length > 2048 || /\s/.test(value)) return false;
+  try { return ['http:', 'https:'].includes(new URL(value).protocol); } catch { return false; }
+}
+
+export function validManualPublicationCitation(value: ManualPublicationCitation): boolean {
+  return !!value && citationUrl(value.url) && (value.license === null || citationUrl(value.license))
+    && (value.author === null || typeof value.author === 'string' && value.author.length > 0
+      && value.author.length <= 200);
+}
+
+/** Citation describes the authored source; only the current Rights owner grants the basis. */
+export async function verifyManualPublicationRights(deps: Pick<MainWorkDependencies, 'rights'>,
+  work: string, id: string): Promise<void> {
+  if (!deps.rights || !assessmentId.test(id)) throw new AdmissionUnavailable('Publication rights are unavailable');
+  let current: boolean;
+  try { current = await deps.rights.store.currentPublicDomainAssessment(work, id); }
+  catch (cause) { throw new AdmissionUnavailable('Publication rights are unavailable', { cause }); }
+  if (!current)
+    throw new WorkStructurePublicationRightsDenied('A current public-domain Work assessment is required');
 }
 
 /** Private bytes are inspected only after the exact Work publish admission. */
@@ -24,6 +56,16 @@ export async function prepareSourcedStructurePublication(deps: MainWorkDependenc
   : Promise<VerifiedPublicationAttribution> {
   const refuse = (reason = 'source-incomplete') =>
     new PublicationUnavailable(`The exact public-domain source is unavailable: ${reason}`);
+  if (input.rightsBasis === 'public-domain' && input.sourceObservation === undefined) {
+    if (!validManualPublicationCitation(input.citation)) throw refuse('citation');
+    await verifyManualPublicationRights(deps, input.work, input.rightsAssessmentId);
+    const header = await readCompositionHeader(deps.environment, input.structure);
+    if (!header || header.owner !== input.work || header.component !== input.expectedMainVersion)
+      throw refuse('structure-owner');
+    if (header.head !== input.expectedStructureHead) throw new StalePublicationHead('Structure head changed');
+    return { kind: 'manual-citation', ...input.citation, rightsAssessmentId: input.rightsAssessmentId,
+      transcriber: input.actingSubject, structure: header.structure, structureRevision: header.head };
+  }
   const principalId = await deps.access.activePrincipalId?.(principal);
   if (input.rightsBasis !== 'public-domain' || !principalId || !deps.sourceIntake) throw refuse('source-owner');
   const observation = await deps.sourceIntake.read(principalId, input.sourceObservation.slice(-36));
@@ -56,13 +98,26 @@ export async function prepareSourcedStructurePublication(deps: MainWorkDependenc
 
 /** The publication snapshot carries public attribution, never retained Source bytes. */
 export async function readPublicationAttribution(env: Pick<WorkActivationEnvironment, 'fuseki'>,
-  source: string, observation: string): Promise<PublicationAttribution> {
+  source: string, observation: string): Promise<PublicationAttribution>;
+export async function readPublicationAttribution(env: Pick<WorkActivationEnvironment, 'fuseki'>,
+  source: string, observation: undefined): Promise<ManualPublicationAttribution>;
+export async function readPublicationAttribution(env: Pick<WorkActivationEnvironment, 'fuseki'>,
+  source: string, observation: string | undefined): Promise<PublicationAttribution | ManualPublicationAttribution> {
   const rows = (await env.fuseki.query(`SELECT ?citation WHERE { GRAPH ${iri(GRAPHS.revisions)} {
     ${iri(source)} <https://schema.org/citation> ?citation . } } LIMIT 2`)).results?.bindings ?? [];
   if (rows.length !== 1 || !rows[0]?.citation) throw new WorkReadUnavailable('Publication attribution is unavailable');
-  let value: PublicationAttribution;
+  let value: PublicationAttribution | ManualPublicationAttribution;
   try { value = JSON.parse(rows[0].citation.value); }
   catch { throw new WorkReadUnavailable('Publication attribution is invalid'); }
+  if (observation === undefined) {
+    if (!value || !('kind' in value) || value.kind !== 'manual-citation'
+      || !assessmentId.test(value.rightsAssessmentId) || !nativeId.test(value.transcriber)
+      || !validManualPublicationCitation(value)
+      || ['record', 'observation', 'provider', 'externalId'].some(key => key in value))
+      throw new WorkReadUnavailable('Manual publication attribution is incomplete');
+    return value;
+  }
+  if (!value || !('record' in value)) throw new WorkReadUnavailable('Publication attribution is incomplete');
   if (value.observation !== observation || !value.record || value.author !== null && (typeof value.author !== 'string' || !value.author) || !value.transcriber
     || !value.provider || !value.externalId || !/^https?:\/\//.test(value.url))
     throw new WorkReadUnavailable('Publication attribution is incomplete');
@@ -70,8 +125,25 @@ export async function readPublicationAttribution(env: Pick<WorkActivationEnviron
 }
 
 export async function selectedPublicationAttribution(session: WorkReadSession,
-  source: { source: string; sourceObservation?: string; work: string } | null) {
-  if (!source?.sourceObservation) return null;
+  source: { source: string; sourceObservation?: string; rightsAssessmentId?: string; work: string } | null) {
+  if (!source) return null;
+  if (!source.sourceObservation) {
+    if (!source.rightsAssessmentId) return null;
+    const attribution = await session.retained(`publication-attribution:${source.source}`,
+      () => readPublicationAttribution(session.deps.environment, source.source, undefined));
+    if (attribution.rightsAssessmentId !== source.rightsAssessmentId)
+      throw new WorkReadUnavailable('Publication assessment does not match its citation');
+    const store = session.deps.rights?.store;
+    if (!store) throw new WorkReadUnavailable('Publication rights are unavailable');
+    const read = async () => {
+      try { return await store.currentPublicDomainAssessment(source.work, attribution.rightsAssessmentId); }
+      catch (cause) { throw new WorkReadUnavailable('Publication rights are unavailable', { cause }); }
+    };
+    const current = await read();
+    if (!current) throw new WorkReadMissing('Publication rights do not permit delivery');
+    session.observeDependency(`structured-publication-rights:${source.source}`, current, read);
+    return attribution;
+  }
   const attribution = await session.retained(`publication-attribution:${source.source}`,
     () => readPublicationAttribution(session.deps.environment, source.source, source.sourceObservation!));
   if ((await session.disclosure([{ owner: 'source', resource: attribution.record, component: 'record',

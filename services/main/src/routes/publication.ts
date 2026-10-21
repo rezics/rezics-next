@@ -5,7 +5,7 @@ import { ANONYMOUS_VIEWER } from '../modules/suitability/policy.ts';
 import { verifyRequestAccount } from '../modules/account/verify-assertion.ts';
 import { disclosureViewer, withDisclosureViewer } from '../modules/disclosure/viewer.ts';
 import { Elysia, t } from 'elysia';
-import { prepareSourcedStructurePublication } from '../modules/work/sourced-structure-publication.ts';
+import { prepareSourcedStructurePublication, verifyManualPublicationRights } from '../modules/work/sourced-structure-publication.ts';
 import { prepareInstructionAdoptions } from '../modules/work/instruction-adoption.ts';
 import { ObjectIntegrityError, ObjectUnavailable } from '../infrastructure/immutable-objects.ts';
 import { readRealmMediaSet, RealmMediaUnavailable, RealmMediaMissing } from '../modules/content-publication/realm-media.ts';
@@ -131,6 +131,10 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
           disclosure: t.Literal('public'),
           rightsBasis: t.Union([t.Literal('original-contribution'), t.Literal('public-domain')]),
           sourceObservation: t.Optional(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' })),
+          citation: t.Optional(t.Object({ url: t.String({ minLength: 1, maxLength: 2048, format: 'uri', pattern: '^https?://[^\\s]+$' }),
+            license: t.Nullable(t.String({ minLength: 1, maxLength: 2048, format: 'uri', pattern: '^https?://[^\\s]+$' })),
+            author: t.Nullable(t.String({ minLength: 1, maxLength: 200 })) }, { additionalProperties: false })),
+          rightsAssessmentId: t.Optional(t.String({ format: 'uuid', pattern: '^[0-9a-f-]{36}$' })),
         }, { additionalProperties: false }),
         t.Object({
           profile: t.Literal('work-structure-publication-v1'),
@@ -155,7 +159,9 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
             ? async (admissionId, principal) => ({
               adoptions: await prepareInstructionAdoptions(work, body, admissionId, principal),
               ...(input.operation === 'publish' && input.rightsBasis === 'public-domain'
-                ? { attribution: await prepareSourcedStructurePublication(work, input, principal) } : {}),
+                ? { attribution: await prepareSourcedStructurePublication(work, input, principal),
+                  ...(input.sourceObservation === undefined ? { verifyAttribution: () =>
+                    verifyManualPublicationRights(work, input.work, input.rightsAssessmentId) } : {}) } : {}),
             }) : undefined);
         return Response.json({ profile: 'work-structure-publication-v1', operation: body.operation,
           work: receipt.work, publicationDecision: receipt.publicationDecision!,

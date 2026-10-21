@@ -59,6 +59,10 @@
       "@id": "https://rezics.com/vocab/publicationOutcome",
       "@type": "@id"
     },
+    "rv:rightsAssessment": {
+      "@id": "https://rezics.com/vocab/rightsAssessment",
+      "@type": "@id"
+    },
     "rv:rightsBasis": {
       "@id": "https://rezics.com/vocab/rightsBasis",
       "@type": "@id"
