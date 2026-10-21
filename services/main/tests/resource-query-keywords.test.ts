@@ -82,6 +82,7 @@ test('ResourceQuery keyword continuation retains language, types, contributor, R
   for (const input of queries(query)) {
     const first = compileQuery(input);
     const next = compileQuery({ ...input, page: { ...input.page, continuation } });
+    if (first.template !== 'search' || next.template !== 'search') throw new Error('Expected paged search plans');
     expect(next).toEqual({ ...first, request: { ...first.request, continuation } });
     expect(next).toMatchObject({ template: 'search', concept: { value: id(2), revision: id(3) }, request: {
       includeTypes: [book], excludeTypes: [recipe], language: 'ja', author: id(5),
