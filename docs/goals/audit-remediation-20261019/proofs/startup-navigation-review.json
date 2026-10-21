@@ -11097,5 +11097,425 @@
       "bytes": 19789,
       "sha256": "05432e538e5597471f6f86cc3950cc768b03ec59281b94556b09df7ddcac876a"
     }
+  },
+  "homeOrcaDocumentSupportV4IndependentConsumption20261021": {
+    "atUTC": "2026-10-21T04:14:24.726809+00:00",
+    "worker": "G-2847",
+    "reviewer": "Actual SAME codex-1 / GPT-6.1 Sol / xhigh; no fallback or nested agents",
+    "decision": "2026-10-21T04:07:23Z",
+    "result": "done",
+    "verdict": "Accept the exact sealed v4 changed support for the bounded document-context support outcome. Independent offline controls pass; no actionable counterexample was established in this slice. Reused native evidence demonstrates real owned static-document binding and speech only. Actual Home speech, AUD-012 and every original class retain their prior dispositions.",
+    "pins": {
+      "reportAndConsumerBase": "747789bf1ee960b9a3530e61085fe50ac30c941b",
+      "producerTrackedSource": "3fe476177125ce11e52d6db5e948b6110bafe979",
+      "supportVersion": "owned-orca-document-context-v4-20261021",
+      "sealedManifest": {
+        "path": ".temp/home-orca-document-support-v4-20261021/bundle.sha256",
+        "sha256": "d297599c031e94804ff552646c1ef3ac2e3fc06347b87efb82608428807ec2b4",
+        "bytes": 18239
+      },
+      "verifiedArtifacts": 155,
+      "verificationBeforeConsumption": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/home-orca-document-support-v4-independent-review-20261021/seal-verification.json",
+        "sha256": "dc37318bcec51046ca3b36e74424a91aadf059ee0ecd614eb5a4fda6be32b95c",
+        "bytes": 382
+      },
+      "verificationAfterControls": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/home-orca-document-support-v4-independent-review-20261021/seal-after-controls.log",
+        "sha256": "b2a644ec5bdf2d8384b1662efd02c97c8174ebf1005e7a411f295029b64d5b96",
+        "bytes": 8629
+      },
+      "changedExecutables": [
+        {
+          "path": ".temp/home-orca-document-support-v4-20261021/at-session.ts",
+          "sha256": "d932c5b88daf0cf7e8e3ecdec95a0f8212bac48e2c3de9493f3768a1b440bbec",
+          "bytes": 13755
+        },
+        {
+          "path": ".temp/home-orca-document-support-v4-20261021/native-key-server.py",
+          "sha256": "7e84e6c224ff3612bf7bc3669fff30056bb7c433c19b46f2608ee35db4c9fc7a",
+          "bytes": 2520
+        },
+        {
+          "path": ".temp/home-orca-document-support-v4-20261021/document_binding.py",
+          "sha256": "09959f03348d020e646296744aa841eb51d4469b9bc94a21bbe37e009a1a6b77",
+          "bytes": 9736
+        },
+        {
+          "path": ".temp/home-orca-document-support-v4-20261021/document-target.ts",
+          "sha256": "edee9abaf80b4a3e99ea5a720811a7f1b507a27195f441c0da08cc5406de7af0",
+          "bytes": 2551
+        }
+      ],
+      "changedExecutablesEqualFinalNativeReplaySnapshot": true,
+      "acceptedV3Controller": {
+        "path": ".temp/home-orca-document-support-v4-20261021/native-window-v3.py",
+        "sha256": "fe35508068db359186514d76f98c2a5e7273ffbd3a3048016100e35be41290db",
+        "bytes": 12025
+      },
+      "frozenCallback": {
+        "path": ".temp/home-orca-document-support-v4-20261021/frozen/original-callback-retained.txt",
+        "sha256": "9c56d91f687e9a03a00ce05dc88171ba22d63beab60d7de6b55592d0296aa4e8",
+        "bytes": 3268
+      },
+      "frozenTemplate": {
+        "path": ".temp/home-orca-document-support-v4-20261021/frozen/aud012-home-only.test.ts.in",
+        "sha256": "22e5b9c90dc1fd0fce2cf412df44a46ab01bf354b72a9b74f6008a9b830868bc",
+        "bytes": 35206
+      },
+      "actualDependencyDigestAndStamp": "afed563fd4dcabbfa62a2354edc5c7b7b8856b5067fc2a39011e76ff75b59c64",
+      "recordedJobImplementation": {
+        "mainHeadObserved": "747789bf1ee960b9a3530e61085fe50ac30c941b",
+        "goalctlSHA256": "cf06b6b0727f466917913fc2a607194323c43037439b8636ce8bc84342d6ccac",
+        "workingDirectory": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2847",
+        "qualification": "Recording used main goalctl as instructed; the selected QA command used this worktree goalctl test and normal admission."
+      }
+    },
+    "consumedArtifacts": {
+      "handoff": {
+        "path": ".temp/home-orca-document-support-v4-20261021/HANDOFF.txt",
+        "sha256": "fe369f7e3fdb112e4fdccc6a173afbb27ed143ac89ed534c22a185f21b816901",
+        "bytes": 3840
+      },
+      "delta": {
+        "path": ".temp/home-orca-document-support-v4-20261021/support-delta.diff",
+        "sha256": "cb97464401cc26a34a25f2ceb77e94634715e756945465e2c4dae90a45d05a87",
+        "bytes": 32284
+      },
+      "producerChecks": {
+        "path": ".temp/home-orca-document-support-v4-20261021/checks.json",
+        "sha256": "6e6683e5bf28a4786fa3c13b7d06d8a40cb2ed05f2ae854e061d738af8c89a0c",
+        "bytes": 5906
+      },
+      "futureBinding": {
+        "path": ".temp/home-orca-document-support-v4-20261021/future-binding.json",
+        "sha256": "395b0fd1e0b7497c4f8527d59c3386dd060bf2fd389e1d3b5dcbe8a101efcecd",
+        "bytes": 8815
+      },
+      "sourceHashes": {
+        "path": ".temp/home-orca-document-support-v4-20261021/source-hashes.json",
+        "sha256": "44010ad7d2469e8a8b4ff0a84325450b91753c2d4aa643578cb235db8f8b12af",
+        "bytes": 5307
+      },
+      "history": {
+        "path": ".temp/home-orca-document-support-v4-20261021/history.json",
+        "sha256": "dab5f3a8ff5acafb1949eb795df995bad4cef4c2ebc7fcb9b804a58e77b0e518",
+        "bytes": 13918
+      },
+      "reach": {
+        "path": ".temp/home-orca-document-support-v4-20261021/reach.json",
+        "sha256": "a2a7fe5c8f30ec9c646634e3412dbcd19d386c68042a15fb294d5cbeb4c617cf",
+        "bytes": 39325
+      },
+      "ownExecutionCopy": ".temp/home-orca-document-support-v4-20261021",
+      "retainedPrivateSealedCopy": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/home-orca-document-support-v4-independent-review-20261021/sealed-producer-bundle",
+      "authorCopyExecuted": false
+    },
+    "independentChangedSupportAssessment": [
+      {
+        "path": ".temp/home-orca-document-support-v4-20261021/document-target.ts",
+        "lines": [
+          5,
+          14,
+          20,
+          22,
+          29,
+          36,
+          43
+        ],
+        "assessment": "Observes the actual owned Page title, URL, browser PID and CDP target. Exactly one live Page and page target with matching URL is required. Ambiguous, divergent or failed metadata observations write null atomically. Metadata supplies identity only, with no expected speech, focus mutation or DOM assertion.",
+        "coverage": "Independent offline observer controls cover actual Page title rather than stale TargetInfo title, multiple pages, divergent URL and destroyed title context. These are controlled observer assertions, not a live ambiguous-AT-SPI-document replay."
+      },
+      {
+        "path": ".temp/home-orca-document-support-v4-20261021/native-key-server.py",
+        "lines": [
+          11,
+          18,
+          22,
+          36,
+          42,
+          45,
+          47
+        ],
+        "assessment": "Wraps the byte-identical accepted v3 controller. After the owned Orca endpoint exists, missing targets and another browser PID refuse activation/input. Structural input refuses an absent endpoint. Pre-Orca nonstructural setup retains the accepted v3 window-only contract."
+      },
+      {
+        "path": ".temp/home-orca-document-support-v4-20261021/document_binding.py",
+        "lines": [
+          17,
+          28,
+          39,
+          42,
+          46,
+          104,
+          123,
+          141,
+          149,
+          152,
+          157,
+          162,
+          172,
+          183
+        ],
+        "assessment": "Requires one showing AT-SPI document matching owned application PID, exact URI and title before activation/input. Structural keys reselect, independently validate v3 WM/X11 ownership inside the owned Orca process, require the selected frame ACTIVE and the existing Orca locus inside that document, bind its real script/frame, and inspect the resulting actual structural document. It does not set locus, speak, synthesize an event, change DOM/presentation mode or replace native navigation. The new endpoint is installed only in the newly owned Orca process; a preexisting socket is not replaced.",
+        "coverage": "Independent six-case Python controls establish call ordering, refusal propagation before input, missing metadata, target drift between select/bind, and accepted nonstructural setup. Their endpoint/window doubles do not establish actual Orca behavior. The producer exact-snapshot native replay supplies the bounded real PID/URI/title mismatch, locus, active-frame and speech evidence."
+      },
+      {
+        "path": ".temp/home-orca-document-support-v4-20261021/at-session.ts",
+        "lines": [
+          22,
+          25,
+          55,
+          136,
+          139,
+          144,
+          148,
+          152,
+          160,
+          162
+        ],
+        "assessment": "Adds task-local target observation and a document endpoint loaded by the owned Orca customizations. Endpoint readiness is explicit. Owned child exit/signal completion precedes removal of its document socket. Existing temporary-permission, native speech, dispatcher, Pulse, AT-SPI and original assertion paths are retained. Cleanup conclusions use actual retained shutdown readbacks rather than the helper signal requests alone."
+      }
+    ],
+    "actionableCounterexamples": [],
+    "boundedClassCoverage": {
+      "principle": "Native input and speech evidence must refer to the exact owned document, and evidence must retain actual assertion reach.",
+      "surfaces": [
+        "owned Page/CDP observation",
+        "native input bridge",
+        "AT-SPI document selection",
+        "actual Orca script/frame/locus",
+        "owned session cleanup"
+      ],
+      "missingForeignAmbiguousOrDriftedContext": "Checked within the changed four-file support. Source requires exact unique selection; offline controls cover refusal ordering/observer ambiguity/drift; the reused live static run supplies three actual identity mismatch refusals before activation. No additional live adverse-state matrix is claimed.",
+      "scopeLimit": "No product/source review, runtime journey, original class closure or extra unchanged review. Accepted v3 controls/controller and accepted Home UI/API criteria are reused."
+    },
+    "executedControls": {
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task --taskfile .temp/home-orca-document-support-v4-20261021/Taskfile.yml controls",
+      "decisionTaskSpelling": "task goal -- job -- task --taskfile .temp/home-orca-document-support-v4-20261021/Taskfile.yml controls",
+      "commandQualification": "Outer recording invocation follows the current explicit instruction to use main goalctl; the supplied Task target and selected assertion path are unchanged.",
+      "selectedAssertionCommand": "bun scripts/goal/goalctl.ts test ./.temp/home-orca-document-support-v4-20261021/offline-controls.test.ts",
+      "recordedJob": "a72dc882-2418-4e42-878f-b3455d3f7c6d",
+      "exitStatus": 0,
+      "bunTests": 3,
+      "bunFailures": 0,
+      "bunExpectCalls": 13,
+      "pythonCases": 6,
+      "pythonQualification": "Executed once by the second Bun test, with a ten-second timeout and asserted child exit/error/signal. Successful child output is captured; no separate Python assertion count claimed.",
+      "normalTaskAdmission": true,
+      "hostedQARunId": null,
+      "log": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/home-orca-document-support-v4-independent-review-20261021/offline-controls.log",
+        "sha256": "91e685ed999b19c64f136e5ac698a7e1948684c0b21f9c04c98785b93ce8885f",
+        "bytes": 408
+      },
+      "nativeReplayRunByReviewer": false,
+      "qualification": "Exact ignored-file selection through normal goalctl test. No hosted QA stack, app, frontend, browser or AT started by this worker."
+    },
+    "reusedNativeEvidence": {
+      "job": "52f49182-bcff-4f3e-b0eb-bab586ada5f6",
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task --taskfile .temp/home-orca-document-support-v4-20261021/Taskfile.yml native",
+      "exitStatus": 0,
+      "tests": 1,
+      "expectCalls": 21,
+      "result": {
+        "path": ".temp/home-orca-document-support-v4-20261021/native-static-2026-10-21T03-56-30-644Z/result.json",
+        "sha256": "161040314e8e7a5fd980d68986899d21132f51ee317b54397ac4aa8a247871f5",
+        "bytes": 76574
+      },
+      "exactReplaySnapshot": ".temp/home-orca-document-support-v4-20261021/native-static-2026-10-21T03-56-30-644Z/replay-source",
+      "log": {
+        "path": ".temp/home-orca-document-support-v4-20261021/receipts/52f49182-bcff-4f3e-b0eb-bab586ada5f6.log",
+        "sha256": "a1acc1ec269ee9a9328904b42a1bfdd67a5026bc74ce19868c0a68f6c3d6eddc",
+        "bytes": 403
+      },
+      "actualReach": {
+        "initialFrame": {
+          "pid": 2776866,
+          "name": "GitHub - Google Chrome - coordinates (坐标)",
+          "role": "frame",
+          "path": [
+            -1,
+            0
+          ]
+        },
+        "firstStructuralBind": "After actual native Tab established the owned locus, the real Orca active frame changed from retained GitHub to Owned Home Document Control while preserving that locus.",
+        "nativeKeys": [
+          "Control+Home",
+          "h",
+          "h"
+        ],
+        "staticHeadingSpeechAndDispatcher": [
+          "Static document boundary control",
+          "Owned structural heading maple"
+        ],
+        "ownedPulseDelivery": true,
+        "structuralDocumentReceipts": 3,
+        "allBeforeAfterLociPreserved": true,
+        "mismatchRefusals": [
+          {
+            "changedIdentity": "PID",
+            "exitStatus": 1,
+            "activeWindowUnchanged": true
+          },
+          {
+            "changedIdentity": "URI",
+            "exitStatus": 1,
+            "activeWindowUnchanged": true
+          },
+          {
+            "changedIdentity": "title",
+            "exitStatus": 1,
+            "activeWindowUnchanged": true
+          }
+        ],
+        "noDistractorStructuralRoot": true,
+        "noDistractorHeadingSpeech": true,
+        "permissionActions": []
+      },
+      "actualShutdown": {
+        "at": "2026-10-21T03:56:45.936Z",
+        "ownedPids": [
+          749564,
+          749648,
+          749902,
+          749963,
+          750256,
+          749649,
+          750015
+        ],
+        "survivors": [],
+        "sockets": [
+          {
+            "path": "/tmp/g2847-aud012-749528.sock",
+            "exists": false
+          },
+          {
+            "path": "/tmp/g2847-native-749528.sock",
+            "exists": false
+          },
+          {
+            "path": "/tmp/rezics-owned-orca-document-749528.sock",
+            "exists": false
+          }
+        ],
+        "ownSinkAbsent": true,
+        "peerProcessControl": false
+      },
+      "qualification": "Only the final pass has a retained executable snapshot. Static native evidence is reused, not rerun or generalized to Home. No screenshots are present in this sealed support bundle; no new visual inspection claimed."
+    },
+    "preservation": {
+      "priorReportFieldsUnchanged": 49,
+      "priorReport": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/home-orca-document-support-v4-independent-review-20261021/report-before.json",
+        "sha256": "70e446c3535f7de2bb06961ed6d333416d64a9b5c5af35906374e835cfc99f62",
+        "bytes": 614748
+      },
+      "retainedCurrentReportFieldsMatchProducerEvidence": [
+        "originalHomeDefrCAS11Callbacks20261020",
+        "aud012HomeCriterionEvidenceMap20261020"
+      ],
+      "producerHistoricalAttempts": [
+        {
+          "run": "native-static-2026-10-21T03-46-45-200Z",
+          "outcome": "failed",
+          "headingOutcomeReached": false,
+          "intendedHeadingSpoken": null,
+          "sourceSnapshotAtExecution": null,
+          "earlierHelperHashLimit": "No per-run helper snapshot was captured; do not apply final helper hashes retrospectively."
+        },
+        {
+          "run": "native-static-2026-10-21T03-50-24-693Z",
+          "outcome": "failed",
+          "headingOutcomeReached": true,
+          "intendedHeadingSpoken": false,
+          "sourceSnapshotAtExecution": null,
+          "earlierHelperHashLimit": "No per-run helper snapshot was captured; do not apply final helper hashes retrospectively."
+        },
+        {
+          "run": "native-static-2026-10-21T03-56-30-644Z",
+          "outcome": "passed",
+          "headingOutcomeReached": true,
+          "intendedHeadingSpoken": true,
+          "sourceSnapshotAtExecution": "replay-source",
+          "earlierHelperHashLimit": null
+        }
+      ],
+      "producerHistoryQualification": [
+        "First refusal: no exact AT-SPI document during native-input qualification. TargetInfo.title was replaced with actual owned Page.title; later actual receipts demonstrate the stale TargetInfo title. Attribution to the first refusal is an inference because its target snapshot was not retained.",
+        "Second attempt: correct document/root and h1 speech reached; expected h2 assertion failed because only one native h followed Control+Home. The final finite control sends two h keys and keeps the same expected h2 speech assertion.",
+        "Final control performs positive structural input before activating the owned distractor, so window switching cannot conceal the naturally stale cached Orca frame. No original callback/template assertion or premise was edited."
+      ],
+      "originalCAS11": "Both unchanged original Home heading assertions reached and failed at aud012-home-only.test.ts:258, with headingReached=false. Description/status, later screenshots and axe were unreached. The final aggregate failed at line269. CAS11 remains spent; its prior shutdown/release/restoration is historical, not revived.",
+      "frozenCallbackAndTemplateByteIdentical": true,
+      "acceptedEvidence": "All prior source reviews, identity/native-radio recovery, fixture-free native-input qualifiers, accepted Home component/UI and matching genuine API criteria, all old failures including Studio400, and their limits remain unchanged. This support adds no private-helper prerequisite to the accepted component/API criteria.",
+      "acceptedV3Controls": "Reuse existing G-2847 support review55d438069f8134755534b46508bbda46cdb88e4c and producer retained v3-checks.json: 3 tests / 81 expects / 17 Python cases; no rerun.",
+      "producerV3DependencySideEffect": "Retain homeNativeWindowSupportOfflineConsumption20261020.dependencyBinding.producerSideEffectPreserved, including automatic immutable-install bookkeeping. This v4 consumer log reports no install; no tooling/dependency repair or stale dependency copy was performed."
+    },
+    "dependencyBinding": {
+      "receipt": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/home-orca-document-support-v4-independent-review-20261021/dependency-binding.json",
+        "sha256": "e413432edf5e1959f0d9c255bb1fea50bd85e148a532c607ead52b1301277e23",
+        "bytes": 556
+      },
+      "digestAndStamp": "afed563fd4dcabbfa62a2354edc5c7b7b8856b5067fc2a39011e76ff75b59c64",
+      "stale": false,
+      "stampMtimeUTC": "2026-10-20T10:57:36.586641+00:00",
+      "inputsEqualReportBase": true,
+      "qualification": "Read-only calculation matches scripts/goal/dependencies.ts; normal test admission retained. No dependency-install message in recorded consumer log. No full write-inventory claim."
+    },
+    "futureBindingOnly": {
+      "binding": {
+        "path": ".temp/home-orca-document-support-v4-20261021/future-binding.json",
+        "sha256": "395b0fd1e0b7497c4f8527d59c3386dd060bf2fd389e1d3b5dcbe8a101efcecd",
+        "bytes": 8815
+      },
+      "stage": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context",
+      "originalCommandOnlyAfterSeparateAuthorization": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test ./.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/aud012-home-only.test.ts",
+      "unchangedCompanions": [
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/observe-document-mode.ts",
+          "sha256": "8d53c9c973a20289423f350934ca4c4e86ad8a492bade5d8b2913f0b64c8d604",
+          "bytes": 3468,
+          "sourceWorktree": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2847",
+          "destination": "observe-document-mode.ts"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/verify-owned-cleanup.py",
+          "sha256": "541030c8fb94a6045d5d2f1be57728498c178196b62c8f9d6e78437354851e1f",
+          "bytes": 4387,
+          "sourceWorktree": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2847",
+          "destination": "verify-owned-cleanup.py"
+        }
+      ],
+      "requiredBinding": [
+        "Copy the seven executable files together, retaining relative imports. Use the exact accepted mode observer and cleanup helper referenced above; do not regenerate the local capture/prepare scripts in the future stage.",
+        "The session observes exactly one live owned Page and CDP target, emits PID/URI/actual Page.title metadata, and installs a task-local endpoint inside its newly owned Orca process.",
+        "Before activation/input, selection requires exactly one showing AT-SPI document matching PID, URI and title. Ambiguity, metadata loss or mismatch refuses input.",
+        "Before structural Control+Home/h/Down/Up/Insert+a, independently validate v3 owned X11/WM focus, actual AT-SPI active frame, and actual Orca locus already within that document. Bind only its real script/active frame; preserve locus, mode, product DOM and normal speech/navigation implementation.",
+        "Retain both before/after document receipts and original independent mode/heading/full description/status/dispatcher/Pulse/screenshot/axe reach. Any missing input is a setup refusal, never an unknown-mode or heading pass."
+      ],
+      "singleNextExistingOwnerInput": "One separate manager-authorized original Home observation event carrying fresh SAME G-2831 serialized READY/CAS custody and explicit root/source/environment binding. Existing G-2847 then observes the unchanged two Home callbacks only. This report neither requests nor prepares runtime/custody.",
+      "originalRunAuthorizedNow": false
+    },
+    "liveEffectsAndLimits": [
+      "This worker executed offline controls only. No app/frontend/browser/AT/permission action, OAuth, lease/CAS reacquisition, reader-state write, backend/corpus/restore/import or locale matrix was performed.",
+      "Native setup refusal and reached static h2 failure remain failures at their actual reach. The later static pass does not retrospectively assign final helper hashes to earlier attempts.",
+      "Actual matching Home title, full At the harbour and localized exact-one unread speech remain unproved. The original unchanged callback assertions require a separately authorized observation with fresh custody; CAS11 cannot be reused.",
+      "No original finding/class closes. Original UI/API criteria keep their accepted evidence and existing limits; no composite closure or current-main native/model/Studio qualification follows."
+    ],
+    "instructionDisposition": {
+      "file": "docs/goals/audit-remediation-20261019/tasks/G-2847.md",
+      "decision": "2026-10-21T04:07:23Z",
+      "quote": "Later original Home title/full At the harbour/localized exact-one unread speech needs separate original-run authorization and fresh G-2831 custody; CAS11 remains spent.",
+      "effect": "Finish this finite changed-support consumption and report only. No original callback run, new runtime preparation or duplicate accepted controls. Affected documentation checks only; no broad Goal check inventory."
+    },
+    "documentationValidation": {
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task docs:check",
+      "resultReceipt": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/home-orca-document-support-v4-independent-review-20261021/docs-check-receipt.json",
+      "resultReportedInWorkerHandoff": true,
+      "additiveReportValidationReceipt": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/home-orca-document-support-v4-independent-review-20261021/report-preservation.json"
+    },
+    "managerNext": "Consume this bounded v4 changed-support verdict. The single next existing-owner input is a separately authorized original Home observation with fresh SAME G-2831 custody/root binding. Retain every accepted UI/API criterion and all actual speech failures; this slice closes no original class."
   }
 }
