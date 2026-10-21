@@ -143,6 +143,6 @@ test('A completed legacy name inventory is traversed again to seed bounded depen
   expect((await backfillPublicNameProjections(env, pool, 1)).complete).toBe(true);
   expect(queries[0]).toContain('LIMIT 65');
   expect(queries[0]).not.toContain('legacy-end');
-  expect(checkpoints.get('public-names-v4')?.complete).toBe(true);
+  expect(checkpoints.get('public-names-v5')?.complete).toBe(true);
   expect(commands).toBe(1);
 });

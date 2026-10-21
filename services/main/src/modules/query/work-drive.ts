@@ -37,9 +37,13 @@ export function resourceTypeKinds(
     'https://rezics.com/vocab/Space': ['space', 'realm', 'site'],
     'https://rezics.com/vocab/Agent': ['agent'],
     'https://rezics.com/vocab/Collection': ['collection'],
+    'https://rezics.com/vocab/Post': ['post'],
   };
-  for (const definition of definitions)
+  for (const definition of definitions) {
     if (definition.base === 'work') owned[definition.type] = ['work'];
+    // A descriptive Resource type can decorate another owner. It does not
+    // prove that the semantic component is that identity's discovery owner.
+  }
   let kinds: ResourceCard['kind'][] = [
     'work',
     'realm',
@@ -48,6 +52,8 @@ export function resourceTypeKinds(
     'site',
     'agent',
     'collection',
+    'resource',
+    'post',
   ];
   for (const condition of conditions.filter(
     (row) => row.facet === 'type' && row.operator !== 'none',

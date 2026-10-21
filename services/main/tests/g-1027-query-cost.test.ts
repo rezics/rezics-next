@@ -33,7 +33,7 @@ test('G1027: compiled and admitted Work subtypes constrain the collector, while 
   ).toEqual([]);
   expect(
     resourceTypeKinds([{ facet: 'type', operator: 'none', values: [book] }], definitions),
-  ).toHaveLength(7);
+  ).toHaveLength(9);
   expect(resourceWorkType([{ facet: 'type', operator: 'any', values: [book] }], definitions)).toBe(
     book,
   );

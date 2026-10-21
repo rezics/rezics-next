@@ -12,6 +12,7 @@ import { workHref, type BrowseScope } from './scope.ts';
 import { authorHref } from '../author/route.ts';
 import { materializeData } from 'native-i18n';
 import { browseCounts } from './count-messages.ts';
+import { entryLabel, typeEntry } from '../catalogue/types.ts';
 
 export function browseResourceHref(item: Pick<ResourceCard, 'kind' | 'id'>): string {
   switch (item.kind) {
@@ -19,7 +20,8 @@ export function browseResourceHref(item: Pick<ResourceCard, 'kind' | 'id'>): str
     case 'realm': return spaceHref(item.id, 'community');
     case 'agent': return resourceHref('/a/', item.id);
     case 'concept': return resourceHref('/concepts/', item.id);
-    case 'site': case 'collection': case 'space': return resourceHref('/e/', item.id);
+    case 'site': case 'collection': case 'space': case 'resource': case 'post':
+      return resourceHref('/e/', item.id);
   }
 }
 
@@ -84,6 +86,11 @@ export function TopicCard(props: CardProps) {
   return <IdentityCard {...props} label={browseMessages[props.locale].topics} icon={HashIcon} />;
 }
 
+export function ResourceCardView(props: CardProps) {
+  const entry = typeEntry(props.item.types, 'resource');
+  return <IdentityCard {...props} label={entry ? entryLabel(entry, props.locale) : ''} />;
+}
+
 /** One card dispatch for Home's previews, Discover's sections and every complete type traversal. */
 export function DiscoverResourceCard(props: CardProps & { slot?: number; scope?: BrowseScope }) {
   switch (props.item.kind) {
@@ -94,5 +101,6 @@ export function DiscoverResourceCard(props: CardProps & { slot?: number; scope?:
     case 'agent': return <PersonCard {...props} />;
     case 'collection': return <ListCard {...props} />;
     case 'concept': return <TopicCard {...props} />;
+    case 'resource': case 'post': return <ResourceCardView {...props} />;
   }
 }

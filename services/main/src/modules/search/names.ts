@@ -97,7 +97,7 @@ export async function backfillCatalogueNames(env: WorkActivationEnvironment): Pr
 }
 
 // Re-run completed inventories for the bounded, complete name recipe.
-export const PUBLIC_NAME_BACKFILL_PROFILE = 'public-names-v4';
+export const PUBLIC_NAME_BACKFILL_PROFILE = 'public-names-v5';
 
 /** Online migration batch. Owner heads are derived inside the writer transaction;
  * concurrent edits stay authoritative. Receipts make a lost checkpoint replayable.
@@ -109,7 +109,8 @@ export async function backfillPublicNameBatch(env: WorkActivationEnvironment, af
           `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
       PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
       SELECT DISTINCT ?resource WHERE { GRAPH ${iri(GRAPHS.current)} {
-        { ?resource a ?type . VALUES ?type { schema:CreativeWork skos:Concept rv:Space rv:Realm rv:Zone rv:Agent rv:Collection } }
+        { ?resource a ?type . VALUES ?type { schema:CreativeWork skos:Concept rv:Space rv:Realm rv:Zone rv:Agent rv:Collection rv:Post } }
+        UNION { ?resource rv:semanticHead ?head }
         UNION { ?resource rv:observationHead ?head }
       } FILTER(STR(?resource)>${lit(after)}) } ORDER BY STR(?resource) LIMIT 65`,
           65_536,

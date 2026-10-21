@@ -45,6 +45,12 @@ export const SiteLatin: Story = { args: { item: browseResources[2]! } };
 export const PersonLatin: Story = { args: { item: browseResources[3]! } };
 export const ListLatin: Story = { args: { item: browseResources[4]! } };
 export const TopicLatin: Story = { args: { item: browseResources[5]! } };
+export const SemanticResource: Story = { args: { item: { ...browseResources[5]!, kind: 'resource',
+  types: ['https://rezics.com/vocab/Character'], name: { ...browseResources[5]!.name,
+    value: 'Artoria Pendragon', language: 'en' } } } };
+export const DiscussionPost: Story = { args: { item: { ...browseResources[5]!, kind: 'post',
+  types: ['https://rezics.com/vocab/Post'], name: { ...browseResources[5]!.name,
+    value: 'Share your smallest useful prompt', language: 'en' } } } };
 export const WorkInCommunity: Story = {
   args: { scope: { kind: 'realm', realm: '00000000-0000-4000-8000-000000000009' } },
   async play({ canvasElement, args }) {

@@ -630,10 +630,10 @@ public final class FilteredGraphTextIndex implements TextIndex {
                 for (String resource : scope.resources()) {
                     Node owner = uri(resource);
                     if (!PublicNameProjection.productResource(owner)) continue;
-                    // Only seven maintained name identities can belong to this
+                    // Only the maintained name identities can belong to this
                     // resource. Content/other units with rv:resource must not
                     // turn a name restriction into a population walk.
-                    for (String kind : List.of("concept", "realm", "site", "agent", "collection", "space", "work")) {
+                    for (String kind : PublicNameProjection.NAME_KINDS) {
                         Node unit = PublicNameProjection.nameUnit(owner, kind);
                         if (data.contains(PUBLIC_GRAPH, unit, uri(RV + "resource"), owner))
                             units.add(new org.apache.lucene.util.BytesRef(unit.getURI()));
@@ -912,7 +912,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
      * https://lucene.apache.org/core/10_3_1/core/org/apache/lucene/index/TermsEnum.html */
     RankPage directory(String kind, String order, int size, RankAfter after,
                        org.apache.jena.sparql.core.DatasetGraph data) {
-        if (size < 1 || size > 64 || !java.util.Set.of("concept", "space", "realm", "site", "agent", "collection", "work").contains(kind)
+        if (size < 1 || size > 64 || !PublicNameProjection.nameKind(kind)
             || !java.util.Set.of("identity", "newest", "updated").contains(order))
             throw new TextIndexException("directory query is not admitted");
         boolean identity = order.equals("identity");

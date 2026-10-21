@@ -86,6 +86,8 @@ export const resourceCard = t.Object({
     t.Literal('agent'),
     t.Literal('collection'),
     t.Literal('concept'),
+    t.Literal('resource'),
+    t.Literal('post'),
   ]),
   name: readName,
   icon: readAvatar,

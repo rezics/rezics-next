@@ -1,4 +1,5 @@
-import { listResult } from '../../api-list.ts';
+import { deflateRawSync, inflateRawSync } from 'node:zlib';
+import { LIST_COST, listResult } from '../../api-list.ts';
 import { readRealmBasis } from '../realm-reads/read-realm.ts';
 import { GRAPHS, iri, lit } from '../work/activate.ts';
 import {
@@ -41,6 +42,7 @@ import { resourceWorkCards } from './work-cards.ts';
 import { optionalPreview } from './optional-preview.ts';
 import { resourceWorkDrive, resourceTypeKinds, resourceWorkType } from './work-drive.ts';
 import { admittedTypes } from '../types/registry.ts';
+import { publicPost } from '../post/patterns.ts';
 
 /** Ownership establishes the read path; descriptive rdf:type only filters it.
  * Public catalogue reads never use private grants, including a reader's own. */
@@ -73,7 +75,19 @@ export function publicResources() {
         FILTER NOT EXISTS { ?conceptRealm a rv:Realm ; rv:realmState rv:Active ; rv:space ?conceptSpace .
           ?conceptSpace rv:realmCapability ?conceptRealm ; rv:disclosure rv:Public .
           FILTER NOT EXISTS { ?conceptSpace rv:listing ?listing . FILTER(?listing != "listed") } } } }
-      BIND("concept" AS ?kind) BIND(?r AS ?summary) BIND(?r AS ?nameResource) } }
+      BIND("concept" AS ?kind) BIND(?r AS ?summary) BIND(?r AS ?nameResource) }
+    UNION { GRAPH ${iri(GRAPHS.current)} { ?r a rdfs:Resource ; rv:semanticHead ?semanticHead .
+        FILTER NOT EXISTS { ?r a schema:CreativeWork }
+        FILTER NOT EXISTS { ?r a ?otherOwner . VALUES ?otherOwner {
+          rv:Agent rv:Post rv:Space rv:Realm rv:Zone rv:Collection skos:Concept } } }
+      GRAPH ${iri(GRAPHS.revisions)} { ?semanticHead a rv:SemanticRevision, rv:RevisionAnchor ;
+        rv:component ?r ; rv:lifecycle rv:Active .
+        FILTER NOT EXISTS { ?semanticHead a rv:ErasedRevision } }
+      FILTER EXISTS { GRAPH ${iri(GRAPHS.current)} { ?r rv:semanticWork ?semanticWork }
+        ${publicWork('?semanticWork', '?semanticMain')} }
+      BIND("resource" AS ?kind) BIND(?r AS ?summary) BIND(?r AS ?nameResource) }
+    UNION { ${publicPost('?r')}
+      BIND("post" AS ?kind) BIND(?r AS ?summary) BIND(?r AS ?nameResource) } }
     FILTER(STRSTARTS(STR(?r), "https://rezics.com/id/"))
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?r rv:protectionHead ?protection } }
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?r rv:mergedInto ?merged } }
@@ -198,6 +212,8 @@ export async function resourceCards(
   const refs = [
     ...new Set(candidates.filter((row) => row.kind !== 'agent').map((row) => row.summary)),
   ];
+  if (candidates.some(row => row.kind === 'resource') && !session.deps.mediaAccess)
+    throw new WorkReadUnavailable('Public semantic authority is unavailable');
   const media = session.deps.media?.store;
   const summaryMedia = media
     ? {
@@ -211,7 +227,11 @@ export async function resourceCards(
     readResourceSummaries(
       session.deps.environment,
       summaryMedia,
-      { viewer: session.viewer },
+      { viewer: session.viewer,
+        // Global catalogue reads never consume an editor's private grants.
+        canReadSemantics: session.deps.mediaAccess
+          ? resources => session.deps.mediaAccess!.canReadSemantics(
+              null, null, resources, session.deps.environment.fuseki) : undefined },
       {
         resources: refs,
         localBasis: session.fencesSelectedUnits,
@@ -430,7 +450,7 @@ async function readResourceListAtPosition(
   if (realm && (await readRealmBasis(session, realm)).visibility !== 'public')
     throw new WorkReadInvalid('Scope is not public');
   const binding = [
-    'resource-list-v2',
+    'resource-list-v3',
     conditions,
     realm ?? null,
     q,
@@ -438,12 +458,16 @@ async function readResourceListAtPosition(
     limit,
     session.displayLanguages,
     session.viewer,
+    resourceTypeKinds(conditions, admittedTypes),
   ];
   const cursor = decodeReadCursor(input.cursor, binding, session.position);
   let prior: PageCursor = { seen: 0, seeks: {}, done: [] };
   if (cursor) {
     try {
-      prior = JSON.parse(cursor.order);
+      // Repeated owner/IRI prefixes are seek metadata, not another population
+      // limit. Keep all admitted owners inside the unchanged opaque-token cap.
+      prior = JSON.parse(inflateRawSync(Buffer.from(cursor.order, 'base64url'),
+        { maxOutputLength: 16_384 }).toString());
     } catch {
       throw new WorkReadInvalid('Resource cursor is invalid');
     }
@@ -553,7 +577,7 @@ async function readResourceListAtPosition(
       more = true;
     } else {
       // Refill the frontier's kind first when only one bounded seek remains.
-      for (const kind of kinds
+      const pendingKinds = kinds
         .filter((kind) => !state.done.includes(kind))
         .sort((a, b) =>
           tails.has(a) && tails.has(b)
@@ -563,9 +587,14 @@ async function readResourceListAtPosition(
               : tails.has(b)
                 ? 1
                 : 0,
-        )) {
+        );
+      for (const [sourceIndex, kind] of pendingKinds.entries()) {
         if (fetched >= QUERY_COST.candidateRows) break;
-        const sourceLimit = Math.min(64, QUERY_COST.candidateRows - fetched);
+        // Every unfinished source must supply a frontier before the merge can
+        // emit a safe prefix. Share the existing allocation as owners grow.
+        const sourceLimit = Math.min(64, Math.floor(
+          (QUERY_COST.candidateRows - fetched) / (pendingKinds.length - sourceIndex)));
+        if (!sourceLimit) break;
         const seek = state.seeks[kind];
         const start = candidates.length;
         let complete = false;
@@ -838,8 +867,11 @@ async function readResourceListAtPosition(
   if (index) await fenceLabelIndex(session, index);
   state.seen += visible.length;
   const next = more
-    ? encodeReadCursor(binding, session.position, items.at(-1)?.id ?? '', JSON.stringify(state))
+    ? encodeReadCursor(binding, session.position, '',
+        deflateRawSync(JSON.stringify(state)).toString('base64url'))
     : null;
+  if (next && next.length > LIST_COST.cursorCharacters)
+    throw new WorkReadUnavailable('Resource continuation exceeds its admitted bound');
   return {
     profile: 'resource-list-v1' as const,
     sourcePosition: kinds.length === 1 && kinds[0] === 'realm' && directoryBasis
