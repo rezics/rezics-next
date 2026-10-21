@@ -1,5 +1,6 @@
 import { isUuid, type SearchParams, single, withQuery } from '../discover/scope.ts';
 import { type WorkTypeKey, workTypeIri } from '../discover/state.ts';
+import type { ResourceQuery } from '../../../../model/definitions/filter-document-v1.ts';
 
 // `/search?q&scope&realm&lang&term` as the URL gives it. Pure functions shared
 // by the route, its components and tests.
@@ -43,7 +44,7 @@ export function normalizeLanguage(raw: string): string | null {
 export const normalizePhrase = (raw: string) => raw.normalize('NFC').trim().replace(/\s+/gu, ' ');
 
 /** Quotes select exact matching; the URL retains them so reload and history retain that intent. */
-export function searchText(raw: string): { keywords: string } | { phrase: string } {
+export function searchText(raw: string): Extract<NonNullable<ResourceQuery['text']>, { keywords: string } | { phrase: string }> {
   const text = normalizePhrase(raw);
   return text.startsWith('"') && text.endsWith('"') && text.length >= 2
     ? { phrase: text.slice(1, -1).trim() } : { keywords: text };

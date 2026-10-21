@@ -5,7 +5,8 @@ import { seedServedTypes } from '../catalogue/type-fixtures.ts';
 import { discoverSearchUrl } from './redirect.ts';
 import { searchRequest } from './read.ts';
 import { chapterSearchState } from '../discover/chapter-text-read.ts';
-import type { SearchContinuation } from './types.ts';
+import type { SearchContinuation, SearchPage } from './types.ts';
+import { readSearchPage } from './read.ts';
 import { browserMainApi } from '../api/browser.ts';
 import { readChapterText } from '../discover/chapter-text-read.ts';
 
@@ -92,4 +93,22 @@ test('single-character chapter reads reach the typed API and retain an actual un
   }
   expect(requests).toEqual(Array.from({ length: 2 }, () => ({ context: 'global', scope: { kind: 'all' },
     text: { keywords: '雨' }, sort: 'relevance', filter: { all: [] }, page: { size: 10 } })));
+});
+
+test('the typed Concept-set result preserves its own continuation and does not invent absent facets', async () => {
+  const continuation: SearchContinuation = { queryDigest: 'a'.repeat(64), resultDigest: 'b'.repeat(64),
+    presentationDigest: 'c'.repeat(64), sourcePosition: { datasetId: 'product', dataEpoch: 'fixture', sequence: '12' },
+    indexGeneration: 'fixture', nextOffset: 10, expiresAt: 0 };
+  const page: SearchPage = { profile: 'public-concept-set-phrase-v1', resultGrain: 'mainVersion',
+    context: 'main-version-default', complete: true, total: 10, population: 10,
+    sourcePosition: { datasetId: 'product', dataEpoch: 'fixture', sequence: '12' }, indexGeneration: 'fixture',
+    next: continuation, results: [] };
+  const fetcher = Object.assign(async () => Response.json({ result: page }), { preconnect: fetch.preconnect });
+  const main = browserMainApi('https://story.invalid', { anonymous: true, fetcher });
+  const read = await readSearchPage({ search: main, names: main },
+    { phrase: 'library night', scope: { kind: 'global' }, language: null, term: null }, { language: 'en' });
+  expect(read.ok).toBe(true);
+  if (!read.ok) throw new Error('Expected the exported Concept-set page');
+  expect(read.page.next).toEqual(continuation);
+  expect(read.page.facets).toBeUndefined();
 });

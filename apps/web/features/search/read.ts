@@ -68,8 +68,9 @@ export async function readSearchPage(clients: { search: MainClient; names: MainC
     const { data, error } = await clients.search.v1.query.post(searchRequest(state, options.continuation));
     if (error) return { ok: false, failure: searchFailureOf(error.status, problemCode(error.value)),
       status: error.status, problem: error.value };
-    if (!data || !('results' in data.result) || !('next' in data.result) || !('sourcePosition' in data.result)
-      || data.result.profile === 'public-content-phrase-page-v1') return { ok: false, failure: 'unavailable' };
+    if (!data || !('results' in data.result) || !('next' in data.result) || !('sourcePosition' in data.result)) {
+      return { ok: false, failure: 'unavailable' };
+    }
     page = data.result;
   } catch {
     return { ok: false, failure: 'unavailable' };
