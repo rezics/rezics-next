@@ -91,13 +91,13 @@ function ReleaseDetails({ hit, locale }: { hit: SearchHit; locale: UiLocale }) {
   const t = levelsCopy(locale), tracking = trackingCopy(locale);
   return <ul aria-label={t.releases} className="grid min-w-0 gap-1 text-muted-foreground text-xs">
     {releases.values.map(release => <li key={release.release} data-release-revision={release.revision}
-      className="min-w-0 [overflow-wrap:anywhere]">
-      <Link href={releaseHref(release.release)} className="underline underline-offset-4">
+      className="flex min-w-0 flex-wrap items-center gap-x-2 [overflow-wrap:anywhere]">
+      <Link href={releaseHref(release.release)} className="inline-flex min-h-6 min-w-0 items-center py-1 underline underline-offset-4">
         {[t[releaseKind[release.kind]], release.year?.toString(), formatLabel(release.platform, tracking)]
           .filter(Boolean).join(' · ')}
       </Link>
       {release.sourceEvidence.flatMap(evidence => evidence.href && /^https?:\/\//i.test(evidence.href)
-        ? [<a key={evidence.observation} href={evidence.href} className="ms-2 underline underline-offset-4">
+        ? [<a key={evidence.observation} href={evidence.href} className="inline-flex min-h-6 min-w-0 items-center py-1 underline underline-offset-4">
           {evidence.provider}</a>] : [])}
     </li>)}
   </ul>;

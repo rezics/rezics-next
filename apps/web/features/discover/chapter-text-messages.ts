@@ -14,7 +14,7 @@ export const chapterTextMessages = defineMessages({
     noneYet: 'No chapter matches yet. Matches in chapter text come after title and name matches.',
     none: insert('No chapter text matches “{{phrase}}”.', { phrase: String }),
     showMore: 'Show more chapter matches', checkMore: 'Check more results', checking: 'Checking more results…',
-    noExcerpt: 'Matching passages aren’t shown here. Open a chapter to read it.', textFormat: 'Text',
+    noExcerpt: 'A matching passage isn’t available for this result. Open the chapter to read it.', textFormat: 'Text',
   },
   'zh-Hant': {
     title: '章節內文中的搜尋結果', resources: '標題與名稱中的搜尋結果',
@@ -24,7 +24,7 @@ export const chapterTextMessages = defineMessages({
     noneYet: '目前尚未找到章節內文結果。章節內文結果會排在標題與名稱結果之後。',
     none: insert('章節內文中沒有符合「{{phrase}}」的結果。', { phrase: String }),
     showMore: '顯示更多章節內文結果', checkMore: '繼續檢查其餘結果', checking: '正在檢查更多結果…',
-    noExcerpt: '此處不顯示符合的段落。開啟章節即可閱讀。', textFormat: '文字',
+    noExcerpt: '此結果沒有可顯示的符合段落。請開啟章節閱讀。', textFormat: '文字',
   },
   'zh-Hans': {
     title: '章节正文中的搜索结果', resources: '标题与名称中的搜索结果',
@@ -34,7 +34,7 @@ export const chapterTextMessages = defineMessages({
     noneYet: '目前尚未找到章节正文结果。章节正文结果排在标题与名称结果之后。',
     none: insert('章节正文中没有与“{{phrase}}”匹配的结果。', { phrase: String }),
     showMore: '显示更多章节正文结果', checkMore: '继续检查其余结果', checking: '正在检查更多结果…',
-    noExcerpt: '此处不显示匹配的段落。打开章节即可阅读。', textFormat: '文本',
+    noExcerpt: '此结果没有可显示的匹配段落。请打开章节阅读。', textFormat: '文本',
   },
   ja: {
     title: '章の本文で見つかった結果', resources: 'タイトルと名前で見つかった結果',
@@ -44,7 +44,7 @@ export const chapterTextMessages = defineMessages({
     noneYet: 'まだ章の本文では見つかっていません。章の本文の結果は、タイトルと名前の結果の後に続きます。',
     none: insert('章の本文に「{{phrase}}」に一致する結果はありません。', { phrase: String }),
     showMore: '章の本文の結果をさらに表示', checkMore: '残りの結果を確認', checking: 'さらに結果を確認しています…',
-    noExcerpt: '一致した箇所はここには表示されません。章を開いてお読みください。', textFormat: 'テキスト',
+    noExcerpt: 'この結果には表示できる一致箇所がありません。章を開いてお読みください。', textFormat: 'テキスト',
   },
   ko: {
     title: '챕터 본문에서 찾은 결과', resources: '제목과 이름에서 찾은 결과',
@@ -54,7 +54,7 @@ export const chapterTextMessages = defineMessages({
     noneYet: '아직 챕터 본문에서 찾은 결과가 없습니다. 챕터 본문 결과는 제목과 이름 결과 다음에 나옵니다.',
     none: insert('챕터 본문에 “{{phrase}}”와(과) 일치하는 결과가 없습니다.', { phrase: String }),
     showMore: '챕터 본문 결과 더 보기', checkMore: '나머지 결과 확인', checking: '결과를 더 확인하는 중…',
-    noExcerpt: '일치하는 구절은 여기에 표시되지 않습니다. 챕터를 열어 읽어 보세요.', textFormat: '텍스트',
+    noExcerpt: '이 결과에는 표시할 수 있는 일치 구절이 없습니다. 챕터를 열어 읽어 보세요.', textFormat: '텍스트',
   },
   de: {
     title: 'Im Kapiteltext gefunden', resources: 'In Titeln und Namen gefunden',
@@ -65,7 +65,7 @@ export const chapterTextMessages = defineMessages({
     none: insert('Kein Kapiteltext enthält „{{phrase}}“.', { phrase: String }),
     showMore: 'Weitere Treffer im Kapiteltext anzeigen', checkMore: 'Weitere Ergebnisse prüfen',
     checking: 'Weitere Ergebnisse werden geprüft …',
-    noExcerpt: 'Passende Textstellen werden hier nicht angezeigt. Öffne ein Kapitel, um es zu lesen.', textFormat: 'Text',
+    noExcerpt: 'Für diesen Treffer ist keine passende Textstelle verfügbar. Öffne das Kapitel, um es zu lesen.', textFormat: 'Text',
   },
   fr: {
     title: 'Trouvé dans le texte des chapitres', resources: 'Trouvé dans les titres et les noms',
@@ -76,7 +76,7 @@ export const chapterTextMessages = defineMessages({
     none: insert('Aucun texte de chapitre ne correspond à « {{phrase}} ».', { phrase: String }),
     showMore: 'Afficher plus de résultats dans les chapitres', checkMore: 'Vérifier d’autres résultats',
     checking: 'Vérification d’autres résultats…',
-    noExcerpt: 'Les passages correspondants ne sont pas affichés ici. Ouvrez un chapitre pour le lire.', textFormat: 'Texte',
+    noExcerpt: 'Aucun passage correspondant n’est disponible pour ce résultat. Ouvrez le chapitre pour le lire.', textFormat: 'Texte',
   },
   es: {
     title: 'Encontrado en el texto de los capítulos', resources: 'Encontrado en títulos y nombres',
@@ -86,6 +86,6 @@ export const chapterTextMessages = defineMessages({
     noneYet: 'Todavía no hay resultados en el texto de los capítulos. Aparecen después de los resultados en títulos y nombres.',
     none: insert('Ningún texto de capítulo coincide con «{{phrase}}».', { phrase: String }),
     showMore: 'Mostrar más resultados en capítulos', checkMore: 'Revisar más resultados', checking: 'Revisando más resultados…',
-    noExcerpt: 'Los pasajes coincidentes no se muestran aquí. Abre un capítulo para leerlo.', textFormat: 'Texto',
+    noExcerpt: 'No hay un pasaje coincidente disponible para este resultado. Abre el capítulo para leerlo.', textFormat: 'Texto',
   },
 });
