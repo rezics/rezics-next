@@ -1,6 +1,20 @@
 import { expect, test } from 'bun:test';
 import { BrowseReadError, type ListPage } from './api.ts';
-import { browseReadFailure, readBrowse, readBrowseScan } from './browse-read.ts';
+import { BROWSE_SCAN_PAGES, browseReadFailure, readBrowse, readBrowseScan } from './browse-read.ts';
+
+test.each([true, false])('scan failure classification preserves the actual successful page at a match or action boundary: %s', async hasMatch => {
+  const pages: { ok: true; data: ListPage<string> }[] = [];
+  const scan = await readBrowseScan(async () => {
+    const page = { ok: true as const, data: { items: hasMatch ? ['match'] : [], complete: false,
+      nextCursor: `opaque:+/%?=&雪:${pages.length}`, count: { value: 7, kind: 'at-least' as const } } };
+    pages.push(page);
+    return page;
+  }, null);
+  expect(scan.checkedPages).toBe(hasMatch ? 1 : BROWSE_SCAN_PAGES);
+  expect(scan.result).toBe(pages.at(-1));
+  expect(scan.result).toMatchObject({ data: { nextCursor: `opaque:+/%?=&雪:${pages.length - 1}`,
+    count: { value: 7, kind: 'at-least' } } });
+});
 
 test('compact responses acquire honest typed scan failures without losing their original HTTP evidence', async () => {
   for (const [status, code, failure] of [

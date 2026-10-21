@@ -43,6 +43,18 @@ test('an exact expression exception cannot cover another projection in the same 
   expect(changedContinuationGroups(continuationInventory([source(`${text}\nexport function another(other) { return other.items; }`)]), baseline)).toHaveLength(1);
 });
 
+test('the bounded browse scan exception refuses a changed owner continuation', () => {
+  const path = 'apps/web/features/discover/browse-read.ts';
+  const original = readFileSync(join(root, path), 'utf8');
+  const retained = 'return { result, checkedPages };';
+  expect(original).toContain(retained);
+  expect(changedContinuationGroups(continuationInventory([source(original, path)]), accepted.violations)).toEqual([]);
+  const dropped = original.replace(retained,
+    'return { result: { ...result, data: { ...result.data, nextCursor: null } }, checkedPages };');
+  expect(changedContinuationGroups(continuationInventory([source(dropped, path)]), accepted.violations))
+    .toContain(`${path}: readBrowseScan: <syntax>: dropped-continuation: result.data.items`);
+});
+
 // These readers consume a URL token. Keep each exception pinned to its whole reader.
 test.each([
   ['apps/web/features/realm/discussions-route.tsx', 'cursor: parseCursor(search)', 'cursor: parseCursor(search) + "suffix"'],
