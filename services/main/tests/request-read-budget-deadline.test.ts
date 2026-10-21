@@ -145,3 +145,23 @@ test('joining an ambient request shortens its original timer and cancels already
     expect(f.headers).toHaveLength(2);
   } finally { await f.stop(); }
 });
+
+
+test('native hops keep the absolute operation deadline across preflight and a tighter nested owner', async () => {
+  const f = fixture();
+  const absolute = Date.now() + 1500;
+  try {
+    await withFusekiReadRequest(request(absolute), limits, async () => {
+      await f.graph.query('SELECT (1 AS ?value) WHERE {}');
+      await delay(30);
+      await fusekiReadBudget.run(scope(performance.now() + 500), async () => {
+        await f.graph.query('SELECT (2 AS ?value) WHERE {}');
+      });
+    });
+    expect(f.headers).toHaveLength(2);
+    const deadlines = f.headers.map(headers => Number(headers.get('x-rezics-server-deadline')));
+    expect(deadlines.every(deadline => Number.isSafeInteger(deadline) && deadline > 0 && deadline <= absolute)).toBe(true);
+    expect(deadlines[1]!).toBeLessThan(deadlines[0]! - 500);
+    expect(Number(f.headers[1]!.get('x-rezics-read-budget-ms'))).toBeLessThanOrEqual(500);
+  } finally { await f.stop(); }
+});

@@ -13,6 +13,156 @@ import org.apache.jena.sparql.exec.QueryExecResult;
 /** Native reads use the same request-local work owner as commands. */
 final class QueryWorkService extends SPARQL_QueryDataset {
     static final String READ_BUDGET_HEADER = "X-Rezics-Read-Budget-Ms";
+    static final String READ_DEADLINE_HEADER = "X-Rezics-Server-Deadline";
+
+    /** Charge native dispatch time as well as execution. The Unix deadline is
+     * the existing operation's cross-hop cap, never a fresh allocation. */
+    static long readDeadline(int milliseconds, String forwarded, long began) {
+        long deadline = began + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(milliseconds);
+        if (forwarded != null && forwarded.matches("[0-9]{1,16}")) {
+            long absolute = Long.parseLong(forwarded);
+            if (absolute > 0 && absolute <= 9_007_199_254_740_991L) {
+                long remaining = Math.min(milliseconds, absolute - System.currentTimeMillis());
+                // Clamp expired values before conversion to keep arithmetic bounded.
+                deadline = Math.min(deadline, System.nanoTime()
+                    + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(Math.max(0, remaining)));
+            }
+        }
+        return deadline;
+    }
+    /** Private, in-process observation of synchronous filter work, including
+     * refused and unbudgeted requests. Jetty dispatch before this filter is
+     * outside coverage: this owner has no acquisition queue (pending is zero).
+     * Neither interrupt nor response settlement retires a worker; filter exit
+     * after boundary cleanup does. No engine/lock/transaction release is implied. */
+    record ReadWorkerMeter(long starts, long released, long active, long pending,
+            Long lastStartAt, Long zeroSince) {}
+    record ReadWorkerEvent(String kind, Long worker, String trace, long at,
+            boolean complete, ReadWorkerMeter totals) {}
+    record ReadWorkerStatus(boolean attached, boolean complete, long failures,
+            long dropped, int pendingNotifications, Long detachedAt, ReadWorkerMeter totals) {}
+
+    static final class ReadWorkerLifecycle {
+        private static final int SUBSCRIBERS = 8, QUEUED = 64;
+        private final java.util.Set<ReadWorkerObservation> subscribers = new java.util.HashSet<>();
+        private boolean started;
+        private long sequence;
+
+        synchronized ReadWorkerObservation observe(java.util.function.Consumer<ReadWorkerEvent> sink) {
+            java.util.Objects.requireNonNull(sink);
+            if (subscribers.size() >= SUBSCRIBERS) throw new IllegalStateException("Native worker observer limit");
+            var observation = new ReadWorkerObservation(this, sink, !started);
+            subscribers.add(observation);
+            observation.emit("snapshot", null, null, System.currentTimeMillis());
+            return observation;
+        }
+        synchronized ReadWorkerFlight enter(jakarta.servlet.ServletRequest request) {
+            started = true;
+            if (subscribers.isEmpty()) return null;
+            var selected = subscribers.stream().filter(subscriber -> subscriber.detachedAt == null).toList();
+            if (selected.isEmpty()) return null;
+            // Reuse the existing W3C propagation identity, never a new diagnostic
+            // header or authority. Keep only a validated trace id, not headers.
+            String trace = null;
+            try {
+                String parent = ((jakarta.servlet.http.HttpServletRequest) request).getHeader("traceparent");
+                if (parent != null && parent.matches("00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}")
+                        && !parent.substring(3, 35).equals("0".repeat(32))
+                        && !parent.substring(36, 52).equals("0".repeat(16))) trace = parent.substring(3, 35);
+            } catch (Throwable failure) {
+                for (var subscriber : selected) { subscriber.failures++; subscriber.complete = false; }
+            }
+            long at = System.currentTimeMillis(), worker = ++sequence;
+            for (var subscriber : selected) {
+                subscriber.starts++; subscriber.active++; subscriber.lastStartAt = at; subscriber.zeroSince = null;
+                subscriber.emit("started", worker, trace, at);
+            }
+            return new ReadWorkerFlight(this, selected, worker, trace);
+        }
+        synchronized void release(ReadWorkerFlight flight) {
+            if (flight.subscribers == null) return;
+            long at = System.currentTimeMillis();
+            for (var subscriber : flight.subscribers) {
+                if (subscriber.detachedAt != null) continue;
+                subscriber.active--; subscriber.released++;
+                if (subscriber.active == 0) subscriber.zeroSince = at;
+                subscriber.emit("released", flight.worker, flight.trace, at);
+            }
+            flight.subscribers = null; flight.trace = null;
+        }
+    }
+    static final class ReadWorkerFlight implements AutoCloseable {
+        private final ReadWorkerLifecycle owner;
+        private java.util.List<ReadWorkerObservation> subscribers;
+        private final long worker;
+        private String trace;
+        private ReadWorkerFlight(ReadWorkerLifecycle owner, java.util.List<ReadWorkerObservation> subscribers,
+                long worker, String trace) {
+            this.owner = owner; this.subscribers = subscribers; this.worker = worker; this.trace = trace;
+        }
+        @Override public void close() { owner.release(this); }
+    }
+    /** Attach before first native work/initial idle. Late attachment is sticky
+     * incomplete. Delivery uses at most one daemon and 64 queued events per
+     * subscriber; a blocking/failing sink cannot hold a native worker. Detached
+     * slots remain reserved until drained, bounding even stuck private sinks.
+     * After the full window: detach, bounded drain, inspect status, then verify
+     * the consumer's separate bounded sink drain/count/bytes/hash/flush/close.
+     * Missing events or incomplete/drop/failure status never establishes zero. */
+    static final class ReadWorkerObservation {
+        private final ReadWorkerLifecycle owner;
+        private java.util.function.Consumer<ReadWorkerEvent> sink;
+        private final java.util.concurrent.ThreadPoolExecutor delivery;
+        private long starts, released, active, failures, dropped;
+        private int notifications;
+        private Long lastStartAt, zeroSince = System.currentTimeMillis(), detachedAt;
+        private boolean complete;
+        private ReadWorkerObservation(ReadWorkerLifecycle owner,
+                java.util.function.Consumer<ReadWorkerEvent> sink, boolean complete) {
+            this.owner = owner; this.sink = sink; this.complete = complete;
+            delivery = new java.util.concurrent.ThreadPoolExecutor(1, 1, 0,
+                java.util.concurrent.TimeUnit.MILLISECONDS, new java.util.concurrent.ArrayBlockingQueue<>(ReadWorkerLifecycle.QUEUED),
+                work -> { var thread = new Thread(work, "native-worker-observer"); thread.setDaemon(true); return thread; });
+        }
+        private ReadWorkerMeter meter() { return new ReadWorkerMeter(starts, released, active, 0, lastStartAt, zeroSince); }
+        private void emit(String kind, Long worker, String trace, long at) {
+            var event = new ReadWorkerEvent(kind, worker, trace, at, complete, meter());
+            notifications++;
+            try {
+                delivery.execute(() -> {
+                    try { sink.accept(event); }
+                    catch (Throwable failure) { synchronized (owner) { failures++; complete = false; } }
+                    finally { synchronized (owner) { notifications--; } }
+                });
+            } catch (RuntimeException failure) { notifications--; dropped++; complete = false; }
+        }
+        ReadWorkerStatus status() {
+            synchronized (owner) {
+                return new ReadWorkerStatus(detachedAt == null, complete, failures, dropped,
+                    notifications, detachedAt, meter());
+            }
+        }
+        void detach() {
+            synchronized (owner) {
+                if (detachedAt != null) return;
+                detachedAt = System.currentTimeMillis();
+                if (active != 0) complete = false;
+                delivery.shutdown();
+            }
+        }
+        /** Wait at most one second; false means cleanup/coverage remains unknown.
+         * This closes only source delivery, never the consumer's private sink. */
+        boolean drain() throws InterruptedException {
+            synchronized (owner) { if (detachedAt == null) throw new IllegalStateException("Detach before drain"); }
+            if (!delivery.awaitTermination(1, java.util.concurrent.TimeUnit.SECONDS)) return false;
+            synchronized (owner) { sink = null; owner.subscribers.remove(this); }
+            return true;
+        }
+    }
+    private static final ReadWorkerLifecycle READ_WORKERS = new ReadWorkerLifecycle();
+    static ReadWorkerObservation observeReadWorkers(java.util.function.Consumer<ReadWorkerEvent> sink) {
+        return READ_WORKERS.observe(sink);
+    }
     /** A transport cancellation and the caller's remaining wall allocation
      * cover parse, readiness, engine execution and lazy response consumption. */
     static final class ReadBoundary implements AutoCloseable {
@@ -26,6 +176,7 @@ final class QueryWorkService extends SPARQL_QueryDataset {
             return timer;
         }
         private final Thread worker = Thread.currentThread();
+        private final ReadBoundary parent = CURRENT.get();
         private final boolean wasInterrupted = worker.isInterrupted();
         private final long deadline;
         private final java.util.concurrent.ScheduledFuture<?> expiry;
@@ -37,8 +188,12 @@ final class QueryWorkService extends SPARQL_QueryDataset {
         private String reason;
 
         ReadBoundary(int milliseconds) {
-            deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(milliseconds);
-            expiry = TIMER.schedule(() -> cancel("deadline"), milliseconds, java.util.concurrent.TimeUnit.MILLISECONDS);
+            this(System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(milliseconds));
+        }
+        ReadBoundary(long requestedDeadline) {
+            deadline = parent == null ? requestedDeadline : Math.min(requestedDeadline, parent.deadline);
+            expiry = TIMER.schedule(() -> cancel("deadline"), Math.max(0, deadline - System.nanoTime()),
+                java.util.concurrent.TimeUnit.NANOSECONDS);
         }
         synchronized void cancel(String why) {
             if (closed || reason != null) return;
@@ -59,6 +214,7 @@ final class QueryWorkService extends SPARQL_QueryDataset {
             if (closed || reason != null) return;
             // Only the operation's body-complete execution/capture path arms
             // this probe. Leave any bytes already owned by Jetty untouched.
+            if (!connection.getEndPoint().isOpen()) { cancel("client-cancelled"); return; }
             if (!connection.getParser().isComplete() || !connection.isRequestBufferEmpty()) return;
             try {
                 int filled = connection.getEndPoint().fill(transportInput);
@@ -88,6 +244,7 @@ final class QueryWorkService extends SPARQL_QueryDataset {
             return current == null ? fallback : Math.min(fallback, current.deadline);
         }
         private synchronized void check() {
+            if (parent != null) parent.check();
             if (reason == null && System.nanoTime() >= deadline) cancel("deadline");
             if (reason != null) throw new org.apache.jena.query.QueryCancelledException(
                 new java.util.concurrent.CancellationException("Native read " + reason));
@@ -127,7 +284,14 @@ final class QueryWorkService extends SPARQL_QueryDataset {
     }
 
     static final class ReadBoundaryFilter implements jakarta.servlet.Filter {
+        private final ReadWorkerLifecycle workers;
+        ReadBoundaryFilter() { this(READ_WORKERS); }
+        ReadBoundaryFilter(ReadWorkerLifecycle workers) { this.workers = workers; }
         @Override public void doFilter(jakarta.servlet.ServletRequest request, jakarta.servlet.ServletResponse response,
+                jakarta.servlet.FilterChain chain) throws java.io.IOException, jakarta.servlet.ServletException {
+            try (var worker = workers.enter(request)) { filterRead(request, response, chain); }
+        }
+        private void filterRead(jakarta.servlet.ServletRequest request, jakarta.servlet.ServletResponse response,
                 jakarta.servlet.FilterChain chain) throws java.io.IOException, jakarta.servlet.ServletException {
             var http = (jakarta.servlet.http.HttpServletRequest) request;
             String header = http.getHeader(READ_BUDGET_HEADER);
@@ -135,15 +299,23 @@ final class QueryWorkService extends SPARQL_QueryDataset {
             if (!header.matches("[1-9][0-9]{0,4}") || Integer.parseInt(header) > 10_000) {
                 ((jakarta.servlet.http.HttpServletResponse) response).sendError(400, "Invalid native read allocation"); return;
             }
+            var transport = org.eclipse.jetty.ee11.servlet.ServletContextRequest.getServletContextRequest(request);
+            long deadline = readDeadline(Integer.parseInt(header), http.getHeader(READ_DEADLINE_HEADER),
+                transport.getBeginNanoTime());
             ReadBoundary previous = ReadBoundary.CURRENT.get();
-            try (var boundary = new ReadBoundary(Integer.parseInt(header))) {
+            try (var boundary = new ReadBoundary(deadline)) {
                 ReadBoundary.CURRENT.set(boundary);
-                var transport = org.eclipse.jetty.ee11.servlet.ServletContextRequest.getServletContextRequest(request);
                 if (transport.getConnectionMetaData().getConnection()
                         instanceof org.eclipse.jetty.server.internal.HttpConnection connection)
                     boundary.connection = connection;
                 transport.addFailureListener(failure -> boundary.cancel("client-cancelled"));
-                try { boundary.check(); chain.doFilter(request, response); }
+                try {
+                    // Start disconnect coverage before parsing/transaction admission;
+                    // the probe touches the socket only once Jetty owns no body bytes.
+                    boundary.monitorTransport();
+                    if (boundary.connection != null) boundary.probeTransport();
+                    boundary.check(); chain.doFilter(request, response);
+                }
                 finally {
                     if (boundary.reason != null && !response.isCommitted())
                         ((jakarta.servlet.http.HttpServletResponse) response).setHeader("X-Rezics-Read-Reason", boundary.reason);

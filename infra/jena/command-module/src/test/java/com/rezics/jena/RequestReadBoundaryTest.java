@@ -68,7 +68,8 @@ public class RequestReadBoundaryTest {
                 };
             }
         }
-        Fixture() {
+        Fixture() { this(0); }
+        Fixture(long dispatchDelay) {
             // GRAPH checks existence before reaching the blocking lookup.
             data.begin(ReadWrite.WRITE);
             try {
@@ -79,6 +80,13 @@ public class RequestReadBoundaryTest {
             var command = Operation.alloc("urn:rezics:test:read-boundary", "command", "command");
             server = FusekiServer.create().port(0).fusekiModules(FusekiModules.empty())
                 .add("/data", data, false)
+                .addFilter("/*", (request, response, chain) -> {
+                    if (dispatchDelay > 0) {
+                        try { Thread.sleep(dispatchDelay); }
+                        catch (InterruptedException interrupted) { throw new java.io.IOException(interrupted); }
+                    }
+                    chain.doFilter(request, response);
+                })
                 .addFilter("/*", new QueryWorkService.ReadBoundaryFilter())
                 .registerOperation(Operation.Query, org.apache.jena.riot.WebContent.contentTypeSPARQLQuery,
                     new QueryWorkService())
@@ -150,4 +158,50 @@ public class RequestReadBoundaryTest {
             fixture.freshRead(false);
         }
     }
+    @Test(timeout = 10_000) public void exhaustedDispatchAllocationStartsNoOrdinaryOrTemplateEngine() throws Exception {
+        for (boolean template : new boolean[] {false, true}) {
+            try (var fixture = new Fixture(250)) {
+                var response = fixture.client.send(fixture.request(template, SLOW, "80"), HttpResponse.BodyHandlers.ofString());
+                assertNotEquals(response.body(), 200, response.statusCode());
+                assertEquals("deadline", response.headers().firstValue("X-Rezics-Read-Reason").orElse(null));
+                assertEquals("queued request started an engine after its allocation", 1, fixture.started.getCount());
+                assertEquals(0, fixture.active.get());
+                fixture.freshRead(template);
+            }
+        }
+    }
+
+    @Test(timeout = 10_000) public void expiredForwardedDeadlineStartsNoOrdinaryOrTemplateEngine() throws Exception {
+        for (boolean template : new boolean[] {false, true}) {
+            try (var fixture = new Fixture()) {
+                var request = HttpRequest.newBuilder(fixture.request(template, SLOW, "10000"), (name, value) -> true)
+                    .header(QueryWorkService.READ_DEADLINE_HEADER, Long.toString(System.currentTimeMillis() - 1)).build();
+                var response = fixture.client.send(request, HttpResponse.BodyHandlers.ofString());
+                assertNotEquals(response.body(), 200, response.statusCode());
+                assertEquals("deadline", response.headers().firstValue("X-Rezics-Read-Reason").orElse(null));
+                assertEquals(1, fixture.started.getCount());
+                assertEquals(0, fixture.active.get());
+                fixture.freshRead(template);
+            }
+        }
+    }
+
+    @Test(timeout = 10_000) public void partlySpentDeadlineIncludesDispatchAndReleasesTheActualEngine() throws Exception {
+        for (boolean template : new boolean[] {false, true}) {
+            try (var fixture = new Fixture(100)) {
+                long absolute = System.currentTimeMillis() + 900;
+                var request = HttpRequest.newBuilder(fixture.request(template, SLOW, "10000"), (name, value) -> true)
+                    .header(QueryWorkService.READ_DEADLINE_HEADER, Long.toString(absolute)).build();
+                var pending = fixture.client.sendAsync(request, HttpResponse.BodyHandlers.ofString());
+                assertTrue("actual engine never started", fixture.started.await(600, TimeUnit.MILLISECONDS));
+                long remaining = Math.max(0, absolute - System.currentTimeMillis());
+                assertTrue("native engine exceeded shared deadline plus 300ms release grace",
+                    fixture.finished.await(remaining + 300, TimeUnit.MILLISECONDS));
+                assertEquals(0, fixture.active.get());
+                assertNotEquals(200, pending.get(2, TimeUnit.SECONDS).statusCode());
+                fixture.freshRead(template);
+            }
+        }
+    }
+
 }

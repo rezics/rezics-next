@@ -275,6 +275,10 @@ function readBudgetHeaders(): Record<string, string> {
   if (!budget) return {};
   const remainingMs = Math.min(10_000, Math.max(1, Math.ceil((budget.deadline ?? performance.now() + 10_000) - performance.now())));
   return { 'x-rezics-read-budget-ms': String(remainingMs),
+    // Carry the same deadline through native dispatch; its duration must not
+    // restart after network transit or a queued servlet admission.
+    'x-rezics-server-deadline': String(Date.now() + Math.max(0,
+      Math.floor((budget.deadline ?? performance.now() + 10_000) - performance.now()))),
     ...(budget.diagnostics && !budget.diagnostics.closed
       ? { 'x-rezics-search-budget-ms': String(Math.min(1_500, remainingMs)) } : {}) };
 }
