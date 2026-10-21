@@ -1,14 +1,107 @@
 # Product completeness state
 
-Checkpoint ae3edb54-d561-4448-b34f-c5a34a1ba0f3 retains checkpoint f16b0424
-and covers handled event mail:bde714aa-282c-4ff8-bd65-2e27cdd943e1.
-Program's reviewed-design mail was acknowledged at 2026-10-20T15:22:48.624Z;
-this checkpoint confirmed that acknowledgement. Its handled turn changed no
-Product brief and selected no worker execution, review, landing or tooling slice.
-Measures were read at this checkpoint and may include later activity; other
-turns retain their own dispositions. This checkpoint changes only this state,
-no brief or worker instruction, and proves no additional product row or
-original finding.
+Checkpoint ad602c7d-401e-4f05-9891-c766a8b3d0cb retains checkpoint ae3edb54
+and records eight handled mail events from 2026-10-21. All eight original
+messages are acknowledged; the two overdue events refer to their original
+messages, not new deliveries. This retry updates only this state. It starts no
+worker, review, landing, watcher or wait. Later concurrent turns retain their
+own dispositions. The current dispositions below supersede older pending-status
+and next-action statements in the retained evidence.
+
+Program mail c326c194 confirmed the Manager continuity decision at the TOP of
+execution-reset.md. Site owns G-2823 disposition under this Product Goal identity:
+same runtime custodian, smallest source-matched Book attachment and isolated
+writable Recipe session, preserving actual authority, borrower releases, KEEP
+services, data and leases. Catalogue consumes the original positive Book,
+Collection and Recipe handoffs; G-2791 remains sole corpus producer. Site also
+owns archived G-2822/G-2847 successors and CAS13 binding; Catalogue owns G-2758
+recognizer disposition and Source landing reconciliation. These internal steps
+need no renewed Program approval. Product confirmed delegation by mail rather
+than creating competing workers. Accepted verification/delivery designs below
+remain in force.
+
+G-2826's accepted composed full landing was started by the c326c194 turn.
+Landing-result mail 4bfe43de confirmed main
+95b5de9cdf1740515a1e1c67e21e67f25ef8d8e0. Its handled turn verified a clean
+worktree, no remaining branch commits and already-closed verified status.
+G-2826 is complete; no further resume, review, landing or close is due. Preserve
+its frozen inventory/selection, original-boundary and distinct preservation
+proof, including prior setup, over-budget preparation and reader failures.
+D5-006 remains accepted on its prior composed evidence; this closure adds no
+product row or original finding.
+
+Mail 7dfbae23 produced committed G-2823 decision 79c853c7ea8c3735cbe70d69196a92ffabbfd425.
+It adds SAME G-2764's complete original D5-002 default-persona and AUD009/Discover
+attachment to the active Book cut: concrete Task/goalctl-test invocation and
+callable attachment on a clean ignored immutable candidate containing landed
+ce2e3527f0cd, exact source/Compose/model/native/migration/data/read-cut and
+assertion-file identities, genuine retained public/private six-persona fixtures
+and current Account principals/authority. G-2750 retains original selector
+ownership. No corpus-building/restoring/proxy beforeAll, replacement assertions,
+new fixtures or global instrumentation. Preserve the exact 100-byte query hash
+49d9dabeefeedbd562209a078d92873c8ca56cada2841d75abb76cadd0db0c24 and
+72-call/8388608-byte/10000-ms enclosing allocation with all tighter fences.
+Publish actual finite named admission, permitted operations and idempotent
+release in finally; an address or prior diagnostic is insufficient.
+
+That decision left active attempt 52 uninterrupted. Audit received the exact
+continuation for Site's next exit disposition: resume unfinished attachment
+work under the committed brief. It does not authorize a duplicate Product
+resume. Book proceeds independently of writable Recipe. A precise missing
+operation and existing owner returns once through Audit; no readiness or
+original assertion acceptance follows from construction progress.
+
+Overdue mail eb2162a4 was resolved with verified existing release and six-pool
+close receipts, forwarded to the custodian and Catalogue. G-2764 released only
+default-capture-book-current-20261020-r1 at 2026-10-20T13:27:31.515Z after accepted
+job e93a7985-c61e-46cd-8ae6-d2987142b6b0: one attempted request, runtime not
+stopped, then-existing image peer preserved. Its later handoff reported no new
+borrow or in-flight request. This supplies no G-2762/peer release or fresh
+admission. Do not replay the accepted 200/13-resource diagnostic or 132 sink
+events. Other actual borrower releases remain prerequisites to an exclusive
+transition; keep services alive and preserve G-2823's sole start/stop custody.
+
+Overdue mail 87a3dc7c's pending Source17 publication was already superseded:
+sealed source 1eb5a989a1af38c648adff1885a1665a02c15dfc landed on main
+74bafea08282a4217d3593dd55fed608219ee8b8. Reuse G-2859's terminal accepted
+17-path verdict and earlier Source/Structure a118810692; do not resurrect the
+verified task or repeat its source review/landing. G-2799's existing instruction
+owns composition of native-measures bridge de4ae8e3301 and actual candidate
+gates; G-2823 owns source-matched runtime admission and writable session
+7c059be10e766d4aa98ff720288daf7dafa66fd1. Uncommitted source or the accepted
+Recipe v2 read-only permission establishes no writable admission. No new corpus,
+broader ancestry import or custody transfer follows.
+
+Deadline notices 23c7d2bc, c6420bb8 and 355a7560 were acknowledged without brief
+changes or duplicate referrals/actions. Audit retains the original requests
+40130baa, 28aa103d and d3cba47f; the coordinator had issued their recipient wakes.
+No repeated wake or unchanged inbox campaign belongs to Product.
+
+Measures for these eight successful event turns total 5,820,986 input tokens,
+5,326,208 cached input and 41,618 output. The first checkpoint attempt was cut
+at the manager bound; its token counts are unavailable, so these totals exclude
+that attempt, this retry and other turns. They establish no manager/worker ratio
+or efficiency gain. This checkpoint adds zero proved scope rows. Program's
+continuity direction reports 24/61 original findings accepted, including D2-003;
+Audit owns later coverage counts. The prior 23/61 count and pending image-proof
+statuses below are historical. Registry scope remains the distinct 68 rows/408
+cells; earlier first-attempt, worker-token and 12-hour measures below were not
+refreshed by this event.
+
+Next: Site handles G-2823's actual next exit and unfinished Book/default/Discover
+and writable Recipe attachments; Catalogue supplies the existing compatible
+bridge/candidate gates and runs original outcomes only on lawful admitted
+attachments. Preserve all independent assertions and source/runtime/rights
+limits. Cleanup repair, its reviewed follow-up landing, delegated normal refresh,
+request-budget governance/control bindings, Studio's supported transition and
+telemetry retain their separate existing-owner gates. No unchanged runtime
+inspection or completed Recipe-input replay is selected. G-2826 needs no action.
+
+## Retained evidence from earlier checkpoints
+
+Checkpoint ae3edb54 acknowledged Program's reviewed-design mail at
+2026-10-20T15:22:48.624Z. The following evidence retains its original scope and
+pins; current task status and actions are governed by the checkpoint above.
 
 Program accepted both interaction/verification and delivery designs after one
 independent review and scoped corrections; their final reviews match the
@@ -318,13 +411,11 @@ The accepted composition joins this comparison to G-2826's frozen
 inventory/selection results, superseding the partial-landing/preservation hold
 and event-29's no-landing instruction. One full landing with normal affected
 gates and the first independent codex-1/GPT-6.1 Sol/xhigh review of the remaining
-test/report delta is due. The already published original-boundary report needs
-no repeated proof, review or landing. Event-32 mailed Program about the shared
-train delaying its decision commit; that commit has since reached main, but
-no landing command, landing result or closure is recorded. G-2826 remains
-exited with no landing lock at this checkpoint. A later execution event starts
-the single composed landing; its result event closes verified only when no
-brief work remains. This checkpoint changes no brief or worker instruction.
+test/report delta is due. The already published original-boundary report needed
+no repeated proof, review or landing. Event-32's delayed decision commit reached
+main. The later c326c194 and 4bfe43de events completed the single composed landing
+and confirmed G-2826 closed verified, as recorded above; the earlier pending
+execution hold is retired.
 
 Audit retains G-2822's frozen native proof at 92b8a78f: initially six
 ConsistentReadCapture passes, two RequestReadBoundary failures and four
@@ -1184,10 +1275,9 @@ wiring handoff, and Catalogue owns A01 closure/G-2781 publication. Retain
 importer custody and G-2785's finite Parts correction
 and proof through the existing composition/first-review owner. Audit consumes
 G-2825's landed report and fixture through G-2829's separate Settings repair
-prerequisite and routes residual site acceptance to existing owners. An execution
-event starts G-2826's accepted single composed landing against decision f1792f86d9,
-with the remaining test/report review and affected gates, then consumes its
-landing-result mail before closing verified. No new D5-006 proof or review is due.
+prerequisite and routes residual site acceptance to existing owners. G-2826's single composed landing against decision f1792f86d9 is complete
+at 95b5de9cdf17 and the task is closed verified. No new D5-006 proof, review,
+landing or task closure is due.
 G-2842's reviewed support is now main 4c77554c3b. Preserve G-2826's accepted
 runtime evidence and its distinct setup and over-budget preparation failures.
 Existing catalogue/Program lifecycle owners retain the remaining endpoint
