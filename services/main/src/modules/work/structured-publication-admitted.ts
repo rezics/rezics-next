@@ -1,4 +1,5 @@
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
+import { CommandRejected } from '../../infrastructure/fuseki.ts';
 import type { VerifiedPublicationAttribution } from './sourced-structure-publication.ts';
 import type { InstructionAdoption } from './instruction-adoption.ts';
 import { AdmissionDenied, AdmissionExpired, AdmissionUnavailable,
@@ -80,7 +81,7 @@ export async function changeAdmittedWorkStructurePublication(
     return { ...checkedWorkStructurePublicationReceipt(terminal, registered, input, digest),
       replayed: registered.replayed };
   } catch (error) {
-    if (error instanceof IdempotencyConflict || error instanceof InvalidPublicationInput
+    if (error instanceof CommandRejected || error instanceof IdempotencyConflict || error instanceof InvalidPublicationInput
       || error instanceof PublicationUnavailable || error instanceof StalePublicationHead
       || error instanceof WorkStructurePublicationRightsDenied
       || error instanceof AdmissionDenied || error instanceof AdmissionUnavailable) throw error;
