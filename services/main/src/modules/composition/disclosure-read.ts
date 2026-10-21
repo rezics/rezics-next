@@ -1,7 +1,6 @@
 import { GRAPHS, iri } from '../work/activate.ts';
 import { publicWork, unerased, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import { targetSummaries, targetSummaryReader, TARGET_RESOLVE_COST } from '../target/resolve.ts';
-import { readResourceSummaries } from '../media/summary.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import { canReadStructureTargets, isCatalogTarget, type StructureProfileRegistration } from '../structure/profiles.ts';
 import { admittedPublicWorks, publishedStructuredWorkSourceFromRows, structuredPublicationRead }
@@ -24,15 +23,29 @@ export async function canReadCompositionWork(session: WorkReadSession, work: str
   if (!rows.length) return false;
   // Publication joins can multiply even private Work rows. Establish audience
   // admission before reporting their shape, so private and absent stay equal.
-  const readable = rows.some(row => row.public?.value === 'true') || !!session.principal && !!session.options.actingSubject
-    && await session.deps.access.canReadWork(session.principal, session.options.actingSubject, work);
+  const canReadOwner = async () => {
+    session.checkDeadline();
+    return rows.some(row => row.public?.value === 'true') || !!session.principal && !!session.options.actingSubject
+      && await session.deps.access.canReadWork(session.principal, session.options.actingSubject, work);
+  };
+  const readable = await canReadOwner();
   if (!readable) return false;
   if (rows.length !== 1 || !rows[0]?.public) throw new WorkReadUnavailable('Work disclosure is ambiguous');
   // Reuse the exact source at this Work probe's cut; a separate source query
   // would add a scalar round trip to every parts/wholes admission.
   const source = publishedStructuredWorkSourceFromRows(rows, work, rows[0]!.main?.value ?? '');
   const sources = new Map(source ? [[work, source]] : []);
-  return (await admittedPublicWorks(session.deps.environment, [work], session.viewer, sources)).has(work);
+  const disclosed = async () => {
+    session.checkDeadline();
+    return (await admittedPublicWorks(session.deps.environment, [work], session.viewer, sources)).has(work);
+  };
+  const admitted = await disclosed();
+  // The graph probe fences publication and heads; grants and disclosure also
+  // have live owners. A closing denial must remain available for native error
+  // classification before the enclosing session refuses its prior selection.
+  if (admitted) session.observeDependency(`composition-work-disclosure:${work}`, true,
+    async () => await canReadOwner() && await disclosed());
+  return admitted;
 }
 
 /** Public semantic disclosure remains owned by Access, including closed gates.
@@ -57,9 +70,9 @@ async function canReadCompositionResources(session: WorkReadSession, resources: 
   for (let at = 0; at < resources.length; at += TARGET_RESOLVE_COST.batch) {
     session.checkDeadline();
     const batch = resources.slice(at, at + TARGET_RESOLVE_COST.batch);
-    const result = await readResourceSummaries(session.deps.environment, session.deps.media?.store,
-      compositionSummaryReader(session), { resources: [...batch], context: DEFAULT_MEDIA_CONTEXT,
-        language: null, languages: session.displayLanguages, includeCollections: true });
+    const result = await session.summaryBatch({ resources: [...batch], context: DEFAULT_MEDIA_CONTEXT,
+      language: null, languages: session.displayLanguages, includeCollections: true },
+    compositionSummaryReader(session), session.deps.media?.store);
     for (const summary of result.summaries) if (summary.status === 'available') readable.add(summary.reference);
   }
   return readable;

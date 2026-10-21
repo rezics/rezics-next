@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { FusekiClient, fusekiReadBudget, type SparqlResult } from '../src/infrastructure/fuseki.ts';
 import type { ImmutableObjects } from '../src/infrastructure/immutable-objects.ts';
-import { canReadCompositionWork, compositionTargetBatchReader,
+import { canReadCompositionResource, canReadCompositionWork, compositionTargetBatchReader,
   compositionTargetDisclosureBatchReader } from '../src/modules/composition/disclosure-read.ts';
 import { readWorkParts, readWorkWholes } from '../src/modules/composition/read.ts';
 import { compositionWorkBatchReader } from '../src/modules/composition/visible-targets.ts';
@@ -250,6 +250,61 @@ test('Composition profile batching preserves catalog targets and leaves other pr
     const readTargets = compositionTargetBatchReader(f.session(), structureProfileFor(profile));
     expect(await readTargets([f.input[0]!.resource])).toEqual(new Set(
       profile === 'book-composition' ? [f.input[0]!.resource] : []));
+  }
+});
+
+test('Composition resource admissions fence public and granted authority through scalar and profile reads', async () => {
+  for (const signedIn of [false, true]) for (const scalar of [false, true]) {
+    for (const change of ['grant', 'erasure', 'disclosure', 'owner'] as const) {
+      if (change === 'grant' && !signedIn) continue;
+      const input: Target[] = [{ ...targets(1)[0]!, private: signedIn, granted: signedIn }];
+      const f = fixture(input, signedIn), resource = input[0]!.resource;
+      const read = (session: WorkReadSession) => scalar
+        ? canReadCompositionResource(session, resource)
+        : compositionTargetBatchReader(session, structureProfileFor('book-composition'))([resource])
+          .then(visible => visible.has(resource));
+      const session = f.session();
+      expect(await read(session)).toBe(true);
+      await session.fenceDependencies();
+      if (change === 'grant') input[0]!.granted = false;
+      else if (change === 'erasure') input[0]!.erased = true;
+      else if (change === 'disclosure') input[0]!.hidden = true;
+      else f.failOwner();
+      if (change === 'owner') {
+        await expect(session.fenceDependencies()).rejects.toThrow('Media owner unavailable');
+        await expect(read(f.session())).rejects.toThrow('Media owner unavailable');
+      } else {
+        await expect(session.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
+        expect(await read(f.session())).toBe(false);
+      }
+    }
+  }
+});
+
+test('Composition Work owner admission fences grants and disclosure without preempting a closing denial', async () => {
+  for (const signedIn of [false, true]) for (const change of ['grant', 'disclosure'] as const) {
+    if (change === 'grant' && !signedIn) continue;
+    const input: Target[] = [{ ...targets(1)[0]!, private: signedIn, granted: signedIn }];
+    const f = fixture(input, signedIn), work = input[0]!.resource;
+    const queryTargets = f.graph.query.bind(f.graph);
+    f.graph.query = async query => query.includes('SELECT ?main ?public')
+      ? { results: { bindings: [{ main: uri(f.revision), public: literal(String(!signedIn)) }] } }
+      : queryTargets(query);
+    const session = f.session();
+    expect(await canReadCompositionWork(session, work)).toBe(true);
+    await session.fenceDependencies();
+    if (change === 'grant') input[0]!.granted = false;
+    else input[0]!.hidden = true;
+    // The native consumer must receive false here to classify its current 403;
+    // the final session fence still refuses the previously admitted selection.
+    expect(await canReadCompositionWork(session, work)).toBe(false);
+    await expect(session.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
+    expect(await canReadCompositionWork(f.session(), work)).toBe(false);
+    if (change === 'grant') input[0]!.granted = true;
+    else input[0]!.hidden = false;
+    const retry = f.session();
+    expect(await canReadCompositionWork(retry, work)).toBe(true);
+    await retry.fenceDependencies();
   }
 });
 
