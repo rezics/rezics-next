@@ -176,3 +176,77 @@ test.each(['opaque:+/%?=&雪', '0', ''])('the supported URL encoder preserves op
   const href = browseHref('/zone/browse', { ...parseBrowseState({ status: 'ongoing' }), cursor });
   expect(new URL(href, 'https://rezics.example').searchParams.get('cursor')).toBe(cursor || null);
 });
+
+const retained = `export function project(page, positions) {
+  const entries = page.items;
+  const kinds = entries.flatMap(entry => entry.kind ?? []);
+  const native = page;
+  const output = { nested: { native }, kinds, cursor: positions.family, discovery: { cursor: positions.variants } };
+  return output;
+}`;
+
+test.each([
+  retained,
+  retained.replace('const native = page;', 'const wrapper = { original: page }; const native = wrapper.original;'),
+  retained.replace('return output;', 'return { ...output, label: "Kinds" };'),
+  retained.replace('const native = page;', 'const native = page as NativePage;'),
+  retained.replace('const native = page;', 'const native = page; const current = positions.family;')
+    .replace('cursor: positions.family', 'cursor: current'),
+  retained.replace('const native = page;', 'const native = page; const { family: current } = positions;')
+    .replace('cursor: positions.family', 'cursor: current'),
+  retained.replace('cursor: positions.family', 'cursor: positions.family ?? null'),
+  retained.replace('return output;', 'return { ...page, kinds };'),
+])('a retained native page and input current positions survive aliases and nested output: %s', text => {
+  expect(continuationInventory([source(text)])).toEqual([]);
+});
+
+test.each([
+  retained.replace('return output;', 'return { kinds };'),
+  retained.replace('return output;', 'return { ...output, nested: { native: other } };'),
+  retained.replace('return output;', 'return { ...output, ...other };'),
+  retained.replace('return output;', 'return { ...output, [key]: other };'),
+  retained.replace('return output;', 'return { output, replacement: { ...page, items: kinds } };'),
+  retained.replace('return output;', 'return { output, replacement: { ...page, next: null } };'),
+  retained.replace('nested: { native }', 'nested: { native: { ...native, items: [] } }'),
+  retained.replace('nested: { native }', 'nested: { native: { ...native, next: null } }'),
+  retained.replace('nested: { native }', 'nested: { native: { ...native, nextCursor: null } }'),
+  retained.replace('return output;', 'return page.items.length ? output : { items: [], next: null };'),
+  retained.replace('return output;', 'page.next = null; return output;'),
+  retained.replace('return output;', 'native.items = []; return output;'),
+  retained.replace('return output;', '({ next: native.next } = other); return output;'),
+  retained.replace('return output;', 'entries.splice(0, 1); return output;'),
+  retained.replace('entry => entry.kind ?? []', 'entry => { entry.kind = null; return []; }'),
+  retained.replace('entry => entry.kind ?? []', 'entry => { const alias = entry; alias.kind = null; return []; }'),
+  retained.replace('return output;', 'for (const entry of entries) entry.kind = null; return output;'),
+  retained.replace('return output;', 'const { ...alias } = page; alias.items.pop(); return output;'),
+  retained.replace('return output;', 'const { items: rows } = page; rows.pop(); return output;'),
+  retained.replace('return output;', 'Object.assign(native, { next: null }); return output;'),
+  retained.replace('return output;', 'mutate(native); return output;'),
+  retained.replace('return output;', 'page = other; return output;'),
+  retained.replace('return output;', 'const change = () => { page.next = null; }; change(); return output;'),
+  retained.replace('const native = page;', 'let native = page; native = other;'),
+])('a page read cannot borrow retention from a lost, overwritten or mutated output: %s', text => {
+  expect(continuationInventory([source(text)]).some(row => row.rule === 'dropped-continuation')).toBe(true);
+});
+
+test.each([
+  retained.replace('page, positions', 'page').replace('const entries', 'const positions = { family: "fake", variants: "fake" }; const entries'),
+  retained.replace('page, positions', 'page').replace('const entries', 'const positions = makePositions(); const entries'),
+  retained.replace('cursor: positions.family', 'cursor: positions.family + "suffix"'),
+  retained.replace('cursor: positions.family', 'cursor: Number(positions.family) + 20'),
+  retained.replace('const entries', 'positions.family = "fake"; const entries'),
+  retained.replace('const entries', 'mutate(positions); const entries'),
+  retained.replace('const entries', 'const current = { family: "fake" }; const entries').replace('cursor: positions.family', 'cursor: current.family'),
+  retained.replace('const entries', 'const current = { cursor: "fake" }; const entries').replace('cursor: positions.family', 'cursor: current.cursor'),
+  retained.replace('const entries', 'const cursor = "fake"; const entries').replace('cursor: positions.family', 'cursor'),
+])('current positions require an unchanged incoming value, independently of property names: %s', text => {
+  expect(continuationInventory([source(text)]).some(row => row.rule === 'invented-continuation')).toBe(true);
+});
+
+test('a function binding is not a cursor value; using its name as a token still fails', () => {
+  const helper = 'export function read(page) { const continuation = value => ({cursor:value}); return {page, next:continuation(page.next)}; }';
+  expect(continuationInventory([source(helper)])).toEqual([]);
+  expect(continuationInventory([source(helper.replace('next:continuation(page.next)', 'continuation'))])).toEqual([]);
+  expect(continuationInventory([source(helper.replace('next:continuation(page.next)', 'cursor:continuation'))])
+    .some(row => row.rule === 'invented-continuation')).toBe(true);
+});
