@@ -33,6 +33,23 @@ export interface ExposureDeclaration {
   idempotencyKey?: boolean;
 }
 export type ExposureDeclarations = Record<string, Record<string, ExposureDeclaration>>;
+
+/** Same operation identity as Elysia's OpenAPI default, including hyphens. */
+export function exposureOperationId(method: string, path: string): string {
+  return (
+    (method === '*' ? 'all' : method.toLowerCase()) +
+    path
+      .split('/')
+      .filter(Boolean)
+      .map((segment) => {
+        if (segment.startsWith(':')) return `By${segment[1]!.toUpperCase()}${segment.slice(2)}`;
+        if (segment.startsWith('{')) return `By${segment[1]!.toUpperCase()}${segment.slice(2, -1)}`;
+        return segment[0]!.toUpperCase() + segment.slice(1);
+      })
+      .join('')
+  );
+}
+
 export class PlatformClosed extends Error {
   readonly code = 'platform_closed';
   constructor() {

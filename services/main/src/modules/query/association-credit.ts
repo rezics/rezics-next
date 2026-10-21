@@ -36,6 +36,10 @@ export interface CreditAssociationProjectionOwner {
     view: RetainedCreditAssociationView): Promise<AssociationCreditProjection | null>;
 }
 export interface AssociationReadOwners {
+  /** Primary native graph reader. Compatibility library owners below remain
+   * explicit adapters and do not certify completeness of this native graph. */
+  native?: (session: WorkReadSession, selection: AssociationSelection,
+    surface: AssociationSurface, token?: string) => ReturnType<typeof readAssociationPage>;
   retainedCredits?: RetainedCreditAssociationReadOwners;
   creditProjection?: CreditAssociationProjectionOwner;
 }

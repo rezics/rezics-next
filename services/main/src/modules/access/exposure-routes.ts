@@ -6,26 +6,13 @@ import { defaultPlatformOpenGroups } from '../../infrastructure/platform-open-gr
 import {
   type AccessExposure,
   type ExposureDeclarations,
+  exposureOperationId,
   platformGroupOpened,
   PlatformClosed,
   validExposure,
 } from './exposure.ts';
 
-/** Same operation identity as Elysia's OpenAPI default, including hyphens. */
-export function exposureOperationId(method: string, path: string): string {
-  return (
-    (method === '*' ? 'all' : method.toLowerCase()) +
-    path
-      .split('/')
-      .filter(Boolean)
-      .map((segment) => {
-        if (segment.startsWith(':')) return `By${segment[1]!.toUpperCase()}${segment.slice(2)}`;
-        if (segment.startsWith('{')) return `By${segment[1]!.toUpperCase()}${segment.slice(2, -1)}`;
-        return segment[0]!.toUpperCase() + segment.slice(1);
-      })
-      .join('')
-  );
-}
+export { exposureOperationId } from './exposure.ts';
 
 export const platformExposureProblem = (error: unknown): Response => {
   if (error instanceof PlatformClosed)

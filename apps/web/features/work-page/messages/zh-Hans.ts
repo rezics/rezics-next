@@ -2,6 +2,7 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkPageMessages } from '../messages.ts';
 
 export default {
+  savedStatus: '已保存的状态', artwork: '图片',
   primaryActions: '主要操作', reactions: '互动',
   moreActions: insert('“{{title}}”的更多操作', { title: String }),
   editionsView: '版本与发行',

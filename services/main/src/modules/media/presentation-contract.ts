@@ -10,8 +10,8 @@ const mediaType = t.Union([t.Literal('image/png'), t.Literal('image/jpeg'),
   t.Literal('image/webp'), t.Literal('image/gif')]);
 const coverHolderEvidence = t.Union([t.Null(), t.Object({ name: t.String({ minLength: 1, maxLength: 200 }),
   fieldLocator: t.String({ minLength: 1, maxLength: 500 }) }, { additionalProperties: false })]);
-export const importedCoverIntent = t.Object({
-  format: t.Literal('media-imported-cover-v1'), targetWork: mediaNative,
+const importedArtFacts = {
+  targetWork: mediaNative,
   source: t.Object({ record: mediaNative, component: t.Nullable(mediaNative), observation: mediaNative,
     provider: t.String({ minLength: 1, maxLength: 100 }), namespace: t.String({ minLength: 1, maxLength: 100 }),
     externalId: t.String({ minLength: 1, maxLength: 500 }), sourceRevision: t.Nullable(t.String({ maxLength: 200 })),
@@ -21,6 +21,25 @@ export const importedCoverIntent = t.Object({
   image: t.Object({ captureUrl: t.String({ format: 'uri', maxLength: 2048 }), captureDigest: digest,
     byteLength: t.Integer({ minimum: 1, maximum: 8_388_608 }), mediaType }, { additionalProperties: false }),
   originalDigest: digest, holderEvidence: coverHolderEvidence,
+};
+export const importedArtRoleSchema = t.Union([t.Literal('cover'), t.Literal('portrait'), t.Literal('screenshot')]);
+export const importedCoverIntent = t.Union([
+  t.Object({ format: t.Literal('media-imported-cover-v1'), ...importedArtFacts }, { additionalProperties: false }),
+  t.Object({ format: t.Literal('media-imported-art-v2'), ...importedArtFacts, role: importedArtRoleSchema,
+    archive: t.Nullable(t.Object({ admission: mediaNative, coordinate: t.Object({
+      table: t.Union([t.Literal('vn'), t.Literal('chars'), t.Literal('vn_screenshots'),
+        t.Literal('releases_images'), t.Literal('vn_image_votes')]),
+      rowOrdinal: t.Integer({ minimum: 0, maximum: 19_999_999 }), rowDigest: digest,
+      fieldLocator: t.String({ minLength: 1, maxLength: 100 }), imageId: t.String({ pattern: '^(cv|ch|sf)[0-9]+$' }),
+      namespace: t.Union([t.Literal('vn'), t.Literal('character'), t.Literal('release')]),
+      externalId: t.String({ pattern: '^[vcr][0-9]+$' }), role: importedArtRoleSchema,
+    }, { additionalProperties: false }) }, { additionalProperties: false })),
+  }, { additionalProperties: false }),
+]);
+export const importedArtUseCommand = t.Object({ profile: t.Literal('media-imported-art-use-v2'),
+  actingSubject: mediaNative, target: mediaNative, context: t.Optional(mediaContextInput),
+  asset: mediaUuid, variant: t.String({ pattern: '^urn:rezics:variant:[0-9a-f-]{36}$' }),
+  revision: mediaUuid, representation: mediaUuid, occurrence: mediaUuid, role: importedArtRoleSchema,
 }, { additionalProperties: false });
 export const imageNsfw = t.Union([t.Literal('unknown'),t.Literal('sfw'),t.Literal('nsfw')]);
 const nullableHead = t.Nullable(mediaNative);

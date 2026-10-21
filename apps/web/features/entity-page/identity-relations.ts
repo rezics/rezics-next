@@ -1,4 +1,4 @@
-import type { AvailableSummary, RelationEntry } from '../work-levels/types.ts';
+import type { AvailableSummary, RelationEntry, RelationsPage } from '../work-levels/types.ts';
 import type { Loaded, RatingRead, RatingContext } from '../work-page/types.ts';
 
 export const identityKeys = ['variant-of', 'represents', 'holds-title'] as const;
@@ -29,10 +29,45 @@ export interface IdentitySectionData {
   };
   /** The next relation page, on the resource whose incidence list was read. */
   next: { resource: AvailableSummary; cursor: string } | null;
+  /** Native selected family answer, retained independently of generic Relations. */
+  page?: RelationsPage;
+  cursor?: string;
+  cursorKey?: 'family';
+  fallback?: RelationEntry[];
+  /** The viewed resource's variant-role selection has its own opaque frontier. */
+  discovery?: { page: RelationsPage; cursor?: string; fallback: RelationEntry[] };
 }
 export interface IdentityData {
   sections: IdentitySectionData[];
+  /** Every successful native incidence answer, including empty selected pages
+   * that produce no specialized section. Presentation never replaces an answer. */
+  nativePages?: readonly RelationsPage[];
   ratings?: Loaded<RatingRead>;
+  /** The complete incidence page from which these sections were read, before presentation. */
+  relations?: RelationsPage;
+}
+
+/**
+ * A specialized section can take an occurrence out of generic Relations only after
+ * it actually presents that occurrence. Count occurrences rather than identities:
+ * a deduplicated family member cannot consume a second returned incidence.
+ */
+export function remainingIdentityRelations(page: RelationsPage, identity: Loaded<IdentityData> | undefined) {
+  if (!identity?.ok || !identity.data.relations
+    || JSON.stringify(identity.data.relations) !== JSON.stringify(page)) return { page, entries: page.items };
+  const members = identity.data.sections.flatMap(section => section.members);
+  const used = new Set<number>();
+  const entries = page.items.filter(entry => {
+    const member = members.findIndex((member, index) => !used.has(index)
+      && member.entry?.relation === entry.relation && member.entry.revision === entry.revision
+      && JSON.stringify(member.entry) === JSON.stringify(entry)
+      && entry.counterparts.length > 0
+      && entry.counterparts.every(summary => summary.status === 'available' && summary.reference === member.summary.reference));
+    if (member < 0) return true;
+    used.add(member);
+    return false;
+  });
+  return { page, entries };
 }
 
 export function identityEntries(
@@ -42,7 +77,7 @@ export function identityEntries(
 ) {
   const definition = definitions.get(key);
   return definition
-    ? entries.filter((entry) => entry.rendering?.meaning.definition === definition)
+    ? entries.filter((entry) => entry.rendering?.meaning?.definition === definition)
     : [];
 }
 

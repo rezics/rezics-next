@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { bigint, boolean, doublePrecision, integer, jsonb, pgSchema, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import type { LogoAnchor, ShowcaseSlot } from './showcase-contract.ts';
+import type { SourceImageRole, VndbCopyCoordinate } from '../source/archive-copy.ts';
 
 // Media owner tables in Main's Content database. The SQL migration
 // `services/content/migrations/070_media_owner.sql` remains the DDL and trigger
@@ -11,9 +12,8 @@ const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull(
 
 type MediaType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/avif' | 'image/gif';
 
-export interface ImportedCoverProvenance {
-  format: 'media-imported-cover-v1';
-  /** Work whose identifying avatar slot may select this imported image. */
+interface ImportedArtFacts {
+  /** Storage-compatible name: in v2 this is the actual native target, including Character. */
   targetWork: string;
   source: {
     record: string;
@@ -39,6 +39,14 @@ export interface ImportedCoverProvenance {
   originalDigest: string;
   holderEvidence: { name: string; fieldLocator: string } | null;
 }
+export type ImportedCoverProvenance = ImportedArtFacts & (
+  | { format: 'media-imported-cover-v1' }
+  | { format: 'media-imported-art-v2'; role: SourceImageRole;
+      archive: { admission: string; coordinate: VndbCopyCoordinate } | null }
+);
+
+export const importedArtRole = (value: ImportedCoverProvenance): SourceImageRole =>
+  value.format === 'media-imported-art-v2' ? value.role : 'cover';
 
 const asset = media.table('asset', {
   id: uuid('id').primaryKey(),

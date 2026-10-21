@@ -103,7 +103,10 @@ export interface WikiDisplayObligation {
 }
 /** No current head, and a disclosure-hidden head, are the same public shape. */
 export type WikiDisplayObligations = { status: 'unassessed' }
-  | { status: 'assessed'; use: 'wiki_display'; instrument: string | null; obligations: WikiDisplayObligation[] };
+  | { status: 'assessed'; use: 'wiki_display'; instrument: string | null; obligations: WikiDisplayObligation[];
+      /** Exact current assessment/material association; this does not identify an unrecorded source. */
+      identity?: { assessmentId: string; materialId: string; component: string;
+        sourceRecordId: string | null; wikiEvidenceId: string | null } };
 
 const displayAppliesTo = new Set(['display', 'all']);
 
@@ -122,10 +125,13 @@ export function resourceFactMaterial(resource: string): MaterialScope {
 }
 
 export function projectWikiDisplay(row: { assessmentId: string | null; licenseInstrument: string | null;
+  materialId?: string; component?: string; sourceRecordId?: string | null; wikiEvidenceId?: string | null;
   obligations: Array<{ kind: string; instrument: string; appliesTo: string; notice: string | null }> } | undefined,
   hidden: boolean): WikiDisplayObligations {
   if (hidden || !row?.assessmentId) return { status: 'unassessed' };
   return { status: 'assessed', use: 'wiki_display', instrument: row.licenseInstrument,
+    ...(row.materialId && row.component ? { identity: { assessmentId: row.assessmentId, materialId: row.materialId,
+      component: row.component, sourceRecordId: row.sourceRecordId ?? null, wikiEvidenceId: row.wikiEvidenceId ?? null } } : {}),
     obligations: row.obligations.flatMap(item => displayAppliesTo.has(item.appliesTo)
       && (obligationKinds as readonly string[]).includes(item.kind)
       ? [{ kind: item.kind as typeof obligationKinds[number], instrument: item.instrument,
@@ -536,6 +542,21 @@ export class RightsStore {
     });
   }
 
+  /** Internal Media composition, called only after its disclosure gate. Database
+   * terms and another use's assessment cannot authorize artwork delivery. */
+  async currentMediaDelivery(material: MaterialScope): Promise<UseEvaluation> {
+    if (!validMaterial(material)) throw new RightsInvalid('invalid media material');
+    return this.transaction(async client => {
+      const found = await this.findMaterial(client, material);
+      if (!found) return { status: 'unassessed', materialId: null };
+      const head = (await client.query<{ assessment_id: string }>(`SELECT assessment_id
+        FROM rights.use_assessment_head WHERE material_id=$1 AND family='data_rights'
+          AND use_kind='media_delivery' AND use_scope='rezics:public-media'`, [found.id])).rows[0];
+      return head ? { status: 'assessed', assessment: await this.read(client, head.assessment_id) }
+        : { status: 'unassessed', materialId: found.id };
+    });
+  }
+
   /**
    * Current wiki-display obligations for a page of materials. One Content
    * statement for the whole batch, then one Access statement for disclosure
@@ -548,10 +569,10 @@ export class RightsStore {
     }
     if (!materials.length) return [];
     const ordinals = materials.map((_, index) => index + 1);
-    let rows: Array<{ ordinal: number; assessment_id: string | null; license_instrument: string | null;
+    let rows: Array<{ ordinal: number; assessment_id: string | null; material_id: string | null; license_instrument: string | null;
       obligations: Array<{ kind: string; instrument: string; applies_to: string; notice: string | null }> | null }>;
     try {
-      rows = (await contentConnection(this.content).query<{ ordinal: number; assessment_id: string | null;
+      rows = (await contentConnection(this.content).query<{ ordinal: number; assessment_id: string | null; material_id: string | null;
         license_instrument: string | null;
         obligations: Array<{ kind: string; instrument: string; applies_to: string; notice: string | null }> | null
       }>(`WITH requested AS ( -- wiki-display obligations
@@ -559,7 +580,7 @@ export class RightsStore {
             $6::text[], $7::text[], $8::text[], $9::text[], $10::text[]) AS r(ordinal, scope_kind, provider,
               namespace, source_record_id, content_variant_id, media_asset, work_id, wiki_evidence_id, component)
         )
-        SELECT r.ordinal, a.id AS assessment_id, a.license_instrument,
+        SELECT r.ordinal, a.id AS assessment_id, m.id AS material_id, a.license_instrument,
           COALESCE(o.items, '[]'::jsonb) AS obligations
         FROM requested r
         LEFT JOIN LATERAL (SELECT m.id FROM rights.material m
@@ -606,11 +627,13 @@ export class RightsStore {
         hidden = new Set(fences.rows.map(row => Number(row.ordinal)));
       } catch { throw new RightsUnavailable('wiki display obligations are unavailable'); }
     }
-    return materials.map((_, index) => {
+    return materials.map((material, index) => {
       const row = byOrdinal.get(index + 1);
       const obligations = Array.isArray(row?.obligations) ? row.obligations
         : typeof row?.obligations === 'string' ? JSON.parse(row.obligations) as typeof row.obligations : [];
       return projectWikiDisplay(row ? { assessmentId: row.assessment_id, licenseInstrument: row.license_instrument,
+        ...(row.material_id ? { materialId: row.material_id, component: material.component,
+          sourceRecordId: material.sourceRecordId, wikiEvidenceId: material.wikiEvidenceId ?? null } : {}),
         obligations: (obligations ?? []).map(item => ({ kind: item.kind, instrument: item.instrument,
           appliesTo: item.applies_to, notice: item.notice })) } : undefined, hidden.has(index + 1));
     });

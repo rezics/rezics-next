@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { AppRouterContext, type AppRouterInstance } from 'next/dist/shared/lib/app-router-context.shared-runtime.js';
 import { resourceHref } from '../address/path.ts';
 import { RelationRows } from '../work-levels/connections.tsx';
 import { copyOf as levelsCopy } from '../work-levels/messages.ts';
@@ -17,7 +18,9 @@ import * as wiki from '../wiki/fixtures.ts';
 import { RelationsView, StatementsView } from './views.tsx';
 
 const hrefFor = standaloneHrefFor({}, resourceHref('/e/', '0b9e4d2a-6c1f-4e8b-a3d5-7f2c9e1b4a6d'));
-const draw = (element: Parameters<typeof renderToStaticMarkup>[0]) => renderToStaticMarkup(element);
+const router: AppRouterInstance = { bfcacheId: '', refresh() {}, push() {}, replace() {}, back() {}, forward() {}, prefetch() {} };
+const draw = (element: Parameters<typeof renderToStaticMarkup>[0]) =>
+  renderToStaticMarkup(createElement(AppRouterContext.Provider, { value: router }, element));
 
 describe('Statements without a label', () => {
   test('values of a predicate with no label share "Other facts" and the page name is not repeated', () => {

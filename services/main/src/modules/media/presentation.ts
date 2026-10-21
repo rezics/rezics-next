@@ -10,6 +10,7 @@ import { SCREEN_POLICY, screenVerdict, type Scores } from '../media-screen/polic
 import { assetIri, DEFAULT_MEDIA_CONTEXT, MediaConflict, MediaFenced, MediaInvalid,
   MediaMissing, MediaStale, type MediaAdmission } from './store.ts';
 import { coverCreditFromProvenance, type CoverCredit } from './cover-credit.ts';
+import type { ImportedCoverProvenance } from './typed-schema.ts';
 
 export const IMAGE_INFERENCE_POLICY = 'image-nsfw-v1';
 export type ImageNsfw = 'unknown' | 'sfw' | 'nsfw';
@@ -33,6 +34,8 @@ export interface MetadataBasis {
   context: string; disclosure: string; objectNamespace: string; byteLength: number;
   campaign?: boolean; campaignZone?: string | null;
   structureInstruction?: boolean;
+  /** Private owner basis, never serialized in ImageMetadata. */
+  importedArt?: ImportedCoverProvenance;
 }
 export interface MediaFieldInput {
   representation?: string; use?: string; field: ImageField;
@@ -250,6 +253,7 @@ export class MediaPresentationStore {
         owner: row.owner, actor: row.actor ?? null, target: row.target ?? null,
         context: row.context ?? DEFAULT_MEDIA_CONTEXT, disclosure: row.disclosure,
         structureInstruction: row.structure_instruction as boolean,
+        ...(row.cover_provenance?.format === 'media-imported-art-v2' ? { importedArt: row.cover_provenance as ImportedCoverProvenance } : {}),
         objectNamespace: row.object_namespace, byteLength: row.byte_length, campaign: row.campaign ?? false,
         campaignZone: row.campaign_zone ?? null };
     });

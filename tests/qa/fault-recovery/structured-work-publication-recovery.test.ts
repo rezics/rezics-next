@@ -213,7 +213,7 @@ test('WORK10: publication settlement, withdrawal replay and restore holds keep o
       if (!kind || !eventId || !receipt || !batchId || !action || !decision || !sequence) {
         throw new Error('Structured publication outbox row is incomplete');
       }
-      const handler = ownerOutboxEventHandler(kind);
+      const handler = await ownerOutboxEventHandler(kind);
       if (!handler) throw new Error('Structured publication outbox handler is missing');
       const read = () => handler.read({ fuseki: fixture.env.fuseki,
         batch: { batchId, dataEpoch: fixture.env.lineage.dataEpoch, sequence,

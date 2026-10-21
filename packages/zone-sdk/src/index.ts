@@ -66,8 +66,9 @@ export interface ZoneCoverCredit {
   kind: 'copyright';
   text: string;
   holder: string | null;
-  source: { name: string; href: string };
-  permittedRole: 'cover';
+  source: { name: string; href: string;
+    identity?: { record: string; component: string | null; observation: string; fieldLocator: string } };
+  permittedRole: 'cover' | 'portrait' | 'screenshot';
 }
 
 /** An image Main serves; `url` is already a path the browser can load. */
@@ -77,7 +78,10 @@ export interface ZoneImage { url: string; width: number; height: number; coverCr
 export interface ZoneWork {
   /** Source attribution supplied by Main for the facts on this card. */
   factObligations?: { status: 'unassessed' } | { status: 'assessed'; use: 'wiki_display';
-    instrument: string | null; obligations: Array<{ kind: 'attribution' | 'share_alike' | 'notice_retention'
+    instrument: string | null;
+    identity?: { assessmentId: string; materialId: string; component: string;
+      sourceRecordId: string | null; wikiEvidenceId: string | null };
+    obligations: Array<{ kind: 'attribution' | 'share_alike' | 'notice_retention'
       | 'change_indication' | 'non_commercial' | 'no_derivatives' | 'other'; instrument: string;
       appliesTo: 'display' | 'all'; notice: string | null }> };
   /** Native IRI. */

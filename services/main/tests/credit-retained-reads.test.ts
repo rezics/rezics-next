@@ -62,6 +62,27 @@ import { creditAttributionOwner, retainedCreditAttributionReader } from '../src/
 import type { RelationAttributionOwner } from '../src/modules/relation/attribution.ts';
 import type { RelationPublication } from '../src/modules/relation/change.ts';
 import { NATIVE_CREDIT_ROLES, type NativeCreditRole } from '../src/modules/work/credit-roles.ts';
+import { Value } from 'typebox/value';
+import { retainedRelationInput } from '../src/modules/relation/retained-contract.ts';
+import { retainedRelationMapping } from '../src/modules/relation/retained-change.ts';
+import { readExactDefinition } from '../src/modules/relation/change.ts';
+import { SourceNativeCreditAnnotationStore, type NativeCreditAnnotationRequest } from '../src/modules/source/native-credit-annotation.ts';
+import { SourceIntakeStore } from '../src/modules/source/intake.ts';
+import { canonicalDigest } from '../src/modules/source/retained-record-normalization.ts';
+import { RightsStore, ASSESS_ACTION, ASSESS_SCOPE, rightsExportUseScope } from '../src/modules/rights/store.ts';
+import { AccessAdmissionRegistry } from '../src/modules/access/admission.ts';
+import { fixtureAuthorityScenario } from '../src/modules/access/fixture-authority-scenario.ts';
+import { configureDisclosure, DisclosureStore } from '../src/modules/disclosure/read.ts';
+import { retainedEvidenceFixture } from './support/retained-evidence-fixture.ts';
+import { systemDisclosure } from '../src/modules/target/disclosed-references.ts';
+import { SourceAssociationEvidenceOwner } from '../src/modules/source/association-evidence.ts';
+import { SourceRetainedFieldSupportStore } from '../src/modules/source/field-support-retained.ts';
+import { SourceRetainedRecordStore } from '../src/modules/source/retained-record.ts';
+import { WikiEvidenceStore } from '../src/modules/wiki/evidence.ts';
+import { WorkReadSession, WorkReadMoved } from '../src/modules/work/read-session.ts';
+import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
+import type { AssociationEvidenceClaim } from '../src/modules/relation/evidence.ts';
+import type { AssociationEvidenceSelection } from '../src/modules/relation/evidence-contract.ts';
 
 const uuid = (n: number) => `00000000-0000-4000-8000-${n.toString(16).padStart(12, '0')}`;
 const id = (n: number) => `https://rezics.com/id/${uuid(n)}`;
@@ -154,7 +175,7 @@ async function accountReader() {
     );
     return { reader, state, close: () => server.stop(true) };
   } catch (error) {
-    server.stop(true);
+    await server.stop(true);
     throw error;
   }
 }
@@ -819,7 +840,7 @@ test('unadopted identity reads retain live Account callbacks, expiry and source/
     account.state.active = false;
     await expect(fenceRetainedCreditIdentityRead(f.deps, basis)).rejects.toBeInstanceOf(AccountAssertionDenied);
     await expect(openRetainedCreditIdentityRead(f.deps, account.reader)).rejects.toBeInstanceOf(AccountAssertionDenied);
-  } finally { f.clean(); account.close(); }
+  } finally { f.clean(); await account.close(); }
 });
 
 test('first binding without publication still refuses denied references, stale origin revisions and generation changes', async () => {
@@ -1090,7 +1111,7 @@ test('an Account-issued live principal can bind and cannot replay after revocati
     expect(account.state.calls).toBeGreaterThan(calls);
     expect(f.sealed.size).toBe(1);
     expect(f.terminals.size).toBe(1);
-  } finally { f.clean(); account.close(); }
+  } finally { f.clean(); await account.close(); }
 });
 
 test('a new exact mapping preserves participation IDs, original identity and immutable prior history', async () => {
@@ -1190,6 +1211,115 @@ test('native manual citations keep their independent receipt and withdrawal with
     expect(f.sealed.size).toBe(1);
   } finally { f.clean(); }
 });
+
+test('actual Source annotations compose through native identity loading, binding and sealed read with explicit null', async () => {
+  const sql = await retainedEvidenceFixture('credit_annotation_binding');
+  const authority = await fixtureAuthorityScenario(sql.accessPool,
+    { scope: `work:edit:${id(1)}`, action: 'work.edit', mandate: 'work.edit' });
+  const f = fixture(false, 'artist', 'vndb', 'staff', authority.principal);
+  try {
+    f.value.actingSubject = authority.actor;
+    const w = f.enableBinding();
+    const env = f.deps.environment;
+    configureDisclosure(env, new DisclosureStore(sql.accessPool));
+    const access = new AccessAdmissionRegistry(sql.accessPool), intake = new SourceIntakeStore(sql.pool);
+    const rights = new RightsStore(sql.pool, sql.accessPool);
+    const annotations = new SourceNativeCreditAnnotationStore(sql.pool, intake, env, access, rights);
+    const raw = { alias: '別名', eid: 'edition-17', note: null, empty: '' };
+    const observed = (await intake.submit(authority.principalId, randomUUID(), {
+      provider: 'manual-wiki', namespace: 'staff', externalId: randomUUID(), sourceRevision: null,
+      mediaType: 'application/json', retention: 'retained', rawBytesBase64: Buffer.from(JSON.stringify(raw)).toString('base64'),
+      coverage: { scope: 'selected-staff-record', complete: false, omittedFields: [] },
+      rightsEvidence: { basis: 'facts', note: 'Independent annotations for native binding' },
+    })).observation;
+    const native = (await readCreditOwnerWitness(env, f.value.credit))!;
+    const annotationIds: string[] = [];
+    for (const field of ['alias', 'eid', 'note'] as const) {
+      const value = raw[field];
+      const request: NativeCreditAnnotationRequest = { profile: 'source-native-credit-annotation-v1',
+        actingSubject: authority.actor, expectedAnnotation: null,
+        native: { work: f.value.work, workHead: f.value.expectedHead, credit: f.value.credit, revision: f.value.revision,
+          receipt: native.receipt.receipt, participation: { role: 'artist', participant: {
+            kind: 'external', provider: 'vndb', namespace: 'staff', key: f.value.sourceKey }, position: 2 } },
+        field, selected: { presence: value === null ? 'null' : 'value', value, language: { state: 'omitted' } },
+        source: { record: observed.record, observation: observed.observation, byteDigest: observed.byteDigest!,
+          recordDigest: canonicalDigest(raw), pointer: `/${field}`, valueDigest: canonicalDigest(value) } };
+      const saved = await annotations.attach(authority.principal, authority.principalId, randomUUID(), request);
+      annotationIds.push(saved.support.support);
+    }
+    const assessor = await fixtureAuthorityScenario(sql.accessPool,
+      { scope: ASSESS_SCOPE, action: ASSESS_ACTION, mandate: ASSESS_ACTION });
+    await rights.assess(assessor.principal, { actingSubject: assessor.actor,
+      material: { scopeKind: 'source_record', provider: null, namespace: null, sourceRecordId: observed.record.slice(-36),
+        contentVariantId: null, mediaAsset: null, component: 'record' }, expressionKind: 'expression', family: 'data_rights',
+      useKind: 'quotation', useScope: rightsExportUseScope('quotation'), basis: 'permission', outcome: 'supported',
+      licenseInstrument: null, exceptionKind: null, rationale: 'Exact independent annotation quotation', extent: {},
+      evidence: {}, obligations: [], expectedAssessment: null, idempotencyKey: randomUUID() });
+    const basis = { kind: 'native-credit' as const, credit: f.value.credit, revision: f.value.revision };
+    const supports = [{ basis, fields: ['provider', 'namespace', 'key'] as CreditAttributionField[], evidence: [] },
+      { basis, fields: ['alias', 'eid', 'note'] as CreditAttributionField[], evidence: annotationIds }];
+    const request = { profile: 'relation-change-v2' as const, mode: 'bind-retained-credit' as const,
+      retained: { profile: 'work-author-credit-v1' as const, credit: f.value.credit,
+        origin: { kind: 'stored-credit' as const, revision: f.value.revision } }, mappingRevision: f.state.mapping.revision,
+      attributionSupports: supports, expectedAssociationHead: null, actingSubject: authority.actor };
+    expect(Value.Check(retainedRelationInput, request)).toBe(true);
+    for (const field of ['creditedName', 'alias', 'eid', 'note'] as const) {
+      expect(Value.Check(retainedRelationInput, { ...request, attributionSupports: [{ basis, fields: [field], evidence: [] }] })).toBe(false);
+    }
+    w.deps.attribution = annotations.attributionOwner();
+    f.deps.owners.attribution = retainedCreditAttributionReader(env,
+      creditAttributionOwner(env, w.deps.attribution), authority.actor);
+    const originDeps = { ...w.deps, originLoaders: { nativeAttribution: annotations.nativeAttribution() } };
+    const loaded = await loadRetainedCreditBinding(originDeps, authority.principal, request);
+    const definition = (await readExactDefinition(env, request.mappingRevision, systemDisclosure))!;
+    expect(retainedRelationMapping(definition, request, loaded.input))
+      .toEqual(loaded.input.mapping);
+    expect(loaded.input.subject.sourceIdentity).toEqual({ provider: 'vndb', namespace: 'staff', key: f.value.sourceKey,
+      alias: raw.alias, eid: raw.eid, note: null });
+    const bound = await w.bind(loaded.input);
+    const read = await resolveRetainedCreditAssociationIdentity(w.deps,
+      { basis: await openRetainedCreditIdentityRead(w.deps, authority.principal), credit: f.value.credit, associationHead: bound.associationHead });
+    expect(read.state.participations).toEqual(bound.participations);
+    expect(read.sourceValidation.find(proof => proof.evidence.length)?.fields).toMatchObject({ alias: raw.alias, eid: raw.eid, note: null });
+    expect(read.sourceValidation.find(proof => proof.evidence.length)?.receipt).not.toBe(native.receipt.receipt);
+    const subject = read.state.participations.find(part => part.id === read.state.subjectParticipation)!;
+    const citations = await annotations.citations({ ...subject, role: 'artist' }, supports[1]!);
+    expect(citations.map(item => item.id)).toEqual(annotationIds);
+    expect(citations[2]?.citation).toMatchObject({ id: annotationIds[2], record: observed.record,
+      locator: { pointer: '/note' }, quote: null, quoteWithheld: true, language: { state: 'omitted' } });
+    const evidenceOwner = new SourceAssociationEvidenceOwner(new SourceRetainedFieldSupportStore(sql.pool,
+      env, access, new SourceRetainedRecordStore(sql.pool, intake)), annotations);
+    const evidenceDeps: MainWorkDependencies = { environment: env, access, wikiEvidence: new WikiEvidenceStore(sql.pool),
+      account: { verify: async () => authority.principal } };
+    const evidenceSession = () => new WorkReadSession(evidenceDeps, new Request('http://test/native-evidence'), {},
+      { dataEpoch: f.live.epoch, sequence: f.live.sequence });
+    const selection: AssociationEvidenceSelection = { profile: 'association-evidence-v1', occurrence: f.value.credit,
+      revision: bound.associationHead, claim: f.value.credit, claimRevision: bound.associationHead,
+      context: 'global', position: 'start', frame: [], limit: 16 };
+    const claim = { occurrence: { ...read, kind: 'retained-credit' }, definition, statement: null,
+      assertion: { statement: id(800), revision: id(801), subject: { kind: 'resource', ref: f.value.work }, evidence: [],
+        coverage: { kind: 'occurrence', occurrence: f.value.credit, occurrenceRevision: bound.associationHead } },
+    } as unknown as AssociationEvidenceClaim;
+    const session = evidenceSession();
+    await evidenceOwner.basis(session, selection, claim);
+    expect((await evidenceOwner.window(session, selection, claim, null, 16)).items)
+      .toEqual([...citations].sort((a, b) => a.id.localeCompare(b.id)).map(item => item.citation!));
+    const empty = structuredClone(loaded.input); empty.subject.sourceIdentity!.note = '';
+    await expect(w.bind(empty, 201)).rejects.toThrow();
+    await annotations.withdraw(authority.principalId, randomUUID(), { support: annotationIds[0]!,
+      expectedSupport: annotationIds[0]!, reason: 'Withdraw independent alias' });
+    await expect(session.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
+    const afterWithdrawal = evidenceSession();
+    await evidenceOwner.basis(afterWithdrawal, selection, claim);
+    expect(await evidenceOwner.window(afterWithdrawal, selection, claim, null, 16))
+      .toEqual({ items: [], after: null, complete: true });
+    const withdrawn = await resolveRetainedCreditAssociationIdentity(w.deps,
+      { basis: await openRetainedCreditIdentityRead(w.deps, authority.principal), credit: f.value.credit, associationHead: bound.associationHead });
+    expect(withdrawn.attribution.find(part => part.participation === subject.id)?.unsupportedFields).toEqual(['alias', 'eid', 'note']);
+    expect(await annotations.citations({ ...subject, role: 'artist' }, supports[1]!)).toEqual(annotationIds.map(id => ({ id, citation: null })));
+    expect((await readCreditOwnerWitness(env, f.value.credit))?.value).toEqual(native.value);
+  } finally { f.clean(); await sql.close(); }
+}, 120_000);
 
 for (const role of NATIVE_CREDIT_ROLES)
   test(`retained ${role} reads preserve the original native credit and allocations`, async () => {
@@ -1764,7 +1894,7 @@ test('Account-issued principals open, fence, page and hydrate without cloning li
       await expect(read()).rejects.toBeInstanceOf(AccountAssertionDenied);
   } finally {
     f.clean();
-    account.close();
+    await account.close();
   }
 });
 
@@ -1798,7 +1928,7 @@ test('Account expiry, unavailable enforcement and changed disclosure refuse ever
   } finally {
     setSystemTime();
     f.clean();
-    account.close();
+    await account.close();
   }
 });
 
@@ -1848,7 +1978,7 @@ for (const phase of [
       await expect(read).rejects.toBeInstanceOf(AccountAssertionDenied);
     } finally {
       f.clean();
-      account.close();
+      await account.close();
     }
   });
 }
@@ -1924,7 +2054,7 @@ for (const origin of ['source-binding', 'selected-publication'] as const) {
       expect(() => structuredClone(view)).not.toThrow();
     } finally {
       f.clean();
-      account.close();
+      await account.close();
     }
   });
 }

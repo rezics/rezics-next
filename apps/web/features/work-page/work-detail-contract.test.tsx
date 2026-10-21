@@ -232,6 +232,10 @@ test('field evidence preserves the exact supplied selection and never exposes a 
   item.evidence = [evidence];
   const props = { work: fixture.work, locale: 'en' as const, messages: t, statements: { ok: true as const, data: page } };
   const html = render(<WorkSources {...props} />);
+  expect(html).toContain(`data-fact-revision="${item.revision}"`);
+  expect(html).toContain(`data-source-key="${evidence.id}"`);
+  expect(html).toContain(`${t.evidence}: ${evidence.id}`);
+  expect(html).not.toContain(`href="${evidence.id}"`);
   expect(html).toContain('/characters/0/name');
   expect(html).toContain(evidence.representationSha256);
   expect(html).toContain(evidence.quote);
@@ -243,6 +247,7 @@ test('field evidence preserves the exact supplied selection and never exposes a 
   expect(withheld).not.toContain(evidence.quote);
   expect(withheld).toContain(t.evidenceQuoteWithheld);
   expect(withheld).toContain(evidence.representationSha256);
+  expect(withheld).toContain(`data-source-key="${evidence.id}"`);
   item.evidence = [{ ...evidence, quote: null }];
   expect(render(<WorkSources {...props} />)).toContain(t.evidenceQuoteWithheld);
 });

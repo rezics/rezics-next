@@ -13,6 +13,9 @@ import { readMetadataHeader, recordedDisplayText, selectedMetadata } from './met
 import { selectedPublicationAttribution } from './sourced-structure-publication.ts';
 import { readSerialStatistics } from './summary-serial.ts';
 import type { NavigationOperation } from '../query/navigation-contract.ts';
+import { nativeFieldDigest, synopsisSlot, SYNOPSIS_DEFINITION,
+  type NativeFieldControlIntent } from '../source/field-control-native.ts';
+import { SYNOPSIS_TEXT_LIMIT, synopsisPropertyValue } from '../source/field-control-language.ts';
 
 /** Legacy anchors remain useful discovery names; their operations carry the
  * actual POST body. Resource operations name the mounted native GET owner. */
@@ -216,6 +219,43 @@ export async function fenceWorkBasis(session: WorkReadSession, basis: WorkBasis)
   if (summary?.status !== 'available') throw new WorkReadMissing('Work is unavailable');
 }
 
+/** The current native field, rather than a title binding or an old support row,
+ * selects its Source material. Missing revision data cannot revive older prose. */
+async function selectedNativeSynopsis(session: WorkReadSession, work: string) {
+  const slot = synopsisSlot(work);
+  const rows = await session.query(`SELECT ?content ?control ?value ?intent WHERE {
+    GRAPH ${iri(GRAPHS.current)} { ${iri(slot)} a rv:EditorialFieldSlot ;
+      rv:component ${iri(work)} ; rv:fieldDefinition ${iri(SYNOPSIS_DEFINITION)} .
+      OPTIONAL { ${iri(slot)} rv:fieldHead ?content }
+      OPTIONAL { ${iri(slot)} rv:fieldControlHead ?control }
+      OPTIONAL { ${iri(slot)} rv:fieldValue ?value } }
+    BIND(IF(BOUND(?control), ?control, <urn:rezics:absent:field-control>) AS ?selectedControl)
+    BIND(IF(BOUND(?content), ?content, <urn:rezics:absent:field-content>) AS ?selectedContent)
+    OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} {
+      ?selectedControl a rv:EditorialFieldControlRevision ; rv:component ${iri(slot)} ;
+        rv:controlField "synopsis" ; rv:fieldRevision ?selectedContent ; rv:controlIntent ?intent .
+      ?selectedContent a rv:EditorialFieldRevision ; rv:component ${iri(slot)} ; rv:fieldValue ?value } }
+  } LIMIT 2`, 2, undefined, SYNOPSIS_TEXT_LIMIT * 8 + 16_384);
+  if (!rows.length) return null;
+  const row = rows[0]!;
+  if (rows.length === 1 && !row.content && !row.control && !row.value && !row.intent) return null;
+  if (rows.length !== 1 || !row.content || !row.control || !row.value || !row.intent) {
+    throw new WorkReadUnavailable('Native Synopsis head is incomplete');
+  }
+  let intent: NativeFieldControlIntent;
+  try {
+    intent = JSON.parse(row.intent.value);
+    nativeFieldDigest(intent);
+    if (intent.work !== work || intent.value !== row.value.value) throw new Error('Current field differs');
+  } catch (cause) { throw new WorkReadUnavailable('Native Synopsis source is incomplete', { cause }); }
+  const property = synopsisPropertyValue(intent.value, intent.language ?? { state: 'omitted' });
+  return { description: { ...recordedDisplayText({ value: intent.value,
+    language: property.kind === 'language-string' ? property.language : 'und' }), basis: 'fallback' as const },
+  // Human field replacement has no supplied Source-qualified material. It must
+  // not inherit the generic import assessment that described earlier prose.
+  material: intent.source ? { ...workDescriptionMaterial(work), sourceRecordId: intent.source.record.slice(-36) } : null };
+}
+
 export async function readWorkHeader(session: WorkReadSession, work: string) {
   const basis = await readWorkBasis(session, work);
   // Admission is shared by Recipe, contents, editions and other readers that
@@ -224,9 +264,11 @@ export async function readWorkHeader(session: WorkReadSession, work: string) {
   const stats = (await readSerialStatistics(session, [work]))?.get(work) ?? null;
   const metadata = basis.metadata;
   const selected = selectedMetadata(metadata, session.options.language);
+  const nativeSynopsis = await selectedNativeSynopsis(session, work);
+  if (nativeSynopsis) selected.description = nativeSynopsis.description;
   // Catalogue creation can carry a source synopsis before an editor has made
   // a separate metadata component. It keeps the same disclosure and licence.
-  if (!metadata.revision && !selected.description) {
+  if (!nativeSynopsis && !metadata.revision && !selected.description) {
     const descriptions = await session.query(`SELECT ?text WHERE { GRAPH ${iri(GRAPHS.current)} {
       ${iri(work)} schema:description ?text } } LIMIT 2`, 2);
     if (descriptions.length > 1) throw new WorkReadUnavailable('Work description is ambiguous');
@@ -237,16 +279,34 @@ export async function readWorkHeader(session: WorkReadSession, work: string) {
   if (selected.description && (await session.disclosure([
     { owner: 'graph', resource: work, component: 'synopsis' },
   ]))[0] !== 'visible') selected.description = null;
+  if (nativeSynopsis && selected.description) {
+    const store = session.deps.rights?.store;
+    if (!store) throw new WorkReadUnavailable('Synopsis rights are unavailable');
+    const read = () => store.nativeSynopsisRestricted(work, nativeSynopsis.description.value, ['disclosure']);
+    try {
+      session.checkDeadline();
+      const restricted = await read();
+      session.observeDependency(`work-synopsis-disclosure:${work}`, restricted, read);
+      if (restricted) selected.description = null;
+    } catch (cause) {
+      if (cause instanceof RightsUnavailable || cause instanceof RightsInvalid) {
+        throw new WorkReadUnavailable('Synopsis rights are unavailable', { cause });
+      }
+      throw cause;
+    }
+  }
   await fenceWorkBasis(session, basis);
   const store = session.deps.rights?.store;
   let descriptionObligations: WikiDisplayObligations = { status: 'unassessed' };
   let factObligations: WikiDisplayObligations = { status: 'unassessed' };
   if (store) {
     try {
-      const read = () => store.currentWikiDisplayObligations([workDescriptionMaterial(work), resourceFactMaterial(work)]);
+      const descriptionMaterial = selected.description ? nativeSynopsis ? nativeSynopsis.material : workDescriptionMaterial(work) : null;
+      const materials = [...descriptionMaterial ? [descriptionMaterial] : [], resourceFactMaterial(work)];
+      const read = () => store.currentWikiDisplayObligations(materials);
       const rights = await read();
-      descriptionObligations = rights[0] ?? descriptionObligations;
-      factObligations = rights[1] ?? factObligations;
+      if (descriptionMaterial) descriptionObligations = rights[0] ?? descriptionObligations;
+      factObligations = rights[descriptionMaterial ? 1 : 0] ?? factObligations;
       session.observeDependency(`work-display-rights:${work}`, rights, read);
     } catch (error) {
       if (error instanceof RightsUnavailable || error instanceof RightsInvalid) {

@@ -21,8 +21,9 @@ export interface CoverCredit {
   kind: 'copyright';
   text: string;
   holder: string | null;
-  source: { name: string; href: string };
-  permittedRole: 'cover';
+  source: { name: string; href: string;
+    identity?: { record: string; component: string | null; observation: string; fieldLocator: string } };
+  permittedRole: 'cover' | 'portrait' | 'screenshot';
 }
 export type ImageMetadataResolver = (references: MediaImageReference[]) => Promise<MediaImageMetadata[]>;
 export interface MediaImageControl {

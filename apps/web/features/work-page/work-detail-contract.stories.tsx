@@ -320,8 +320,19 @@ export const SourcesAndEvidence: Story = {
     const evidence = within(sources).getByRole('link', { name: 'Evidence 1' });
     await expect(evidence).toHaveAttribute('href', 'https://openlibrary.org/works/OL123W?revision=7');
     await expect(within(sources).getAllByText(messages.en.fieldEvidenceUnavailable).length).toBeGreaterThan(0);
+    const nativeEvidence = sources.querySelectorAll<HTMLElement>('[data-field-evidence]');
+    await expect(nativeEvidence).toHaveLength(2);
+    const statement = entity.statements().groups.flatMap(group => group.items).find(item => item.kind === 'statement')!;
+    for (const [index, id] of ['00000000-0000-4000-8000-000000000020', '00000000-0000-4000-8000-000000000022'].entries()) {
+      const key = `https://rezics.com/id/${id}`;
+      await expect(nativeEvidence[index]).toHaveAttribute('data-source-key', key);
+      await expect(nativeEvidence[index]!.closest('[data-fact-revision]')).toHaveAttribute('data-fact-revision', statement.revision);
+      await expect(within(nativeEvidence[index]!).getByText(`${messages.en.evidence}: ${key}`)).toBeVisible();
+      await expect(nativeEvidence[index]!.querySelector(`a[href="${key}"]`)).toBeNull();
+    }
     evidence.focus();
     await expect(evidence).toHaveFocus();
+    nativeEvidence[0]!.scrollIntoView({ block: 'center' });
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
 };
