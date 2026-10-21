@@ -4,8 +4,10 @@ import {
   readExactDefinition,
   readCurrentOccurrence,
   readDefinitionByKey,
+  roleIri,
   type ExactDefinition,
 } from './change.ts';
+import { readCurrentComponent } from '../semantic/change.ts';
 import { relationSubjectWork } from './work-authority.ts';
 import { renderRelation, type RelationBinding, type RelationRendering } from '../lexicon/render.ts';
 import { selectedProjection, type RelationProjection } from '../lexicon/render.ts';
@@ -27,7 +29,9 @@ import { framePattern, matchFromScore, readContinuityMemberships,
 import { CONTINUITY_MEMBERSHIP_COST, type Coordinate } from '../projection/dimension.ts';
 import { resolveTargets, targetSummaries } from '../target/resolve.ts';
 import { readingBoundary } from '../reading-position/boundary.ts';
-import { decodeReadCursor, encodeReadCursor, WorkReadInvalid, type WorkReadSession } from '../work/read-session.ts';
+import { decodeReadCursor, encodeReadCursor, WorkReadInvalid, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
+import { readCollectionPurpose, renderCollectionIncidence, type CollectionIncidenceRendering,
+  type CollectionPurpose } from '../collection/purpose.ts';
 
 /** One Work target, at most eight 64-row membership batches and one summary batch for up to 64 results.
  * Hidden rows use the scan budget but cannot fail the read; a cursor continues even an empty page. */
@@ -80,10 +84,13 @@ export interface RelationPageEntry {
   sourceMainVersion?: string | null;
   sourceMainRevision?: string | null;
   targetMainRevision?: string;
-  rendering: RelationRendering | null;
+  rendering: RelationRendering | CollectionIncidenceRendering | null;
   counterparts: ResourceSummary[];
   frameMatch?: ReturnType<typeof matchFromScore>;
+  collectionPurpose?: CollectionPurpose | null;
 }
+/** Exact authored occurrence meaning and the role held by the viewed resource. */
+export interface RelationSelection { definition: string; viewingRole: string }
 interface Candidate {
   key: string;
   score?: number;
@@ -122,15 +129,19 @@ export async function relationCandidates(
   after?: string,
   frames?: readonly Coordinate[],
   afterScore = 0,
+  selection?: RelationSelection,
 ): Promise<Candidate[]> {
   const coverage = frames ? framePattern(frames, '?relation', GRAPHS.current) : null;
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     SELECT DISTINCT ?relation ?kind ?key ${coverage ? '?specificity' : ''} WHERE {
       { GRAPH ${iri(GRAPHS.current)} { ?relation a rv:RelationOccurrence ; rv:occurrenceHead ?head }
         GRAPH ${iri(GRAPHS.revisions)} { ?head rv:lifecycle rv:Active ; rv:participation ?part .
-          ?part rv:participant ${iri(resource)} }
+          ?part rv:participant ${iri(resource)} .
+          ${selection ? `?head rv:relationDefinition ?selectedDefinitionRevision .
+          ?selectedDefinitionRevision a rv:DefinitionRevision ; rv:component ${iri(selection.definition)} .
+          ?part rv:role ${iri(roleIri(selection.definition, selection.viewingRole))} .` : ''} }
         BIND("occurrence" AS ?kind) }
-      UNION { GRAPH ${iri(GRAPHS.current)} {
+      ${selection ? '' : `UNION { GRAPH ${iri(GRAPHS.current)} {
         ?relation a rv:AuthorCredit ; rv:work ${iri(resource)} ; rv:creditRevision ?creditHead .
         FILTER NOT EXISTS { ?relation rv:retiredBy ?retirement }
       } BIND("author-credit" AS ?kind) }
@@ -146,7 +157,7 @@ export async function relationCandidates(
         ?generation rv:generationState rv:Active .
         ?placement a rv:OccurrencePlacement ; rv:generation ?generation ; schema:item ${iri(resource)} .
         FILTER NOT EXISTS { ?placement rv:removedBy ?removed }
-      } BIND("collection" AS ?kind) }
+      } BIND("collection" AS ?kind) }`}
       BIND(CONCAT(?kind, ":", STR(?relation)) AS ?key)
       ${coverage ? `${coverage.filter} BIND((${coverage.score}) AS ?specificity)` : ''}
       ${after ? `FILTER(${coverage ? `?specificity < ${afterScore} || ?specificity = ${afterScore} && ` : ''}?key > ${lit(after)})` : ''}
@@ -174,6 +185,8 @@ async function resolveCandidate(
   canReadOccurrence: ReferenceCheck,
   definition: (key: string, legacy: boolean) => Promise<ExactDefinition | null>,
   publicOccurrences?: ReadonlyMap<string,ReadonlySet<string>>,
+  session?: WorkReadSession,
+  selection?: RelationSelection,
 ): Promise<Resolved | null> {
   const base = {
     relation: candidate.relation,
@@ -183,7 +196,9 @@ async function resolveCandidate(
   };
   if (candidate.kind === 'collection') {
     if (!(await canRead(candidate.relation))) return null;
-    return { entry: base, references: [candidate.relation] };
+    if (!session) throw new WorkReadUnavailable('Collection purpose read session is unavailable');
+    const collectionPurpose = await readCollectionPurpose(session, candidate.relation);
+    return { entry: { ...base, collectionPurpose }, references: [candidate.relation] };
   }
   if (candidate.kind === 'author-credit') {
     if (!(await canRead(resource))) return null;
@@ -233,9 +248,10 @@ async function resolveCandidate(
     const readable = await disclose(refs);
     if (refs.some((ref) => !readable.has(ref))) return null;
     const own = current.state.participations.find(
-      (item) => item.participant.kind === 'resource' && item.participant.ref === resource,
+      (item) => item.participant.kind === 'resource' && item.participant.ref === resource
+        && (!selection || item.role === roleIri(selection.definition, selection.viewingRole)),
     );
-    if (!own) return null;
+    if (!own || selection && meaning.definition !== selection.definition) return null;
     return {
       entry: { ...base, revision: current.head, evidence: current.state.evidence ?? null },
       references: [...new Set(refs.filter((ref) => ref !== resource))],
@@ -294,7 +310,8 @@ async function resolveCandidate(
 }
 
 /** Fixed work budget, O(page participants + selected labels); no full catalogue scan.
- * A cursor exists only after finding a later visible row. Summary references fit one owner batch.
+ * Unselected cursors require a later visible row; selected cursors may also carry an
+ * opaque bounded-scan frontier. Summary references fit one owner batch.
  * Position is rechecked after resolution so concurrent updates yield a stale page, never mixed state. */
 export async function readResourceRelations(env: WorkActivationEnvironment,
   input: Parameters<typeof readResourceRelationsAtPosition>[1], session?: WorkReadSession) {
@@ -305,7 +322,7 @@ export async function readResourceRelations(env: WorkActivationEnvironment,
   // dataset movement alone is outside its dependency set.
   const token = (value: Awaited<ReturnType<typeof read>>) => [value.items, value.next !== null];
   session?.observeDependency(`relation-page:${JSON.stringify([input.resource, input.languages,
-    input.limit, input.after, input.readingPosition, input.frames])}`, token(page),
+    input.limit, input.after, input.readingPosition, input.frames, input.definition, input.viewingRole])}`, token(page),
   async () => token(await read()));
   return page;
 }
@@ -317,6 +334,8 @@ async function readResourceRelationsAtPosition(
     languages: readonly string[];
     limit: number;
     after?: string;
+    definition?: string;
+    viewingRole?: string;
     canRead: ReferenceCheck;
     /** The caller's reference rule: a participant or role member may be a Concept the semantic reader alone hides. */
     disclose: ReferenceDisclosure;
@@ -331,6 +350,15 @@ async function readResourceRelationsAtPosition(
   session?: WorkReadSession,
 ) {
   checkedNativeIri(input.resource);
+  let selection: RelationSelection | undefined;
+  if (input.definition !== undefined || input.viewingRole !== undefined) {
+    if (input.definition === undefined || typeof input.viewingRole !== 'string'
+      || !/^[a-z][a-z0-9-]{0,31}$/.test(input.viewingRole)) {
+      throw new SemanticChangeRejected('invalid', 'relation selection requires a Definition and viewing role');
+    }
+    checkedNativeIri(input.definition);
+    selection = { definition: input.definition, viewingRole: input.viewingRole };
+  }
   if (
     !Number.isInteger(input.limit) ||
     input.limit < 1 ||
@@ -354,15 +382,41 @@ async function readResourceRelationsAtPosition(
   if (input.visibleRecords && !(await input.visibleRecords([input.resource])).has(input.resource)) {
     throw new SemanticTargetUnavailable('resource is unavailable');
   }
+  const readSelection = async () => {
+    if (!selection) return null;
+    // Audience admission precedes retained meaning/role diagnostics. Selection
+    // grants no access to the Definition, occurrence or any participant.
+    if (!await input.canRead(selection.definition)
+      || !(await input.disclose([selection.definition])).has(selection.definition)
+      || (await discloseInventory(env, [{ owner: 'graph', resource: selection.definition,
+        component: 'record' }], currentDisclosureViewer(), 'read'))[0] !== 'visible') {
+      throw new SemanticTargetUnavailable('relation Definition is unavailable');
+    }
+    return readCurrentComponent(env, selection.definition, 'definition');
+  };
+  const selectedDefinition = await readSelection();
+  if (selection) {
+    if (!selectedDefinition) throw new SemanticTargetUnavailable('relation Definition is unavailable');
+    if (selectedDefinition.state.component !== 'definition' || selectedDefinition.state.kind !== 'relation'
+      || !selectedDefinition.state.roles.some(role => role.key === selection.viewingRole)) {
+      throw new SemanticChangeRejected('invalid', 'relation selection requires an authored relation role');
+    }
+    session?.observeDependency(`relation-selection:${selection.definition}`, selectedDefinition.head,
+      async () => (await readSelection())?.head);
+  }
   const snapshot = session?.fencesSelectedUnits
     ? { epoch: session.position.dataEpoch, sequence: session.position.sequence } : await position(env);
   // Bind the complete effective query without making the returned cursor grow with reader or frame metadata.
-  const binding = createHash('sha256').update(JSON.stringify([input.resource, input.limit,
-    input.languages, input.frames, input.readingPosition])).digest('hex');
+  const effectiveQuery = [input.resource, input.limit, input.languages, input.frames, input.readingPosition];
+  // Keep the original unselected binding and cursor bytes meaningful for existing clients.
+  const binding = createHash('sha256').update(JSON.stringify(selection
+    ? [...effectiveQuery, selection, selectedDefinition!.head, 'specificity-key-v1'] : effectiveQuery)).digest('hex');
   let cursor: Cursor | undefined;
   if (input.after) {
+    const selectedCursor = selection ? decodeReadCursor(input.after, binding,
+      { dataEpoch: snapshot.epoch, sequence: snapshot.sequence }) : null;
     try {
-      cursor = JSON.parse(Buffer.from(input.after, 'base64url').toString()) as Cursor;
+      cursor = JSON.parse(selectedCursor?.after ?? Buffer.from(input.after, 'base64url').toString()) as Cursor;
       if (
         !cursor ||
         cursor.resource !== input.resource ||
@@ -412,7 +466,7 @@ async function readResourceRelationsAtPosition(
     hasNext = false,
     exhausted = false;
   for (let scan = 0; scan < RELATION_PAGE_COST.maxScans; scan++) {
-    const candidates = await relationCandidates(env, input.resource, after, input.frames, afterScore);
+    const candidates = await relationCandidates(env, input.resource, after, input.frames, afterScore, selection);
     for (let offset = 0; offset < candidates.length && !hasNext; offset += DISCLOSURE_COST.batch) {
       const disclosed: { candidate: Candidate; resolved: Resolved }[] = [];
       const batch = candidates.slice(offset, offset + DISCLOSURE_COST.batch);
@@ -441,6 +495,8 @@ async function readResourceRelationsAtPosition(
           input.canReadOccurrence,
           definition,
           publicOccurrences,
+          session,
+          selection,
         );
         if (resolved) {
           if (resolved.entry.evidence && publicOccurrences?.get(candidate.relation)?.has(resolved.entry.evidence)) {
@@ -472,7 +528,8 @@ async function readResourceRelationsAtPosition(
       break;
     }
   }
-  if (!hasNext && !exhausted) throw new RevisionCorrupt('relation page scan budget exceeded');
+  const pending = !hasNext && !exhausted;
+  if (pending && !selection) throw new RevisionCorrupt('relation page scan budget exceeded');
   const summaries = references.size ? await input.summarize([...references]) : [];
   // A revoked read during summary resolution invalidates the page instead of exposing a placeholder.
   if (summaries.find((item) => item.reference === input.resource)?.status !== 'available') {
@@ -487,7 +544,9 @@ async function readResourceRelationsAtPosition(
   const items: RelationPageEntry[] = [];
   const renderings = new Map<string, RelationRendering>();
   for (const { candidate, resolved } of selected) {
-    let rendering: RelationRendering | null = null;
+    let rendering: RelationRendering | CollectionIncidenceRendering | null = resolved.entry.kind === 'collection'
+      ? renderCollectionIncidence(resolved.entry.relation, input.resource, resolved.entry.collectionPurpose ?? null, input.languages)
+      : null;
     if (resolved.meaning && resolved.viewingRole && resolved.bindings) {
       const key = `${resolved.meaning.revision}:${resolved.viewingRole}`;
       if (!renderings.has(key))
@@ -541,6 +600,9 @@ async function readResourceRelationsAtPosition(
   for (const definition of new Set(selected.flatMap(({ resolved }) => (resolved.meaning ? [resolved.meaning.definition] : [])))) {
     if (!(await input.canRead(definition))) throw new StaleSemanticHead('relation availability changed');
   }
+  if (selection && (await readSelection())?.head !== selectedDefinition!.head) {
+    throw new StaleSemanticHead('relation selection changed');
+  }
   if (input.publicOccurrences) {
     const occurrences = selected.filter(item => publiclyDisclosed.has(item.candidate.relation)).map(item => item.candidate.relation);
     const publicOccurrences = await input.publicOccurrences(occurrences);
@@ -555,16 +617,20 @@ async function readResourceRelationsAtPosition(
     profile: 'resource-relations-v1' as const,
     resource: input.resource,
     items,
-    next: hasNext
-      ? Buffer.from(
-          JSON.stringify({
+    next: hasNext || pending
+      ? (() => {
+          const continuation = JSON.stringify({
             resource: input.resource,
             ...snapshot,
-            after: selected.at(-1)!.candidate.key,
+            after: pending ? after! : selected.at(-1)!.candidate.key,
             binding,
-            ...(input.frames ? { score: selected[selected.length - 1]!.candidate.score } : {}),
-          }),
-        ).toString('base64url')
+            ...(input.frames ? { score: pending ? afterScore : selected.at(-1)!.candidate.score } : {}),
+          });
+          // A bounded selected scan may end on a withheld row. Use the existing
+          // authenticated opaque cursor so its physical frontier discloses no ID.
+          return selection ? encodeReadCursor(binding, { dataEpoch: snapshot.epoch, sequence: snapshot.sequence }, continuation)
+            : Buffer.from(continuation).toString('base64url');
+        })()
       : null,
     sourcePosition: {
       datasetId: 'product',

@@ -45,6 +45,28 @@ export function WorkPageCover({ work, authors = [], avatarQuery }: {
   </div>;
 }
 
+/** The same identity with or without art; a caller may stream its decorative read independently. */
+export function WorkIdentity({ workRef, work, credits, domainFacts, ratingLine, showcase, cover, shortcuts, locale, messages }: {
+  workRef: WorkAt; work: Header; credits: ReactNode; domainFacts?: ReactNode; ratingLine?: ReactNode;
+  showcase?: WorkShowcaseHeader | null; cover: ReactNode; shortcuts?: ReactNode;
+  locale: UiLocale; messages: WorkPageMessages;
+}) {
+  const header = <WorkHeader work={work} credits={credits} domainFacts={domainFacts} ratingLine={ratingLine}
+    locale={locale} messages={messages} />;
+  return <div className="grid min-w-0 content-start gap-3">
+    {showcase ? <OverviewOnly workRef={workRef}><WorkArtHero header={showcase}>
+      <WorkHeader work={work} credits={credits} domainFacts={domainFacts} ratingLine={ratingLine} showcase={showcase}
+        locale={locale} messages={messages} /></WorkArtHero></OverviewOnly> : null}
+    <div className="grid min-w-0 grid-cols-[6.5rem_minmax(0,1fr)] items-start gap-4
+      sm:grid-cols-[8rem_minmax(0,1fr)] sm:gap-6 lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-12">
+      <div className="flex min-w-0 justify-center">{cover}</div>
+      <div className="grid min-w-0 content-start gap-3">
+        {showcase ? <HiddenOnOverview workRef={workRef}>{header}</HiddenOnOverview> : header}{shortcuts}
+      </div>
+    </div>
+  </div>;
+}
+
 /**
  * Identity and the next action around every Work view. Books and other cover-led Works use one layout: on a phone
  * a thumbnail sits beside the title and the primary action, the reader's status and the shelf follow at full
@@ -54,7 +76,8 @@ export function WorkPageCover({ work, authors = [], avatarQuery }: {
 export function WorkFrame({ workRef, work, experience = workExperience(null, work.types), credits, authors = [], cover,
   domainFacts, ratingLine, showcase, readAction, status, shortcuts, sections = [], sources, statementSources, sourceLabels, factObligations,
   signedIn = false, signInHref, actingSubject, relationships,
-  readerSeed, ratingTarget, readerActions, avatarQuery, locale, messages, children }: {
+  readerSeed, ratingTarget, readerActions, shelfAction, ratingAction, identity, evidence: streamedEvidence,
+  avatarQuery, locale, messages, children }: {
   workRef: WorkAt; work: Header; credits: ReactNode; authors?: readonly CatalogueAuthor[];
   /** The page the Work's projection names; the registry's entry for its types when left out. */
   experience?: WorkExperience;
@@ -88,6 +111,10 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
   relationships?: React.ComponentProps<typeof RelationshipControl>['api'];
   /** Stories supply reader actions; pages derive them from the session. */
   readerActions?: ReaderActions;
+  /** Native reader controls may await their private state without suspending the method. */
+  shelfAction?: ReactNode; ratingAction?: ReactNode;
+  /** Independently streamed non-book identity and evidence, retaining the shared layout and sources. */
+  identity?: ReactNode; evidence?: ReactNode;
   avatarQuery?: string;
   locale: UiLocale; messages: WorkPageMessages; children: ReactNode;
 }) {
@@ -110,11 +137,11 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
   const compactHeader = showcase ? <HiddenOnOverview workRef={workRef}>{header}</HiddenOnOverview> : header;
   const primary = readAction === undefined && showsBookControls(experience) ? <ReadButton workRef={workRef} start={{ kind: 'contents' }}
     messages={messages} /> : readAction;
-  const shelf = <ShelfButton work={work.id} title={work.title.value} locale={locale} size="sm" variant="outline"
-    words={shelfWords(experience, messages)} className="min-h-11" />;
+  const shelf = shelfAction === undefined ? <ShelfButton work={work.id} title={work.title.value} locale={locale} size="sm" variant="outline"
+    words={shelfWords(experience, messages)} className="min-h-11" /> : shelfAction;
   const reactions = <div data-work-reactions className="flex min-w-0 items-start justify-end gap-2">
     <div role="group" aria-label={t.reactions} className="flex min-w-0 items-center justify-end gap-1">
-      <WorkRating work={work.id} locale={locale} label={messages.ratings} />
+      {ratingAction === undefined ? <WorkRating work={work.id} locale={locale} label={messages.ratings} /> : ratingAction}
     </div>
     <div className="shrink-0 [&_button]:min-h-11 [&_button]:min-w-11 [&_a]:min-h-11">
       <RelationshipControl target={work.id} kind="work" name={work.title.value} locale={locale} compact
@@ -123,10 +150,10 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
       reports={workReportTargets(work, workRef)} />
     </div>
   </div>;
-  const evidence = <WorkSources work={work} locale={locale} messages={messages} avatarQuery={avatarQuery}
+  const evidence = streamedEvidence === undefined ? <WorkSources work={work} locale={locale} messages={messages} avatarQuery={avatarQuery}
     statements={statementSources} labels={sourceLabels} factObligations={factObligations}>
     {sources}
-  </WorkSources>;
+  </WorkSources> : streamedEvidence;
   const nativeType = typeEntry(work.types);
   const subjectIdentity = { 'data-subject-header': nativeType ? '' : undefined,
     'data-resource': nativeType ? work.id : undefined, 'data-semantic-type': nativeType?.type };
@@ -142,16 +169,9 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
             </div>
             {reactions}
           </div>
-          <div className="grid min-w-0 content-start gap-3">
-            {artHeader}
-            <div className="grid min-w-0 grid-cols-[6.5rem_minmax(0,1fr)] items-start gap-4
-              sm:grid-cols-[8rem_minmax(0,1fr)] sm:gap-6 lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-12">
-              <div className="flex min-w-0 justify-center">
-                {cover ?? <WorkPageCover work={work} authors={authors} avatarQuery={avatarQuery} />}
-              </div>
-              <div className="grid min-w-0 content-start gap-3">{compactHeader}{shortcuts}</div>
-            </div>
-          </div>
+          {identity === undefined ? <WorkIdentity workRef={workRef} work={work} credits={credits} domainFacts={domainFacts}
+            ratingLine={ratingLine} showcase={showcase} cover={cover ?? <WorkPageCover work={work} authors={authors} avatarQuery={avatarQuery} />}
+            shortcuts={shortcuts} locale={locale} messages={messages} /> : identity}
           {status}
         </div>
         {nav}

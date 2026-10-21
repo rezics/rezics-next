@@ -86,10 +86,10 @@ async function capture<T>(pool: Pool, work: () => Promise<T>, allDecisionReads =
   const probe = spyOn(pool, 'connect').mockImplementation(function (...args: unknown[]) {
     const callback = args[0];
     if (typeof callback === 'function') {
-      return Reflect.apply(connect, pool, [(error: Error | undefined, client: PoolClient | undefined, release: unknown) => {
+      return connect.call(pool, (error: Error | undefined, client: PoolClient | undefined, release: unknown) => {
         if (client) observe(client);
         callback(error, client, release);
-      }]);
+      });
     }
     return (Reflect.apply(connect, pool, args) as Promise<PoolClient>).then(client => { observe(client); return client; });
   });

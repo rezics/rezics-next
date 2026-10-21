@@ -7,14 +7,15 @@ import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { WorkReadMoved, WorkReadUnavailable, type ReadRow, type WorkReadSession } from '../work/read-session.ts';
 import { framePattern, readFrames } from '../projection/frame-read.ts';
 import { targetSummaries } from '../target/resolve.ts';
-import { readingBoundary } from '../reading-position/boundary.ts';
+import { readingBoundary, type ReadingBoundary } from '../reading-position/boundary.ts';
 import type { Acceptance } from './graph.ts';
 import { statementQualificationExport } from './qualification.ts';
 import { MAX_PUBLIC_STATEMENT_BATCH, StatementNotFound, resolveStatementAcceptancesAt, type MeaningBasis, type StatementResolution } from './read.ts';
 import { STATEMENT_FAMILIES } from './receipt-family.ts';
 import { checkedStatementMeaningV2, statementMeaningKeyV2, statementNativeId, StatementV2Rejected,
   STATEMENT_V2_PROFILE, type StatementCoverage, type StatementMeaningV2 } from './v2-schema.ts';
-import { resolveStatementCoverage, StatementCoverageHidden } from './v2-coverage.ts';
+import { resolveStatementCoverage, StatementCoverageHidden, type RetainedStatementCoverageReader } from './v2-coverage.ts';
+import { retainedStatementCoverageReader } from './retained-coverage.ts';
 import { relationAttributionVerifier } from '../relation/attribution.ts';
 
 const RDF = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#';
@@ -178,6 +179,12 @@ async function readableReferences(session: WorkReadSession, references: readonly
 }
 
 export type StatementOwnerQuery = (body: string, limit: number) => Promise<readonly ReadRow[]>;
+/** Server-owned exact native credit identity and request position. These do
+ * not replace the Statement's receipt, DecisionSlots or coverage validation. */
+export interface StatementV2ReadOwners {
+  nativeCoverage?: RetainedStatementCoverageReader;
+  boundary?: ReadingBoundary;
+}
 
 /** Select the same bounded exact assertion inventory for HTTP reads and native
  * support admission. Each consumer resolves the assertion through its real
@@ -211,9 +218,9 @@ export async function resolveAdoptedOccurrenceV2<T extends { coverage: Statement
 
 /** The occurrence has its own adoption, independently of any trait's decision. */
 export function readAdoptedOccurrenceV2(session: WorkReadSession, occurrence: string, occurrenceRevision: string,
-  context: string, frames: readonly string[], canReadPrivate: (context: string) => Promise<boolean>) {
+  context: string, frames: readonly string[], canReadPrivate: (context: string) => Promise<boolean>, owners: StatementV2ReadOwners = {}) {
   return resolveAdoptedOccurrenceV2(occurrence, occurrenceRevision, (body, limit) => session.query(body, limit),
-    (statement, revision) => readAdoptedStatementV2(session, statement, revision, context, frames, canReadPrivate));
+    (statement, revision) => readAdoptedStatementV2(session, statement, revision, context, frames, canReadPrivate, owners));
 }
 
 export async function readStatementV2MeaningBasis(snapshot: Pick<StatementV2Snapshot, 'meaning' | 'semanticContextRevision'>,
@@ -233,15 +240,16 @@ export async function readStatementV2MeaningBasis(snapshot: Pick<StatementV2Snap
 
 /** A trait's decision cannot adopt its occurrence. */
 async function requireOccurrenceAssertion(session: WorkReadSession, snapshot: StatementV2Snapshot,
-  context: string, frames: readonly string[], canReadPrivate: (context: string) => Promise<boolean>): Promise<void> {
+  context: string, frames: readonly string[], canReadPrivate: (context: string) => Promise<boolean>, owners: StatementV2ReadOwners): Promise<void> {
   const coverage = snapshot.meaning.coverage;
   if (coverage.kind === 'participation') await readAdoptedOccurrenceV2(session, coverage.occurrence,
-    coverage.occurrenceRevision, context, frames, canReadPrivate);
+    coverage.occurrenceRevision, context, frames, canReadPrivate, owners);
 }
 
 /** Public exact reads require current adoption. The writer uses the receipt-bound snapshot above for its draft result. */
 export async function readAdoptedStatementV2(session: WorkReadSession, statement: string, revision: string,
   context: string, frames: readonly string[], canReadPrivate: (context: string) => Promise<boolean>,
+  owners: StatementV2ReadOwners = {},
 ) {
   const env = session.deps.environment;
   if (context !== 'global') {
@@ -278,12 +286,13 @@ export async function readAdoptedStatementV2(session: WorkReadSession, statement
   }
   let coverage;
   const attribution = relationAttributionVerifier(session.deps.relationAttribution, session.principal, session.options.actingSubject);
+  const compatibility = retainedStatementCoverageReader(session.deps, session.principal, session.options.actingSubject);
   try { coverage = await resolveStatementCoverage(env, snapshot.meaning, canRead, canRead, disclose,
-    refs => readableReferences(session, refs), attribution); }
+    refs => readableReferences(session, refs), attribution, compatibility, owners.nativeCoverage); }
   catch (error) { if (error instanceof StatementCoverageHidden) throw new StatementNotFound('Statement is unavailable'); throw error; }
   session.observeDependency(`statement-coverage:${statement}:${revision}`, coverage,
     () => resolveStatementCoverage(env, snapshot.meaning, async ref => (await readableReferences(session, [ref])).has(ref),
-      async ref => (await readableReferences(session, [ref])).has(ref), disclose, refs => readableReferences(session, refs), attribution));
+      async ref => (await readableReferences(session, [ref])).has(ref), disclose, refs => readableReferences(session, refs), attribution, compatibility, owners.nativeCoverage));
   const readMeaning = () => readStatementV2MeaningBasis(snapshot, (body, limit) => session.query(body, limit), canReadPrivate);
   const meaningBasis = await readMeaning();
   session.observeDependency(`statement-meaning-basis:${statement}:${revision}`, meaningBasis, readMeaning);
@@ -300,13 +309,13 @@ export async function readAdoptedStatementV2(session: WorkReadSession, statement
     ...[snapshot.meaning.subject, snapshot.meaning.value].flatMap(value => value.kind === 'resource' ? [value.ref] : []),
     ...(snapshot.meaning.qualification ? [snapshot.meaning.qualification.definition, snapshot.meaning.qualification.interpretationContext,
       ...(snapshot.meaning.qualification.editionScope ? [snapshot.meaning.qualification.editionScope] : [])] : [])])].filter(statementNativeId);
-  const disclosed = await disclose(records), visible = await readingBoundary(session).visible(records);
+  const disclosed = await disclose(records), visible = await (owners.boundary ?? readingBoundary(session)).visible(records);
   if (records.some(ref => !disclosed.has(ref) || !visible.has(ref))) throw new StatementNotFound('Statement is unavailable');
   const value = snapshot.meaning.value;
   if (value.kind === 'resource' && snapshot.meaning.coverage.kind !== 'occurrence' && !await canRead(value.ref)) {
     throw new StatementNotFound('Statement is unavailable');
   }
-  await requireOccurrenceAssertion(session, snapshot, context, frames, canReadPrivate);
+  await requireOccurrenceAssertion(session, snapshot, context, frames, canReadPrivate, owners);
   const current = await session.query(`SELECT ?epoch ?sequence WHERE {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence }
   } LIMIT 2`, 2);
