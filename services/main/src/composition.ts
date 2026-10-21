@@ -154,6 +154,7 @@ import { SourceFieldApplicationStore } from './modules/source/field-application.
 import { SourceRetainedFieldSupportStore, retainedFieldEvidenceOwners, type RetainedFieldOwners } from './modules/source/field-support-retained.ts';
 import { acknowledgedSemanticSupportOwners } from './modules/source/field-support-acknowledged.ts';
 import { SourceRetainedRecordEvidenceOwner } from './modules/source/retained-evidence.ts';
+import { SourceReleaseEvidenceOwner } from './modules/source/release-evidence.ts';
 import { SourceNativeChildStore } from './modules/source/child-native-support.ts';
 import { ProviderIdentityStore } from './modules/source/provider-identity.ts';
 import { SourceScoreStore } from './modules/source/score.ts';
@@ -588,6 +589,7 @@ export async function composeMain(input: ComposeMainInput) {
       sourceCorrespondences, environment, account, access, sourceAuthorNames),
     sourceFieldWithdrawals,
     sourceRetainedFieldSupports,
+    sourceReleaseEvidence: new SourceReleaseEvidenceOwner(contentPool,sourceConversions.retained,retainedEvidence),
     sourceFieldApplications: new SourceFieldApplicationStore(contentPool, environment,
       account, access, sourceConversions, sourceAdoptions, sourceFieldWithdrawals, rightsStore),
     sourceNativeChildren: new SourceNativeChildStore(contentPool, sourceProposals, sourceConversions,

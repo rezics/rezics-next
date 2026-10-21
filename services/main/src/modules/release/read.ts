@@ -12,6 +12,8 @@ import {
 import { admittedPage } from '../disclosure/admitted-page.ts';
 import { admittedReadPosition } from '../read-basis/admitted-position.ts';
 import { fenceWorkBasis, readWorkBasis } from '../work/read-header.ts';
+import { releaseSourceEvidence } from '../source/release-evidence.ts';
+import type { ReleaseSourceEvidence } from '../source/release-evidence-contract.ts';
 import { recordedLanguageTag, InvalidContentLanguages } from './languages.ts';
 import {
   parseStoredRelease,
@@ -68,6 +70,7 @@ export interface ReleaseView {
   }[];
   legacyCoverage: { scope: string; complete: boolean } | null;
   snapshots: SnapshotView[];
+  sourceEvidence: ReleaseSourceEvidence[];
 }
 
 function viewOf(
@@ -123,6 +126,7 @@ function viewOf(
     platform: record.profile !== 'release-v1' ? record.platform : null,
     territory: record.profile !== 'release-v1' ? record.territory : null,
     snapshots,
+    sourceEvidence: [],
   };
 }
 
@@ -324,10 +328,12 @@ export async function readWorkReleases(
   const records = page.map((row) => selected.records.get(row.release!.value)!);
   const snapshots = await releaseSnapshots(session, work, records);
   await fenceWorkBasis(session, basis);
-  const views = records.map((record) => ({
+  const views = await Promise.all(records.map(async (record) => ({
     ...selected.views.get(record.id)!,
     snapshots: snapshots.get(record.id) ?? [],
-  }));
+    sourceEvidence: await releaseSourceEvidence(session,{ owner: 'release',component: record.id,
+      revision: selected.views.get(record.id)!.revision }),
+  })));
   return { ...pageResult(session, views, selected.lookahead
     ? encodeReadCursor(binding, position, page.at(-1)!.release!.value) : null), sourcePosition: position };
 }
@@ -453,7 +459,8 @@ export async function readWorkRelease(session: WorkReadSession, work: string, re
     await completeViews(session, [{ record, revision: rows[0].revision.value, snapshots }])
   )[0];
   if (!view) throw new WorkReadMissing('Release is unavailable');
-  return { ...view, sourcePosition: session.position };
+  return { ...view, sourceEvidence: await releaseSourceEvidence(session,{ owner: 'release',
+    component: view.id,revision: view.revision }),sourcePosition: session.position };
 }
 
 export interface ReleaseLookup {
@@ -507,7 +514,11 @@ export async function readReleasesByIdentifier(session: WorkReadSession, lookup:
   const position = await releasePosition(session, input);
   const cursor = decodeReadCursor(session.options.cursor, binding, position);
   const selected = await releasePage(session, { ...input, after: cursor?.after });
-  const views = selected.page.map((row) => selected.views.get(row.release!.value)!);
+  const views = await Promise.all(selected.page.map(async (row) => {
+    const view = selected.views.get(row.release!.value)!;
+    return { ...view,sourceEvidence: await releaseSourceEvidence(session,{ owner: 'release',
+      component: view.id,revision: view.revision }) };
+  }));
   return { ...pageResult(
     session,
     views,

@@ -28,6 +28,7 @@ export interface RealizationSourceBasisRead {
 export async function readRealizationSourceBasis(
   env: WorkActivationEnvironment,
   basis: ReleaseNativeCommandBasis,
+  head: 'expected' | 'observed' = 'expected',
 ): Promise<RealizationSourceBasisRead | ReleaseSourceVerificationFailure> {
   if (!validReleaseNativeCommand(basis)) {
     return releaseNativeFailure('target-mismatch', 'realization-command-basis-invalid');
@@ -72,7 +73,7 @@ export async function readRealizationSourceBasis(
   ) {
     return releaseNativeFailure('target-mismatch', 'realization-command-state-differs');
   }
-  if (row.head.value !== basis.expectedHead)
+  if (head === 'expected' && row.head.value !== basis.expectedHead)
     return releaseNativeFailure('head-mismatch', 'realization-head-moved');
   return { status: 'available', record, receipt, head: row.head.value };
 }
