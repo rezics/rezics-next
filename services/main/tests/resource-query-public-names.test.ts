@@ -4,11 +4,13 @@ import { Value } from 'typebox/value';
 import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts';
 import { configureDisclosure } from '../src/modules/disclosure/read.ts';
 import { PROFILES } from '../src/modules/semantic/schema.ts';
-import { resourceCard, type ResourceListPlan } from '../src/modules/query/resource-contract.ts';
+import { resourceCard, resourceListQuery, type ResourceListPlan } from '../src/modules/query/resource-contract.ts';
 import { resourceCards, readResourceList } from '../src/modules/query/resources.ts';
 import { resourceTypeKinds } from '../src/modules/query/work-drive.ts';
 import { searchGraphSnapshot } from '../src/modules/search/snapshot-state.ts';
 import { ANONYMOUS_VIEWER } from '../src/modules/suitability/policy.ts';
+import { compileQuery, QueryRejected } from '../src/modules/query/compile.ts';
+import { indexedLabels } from '../src/modules/search/labels.ts';
 import { WorkReadInvalid, WorkReadUnavailable, type WorkReadSession } from '../src/modules/work/read-session.ts';
 import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 
@@ -44,6 +46,8 @@ function fixture() {
     manifests.set(entry.id, `urn:rezics:sha256:${manifest.digest}`);
   }
   const directoryLimits: number[] = [], authorities: unknown[][] = [];
+  const rankedRequests: { text: string; scope: Record<string, unknown>; after?: unknown }[] = [];
+  const populationQueries: string[] = [];
   const graph = new FusekiClient('http://public-name-owner-inputs.invalid');
   const refs = (body: string, variable: string) => [...(new RegExp(`VALUES \\?${variable} \\{([^}]+)\\}`)
     .exec(body)?.[1] ?? '').matchAll(/<([^>]+)>/g)].map(match => match[1]!);
@@ -52,7 +56,20 @@ function fixture() {
     if (body.includes('SELECT ?page WHERE')) {
       const args = body.match(/"(?:\\.|[^"\\])*"/g)!.map(value => JSON.parse(value) as string);
       const after = args[1] ? JSON.parse(args[1]) as { id: string } : undefined;
-      const scope = JSON.parse(args[2]!) as { names: string; directory: string };
+      const scope = JSON.parse(args[2]!) as { names: string; directory?: string; matchMode?: string };
+      if (!scope.directory) {
+        rankedRequests.push({ text: args[0]!, scope, after });
+        const offset = after ? Number((after as { document?: number }).document ?? -1) + 1 : 0;
+        // Controlled native pages establish adapter/continuation behavior only.
+        // Actual matching is covered by PublicNameDiscoveryTest.
+        const hits = entries.map((entry, document) => ({
+          id: `urn:rezics:search:name:${entry.kind}:${entry.id.split('/').at(-1)}`,
+          key: `urn:rezics:search:name:${entry.kind}:${entry.id.split('/').at(-1)}`,
+          score: '1', document,
+        }));
+        return { results: { bindings: [{ page: literal(JSON.stringify({ hits: hits.slice(offset, offset + 64),
+          more: hits.length > offset + 64, commit: '1' })) }] } };
+      }
       const limit = Number(/rv:publicTitle, "(?:\\.|[^"\\])*", (\d+)/.exec(body)![1]);
       directoryLimits.push(limit);
       const candidates = entries.filter(entry => entry.kind === scope.names).map(entry => ({
@@ -62,10 +79,10 @@ function fixture() {
       return { results: { bindings: [{ page: literal(JSON.stringify({ hits: candidates.slice(0, limit),
         more: candidates.length > limit, commit: '1' })) }] } };
     }
-    if (body.includes('SELECT DISTINCT ?r ?kind ?summary')) return { results: { bindings:
+    if (body.includes('SELECT DISTINCT ?r ?kind ?summary')) { populationQueries.push(body); return { results: { bindings:
       entries.filter(entry => refs(body, 'r').includes(entry.id) && !state.private).map(entry => ({
         r: uri(entry.id), summary: uri(entry.id), kind: literal(entry.kind), resourceType: uri(entry.types[0]!),
-      })) } };
+      })) } }; }
     if (body.includes('SELECT ?epoch ?sequence ?hold ?r')) return { results: { bindings: [control,
       ...entries.filter(entry => refs(body, 'r').includes(entry.id)).map(entry => ({ ...control,
         r: uri(entry.id), type: literal('resource'), head: uri(id(900)), public: literal(String(!state.private)),
@@ -114,7 +131,7 @@ function fixture() {
       position: { dataEpoch: 'epoch', sequence: '7', generation: 'generation', population: entries.length,
         serverInstanceId: 'instance', publicSearchWriteEpoch: '0' } }, () => readResourceList(session, input));
   };
-  return { session, entries, state, read, directoryLimits, authorities, observed };
+  return { session, entries, state, read, directoryLimits, authorities, observed, rankedRequests, populationQueries };
 }
 
 test('generic Resource/Post pages share the bounded All seek, round-trip every cursor and finish without loss', async () => {
@@ -170,4 +187,79 @@ test('Resource types retain every compatible owner and cursors cannot cross sele
   const f = fixture(), page = await f.read();
   await expect(f.read({ ...plan, input: { ...plan.input, limit: 10, cursor: page.nextCursor! } }))
     .rejects.toBeInstanceOf(WorkReadInvalid);
+});
+
+
+test('ordinary resource-list q explicitly selects literal keywords and preserves phrase opt-in', async () => {
+  for (const matchMode of [undefined, 'keywords', 'phrase'] as const) {
+    const f = fixture();
+    const request = { ...plan.input, q: '  garden   winter  ', sort: 'relevance' as const,
+      ...(matchMode ? { matchMode } : {}) };
+    expect(Value.Check(resourceListQuery, request)).toBe(true);
+    await f.read({ ...plan, input: request });
+    expect(f.rankedRequests[0]).toMatchObject({ text: 'garden winter', scope: { names: 'all', matchMode: matchMode ?? 'keywords' } });
+  }
+});
+
+test('resource-list keyword continuation preserves filters, traverses completely and rejects text/mode/filter changes', async () => {
+  const f = fixture(), seen: string[] = [];
+  const request = { ...plan.input, q: 'prejudice pride', sort: 'relevance' as const };
+  const first = await f.read({ ...plan, input: request });
+  expect(first.nextCursor).not.toBeNull();
+  const follow = { ...request, cursor: first.nextCursor! };
+  for (const change of [{ q: 'other words' }, { matchMode: 'phrase' as const }]) {
+    await expect(f.read({ ...plan, input: { ...follow, ...change } })).rejects.toBeInstanceOf(WorkReadInvalid);
+  }
+  await expect(f.read({ input: follow, conditions: [{ facet: 'language', operator: 'any', values: ['ja'] }] }))
+    .rejects.toBeInstanceOf(WorkReadInvalid);
+  let page = first;
+  for (let n = 0; n < 10; n++) {
+    seen.push(...page.items.map(item => item.id));
+    expect(new Set(seen).size).toBe(seen.length);
+    expect(page.count).toEqual({ value: seen.length, kind: page.complete ? 'exact' : 'at-least' });
+    if (page.complete) break;
+    page = await f.read({ input: { ...follow, cursor: page.nextCursor! }, conditions: [] });
+  }
+  expect(page.complete).toBe(true); expect(seen).toEqual(f.entries.map(entry => entry.id));
+  expect(f.rankedRequests.every(row => row.scope.matchMode === 'keywords')).toBe(true);
+  const canonical = fixture();
+  const a = await canonical.read({ ...plan, input: { ...request, q: '  cafe\u0301   noir  ' } });
+  await expect(canonical.read({ ...plan, input: { ...request, q: 'café noir', cursor: a.nextCursor! } })).resolves.toBeDefined();
+  const filtered = fixture();
+  const selected: ResourceListPlan = { input: request, conditions: [{ facet: 'language', operator: 'any', values: ['ja'] }] };
+  const filteredPage = await filtered.read(selected);
+  await filtered.read({ ...selected, input: { ...request, cursor: filteredPage.nextCursor! } });
+  expect(filtered.populationQueries.every(query => query.includes('ja'))).toBe(true);
+});
+
+test('directory-ordered keyword tests use the same explicit native mode and current public population', async () => {
+  for (const matchMode of ['keywords', 'phrase'] as const) {
+    const f = fixture();
+    await f.read({ ...plan, input: { ...plan.input, q: 'garden winter', ...{ matchMode } } });
+    expect(f.populationQueries.length).toBeGreaterThan(0);
+    expect(f.populationQueries.every(query => query.includes(`\\"matchMode\\":\\"${matchMode}\\"`))).toBe(true);
+    expect(f.populationQueries.every(query => query.includes('rv:rankedText'))).toBe(true);
+  }
+});
+
+test('resource-list keyword admission and actual name adapter use one to eighty Unicode code points', async () => {
+  const f = fixture();
+  for (const q of ['猫', 'a', '𠮷', '星 空', '𠮷'.repeat(80)]) {
+    const input = { ...plan.input, q, sort: 'relevance' as const };
+    expect(Value.Check(resourceListQuery, input)).toBe(true);
+    await f.read({ ...plan, input });
+  }
+  for (const q of ['𠮷'.repeat(81), 'x'.repeat(81), 'a\u0000b']) {
+    expect(Value.Check(resourceListQuery, { ...plan.input, q })).toBe(false);
+    expect(() => compileQuery({ ...plan.input, q })).toThrow(QueryRejected);
+    await expect(indexedLabels(f.session, q, 1)).rejects.toBeInstanceOf(WorkReadInvalid);
+  }
+  // NFC can expand a code point (U+0344 -> U+0308 U+0301); refuse before native I/O.
+  const expanded = '\u0344'.repeat(41);
+  expect(() => compileQuery({ ...plan.input, q: expanded })).toThrow(QueryRejected);
+  await expect(indexedLabels(f.session, expanded, 1)).rejects.toBeInstanceOf(WorkReadInvalid);
+  for (const extra of [{ matchMode: 'fuzzy' }, { matchMode: 'phrase' }, { q: ' ', matchMode: 'keywords' }]) {
+    expect(() => compileQuery({ ...plan.input, ...extra } as never)).toThrow(QueryRejected);
+  }
+  expect(Value.Check(resourceListQuery, { ...plan.input, q: 'garden', matchMode: 'fuzzy' })).toBe(false);
 });

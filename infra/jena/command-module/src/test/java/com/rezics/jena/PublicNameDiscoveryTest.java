@@ -183,4 +183,155 @@ public class PublicNameDiscoveryTest {
             assertFalse(data.contains(PUBLIC, unit, p("publicTitle"), Node.ANY));
         } finally { data.abort(); data.end(); data.close(); }
     }
+    private static String literal(String value) {
+        return org.apache.jena.riot.out.NodeFmtLib.strNT(NodeFactory.createLiteralString(value));
+    }
+    /** Exercise the real ARQ request boundary, not a second keyword matcher. */
+    private static org.apache.jena.atlas.json.JsonObject names(DatasetGraph data, String text, String mode) {
+        org.apache.jena.sparql.function.FunctionRegistry.get().put("https://rezics.com/vocab/rankedText",
+            FilteredGraphTextIndex.RankedFunction.class);
+        var scope = new org.apache.jena.atlas.json.JsonObject(); scope.put("names", "resource");
+        if (mode != null) scope.put("matchMode", mode);
+        String query = "SELECT ?page WHERE { BIND(<https://rezics.com/vocab/rankedText>(<https://rezics.com/vocab/publicTitle>,"
+            + literal(text) + ",64,\"\"," + literal(scope.toString()) + ") AS ?page) }";
+        try (var run = org.apache.jena.query.QueryExecutionFactory.create(query, org.apache.jena.query.DatasetFactory.wrap(data))) {
+            // Match the assembler binding: ARQ exposes the underlying RDF dataset.
+            run.getContext().set(TextQuery.textIndex, ((DatasetGraphText) data).getTextIndex());
+            var row = run.execSelect().next();
+            assertTrue("Native name request must return its bounded page", row.contains("page"));
+            return org.apache.jena.atlas.json.JSON.parse(row.getLiteral("page").getString());
+        }
+    }
+    private static List<String> nameKeys(DatasetGraph data, String text, String mode) {
+        var result = new java.util.ArrayList<String>();
+        for (var value : names(data, text, mode).get("hits").getAsArray()) {
+            var hit = value.getAsObject();
+            if (!hit.get("key").isNull()) result.add(hit.get("key").getAsString().value());
+        }
+        return result;
+    }
+    private static void named(DatasetGraph data, int number, String name, String... aliases) {
+        resource(data, id(number), id(1), "https://example.org/IndependentType");
+        data.deleteAny(CURRENT, id(number), LABEL, Node.ANY);
+        Node alternate = uri("https://schema.org/alternateName");
+        data.deleteAny(CURRENT, id(number), alternate, Node.ANY);
+        data.add(CURRENT, id(number), LABEL, NodeFactory.createLiteralString(name));
+        for (String alias : aliases) data.add(CURRENT, id(number), alternate, NodeFactory.createLiteralString(alias));
+        PublicNameProjection.refresh(data, id(number));
+    }
+    @Test public void literalKeywordsMatchUnorderedTitleAndAliasWordsWithinOneAuthoredName() {
+        var index = index(); var data = dataset(index); data.begin(ReadWrite.WRITE);
+        try {
+            work(data, id(1), id(2));
+            named(data, 10, "Pride and Prejudice", "The Winter Garden");
+            named(data, 11, "Pride without the other word", "Prejudice");
+            named(data, 12, "Unrelated", "Pride or Prejudice");
+            data.commit();
+        } finally { data.end(); }
+        data.begin(ReadWrite.READ);
+        try {
+            String target = PublicNameProjection.nameUnit(id(10), "resource").getURI();
+            String other = PublicNameProjection.nameUnit(id(12), "resource").getURI();
+            assertEquals(java.util.Set.of(target, other), new java.util.HashSet<>(nameKeys(data, "prejudice pride", "keywords")));
+            assertEquals(List.of(target), nameKeys(data, "garden winter", "keywords"));
+            assertTrue(nameKeys(data, "pride prejudice", "phrase").isEmpty());
+            assertTrue(nameKeys(data, "pride prejudice", null).isEmpty());
+            assertEquals(List.of(target), nameKeys(data, "pride and prejudice", "phrase"));
+            assertTrue(nameKeys(data, "pride nonexistent", "keywords").isEmpty());
+            // Operator-looking input remains literal analyzed text: OR must be present.
+            assertEquals(List.of(other), nameKeys(data, "pride OR prejudice", "keywords"));
+            assertTrue(nameKeys(data, "pride OR nonexistent", "keywords").isEmpty());
+            assertTrue(nameKeys(data, "title:pride", "keywords").isEmpty());
+            assertEquals(java.util.Set.of(target, other), new java.util.HashSet<>(nameKeys(data, "+pride -prejudice*", "keywords")));
+        } finally { data.end(); data.close(); }
+    }
+    @Test public void nativeKeywordsNormalizeNfcAndWhitespaceAndSupportCjkAndSupplementaryCharacters() {
+        var index = index(); var data = dataset(index); data.begin(ReadWrite.WRITE);
+        try {
+            work(data, id(1), id(2));
+            named(data, 10, "Café au lait"); named(data, 11, "Caf\u0065\u0301 noir");
+            named(data, 12, "星空物語"); named(data, 13, "𠮷野家"); named(data, 14, "A");
+            data.commit();
+        } finally { data.end(); }
+        data.begin(ReadWrite.READ);
+        try {
+            for (String text : List.of("lait cafe\u0301", "  lait\u00a0café  "))
+                assertEquals(List.of(PublicNameProjection.nameUnit(id(10), "resource").getURI()), nameKeys(data, text, "keywords"));
+            assertEquals(List.of(PublicNameProjection.nameUnit(id(11), "resource").getURI()), nameKeys(data, "noir café", "keywords"));
+            for (String text : List.of("星空物語", "星 空 物 語", "物語 星空", "星"))
+                assertEquals(List.of(PublicNameProjection.nameUnit(id(12), "resource").getURI()), nameKeys(data, text, "keywords"));
+            assertEquals(List.of(PublicNameProjection.nameUnit(id(13), "resource").getURI()), nameKeys(data, "𠮷", "keywords"));
+            assertEquals(List.of(PublicNameProjection.nameUnit(id(14), "resource").getURI()), nameKeys(data, "a", "keywords"));
+            assertTrue(nameKeys(data, "猫", "keywords").isEmpty());
+            assertFalse(names(data, "𠮷".repeat(80), "keywords").get("more").getAsBoolean().value());
+            assertThrows(TextIndexException.class, () -> index.ranked(p("publicTitle"), "𠮷".repeat(81), 1, null, data,
+                new FilteredGraphTextIndex.RankScope(null, null, null, false, "resource", null)));
+            assertThrows(TextIndexException.class, () -> index.ranked(p("publicTitle"), "\u0344".repeat(41), 1, null, data,
+                new FilteredGraphTextIndex.RankScope(null, null, null, false, "resource", null)));
+        } finally { data.end(); data.close(); }
+    }
+    @Test public void keywordHitsStillRequireTheCurrentPublicUnwithdrawnOwner() {
+        var index = index(); var data = dataset(index); data.begin(ReadWrite.WRITE);
+        try { work(data, id(1), id(2)); named(data, 10, "The Winter Garden"); data.commit(); }
+        finally { data.end(); }
+        data.begin(ReadWrite.READ);
+        try { assertEquals(1, nameKeys(data, "garden winter", "keywords").size()); }
+        finally { data.end(); }
+        // Keep the stored projection deliberately stale; ranked disclosure must use current facts.
+        data.begin(ReadWrite.WRITE);
+        try { set(data, CURRENT, id(10), "disclosure", p("Private")); data.commit(); }
+        finally { data.end(); }
+        data.begin(ReadWrite.READ);
+        try {
+            assertTrue(nameKeys(data, "garden winter", "keywords").isEmpty());
+            assertEquals(1, names(data, "garden winter", "keywords").get("hits").getAsArray().size());
+        } finally { data.end(); }
+        data.begin(ReadWrite.WRITE);
+        try {
+            set(data, CURRENT, id(10), "disclosure", null);
+            set(data, CURRENT, id(10), "semanticHead", id(99)); data.commit();
+        } finally { data.end(); }
+        data.begin(ReadWrite.READ);
+        try { assertTrue(nameKeys(data, "garden winter", "keywords").isEmpty()); }
+        finally { data.end(); }
+        data.begin(ReadWrite.WRITE);
+        try {
+            Node head = uri(id(10).getURI() + "/revision");
+            set(data, CURRENT, id(10), "semanticHead", head);
+            data.add(REVISIONS, head, RDF.type.asNode(), p("ErasedRevision")); data.commit();
+        } finally { data.end(); }
+        data.begin(ReadWrite.READ);
+        try { assertTrue(nameKeys(data, "garden winter", "keywords").isEmpty()); }
+        finally { data.end(); data.close(); }
+    }
+
+    @Test public void keywordAliasPagesAdvanceEveryPhysicalHitAndFinishWithoutDuplicateResources() {
+        var index = index(); var data = dataset(index); data.begin(ReadWrite.WRITE);
+        try {
+            work(data, id(1), id(2));
+            for (int n = 10; n < 80; n++) named(data, n, "The Winter Garden", "Winter and Garden");
+            data.commit();
+        } finally { data.end(); }
+        data.begin(ReadWrite.READ);
+        try {
+            var scope = new FilteredGraphTextIndex.RankScope(null, null, null, false, "resource", null, "keywords");
+            var seen = new java.util.HashSet<String>();
+            FilteredGraphTextIndex.RankAfter after = null;
+            boolean complete = false;
+            for (int n = 0; n < 20; n++) {
+                var page = index.ranked(p("publicTitle"), "garden winter", 17, after, data, scope);
+                assertTrue(page.hits().size() <= 17);
+                for (var hit : page.hits()) if (hit.key() != null) assertTrue("Duplicate resource", seen.add(hit.key()));
+                if (!page.more()) { complete = true; break; }
+                assertFalse(page.hits().isEmpty());
+                var last = page.hits().getLast();
+                assertNotNull(last.document());
+                after = new FilteredGraphTextIndex.RankAfter(last.id(), last.score(), page.commit(), last.document());
+            }
+            assertTrue("Traversal must terminate", complete); assertEquals(70, seen.size());
+            var invalid = new FilteredGraphTextIndex.RankScope(null, null, null, false, "resource", null, "fuzzy");
+            assertThrows(TextIndexException.class, () -> index.ranked(p("publicTitle"), "garden winter", 17, null, data, invalid));
+        } finally { data.end(); data.close(); }
+    }
+
 }

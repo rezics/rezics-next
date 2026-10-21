@@ -42,7 +42,8 @@ const scopeRealm = t.Object({ kind: t.Literal('realm'), realm: nativeId }, close
 const scopeMine = t.Object({ kind: t.Literal('mine') }, closed);
 const scopeV1 = t.Union([scopeAll, scopeRealm]);
 const scope = t.Union([scopeAll, scopeRealm, scopeMine]);
-const text = t.Union([t.Object({ phrase: t.String({ minLength: 2, maxLength: 80 }) }, closed),
+const text = t.Union([t.Object({ keywords: t.String({ minLength: 1, maxLength: 80 }) }, closed),
+  t.Object({ phrase: t.String({ minLength: 1, maxLength: 80 }) }, closed),
   t.Object({ title: t.String({ minLength: 2, maxLength: 80 }),
     body: t.String({ minLength: 2, maxLength: 80 }) }, closed)]);
 const page = t.Object({ size: t.Integer({ minimum: 1, maximum: QUERY_COST.searchPageSize }),
@@ -132,7 +133,7 @@ export function queryRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         } catch (error) { return discoveryError(error); }
         return Response.json({ profile: 'query-v1', template: 'resource-list-v1',
           selection: { context: query.context, scope: query.scope, filter: query.filter ?? { all: [] },
-            text: query.q?.trim() ? { phrase: query.q } : null, sort: query.sort,
+            text: query.q ? (query.matchMode === 'phrase' ? { phrase: query.q } : { keywords: query.q }) : null, sort: query.sort,
             pageSize: query.limit ?? 20, facetRefs: compiled.facets, semanticRevisions: [] }, result },
           { headers: { 'cache-control': 'private, no-store' } });
       }

@@ -10,6 +10,7 @@ import { ZONE_BROWSE_COST } from '../zone-modules/contract.ts';
 import { CONCEPT_WORKS_COST, type ConceptWorksQuery, type FilteredWorksQuery } from '../concept-page/contract.ts';
 import { compileReleaseQuery, relatedCondition, type ReleaseQuery } from '../facets/release-query.ts';
 import type { ResourceListQuery, ResourceListPlan, ResourceCondition } from './resource-contract.ts';
+import { normalizeNameQuery } from '../search/labels.ts';
 import type { Exposure } from '../access/exposure.ts';
 import { semanticTypeCapabilities } from '../semantic/selected-capability.ts';
 
@@ -26,7 +27,8 @@ export class QueryRejected extends Error {
   constructor(readonly refusal: QueryRefusal, message: string) { super(message); }
 }
 
-type SearchRequest = { profile: string; phrase?: string; titleTerm?: string; bodyTerm?: string;
+type SearchRequest = { profile: string; phrase?: string; matchMode?: 'keywords' | 'phrase';
+  titleTerm?: string; bodyTerm?: string;
   language: string | null; author?: string; context?: { kind: 'realm-local'; id: string };
   includeTypes?: string[]; excludeTypes?: string[]; sense?: string;
   ratingContext?: string; minimumMeanTimes10?: number; pageSize?: number; continuation?: unknown };
@@ -181,8 +183,14 @@ export type AdmittedQuery = ResourceQuery | ResourceQueryV2;
 export function compileQuery(query: AdmittedQuery | ResourceListQuery): CompiledQuery {
   if ('profile' in query && query.profile === 'resource-list-v1') {
     const input = query as ResourceListQuery;
+    if (input.q !== undefined && typeof input.q !== 'string') fail('Search text is malformed');
+    let q: string;
+    try { q = normalizeNameQuery(input.q ?? ''); }
+    catch { throw new QueryRejected('invalid_query', 'Search text is invalid'); }
+    if (input.matchMode !== undefined && !['keywords', 'phrase'].includes(input.matchMode)) fail('Unsupported match mode');
+    if (input.matchMode !== undefined && !q) fail('A match mode needs text');
     const admitted = admit(input.filter as FilterDocument | undefined, true);
-    if (input.sort === 'relevance' && !input.q?.trim()) fail('Relevance needs text');
+    if (input.sort === 'relevance' && !q) fail('Relevance needs text');
     if (input.scope.kind === 'realm' && (input.context === 'global' || input.context.realm !== input.scope.realm)) {
       fail('A Realm scope needs the same Realm Context');
     }
@@ -197,7 +205,7 @@ export function compileQuery(query: AdmittedQuery | ResourceListQuery): Compiled
       const operator = condition.any ? 'any' : condition.all ? 'all' : 'none';
       return { facet: name as ResourceCondition['facet'], operator, values: values(condition, operator) };
     });
-    return { template: 'resource-list', request: { input, conditions },
+    return { template: 'resource-list', request: { input: { ...input, ...(input.q !== undefined ? { q } : {}) }, conditions },
       facets: admitted.facets, graphReads: admitted.graphReads };
   }
   const legacy = query as ResourceQuery | ResourceQueryV2;
@@ -224,10 +232,29 @@ export function compiledQueryCapabilities(plan: CompiledQuery): Exposure[] {
   return semanticTypeCapabilities(types);
 }
 
+/** Internal callers share the route's closed text alternatives and Unicode bound. */
+function admitText(text: ResourceQuery['text']): void {
+  if (text === undefined) return;
+  if (!text || typeof text !== 'object' || Array.isArray(text)) fail('Text needs an admitted alternative');
+  const keys = Object.keys(text);
+  const single = keys.length === 1 && (keys[0] === 'keywords' || keys[0] === 'phrase');
+  const fields = keys.length === 2 && keys.includes('title') && keys.includes('body');
+  if (!single && !fields) fail('Text needs keywords, phrase, or title and body');
+  for (const value of Object.values(text)) {
+    if (typeof value !== 'string' || !value.trim() || [...value].length < (fields ? 2 : 1)) {
+      fail('Search text is empty or malformed');
+    }
+    if ([...value].length > 80) {
+      throw new QueryRejected('query_budget_exceeded', 'Search text exceeds 80 Unicode code points');
+    }
+  }
+}
+
 function compileLegacyQuery(query: ResourceQuery | ResourceQueryV2): CompiledQuery {
   if (query.sourcePolicy !== undefined || query.asOf !== undefined) {
     throw new QueryRejected('unsupported_query_source', 'Only the current product source is admitted');
   }
+  admitText(query.text);
   const admitted = admit(query.filter, query.scope.kind === 'realm');
   const { conditions, facets, graphReads } = admitted;
   if (!Number.isInteger(query.page?.size) || query.page.size < 1) {
@@ -392,7 +419,16 @@ function compileLegacyQuery(query: ResourceQuery | ResourceQueryV2): CompiledQue
   const request: SearchRequest = { profile: '', language: null, pageSize: query.page.size,
     ...realm ? { context: { kind: 'realm-local', id: realm } } : {},
     ...query.page.continuation === undefined ? {} : { continuation: query.page.continuation } };
-  if (searchText && 'phrase' in searchText) request.phrase = searchText.phrase;
+  if (searchText && 'keywords' in searchText) {
+    request.phrase = searchText.keywords;
+    request.matchMode = 'keywords';
+  } else if (searchText && 'phrase' in searchText) {
+    request.phrase = searchText.phrase;
+    // Omitted mode retains the producer's two-point legacy admission. Only a
+    // single settled point needs the additive explicit exact-phrase mode.
+    const settled = searchText.phrase.normalize('NFC').trim().replace(/\s+/gu, ' ');
+    if ([...settled].length === 1) request.matchMode = 'phrase';
+  }
   else if (searchText) { request.titleTerm = searchText.title; request.bodyTerm = searchText.body; }
   const concepts: ConceptSelection[] = [];
   let includeMatch: 'all' | 'any' = 'all';

@@ -22,6 +22,7 @@ import { QUERY_COST } from './compile.ts';
 import { conceptCountBasis } from '../discovery/concepts.ts';
 import {
   indexedLabels,
+  normalizeNameQuery,
   indexedNameMatch,
   labelIndexReady,
   fenceLabelIndex,
@@ -445,15 +446,17 @@ async function readResourceListAtPosition(
 ) {
   const { input, conditions } = plan;
   const limit = input.limit ?? 20,
-    q = input.q?.trim() ?? '';
+    q = normalizeNameQuery(input.q ?? '');
+  const matchMode = input.matchMode ?? 'keywords';
   const realm = input.scope.kind === 'realm' ? input.scope.realm : undefined;
   if (realm && (await readRealmBasis(session, realm)).visibility !== 'public')
     throw new WorkReadInvalid('Scope is not public');
   const binding = [
-    'resource-list-v3',
+    'resource-list-v4',
     conditions,
     realm ?? null,
     q,
+    q ? matchMode : null,
     input.sort,
     limit,
     session.displayLanguages,
@@ -552,6 +555,7 @@ async function readResourceListAtPosition(
         state.after,
         kinds.length === 1 ? kinds[0] : 'all',
         rankedResources,
+        matchMode,
       );
       candidates = page.hits.map((hit) => {
         const id = 'https://rezics.com/id/' + hit.id.split(':').at(-1);
@@ -749,7 +753,7 @@ async function readResourceListAtPosition(
         .filter((row) => row.summary)
         .map((row) => iri(row.id))
         .join(' ')} } ${population}
-      ${q && input.sort !== 'relevance' ? indexedNameMatch('?r', q) : ''}
+      ${q && input.sort !== 'relevance' ? indexedNameMatch('?r', q, matchMode) : ''}
       GRAPH ${iri(GRAPHS.current)} { { ?r a ?resourceType }
         UNION { ?r rv:space ?typedSpace . ?typedSpace a ?resourceType } }
       OPTIONAL { VALUES ?r { ${window

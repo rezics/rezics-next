@@ -59,6 +59,9 @@ export const resourceListQuery = t.Object(
   {
     profile: t.Literal('resource-list-v1'),
     ...listRequestFields,
+    matchMode: t.Optional(t.Union([t.Literal('keywords'), t.Literal('phrase')], {
+      description: 'Literal name matching. Omitted mode requires all keywords in one name; phrase also requires token order and adjacency.',
+    })),
     context: t.Union([
       t.Literal('global'),
       t.Object({ realm: readId }, { additionalProperties: false }),

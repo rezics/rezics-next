@@ -172,6 +172,19 @@ public final class FilteredGraphTextIndex implements TextIndex {
     }
     private Document rankDocument(Entity entity, RankMetadata metadata) {
         var doc = org.apache.jena.query.text.RezicsLuceneDocument.build(lucene, entity);
+        // Normalize the indexed name only. Stored evidence, RDF literals and
+        // Jena deletion checksums retain their exact authored bytes.
+        var names = doc.getFields("publicTitle");
+        doc.removeFields("publicTitle");
+        for (var name : names) {
+            String value = name.stringValue();
+            String normalized = java.text.Normalizer.normalize(value, java.text.Normalizer.Form.NFC);
+            if (normalized.equals(value)) { doc.add(name); continue; }
+            var type = new org.apache.lucene.document.FieldType(name.fieldType());
+            type.setStored(false); type.freeze();
+            doc.add(new org.apache.lucene.document.Field("publicTitle", normalized, type));
+            if (name.fieldType().stored()) doc.add(new org.apache.lucene.document.StoredField("publicTitle", value));
+        }
         decorateTitleDocument(doc, entity.getId());
         decorateRankDocument(doc, metadata == null ? null : metadata.context(), metadata == null ? null : metadata.group());
         return doc;
@@ -533,9 +546,12 @@ public final class FilteredGraphTextIndex implements TextIndex {
             this(hits, count, precision, commit, more, 0);
         }
     }
-    public record RankScope(String realm, String language, String author, boolean catalogue, String names, List<String> resources) {
-        public RankScope(String realm, String language, String author, boolean catalogue) { this(realm, language, author, catalogue, null, null); }
-        public RankScope(String realm, String language, String author) { this(realm, language, author, false, null, null); }
+    public record RankScope(String realm, String language, String author, boolean catalogue, String names, List<String> resources, String matchMode) {
+        public RankScope(String realm, String language, String author, boolean catalogue, String names, List<String> resources) {
+            this(realm, language, author, catalogue, names, resources, null);
+        }
+        public RankScope(String realm, String language, String author, boolean catalogue) { this(realm, language, author, catalogue, null, null, null); }
+        public RankScope(String realm, String language, String author) { this(realm, language, author, false, null, null, null); }
     }
     static final class RankRestart extends TextIndexException {
         RankRestart() { super("ranked continuation requires restart"); }
@@ -554,6 +570,16 @@ public final class FilteredGraphTextIndex implements TextIndex {
     public RankPage ranked(Node property, String phrase, int size, RankAfter after,
                            org.apache.jena.sparql.core.DatasetGraph data, RankScope scope) {
         if (size < 1 || size > 64) throw new TextIndexException("ranked page size is out of bounds");
+        String mode = scope == null || scope.matchMode() == null ? "phrase" : scope.matchMode();
+        if (!mode.equals("keywords") && !mode.equals("phrase")) throw new TextIndexException("unsupported match mode");
+        if (scope != null && scope.names() != null) {
+            if (phrase.codePointCount(0, phrase.length()) > 80 || phrase.chars().anyMatch(c -> c <= 31 || c == 127))
+                throw new TextIndexException("name text is out of bounds");
+            phrase = java.text.Normalizer.normalize(phrase, java.text.Normalizer.Form.NFC)
+                .replaceAll("[\\s\\p{Z}\\uFEFF]+", " ").trim();
+            if (phrase.isEmpty() || phrase.codePointCount(0, phrase.length()) > 80)
+                throw new TextIndexException("normalized name text is out of bounds");
+        }
         if (scope != null && scope.names() == null && rankData.get() == null)
             throw new TextIndexException("ranked scope metadata needs startup qualification or an index rebuild");
         String field = lucene.getDocDef().getField(property);
@@ -568,8 +594,16 @@ public final class FilteredGraphTextIndex implements TextIndex {
                 || after.id() == null && (after.score() != 0 || after.document() != null)))
                 throw new RankRestart();
             QueryParser parser = new QueryParser(field, lucene.getQueryAnalyzer());
-            // The API supplies a literal phrase, never Lucene operators.
-            Query body = parseQuery(parser, "\"" + phrase.replace("\\", "\\\\").replace("\"", "\\\"") + "\"");
+            // QueryBuilder analyzes literal text directly: every token must
+            // occur in this document, with no Lucene operator interpretation.
+            Query body;
+            if (mode.equals("keywords")) {
+                try (var phase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.PARSE)) {
+                    body = new org.apache.lucene.util.QueryBuilder(lucene.getQueryAnalyzer())
+                        .createBooleanQuery(field, phrase, BooleanClause.Occur.MUST);
+                    if (body == null) body = new org.apache.lucene.search.MatchNoDocsQuery();
+                }
+            } else body = parseQuery(parser, "\"" + phrase.replace("\\", "\\\\").replace("\"", "\\\"") + "\"");
             boolean names = scope != null && scope.names() != null;
             boolean catalogue = scope != null && scope.catalogue();
             Query text = body;
@@ -1537,7 +1571,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
                 RankScope scope = new RankScope(optionalString(scopeValue, "realm"),
                     optionalString(scopeValue, "language"), optionalString(scopeValue, "author"),
                     scopeValue.hasKey("catalogue") && scopeValue.get("catalogue").getAsBoolean().value(),
-                    optionalString(scopeValue, "names"), resources);
+                    optionalString(scopeValue, "names"), resources, optionalString(scopeValue, "matchMode"));
                 RankPage page = scopeValue.hasKey("directory")
                     ? index.directory(scope.names(), optionalString(scopeValue, "directory"),
                         args.get(2).getInteger().intValueExact(), after, env.getDataset())
