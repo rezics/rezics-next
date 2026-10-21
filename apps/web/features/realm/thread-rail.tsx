@@ -40,13 +40,14 @@ export function ThreadRail({ name, description, members, aboutHref, rules, label
   labels: { about: string; rules: string; more: string };
 }) {
   const card = 'grid gap-3 rounded-2xl border border-border/70 bg-card p-4 shadow-(--aura-shadow-card)';
+  const hasAbout = Boolean(description || members);
   return <aside aria-label={labels.about} className="grid content-start gap-4 lg:sticky lg:top-20">
-    <nav aria-label={labels.about} className="flex flex-wrap gap-x-4 gap-y-1 text-sm lg:hidden">
+    <nav aria-label={labels.about} className={`flex flex-wrap gap-x-4 gap-y-1 text-sm${hasAbout ? ' lg:hidden' : ''}`}>
       <LocalizedLink href={aboutHref} className="inline-flex min-h-9 items-center rounded-sm text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring">{labels.more}</LocalizedLink>
       {rules.length ? <LocalizedLink href={`${aboutHref}#realm-rules`} className="inline-flex min-h-9 items-center gap-1.5 rounded-sm text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring">
         <ScrollTextIcon aria-hidden="true" className="size-4" />{labels.rules}</LocalizedLink> : null}
     </nav>
-    <section aria-labelledby="rail-about" className={`${card} hidden lg:grid`}>
+    {hasAbout ? <section aria-labelledby="rail-about" className={`${card} hidden lg:grid`}>
       <h2 id="rail-about" className="font-semibold text-muted-foreground text-xs uppercase tracking-wide">
         {labels.about}</h2>
       <p lang={name.lang} dir={direction(name.lang, name.value)} className="font-semibold">{name.value}</p>
@@ -57,7 +58,7 @@ export function ThreadRail({ name, description, members, aboutHref, rules, label
         className="size-4 text-muted-foreground" />{members}</p> : null}
       <LocalizedLink href={aboutHref} className="inline-flex min-h-8 w-fit items-center font-medium text-primary text-sm
         underline-offset-4 hover:underline">{labels.more}</LocalizedLink>
-    </section>
+    </section> : null}
     {rules.length ? <section aria-labelledby="rail-rules" className={`${card} hidden lg:grid`}>
       <h2 id="rail-rules" className="flex items-center gap-1.5 font-semibold text-muted-foreground text-xs uppercase
         tracking-wide"><ScrollTextIcon aria-hidden="true" className="size-3.5" />{labels.rules}</h2>

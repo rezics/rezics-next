@@ -139,7 +139,7 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
     messages={messages} /> : readAction;
   const shelf = shelfAction === undefined ? <ShelfButton work={work.id} title={work.title.value} locale={locale} size="sm" variant="outline"
     words={shelfWords(experience, messages)} className="min-h-11" /> : shelfAction;
-  const reactions = <div data-work-reactions className="flex min-w-0 items-start justify-end gap-2">
+  const reactions = <div data-work-reactions className="ml-auto flex min-w-0 items-start justify-end gap-2">
     <div role="group" aria-label={t.reactions} className="flex min-w-0 items-center justify-end gap-1">
       {ratingAction === undefined ? <WorkRating work={work.id} locale={locale} label={messages.ratings} /> : ratingAction}
     </div>

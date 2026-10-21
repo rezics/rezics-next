@@ -99,7 +99,21 @@ export const TopThisMonth: Story = {
 export const Empty: Story = {
   args: { items: [], next: false },
   async play({ canvasElement }) {
-    await expect(within(canvasElement).getByRole('heading', { name: 'No discussions yet' })).toBeVisible();
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('heading', { name: 'No discussions yet' })).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: /^Sort:/ })).toBeNull();
+    await expect(canvas.queryByRole('button', { name: /^Period:/ })).toBeNull();
+  },
+};
+
+export const EmptyPeriod: Story = {
+  args: { items: [], next: false, sort: 'top', window: 'month' },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('button', { name: 'Period: This month' })).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: 'Period: This month' }));
+    await expect(await screen.findByRole('menuitemradio', { name: 'All time' })).toBeVisible();
+    await userEvent.keyboard('{Escape}');
   },
 };
 

@@ -1,14 +1,14 @@
 import { RealmPageStory } from '../realm/story-page.tsx';
 import { communityZone } from '../zones/fixtures.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
 import { resourceHref } from '../address/path.ts';
 import { RelationshipControl } from '../relationships/control.tsx';
 import { attributed } from '../rights-mark/fixtures.ts';
 import Link from '../shell/localized-link.tsx';
 import { messages as workMessages } from '../work-page/messages.ts';
-import { citationNames, citedStatements, importedSourceStatements, predicateLabels, projectionFor } from './fixtures.ts';
+import { citationNames, citedStatements, importedSourceStatements, predicateLabels, projectionFor, statements } from './fixtures.ts';
 import { EntityHeader, SubjectDescription } from './header.tsx';
 import { copyOf } from './messages.ts';
 import { StatementSourcesView } from './sources.tsx';
@@ -17,27 +17,32 @@ import { StatementsView } from './views.tsx';
 
 // Contract-built states. Real endpoint replay and screenshots belong to the wave prove phase.
 const subject = projectionFor({ base: 'resource', types: ['https://schema.org/Organization'], name: 'Example Studio' });
+const personSubject = projectionFor({ base: 'resource', types: ['https://schema.org/Person'], name: 'Kirito キリト' });
 const target = subject.target.resource;
 const here = resourceHref('/e/', target);
 const sourcePage = { ...importedSourceStatements(), factObligations: attributed, nextCursor: 'facts/+==' };
 const hrefFor = standaloneHrefFor({}, here);
 
-function Detail({ locale = 'en', long = false, unavailable = false, claims }: {
-  locale?: UiLocale; long?: boolean; unavailable?: boolean; claims?: 'recorded' | 'withheld';
+function Detail({ locale = 'en', long = false, unavailable = false, claims, person = false }: {
+  locale?: UiLocale; long?: boolean; unavailable?: boolean; claims?: 'recorded' | 'withheld'; person?: boolean;
 }) {
   const t = copyOf(locale);
-  const page = claims ? { ...citedStatements(claims === 'withheld'), factObligations: attributed } : sourcePage;
+  const projection = person ? personSubject : subject;
+  const name = person ? 'Kirito キリト' : 'Example Studio';
+  const page = person ? statements() : claims ? { ...citedStatements(claims === 'withheld'), factObligations: attributed } : sourcePage;
   const names = claims ? citationNames : new Map();
   return <div className="mx-auto grid max-w-4xl gap-7 px-4 py-6">
-    <EntityHeader summary={subject.summary as Extract<typeof subject.summary, { status: 'available' }>}
-      registry={subject.registry} locale={locale} t={t}
+    <EntityHeader summary={projection.summary as Extract<typeof subject.summary, { status: 'available' }>}
+      registry={projection.registry} locale={locale} t={t}
       primary={<Link href="#related" className="rounded-sm text-primary underline underline-offset-4">{t.relations}</Link>}
-      actions={<RelationshipControl target={target} kind="organization" name="Example Studio" locale={locale}
+      actions={<RelationshipControl target={target} kind={person ? 'person' : 'organization'} name={name} locale={locale}
         signedIn={false} signInHref="/auth/start" reactionsLabel={t.reactions}
-        moreAccessibleLabel={t.moreActions({ name: 'Example Studio' })} reports={[{ target, kind: 'page' }]} />} />
-    {long ? <SubjectDescription locale={locale}><p lang="en">{'The studio makes stories for readers around the world. '.repeat(90)}</p></SubjectDescription> : null}
+        moreAccessibleLabel={t.moreActions({ name })} reports={[{ target, kind: 'page' }]} />} />
+    {long ? <SubjectDescription locale={locale}><p lang="en">{(person
+      ? 'Kirito is a character in Sword Art Online. '
+      : 'The studio makes stories for readers around the world. ').repeat(90)}</p></SubjectDescription> : null}
     <div data-primary-content className="grid min-w-0 gap-7"><StatementsView page={unavailable ? { ok: false, failure: 'unavailable' } : { ok: true, data: page }}
-      names={names} ownName="Example Studio" labels={predicateLabels} cursor={undefined}
+      names={names} ownName={name} labels={predicateLabels} cursor={undefined}
       hrefFor={hrefFor} locale={locale} t={t} messages={workMessages[locale]} pageEndSources />
     <section id="related" className="grid gap-2"><h2 className="font-semibold">{t.relations}</h2><p>Example series</p></section>
     </div>
@@ -47,15 +52,15 @@ function Detail({ locale = 'en', long = false, unavailable = false, claims }: {
   </div>;
 }
 
-async function headerContract(canvasElement: HTMLElement, locale: UiLocale = 'en') {
+async function headerContract(canvasElement: HTMLElement, locale: UiLocale = 'en', person = false) {
   const header = canvasElement.querySelector<HTMLElement>('[data-subject-header]')!;
   const t = copyOf(locale);
   const top = within(header);
   await expect(header).toHaveAttribute('data-resource', target);
-  await expect(header).toHaveAttribute('data-semantic-type', subject.registry.type);
+  await expect(header).toHaveAttribute('data-semantic-type', person ? personSubject.registry.type : subject.registry.type);
   const primary = top.getByRole('group', { name: t.primaryActions });
   const reactions = top.getByRole('group', { name: t.reactions });
-  const more = top.getByRole('button', { name: t.moreActions({ name: 'Example Studio' }) });
+  const more = top.getByRole('button', { name: t.moreActions({ name: person ? 'Kirito キリト' : 'Example Studio' }) });
   await expect(within(primary).getByRole('link', { name: t.relations })).toBeVisible();
   await expect(reactions).toBeVisible();
   await expect(primary.compareDocumentPosition(reactions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -109,6 +114,29 @@ export const LongDescriptionPhone: Story = {
     await expect(canvas.getByRole('button', { name: 'Show more' })).toBeVisible();
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
     await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
+    await expect(canvas.getByRole('button', { name: 'Show less' })).toBeVisible();
+  },
+};
+
+export const PersonLongDescription: Story = {
+  args: { person: true, long: true },
+  async play({ canvasElement }) {
+    await headerContract(canvasElement, 'en', true);
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('heading', { level: 1, name: 'Kirito キリト' })).toBeVisible();
+    const more = canvas.getByRole('button', { name: 'More actions for Kirito キリト' });
+    const expand = await canvas.findByRole('button', { name: 'Show more' });
+    await expect(more.compareDocumentPosition(expand) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await expect(canvas.getByRole('heading', { name: 'Discussion' })).toBeVisible();
+    more.focus();
+    await userEvent.keyboard('{Enter}');
+    const report = await within(document.body).findByRole('menuitem', { name: 'Report this page' });
+    await expect(new URL(report.getAttribute('href')!, location.origin).searchParams.get('target')).toBe(target);
+    await waitFor(() => expect(report.closest('[role="menu"]')).toHaveFocus());
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(more).toHaveFocus());
+    await expect(more).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(expand);
     await expect(canvas.getByRole('button', { name: 'Show less' })).toBeVisible();
   },
 };

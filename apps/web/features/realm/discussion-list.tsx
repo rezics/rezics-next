@@ -43,13 +43,15 @@ export function DiscussionList({ items, realmPath, realmId, sort, window, hrefs,
 }) {
   const { t } = useFeed();
   const SortIcon = sortIcons[sort];
+  // A finite Top period can hide existing threads; an unfiltered empty list has nothing to order.
+  const sorting = items.length > 0 || (sort === 'top' && window !== 'all');
   return <section aria-labelledby="realm-discussions" className="min-w-0">
     <div className="flex min-h-12 flex-wrap items-center gap-1 border-border/60 border-b pb-1.5">
       <h2 id="realm-discussions" className="me-auto font-semibold text-lg">{t.discussionsLabel}</h2>
-      <LinkMenu label={t.sortLabel} value={sort} icon={<SortIcon aria-hidden="true" className="size-4" />}
+      {sorting ? <LinkMenu label={t.sortLabel} value={sort} icon={<SortIcon aria-hidden="true" className="size-4" />}
         options={(['best', 'new', 'top'] as const).map(option => ({ value: option, label: t[option],
-          help: option === 'best' ? t.bestHelp : option === 'new' ? t.newHelp : t.topHelp, href: hrefs.sorts[option] }))} />
-      {sort === 'top' ? <LinkMenu label={t.period} value={window} options={(['week', 'month', 'all'] as const)
+          help: option === 'best' ? t.bestHelp : option === 'new' ? t.newHelp : t.topHelp, href: hrefs.sorts[option] }))} /> : null}
+      {sorting && sort === 'top' ? <LinkMenu label={t.period} value={window} options={(['week', 'month', 'all'] as const)
         .map(option => ({ value: option, label: option === 'week' ? t.week : option === 'month' ? t.month : t.allTime,
           href: hrefs.windows[option] }))} /> : null}
     </div>

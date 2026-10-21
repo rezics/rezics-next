@@ -22,7 +22,6 @@ import { useFeed } from '../feed/feed-context.tsx';
 import { SubjectHeader } from '../entity-page/header.tsx';
 import { copyOf as detailCopy } from '../entity-page/messages.ts';
 import { SubjectSources } from '../entity-page/sources.tsx';
-import { ReportMenu } from '../safety/report-action.tsx';
 import { ReplyComposer, type ReplyMode, type ReplyTarget } from '../feed/reply-composer.tsx';
 import { ReplyBody, ReplyByline, ReplyList, type ThreadContext } from '../feed/reply-tree.tsx';
 import { mainThreadApi, type ThreadApi } from '../feed/thread-api.ts';
@@ -177,14 +176,14 @@ function OpeningPost({
         {title || t.untitled}
       </h1>
       </div>} actions={<>
-        {!post.blocked && post.author ? <ReplyAuthorActions target={{ reply: post.reply,
-          realm: read.realm, author: post.author.id, revisionId: post.revisionId, placement: post.placement }} /> : null}
         {post.blocked ? null : <div role="group" aria-label={detail.reactions} className="flex items-center gap-1.5">
           <VoteControl target={{ id: post.placement, vote: post.vote.value,
             score: post.vote.score, revision: post.vote.revision, open: post.vote.open }} /></div>}
-        <ReportMenu targets={[{ target: post.reply, kind: 'post', realm: read.realm,
-          ...(post.revisionId ? { selection: { component: 'body' as const, revision: `urn:rezics:content:revision:${post.revisionId}`, locator: null } } : {}) }]}
-          name={title || t.untitled} locale={locale} moreAccessibleLabel={detail.moreActions({ name: title || t.untitled })} />
+        <ReplyAuthorActions target={!post.blocked && post.author ? { reply: post.reply,
+          realm: read.realm, author: post.author.id, revisionId: post.revisionId, placement: post.placement } : null}
+          report={{ target: post.reply, kind: 'post', realm: read.realm,
+            ...(post.revisionId ? { selection: { component: 'body' as const, revision: `urn:rezics:content:revision:${post.revisionId}`, locator: null } } : {}) }}
+          menuLabel={detail.moreActions({ name: title || t.untitled })} />
       </>} primary={<a href="#comments"
         className="inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 font-medium text-muted-foreground text-sm outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring">
         <MessageCircleIcon aria-hidden="true" className="size-4" />{t.comments(count)}{read.complete ? '' : '+'}

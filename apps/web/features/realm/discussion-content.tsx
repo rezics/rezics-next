@@ -17,6 +17,7 @@ import { DiscussionList } from './discussion-list.tsx';
 import { discussionListHref, type BoardPage, type DiscussionQuery } from './discussion-read.ts';
 import type { RealmMessages } from './messages.ts';
 import { RealmNotFound } from './states.tsx';
+import { realmHref } from './route.ts';
 
 export function DiscussionListSkeleton() {
   return <div aria-busy="true" className="overflow-hidden border-border/60 border-y bg-card sm:rounded-2xl sm:border">
@@ -95,7 +96,13 @@ export function DiscussionListContent({ page, path, query, locale, feed, message
       <LocalizedLink href={hrefs.windows.all} className={buttonVariants({ variant: 'outline', size: 'sm' })}>{t.showAllTime}</LocalizedLink>
       <LocalizedLink href={hrefs.sorts.new} className={buttonVariants({ variant: 'ghost', size: 'sm' })}>{t.new}</LocalizedLink>
     </EmptyState>
-    : <EmptyState icon={MessagesSquareIcon} headingLevel={3} title={t.emptyDiscussions} description={t.emptyDiscussionsBody} className="m-3 sm:m-4" />;
+    : <EmptyState icon={MessagesSquareIcon} headingLevel={3} title={t.emptyDiscussions} description={t.emptyDiscussionsBody} className="m-3 sm:m-4">
+      {query.concept || query.language ? <LocalizedLink
+        href={discussionListHref(path, { ...query, concept: undefined, language: undefined, cursor: undefined })}
+        className={buttonVariants({ variant: 'outline', size: 'sm' })}>{messages.allDiscussions}</LocalizedLink>
+        : <LocalizedLink href={realmHref(locale, page.data.realm, 'works')}
+          className={buttonVariants({ variant: 'outline', size: 'sm' })}>{messages.browse}</LocalizedLink>}
+    </EmptyState>;
   return <DiscussionList items={page.data.items} realmPath={path} realmId={page.data.realm} sort={query.sort} window={query.window} hrefs={hrefs}
     next={page.data.nextCursor ? discussionListHref(path, { ...query, cursor: page.data.nextCursor }) : null}
     first={query.cursor ? top : null} empty={empty} />;
