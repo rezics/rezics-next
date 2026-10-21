@@ -1847,7 +1847,7 @@ export const profileRegistry = {
     ]
   },
   "work-structure-publication-v2": {
-    "sha256": "2148417cd96941148902cfcbb4afcd16578fab7a6fefc3e1c3c5819cfd89399d",
+    "sha256": "f54150c72db8a4511385924a5ad3016c0cb47a27da79052e16436d854fa3a2a6",
     "file": "shapes/work-structure-publication-v2.ttl",
     "shapes": [
       "https://rezics.com/definition/work-structure-publication-v2/work-shape",

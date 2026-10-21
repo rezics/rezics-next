@@ -164,7 +164,7 @@ export async function readWorkBasis(session: WorkReadSession, work: string): Pro
     if (!await structureRevisionDisclosureVisible(session, { work, workRevision: row.head.value,
       structure: source.structure, revision: source.structureRevision })) source = null;
   }
-  if (source?.sourceObservation) await selectedPublicationAttribution(session, source);
+  if (source?.sourceObservation || source?.rightsAssessmentId) await selectedPublicationAttribution(session, source);
   const readHeads = async () => isPublic ? (await readMainLanguageHeads(session.deps.environment,
     row.main!.value, true)).sort((a, b) => a.language.localeCompare(b.language)) : [];
   const heads = await readHeads();

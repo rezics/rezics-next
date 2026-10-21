@@ -92,7 +92,12 @@ export const publishedStructuredWork = (work: string, main: string) => `GRAPH ${
     FILTER(?structuredBasis = rv:OriginalContribution || ?structuredBasis = rv:PublicDomain)
     FILTER(?structuredBasis != rv:PublicDomain || EXISTS {
       ?structuredDecision rv:sourceObservation ?structuredObservation .
-      ?structuredSource rv:sourceObservation ?structuredObservation . })
+      ?structuredSource rv:sourceObservation ?structuredObservation . } || EXISTS {
+      ?structuredDecision rv:rightsAssessment ?structuredAssessment .
+      ?structuredSource rv:rightsAssessment ?structuredAssessment ; schema:citation ?structuredCitation .
+      FILTER(REGEX(STR(?structuredAssessment), "^urn:rezics:rights:assessment:[0-9a-f-]{36}$"))
+      FILTER NOT EXISTS { ?structuredDecision rv:sourceObservation ?manualObservation }
+      FILTER NOT EXISTS { ?structuredSource rv:sourceObservation ?manualSourceObservation } })
     ?structuredSource a rv:WorkStructurePublicSource ; rv:work ${work} ; rv:component ${main} ;
       rv:structureProfile ?structuredProfile ; rv:structure ?structuredStructure ; rv:structureRevision ?structuredRevision ;
       rv:selectedGeneration ?structuredGeneration ; rv:sourceRoot ?structuredRoot .
@@ -112,6 +117,7 @@ export interface PublishedStructuredWorkSource {
   selectedGeneration: string;
   sourceRoot: string;
   sourceObservation?: string;
+  rightsAssessmentId?: string;
 }
 
 const nativeWorkId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -131,6 +137,7 @@ export const structuredPublicationRead = (work: string, main: string) => `
   GRAPH ${iri(GRAPHS.revisions)} { ?structuredDecision a rv:WorkStructurePublicationDecision ;
     rv:component ${work} ; rv:publicationOutcome rv:Published .
     OPTIONAL { ?structuredDecision rv:sourceObservation ?structuredObservation }
+    OPTIONAL { ?structuredDecision rv:rightsAssessment ?structuredAssessment }
     OPTIONAL { ?structuredDecision rv:publicSource ?structuredSource .
       OPTIONAL { ?structuredSource rv:work ${work} ; rv:component ?structuredSourceMain ;
         rv:structure ?structuredStructure ; rv:structureProfile ?structuredProfile ;
@@ -183,12 +190,17 @@ function sourceFromRow(row: NonNullable<import('../../infrastructure/fuseki.ts')
     selectedGeneration: value('structuredGeneration') ?? '',
     sourceRoot: value('structuredRoot') ?? '',
     ...(value('structuredObservation') ? { sourceObservation: value('structuredObservation')! } : {}),
+    ...(value('structuredAssessment') ? { rightsAssessmentId:
+      value('structuredAssessment')!.slice('urn:rezics:rights:assessment:'.length) } : {}),
   };
   if (![source.work, source.mainVersion, source.decision, source.structure, source.structureRevision, source.selectedGeneration]
       .every(value => nativeWorkId.test(value))
     || !source.source.startsWith('urn:rezics:work-source:')
     || !/^https:\/\/rezics\.com\/vocab\/[A-Za-z][A-Za-z0-9]*$/.test(source.structureProfile)
-    || !structuredRoot.test(source.sourceRoot) || value('structuredExact') !== 'true') {
+    || !structuredRoot.test(source.sourceRoot) || value('structuredExact') !== 'true'
+    || value('structuredAssessment') !== undefined
+      && (!/^urn:rezics:rights:assessment:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value('structuredAssessment')!)
+        || source.sourceObservation !== undefined)) {
     throw new PublishedStructureSourceUnavailable('incomplete');
   }
   return source;
@@ -215,7 +227,7 @@ export async function readPublishedStructuredWorkSources(environment: WorkActiva
   const rows = (await environment.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
     PREFIX schema: <https://schema.org/>
     SELECT ?work ?main ?structuredDecision ?structuredSource ?structuredStructure ?structuredProfile
-      ?structuredRevision ?structuredGeneration ?structuredRoot ?structuredObservation ?structuredExact WHERE {
+      ?structuredRevision ?structuredGeneration ?structuredRoot ?structuredObservation ?structuredAssessment ?structuredExact WHERE {
       VALUES ?work { ${unique.map(iri).join(' ')} }
       OPTIONAL { ${structuredPublicationRead('?work', '?structuredSourceMain')} }
       BIND(?structuredSourceMain AS ?main)
@@ -240,7 +252,7 @@ export async function readPublishedStructuredWorkSource(environment: WorkActivat
   const rows = (await environment.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
     PREFIX schema: <https://schema.org/>
     SELECT ?structuredDecision ?structuredSource ?structuredStructure ?structuredProfile
-      ?structuredRevision ?structuredGeneration ?structuredRoot ?structuredObservation ?structuredExact WHERE {
+      ?structuredRevision ?structuredGeneration ?structuredRoot ?structuredObservation ?structuredAssessment ?structuredExact WHERE {
       ${structuredPublicationRead(iri(work), iri(mainVersion))}
     } LIMIT 2`, 16 * 1024)).results?.bindings ?? [];
   return publishedStructuredWorkSourceFromRows(rows, work, mainVersion);
