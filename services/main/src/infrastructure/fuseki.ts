@@ -104,6 +104,9 @@ export interface FusekiReadBudget {
 
 interface ReadScope {
   parent?: FusekiReadBudget;
+  /** Counter transfers made before entering a reserved child, not read costs. */
+  reservation?: Partial<Pick<FusekiReadBudget, 'callsLeft' | 'bytesLeft'>>;
+  prepaid?: ReadonlySet<FusekiReadBudget>;
   controller: AbortController;
   deadlineTimer?: ReturnType<typeof setTimeout>;
   request?: { root: FusekiReadBudget; limits: ReadLimits; claimed: boolean };
@@ -123,10 +126,26 @@ class FusekiReadBudgets extends AsyncLocalStorage<FusekiReadBudget | undefined> 
     const parent = this.getStore();
     if (parent === store) return super.run(store, callback, ...args);
     const request = readScopes.get(parent!)?.request ?? readScopes.get(store)?.request;
+    const chain = budgetChain();
+    const prepaid = new Set<FusekiReadBudget>();
+    // Existing reservation owners transfer both counters before run(), then
+    // return only the unused balance. Those ancestors have already paid for
+    // this child; charging them per read as well would spend the cost twice.
+    const reserved = parent && readScopes.get(parent)?.reservation;
+    if (reserved?.callsLeft === store.callsLeft && reserved.bytesLeft === store.bytesLeft) {
+      for (const owner of chain) {
+        const transfer = readScopes.get(owner)?.reservation;
+        if (transfer?.callsLeft === store.callsLeft && transfer.bytesLeft === store.bytesLeft) prepaid.add(owner);
+      }
+    }
+    for (const owner of chain) readScopes.get(owner)!.reservation = undefined;
     if (parent && request && !request.claimed) {
       // The first declared owner selects the allocation once. Preflight has
       // already spent from it; sibling owners and retries cannot replenish it.
-      const calls = store.callsLeft, bytes = store.bytesLeft;
+      // A reserved child uses the existing request allocation, rather than
+      // promoting its smaller sub-allocation to the whole operation's limit.
+      const calls = prepaid.size ? request.limits.calls : store.callsLeft;
+      const bytes = prepaid.size ? request.limits.bytes : store.bytesLeft;
       request.root.callsLeft = calls - (Number.MAX_SAFE_INTEGER - request.root.callsLeft);
       request.root.bytesLeft = bytes - (Number.MAX_SAFE_INTEGER - request.root.bytesLeft);
       request.claimed = true;
@@ -142,10 +161,18 @@ class FusekiReadBudgets extends AsyncLocalStorage<FusekiReadBudget | undefined> 
         if (key === 'readPhase') return target.readPhase ?? parent?.readPhase;
         return Reflect.get(target, key, target) as unknown;
       },
-      set: (target, key, value) => Reflect.set(target, key, value, target),
+      set(target, key, value) {
+        const before = key === 'callsLeft' || key === 'bytesLeft' ? target[key] : undefined;
+        const changed = Reflect.set(target, key, value, target);
+        if (changed && before !== undefined && (key === 'callsLeft' || key === 'bytesLeft')) {
+          const state = readScopes.get(scope)!;
+          (state.reservation ??= {})[key] = before - target[key];
+        }
+        return changed;
+      },
     });
     const observation = readScopes.get(store)?.observation;
-    readScopes.set(scope, { parent, controller, request, observation,
+    readScopes.set(scope, { parent, prepaid, controller, request, observation,
       caller: observation?.observer || currentReadObservation()?.observer ? readCaller() : undefined });
     return super.run(scope, callback, ...args);
   }
@@ -469,13 +496,15 @@ function takeReadCost(key: 'callsLeft' | 'bytesLeft', amount: number, call?: Obs
   emitReadObservation(call, 'before-debit', 'active', debit);
   try {
     assertFusekiReadActive();
-    const chain = budgetChain();
+    const enclosing = budgetChain();
+    const prepaid = new Set(enclosing.flatMap(budget => [...(readScopes.get(budget)?.prepaid ?? [])]));
+    const chain = enclosing.filter(budget => !prepaid.has(budget));
     const before = chain.map(budget => budget[key]);
     for (const budget of chain) {
       const left = readCostLeft(budget, key);
       if (left < amount) {
         const error = new FusekiReadBudgetExceeded(`Fuseki read ${key === 'callsLeft' ? 'call' : 'byte'} budget exceeded`);
-        for (const owner of chain) readScopes.get(owner)?.controller.abort(error);
+        for (const owner of enclosing) readScopes.get(owner)?.controller.abort(error);
         throw error;
       }
     }
@@ -486,6 +515,9 @@ function takeReadCost(key: 'callsLeft' | 'bytesLeft', amount: number, call?: Obs
       const missing = amount - (before[index]! - budget[key]);
       if (missing > 0) budget[key] -= missing;
     });
+    // Real debits, including accessor forwarding, are never reservations for a
+    // subsequently entered owner. Only caller transfers before run() qualify.
+    for (const budget of enclosing) readScopes.get(budget)!.reservation = undefined;
   } catch (error) {
     if (call) call.cause = readObservationCause(error, key, call.signal);
     emitReadObservation(call, 'refused-debit', call?.cause === 'deadline' || call?.cause === 'cancelled'
