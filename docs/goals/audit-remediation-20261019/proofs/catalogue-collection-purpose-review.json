@@ -3475,5 +3475,1566 @@
       "No implementation, inventory, original assertions, runtime/service lifecycle, OAuth/API borrower, browser/Storybook, corpus/prepare/restore/import/reset, lease, publication, landing or class closure."
     ],
     "managerNext": "Accept only this bounded native-next-projected-output-overwrite correction. One remaining owner input: G-2758 supplies its sealed consumer correction and exact disposition for the existing identityEntries/relationRows continuation/predicate entries; this review does not inspect that moving work. Existing Catalogue/Recipe/Site owners retain their separate residuals and original acceptance."
+  },
+  "retainedSelectedRelationIndependentStoryProof": {
+    "profile": "retained-selected-relation-independent-story-proof-v1",
+    "worker": "G-2863",
+    "predecessor": {
+      "worker": "G-2849",
+      "state": "terminal-verified-archived",
+      "mutatedOrResurrected": false,
+      "acceptedSourceReviewsRepeated": false
+    },
+    "observedAt": "2026-10-21T06:34:59.553122+00:00",
+    "reviewer": {
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "independent": true,
+      "delegation": false,
+      "fallback": false
+    },
+    "decision": {
+      "result": "pass",
+      "scope": "Exactly eight pending retained-relation and four pending selected-relation production-component stories, original play bodies, mandatory axe sweeps and twelve actual PNG inspections.",
+      "independentStoriesProved": 12,
+      "productOutcomeFailures": 0,
+      "setupFailures": 0,
+      "originalClassClosure": false,
+      "nativeApiAuthorityPersistenceAcceptance": false,
+      "sourceReviews": "Reuse accepted native/Source/consumer reviews and matching API/persistence evidence only within their original byte/criterion scopes; no repeat source verdict or new backend run."
+    },
+    "pins": {
+      "proofSource": "779f14495aba3cee797b8d777a9fd2528b38a9c9",
+      "earlierRetainedAuthor": "adeffff02b6f9782c98c4eb991ffe00ea24adfd3",
+      "nativeSelectorDependency": "de4ae8e3301a2a73c50ef278f39abb9b3c2df4be",
+      "workerReportBase": "8f36de17d55dbc57cb2c2c49daef245f543e3d30",
+      "proofRoot": ".temp/goal/relation-independent/proof-root",
+      "workerBranchRebasedMergedOrReset": false
+    },
+    "inputs": [
+      {
+        "path": ".temp/goal/relation-independent/retained-relation-story-source-map.json",
+        "bytes": 32220,
+        "sha256": "a0638c06704cae660ab514b9ec803eaa0afe4f1b216833d8e77c93a4a099fc11"
+      },
+      {
+        "path": ".temp/goal/relation-independent/retained-relation-story-outcome-map.json",
+        "bytes": 12232,
+        "sha256": "21616ce321745cc955a204518dfa969835aa24f6ae525c310af38fa67d6e7191"
+      },
+      {
+        "path": ".temp/goal/relation-independent/selected-relation-consumer-source-map.json",
+        "bytes": 45248,
+        "sha256": "b09b2fddc032d11db45cd2edef2de857db2cbc3a9ae020e1c592d16d97c1f76e"
+      },
+      {
+        "path": ".temp/goal/relation-independent/selected-relation-consumer-outcome-map.json",
+        "bytes": 23319,
+        "sha256": "ec223de2801f46e2264b02c2ee0487613aaa742550fae36b2b26e44b54f9f161"
+      },
+      {
+        "path": ".temp/goal/relation-independent/selected-relation-guard-map.json",
+        "bytes": 57906,
+        "sha256": "ec26b22d5f488e6343818c8039c7f45f6d9a2a722210ebfd125ef966565d64cd"
+      },
+      {
+        "path": ".temp/goal/relation-independent/selected-relation-scanner-limit-map.json",
+        "bytes": 34476,
+        "sha256": "b1684759b28e5f2f6caa1cf42035bb48a1dacde878e4c95ae737af6592f8ef14"
+      },
+      {
+        "path": ".temp/ref/execution-reset.md",
+        "bytes": 9845,
+        "sha256": "90c1ab7ed3c3e893c1fe81169c5ceebdf8e16b789418552244012aaf957797d3"
+      },
+      {
+        "path": ".temp/ref/retained-relation-story-handoff.md",
+        "bytes": 15917,
+        "sha256": "12c600ac6c03553e0853a22b6f21f1d9b40c56e0a1a15f08bfa9f5f71b48685f"
+      },
+      {
+        "path": ".temp/ref/selected-relation-consumer-handoff.md",
+        "bytes": 17247,
+        "sha256": "5ecc75b691044825fe699e32b70b4bb4a6c30e9423c8d62ff27f3295d2c9b124"
+      },
+      {
+        "path": ".temp/ref/selected-relation-scanner-limit-handoff.md",
+        "bytes": 11418,
+        "sha256": "b616c8b9fb9d886c9d3e80bbf9cea241afc4c3905ef1494d70d6a41049f56916"
+      }
+    ],
+    "sourceApplicability": {
+      "pin": "779f14495aba3cee797b8d777a9fd2528b38a9c9",
+      "method": "git archive into ignored tree; every archived blob verified against git ls-tree; no checkout/branch/history change",
+      "verifiedArchiveBlobCount": 10159,
+      "archiveContentSha256": "ca9e1a06341ea020d60dddd833acb34d42b2a63f7ec3e1b6992c3f873811d877",
+      "applicableBindings": [
+        {
+          "path": "apps/web/.storybook/main.ts",
+          "blob": "9ff3e4e1f77dac7c040eb566b6cb102b83cce455",
+          "bytes": 2855,
+          "sha256": "7ef8b85080a875db37683511d92df8c28c29552ecc37deff79f12a912257c524"
+        },
+        {
+          "path": "apps/web/.storybook/next-link.tsx",
+          "blob": "81a886c5b42e96b03891804417f6acbe5e632380",
+          "bytes": 394,
+          "sha256": "889a260eb11a51801f0a41b4ec81bc26e954802038662d3bfc382dccd1e9da0e"
+        },
+        {
+          "path": "apps/web/.storybook/preview.tsx",
+          "blob": "1ba5806d7f8720646dfe0a591067966745179187",
+          "bytes": 4767,
+          "sha256": "b6a0488d6b05e049eb07e1a560c1d78ef7fe8af5a9e674975b984fc7615b4003"
+        },
+        {
+          "path": "apps/web/.storybook/story-screenshots.setup.ts",
+          "blob": "92f97d8ac171d5dbb652b4506c0ceb4b038a03fd",
+          "bytes": 1488,
+          "sha256": "701ab96b0012925a0613afebc323304c10637575b447e0f6f3332ec8fdb3d43b"
+        },
+        {
+          "path": "apps/web/features/entity-page/entity-page.stories.tsx",
+          "blob": "bb57fface07d2b2978d67ceac04ce9ac40abdf80",
+          "bytes": 40974,
+          "sha256": "1244d0471bdc2414eefc6d4d3483ae06fb737a7d808aacbf5feb423d6d62464d"
+        },
+        {
+          "path": "apps/web/features/entity-page/entity-page.tsx",
+          "blob": "ad135cd27bf44ccbbe06d7ca99a092b7103b65a4",
+          "bytes": 16502,
+          "sha256": "bfb64612fdf14967bda6e2419d711d399a9892b23b612de36672f983cfda544a"
+        },
+        {
+          "path": "apps/web/features/entity-page/fixtures.ts",
+          "blob": "918d0332db4e3e58e6d789b1e6e73ca434805473",
+          "bytes": 14849,
+          "sha256": "f230823cfe28ccb1bced4dc83910ca55455135c1ad76c756a67fb16de6cf78fd"
+        },
+        {
+          "path": "apps/web/features/entity-page/header.tsx",
+          "blob": "3a5fb4849a2452a123b1491e512b54e68cca7018",
+          "bytes": 4719,
+          "sha256": "0ac43c9507ca573d6749e3748e658e648e819402538b76e764513e418f6d5549"
+        },
+        {
+          "path": "apps/web/features/entity-page/identity-fixtures.ts",
+          "blob": "249f021d4736debdab45cc736dd37f855d9cc798",
+          "bytes": 7328,
+          "sha256": "ed52b907f0147f2dfc627060f103f0021cbb5b4253682112069cde3d3245d467"
+        },
+        {
+          "path": "apps/web/features/entity-page/identity-read.ts",
+          "blob": "7991b37bc5929163d3bd18f49fc5d036e1332ad3",
+          "bytes": 11822,
+          "sha256": "7eadb3164c2a869160577bdc9e5e00759f4ed84cead7479d4fd47c384842ebb6"
+        },
+        {
+          "path": "apps/web/features/entity-page/identity-reads.test.ts",
+          "blob": "00b827dff513a851a4f5bac1e8d8db13648563ad",
+          "bytes": 24124,
+          "sha256": "b63041a5f0684a7f457c61527d4abfda101ec3912b087336725e8abaef379a8d"
+        },
+        {
+          "path": "apps/web/features/entity-page/identity-relations.test.ts",
+          "blob": "ecc2d006d2df23ba509591c6829cbd9bc95bfb3f",
+          "bytes": 20529,
+          "sha256": "d87859d698a5052d81ac33564fcd5b59d89582b3f7dc6f68cfb11dfffc3184c8"
+        },
+        {
+          "path": "apps/web/features/entity-page/identity-relations.ts",
+          "blob": "1721770e1dc8d9782797bdbdc49ea719181cede8",
+          "bytes": 4474,
+          "sha256": "3ec99b6f0d8ecd4a184fc10172d9b4d95e513cde4ac8d59d84164e9cf13355a9"
+        },
+        {
+          "path": "apps/web/features/entity-page/identity-views.tsx",
+          "blob": "08904b8c00b59fb77b7aa608a6e11950c70277b7",
+          "bytes": 10717,
+          "sha256": "e68b5de3da90a296f1aa2a1e592643c16e806838b3a00163282b7db36e071561"
+        },
+        {
+          "path": "apps/web/features/entity-page/messages.ts",
+          "blob": "20a6f5b669c3883624c8e608f569f4d86150369e",
+          "bytes": 5090,
+          "sha256": "69aca46f7d87db73c68a1f23618f47d2dc3b68adec412b2b01929d581fe8a32c"
+        },
+        {
+          "path": "apps/web/features/entity-page/messages/de.ts",
+          "blob": "d5bad0632c68165a73d7565d62e06d47d111f837",
+          "bytes": 4143,
+          "sha256": "3d5e81cd105d761f262a5d4e4c90a29bab6536a8312c0a0ece964fb5706d4c6b"
+        },
+        {
+          "path": "apps/web/features/entity-page/messages/es.ts",
+          "blob": "5091beb12128ca096a81922e0bc30d4bdf6f69fd",
+          "bytes": 4102,
+          "sha256": "bc23f99a0e353c6532a108eebf828c3ecf68a9021625137c74ee1e104e43915c"
+        },
+        {
+          "path": "apps/web/features/entity-page/messages/fr.ts",
+          "blob": "2f79222fb93c70cd2634e356b79f3c3373627672",
+          "bytes": 4183,
+          "sha256": "eb3d0e5dcd1ffd9f9642ba0c18b22c55942b9de136d7b2d99d961eb6cef8df13"
+        },
+        {
+          "path": "apps/web/features/entity-page/messages/ja.ts",
+          "blob": "c594f20f26440ca3a57ae511be51cf24dc80b9e9",
+          "bytes": 4607,
+          "sha256": "67031d52da7b7dd168c12eeeaf8e628fa1dabc66684c02ec9465ee362d830e1d"
+        },
+        {
+          "path": "apps/web/features/entity-page/messages/ko.ts",
+          "blob": "0a88645391ebafd3461fad35d84c165f654bc0d8",
+          "bytes": 4340,
+          "sha256": "9cee471e4694c14ef5519789abd02cc26ca4f343cd1d45a7865d21a642d67a31"
+        },
+        {
+          "path": "apps/web/features/entity-page/messages/zh-Hans.ts",
+          "blob": "de99c829e1b8d95b0197dc15b38f485ee7287862",
+          "bytes": 3616,
+          "sha256": "b77f6f1893f779a35684d5e0a60ec18e578380196fdef0a78e6277036c0a750c"
+        },
+        {
+          "path": "apps/web/features/entity-page/messages/zh-Hant.ts",
+          "blob": "beb745539ae8e49e2a37ea1376da7d670a49bae4",
+          "bytes": 3622,
+          "sha256": "b7962b99d663ab4e9bdeef43d8558e17303fcccfcb95ec55f45eabc5edc3bb1d"
+        },
+        {
+          "path": "apps/web/features/entity-page/route.ts",
+          "blob": "c5ff77f146070de866b39ad3a2dd655198a27cf3",
+          "bytes": 2892,
+          "sha256": "16a00b71fb503137bc4932748e42ae8a135cfca126d1941f26b66bdc3b26c2fa"
+        },
+        {
+          "path": "apps/web/features/entity-page/sections.tsx",
+          "blob": "c82579bf3c6c5fe1bb78049f0ed9d249d5c36f23",
+          "bytes": 7251,
+          "sha256": "27af956d9ee5fc2e4c80e3efbf3f905ce1a2a539a620b7633cc5aa915e218890"
+        },
+        {
+          "path": "apps/web/features/entity-page/views.tsx",
+          "blob": "af1852178ed48456d78b962f2c2e7d429f446233",
+          "bytes": 15130,
+          "sha256": "ad694a5091f60af2f6a3a5f01a39a66e8250a6782bb4b048f7826de813e2381f"
+        },
+        {
+          "path": "apps/web/features/shell/localized-link.tsx",
+          "blob": "d9404ab5a2f79e3b01f9fc8311ef40ea1526baba",
+          "bytes": 3199,
+          "sha256": "2e24fec3a0acd8502950e3d23f60fa304fac7e53a963c665fba24af797eee866"
+        },
+        {
+          "path": "apps/web/features/shell/shell-provider.tsx",
+          "blob": "bc23ae0b00cfd1ff4b522776e95f6ce5cc82ec23",
+          "bytes": 4310,
+          "sha256": "dab5ec9bca57fef53a58694dee0ef32d5c64dd4305ca7bd4f2f52612350741e7"
+        },
+        {
+          "path": "apps/web/features/tracking/series-progress-panel.tsx",
+          "blob": "e47243413e115a99e55753f5ec7a09ded1bcb664",
+          "bytes": 26034,
+          "sha256": "8490be589b66a259a7e5e6a77474e08c9cd764f313fdf6cb4faeb9a48096854e"
+        },
+        {
+          "path": "apps/web/features/work-levels/connections.stories.tsx",
+          "blob": "a73b18565782b5871d6a842927dff5585a7dad35",
+          "bytes": 27376,
+          "sha256": "1079198aef128f946b8ed0e91cb95995dfaca70681e3bf2f1350f7b5064bb10e"
+        },
+        {
+          "path": "apps/web/features/work-levels/connections.tsx",
+          "blob": "7c49bc6df47da6277931cf0f10874e40cf51c231",
+          "bytes": 22180,
+          "sha256": "976c6a2f84c08ebea1c2e8aa4cc86a095d1649b2b5b1a3efa4ac310af4993ecb"
+        },
+        {
+          "path": "apps/web/features/work-levels/fixtures.ts",
+          "blob": "ce787e0dfd24f603c9dd1b93015271f48e310710",
+          "bytes": 9891,
+          "sha256": "77333337aeaaf3da24dc165f6a4cdc16478abeeb19df02e2ea0f2e623b8cb0cc"
+        },
+        {
+          "path": "apps/web/features/work-levels/messages.ts",
+          "blob": "5f287b2b3889a281d7f5b2256917b2ec27d8843c",
+          "bytes": 5465,
+          "sha256": "28d6c46edca57851cd5a67aa2a074f87f8ab8bd55acc1f3dbcab70371b8a4a81"
+        },
+        {
+          "path": "apps/web/features/work-levels/messages/de.ts",
+          "blob": "0213518f49d901bdd79e2458eb98006b1f0bb0a6",
+          "bytes": 4990,
+          "sha256": "842530db23ccbc5e29a729f921581c2c1d5c345b317f4e4f115020cd8544b8bd"
+        },
+        {
+          "path": "apps/web/features/work-levels/messages/es.ts",
+          "blob": "eecf85363e2663afb1af8a8ae682f1bede79bfd0",
+          "bytes": 4826,
+          "sha256": "6e88180de5089d6350e2997072e10ec34924f80725802ae2e428663739fde55c"
+        },
+        {
+          "path": "apps/web/features/work-levels/messages/fr.ts",
+          "blob": "c0f70efb2d2c81441534d8abd1f6ceca0c2e352e",
+          "bytes": 4949,
+          "sha256": "cd44806371af9415357c7d90c637e9a758247246985d8294cf619ea0c64420e6"
+        },
+        {
+          "path": "apps/web/features/work-levels/messages/ja.ts",
+          "blob": "e037716b3b09abf52cdb190b87e01f4603c1d40a",
+          "bytes": 5209,
+          "sha256": "adc46db4e6266530917dadf271cdedd23bec82dac390eb05baf31b10f9d5dc36"
+        },
+        {
+          "path": "apps/web/features/work-levels/messages/ko.ts",
+          "blob": "af8a84dce1d4aa70536dbeb9a8f861eeebba54d0",
+          "bytes": 4866,
+          "sha256": "561db0cfac99ed8e8e8489e3ab940571128418b56e5d4366d729162364fbbdb5"
+        },
+        {
+          "path": "apps/web/features/work-levels/messages/zh-Hans.ts",
+          "blob": "b9b5b7e8545bb7ff9298f433593c5376e5b4ddab",
+          "bytes": 4374,
+          "sha256": "0f69ced8b366d0ac83a8fde4dc121dffe55074acd0b4108e08cde57aedb2196d"
+        },
+        {
+          "path": "apps/web/features/work-levels/messages/zh-Hant.ts",
+          "blob": "39553eff7adfe959162d9e739643019efc0cb1a1",
+          "bytes": 4380,
+          "sha256": "ff26c2059754f9b7828559eb4f28a1c7583e4e79b15acf2d8e1055215a1fb19a"
+        },
+        {
+          "path": "apps/web/features/work-levels/name-recovery.stories.tsx",
+          "blob": "93192c2be2c2ac3e43897de9b93c171478624bfc",
+          "bytes": 8449,
+          "sha256": "2a843195b6c69926b23c488f6db778d7a12f796e97fa63c690e48499e9580581"
+        },
+        {
+          "path": "apps/web/features/work-levels/names.tsx",
+          "blob": "bc4556d4b9414f3ba22fe6997d9d84924760b200",
+          "bytes": 3508,
+          "sha256": "421119acbd16633ed1cb17ab17a37eb72d4aaac3447ec62121ba3872a45cc80e"
+        },
+        {
+          "path": "apps/web/features/work-levels/pages.tsx",
+          "blob": "db0c3e1f4ce63b618ce680eed297e816eb593ce6",
+          "bytes": 7457,
+          "sha256": "2c0de7f124f3f7b148e41a04dcbc5c5912aba3ef918009a15ea4ca3bb349ecf8"
+        },
+        {
+          "path": "apps/web/features/work-levels/previews.tsx",
+          "blob": "d20929232e94dc74c3bdacfc983556e1d36bed46",
+          "bytes": 8505,
+          "sha256": "f8b95743439d8334dac974d66a44a2709aa09ac0d58979bada17bc79dc8ef697"
+        },
+        {
+          "path": "apps/web/features/work-levels/read.ts",
+          "blob": "2f2afd228b3460541f502f9c5d63ad556716cc2f",
+          "bytes": 8270,
+          "sha256": "db0c26f1afc1d4a668d5d19a466ea60474b158e8f9b48b756b89354fa0d63197"
+        },
+        {
+          "path": "apps/web/features/work-levels/relation-rows.ts",
+          "blob": "038c950fa292f0b09df66fec80dc8d0bc809831b",
+          "bytes": 12695,
+          "sha256": "289d818830161f940d5b8a29cdb51258eb5346373c33d0d96f3552a5d444b103"
+        },
+        {
+          "path": "apps/web/features/work-levels/route.ts",
+          "blob": "12b4827029b7b49c7bced154a3e159e8e09ad7fe",
+          "bytes": 5482,
+          "sha256": "0167e7e831ac6295237fda947df3401a25e488f7631c99e622aa9e5d7383a3db"
+        },
+        {
+          "path": "apps/web/features/work-levels/types.ts",
+          "blob": "22a62804c79bb7c90bcfeea2f58c3d3f65b9f4f2",
+          "bytes": 2629,
+          "sha256": "be954940d68962ccf2bcd1a4f8f053ce31df10945095f782431055b6be80c0e8"
+        },
+        {
+          "path": "apps/web/tests/catalogue-detail-contract.e2e.ts",
+          "blob": "b6045fca00f40afd56dd8ac13148ed929f7d4cd9",
+          "bytes": 32565,
+          "sha256": "b6889bcde1f06083da74aa0507f85c35a91627a80dea75cb9e3f586b8ebfa2c3"
+        },
+        {
+          "path": "apps/web/tests/g-837-work-levels.test.ts",
+          "blob": "85d295baa11a6f89c9d7ee435796c93bb9848a6d",
+          "bytes": 30784,
+          "sha256": "3f1e4880a87437af80559ebebb56ca0724880a36ad5e93431631d3b00e50b831"
+        },
+        {
+          "path": "apps/web/vitest.config.ts",
+          "blob": "87980f03e746d949c3235e27a6b1f4fcc1f19231",
+          "bytes": 2764,
+          "sha256": "6eba5c586df8eafca044a4473fb9977a66bd79f06e5efdc2ac155b43521febc4"
+        },
+        {
+          "path": "generated/openapi/main/public.json",
+          "blob": "0640407d73f488c238ebf7f0229109b13b4cba46",
+          "bytes": 42527180,
+          "sha256": "eacf85a4bae7e1519df6e3a7167dd1c9c45bd79959b9a19596be724b9d208edd"
+        },
+        {
+          "path": "scripts/qa/accessibility.ts",
+          "blob": "50813fdb58b6967a1bcdcf0ec9e8c933d754f263",
+          "bytes": 475,
+          "sha256": "b35025b3b1d7204b2c383073f6fbe5a311a98d297c47424670dbe6828869b827"
+        },
+        {
+          "path": "scripts/qa/story-accessibility.setup.ts",
+          "blob": "42250728a58a9ad42f3ca561a732b7315aee0780",
+          "bytes": 3229,
+          "sha256": "2e5dbcabc65bf85f8e83338beb6ff6613bc92edd0e9bd8e10dc747209346a5e4"
+        },
+        {
+          "path": "scripts/qa/story-accessibility.ts",
+          "blob": "917a2b35f070cdbd43aaaf5c2d5af13016e029fd",
+          "bytes": 466,
+          "sha256": "b99208ff97fbb9f843ad3f3da16c828ab902c59838fbb6d842ec2b8bd7b21751"
+        },
+        {
+          "path": "scripts/qa/story-browser.ts",
+          "blob": "bd99caa7b38c87e229d57f491b3c8b8b66ff4aad",
+          "bytes": 3345,
+          "sha256": "4098faff093e571e9354b5957d25f29a22b21a3cb7b407839d43374677762d90"
+        },
+        {
+          "path": "scripts/qa/story-screenshots.ts",
+          "blob": "531b2bb355b48534fbbbd4b4d981fb599e8c2382",
+          "bytes": 2295,
+          "sha256": "675010fc7ae9c6e13e0f3dbb32a8f692a285c35608dfad7881d037d339dc4066"
+        },
+        {
+          "path": "scripts/static/web-continuations.inventory.json",
+          "blob": "657afcd915946269c48897559453b25b334d7496",
+          "bytes": 305371,
+          "sha256": "64a2a39920b1eaaf86bd89d8dbe40f6c9a2a876a317ab87f707804bfaf1241de"
+        },
+        {
+          "path": "scripts/static/web-continuations.test.ts",
+          "blob": "6b235b24fdb2a486a2e51c7bc25ef653444ff8d3",
+          "bytes": 11245,
+          "sha256": "01cf9f4d023c941bc3246a24246ba3daa8b11900ff3257a292cffc4ff0dec0ba"
+        },
+        {
+          "path": "scripts/static/web-continuations.ts",
+          "blob": "a00c81832f1837c634a3a4c6b17448ad2c618cf2",
+          "bytes": 21346,
+          "sha256": "74b92b6e1a865b386509dc026215fad264c9e63bc9e1bedb333da173e95eb67f"
+        },
+        {
+          "path": "scripts/static/web-page-filtering.inventory.json",
+          "blob": "0b483885106d15b3a5822296f9a2bf354aba2209",
+          "bytes": 58548,
+          "sha256": "7afb8219d982f85921ee5e658fc6c251b5776d9df397d44ab8f2c24dafa9b9fc"
+        },
+        {
+          "path": "scripts/static/web-page-filtering.test.ts",
+          "blob": "93efd32140c4befe6fa3a8586986c0e1a2e7a9d4",
+          "bytes": 5454,
+          "sha256": "b7b2be8b461241b1cd82cbffb4665930799b70e86c37cb5ee47d7588e9e9f4fe"
+        },
+        {
+          "path": "scripts/static/web-page-filtering.ts",
+          "blob": "c3ab827628a4ec16deecf402b4cf59f05c198b46",
+          "bytes": 15106,
+          "sha256": "6ccaec3dd8163784a0eb566959ed9f2f32537d7ebfe51bf43bf22df2c3be436d"
+        },
+        {
+          "path": "scripts/static/web-relations-page.test.ts",
+          "blob": "55bfa73df4e33826f624a9bb9a256de0341681b7",
+          "bytes": 8663,
+          "sha256": "61e66a8294cdf8b05f9eff68cef1075b0e4e96fde2b0234188695fc2e27fe50b"
+        },
+        {
+          "path": "scripts/static/web-source-scan.ts",
+          "blob": "ceb9d00d758ec1f2033d5ab53fb7b1af8569a697",
+          "bytes": 2931,
+          "sha256": "993a7b51346ba84d79f67e6b6ee7ae4c5f31aaf672d7c8d696ca0f8f8c9f3b2b"
+        },
+        {
+          "path": "services/main/src/modules/display-language/select.ts",
+          "blob": "e3dcc380dfaf3ea8b0bc901985137585aca89313",
+          "bytes": 4242,
+          "sha256": "c12cc2913876298a0566325e209db0da20832baa68c52bf4fc9faa214c72dd28"
+        },
+        {
+          "path": "services/main/src/modules/entity-page/contract.ts",
+          "blob": "aba4c383917202595f8ad875b3d01b8f7e79afc7",
+          "bytes": 6977,
+          "sha256": "d04789b43372edcbe99511682401d1390855a8d5d28e78a3611f8576e307a2b6"
+        },
+        {
+          "path": "services/main/src/modules/wiki/evidence.ts",
+          "blob": "d5484dfcd8c18646fa6944fb92482d4d29efa5e2",
+          "bytes": 9615,
+          "sha256": "a8b97a506398fe5babb0618b0ec2ffce2644f3c5253df59f82a04f01f9068b43"
+        },
+        {
+          "path": "services/main/src/routes/resource-relations.ts",
+          "blob": "b144a4728631e01851e8e559e7b57917d2975cb4",
+          "bytes": 14138,
+          "sha256": "4fe158ffcf28139b467c53f019a04b15eb1a71550e4fdda13d0192348b0d185d"
+        },
+        {
+          "path": "tests/qa/integration/collection-domain-roles.test.ts",
+          "blob": "c70b79027c5c91f6a2b62a4e33b29a9364984e4d",
+          "bytes": 5335,
+          "sha256": "c6d149bc04ca1080c5c2333950615adccc90b3cae6e798ae19ad9a058dee25fa"
+        },
+        {
+          "path": "tests/qa/integration/support/catalogue-information.ts",
+          "blob": "d757ab29ce4faba937f9abe54b28c3fa7c213c9a",
+          "bytes": 51981,
+          "sha256": "3fc81eed5c0090521d49a669c25c608b07182a1a2ec23042780193bd4dc7c94f"
+        }
+      ],
+      "retainedAuthorToSelectedDifferences": [
+        {
+          "path": "apps/web/features/entity-page/entity-page.stories.tsx",
+          "retainedAuthorBlob": "9a1ae32d1dba176c95a09511efee471d5366f543",
+          "selectedPinBlob": "bb57fface07d2b2978d67ceac04ce9ac40abdf80",
+          "selectedReceipt": "changes"
+        },
+        {
+          "path": "apps/web/features/entity-page/identity-read.ts",
+          "retainedAuthorBlob": "71db905674129313787764c8f530d61a6d924224",
+          "selectedPinBlob": "7991b37bc5929163d3bd18f49fc5d036e1332ad3",
+          "selectedReceipt": "changes"
+        },
+        {
+          "path": "apps/web/features/entity-page/identity-relations.ts",
+          "retainedAuthorBlob": "05d34bcfff4d84611bdc2f1266f4532ca83651c2",
+          "selectedPinBlob": "1721770e1dc8d9782797bdbdc49ea719181cede8",
+          "selectedReceipt": "changes"
+        },
+        {
+          "path": "apps/web/features/entity-page/identity-reads.test.ts",
+          "retainedAuthorBlob": "b4efa6d2eb1ba9e65df395764dde7e5b5e4b2a26",
+          "selectedPinBlob": "00b827dff513a851a4f5bac1e8d8db13648563ad",
+          "selectedReceipt": "changes"
+        },
+        {
+          "path": "apps/web/features/entity-page/identity-relations.test.ts",
+          "retainedAuthorBlob": "afeac4cde8291bbec18ed2847e8c55c840ab0d58",
+          "selectedPinBlob": "ecc2d006d2df23ba509591c6829cbd9bc95bfb3f",
+          "selectedReceipt": "changes"
+        },
+        {
+          "path": "apps/web/features/entity-page/identity-views.tsx",
+          "retainedAuthorBlob": "338fc7f4de8f00c3ed5538723fa01380cb75f1c6",
+          "selectedPinBlob": "08904b8c00b59fb77b7aa608a6e11950c70277b7",
+          "selectedReceipt": "changes"
+        },
+        {
+          "path": "apps/web/features/entity-page/route.ts",
+          "retainedAuthorBlob": "e8481aec45f9891f52594a31f3310e66845e08d2",
+          "selectedPinBlob": "c5ff77f146070de866b39ad3a2dd655198a27cf3",
+          "selectedReceipt": "changes"
+        },
+        {
+          "path": "generated/openapi/main/public.json",
+          "retainedAuthorBlob": "4bf883008968ad9bdc80b65eefca9b5c1927ef28",
+          "selectedPinBlob": "0640407d73f488c238ebf7f0229109b13b4cba46",
+          "selectedReceipt": "native-delivery-parent"
+        }
+      ],
+      "retainedStoryLinesPreservedInOrder": true,
+      "selectedChangesAndDependenciesMatch": true,
+      "dependencyInputs": [
+        {
+          "path": ".yarn/patches/elysia-opentelemetry-status.patch",
+          "blob": "d302af22b382ac2b2cd11300fce1116c98fe9b39",
+          "bytes": 4690,
+          "sha256": "eb294d457fdbf338024e5f505b8cb4a27779defb929768f3636f430860616930"
+        },
+        {
+          "path": ".yarnrc.yml",
+          "blob": "18e7483343c144cd6b21f5c31726b973198d333c",
+          "bytes": 117,
+          "sha256": "3a5fa848917bb984a50f6fe6c270e3b8270b2c1a1b905c5c7727c9263e35dc7b"
+        },
+        {
+          "path": "apphost/package.json",
+          "blob": "32ffc113f599fd65dcf499690944745cc7a01fee",
+          "bytes": 269,
+          "sha256": "09cdc811935b666d1d19a7bccc9667a03d65fab0616874ef3d4618e5f720900a"
+        },
+        {
+          "path": "apps/accounts/package.json",
+          "blob": "361c8bfb69801c3ddaf2af761a04669e0dcf33bf",
+          "bytes": 1135,
+          "sha256": "e577b25fd335fec1ea399509bfb841925c5b3d7b544a56203304c940b6aabc1c"
+        },
+        {
+          "path": "apps/web/package.json",
+          "blob": "788bd74341217c9fb7f655e00ccd902d64210f5b",
+          "bytes": 1602,
+          "sha256": "f0b29308365ed08148f73ba83b3c5f6c5b5e890c1df2d547ece26b541ad7965f"
+        },
+        {
+          "path": "package.json",
+          "blob": "5b83cc84bb8984bbb72f1056d2ecc9463973fde3",
+          "bytes": 1164,
+          "sha256": "507787932c026b08db8c45a0673da53ee42a8668bda84cfc5e2d4a62d30afdb4"
+        },
+        {
+          "path": "packages/conversion/package.json",
+          "blob": "946ba903846f0e8a734988322072eb34a95cc625",
+          "bytes": 167,
+          "sha256": "a05f73f96a6d9f4d590913192b838d78c5e7f8305f7361978cf6309d5e88bf85"
+        },
+        {
+          "path": "packages/document/package.json",
+          "blob": "56e8b96232a239ac6d667a5379905a0c4175a9b9",
+          "bytes": 732,
+          "sha256": "c87168f9bd07e47b5e57e91ab5424abcb004f78885fd2bcffd8343b0c3e2ff94"
+        },
+        {
+          "path": "packages/model/package.json",
+          "blob": "0609f74d865c30e030ece8b27d5d6b106db2a01e",
+          "bytes": 606,
+          "sha256": "f51043546ca29144931f33a19fc3a70d454c15285157f48e997292f62723011f"
+        },
+        {
+          "path": "packages/observability/package.json",
+          "blob": "30c4935266845b4f1009df0583d65bf99308e328",
+          "bytes": 1156,
+          "sha256": "bc006b492c9862540dd6cfa475da65f5f2ba20b2fc0d0fb3fb8694eab1ca5c5d"
+        },
+        {
+          "path": "packages/ui/package.json",
+          "blob": "008cd8a1e103f167b4f69117d7c455b83a251f30",
+          "bytes": 1271,
+          "sha256": "918f010f3942a38f238055257a22b226046a1fd0d43b4e99574f495854d1abe4"
+        },
+        {
+          "path": "packages/wiki-toolkit/package.json",
+          "blob": "9c386f3db7c248fea35fd818384156899af58c78",
+          "bytes": 958,
+          "sha256": "7b918c2089a1cd19f4fa63ad70337a34981edd18a671ea5198b215488e2526e8"
+        },
+        {
+          "path": "packages/zone-sdk/package.json",
+          "blob": "949a0531df4ee3a89ab36394702b8fae3e13ab89",
+          "bytes": 276,
+          "sha256": "eaadfbf6276e8535d7eea962d7aed47cead5b172343e88348a6cfe1d7c4d7f7f"
+        },
+        {
+          "path": "scripts/research/http_framework_comparison/package.json",
+          "blob": "0cac69060f366ab8e87e7694531586c35df1f9e0",
+          "bytes": 138,
+          "sha256": "d19ed4231b9c2a632e17cfe6576841f4e1b4620cf38705851b2f9c90fa4f97a8"
+        },
+        {
+          "path": "scripts/research/http_framework_comparison/probe/package.json",
+          "blob": "910f2d577f0a2ee5311b73c3dc5d0a1927730452",
+          "bytes": 572,
+          "sha256": "99c24df7fae8f773bf614877789e9d2457254aef89cbb18709b534ebd4639f68"
+        },
+        {
+          "path": "services/account/package.json",
+          "blob": "691030981534a6e451e5cef138376bd3bfd72b2a",
+          "bytes": 961,
+          "sha256": "fc3a842341b17160aef53045045f93f76b38bac8d5b646e963699d4fd0775a6c"
+        },
+        {
+          "path": "services/content/package.json",
+          "blob": "d3c5acc87bf7d5c99c64e55f980a3b630d5c8cbc",
+          "bytes": 395,
+          "sha256": "511f1041851ec53182b3c442bfa5897e46a8e6064b196369a030282236dfd8df"
+        },
+        {
+          "path": "services/main/package.json",
+          "blob": "b1da791318ab3a42057a19a00435564cd6593e38",
+          "bytes": 1134,
+          "sha256": "c1b72803a0e8a3c6c1ef6087951e53e6ae5c01101b59836857f7bed2d5cc19c8"
+        },
+        {
+          "path": "yarn.lock",
+          "blob": "239124b3f025a9beeb23d08d75adfbdbcc18c366",
+          "bytes": 435646,
+          "sha256": "5473e2ac8b308af7e28929652f8882e71e11d81728d567d6324ca7c65eb0ac30"
+        }
+      ],
+      "artifact": {
+        "path": ".temp/goal/relation-independent/verified-source.json",
+        "bytes": 23296,
+        "sha256": "cb87eba1ca27a0c23753dcd5cd4bef2ede0403313aa022c4731ca47c070585f3"
+      },
+      "dependencyPreparation": "The supported goalctl test invocation detected missing local dependencies and ran task install (immutable Yarn install and repository dependency preparation) in the extracted proof root. Manifest, patch and lockfile inputs are bound below. The ignored archive has no separate Git index, so its inherited Git inventory stamp is not treated as dependency-equivalence proof.",
+      "coherentPinReason": "The selected consumer pin contains both authored story deltas and native selector delivery. Every retained story line remains in order. Seven earlier mapped files advance through the accepted selected consumer delta; public OpenAPI advances through its accepted native delivery parent. Their actual blobs are recorded; no retained-author dependency equality is invented.",
+      "retainedConnectionsStoryByteIdentical": true,
+      "selectedReceiptChangesVerified": 8,
+      "selectedReceiptUnchangedDependenciesVerified": 59,
+      "alternateStoryPinRequired": false,
+      "acceptedSourceReviewRepeated": false
+    },
+    "execution": {
+      "job": "f4c9eb18-34a3-4dba-ae5f-8952eaa032e4",
+      "qa": "20261021t062913-e69faa",
+      "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- env REZICS_QA_ARTIFACT_ROOT=/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2863/.temp/goal/relation-independent/qa task --dir .temp/goal/relation-independent/proof-root goal -- test apps/web/features/entity-page/entity-page.stories.tsx apps/web/features/work-levels/connections.stories.tsx --testNamePattern 'Partial Semantic Incidences|Late Hub Repeated Occurrences|Empty Continued Relations|Selected Identity Frontiers|Selected Identity Terminal Page' --reporter=verbose",
+      "pinnedRootCommand": "task goal -- test apps/web/features/entity-page/entity-page.stories.tsx apps/web/features/work-levels/connections.stories.tsx --testNamePattern 'Partial Semantic Incidences|Late Hub Repeated Occurrences|Empty Continued Relations|Selected Identity Frontiers|Selected Identity Terminal Page' --reporter=verbose",
+      "reporterReason": "Verbose reporter records each original body result without changing selection or assertions.",
+      "exitCode": 0,
+      "filesPassed": 2,
+      "storiesPassed": 12,
+      "storiesFailed": 0,
+      "outsideNameSelection": 35,
+      "selectionNote": "Vitest reports 35 skipped tests because they are outside the requested name pattern; no skip, assertion or case was added/removed/changed.",
+      "durationSeconds": 18.0,
+      "log": {
+        "path": ".temp/goal/jobs/f4c9eb18-34a3-4dba-ae5f-8952eaa032e4.log",
+        "bytes": 7328,
+        "sha256": "da07e972b1aa00e4d32a70277d451ad48415b187adcbdc611799632f000d3322"
+      },
+      "summary": {
+        "path": ".temp/goal/relation-independent/qa/20261021t062913-e69faa/summary.md",
+        "bytes": 357,
+        "sha256": "1714d5d825518dabfdc0b4f330b17fdd14fd41c3aad9a5f479782517110d2435"
+      },
+      "warnings": [
+        "Vite native-config ESM/CommonJS compatibility warning",
+        "Unresolved @storybook/react-dom-shim optimizeDeps.include warning"
+      ],
+      "warningDisposition": "Both files loaded, all twelve original play bodies and mandatory hooks completed, twelve PNGs emitted, command exit 0. No setup correction or rerun was needed."
+    },
+    "accessibility": {
+      "scope": "Mandatory existing afterEach on each successful selected play body, using axe WCAG 2/2.1/2.2 A/AA tags and serious/critical blocking threshold.",
+      "result": "pass",
+      "stories": 12,
+      "configuredThemeViewportSweepsCompleted": 48,
+      "blockingSeriousOrCriticalViolations": 0,
+      "rawAxeJsonEmitted": false,
+      "evidence": "Passing Vitest results include the mandatory awaited hook. No separate raw violation inventory was emitted, so no claim of zero minor/moderate violations or complete accessibility conformance.",
+      "initialAndNativeRefusalStatesCovered": false
+    },
+    "visualInspection": {
+      "actualPngsOpened": 12,
+      "desktop": {
+        "count": 6,
+        "width": 1200,
+        "height": 900,
+        "locale": "en"
+      },
+      "phone": {
+        "count": 6,
+        "width": 390,
+        "height": 844,
+        "locale": "ja"
+      },
+      "finding": "No overlap, horizontal clipping or unreadable text/focus was observed in the twelve captured states. Japanese counterpart rows wrap within the viewport. SelectedIdentityFrontiersPhoneJapanese continues below the fold; no full-page visual claim.",
+      "screenshotsAreDistinctFromBodyAndAxeEvidence": true
+    },
+    "stories": [
+      {
+        "id": "entity-page-sections--partial-semantic-incidences",
+        "path": "apps/web/features/entity-page/entity-page.stories.tsx",
+        "exportName": "PartialSemanticIncidences",
+        "name": "Partial Semantic Incidences",
+        "sourceBlob": "bb57fface07d2b2978d67ceac04ce9ac40abdf80",
+        "sourceSha256": "1244d0471bdc2414eefc6d4d3483ae06fb737a7d808aacbf5feb423d6d62464d",
+        "locale": "en",
+        "fixture": "supplied-native-contract-example",
+        "scope": "partialEntity",
+        "interaction": {
+          "result": "pass",
+          "originalBodyReached": true,
+          "lastOutcomeAssertionReached": true,
+          "durationMs": 1664,
+          "positiveOutcomesReached": [
+            "Relations and structural Collections regions visible despite misleading ordinary Collection title",
+            "Both repeated semantic chips retain canonical localized target links",
+            "Two incidence rows each retain additional, withheld and repeated counterparts in order; rendering:null retains Side story guide fallback link",
+            "Exact encoded opaque next and first-page links; focus on Next page; no horizontal overflow"
+          ],
+          "negativeOutcomesReached": [
+            "Withheld names have no href or invented address",
+            "Unavailable semantic rendering gets no semantic chip",
+            "No repeated counterpart or incidence is collapsed"
+          ],
+          "assertionCount": "Vitest did not emit an expect count; every selected original play body completed, including its final overflow assertion."
+        },
+        "axe": {
+          "result": "pass",
+          "mandatoryPostInteractionHookCompleted": true,
+          "themes": [
+            "light",
+            "dark"
+          ],
+          "viewports": [
+            "390x844",
+            "1280x860"
+          ],
+          "configuredSweeps": 4,
+          "blockingSeriousOrCriticalViolations": 0
+        },
+        "screenshot": {
+          "path": ".temp/goal/relation-independent/qa/20261021t062913-e69faa/story-screenshots/apps-web-features-entity-page-entity-page.stories.tsx/PartialSemanticIncidences.png",
+          "bytes": 34421,
+          "sha256": "2892749bfceac2e45b694c578e2760d4b9d822932734986b3f555830dac4ae4a",
+          "width": 1200,
+          "height": 900,
+          "theme": "light",
+          "actualPngOpenedByIndependentWorker": true,
+          "visualResult": "pass-with-viewport-limits",
+          "observation": "Misleading Collection title, repeated semantic chips, ordered fallback rows, withheld labels and first/next controls are readable. Japanese row wrapping stays within the phone width; final focused Next page is visible."
+        },
+        "originalNativeApiAuthorityPersistenceProved": false
+      },
+      {
+        "id": "entity-page-sections--partial-semantic-incidences-phone-japanese",
+        "path": "apps/web/features/entity-page/entity-page.stories.tsx",
+        "exportName": "PartialSemanticIncidencesPhoneJapanese",
+        "name": "Partial Semantic Incidences Phone Japanese",
+        "sourceBlob": "bb57fface07d2b2978d67ceac04ce9ac40abdf80",
+        "sourceSha256": "1244d0471bdc2414eefc6d4d3483ae06fb737a7d808aacbf5feb423d6d62464d",
+        "locale": "ja",
+        "fixture": "supplied-native-contract-example",
+        "scope": "partialEntity",
+        "interaction": {
+          "result": "pass",
+          "originalBodyReached": true,
+          "lastOutcomeAssertionReached": true,
+          "durationMs": 728,
+          "positiveOutcomesReached": [
+            "Relations and structural Collections regions visible despite misleading ordinary Collection title",
+            "Both repeated semantic chips retain canonical localized target links",
+            "Two incidence rows each retain additional, withheld and repeated counterparts in order; rendering:null retains Side story guide fallback link",
+            "Exact encoded opaque next and first-page links; focus on Next page; no horizontal overflow"
+          ],
+          "negativeOutcomesReached": [
+            "Withheld names have no href or invented address",
+            "Unavailable semantic rendering gets no semantic chip",
+            "No repeated counterpart or incidence is collapsed"
+          ],
+          "assertionCount": "Vitest did not emit an expect count; every selected original play body completed, including its final overflow assertion."
+        },
+        "axe": {
+          "result": "pass",
+          "mandatoryPostInteractionHookCompleted": true,
+          "themes": [
+            "light",
+            "dark"
+          ],
+          "viewports": [
+            "390x844",
+            "1280x860"
+          ],
+          "configuredSweeps": 4,
+          "blockingSeriousOrCriticalViolations": 0
+        },
+        "screenshot": {
+          "path": ".temp/goal/relation-independent/qa/20261021t062913-e69faa/story-screenshots/apps-web-features-entity-page-entity-page.stories.tsx/PartialSemanticIncidencesPhoneJapanese.png",
+          "bytes": 37736,
+          "sha256": "5ca5089f0a877dd77ce23e49bc5a6f8f7ce562b394a4e9823626abe42bb86080",
+          "width": 390,
+          "height": 844,
+          "theme": "light",
+          "actualPngOpenedByIndependentWorker": true,
+          "visualResult": "pass-with-viewport-limits",
+          "observation": "Misleading Collection title, repeated semantic chips, ordered fallback rows, withheld labels and first/next controls are readable. Japanese row wrapping stays within the phone width; final focused Next page is visible."
+        },
+        "originalNativeApiAuthorityPersistenceProved": false
+      },
+      {
+        "id": "entity-page-sections--late-hub-repeated-occurrences",
+        "path": "apps/web/features/entity-page/entity-page.stories.tsx",
+        "exportName": "LateHubRepeatedOccurrences",
+        "name": "Late Hub Repeated Occurrences",
+        "sourceBlob": "bb57fface07d2b2978d67ceac04ce9ac40abdf80",
+        "sourceSha256": "1244d0471bdc2414eefc6d4d3483ae06fb737a7d808aacbf5feb423d6d62464d",
+        "locale": "en",
+        "fixture": "supplied-native-contract-example",
+        "scope": "lateHub",
+        "interaction": {
+          "result": "pass",
+          "originalBodyReached": true,
+          "lastOutcomeAssertionReached": true,
+          "durationMs": 563,
+          "positiveOutcomesReached": [
+            "Enter on the actual continuation anchor transitions supplied reader snapshots from absent family to late hub plus three distinct incidence occurrences naming the same target",
+            "Hub and all member canonical links, unknown-kind fallback and visible-reading-position caption",
+            "Family and generic own next/current opaque links remain separate; focus on More relations; no horizontal overflow"
+          ],
+          "negativeOutcomesReached": [
+            "No family region in the initial supplied snapshot",
+            "Empty generic page does not show a false no-relations message before or after transition",
+            "Three repeated target occurrences are not collapsed"
+          ],
+          "assertionCount": "Vitest did not emit an expect count; every selected original play body completed, including its final overflow assertion."
+        },
+        "axe": {
+          "result": "pass",
+          "mandatoryPostInteractionHookCompleted": true,
+          "themes": [
+            "light",
+            "dark"
+          ],
+          "viewports": [
+            "390x844",
+            "1280x860"
+          ],
+          "configuredSweeps": 4,
+          "blockingSeriousOrCriticalViolations": 0
+        },
+        "screenshot": {
+          "path": ".temp/goal/relation-independent/qa/20261021t062913-e69faa/story-screenshots/apps-web-features-entity-page-entity-page.stories.tsx/LateHubRepeatedOccurrences.png",
+          "bytes": 36565,
+          "sha256": "cc4939b04870ddcacf8ed4a2c9a26dc8ea8b652b1feddca0a5c0002679fdb8f4",
+          "width": 1200,
+          "height": 900,
+          "theme": "light",
+          "actualPngOpenedByIndependentWorker": true,
+          "visualResult": "pass-with-viewport-limits",
+          "observation": "Hub plus three repeated Saber Alter cards/rows remain distinct. Main-entry caption, reading-position caption, generic navigation and focused More relations are readable on desktop and phone."
+        },
+        "originalNativeApiAuthorityPersistenceProved": false
+      },
+      {
+        "id": "entity-page-sections--late-hub-repeated-occurrences-phone-japanese",
+        "path": "apps/web/features/entity-page/entity-page.stories.tsx",
+        "exportName": "LateHubRepeatedOccurrencesPhoneJapanese",
+        "name": "Late Hub Repeated Occurrences Phone Japanese",
+        "sourceBlob": "bb57fface07d2b2978d67ceac04ce9ac40abdf80",
+        "sourceSha256": "1244d0471bdc2414eefc6d4d3483ae06fb737a7d808aacbf5feb423d6d62464d",
+        "locale": "ja",
+        "fixture": "supplied-native-contract-example",
+        "scope": "lateHub",
+        "interaction": {
+          "result": "pass",
+          "originalBodyReached": true,
+          "lastOutcomeAssertionReached": true,
+          "durationMs": 511,
+          "positiveOutcomesReached": [
+            "Enter on the actual continuation anchor transitions supplied reader snapshots from absent family to late hub plus three distinct incidence occurrences naming the same target",
+            "Hub and all member canonical links, unknown-kind fallback and visible-reading-position caption",
+            "Family and generic own next/current opaque links remain separate; focus on More relations; no horizontal overflow"
+          ],
+          "negativeOutcomesReached": [
+            "No family region in the initial supplied snapshot",
+            "Empty generic page does not show a false no-relations message before or after transition",
+            "Three repeated target occurrences are not collapsed"
+          ],
+          "assertionCount": "Vitest did not emit an expect count; every selected original play body completed, including its final overflow assertion."
+        },
+        "axe": {
+          "result": "pass",
+          "mandatoryPostInteractionHookCompleted": true,
+          "themes": [
+            "light",
+            "dark"
+          ],
+          "viewports": [
+            "390x844",
+            "1280x860"
+          ],
+          "configuredSweeps": 4,
+          "blockingSeriousOrCriticalViolations": 0
+        },
+        "screenshot": {
+          "path": ".temp/goal/relation-independent/qa/20261021t062913-e69faa/story-screenshots/apps-web-features-entity-page-entity-page.stories.tsx/LateHubRepeatedOccurrencesPhoneJapanese.png",
+          "bytes": 37695,
+          "sha256": "3330a81d1c466640f0313166f5c7a115d15865ad47bb01193592c18dfe344755",
+          "width": 390,
+          "height": 844,
+          "theme": "light",
+          "actualPngOpenedByIndependentWorker": true,
+          "visualResult": "pass-with-viewport-limits",
+          "observation": "Hub plus three repeated Saber Alter cards/rows remain distinct. Main-entry caption, reading-position caption, generic navigation and focused More relations are readable on desktop and phone."
+        },
+        "originalNativeApiAuthorityPersistenceProved": false
+      },
+      {
+        "id": "work-levels-connections--partial-semantic-incidences",
+        "path": "apps/web/features/work-levels/connections.stories.tsx",
+        "exportName": "PartialSemanticIncidences",
+        "name": "Partial Semantic Incidences",
+        "sourceBlob": "a73b18565782b5871d6a842927dff5585a7dad35",
+        "sourceSha256": "1079198aef128f946b8ed0e91cb95995dfaca70681e3bf2f1350f7b5064bb10e",
+        "locale": "en",
+        "fixture": "supplied-native-contract-example",
+        "scope": "partialConnections",
+        "interaction": {
+          "result": "pass",
+          "originalBodyReached": true,
+          "lastOutcomeAssertionReached": true,
+          "durationMs": 1024,
+          "positiveOutcomesReached": [
+            "Full Connections / phone preview retain null-purpose structural Collection and Reboots of semantic row",
+            "Both repeated semantic targets and all ordered extra/withheld/repeated counterparts retain truthful rendering",
+            "Side story guide fallback remains linked",
+            "Full next/first links retain independent member/part cursors; preview retains genuine View all destination; focused navigation; no horizontal overflow"
+          ],
+          "negativeOutcomesReached": [
+            "Withheld names have no href or invented address",
+            "Repeated semantic targets and counterparts are not deduplicated"
+          ],
+          "assertionCount": "Vitest did not emit an expect count; every selected original play body completed, including its final overflow assertion."
+        },
+        "axe": {
+          "result": "pass",
+          "mandatoryPostInteractionHookCompleted": true,
+          "themes": [
+            "light",
+            "dark"
+          ],
+          "viewports": [
+            "390x844",
+            "1280x860"
+          ],
+          "configuredSweeps": 4,
+          "blockingSeriousOrCriticalViolations": 0
+        },
+        "screenshot": {
+          "path": ".temp/goal/relation-independent/qa/20261021t062913-e69faa/story-screenshots/apps-web-features-work-levels-connections.stories.tsx/PartialSemanticIncidences.png",
+          "bytes": 43090,
+          "sha256": "f4fda5fa27a73b19888b11266ee0588020c8ea6f6ae27d9fc4b583194c3c36da",
+          "width": 1200,
+          "height": 900,
+          "theme": "light",
+          "actualPngOpenedByIndependentWorker": true,
+          "visualResult": "pass-with-viewport-limits",
+          "observation": "Structural Collection, two semantic targets with unresolved source-version labels, repeated fallback rows and navigation remain readable. Japanese preview wraps counterparts within the phone width and shows focused View all."
+        },
+        "originalNativeApiAuthorityPersistenceProved": false
+      },
+      {
+        "id": "work-levels-connections--partial-semantic-incidences-preview-phone-japanese",
+        "path": "apps/web/features/work-levels/connections.stories.tsx",
+        "exportName": "PartialSemanticIncidencesPreviewPhoneJapanese",
+        "name": "Partial Semantic Incidences Preview Phone Japanese",
+        "sourceBlob": "a73b18565782b5871d6a842927dff5585a7dad35",
+        "sourceSha256": "1079198aef128f946b8ed0e91cb95995dfaca70681e3bf2f1350f7b5064bb10e",
+        "locale": "ja",
+        "fixture": "supplied-native-contract-example",
+        "scope": "partialConnections",
+        "interaction": {
+          "result": "pass",
+          "originalBodyReached": true,
+          "lastOutcomeAssertionReached": true,
+          "durationMs": 588,
+          "positiveOutcomesReached": [
+            "Full Connections / phone preview retain null-purpose structural Collection and Reboots of semantic row",
+            "Both repeated semantic targets and all ordered extra/withheld/repeated counterparts retain truthful rendering",
+            "Side story guide fallback remains linked",
+            "Full next/first links retain independent member/part cursors; preview retains genuine View all destination; focused navigation; no horizontal overflow"
+          ],
+          "negativeOutcomesReached": [
+            "Withheld names have no href or invented address",
+            "Repeated semantic targets and counterparts are not deduplicated"
+          ],
+          "assertionCount": "Vitest did not emit an expect count; every selected original play body completed, including its final overflow assertion."
+        },
+        "axe": {
+          "result": "pass",
+          "mandatoryPostInteractionHookCompleted": true,
+          "themes": [
+            "light",
+            "dark"
+          ],
+          "viewports": [
+            "390x844",
+            "1280x860"
+          ],
+          "configuredSweeps": 4,
+          "blockingSeriousOrCriticalViolations": 0
+        },
+        "screenshot": {
+          "path": ".temp/goal/relation-independent/qa/20261021t062913-e69faa/story-screenshots/apps-web-features-work-levels-connections.stories.tsx/PartialSemanticIncidencesPreviewPhoneJapanese.png",
+          "bytes": 42543,
+          "sha256": "3d2dc71af8b8efde7ec6a9f3e5d98482895acd3c4ba3d9dd2d2e6612e553942a",
+          "width": 390,
+          "height": 844,
+          "theme": "light",
+          "actualPngOpenedByIndependentWorker": true,
+          "visualResult": "pass-with-viewport-limits",
+          "observation": "Structural Collection, two semantic targets with unresolved source-version labels, repeated fallback rows and navigation remain readable. Japanese preview wraps counterparts within the phone width and shows focused View all."
+        },
+        "originalNativeApiAuthorityPersistenceProved": false
+      },
+      {
+        "id": "work-levels-connections--empty-continued-relations",
+        "path": "apps/web/features/work-levels/connections.stories.tsx",
+        "exportName": "EmptyContinuedRelations",
+        "name": "Empty Continued Relations",
+        "sourceBlob": "a73b18565782b5871d6a842927dff5585a7dad35",
+        "sourceSha256": "1079198aef128f946b8ed0e91cb95995dfaca70681e3bf2f1350f7b5064bb10e",
+        "locale": "en",
+        "fixture": "supplied-native-contract-example",
+        "scope": "empty",
+        "interaction": {
+          "result": "pass",
+          "originalBodyReached": true,
+          "lastOutcomeAssertionReached": true,
+          "durationMs": 417,
+          "positiveOutcomesReached": [
+            "Empty continued full batch retains exact opaque next and first-page navigation with independent member/part current positions",
+            "Empty Japanese preview retains genuine View all destination",
+            "Zero list items, visible Connections region, focus on navigation, no horizontal overflow"
+          ],
+          "negativeOutcomesReached": [
+            "No false no-connections claim from an empty continued page"
+          ],
+          "assertionCount": "Vitest did not emit an expect count; every selected original play body completed, including its final overflow assertion."
+        },
+        "axe": {
+          "result": "pass",
+          "mandatoryPostInteractionHookCompleted": true,
+          "themes": [
+            "light",
+            "dark"
+          ],
+          "viewports": [
+            "390x844",
+            "1280x860"
+          ],
+          "configuredSweeps": 4,
+          "blockingSeriousOrCriticalViolations": 0
+        },
+        "screenshot": {
+          "path": ".temp/goal/relation-independent/qa/20261021t062913-e69faa/story-screenshots/apps-web-features-work-levels-connections.stories.tsx/EmptyContinuedRelations.png",
+          "bytes": 13024,
+          "sha256": "6c2463f0615db5a6c8a1de500ac94164332795de6cc26e140aff2a4d45bb4e4e",
+          "width": 1200,
+          "height": 900,
+          "theme": "light",
+          "actualPngOpenedByIndependentWorker": true,
+          "visualResult": "pass-with-viewport-limits",
+          "observation": "Empty full batch shows first/next controls; empty Japanese preview shows focused View all. Whitespace conveys an empty batch without a false absence message."
+        },
+        "originalNativeApiAuthorityPersistenceProved": false
+      },
+      {
+        "id": "work-levels-connections--empty-continued-relations-preview-phone-japanese",
+        "path": "apps/web/features/work-levels/connections.stories.tsx",
+        "exportName": "EmptyContinuedRelationsPreviewPhoneJapanese",
+        "name": "Empty Continued Relations Preview Phone Japanese",
+        "sourceBlob": "a73b18565782b5871d6a842927dff5585a7dad35",
+        "sourceSha256": "1079198aef128f946b8ed0e91cb95995dfaca70681e3bf2f1350f7b5064bb10e",
+        "locale": "ja",
+        "fixture": "supplied-native-contract-example",
+        "scope": "empty",
+        "interaction": {
+          "result": "pass",
+          "originalBodyReached": true,
+          "lastOutcomeAssertionReached": true,
+          "durationMs": 309,
+          "positiveOutcomesReached": [
+            "Empty continued full batch retains exact opaque next and first-page navigation with independent member/part current positions",
+            "Empty Japanese preview retains genuine View all destination",
+            "Zero list items, visible Connections region, focus on navigation, no horizontal overflow"
+          ],
+          "negativeOutcomesReached": [
+            "No false no-connections claim from an empty continued page"
+          ],
+          "assertionCount": "Vitest did not emit an expect count; every selected original play body completed, including its final overflow assertion."
+        },
+        "axe": {
+          "result": "pass",
+          "mandatoryPostInteractionHookCompleted": true,
+          "themes": [
+            "light",
+            "dark"
+          ],
+          "viewports": [
+            "390x844",
+            "1280x860"
+          ],
+          "configuredSweeps": 4,
+          "blockingSeriousOrCriticalViolations": 0
+        },
+        "screenshot": {
+          "path": ".temp/goal/relation-independent/qa/20261021t062913-e69faa/story-screenshots/apps-web-features-work-levels-connections.stories.tsx/EmptyContinuedRelationsPreviewPhoneJapanese.png",
+          "bytes": 10048,
+          "sha256": "8f978dba902725371c74e57eae0f355f94cffb62bb7278c9d8d2abd948b501d2",
+          "width": 390,
+          "height": 844,
+          "theme": "light",
+          "actualPngOpenedByIndependentWorker": true,
+          "visualResult": "pass-with-viewport-limits",
+          "observation": "Empty full batch shows first/next controls; empty Japanese preview shows focused View all. Whitespace conveys an empty batch without a false absence message."
+        },
+        "originalNativeApiAuthorityPersistenceProved": false
+      },
+      {
+        "id": "entity-page-sections--selected-identity-frontiers",
+        "path": "apps/web/features/entity-page/entity-page.stories.tsx",
+        "exportName": "SelectedIdentityFrontiers",
+        "name": "Selected Identity Frontiers",
+        "sourceBlob": "bb57fface07d2b2978d67ceac04ce9ac40abdf80",
+        "sourceSha256": "1244d0471bdc2414eefc6d4d3483ae06fb737a7d808aacbf5feb423d6d62464d",
+        "locale": "en",
+        "fixture": "supplied-native-contract-reader-snapshot",
+        "scope": "frontiers",
+        "interaction": {
+          "result": "pass",
+          "originalBodyReached": true,
+          "lastOutcomeAssertionReached": true,
+          "durationMs": 796,
+          "positiveOutcomesReached": [
+            "Initial empty hub and discovery pages each retain their own next frontier and current positions",
+            "Enter on selected discovery continuation presents supplied late hub and three repeated member occurrences",
+            "Canonical member/additional/fallback destinations, two unlinked withheld names and three retained fallback incidence rows",
+            "Generic Relations text is unchanged across selected snapshot transition",
+            "Exact opaque family/discovery/generic navigation tuples; discovery navigation clears family cursor; focused navigation; no horizontal overflow"
+          ],
+          "negativeOutcomesReached": [
+            "No false no-variants claim from empty selected page",
+            "No link fabricated for withheld names",
+            "No repeated member collapse or generic Relations replacement",
+            "Changing discovery does not retain obsolete family cursor"
+          ],
+          "assertionCount": "Vitest did not emit an expect count; every selected original play body completed, including its final overflow assertion."
+        },
+        "axe": {
+          "result": "pass",
+          "mandatoryPostInteractionHookCompleted": true,
+          "themes": [
+            "light",
+            "dark"
+          ],
+          "viewports": [
+            "390x844",
+            "1280x860"
+          ],
+          "configuredSweeps": 4,
+          "blockingSeriousOrCriticalViolations": 0
+        },
+        "screenshot": {
+          "path": ".temp/goal/relation-independent/qa/20261021t062913-e69faa/story-screenshots/apps-web-features-entity-page-entity-page.stories.tsx/SelectedIdentityFrontiers.png",
+          "bytes": 63405,
+          "sha256": "b9281fd1906734041a6dcebb643955f42476cdbe946bf3733a453ae18bf62ff0",
+          "width": 1200,
+          "height": 900,
+          "theme": "light",
+          "actualPngOpenedByIndependentWorker": true,
+          "visualResult": "pass-with-viewport-limits",
+          "observation": "Main hub, three distinct repeated member rows, retained fallback counterparts and two navigation groups remain readable. Phone screenshot shows the selected family and start of generic Relations; remaining generic content extends below the viewport and is covered by DOM assertions, not this PNG."
+        },
+        "originalNativeApiAuthorityPersistenceProved": false
+      },
+      {
+        "id": "entity-page-sections--selected-identity-frontiers-phone-japanese",
+        "path": "apps/web/features/entity-page/entity-page.stories.tsx",
+        "exportName": "SelectedIdentityFrontiersPhoneJapanese",
+        "name": "Selected Identity Frontiers Phone Japanese",
+        "sourceBlob": "bb57fface07d2b2978d67ceac04ce9ac40abdf80",
+        "sourceSha256": "1244d0471bdc2414eefc6d4d3483ae06fb737a7d808aacbf5feb423d6d62464d",
+        "locale": "ja",
+        "fixture": "supplied-native-contract-reader-snapshot",
+        "scope": "frontiers",
+        "interaction": {
+          "result": "pass",
+          "originalBodyReached": true,
+          "lastOutcomeAssertionReached": true,
+          "durationMs": 678,
+          "positiveOutcomesReached": [
+            "Initial empty hub and discovery pages each retain their own next frontier and current positions",
+            "Enter on selected discovery continuation presents supplied late hub and three repeated member occurrences",
+            "Canonical member/additional/fallback destinations, two unlinked withheld names and three retained fallback incidence rows",
+            "Generic Relations text is unchanged across selected snapshot transition",
+            "Exact opaque family/discovery/generic navigation tuples; discovery navigation clears family cursor; focused navigation; no horizontal overflow"
+          ],
+          "negativeOutcomesReached": [
+            "No false no-variants claim from empty selected page",
+            "No link fabricated for withheld names",
+            "No repeated member collapse or generic Relations replacement",
+            "Changing discovery does not retain obsolete family cursor"
+          ],
+          "assertionCount": "Vitest did not emit an expect count; every selected original play body completed, including its final overflow assertion."
+        },
+        "axe": {
+          "result": "pass",
+          "mandatoryPostInteractionHookCompleted": true,
+          "themes": [
+            "light",
+            "dark"
+          ],
+          "viewports": [
+            "390x844",
+            "1280x860"
+          ],
+          "configuredSweeps": 4,
+          "blockingSeriousOrCriticalViolations": 0
+        },
+        "screenshot": {
+          "path": ".temp/goal/relation-independent/qa/20261021t062913-e69faa/story-screenshots/apps-web-features-entity-page-entity-page.stories.tsx/SelectedIdentityFrontiersPhoneJapanese.png",
+          "bytes": 56473,
+          "sha256": "7129a8ec1c9c4779d77523d002717ac5c85000699932f98a1d3a8979c662b99e",
+          "width": 390,
+          "height": 844,
+          "theme": "light",
+          "actualPngOpenedByIndependentWorker": true,
+          "visualResult": "pass-with-viewport-limits",
+          "observation": "Main hub, three distinct repeated member rows, retained fallback counterparts and two navigation groups remain readable. Phone screenshot shows the selected family and start of generic Relations; remaining generic content extends below the viewport and is covered by DOM assertions, not this PNG."
+        },
+        "originalNativeApiAuthorityPersistenceProved": false
+      },
+      {
+        "id": "entity-page-sections--selected-identity-terminal-page",
+        "path": "apps/web/features/entity-page/entity-page.stories.tsx",
+        "exportName": "SelectedIdentityTerminalPage",
+        "name": "Selected Identity Terminal Page",
+        "sourceBlob": "bb57fface07d2b2978d67ceac04ce9ac40abdf80",
+        "sourceSha256": "1244d0471bdc2414eefc6d4d3483ae06fb737a7d808aacbf5feb423d6d62464d",
+        "locale": "en",
+        "fixture": "supplied-native-contract-reader-snapshot",
+        "scope": "terminal",
+        "interaction": {
+          "result": "pass",
+          "originalBodyReached": true,
+          "lastOutcomeAssertionReached": true,
+          "durationMs": 575,
+          "positiveOutcomesReached": [
+            "Two independently addressed First page controls survive terminal selected pages",
+            "Hub restart clears family while retaining discovery; discovery restart clears both selected cursors; both retain generic current",
+            "Withheld incidence remains visibly unlinked; reading-position caption visible",
+            "Generic next retains both selected current tokens; focused restart control; no horizontal overflow"
+          ],
+          "negativeOutcomesReached": [
+            "No selected More relations link is invented on terminal pages",
+            "No false no-variants message or link fabricated for withheld summary"
+          ],
+          "assertionCount": "Vitest did not emit an expect count; every selected original play body completed, including its final overflow assertion."
+        },
+        "axe": {
+          "result": "pass",
+          "mandatoryPostInteractionHookCompleted": true,
+          "themes": [
+            "light",
+            "dark"
+          ],
+          "viewports": [
+            "390x844",
+            "1280x860"
+          ],
+          "configuredSweeps": 4,
+          "blockingSeriousOrCriticalViolations": 0
+        },
+        "screenshot": {
+          "path": ".temp/goal/relation-independent/qa/20261021t062913-e69faa/story-screenshots/apps-web-features-entity-page-entity-page.stories.tsx/SelectedIdentityTerminalPage.png",
+          "bytes": 39150,
+          "sha256": "8c3e9e266e4da7020e7cbcbcdb77fd2190e6e772cdeeb96d95789f29e243075a",
+          "width": 1200,
+          "height": 900,
+          "theme": "light",
+          "actualPngOpenedByIndependentWorker": true,
+          "visualResult": "pass-with-viewport-limits",
+          "observation": "Reading-position caption, withheld non-link, both restart controls and separate generic Relations remain readable. The focused selected restart and generic first/next controls fit in both captures."
+        },
+        "originalNativeApiAuthorityPersistenceProved": false
+      },
+      {
+        "id": "entity-page-sections--selected-identity-terminal-page-phone-japanese",
+        "path": "apps/web/features/entity-page/entity-page.stories.tsx",
+        "exportName": "SelectedIdentityTerminalPagePhoneJapanese",
+        "name": "Selected Identity Terminal Page Phone Japanese",
+        "sourceBlob": "bb57fface07d2b2978d67ceac04ce9ac40abdf80",
+        "sourceSha256": "1244d0471bdc2414eefc6d4d3483ae06fb737a7d808aacbf5feb423d6d62464d",
+        "locale": "ja",
+        "fixture": "supplied-native-contract-reader-snapshot",
+        "scope": "terminal",
+        "interaction": {
+          "result": "pass",
+          "originalBodyReached": true,
+          "lastOutcomeAssertionReached": true,
+          "durationMs": 472,
+          "positiveOutcomesReached": [
+            "Two independently addressed First page controls survive terminal selected pages",
+            "Hub restart clears family while retaining discovery; discovery restart clears both selected cursors; both retain generic current",
+            "Withheld incidence remains visibly unlinked; reading-position caption visible",
+            "Generic next retains both selected current tokens; focused restart control; no horizontal overflow"
+          ],
+          "negativeOutcomesReached": [
+            "No selected More relations link is invented on terminal pages",
+            "No false no-variants message or link fabricated for withheld summary"
+          ],
+          "assertionCount": "Vitest did not emit an expect count; every selected original play body completed, including its final overflow assertion."
+        },
+        "axe": {
+          "result": "pass",
+          "mandatoryPostInteractionHookCompleted": true,
+          "themes": [
+            "light",
+            "dark"
+          ],
+          "viewports": [
+            "390x844",
+            "1280x860"
+          ],
+          "configuredSweeps": 4,
+          "blockingSeriousOrCriticalViolations": 0
+        },
+        "screenshot": {
+          "path": ".temp/goal/relation-independent/qa/20261021t062913-e69faa/story-screenshots/apps-web-features-entity-page-entity-page.stories.tsx/SelectedIdentityTerminalPagePhoneJapanese.png",
+          "bytes": 48751,
+          "sha256": "8b2b39bccd0e071ed96bcbf62e84cc24f56ae9208efd2ba1783cfd2f3bd618f1",
+          "width": 390,
+          "height": 844,
+          "theme": "light",
+          "actualPngOpenedByIndependentWorker": true,
+          "visualResult": "pass-with-viewport-limits",
+          "observation": "Reading-position caption, withheld non-link, both restart controls and separate generic Relations remain readable. The focused selected restart and generic first/next controls fit in both captures."
+        },
+        "originalNativeApiAuthorityPersistenceProved": false
+      }
+    ],
+    "originalOutcomeProjection": {
+      "componentCriteriaEstablished": [
+        "Ordered retained repeated incidence/counterpart rendering with safe fallback and withheld non-links",
+        "Keyboard continuation of supplied snapshots, late hub plus three repeated target occurrences",
+        "Independent generic/family/discovery current-next and first-page destinations on empty and terminal supplied pages",
+        "No false absence from continued empty batches; full/preview navigation and null-purpose structural Collection rendering",
+        "Selected component final-state axe checks and inspected English desktop/Japanese phone captures"
+      ],
+      "originalRequirementsRetained": {
+        "personas": [
+          "visitor",
+          "stranger",
+          "member",
+          "owner",
+          "moderator",
+          "operator"
+        ],
+        "api": {
+          "file": "tests/qa/integration/collection-domain-roles.test.ts",
+          "case": "${persona}: ordinary membership, a book list, recipe selection, series and franchise stay distinct",
+          "helper": "tests/qa/integration/support/catalogue-information.ts:795",
+          "requirements": "Exact native purpose Statement/revision/sources and heading; misleading ordinary title does not establish series; public hidden pages 404 and no hidden serialization; canonical Collection page limit=1 returns every original repeated occurrence in order with exclusive finite continuation. Separate existing source-support and cursor/CAS/private/public mutation assertions remain untouched.",
+          "executedByReviewer": false
+        },
+        "browser": {
+          "file": "apps/web/tests/catalogue-detail-contract.e2e.ts",
+          "case": "C29 / visitor / reading lists curations genuine series and unknown collections preserve their roles and occurrences",
+          "line": 338,
+          "requirements": "Exact named role region and Collection title link, actual Collection header, every Members data-occurrence in order, member titles/hrefs, no Series/Franchises headings on other roles, mandatory repeated-member control.",
+          "executedByReviewer": false
+        },
+        "prerequisites": "Use the existing public-command fixture/proof owners. The eleven-path delivery adds no corpus preparation or runtime bootstrap for collection-purpose-v1. The reader intentionally refuses unavailable DefinitionKey/current Definition, active canonical Structure, Global scope/decisions or seek owner rather than reporting false absence. Their real retained availability was not inspected or established by fabricated fixture responses.",
+        "publicOutcomeAssertionFailuresReproducedByReviewer": []
+      },
+      "unprovedOriginal": [
+        "C29 exact role regions, native Collection links/header identity, ordered Members and repeated occurrences.",
+        "A17/six-persona authority/CAS/replay/privacy/persistence/native-support/API outcomes.",
+        "Original non-Work A13/I1-001 R1-R7/F1-F4 handoff stories, native/backend selections and six browser journeys.",
+        "Combined native API/rendered proof and original class closure. Source inferences and fixture screenshots are not those original outcomes."
+      ],
+      "boundary": "These fixtures are supplied native-contract examples/reader snapshots. The local continuation anchor interception swaps supplied snapshots and makes no native HTTP selection or durable write. Component criteria do not establish exact original C29 regions/Collection headers/ordered Members on a real stack, A17 six-persona authority/CAS/replay/privacy/persistence/native support/API outcomes, or non-Work native/browser obligations.",
+      "retainedMatchingEvidence": "Accepted source/native/Source/consumer reviews, author owner tests, and any already accepted matching API/persistence proof remain retained with their original applicability; this observation neither replaces nor expands them. No original unproved requirement is closed."
+    },
+    "retainedRedGates": {
+      "rerun": false,
+      "unchangedGuardMap": {
+        "path": ".temp/goal/relation-independent/selected-relation-guard-map.json",
+        "bytes": 57906,
+        "sha256": "ec26b22d5f488e6343818c8039c7f45f6d9a2a722210ebfd125ef966565d64cd"
+      },
+      "productionGuardQa": "20261020t170844-ca67dc",
+      "assertionBodiesReachedHistorically": true,
+      "passed": 60,
+      "failed": 2,
+      "expectations": 87,
+      "before": {
+        "continuation": 17,
+        "predicates": 6
+      },
+      "after": {
+        "continuation": 19,
+        "predicates": 4
+      },
+      "contextAwareDelta": {
+        "introduced": 6,
+        "resolved": 4
+      },
+      "inference": {
+        "runInThisCut": false,
+        "reason": "Frontend consumer changes do not change the accepted inference dependencies; no broader repeat or limit change authorized.",
+        "retainedConsumerResidual": "Main 27005564 > 26950993.650000002 (stored 25667613 +5%), same unchanged base; Web 38863247; old base Web had nine diagnostics and no measurement.",
+        "deliveredNativeResidual": "Main 27003007 > 26950993.65; delivered comparison base 26991733. Native freshness and affected inference delta pass are distinct from the still-red absolute limit."
+      },
+      "disposition": "Preserve every historical finding/context, assertion, inventory and limit without waiver or relabeling. G-2860 owns scanner repair independently; scanner recognition is not a prerequisite for this component observation. Genuine runtime/API proof and normal landing gates remain separate.",
+      "otherResiduals": [
+        "SITE Home ContinueStrip / ZoneSiteRoute",
+        "Recipe readRecipeVisitFrame predicate",
+        "G920 reader-budget expected2/actual4"
+      ]
+    },
+    "historicalPreservation": {
+      "path": ".temp/goal/relation-independent/historical-report.json",
+      "bytes": 204013,
+      "sha256": "d5ef89b16c7aced4397e477b7e4417398eacb9c1806d9941407dda0f6f00ac30",
+      "historicalTopLevelMembers": 23,
+      "allPriorParsedValuesUnchanged": true,
+      "priorTextPrefixPreserved": true,
+      "onlyNewTopLevelMember": "retainedSelectedRelationIndependentStoryProof"
+    },
+    "reportChecks": [
+      {
+        "job": "ef0396e4-c6f8-4c7e-85f2-0af26a46c8ee",
+        "step": 1,
+        "command": "task --taskfile .temp/goal/relation-independent/report.Taskfile.yml verify",
+        "exitCode": 0,
+        "result": "PASS: 23 historical values/text prefix, 12 body/axe/PNG records, immutable receipt and PNG hashes, original obligations and retained 19/4 history.",
+        "log": {
+          "path": ".temp/goal/jobs/ef0396e4-c6f8-4c7e-85f2-0af26a46c8ee.1.log",
+          "bytes": 373,
+          "sha256": "c9e36e1b66a93124b577c110d67db29459b319eea87f49fc67a9466fe6040ff8"
+        }
+      },
+      {
+        "job": "ef0396e4-c6f8-4c7e-85f2-0af26a46c8ee",
+        "step": 2,
+        "command": "task docs:check",
+        "exitCode": 0,
+        "result": "PASS: 13 checker self-tests and 257 Markdown files; external URLs/runtime excluded.",
+        "log": {
+          "path": ".temp/goal/jobs/ef0396e4-c6f8-4c7e-85f2-0af26a46c8ee.2.log",
+          "bytes": 359,
+          "sha256": "ea666d237f0c1f315d38e35fd4e8d12357a0fedf565136b4c42aff77c07b244f"
+        }
+      },
+      {
+        "job": "ef0396e4-c6f8-4c7e-85f2-0af26a46c8ee",
+        "step": 3,
+        "command": "task goal -- check",
+        "exitCode": 0,
+        "result": "PASS: report AST and affected repository guard 1/45; no changed TypeScript/source or brief tests. No historical production guard was rerun or waived.",
+        "log": {
+          "path": ".temp/goal/jobs/ef0396e4-c6f8-4c7e-85f2-0af26a46c8ee.3.log",
+          "bytes": 571,
+          "sha256": "a992f8242f727521686b2185d4583b0623c98d997ed3e0ccf1c860a3c4c4c62a"
+        }
+      }
+    ],
+    "limitations": [
+      "Source bytes were confirmed for applicability once; no accepted source/native/Source/consumer review was repeated.",
+      "No API/backend/native operation, OAuth/lease, corpus preparation/import/restore/reset, runtime stack or browser journey ran; only authorized Storybook component QA.",
+      "All six desktop and six phone PNGs show one final light-theme viewport state each. Axe separately sweeps both themes and two sizes; neither covers every locale, initial/loading/refusal state or full native journey.",
+      "No original assertions, inventories, inference limits, scanner source or product source changed. All artifacts other than this append-only report remain ignored under the worker .temp.",
+      "No fallback, subagent, publication, landing, original class closure or mutation of archived G-2849."
+    ],
+    "instructionTrace": [
+      {
+        "path": ".agents/skills/goal-worker/SKILL.md",
+        "quote": "End that turn immediately with `RESULT: parked`",
+        "effect": "The combined interaction job parked and this worker ended its turn immediately; resumed only on the recorded completion wake. No polling or fix-round claim."
+      },
+      {
+        "path": ".agents/skills/goal-worker/SKILL.md",
+        "quote": "read the PNGs under the run's `story-screenshots` directory",
+        "effect": "Opened all twelve actual PNGs and recorded visual observations separately from body and axe results."
+      }
+    ],
+    "managerNext": "Accept this bounded independent component observation after G-2849 and preserve all prior custody. Continue G-2860 scanner work and genuine original native/API/authority/persistence/browser proof independently. The manager owns any landing; no original class is closed by this report.",
+    "workerCheckOutput": {
+      "path": ".temp/goal/check/run-GyHcBN/output.log",
+      "bytes": 2911,
+      "sha256": "d73db02cf5e8bfcc210b9a0bf25485be2ec8dd1b90e692ca282f2328ac4cf255"
+    },
+    "treeCurrency": "Report-only worker HEAD remained 8f36de17d55dbc57cb2c2c49daef245f543e3d30 throughout preparation and checks; normal check ran with the report modification present, without rebase/reset/merge/history rewrite or prepared-tree override. The archived source tree was isolated under .temp.",
+    "gitDiffCheck": "pass"
   }
 }
