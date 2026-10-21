@@ -14,13 +14,13 @@ const summary = answer('hub-status-progress') as ProgressSummary;
 let preference: Loaded<EditionPreference | null> = { ok: true, data: saved };
 let progress: Loaded<ProgressSummary> = { ok: true, data: summary };
 let start: ReadStart = null;
-const languages: (string | undefined)[] = [];
+const languages: (string | null | undefined)[] = [];
 const original = { ...(await import('./read.ts')) };
 const restore = replaceModule(import.meta.resolve('./read.ts'), original, {
   readStart: async () => start,
   readEditionPreference: async () => preference,
   readReleases: async () => ({ ok: true, data: answer('hub-releases') }),
-  readProgressSummary: async (_id: string, language?: string) => { languages.push(language); return progress; },
+  readProgressSummary: async (_id: string, language?: string | null) => { languages.push(language); return progress; },
 });
 afterAll(restore);
 const { PrimaryAction } = await import('./hub-sections.tsx');
@@ -37,6 +37,13 @@ test('a reader with no saved edition can choose from the admitted release invent
   preference = { ok: true, data: null };
   progress = { ok: false, failure: 'unavailable' };
   expect((await action())?.props.action).toEqual({ kind: 'choose', href: '#availability', part: null });
+});
+
+test('a saved Release without a language keeps its choice and does not borrow the interface language', async () => {
+  preference = { ok: true, data: { ...saved, language: null } };
+  progress = { ok: false, failure: 'unavailable' };
+  expect(await action()).toBeNull();
+  expect(languages.at(-1)).toBeNull();
 });
 
 

@@ -42,7 +42,7 @@ export interface TrackingApi {
   /** Read the saved choice independently of catalogue pages; its stored revision remains the write's basis. */
   edition(work: string, choice: NonNullable<EditionChoice['edition']>): Promise<Loaded<Realization | Release>>;
   /** Main's series progress for a Work's composition, in the chosen language (the preference's when unset). */
-  series(resource: string, language?: string): Promise<Loaded<ProgressSummary>>;
+  series(resource: string, language?: string | null): Promise<Loaded<ProgressSummary>>;
   relations(resource: string): Promise<Loaded<Relations>>;
   /** The definition Main holds for a relation key, to tell which entries are that kind. */
   definition(key: string): Promise<Loaded<{ definition: string }>>;

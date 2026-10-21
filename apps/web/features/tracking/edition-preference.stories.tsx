@@ -177,7 +177,7 @@ function pendingSetupFixture() {
   const relations = { ...fixture.spiderRelations(), resource: work };
   const pending = deferred<Awaited<ReturnType<TrackingApi['relations']>>>();
   const relationReads: string[] = [];
-  const progressReads: (string | undefined)[] = [];
+  const progressReads: (string | null | undefined)[] = [];
   const series = source.api.series;
   source.api = { ...source.api,
     async relations(resource) {

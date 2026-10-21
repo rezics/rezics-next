@@ -161,3 +161,28 @@ test('the Work hub progress summary retains the recorded saved edition and conti
   const reads = booksEditionReads({ main, actingSubject });
   expect<unknown>(await reads.readProgressSummary(work.slice(-36))).toEqual({ ok: true, data: progress.answer });
 });
+
+test('an unknown saved Release language is omitted from both progress request owners', async () => {
+  const record = records[0]!;
+  const own = sample(record, 'member', 'own-preference-paperback');
+  const progress = sample(record, 'member', 'own-progress-summary');
+  const original = new URL(own.path, 'https://recorded.invalid');
+  const actingSubject = original.searchParams.get('actingSubject')!;
+  const work = (sample(record, 'member', 'work-header').answer as { id: string }).id;
+  const requests: URL[] = [];
+  const fetcher = (async (input: RequestInfo | URL) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    requests.push(url);
+    return Response.json(progress.answer);
+  }) as typeof fetch;
+  const main = browserMainApi('https://recorded.invalid', { fetcher });
+  const reads = booksEditionReads({ main, actingSubject });
+  expect<unknown>(await reads.readProgressSummary(work.slice(-36), null)).toEqual({ ok: true, data: progress.answer });
+  expect<unknown>(await mainTrackingApi(actingSubject, () => main).series(work, null))
+    .toEqual({ ok: true, data: progress.answer });
+  expect(requests).toHaveLength(2);
+  for (const request of requests) {
+    expect(request.pathname).toEndWith(`/progress-summaries/${work.slice(-36)}`);
+    expect([...request.searchParams]).toEqual([['actingSubject', actingSubject]]);
+  }
+});

@@ -368,7 +368,7 @@ export const readStart = cache(async (id: string, work: string, locale: UiLocale
  * Where Main says the reader stands in a Work: its composition's next part, or a standalone Work's own status
  * (G-835). Nothing is derived here. Signed out, or without an acting Agent, there is nothing to read.
  */
-export const readProgressSummary = cache(async (id: string, language?: string, client?: SuppliedClient): Promise<Loaded<ProgressSummary>> => {
+export const readProgressSummary = cache(async (id: string, language?: string | null, client?: SuppliedClient): Promise<Loaded<ProgressSummary>> => {
   return booksEditionReads(client ?? await reader()).readProgressSummary(id, language);
 });
 

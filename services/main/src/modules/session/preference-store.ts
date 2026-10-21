@@ -23,6 +23,7 @@ export class EditionPreferenceStore {
     key: string, assertOwner: () => Promise<void>) {
     if (!owner.principal.issuer || !owner.principal.subject || !Value.Check(readId, owner.agent)
       || !Value.Check(readId, work) || !Value.Check(editionChoice, choice)
+      || (choice.language === null && choice.edition?.kind !== 'release')
       || !/^[A-Za-z0-9:_./-]{1,128}$/.test(key) || !Number.isSafeInteger(expectedVersion)
       || expectedVersion < 0 || expectedVersion >= Number.MAX_SAFE_INTEGER) {
       throw new InvalidEditionPreference('Invalid edition preference');

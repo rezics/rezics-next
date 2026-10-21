@@ -73,7 +73,8 @@ export async function readSeriesProgress(session: WorkReadSession, owner: Sessio
   const nextPreference = summary.next ? preferences.get(summary.next.part.work) : undefined;
   await fenceWorkBasis(session, basis);
   return { resource, scope: 'disclosed-composition' as const, ...summary, preference, primaryAction: summary.next
-    ? { work: summary.next.part.work, edition: nextPreference && canonicalLanguage(nextPreference.language) === language ? nextPreference.edition : null, language } : null,
+    ? { work: summary.next.part.work, edition: nextPreference?.language != null
+      && canonicalLanguage(nextPreference.language) === language ? nextPreference.edition : null, language } : null,
     revisions: { composition: { structure: composition.structure, revision: composition.revision },
       sessions: attempts.items.map(attempt => ({ id: attempt.id, version: attempt.version })),
       library: library.filter(item => item.version > 0).map(item => ({ work: item.work, version: item.version })),

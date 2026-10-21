@@ -1,6 +1,6 @@
 import type { UiLocale } from '../../i18n/define.ts';
 import { isKnownFormat, timeText } from './model.ts';
-import type { Copy } from './messages.ts';
+import { copyOf, type Copy } from './messages.ts';
 import type { Editions, Locator, LocatorUnit, Release, Selection, SessionState } from './types.ts';
 
 // How the words of tracking are chosen: Main's states and units named in the reader's language.
@@ -16,7 +16,8 @@ export function moveLabel(state: SessionState, from: SessionState, t: Copy): str
 }
 
 /** A language tag in the reader's language; the tag itself where the runtime has no name for it. */
-export function languageName(tag: string, locale: UiLocale): string {
+export function languageName(tag: string | null, locale: UiLocale): string {
+  if (tag === null) return copyOf(locale).unknown;
   try { return new Intl.DisplayNames([locale], { type: 'language' }).of(tag) ?? tag; } catch { return tag; }
 }
 

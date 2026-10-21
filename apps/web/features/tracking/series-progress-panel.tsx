@@ -230,7 +230,7 @@ export function PreferenceForm({ work, preference, language, editions, api, loca
             setStale(null);
             setEdition(current?.edition ?? null);
             onSaved(current);
-            if (current) onLanguage(current.language);
+            if (current && current.language !== null) onLanguage(current.language);
           }}>{t.useTheirs}</Button>
       </div>
     </AlertDescription></Alert> : null}

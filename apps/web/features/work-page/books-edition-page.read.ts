@@ -65,7 +65,7 @@ export function booksEditionReads({ main, actingSubject }: { main: Pick<MainClie
     readEditionPreference: (id: string): Promise<BooksRead<EditionPreference | null>> => actingSubject
       ? settleNullable(() => main.v1.me['edition-preferences']({ work: id }).get({ query: { actingSubject } }))
       : Promise.resolve({ ok: false, failure: 'sign-in' }),
-    readProgressSummary: (id: string, language?: string): Promise<BooksRead<ProgressSummary>> => actingSubject
+    readProgressSummary: (id: string, language?: string | null): Promise<BooksRead<ProgressSummary>> => actingSubject
       ? settle(() => main.v1.me['progress-summaries']({ resource: id }).get({
         query: { actingSubject, ...(language ? { language } : {}) } }))
       : Promise.resolve({ ok: false, failure: 'sign-in' }),
@@ -110,7 +110,7 @@ export type BooksReleasePage = Extract<Awaited<ReturnType<ReturnType<typeof book
 
 type BooksReads = ReturnType<typeof booksEditionReads>;
 type StatusReads = Pick<BooksReads, 'readEditionPreference' | 'readEditionRelease'> & Partial<Pick<BooksReads, 'readEditionRealization'>> & {
-  readProgressSummary: (id: string, language?: string) => Promise<{ ok: true; data: ProgressSummary } | { ok: false }>;
+  readProgressSummary: (id: string, language?: string | null) => Promise<{ ok: true; data: ProgressSummary } | { ok: false }>;
 };
 
 /** Resolve the saved identity directly: it need not appear in the first inventory page. */

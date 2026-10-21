@@ -92,7 +92,8 @@ export function IdentityStatus({ progress, preference, editionName, locale, mess
   const lines: string[] = [];
   const chosen = preference?.ok ? preference.data : null;
   if (chosen) {
-    lines.push(t.editionLine({ edition: editionName ?? languageName(chosen.language, locale) }));
+    lines.push(t.editionLine({ edition: editionName ?? (chosen.language === null
+      ? t.unknownLanguage : languageName(chosen.language, locale)) }));
   }
   if (progress?.ok) {
     const summary = progress.data;
