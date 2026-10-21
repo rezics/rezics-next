@@ -37,10 +37,12 @@ the vault credentials when needed (see [environment](README.md#environment-owner
 It asks the maintainer only for what no local action can supply, such as a
 third-party account, a payment or a product decision that changes the outcome.
 Another running Goal's scope and areas are not the manager's to change: it asks
-that Goal's manager, and the maintainer settles what they cannot. Manager sessions are not a communication channel to the maintainer. While a program Goal
-runs, a manager sends what it would ask the maintainer to the program manager.
-The program manager decides within this charter and passes on only what needs
-the maintainer.
+that Goal's manager and agrees ownership and a compatible change directly.
+All manager roles, including implementation managers and Program/supermanager,
+are engineering peers. Program's shared-host, registry and coordination duties
+do not make it an approval gate for routine investigation, design or repair.
+Only decisions reserved to the maintainer below need escalation; ordinary
+engineering uncertainty is resolved through evidence and peer coordination.
 
 ## Standing directions
 
@@ -79,7 +81,8 @@ untracked; do not copy them into briefs or commit messages. Follow the [document
 when a document changes during work.
 
 Each manager decides within its Goal and settles cross-Goal matters with the
-other manager. Managers do not audit one another. The program owns scheduled
+affected peers. Shared problem notices require checking related local failures,
+not another manager-review layer. The program owns scheduled
 checks on main and audits newly proved rows independently. Test admission is
 shared tooling's responsibility. Only a failing public-API test of a row's
 persona outcome reopens a proved cell; acknowledgement cannot clear the fault.
@@ -95,9 +98,11 @@ Follow [Asking the maintainer](#asking-the-maintainer) for decisions reserved to
 
 Landing gates run the tests the change affects plus those its brief names;
 main's scheduled confirmation catches what that selection misses, and its
-failures are fixed on main. A second landing review with findings comes to the
-program. Findings that disclose data or bypass authority are fixed before the
-merge; the rest merge with the change and join the next batch. A branch's
+failures are fixed on main. The owning manager investigates a second landing
+review's findings with affected peers, including Program for shared-tool faults;
+it does not wait for a routine ruling. Findings that disclose data or bypass
+authority are fixed before the merge; the rest merge with the change and join
+the next batch. A branch's
 confirmation failure in a test that passed on main is the branch's regression
 only when a rerun of that file on the branch head fails again; a failure that
 does not repeat is repaired on main. Small follow-ups
@@ -119,6 +124,45 @@ largest cause the same day through a tooling, harness, protocol or brief change.
 Compare the next full 12-hour window and record both readings at the checkpoint.
 The planning yardstick is launch-ready scope in about twelve hours of running,
 apart from external conditions, with allowance to spare.
+
+### Shared problem-solving duty
+
+This standing direction supersedes older internal Program-reading or ruling
+holds for routine work. Explicit maintainer boundaries and required independent
+review remain in force.
+
+Every manager owns recognizing and resolving problems, not merely assigning
+work or relaying a blocked status. A failed operation, stalled or idle work,
+unexpected cost or delay, repeated attempt, conflicting instruction or suspect
+test premise triggers this duty immediately; do not wait for an hourly audit
+or for the maintainer to notice.
+
+Investigate the current source, actual inputs, logs and first failed assertion
+or setup stage. Research credible remedies, including reuse of existing code,
+evidence, fixtures and infrastructure, and compare correctness, time, resource
+cost and effects on peers. Use primary documentation or a bounded researcher
+when the uncertainty needs it; reuse applicable prior research. A known local
+defect needs a focused investigation, not an academic survey or a new report.
+Choose the most efficient correct remedy, execute it yourself or through an
+explicit owner, and verify the original failure and affected behavior. Research,
+mail, a larger retry allowance and an unchanged rerun are not a repair.
+
+At discovery, notify **every active manager**, including Program, with one
+problem identifier, evidence, impact and the immediate containment or next
+action. Consult affected peers before changing their claimed paths, contracts,
+data or running resources; agree one repair owner, boundaries and compatibility
+so work is not duplicated. Keep independent ready work moving. Do not wait for
+general acknowledgement, Program review or maintainer feedback to perform an
+authorized repair. Stop repeating an unchanged failure while investigating it,
+preserving healthy work and useful evidence.
+
+After verification, notify the same managers with that identifier, the actual
+fix and source revision, checks, changed usage or recovery instructions and any
+remaining limits. Recipients apply the lesson to their own affected scope;
+they do not just acknowledge it. Put durable guidance in its existing owner so
+future managers learn it. Use [Goal mail](../../.agents/skills/goal-management/SKILL.md#shared-problem-notices)
+for discovery and resolution notices, not an approval chain. Ask the maintainer
+only when a genuinely reserved decision remains; continue all independent work.
 
 ## Asking the maintainer
 
