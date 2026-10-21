@@ -227,7 +227,12 @@ export async function loadHeroModule(
       const summary = 'work' in slide ? summaries.get(slide.work) : null;
       const realmCard = 'work' in slide ? known.get(slide.work) : undefined;
       const complete = summary ? zoneWork(summary, context, null) : null;
-      const work = complete && summary ? { ...withRealmCard(complete, realmCard), kind: complete.kind,
+      // A complete Work owns even its empty fields. An older Realm card may
+      // supply placement context, but must not restore a cleared cover or credit.
+      const work = complete && summary ? { ...complete,
+        decision: realmCard?.decision ?? complete.decision,
+        hub: complete.hub ?? realmCard?.hub ?? null,
+        showcaseArt: complete.showcaseArt ?? realmCard?.showcaseArt ?? null,
         href: realmCard?.href ?? resourceHref('/w/', summary.address) } : realmCard ?? null;
       const adapted = presentationSlide(slide, work, context, slideMedia);
       return adapted ? [adapted] : [];

@@ -165,6 +165,26 @@ describe('Realm modules with missing supplementary cards', () => {
     expectIdentity(state.data.slides[0]!.work!);
   });
 
+  test('a complete scheduled Work keeps cleared cover, credits and metadata over older Realm values', async () => {
+    const preview = collectionPreview();
+    preview.presentation.slides = [{ id: 'book', work: book.id }];
+    const current: ShowcaseWork = { ...book, cover: previewSummary.avatar, primaryCredits: [], tagline: null,
+      completionStatus: null, chapterCount: null, wordCount: null, lastUpdatedAt: null };
+    const older: ZoneWork = { ...zoneWork(book, context, previewCollection),
+      cover: { url: '/old-cover.webp', width: 400, height: 600 } };
+    const state = await loadHeroModule(module('hero-carousel', 'new-adoptions'),
+      localizedHomePresentation(preview.presentation, 'en'), context, [], undefined,
+      async () => new Map([[book.id, older]]), async () => new Map([[book.id, current]]));
+    if (state.state !== 'ready') throw new Error('Hero did not load');
+    const work = state.data.slides[0]!.work!;
+    expect(work).toEqual({ ...zoneWork(current, context, null),
+      decision: older.decision, href: older.href, hub: null, showcaseArt: null });
+    expect(coverProps(catalogueWork(work))).toEqual(coverProps(resourceWork(discoveryCard(current))));
+    expect(work.author).toBeNull();
+    expect(work.authorHref).toBeNull();
+    expect(work.authors).toEqual([]);
+  });
+
   for (const type of ['quote-stream', 'discussion-list'] as const) {
     test(`${type} hydrates a missing Realm card and refuses an unavailable Work`, async () => {
       const load = async (works: typeof readShowcaseWorks, cards = noCards) => type === 'quote-stream'
