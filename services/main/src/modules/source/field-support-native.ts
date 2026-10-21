@@ -18,7 +18,11 @@ export interface SourceNativeVerificationContext {
 }
 export type NativeSupportVerifier = (input: RetainedSupportRequest,
   requireCurrent: boolean, context?: SourceNativeVerificationContext) => Promise<VerifiedNativeAcknowledgement>;
-export interface SourceNativeVerifiers { semantic?: NativeSupportVerifier; statement?: NativeSupportVerifier; structure?: NativeSupportVerifier }
+export interface SourceNativeVerifiers { semantic?: NativeSupportVerifier; statement?: NativeSupportVerifier; structure?: NativeSupportVerifier;
+  /** Read-only native correspondence for the actual public reader; never write admission. */
+  semanticRead?: (input: RetainedSupportRequest, selected: NativeBasisVerificationInput['selected'],
+    session: WorkReadSession) => Promise<VerifiedNativeAcknowledgement>;
+}
 const equal = (left: unknown, right: unknown) => canonicalJson(left) === canonicalJson(right);
 const RECEIPT = /^urn:rezics:receipt:[0-9a-f]{64}$/;
 

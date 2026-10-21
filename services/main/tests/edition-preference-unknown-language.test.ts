@@ -28,6 +28,49 @@ test('a visitor choosing a retained release with unknown language reaches authen
   expect((await response.json()).code).toBe('account_assertion_denied');
 });
 
+test('progress summary accepts the unknown-language wire value without bypassing authentication', async () => {
+  let verified = 0;
+  const work = { account: { verify: async () => {
+    verified++; throw new AccountAssertionDenied('Authentication required');
+  } } } as unknown as MainWorkDependencies;
+  const routes = progressSummariesRoutes(work);
+  for (const suffix of ['', '&language=en', '&language=null']) {
+    const response = await routes.handle(new Request(
+      `http://main.test/v1/me/progress-summaries/${uuid(2)}?actingSubject=${owner.agent}${suffix}`));
+    expect(response.status).toBe(401);
+    expect((await response.json()).code).toBe('account_assertion_denied');
+  }
+  expect(verified).toBe(3);
+});
+
+test('unknown-language progress remains private to the principal’s own Person', async () => {
+  let ownership = 0;
+  const work = { account: { verify: async () => owner.principal }, access: {
+    canReadAsBaselineMember: async () => { ownership++; return false; },
+  } } as unknown as MainWorkDependencies;
+  const response = await progressSummariesRoutes(work).handle(new Request(
+    `http://main.test/v1/me/progress-summaries/${uuid(2)}?actingSubject=${id(9)}&language=null`));
+  expect(response.status).toBe(403);
+  expect((await response.json()).code).toBe('progress_denied');
+  expect(ownership).toBe(1);
+});
+
+test('progress summary does not treat an empty or invalid language as unknown', async () => {
+  let verified = 0;
+  const work = { account: { verify: async () => {
+    verified++; throw new AccountAssertionDenied('Authentication required');
+  } } } as unknown as MainWorkDependencies;
+  const routes = progressSummariesRoutes(work);
+  for (const language of ['', 'undefined', 'not_a_language']) {
+    const response = await routes.handle(new Request(
+      `http://main.test/v1/me/progress-summaries/${uuid(2)}?actingSubject=${owner.agent}&language=${language}`));
+    // The standalone router uses Elysia's validation response; Main maps it to 400.
+    expect(response.status).toBe(422);
+    expect((await response.json()).code).toBe('validation');
+  }
+  expect(verified).toBe(0);
+});
+
 test('an unknown language needs a retained release pin before storage is touched', async () => {
   let queries = 0;
   const store = new EditionPreferenceStore({ connect: async () => { queries++; throw new Error('unexpected storage'); } } as unknown as Pool);

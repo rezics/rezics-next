@@ -32,10 +32,10 @@ const binding = (term: Term) => term.termType === 'NamedNode' ? uri(term.value) 
 };
 export const nativePrincipal = { issuer: 'https://account.test', subject: 'verified-account' } as VerifiedPrincipal;
 
-export async function semanticFixture() {
+export async function semanticFixture(properties?: ResourceState['properties']) {
   const component = nativeId(1), revision = nativeId(2), operation = nativeId(3), admissionId = Bun.randomUUIDv7();
   const receipt = familyReceiptIri(admissionId, SEMANTIC_CHANGE_FAMILY), generation = `urn:rezics:model-generation:${hash('model')}`;
-  const state: ResourceState = { component: 'resource', types: [], lifecycle: 'active', properties: [
+  const state: ResourceState = { component: 'resource', types: [], lifecycle: 'active', properties: properties ?? [
     { predicate: 'https://schema.org/alternateName', value: { kind: 'language-string', lexical: '原作', language: 'ja' } },
   ] };
   let manifest = '', head = revision, acknowledgedRevision = revision, succeeds = true, finalHeadMatches = true, active = true;
