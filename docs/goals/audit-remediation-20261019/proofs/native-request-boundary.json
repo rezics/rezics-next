@@ -4018,5 +4018,245 @@
       }
     },
     "landingDisposition": "Accept this additive report-only correction verdict. G2822-SQL-01 is corrected at the exact reviewed pin and this SQL source is approved for the next scoped complete Runtime binding with the listed consumer obligations. No additional source-review chain, product landing, runtime activation or original finding closure is authorized by this verdict."
+  },
+  "nativeWorkerLifecycleDeltaReviewV1": {
+    "schemaVersion": 1,
+    "reviewId": "G-2861-native-worker-first-review",
+    "reviewedAtUtc": "2026-10-21T06:30:15.573287Z",
+    "reviewer": {
+      "worker": "G-2861",
+      "predecessor": "G-2822",
+      "engine": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "independent": true,
+      "nestedAgents": false,
+      "accountFallback": false,
+      "authorization": "Manager continuity decision, execution-reset.md, 2026-10-21; normal successor for first review of the sealed native delta. G-2822 terminal record unchanged."
+    },
+    "scope": "First independent review of the two new native lifecycle paths only. All 22 earlier top-level fields, source assertions, reports, failures and acceptance limits are preserved; accepted unchanged SQL/Account/Main/Fuseki/native/default/desktop/UI evidence is reused where blobs agree.",
+    "sourceVerdict": {
+      "status": "approved-for-scoped-original-runtime-binding",
+      "findings": [],
+      "counterexample": null,
+      "decision": "No blocking source counterexample found at this exact pin within the documented synchronous ReadBoundaryFilter invocation boundary. Approve that limited observation prerequisite. This source does not establish comprehensive native pending-zero, engine/lock/transaction release, actual Runtime attachment or original outcome success. G-2762 next supplies the complete callable original-read-cancellation-input-v1 Runtime and exact original commands; no review-report chain is needed."
+    },
+    "source": {
+      "commit": "2f51112e22461f5987c0299dbee464fe34ec105c",
+      "tree": "feacea2b8b0c5313cd76212ed400222d73c35083",
+      "base": "be0352c5cf48c30170f0fb892a78dc10a157c373",
+      "baseTree": "578107de0e51e7b8b9512ae2305c446b23d410fc",
+      "frozenProduct": "76c5955006dbea2016e84465d8f3e79fdf4fc979",
+      "workerDispatchHead": "58fb0eb45a403a7c3574fc32fc3287a7b5a1b146",
+      "snapshot": ".temp/native-lifecycle-review-v1/candidate",
+      "sealedProvenance": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2762/.temp/native-worker-lifecycle-observation-v1/candidate",
+      "sourceImmutableAndUnchanged": true,
+      "newDeltaPaths": [
+        "infra/jena/command-module/src/main/java/com/rezics/jena/QueryWorkService.java",
+        "infra/jena/command-module/src/test/java/com/rezics/jena/RequestReadLifecycleObservationTest.java"
+      ],
+      "inspectedBlobs": [
+        {
+          "path": "infra/jena/command-module/src/main/java/com/rezics/jena/QueryWorkService.java",
+          "newDelta": true,
+          "frozen": {
+            "mode": "100644",
+            "blob": "ac869e1f857e17677f0da3dca9ef0b857414ae7a",
+            "bytes": 16652,
+            "sha256": "9e12308d017b010dd221086b532531803692580c651403b403c6f3817d6f199e"
+          },
+          "before": {
+            "mode": "100644",
+            "blob": "ac869e1f857e17677f0da3dca9ef0b857414ae7a",
+            "bytes": 16652,
+            "sha256": "9e12308d017b010dd221086b532531803692580c651403b403c6f3817d6f199e"
+          },
+          "after": {
+            "mode": "100644",
+            "blob": "3c9753a6ace637fd139995dc7c1e244e5003c974",
+            "bytes": 25131,
+            "sha256": "6abf22a7c8d6bd914e24d2aa8cea853ed67a0941a2c8572a48e788d63518079d"
+          }
+        },
+        {
+          "path": "infra/jena/command-module/src/test/java/com/rezics/jena/RequestReadLifecycleObservationTest.java",
+          "newDelta": true,
+          "frozen": null,
+          "before": null,
+          "after": {
+            "mode": "100644",
+            "blob": "1d088271be6aad5d48504c0c9c9b7bfb5755733e",
+            "bytes": 19229,
+            "sha256": "afcbb5e5352645f67d26a986819526f2ba7664d160737ef07740ca41c95622b2"
+          }
+        }
+      ],
+      "comparison": {
+        "sourceEntries": 10104,
+        "baseEntries": 10103,
+        "frozenEntries": 10099,
+        "inheritedApprovedPathsUnchanged": 9,
+        "otherBaseEntriesUnchanged": 10102,
+        "otherFrozenEntriesUnchanged": 10089,
+        "trackedDeltaExactlyTwoPaths": true,
+        "patchByteExact": "git diff --binary --full-index base source",
+        "sealedFilesVerified": 57,
+        "sealedManifestSha256": "8164334751cd2d75685d6100a360a5a7b05cb267f6f4ee5cdce26f70c8259341",
+        "priorPacketFilesVerified": 62,
+        "priorPacketManifestSha256": "c8ef7d674d1da9ca45cba0a4d217ec2365aa38da5ba832ef57bf5bedb8bc433d",
+        "moduleInputPinsVerified": 26,
+        "acceptedCallbacksVerified": 5,
+        "sameOwnerBindingsVerified": 4,
+        "details": ".temp/native-lifecycle-review-v1/input-verification.json"
+      },
+      "moduleBinding": "Unchanged CommandModule.prepare installs the default ReadBoundaryFilter, using the same static READ_WORKERS as package-private observeReadWorkers. Runtime attachment must use the actual server JVM, jar and classloader; a duplicate module or fixture lifecycle observes another owner. Preserved callback imports resolve the actual candidate-local Account/Main/Fuseki/SQL owners; no application module or runtime was activated."
+    },
+    "reviewedSemantics": {
+      "startsAndReleases": "Synchronized enter before allocation admission emits cumulative starts for successful, unbudgeted, invalid/refused and failing filter invocations, including brief work between snapshots. Each flight releases once after downstream return/throw, ReadBoundary.close and restoration/removal of CURRENT. Cancellation/deadline/interruption or response settlement alone emits no release. Independent probes preserve a downstream Error and keep a cancelled worker active through held cleanup while an unaffected waiter stays active.",
+      "countersAndTime": "Each subscriber receives immutable cumulative starts/released/active/pending with starts=released+active+pending. Host System.currentTimeMillis supplies Unix-ms at/lastStartAt/zeroSince. Start clears zeroSince; only final actual covered release establishes it. Initial idle is valid only when attached before the owner first starts. Per-subscriber totals are whole covered-owner totals, not per-trace totals; late totals are incomplete even when numerically zero.",
+      "identityAndPrivacy": "Only nonzero validated W3C v00 trace/span identities yield the trace ID; missing/invalid context is unmatched runtime work. Trace-access Throwable invalidates every affected subscriber while ordinary execution and its original exception continue. Retained records contain primitive counts/timestamps, worker ID, validated trace ID and flags; no Request, thread, headers, credentials, tokens, query text, parameters or bodies. Native authority and budgets are unchanged. Bind selected lawful request traces explicitly and reduce their own paired worker events; no copied whole-runtime totals.",
+      "executionAndCleanup": "Reviewed the actual filter wrapper and unchanged boundary timer, execution abort, close and CURRENT restoration paths. Outer try-with-resources encloses allocation validation, real downstream work, inner boundary close and finally cleanup. The unbudgeted/refused paths have no new ThreadLocal. Existing interrupt clearing preserves a preexisting interrupt and removes boundary-owned interruption on close. The focused departure fixtures construct the real ReadBoundary on the worker thread inside an unbudgeted filter; they do not exercise a live budget-header servlet transport, engine or authenticated request. Accepted unchanged transport/native evidence is reused; no broader release is inferred.",
+      "subscribersAndBounds": "Eight additive subscriber slots; each has one daemon delivery thread, at most 64 queued events and one running event (65 pending notifications). No retained event history. Native execution never awaits the sink; sink Throwables are caught. Queue rejection increments dropped and makes complete permanently false. Late attachment, identity failure, sink failure and detach with active work are sticky incomplete. Native flights retain only their bounded subscriber list, worker and trace until close, then clear the list/trace. Detached slots remain reserved until true drain, bounding abandoned blocked sources.",
+      "detachAndDrain": "Detach is idempotent, does not await a sink, freezes coverage at detachedAt and shuts down source delivery; active detach remains incomplete and later unobserved releases cannot manufacture zero. Drain waits at most one second, requires prior detach, and clears the source callback/removes its reserved slot only after executor termination. False or interrupted drain cannot certify cleanup; independent interruption probe confirms the undrained slot remains reserved. Interrupted wait itself need not alter complete: an affirmative later drain and final status are still required.",
+      "sourceAndSink": "Event delivery is asynchronous. Match the reduced event watermark with source totals and outstanding notifications; stale prefixes and per-event complete flags cannot override final complete/failures/dropped status. Source drain proves delivery settlement only. Consumer queues/references and accepted sink work must also be bounded; separately verify actual written event count/bytes/hash, overflow/drop/failure status and flush/close. No private runtime sink or I/O was exercised; null is not zero/success."
+    },
+    "materialBoundary": {
+      "unit": "One synchronous ReadBoundaryFilter.doFilter invocation; starts at synchronized lifecycle entry and releases after downstream/boundary/ThreadLocal cleanup. Does not measure HTTP transport departure or engine/transaction lifetime.",
+      "pending": "This owner owns no acquisition queue; its pending=0 is valid only inside that synchronous invocation boundary. Before-filter Jetty dispatch/queues, asynchronous work outliving filter return, offline native work and engine/lock/transaction release are uncovered.",
+      "originalMapping": "Do not map this meter to broader native pending-zero or a later original Runtime field. Unless the complete binder independently covers every required boundary, original Observation.known remains false. Unknown, late, dropped, overflowed, failed or incomplete coverage never proves zero. No later field was inventoried."
+    },
+    "independentExecution": {
+      "recordedJob": "82f37426-d529-4104-992f-9baf5f0fb606",
+      "command": "bun scripts/goal/goalctl.ts test ./.temp/native-lifecycle-review-v1/native-review.test.ts",
+      "recordedThrough": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- <command> from this worktree",
+      "admission": "One normal goalctl QA slot; task jena:test retains 4 GiB host admission. No heavy slot, runtime image or full native suite.",
+      "nativeCommand": "task jena:test -- --tests RequestReadLifecycleObservationTest,ReadWorkerBoundaryReviewTest",
+      "nativeRecord": "2eae1785-b0b4-4d08-b383-36b2eabaf81c",
+      "target": "module-test",
+      "source": "Separate local probe context at the sealed commit; all 150 existing native source/test files match the pristine snapshot. The only extra file is the independent ReadWorkerBoundaryReviewTest.java. The sealed packet, pristine local candidate and worker branches are untouched.",
+      "exit": 0,
+      "nativeCases": 14,
+      "changedOwnerCases": 10,
+      "independentProbeCases": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "nativeAssertionCount": null,
+      "assertionCountLimit": "Maven reports cases, not Java assertion counts. The separate Bun harness passed 1 test/151 expect calls checking the 150 existing source/test files and Task exit; these are not Java assertions or original outcome counts.",
+      "newCases": [
+        "traceAccessorErrorInvalidatesEverySubscriberWithoutChangingDownstreamError",
+        "cancelledWorkerCleanupAndUnaffectedWaiterRemainIndependentlyActive",
+        "interruptedDrainDoesNotReleaseSlotsOrClaimCompletedDelivery",
+        "sourceDrainAloneDoesNotFlushOrCloseAcceptedPrivateSinkWork"
+      ],
+      "receipts": {
+        "record": ".temp/native-lifecycle-review-v1/retained/native.json",
+        "nativeLog": ".temp/native-lifecycle-review-v1/retained/native.log",
+        "jobLog": ".temp/native-lifecycle-review-v1/retained/82f37426-d529-4104-992f-9baf5f0fb606.log",
+        "harness": ".temp/native-lifecycle-review-v1/native-review.test.ts",
+        "probe": ".temp/native-lifecycle-review-v1/probe/infra/jena/command-module/src/test/java/com/rezics/jena/ReadWorkerBoundaryReviewTest.java"
+      },
+      "setupFailurePreserved": {
+        "job": "0b08bb9e-ffd8-4c6f-b276-ead6c5996faa",
+        "exit": 1,
+        "assertionReached": false,
+        "nativeTestsExecuted": 0,
+        "reason": "Bun treated .temp/... as a discovery filter and matched zero files. Corrected only the caller argument to ./.temp/...; no source/test assertions changed.",
+        "log": ".temp/native-lifecycle-review-v1/retained/0b08bb9e-ffd8-4c6f-b276-ead6c5996faa.log"
+      }
+    },
+    "reusedChecks": {
+      "sqlLifecycleCorrectionReviewV2": {
+        "reportCommit": "bf3ec4f65430a494f75025317cbd9a67c294d877",
+        "source": "be0352c5cf48c30170f0fb892a78dc10a157c373",
+        "tests": 21,
+        "assertions": 980,
+        "run": "20261020t163952-1caad1",
+        "executionReplayed": false,
+        "verification": "All 21 JUnit cases/980 assertions parsed without failure/error/skip; all 62 prior packet digests verified; entire previous report equals bf3ec4f and is preserved.",
+        "junit": ".temp/native-lifecycle-review-v1/retained/reused-sql-owner.xml",
+        "allFiveConsumerObligationsRetained": true
+      },
+      "nativeProducer": {
+        "job": "f6f4b188-7d08-4ff6-b430-7c01167bb357",
+        "nativeTests": 10,
+        "newSourceReviewedHere": true,
+        "affected": "Java production/tests compiled by selected module-test. Producer AST for the exact two changed paths and two repository guard files/four tests/28 assertions passed at the same immutable inputs; receipts and well-formed four-case XML verified and retained. TypeScript types/inference/lint correctly not selected for this Java-only delta.",
+        "checks": ".temp/native-lifecycle-review-v1/sealed/checks.json",
+        "guardXml": ".temp/native-lifecycle-review-v1/sealed/retained/unit.xml"
+      },
+      "allEarlierAcceptedEvidence": "Account19e9747/fd02aefd 18 tests/777 assertions, shared-key d7711c90 13 tests/136 assertions, Main/Fuseki 85 tests/546 assertions and accepted native/composition/default/desktop/UI evidence stay accepted where blobs agree. Every tracked entry outside these two paths equals the approved base. No accepted unchanged check was replayed. Existing inference merge conditions remain."
+    },
+    "failureEvidencePreserved": {
+      "allOldFieldsUnchanged": true,
+      "reachedEightAssertionFailure": "sqlLifecycleDeltaReviewV1 remains unchanged: job9564518b-829d-4153-8660-a6c97959099b reached the final source outcome assertion on reviewed89541; one test/eight assertions, one failure. The historical failure is not rewritten as a pass.",
+      "historicalZeroTestSelector": "Earlier job6c455b91-8af0-4825-8715-155d24d30aa3 executed zero tests and reached no assertion; preserved separately in the prior review.",
+      "historicalLocalRefSetup": {
+        "job": "04245352-514c-4b44-afea-07660f5d32b7",
+        "step": 2,
+        "exit": 201,
+        "reason": "new private clone omitted its local main ref; git rev-parse main failed before types",
+        "repair": "added candidate-local main and wave/audit-20261019 refs at unchanged frozen76c5955006, identical to predecessor refs; HEAD/source not moved or changed",
+        "testsReplayedAfterHarnessRepair": false
+      },
+      "guardLimitation": {
+        "reportedTests": 172,
+        "renderedTestcases": 168,
+        "parseError": "mismatched tag: line 220, column 2",
+        "independentlyVerified": true,
+        "missingRecordsInvented": false
+      },
+      "otherHistory": "Every original native failure and all earlier evidence remains in its original field. New 14-case native success and valid four-case guard XML do not rewrite prior failures or malformed XML. The producer empty-bundle packaging failure is retained in sealed/checks.json and its log."
+    },
+    "consumerObligations": [
+      "G-2762 next supplies the complete callable original-read-cancellation-input-v1 Runtime, actual Request/control/trace/module bindings and exact original commands at the sealed source. Accepted source evidence is reused; no review-report chain. Existing owners supply admission. G-2823 alone keeps startup/stop/lifecycle and sole borrower/lease custody.",
+      "Attach to the real installed native owner in the actual JVM/jar/classloader before first filter work/initial idle; preserve subscribers, actual authority, session/consent/scope/currentAssertion/privacy, signals/deadlines/budgets and all tighter enclosing limits. Preserve all five accepted SQL obligations and cover every real participating pool before its first checkout.",
+      "Reduce lawful selected traces from actual worker starts/releases and timestamps, retaining unmatched traffic in whole-runtime totals. Synchronize delivery watermarks and source status, require conservation and complete source/consumer coverage. Do not substitute HTTP, sampled search phases, interruption or filter pending=0 for missing engine/lock/transaction/native queue evidence.",
+      "Bound private subscriber/trace/worker/event references, consumer queues and sink work. Never retain or serialize Request objects, credentials, headers, tokens, query text, SQL, parameters or bodies. Failed, dropped, overflowed, late, unknown or incomplete observation stays inconclusive.",
+      "After the entire required window, stop acceptance, detach all sources, perform bounded true drain, inspect final attached/complete/failure/drop/pending status, separately drain accepted sink work and verify actual written events/bytes/hash and flush/close with explicit I/O errors, then clear references. Detach/source drain alone cannot certify sink I/O."
+    ],
+    "remainingProof": {
+      "originalAcceptance": "Unchanged: 24/61 overall; Site21/45. No original finding closed.",
+      "outcomes": "authenticated70/mixed4; IAM02/IAM10; lawful current session/consent/scope/currentAssertion/privacy; actual Request identity/departure/unaffected waiter; every tighter limit; readers1/2/4/8; 100ms transport grace then 300ms without new/active/pending work; SQL/native pending-zero and fresh independent retry remain open.",
+      "frozenRequest": {
+        "product": "76c5955006dbea2016e84465d8f3e79fdf4fc979",
+        "bytes": 100,
+        "sha256": "49d9dabeefeedbd562209a078d92873c8ca56cada2841d75abb76cadd0db0c24",
+        "calls": 72,
+        "bytesLimit": 8388608,
+        "deadlineMs": 10000,
+        "allTighterEnclosingLimits": "unchanged"
+      },
+      "privateSink": {
+        "activated": false,
+        "writtenEvents": null,
+        "writtenBytes": null,
+        "sha256": null,
+        "flushVerified": null,
+        "closeVerified": null
+      }
+    },
+    "preservation": {
+      "priorReportFields": 22,
+      "priorReportSha256": "450935eeeafa370870d5d53af9ce575f60ad555fc62203c45fcfdb4f0fb1d72a",
+      "allEarlierFieldsAndAssertionsUnchanged": true,
+      "G2822TerminalRecordUnchanged": true,
+      "candidatePriorPacketsAndWorkerBranchesUnchanged": true,
+      "productOrOriginalAssertionEdits": false,
+      "runtimeListenerControlSinkOAuthDataLeaseMutation": false,
+      "runtimeImageBuildFullSuiteBrowserCorpusOrSharedReset": false,
+      "preservedCustody": "G-2823 sole startup/stop/lifecycle/borrower/lease custody; Task1677097, hosts77717/78038, KEEP runtimes, existing data/leases and peer G-2845 deletion untouched."
+    },
+    "artifacts": {
+      "root": ".temp/native-lifecycle-review-v1",
+      "manifest": ".temp/native-lifecycle-review-v1/artifact-manifest.json",
+      "manifestSha256": "7e383f20c2b50668592f2db6a7259a1bf5315159a58bbe118cebf0dadc4acff5",
+      "files": 44,
+      "retained": "Immutable source Git copy, exact sealed evidence copies, comparison/pin verification, independent probe/harness, selected native and reused SQL receipts remain under this worktree .temp."
+    },
+    "checks": {
+      "status": "pending report validation, task docs:check and recorded affected worker check"
+    },
+    "landingDisposition": "Accept this additive report-only first native source verdict. G-2762 may supply the complete original callable Runtime and bindings next; G-2823 retains lifecycle/admission custody. No product landing, activation, new review-report chain or original finding closure follows from this source approval."
   }
 }
