@@ -6197,5 +6197,458 @@
     "audit": "ACTIVE",
     "nextOwner": "Root to consume new immutable custody and separately authorize SAME G-2847 unchanged original Home speech command."
   }
-
+,
+  "cas13StatusDateSemanticRestoration": {
+    "atUTC": "2026-10-21T06:48:43.383788+00:00",
+    "worker": "G-2831",
+    "scope": "Only committed Decision2026-10-21T06:31:20Z: SAME custodian guarded CAS13 status/date cleanup after actual G-2862 release under delegated Site authority. Historical additional Root-approval holds superseded. No preparation, new borrower, AT callback or repeated source review.",
+    "result": "Supported PUT200 with fresh actual expectedVersion13 and new unique command identity restored original null status/startedOn/finishedOn; version14 and changedAt history retained. Two complete five-API before guards and two complete invariant readback sets passed.",
+    "restorationSucceeded": true,
+    "sameOwnerCleanupCompleted": true,
+    "cleanupNeeded": false,
+    "semanticRestorationOnly": true,
+    "byteExactRollbackOrHistoryDeletionClaimed": false,
+    "lawfulActor": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+    "book": {
+      "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+      "title": "The Lantern Road 8805d7a2"
+    },
+    "custody": {
+      "managerAuthority": {
+        "path": ".temp/reading-home-CAS13-cleanup-G-2831-20261021T0638Z/source/manager-cleanup-authority.json",
+        "sha256": "a8d71c2be25d4c3cf3dab3592f93b9faec408871247c63fc7dcb505954554e84",
+        "bytes": 1702
+      },
+      "actualBorrower": "G-2862",
+      "actualBorrowerRelease": {
+        "path": ".temp/reading-home-CAS13-cleanup-G-2831-20261021T0638Z/source/G2862-explicit-borrower-release.json",
+        "sha256": "63f8d6dacc6e01cb1758c3326f1a2ca196dbed1f5bc282edcc2aa3ff37c3b2c1",
+        "bytes": 9976
+      },
+      "actualBorrowerReleaseAtUTC": "2026-10-21T06:29:01.092000+00:00",
+      "independentBorrowerShutdown": {
+        "path": ".temp/reading-home-CAS13-cleanup-G-2831-20261021T0638Z/source/G2862-independent-shutdown-verification.json",
+        "sha256": "38bdcb5a134c19c8b7e899ecda0696e5a8fec670e0adc71b97e8c09a6b5201d3",
+        "bytes": 4006
+      },
+      "successorManagerLease": {
+        "path": ".temp/reading-home-CAS13-cleanup-G-2831-20261021T0638Z/source/successor-manager-lease.json",
+        "sha256": "3b3a9f22a16091ad8a1456e49f141fb36dc2b8c11a4ba47aa3c2f73fd76849a7",
+        "bytes": 1501
+      },
+      "readySHA256": "92074fab1d345a57a39252d0d4932f4d9cea07569fd5b1c406986377dad676f1",
+      "privateBeforeSHA256": "a14400d9fcff4804bfe564326d1c8d17a934afc5fb062d180cf31ddef9c6b97a",
+      "heldStateSHA256": "27d1634835c1d3dce14bbb0f1ea8a49f5012eb75be59b3aa70d90ea816c5eb44",
+      "sameOwnerCleanupOperationSHA256": "48e738fd4dc7d753dddc10da7450065b23f769280e53a91b1a31aeb35d8b0ee8",
+      "retainedCustodyHashes": {
+        "ready-for-G2847-HomeDEFR-CAS13.json": "92074fab1d345a57a39252d0d4932f4d9cea07569fd5b1c406986377dad676f1",
+        "private/before-backup.json": "a14400d9fcff4804bfe564326d1c8d17a934afc5fb062d180cf31ddef9c6b97a",
+        "private/lease-state.json": "27d1634835c1d3dce14bbb0f1ea8a49f5012eb75be59b3aa70d90ea816c5eb44",
+        "same-owner-cleanup-operation.json": "48e738fd4dc7d753dddc10da7450065b23f769280e53a91b1a31aeb35d8b0ee8",
+        "source/retained-supported-cleanup-callback.ts": "fd15dff6373243c994e153e8920ad8ba74c41ecb3e4944b401988ff133533f4c"
+      },
+      "priorPreparationArtifactHashesUnchanged": 49,
+      "borrowerLedgerObserved": {
+        "state": "exited",
+        "attempt": 3
+      },
+      "historicalG2847LabelIsNotCurrentBorrowerAuthority": true,
+      "allOlderBorrowsAndCAS13BorrowSpent": true,
+      "newBorrowAuthorized": false,
+      "callbackAdaptation": {
+        "retainedCallbackSHA256": "fd15dff6373243c994e153e8920ad8ba74c41ecb3e4944b401988ff133533f4c",
+        "executionCallbackSHA256": "cc6016593103ab7d83d62ac2bcdcdacea05905e17a1ef71c6c9b39cfe8712281",
+        "unchangedCoreSHA256": {
+          "semanticGuardAndComparators": "b82eabc4b214bbd10e29d1f69561814f469d7241a2b07aced51c882424d85fe6",
+          "supportedCurrentCASWrite": "396e7283c1a289a573aa38e4b156e26696da6258efc615ad19511ff0ce72a485"
+        },
+        "adaptation": "Bind exact current CAS13 READY/private custody and actual G-2862 explicit release, independent shutdown, successor lease and committed Manager cleanup-only authority. Historical G-2847 label is not borrower authority. Normal OAuth, five APIs, semantic guards/comparators, fresh expectedVersion/randomUUID PUT and two complete pre/post sets preserved byte-for-byte.",
+        "borrowerAutomaticFeedWatermarksRetainedSeparately": true,
+        "productAndOriginalTestsChanged": false
+      }
+    },
+    "sourceAndRuntime": {
+      "reportBranchPinBeforeAppend": "e6654c964752810980af789609fcfa91827d8c96",
+      "frontendProductAndTestPin": "8b8a2c0a97b5662e6283fa7531a8f1c600f37fd0",
+      "backendServedPin": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "mainOrigin": "http://127.0.0.1:3001",
+      "accountsOrigin": "http://127.0.0.1:3004",
+      "temporaryFrontend": "http://127.0.0.1:43131",
+      "runtimeReceipt": {
+        "path": ".temp/reading-home-CAS13-cleanup-G-2831-20261021T0638Z/source/backend-served-revision.json",
+        "sha256": "fe78e239322186b28fb1f13583cdae6929852939d493b523212c05d9cc711980",
+        "bytes": 785
+      },
+      "dependencyBinding": {
+        "path": ".temp/reading-home-CAS13-cleanup-G-2831-20261021T0638Z/source/dependency-binding.json",
+        "sha256": "1cf11c317c02648a57116fc5651ce0216add50d94b32d0bd2880b9a28cea21ee",
+        "bytes": 3205
+      },
+      "executionCallbackSHA256": "cc6016593103ab7d83d62ac2bcdcdacea05905e17a1ef71c6c9b39cfe8712281",
+      "mainProcessCwd": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "freshNormalOwnOAuth": true,
+      "eligibleSessionAgentAndSameBookIdentity200": true,
+      "copiedSession": false,
+      "apiMocking": false,
+      "backendRestartOrRefresh": false,
+      "scopeLimit": "Frozen8b8a2c0a Web-consumer status-only recovery on Main3001/Accounts3004 installed75409. No current native, Studio, Book transfer, product integration or regression qualification."
+    },
+    "supportedCommand": {
+      "method": "PUT",
+      "url": "http://127.0.0.1:43131/api/main/v1/works/01a10aff-93e5-7069-b80a-cd33bb6ce57c/reader-status",
+      "requestBody": {
+        "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+        "expectedVersion": 13,
+        "status": null,
+        "startedOn": null,
+        "finishedOn": null
+      },
+      "idempotencyKey": "609673ce-b839-4af5-b93b-f2975a52c883",
+      "attemptedAtUTC": "2026-10-21T06:41:13.515Z",
+      "response": {
+        "status": 200,
+        "body": {
+          "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+          "status": null,
+          "startedOn": null,
+          "finishedOn": null,
+          "version": 14,
+          "changedAt": "2026-10-21 06:41:14.047849+00",
+          "replayed": false
+        },
+        "receivedAtUTC": "2026-10-21T06:41:14.070Z"
+      }
+    },
+    "preWriteQualification": "Both complete five-API snapshots agreed with exact held reading/null dates/version13/changedAt and guarded semantic state. Version13 was compared as custody guard; request expectedVersion was read freshly from snapshotB. Preserved original callback assertionReach wording mentions Root release historically; actual bound cleanup authority is committed delegated Site receipt.",
+    "genuineReadSets": {
+      "fresh pre-cleanup A": [
+        {
+          "label": "fresh pre-cleanup A reader",
+          "method": "GET",
+          "url": "http://127.0.0.1:43131/api/main/v1/works/01a10aff-93e5-7069-b80a-cd33bb6ce57c/reader-state?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839",
+          "status": 200,
+          "receivedAtUTC": "2026-10-21T06:41:09.442Z",
+          "sourcePosition": {
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "11954"
+          }
+        },
+        {
+          "label": "fresh pre-cleanup A directory",
+          "method": "GET",
+          "url": "http://127.0.0.1:43131/api/main/v1/me/shelves?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839&limit=20",
+          "status": 200,
+          "receivedAtUTC": "2026-10-21T06:41:09.582Z",
+          "sourcePosition": {
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "11954"
+          }
+        },
+        {
+          "label": "fresh pre-cleanup A reading",
+          "method": "GET",
+          "url": "http://127.0.0.1:43131/api/main/v1/me/shelves/status/reading/works?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839&sort=last-read&order=desc&limit=3",
+          "status": 200,
+          "receivedAtUTC": "2026-10-21T06:41:09.946Z",
+          "sourcePosition": {
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "11954"
+          }
+        },
+        {
+          "label": "fresh pre-cleanup A follow",
+          "method": "GET",
+          "url": "http://127.0.0.1:43131/api/main/v1/me/follow-state?target=https%3A%2F%2Frezics.com%2Fid%2F01a10aff-93e5-7069-b80a-cd33bb6ce57c&kind=work&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839",
+          "status": 200,
+          "receivedAtUTC": "2026-10-21T06:41:10.683Z",
+          "sourcePosition": null
+        },
+        {
+          "label": "fresh pre-cleanup A continuation",
+          "method": "GET",
+          "url": "http://127.0.0.1:43131/api/main/v1/me/continue/01a10aff-93e5-7069-b80a-cd33bb6ce57c?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839",
+          "status": 200,
+          "receivedAtUTC": "2026-10-21T06:41:10.990Z",
+          "sourcePosition": {
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "11954"
+          }
+        }
+      ],
+      "fresh pre-cleanup B": [
+        {
+          "label": "fresh pre-cleanup B reader",
+          "method": "GET",
+          "url": "http://127.0.0.1:43131/api/main/v1/works/01a10aff-93e5-7069-b80a-cd33bb6ce57c/reader-state?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839",
+          "status": 200,
+          "receivedAtUTC": "2026-10-21T06:41:11.394Z",
+          "sourcePosition": {
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "11954"
+          }
+        },
+        {
+          "label": "fresh pre-cleanup B directory",
+          "method": "GET",
+          "url": "http://127.0.0.1:43131/api/main/v1/me/shelves?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839&limit=20",
+          "status": 200,
+          "receivedAtUTC": "2026-10-21T06:41:11.577Z",
+          "sourcePosition": {
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "11954"
+          }
+        },
+        {
+          "label": "fresh pre-cleanup B reading",
+          "method": "GET",
+          "url": "http://127.0.0.1:43131/api/main/v1/me/shelves/status/reading/works?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839&sort=last-read&order=desc&limit=3",
+          "status": 200,
+          "receivedAtUTC": "2026-10-21T06:41:11.932Z",
+          "sourcePosition": {
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "11954"
+          }
+        },
+        {
+          "label": "fresh pre-cleanup B follow",
+          "method": "GET",
+          "url": "http://127.0.0.1:43131/api/main/v1/me/follow-state?target=https%3A%2F%2Frezics.com%2Fid%2F01a10aff-93e5-7069-b80a-cd33bb6ce57c&kind=work&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839",
+          "status": 200,
+          "receivedAtUTC": "2026-10-21T06:41:12.511Z",
+          "sourcePosition": null
+        },
+        {
+          "label": "fresh pre-cleanup B continuation",
+          "method": "GET",
+          "url": "http://127.0.0.1:43131/api/main/v1/me/continue/01a10aff-93e5-7069-b80a-cd33bb6ce57c?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839",
+          "status": 200,
+          "receivedAtUTC": "2026-10-21T06:41:12.912Z",
+          "sourcePosition": {
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "11954"
+          }
+        }
+      ],
+      "cleanup readback A": [
+        {
+          "label": "cleanup readback A reader",
+          "method": "GET",
+          "url": "http://127.0.0.1:43131/api/main/v1/works/01a10aff-93e5-7069-b80a-cd33bb6ce57c/reader-state?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839",
+          "status": 200,
+          "receivedAtUTC": "2026-10-21T06:41:14.376Z",
+          "sourcePosition": {
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "11954"
+          }
+        },
+        {
+          "label": "cleanup readback A directory",
+          "method": "GET",
+          "url": "http://127.0.0.1:43131/api/main/v1/me/shelves?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839&limit=20",
+          "status": 200,
+          "receivedAtUTC": "2026-10-21T06:41:14.492Z",
+          "sourcePosition": {
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "11954"
+          }
+        },
+        {
+          "label": "cleanup readback A reading",
+          "method": "GET",
+          "url": "http://127.0.0.1:43131/api/main/v1/me/shelves/status/reading/works?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839&sort=last-read&order=desc&limit=3",
+          "status": 200,
+          "receivedAtUTC": "2026-10-21T06:41:14.636Z",
+          "sourcePosition": {
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "11954"
+          }
+        },
+        {
+          "label": "cleanup readback A follow",
+          "method": "GET",
+          "url": "http://127.0.0.1:43131/api/main/v1/me/follow-state?target=https%3A%2F%2Frezics.com%2Fid%2F01a10aff-93e5-7069-b80a-cd33bb6ce57c&kind=work&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839",
+          "status": 200,
+          "receivedAtUTC": "2026-10-21T06:41:15.094Z",
+          "sourcePosition": null
+        },
+        {
+          "label": "cleanup readback A continuation",
+          "method": "GET",
+          "url": "http://127.0.0.1:43131/api/main/v1/me/continue/01a10aff-93e5-7069-b80a-cd33bb6ce57c?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839",
+          "status": 200,
+          "receivedAtUTC": "2026-10-21T06:41:15.470Z",
+          "sourcePosition": {
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "11954"
+          }
+        }
+      ],
+      "cleanup readback B": [
+        {
+          "label": "cleanup readback B reader",
+          "method": "GET",
+          "url": "http://127.0.0.1:43131/api/main/v1/works/01a10aff-93e5-7069-b80a-cd33bb6ce57c/reader-state?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839",
+          "status": 200,
+          "receivedAtUTC": "2026-10-21T06:41:15.844Z",
+          "sourcePosition": {
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "11954"
+          }
+        },
+        {
+          "label": "cleanup readback B directory",
+          "method": "GET",
+          "url": "http://127.0.0.1:43131/api/main/v1/me/shelves?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839&limit=20",
+          "status": 200,
+          "receivedAtUTC": "2026-10-21T06:41:16.029Z",
+          "sourcePosition": {
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "11954"
+          }
+        },
+        {
+          "label": "cleanup readback B reading",
+          "method": "GET",
+          "url": "http://127.0.0.1:43131/api/main/v1/me/shelves/status/reading/works?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839&sort=last-read&order=desc&limit=3",
+          "status": 200,
+          "receivedAtUTC": "2026-10-21T06:41:16.198Z",
+          "sourcePosition": {
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "11954"
+          }
+        },
+        {
+          "label": "cleanup readback B follow",
+          "method": "GET",
+          "url": "http://127.0.0.1:43131/api/main/v1/me/follow-state?target=https%3A%2F%2Frezics.com%2Fid%2F01a10aff-93e5-7069-b80a-cd33bb6ce57c&kind=work&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839",
+          "status": 200,
+          "receivedAtUTC": "2026-10-21T06:41:16.670Z",
+          "sourcePosition": null
+        },
+        {
+          "label": "cleanup readback B continuation",
+          "method": "GET",
+          "url": "http://127.0.0.1:43131/api/main/v1/me/continue/01a10aff-93e5-7069-b80a-cd33bb6ce57c?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839",
+          "status": 200,
+          "receivedAtUTC": "2026-10-21T06:41:17.179Z",
+          "sourcePosition": {
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "11954"
+          }
+        }
+      ]
+    },
+    "postWriteVerification": {
+      "allTwentySnapshotResponses200": true,
+      "twoCompletePreWriteSets": true,
+      "twoCompletePostWriteSets": true,
+      "sameOriginalStatusDatesRestored": true,
+      "invariants": {
+        "originalStatusRestored": true,
+        "originalDatesRestored": true,
+        "progressUnchanged": true,
+        "customShelvesUnchanged": true,
+        "ratingUnchanged": true,
+        "statusShelfCountsRestored": true,
+        "readingItemsRestored": true,
+        "followBasisUnchanged": true,
+        "continuationLastPositionNextUnreadAndCountUnchanged": true,
+        "versionHistoryPreserved": true,
+        "changedAtHistoryPreserved": true,
+        "byteExactRollbackClaimed": false
+      },
+      "sourceIdentityQualification": "Actual endpoint URLs, bodies, receipt times and sourcePosition values retained privately. Sequential genuine reads are not a cross-store atomic snapshot.",
+      "fullActualAnswers": {
+        "path": ".temp/reading-home-CAS13-cleanup-G-2831-20261021T0638Z/private/cleanup-result.json",
+        "sha256": "bb29c0f67ccdfa504239405a2b03b4fdfee403407df448e44644dbdded81c6ea",
+        "bytes": 36847
+      },
+      "freshPreCleanupBackup": {
+        "path": ".temp/reading-home-CAS13-cleanup-G-2831-20261021T0638Z/private/pre-cleanup-backup.json",
+        "sha256": "3a3d8bb5b348120f01bcecc697d19b65b9df847ea0750fbd5e3ad7be1b456dd1",
+        "bytes": 18742
+      }
+    },
+    "assertionReach": [
+      "Root release, original private backup hash, fresh own eligible OAuth, consistent current held status/version and all guarded invariants",
+      "One supported current-CAS/idempotent cleanup PUT200; version increment and durable changedAt retained",
+      "Two actual successful readbacks restore original null status/dates and empty directory/status shelves; progress/custom shelves/rating/continuation/follow basis unchanged"
+    ],
+    "ownedShutdown": {
+      "path": ".temp/reading-home-CAS13-cleanup-G-2831-20261021T0638Z/owned-shutdown-verification.json",
+      "sha256": "d2af414093e5117b69d1fc089110ae77698b9066c6cb57f7f4442d907592f0d0",
+      "bytes": 1790
+    },
+    "preservation": {
+      "allPriorReportFieldsAndHistoricalMemberBytesPreserved": true,
+      "borrowerOriginalFailures": [
+        {
+          "id": "card-home-de-390",
+          "started": "2026-10-21T06:25:27.928Z",
+          "outcome": "failed",
+          "error": "Owned native key refused: DocumentRefused: Error: atspi_error: Method \"Get\" with signature \"ss\" on interface \"org.freedesktop.DBus.Properties\" could not be processed as object /org/a11y/atspi/accessible/258 does not exist\n (1)",
+          "stack": "Error: Owned native key refused: DocumentRefused: Error: atspi_error: Method \"Get\" with signature \"ss\" on interface \"org.freedesktop.DBus.Properties\" could not be processed as object /org/a11y/atspi/accessible/258 does not exist\n (1)\n    at native (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2862/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/at-session.ts:74:27)\n    at native (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2862/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/at-session.ts:90:49)\n    at enableTemporaryNativeInput (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2862/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/at-session.ts:96:4)\n    at go (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2862/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/aud012-home-only.test.ts:121:12)\n    at async <anonymous> (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2862/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/aud012-home-only.test.ts:248:89)\n    at async cell (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2862/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/aud012-home-only.test.ts:221:160)\n    at async <anonymous> (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2862/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/aud012-home-only.test.ts:247:143)",
+          "ended": "2026-10-21T06:25:34.477Z"
+        },
+        {
+          "id": "card-home-fr-390",
+          "started": "2026-10-21T06:25:34.483Z",
+          "outcome": "failed",
+          "error": "Owned native key refused: DocumentRefused: Error: atspi_error: Method \"Get\" with signature \"ss\" on interface \"org.freedesktop.DBus.Properties\" could not be processed as object /org/a11y/atspi/accessible/258 does not exist\n (1)",
+          "stack": "Error: Owned native key refused: DocumentRefused: Error: atspi_error: Method \"Get\" with signature \"ss\" on interface \"org.freedesktop.DBus.Properties\" could not be processed as object /org/a11y/atspi/accessible/258 does not exist\n (1)\n    at native (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2862/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/at-session.ts:74:27)\n    at native (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2862/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/at-session.ts:90:49)\n    at enableTemporaryNativeInput (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2862/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/at-session.ts:96:4)\n    at go (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2862/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/aud012-home-only.test.ts:121:12)\n    at async <anonymous> (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2862/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/aud012-home-only.test.ts:248:89)\n    at async cell (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2862/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/aud012-home-only.test.ts:221:160)\n    at async <anonymous> (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2862/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/aud012-home-only.test.ts:247:143)",
+          "ended": "2026-10-21T06:25:40.889Z"
+        }
+      ],
+      "borrowerAutomaticFeedWatermarks": [
+        {
+          "at": "2026-10-21T06:25:33.267Z",
+          "method": "PUT",
+          "url": "http://127.0.0.1:44889/api/main/v1/me/feed-watermarks/following",
+          "prohibited": false
+        },
+        {
+          "at": "2026-10-21T06:25:40.091Z",
+          "method": "PUT",
+          "url": "http://127.0.0.1:44889/api/main/v1/me/feed-watermarks/following",
+          "prohibited": false
+        }
+      ],
+      "borrowerAutomaticRequestsQualification": "Two automatic PUT feed-watermarks/following requests, response status not recorded; distinct from explicit reader-state restoration.",
+      "cleanupBrowserAutomaticMainNonGetRequests": [],
+      "sourceReviewRepeated": false,
+      "ATCallbacksExecuted": false,
+      "newBorrowOrPreparation": false,
+      "productFilesOrOriginalTestsChanged": false,
+      "mainOtherWorktreesOrSharedControlManuallyWritten": false,
+      "corpusRestoreImportResetSharedRefreshOrNativeBuild": false,
+      "backendStartedOrChanged": false,
+      "G2823RuntimeImageDefaultLeasesSoleStopCustodyStoragePreserved": true,
+      "Task1677097KEEPAndPeerResourcesPreserved": true,
+      "hosts77717And78038Untouched": true,
+      "originalFindingOrClassClosed": false,
+      "audit": "ACTIVE"
+    },
+    "evidence": {
+      "privateBundle": ".temp/reading-home-CAS13-cleanup-G-2831-20261021T0638Z",
+      "sanitizedReceipt": ".temp/reading-home-CAS13-cleanup-G-2831-20261021T0638Z/sanitized-CAS13-cleanup-receipt.json",
+      "manifest": ".temp/reading-home-CAS13-cleanup-G-2831-20261021T0638Z/artifact-manifest.json",
+      "managerCopy": "Worker writes restricted to own worktree and /tmp. Manager may copy private bundle into main; no credentials published."
+    },
+    "administrativeChecks": {
+      "scope": "Only recorded supported cleanup selection and docs:check; no broad gate or original callback rerun.",
+      "affectedCleanupSelection": {
+        "recordedJob": "ae8b8977-b553-4e4f-9534-f5ed1f8bafab",
+        "exitStatus": 0,
+        "bunPassed": 1,
+        "expectations": 8,
+        "playwrightPassed": 1,
+        "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test ./.temp/reading-home-CAS13-cleanup-G-2831-20261021T0638Z/capture.test.ts",
+        "taskBrowserCommand": "task web:e2e -- --config .temp/reading-home-CAS13-cleanup-G-2831-20261021T0638Z/playwright.config.ts cleanup.spec.ts",
+        "normalTaskAdmission": true,
+        "separateQAStackOrRunId": null,
+        "qaIdQualification": "No standalone QA run ID emitted; exact recorded job/admitted Task command, logs and Playwright results retained."
+      },
+      "docsCheck": "Pending recorded task docs:check after additive append; separate administrative entry will retain actual result."
+    }
+  }
 }
