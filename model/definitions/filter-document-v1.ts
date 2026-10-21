@@ -30,7 +30,8 @@ export interface ResourceQuery {
   context: 'global' | { realm: string };
   scope: { kind: 'all' } | { kind: 'realm'; realm: string };
   filter?: FilterDocument;
-  text?: { phrase: string } | { title: string; body: string };
+  /** Keywords need not be adjacent or ordered; phrase retains exact matching. */
+  text?: { keywords: string } | { phrase: string } | { title: string; body: string };
   sort: 'relevance' | 'newest' | 'updated';
   page: { size: number; continuation?: unknown };
   /** Explicit unsupported selectors are admitted as typed refusals. */
