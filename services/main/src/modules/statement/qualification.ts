@@ -42,6 +42,20 @@ export const QUALIFICATION_DEFINITION_NOTATION = 'statement-proposition-qualific
 export const DATE_PUBLISHED_PREDICATE = 'https://schema.org/datePublished';
 export const DATE_PUBLISHED_DEFINITION_NOTATION = 'statement-first-publication-date-v1';
 
+/** A finite property of a Collection, independently recorded and adopted. Its
+ * notation fixes this meaning; labels and ordinary membership establish none. */
+export const COLLECTION_PURPOSE_NOTATION = 'collection-purpose-v1';
+export const COLLECTION_PURPOSE_KINDS = ['reading-list', 'recipe-selection', 'series', 'franchise'] as const;
+export type CollectionPurposeKind = typeof COLLECTION_PURPOSE_KINDS[number];
+
+export function checkedCollectionPurposeValue(value: StatementValue): CollectionPurposeKind {
+  if (value.kind !== 'literal' || value.datatype !== 'http://www.w3.org/2001/XMLSchema#string'
+    || value.language !== null || !COLLECTION_PURPOSE_KINDS.includes(value.lexical as CollectionPurposeKind)) {
+    throw new InvalidContextCommand('Collection purpose requires one of the four exact untagged string values');
+  }
+  return value.lexical as CollectionPurposeKind;
+}
+
 export const STATEMENT_VALUE_PRECISIONS = ['exact', 'approximate', 'uncertain'] as const;
 export const STATEMENT_VALUE_QUALIFIERS = ['disputed-attribution', 'inferred'] as const;
 export type StatementValuePrecision = (typeof STATEMENT_VALUE_PRECISIONS)[number];
@@ -535,6 +549,14 @@ export async function validateStatementDefinitions(
   const definitions = await exactDefinitions(env, references, canReadDefinition, readComponent, profile);
   const relation = definitions.get(input.relationDefinition)!;
   const firstPublication = relation.state.notation === DATE_PUBLISHED_DEFINITION_NOTATION;
+  if (relation.state.notation === COLLECTION_PURPOSE_NOTATION) {
+    if (relation.state.kind !== 'property' || relation.state.roles.length !== 0
+      || relation.state.successor !== null || relation.definition !== input.predicate
+      || qualification) {
+      throw new InvalidContextCommand('Collection purpose requires its exact unqualified property definition');
+    }
+    checkedCollectionPurposeValue(input.value ?? { kind: 'no-value' });
+  }
   if (firstPublication && profile === 'statement-v2') {
     throw new StatementV2Rejected('unsupported_model_revision', 'the retained first-publication property binds the V1 literal contract');
   }

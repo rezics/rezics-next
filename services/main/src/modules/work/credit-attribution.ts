@@ -1,5 +1,6 @@
-import type { RelationAttributionOwner, RelationAttributionProof } from '../relation/attribution.ts';
-import { readExactDefinition } from '../relation/change.ts';
+import type { RelationAttributionOwner, RelationAttributionProof, RelationAttributionRequest } from '../relation/attribution.ts';
+import { readExactDefinition, type ExactDefinition } from '../relation/change.ts';
+import type { AttributedParticipation } from '../relation/v2-schema.ts';
 import { systemDisclosure } from '../target/disclosed-references.ts';
 import { GRAPHS, hash, iri, lit, type WorkActivationEnvironment } from './activate.ts';
 import { canonicalCreditValue, creditNativeId, creditReceiptId } from './credit-association-state.ts';
@@ -34,6 +35,32 @@ export function creditOwnerGuard(witness: CreditOwnerWitness, head: { workHead: 
   ${unerased(iri(value.work))}`;
 }
 
+/** Public native receipt proof. Reading an already admitted tuple grants no
+ * command authority and needs no invented Account or acting Subject. The tuple
+ * attests only its qualified provider/namespace/key, never Source aliases or
+ * reported absence. Citation fields remain a separate owner operation. */
+export async function readNativeCreditAttributionProof(env: WorkActivationEnvironment, definition: ExactDefinition,
+  participations: readonly AttributedParticipation[], request: RelationAttributionRequest) {
+  const { participation, support } = request;
+  if (support.basis.kind !== 'native-credit') return null;
+  const native = await readCreditOwnerWitness(env, support.basis.credit);
+  const head = native && await readCreditOwnerHead(env, native);
+  const mapping = definition.retainedCredit;
+  const work = participations.find(item => definition.roleKeys[item.role] === definition.workSubjectRole);
+  if (!native || !head || head.creditHead !== native.value.revision
+    || native.value.revision !== support.basis.revision || !mapping
+    || mapping.origin !== native.profile || mapping.storedRole !== native.value.role
+    || definition.roleKeys[participation.role] !== mapping.subjectRole
+    || work?.participant.kind !== 'resource' || work.participant.ref !== native.value.work
+    || !equal(participation.participant, creditOwnerParticipant(native))
+    || participation.position !== (native.value.agent ? undefined : native.value.nativeOrdinal)) return null;
+  const proof: RelationAttributionProof = { basis: support.basis, receipt: native.receipt.receipt,
+    revision: native.value.revision, validationToken: hash(canonicalCreditValue(native)), state: 'current', evidence: [],
+    participant: creditOwnerParticipant(native), fields: native.value.agent ? {} : {
+      provider: native.value.provider, namespace: native.value.namespace, key: native.value.sourceKey } };
+  return { native, head, proof, guard: creditOwnerGuard(native, head) };
+}
+
 /** Compose native identity with the existing citation/field/rights owner.
  * Manual citations are verified by that owner independently of conversion.
  * The native command is never substituted for an external citation receipt. */
@@ -46,26 +73,16 @@ export function creditAttributionOwner(
     for (const request of input.requests) {
       const { participation, support } = request;
       let native: CreditOwnerWitness | null = null;
+      let nativeProof: RelationAttributionProof | null = null;
       if (support.basis.kind === 'native-credit') {
-        native = await readCreditOwnerWitness(env, support.basis.credit);
-        const head = native && await readCreditOwnerHead(env, native);
-        const mapping = input.definition.retainedCredit;
-        const work = input.participations.find(item => input.definition.roleKeys[item.role] === input.definition.workSubjectRole);
-        if (!native || !head || head.creditHead !== native.value.revision
-          || native.value.revision !== support.basis.revision || !mapping
-          || mapping.origin !== native.profile || mapping.storedRole !== native.value.role
-          || input.definition.roleKeys[participation.role] !== mapping.subjectRole
-          || work?.participant.kind !== 'resource' || work.participant.ref !== native.value.work
-          || !equal(participation.participant, creditOwnerParticipant(native))
-          || participation.position !== (native.value.agent ? undefined : native.value.nativeOrdinal)) return null;
-        guards.push(creditOwnerGuard(native, head));
+        const resolved = await readNativeCreditAttributionProof(env, input.definition, input.participations, request);
+        if (!resolved) return null;
+        native = resolved.native; nativeProof = resolved.proof;
+        guards.push(resolved.guard);
       }
       let proof: RelationAttributionProof;
       if (native && !support.evidence.length) {
-        proof = { basis: support.basis, receipt: native.receipt.receipt, revision: native.value.revision,
-          validationToken: hash(canonicalCreditValue(native)), state: 'current', evidence: [],
-          participant: creditOwnerParticipant(native), fields: native.value.agent ? {} : {
-            provider: native.value.provider, namespace: native.value.namespace, key: native.value.sourceKey } };
+        proof = nativeProof!;
       } else {
         if (!citations) return null;
         const supported = await citations.verify({ ...input, requests: [request] });

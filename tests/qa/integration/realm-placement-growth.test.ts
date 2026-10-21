@@ -111,6 +111,6 @@ test('Realm placement publication stays bounded as its ranking grows and eight w
     console.info(JSON.stringify({ capability: 'realm-placement-access-locks', sampleIntervalMs: 10, ...locks }));
     await h.close();
     await shutdownTelemetry();
-    sink.stop();
+    await sink.stop();
   }
 }, 600_000);

@@ -37,7 +37,9 @@ export async function executeAssociationQuery(deps: MainWorkDependencies, reques
       throw new AccountAssertionDenied('Authentication is required');
     }
     if (selection.parameters.context !== 'global') await session.realm(selection.parameters.context.realm);
-    const result = await readRetainedCreditAssociationPage(session, selection, deps.subjectAssociations ?? {}, surface, input.cursor);
+    const owners = deps.subjectAssociations;
+    const result = owners?.native ? await owners.native(session, selection, surface, input.cursor)
+      : await readRetainedCreditAssociationPage(session, selection, owners ?? {}, surface, input.cursor);
     return surface === 'query' ? { profile: 'query-v1' as const, template: ASSOCIATION_QUERY, selection, result } : result;
   };
   const options = { ...input.presentation, limit: selection.limit, cursor: input.cursor,

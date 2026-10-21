@@ -7,7 +7,6 @@ import { idOf } from '../work-page/route.ts';
 import type { Loaded, RatingContextPage, RatingRead, RatingSummary } from '../work-page/types.ts';
 import {
   bindingSummary,
-  fromRole,
   identityEntries,
   identityKeys,
   type IdentityData,
@@ -28,6 +27,7 @@ export const readIdentityRelations = cache(
     cursor?: string,
     position?: string,
     frame?: string,
+    selection?: { definition: string; viewingRole: string },
   ): Promise<Loaded<RelationsPage>> => {
     const { main, actingSubject } = await reader();
     const id = idOf(resource);
@@ -41,6 +41,7 @@ export const readIdentityRelations = cache(
             limit: 20,
             position,
             ...(frame ? { frame: [frame] } : {}),
+            ...selection,
           },
         }),
       cursor,
@@ -97,12 +98,15 @@ async function titleApplicability(
   const read = await settle(() =>
     main.v1.relations({ id }).revisions({ revision }).get({ query: { actingSubject, position } }),
   );
-  if (!read.ok) return null;
+  if (!read.ok || read.data.profile === 'association-evidence-v1') return null;
   const names = await namesOf(read.data.applicability, position);
   if (read.data.applicability.some((ref) => names.get(ref)?.status !== 'available')) return null;
-  return [...names.values()].filter(
-    (item): item is AvailableSummary => item.status === 'available',
-  );
+  const applicable: AvailableSummary[] = [];
+  for (const item of names.values()) {
+    if (item.status !== 'available') return null;
+    applicable.push(item);
+  }
+  return applicable;
 }
 
 export async function readIdentitySections(
@@ -118,6 +122,7 @@ export async function readIdentitySections(
   if (!own.ok) return own;
   const definitions = await readIdentityDefinitions();
   if (!definitions.ok) return definitions;
+  const nativePages: RelationsPage[] = [own.data];
   const entries = own.data.items;
   const sections: IdentitySectionData[] = [];
   const ratingReads = new Map<string, Promise<Loaded<RatingRead>>>();
@@ -143,38 +148,44 @@ export async function readIdentitySections(
     kindKey: entry ? kindKeys.get(bindingSummary(entry, 'kind', self)?.reference ?? '') : undefined,
     ratings: rated ? await ratingsFor(summary.reference) : null,
     applicability:
-      entry && entry.rendering?.meaning.definition === definitions.data.get('holds-title')
+      entry?.rendering?.meaning && entry.rendering.meaning.definition === definitions.data.get('holds-title')
         ? await titleApplicability(entry, position)
         : [],
   });
   const continuation = (source: AvailableSummary, cursor: string | null) =>
     cursor ? { resource: source, cursor } : null;
-  // A continuation page lists later relations only: the variant-of relation that names the hub, and whether the page has
-  // any variants at all, are read from the first page, or a later page would lose the hub row.
-  const head = cursors.relations
-    ? await readIdentityRelations(self.reference, undefined, position, frame)
-    : own;
-  const variants = identityEntries(head.ok ? head.data.items : entries, definitions.data, 'variant-of');
-  const asVariant = variants.find((entry) => entry.rendering?.viewingRole === 'variant');
-  const hubSummary = asVariant ? bindingSummary(asVariant, 'hub', self) : self;
   const is = (type: string) => page.target.types.includes(`${namespaces.rv}${type}`);
-  if (variants.length || is('Character')) {
-    let family: Loaded<RelationsPage> = own;
-    if (asVariant && hubSummary) {
+  const variantDefinition = definitions.data.get('variant-of');
+  if (variantDefinition) {
+    // Discovery and the hub's list are independently paged native selections.
+    // A mixed first/current page cannot establish either the hub or its absence.
+    const discovery = await readIdentityRelations(self.reference, cursors.variants, position, frame,
+      { definition: variantDefinition, viewingRole: 'variant' });
+    if (!discovery.ok) return discovery;
+    nativePages.push(discovery.data);
+    let hubSummary = self;
+    let hubEntry: RelationEntry | undefined;
+    for (const entry of discovery.data.items) {
+      const hub = bindingSummary(entry, 'hub', self);
+      if (hub && !hubEntry) { hubSummary = hub; hubEntry = entry; }
+    }
+    if (hubSummary.reference !== self.reference) {
       // Require the hub's own position-aware projection before following its incidence list.
       const hubPage = await readEntityProjection(idOf(hubSummary.reference)!, position);
-      family = hubPage.ok
-        ? await readIdentityRelations(hubSummary.reference, cursors.family, position, frame)
-        : hubPage;
+      if (!hubPage.ok) return hubPage;
     }
+    const family = await readIdentityRelations(hubSummary.reference, cursors.family, position, frame,
+      { definition: variantDefinition, viewingRole: 'hub' });
     if (!family.ok) return family;
-    const familyEntries = identityEntries(family.data.items, definitions.data, 'variant-of');
+    nativePages.push(family.data);
+    const familyEntries = family.data.items;
+    const hasFamily = !!hubEntry || familyEntries.length > 0;
     // Identify the seeded concepts by their authored English names; presentation uses reviewed UI wording.
     // Unrecognised concepts retain their own localized label rather than being recategorized.
     const kinds = [
       ...new Set(
         familyEntries.flatMap(
-          (entry) => bindingSummary(entry, 'kind', hubSummary ?? self)?.reference ?? [],
+          (entry) => bindingSummary(entry, 'kind', hubSummary)?.reference ?? [],
         ),
       ),
     ];
@@ -196,19 +207,40 @@ export async function readIdentitySections(
           if (kind.name.value === 'Counterpart') kindKeys.set(kind.reference, 'counterpart');
         }
     }
-    const members = hubSummary && variants.length ? [await member(hubSummary, null, true)] : [];
-    const seen = new Set(members.map((item) => item.summary.reference));
+    const members = hasFamily ? [await member(hubSummary, null, true)] : [];
+    const fallback: RelationEntry[] = [];
     for (const entry of familyEntries) {
-      const variant = bindingSummary(entry, 'variant', hubSummary ?? self);
-      if (!variant || seen.has(variant.reference)) continue;
-      seen.add(variant.reference);
-      members.push(await member(variant, fromRole(entry, 'hub')));
+      const variant = bindingSummary(entry, 'variant', hubSummary);
+      if (variant) members.push(await member(variant, entry));
+      // A card names one counterpart. Preserve every other supplied occurrence,
+      // including another occurrence of that same identity and refused summaries.
+      let consumed = false;
+      const counterparts = entry.counterparts.filter(summary => {
+        if (!consumed && variant && summary === variant) { consumed = true; return false; }
+        return true;
+      });
+      if (counterparts.length || !variant) fallback.push({ ...entry, counterparts });
     }
-    sections.push({
+    const discoveryFallback: RelationEntry[] = [];
+    for (const entry of discovery.data.items) {
+      let consumed = false;
+      const counterparts = entry.counterparts.filter(summary => {
+        if (!consumed && entry === hubEntry && summary === hubSummary) { consumed = true; return false; }
+        return true;
+      });
+      if (counterparts.length || entry !== hubEntry) discoveryFallback.push({ ...entry, counterparts });
+    }
+    if (hasFamily || is('Character') || family.data.next || cursors.family
+      || discovery.data.items.length || discovery.data.next || cursors.variants) sections.push({
       kind: 'family',
-      hub: variants.length ? hubSummary : null,
+      hub: hasFamily ? hubSummary : null,
       members,
-      next: hubSummary ? continuation(hubSummary, family.data.next) : null,
+      next: continuation(hubSummary, family.data.next),
+      page: family.data,
+      cursor: cursors.family,
+      cursorKey: 'family',
+      fallback,
+      discovery: { page: discovery.data, cursor: cursors.variants, fallback: discoveryFallback },
     });
   }
   const character = is('Character');
@@ -245,6 +277,8 @@ export async function readIdentitySections(
   return {
     ok: true,
     data: {
+      relations: own.data,
+      nativePages,
       sections,
       ...(is('Character') || is('GameUnit') ? { ratings: await ratingsFor(self.reference) } : {}),
     },
