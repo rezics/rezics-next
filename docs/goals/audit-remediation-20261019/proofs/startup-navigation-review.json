@@ -11517,5 +11517,630 @@
       "additiveReportValidationReceipt": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/home-orca-document-support-v4-independent-review-20261021/report-preservation.json"
     },
     "managerNext": "Consume this bounded v4 changed-support verdict. The single next existing-owner input is a separately authorized original Home observation with fresh SAME G-2831 custody/root binding. Retain every accepted UI/API criterion and all actual speech failures; this slice closes no original class."
+  },
+  "originalHomeDefrCAS13SuccessorObservation20261021": {
+    "atUTC": "2026-10-21T06:32:00.423549+00:00",
+    "worker": "G-2862",
+    "predecessor": "G-2847",
+    "managerSession": "goal-audit-remediation-20261019",
+    "reviewer": "Independent codex-1 / GPT-6.1 Sol / xhigh, fresh successor dispatch; no account/model fallback or nested agents",
+    "result": "blocked on live owned-document selection; single authorized unchanged original run completed and actual successor borrower explicitly released",
+    "verdict": "Fresh lawful OAuth/CAS13 and original before/after reader/continuation invariants passed. Both unchanged HomeDE390/HomeFR390 cells failed in setup at v4 document selection before the original card heading, full description and localized unread speech assertions. The aggregate assertion failed; no original class closes. All prior accepted reviews and actual failures remain history.",
+    "authority": {
+      "decision": "Manager continuity decision, 2026-10-21",
+      "decisionFile": "docs/goals/audit-remediation-20261019/execution-reset.md",
+      "brief": "docs/goals/audit-remediation-20261019/tasks/G-2862.md",
+      "archivedArtifactCorrection": "G-2847 ignored tree was read only from .temp/goal-orchestration/runs/G-2847/worktree-temp; no removed predecessor worktree was recreated.",
+      "actualBorrower": "G-2862",
+      "callbackLineageLabel": "G-2847",
+      "labelDisposition": "All template, callback and accepted support bytes retained. The separate serialized manager lease and explicit release identify G-2862 as the real borrower and G-2847 as predecessor. No terminal predecessor record was mutated."
+    },
+    "reportBaseline": {
+      "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/report-before-G2862.json",
+      "sha256": "f58134c7bbe371d4627d980ce7de813fc48da380cdfcf333224185a807f1e636",
+      "bytes": 640065
+    },
+    "reusedAcceptedEvidence": {
+      "sourceSupportVerdictCommit": "951fb35c0c300781ca3801f44f318a5c232bc321",
+      "sourceSupportReportKey": "homeOrcaDocumentSupportV4IndependentConsumption20261021",
+      "acceptedSupportFilesIndependentlyRehashed": 155,
+      "acceptedControls": {
+        "tests": 3,
+        "expects": 13,
+        "pythonCases": 6,
+        "repeated": false
+      },
+      "sourceReviewRepeated": false,
+      "componentUIReportKey": "aud012HomeCriterionEvidenceMap20261020",
+      "componentInteractions": "Reuse accepted production Home/Page keyboard hide/Undo, full accessible descriptions, localized destinations and exact/lower-bound/fallback states within their established limits. No story, matrix or backend replay.",
+      "screenshots": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/accepted-UI-reuse.json",
+        "sha256": "fe4902e7c9e6b7ee4d71ac963e9e509e64856743e55edc1e6f08641f4679066f",
+        "bytes": 1347
+      },
+      "actuallyViewedByThisWorker": true,
+      "matchingHistoricalAPIEvidence": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/reused-accepted-UI/matched-CAS11-api-evidence.json",
+        "sha256": "bfcde2a2391f013dc19ee1a26dac33f13173e71edd150948b88c289f8ff780ef",
+        "bytes": 5943
+      },
+      "limit": "Retained screenshots and CAS11 pairing do not become new CAS13 card/speech/focus/axe acceptance. This run separately supplies genuine CAS13 API readbacks."
+    },
+    "binding": {
+      "stage": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context",
+      "sourcePin": "8b8a2c0a97b5662e6283fa7531a8f1c600f37fd0",
+      "backendPin": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "mainOrigin": "http://127.0.0.1:3001",
+      "accountsOrigin": "http://127.0.0.1:3004",
+      "ownFrontendOrigin": "http://127.0.0.1:44889",
+      "sourceCleanBeforeAndAfter": true,
+      "ready": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/renewed-ready.json",
+        "sha256": "92074fab1d345a57a39252d0d4932f4d9cea07569fd5b1c406986377dad676f1",
+        "bytes": 40577
+      },
+      "readySHA256Expected": "92074fab1d345a57a39252d0d4932f4d9cea07569fd5b1c406986377dad676f1",
+      "custodyHandoff": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/source-custody/CAS13/CAS13-custody-ready-handoff.json",
+        "sha256": "91f3c75136c2f99302d14c04cf904df7e9078986a8b3c509322620130c30f602",
+        "bytes": 4015
+      },
+      "custodyFilesIndependentlyRehashed": 49,
+      "bindingVerification": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/binding-verification.json",
+        "sha256": "199a9907878e31f2b5379794219cf7ce0b37a14a7cab269b9c949a9b565f99ab",
+        "bytes": 48173
+      },
+      "selectionManifest": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/selection-manifest.json",
+        "sha256": "2c280df26bbbf7549e2b2261061d781008a23f5b866ebe14b4b369bf35bc9061",
+        "bytes": 4473
+      },
+      "leasedSourceSelection": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/leased-source-selection.json",
+        "sha256": "3a9c249878718706cf6bfa0afcca58d5b1fff51380fbfd9cc4c05de8aa18b8fd",
+        "bytes": 8709
+      },
+      "serializedSuccessorLease": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/successor-manager-lease.json",
+        "sha256": "3b3a9f22a16091ad8a1456e49f141fb36dc2b8c11a4ba47aa3c2f73fd76849a7",
+        "bytes": 1501
+      },
+      "sourceDependencyHashes": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/G2862-actual-source-dependency-hashes.json",
+        "sha256": "392079da1a5c4c0749a0178ab655bab81975939ffada03963530c22e8dbb9d9f",
+        "bytes": 6611
+      },
+      "frozenTemplate": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/aud012-home-only.test.ts.in",
+        "sha256": "22e5b9c90dc1fd0fce2cf412df44a46ab01bf354b72a9b74f6008a9b830868bc",
+        "bytes": 35206
+      },
+      "actualUnchangedTest": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/aud012-home-only.test.ts",
+        "sha256": "22e5b9c90dc1fd0fce2cf412df44a46ab01bf354b72a9b74f6008a9b830868bc",
+        "bytes": 35206
+      },
+      "originalCallback": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/original-callback-retained.txt",
+        "sha256": "9c56d91f687e9a03a00ce05dc88171ba22d63beab60d7de6b55592d0296aa4e8",
+        "bytes": 3268
+      },
+      "newOutputDirectoryName": "CAS13-home-defr-G2862-run-20261021T062345Z",
+      "producerArtifactsMutated": false,
+      "earlierCAS5CAS7CAS9CAS11LeasesReused": false
+    },
+    "preparationJob": {
+      "id": "2651144f-4fac-4e36-9687-e31fbf11d80c",
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task --taskfile .temp/home-observation.Taskfile.yml bind",
+      "exitStatus": 0,
+      "receipt": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/2651144f-4fac-4e36-9687-e31fbf11d80c-job-receipt.json",
+        "sha256": "ca8adc5ac336c76254f98b6b9a467d2f050e1f48bbdd4178b3b64c00f315382c",
+        "bytes": 871
+      },
+      "log": {
+        "path": ".temp/goal/jobs/2651144f-4fac-4e36-9687-e31fbf11d80c.log",
+        "sha256": "e3f995f3cd42c20c5dbbbb7fa707ee8c455948f0e2496ec3385aa9c859ce4c96",
+        "bytes": 926
+      },
+      "scope": "Immutable byte transfer and existing source/dependency materialization with successor/CAS13 binding; no new corpus/backend producer or support controls."
+    },
+    "originalRecordedRun": {
+      "id": "d7b7a517-a1cc-4d25-bf18-2f61a54d2e97",
+      "attempt": 2,
+      "continuedAttempt": 3,
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task goal -- test ./.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/aud012-home-only.test.ts",
+      "exitStatus": 201,
+      "runnerResultClass": "assertion",
+      "tests": 1,
+      "passed": 0,
+      "failed": 1,
+      "expectCalls": 14,
+      "testDurationMs": 97224.9,
+      "startedAtUTC": "2026-10-21T06:24:06.476Z",
+      "finishedAtUTC": "2026-10-21T06:25:41.691Z",
+      "hostedQARunId": null,
+      "normalTaskAdmission": true,
+      "receipt": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/d7b7a517-a1cc-4d25-bf18-2f61a54d2e97-job-receipt.json",
+        "sha256": "b34de7a3ec8581422b2f10d6444f22e2de823bce0203d41984c071a2d60146ca",
+        "bytes": 1031
+      },
+      "log": {
+        "path": ".temp/goal/jobs/d7b7a517-a1cc-4d25-bf18-2f61a54d2e97.log",
+        "sha256": "4e05b530ea30e4f65326e1f0d2e037dd6018843360c41ad518af4382fecc43c9",
+        "bytes": 2728
+      },
+      "result": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/CAS13-home-defr-G2862-run-20261021T062345Z/result.json",
+        "sha256": "835256980920b0fc75a6e801e2192b1448250ff26a87f8b5b49281a81f2e42e5",
+        "bytes": 780415
+      },
+      "aggregateAssertion": {
+        "line": 269,
+        "reached": true,
+        "passed": false,
+        "reason": "Both original cells recorded native document-selection setup refusals; aggregate expected no failed cells."
+      },
+      "automaticRerun": false
+    },
+    "freshIdentityAndGenuineAPIs": {
+      "method": "Normal own browser OAuth PKCE through unchanged exact-pin signInAtAccounts and existing fixture member; bearer/session key remain private in memory.",
+      "initial": {
+        "at": "2026-10-21T06:25:20.120Z",
+        "status": 200,
+        "eligible": true,
+        "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839"
+      },
+      "final": {
+        "status": 200,
+        "eligible": true,
+        "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839"
+      },
+      "freshReadbackBeforeAcquisitionAtUTC": "2026-10-21T06:25:27.920Z",
+      "actualAcquiredAtUTC": "2026-10-21T06:25:27.924Z",
+      "beforeAfterReadbacks": [
+        {
+          "label": "borrower before actual AT; NEW renewed current-CAS read-only custody",
+          "at": "2026-10-21T06:25:27.920Z",
+          "readerStatus": 200,
+          "reader": {
+            "profile": "reader-work-state-v1",
+            "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+            "status": {
+              "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+              "status": "reading",
+              "startedOn": null,
+              "finishedOn": null,
+              "version": 13,
+              "changedAt": "2026-10-21 04:24:59.585799+00"
+            },
+            "customShelves": [],
+            "rating": {
+              "global": null,
+              "realm": null
+            },
+            "progress": null,
+            "sourcePosition": {
+              "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+              "sequence": "11954"
+            }
+          },
+          "continuationStatus": 200,
+          "continuation": {
+            "profile": "work-resume-v1",
+            "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+            "sourcePosition": {
+              "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+              "sequence": "11954"
+            },
+            "lastPosition": null,
+            "nextUnread": {
+              "occurrence": "https://rezics.com/id/5caa0cc4-f716-876a-8a46-fa048620c48d",
+              "title": "At the harbour",
+              "href": "/w/01a10aff-93e5-7069-b80a-cd33bb6ce57c/read/5caa0cc4-f716-876a-8a46-fa048620c48d?language=en"
+            },
+            "unreadCount": {
+              "value": 1,
+              "kind": "exact"
+            }
+          }
+        },
+        {
+          "label": "borrower after actual AT",
+          "at": "2026-10-21T06:25:41.574Z",
+          "readerStatus": 200,
+          "reader": {
+            "profile": "reader-work-state-v1",
+            "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+            "status": {
+              "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+              "status": "reading",
+              "startedOn": null,
+              "finishedOn": null,
+              "version": 13,
+              "changedAt": "2026-10-21 04:24:59.585799+00"
+            },
+            "customShelves": [],
+            "rating": {
+              "global": null,
+              "realm": null
+            },
+            "progress": null,
+            "sourcePosition": {
+              "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+              "sequence": "11954"
+            }
+          },
+          "continuationStatus": 200,
+          "continuation": {
+            "profile": "work-resume-v1",
+            "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+            "sourcePosition": {
+              "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+              "sequence": "11954"
+            },
+            "lastPosition": null,
+            "nextUnread": {
+              "occurrence": "https://rezics.com/id/5caa0cc4-f716-876a-8a46-fa048620c48d",
+              "title": "At the harbour",
+              "href": "/w/01a10aff-93e5-7069-b80a-cd33bb6ce57c/read/5caa0cc4-f716-876a-8a46-fa048620c48d?language=en"
+            },
+            "unreadCount": {
+              "value": 1,
+              "kind": "exact"
+            }
+          }
+        }
+      ],
+      "readerAndContinuationObjectsEqual": true,
+      "observedInvariant": "Same lawful actor, Book01a10aff, reading/null dates/CAS13, null progress, no custom shelves, nextUnread5caa0cc4 titled At the harbour, unreadCount exact1. Both reader-state and continuation requests returned200 before and after.",
+      "backendRuntime": {
+        "refreshRevision": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "source": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "observedAt": "2026-10-21T06:24:07.051Z",
+        "provenanceLimit": "Current shared refresh and source directory, not immutable historical runtime identity",
+        "processes": [
+          {
+            "pid": 1372265,
+            "source": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+            "checkoutHead": "75409ac3c379a9f84212e48a8abdc6540c5c44a2"
+          }
+        ],
+        "readiness": {
+          "origin": "http://127.0.0.1:3001",
+          "status": 200
+        }
+      },
+      "provenanceLimit": "Installed shared backend75409 at actual observation times and clean frozen frontend8b8a; no current-main native, model, Studio, Book or broader integration qualification.",
+      "readerStatusDateProgressPreferenceWrites": false,
+      "observedOtherNonGetRequests": [
+        {
+          "at": "2026-10-21T06:25:33.267Z",
+          "method": "PUT",
+          "url": "http://127.0.0.1:44889/api/main/v1/me/feed-watermarks/following",
+          "prohibited": false
+        },
+        {
+          "at": "2026-10-21T06:25:40.091Z",
+          "method": "PUT",
+          "url": "http://127.0.0.1:44889/api/main/v1/me/feed-watermarks/following",
+          "prohibited": false
+        }
+      ],
+      "otherRequestLimit": "Two genuine app PUT feed-watermarks/following requests were observed. They are not reader-status/date/progress writes; no claim that the whole browser journey made only GETs."
+    },
+    "originalAssertionReach": {
+      "cells": [
+        {
+          "id": "card-home-de-390",
+          "outcome": "setup-refused before original outcome assertions",
+          "startedAtUTC": "2026-10-21T06:25:27.928Z",
+          "endedAtUTC": "2026-10-21T06:25:34.477Z",
+          "firstUnavailablePrerequisite": "Owned native key refused: DocumentRefused: Error: atspi_error: Method \"Get\" with signature \"ss\" on interface \"org.freedesktop.DBus.Properties\" could not be processed as object /org/a11y/atspi/accessible/258 does not exist\n (1)",
+          "setupPath": "aud012-home-only.test.ts:121 go -> at-session.ts:96 enableTemporaryNativeInput -> native activate -> document select",
+          "originalCardHeadingLine258Reached": false,
+          "originalCardDescriptionAndStatusLine264Reached": false,
+          "originalCardAxeLine265Reached": false,
+          "originalCardScreenshotReached": false,
+          "originalCardTitleSpeechPassed": false,
+          "fullAtTheHarbourSpeechPassed": false,
+          "localizedExactOneUnreadSpeechPassed": false
+        },
+        {
+          "id": "card-home-fr-390",
+          "outcome": "setup-refused before original outcome assertions",
+          "startedAtUTC": "2026-10-21T06:25:34.483Z",
+          "endedAtUTC": "2026-10-21T06:25:40.889Z",
+          "firstUnavailablePrerequisite": "Owned native key refused: DocumentRefused: Error: atspi_error: Method \"Get\" with signature \"ss\" on interface \"org.freedesktop.DBus.Properties\" could not be processed as object /org/a11y/atspi/accessible/258 does not exist\n (1)",
+          "setupPath": "aud012-home-only.test.ts:121 go -> at-session.ts:96 enableTemporaryNativeInput -> native activate -> document select",
+          "originalCardHeadingLine258Reached": false,
+          "originalCardDescriptionAndStatusLine264Reached": false,
+          "originalCardAxeLine265Reached": false,
+          "originalCardScreenshotReached": false,
+          "originalCardTitleSpeechPassed": false,
+          "fullAtTheHarbourSpeechPassed": false,
+          "localizedExactOneUnreadSpeechPassed": false
+        }
+      ],
+      "cardsReached": 0,
+      "documentSelection": [
+        {
+          "operation": "select",
+          "qualified": true,
+          "target": {
+            "pid": 1860093,
+            "uri": "http://127.0.0.1:44889/en",
+            "title": "REZICS · Home",
+            "targetId": "5893DE011E33FAE39C78334AE7121A2A",
+            "observedTitleSource": "owned Page.title",
+            "targetInfoTitle": "REZICS · Home"
+          },
+          "application": {
+            "pid": 1860093,
+            "name": "Google Chrome",
+            "role": "application",
+            "path": [
+              -1
+            ]
+          },
+          "frame": {
+            "pid": 1860093,
+            "name": "REZICS · Home - Google Chrome",
+            "role": "frame",
+            "path": [
+              -1,
+              0
+            ]
+          },
+          "document": {
+            "pid": 1860093,
+            "name": "REZICS · Home",
+            "role": "document web",
+            "path": [
+              -1,
+              0,
+              0,
+              0,
+              5,
+              2,
+              1,
+              3
+            ]
+          },
+          "frameBefore": {
+            "pid": 2776866,
+            "name": "GitHub - Google Chrome - coordinates (坐标)",
+            "role": "frame",
+            "path": [
+              -1,
+              0
+            ]
+          },
+          "focus": {
+            "pid": 2776866,
+            "name": "GitHub",
+            "role": "document web",
+            "path": [
+              -1,
+              0,
+              0,
+              0,
+              5,
+              2,
+              1,
+              3
+            ]
+          },
+          "stateChanged": false,
+          "at": 1792563927.2289834,
+          "orcaPid": 1867097,
+          "supportVersion": 4
+        },
+        {
+          "qualified": false,
+          "error": "Error: atspi_error: Method \"Get\" with signature \"ss\" on interface \"org.freedesktop.DBus.Properties\" could not be processed as object /org/a11y/atspi/accessible/258 does not exist\n (1)",
+          "refusedRequest": {
+            "operation": "select",
+            "target": {
+              "pid": 1860093,
+              "uri": "http://127.0.0.1:44889/de",
+              "title": "REZICS · Startseite",
+              "targetId": "5893DE011E33FAE39C78334AE7121A2A",
+              "observedTitleSource": "owned Page.title",
+              "targetInfoTitle": "REZICS · Startseite"
+            },
+            "client": null
+          },
+          "at": 1792563934.4729924,
+          "orcaPid": 1867097,
+          "supportVersion": 4
+        },
+        {
+          "qualified": false,
+          "error": "Error: atspi_error: Method \"Get\" with signature \"ss\" on interface \"org.freedesktop.DBus.Properties\" could not be processed as object /org/a11y/atspi/accessible/258 does not exist\n (1)",
+          "refusedRequest": {
+            "operation": "select",
+            "target": {
+              "pid": 1860093,
+              "uri": "http://127.0.0.1:44889/fr",
+              "title": "REZICS · Accueil",
+              "targetId": "5893DE011E33FAE39C78334AE7121A2A",
+              "observedTitleSource": "owned Page.title",
+              "targetInfoTitle": "REZICS · Accueil"
+            },
+            "client": null
+          },
+          "at": 1792563940.8852997,
+          "orcaPid": 1867097,
+          "supportVersion": 4
+        }
+      ],
+      "focusAndModeQualification": "readerFocusQualification and readerBrowseQualification absent; neither is accepted from automatic page/mode speech.",
+      "pageTitleObservation": "The real owned Page/CDP targets named REZICS · Startseite and REZICS · Accueil, and those automatic page titles reached Orca and dispatcher. Both live select requests then refused stale AT-SPI accessible/258; original card assertions remain unreached.",
+      "speechAndDocumentInspection": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/G2862-speech-document-and-reach-inspection.json",
+        "sha256": "f94544b70fa81d25d872473e0404ebf2cac64b332093ee4a3d50b5c8c05a2365",
+        "bytes": 10523
+      },
+      "fullReceipts": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/G2862-run-artifact-manifest.json",
+        "sha256": "68f92030bc9a7e779f7ae5c31032cae1d9e941659a5eda95753b3b4b77c5028a",
+        "bytes": 10558
+      },
+      "actualRunScreenshots": [],
+      "screenshotsDisposition": "No fresh screenshot was produced: unchanged callback captures only after description/status preparation. Both cells refused earlier. Retained accepted component screenshots were actually viewed and remain historical UI evidence.",
+      "axeDisposition": "Unreached in both original cells; no zero-violation result inferred.",
+      "supportDisposition": "Retain accepted immutable offline/static support verdict. This actual live multilingual Home transition exposes an unavailable live document-selection prerequisite; no source/support patch or new review performed."
+    },
+    "actualSuccessorRelease": {
+      "actualBorrower": "G-2862",
+      "predecessor": "G-2847",
+      "borrowerReleased": true,
+      "CAS13LeaseSpent": true,
+      "explicitRelease": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/G2862-explicit-borrower-release.json",
+        "sha256": "63f8d6dacc6e01cb1758c3326f1a2ca196dbed1f5bc282edcc2aa3ff37c3b2c1",
+        "bytes": 9976
+      },
+      "callbackReleaseAtUTC": "2026-10-21T06:25:43.685Z",
+      "actualAcquiredAtUTC": "2026-10-21T06:25:27.924Z",
+      "allOwnedShutdownVerified": true,
+      "independentShutdown": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/G2862-independent-shutdown-verification.json",
+        "sha256": "38bdcb5a134c19c8b7e899ecda0696e5a8fec670e0adc71b97e8c09a6b5201d3",
+        "bytes": 4006
+      },
+      "callbackShutdown": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/CAS13-home-defr-G2862-run-20261021T062345Z/owned-cleanup-verification.json",
+        "sha256": "7578effcdf17a18db5ca5eca42246408e92623a4a078ea8ef835fd0e3c6ee9da",
+        "bytes": 1248
+      },
+      "frontendPID": 1846233,
+      "browserPID": 1860093,
+      "orcaPID": 1867097,
+      "ownedSupportPIDs": [
+        1859755,
+        1860090,
+        1861538,
+        1861574
+      ],
+      "ownedJobIdentities": [
+        {
+          "pid": 1834293,
+          "exists": false,
+          "job": "2651144f-4fac-4e36-9687-e31fbf11d80c",
+          "role": "owner",
+          "recordedIdentity": {
+            "pid": 1834293,
+            "start": "24289706",
+            "boot": "90eb862c-6494-424a-9a4c-39230eed8346",
+            "cgroup": "0::/user.slice/user-1000.slice/user@1000.service/app.slice/tmux-spawn-59815c4d-58ff-4d03-9a06-c7d5c67b2ed0.scope"
+          },
+          "recordedIdentityStillLive": false
+        },
+        {
+          "pid": 1834651,
+          "exists": false,
+          "job": "2651144f-4fac-4e36-9687-e31fbf11d80c",
+          "role": "executor",
+          "recordedIdentity": {
+            "pid": 1834651,
+            "start": "24289821",
+            "boot": "90eb862c-6494-424a-9a4c-39230eed8346",
+            "cgroup": "0::/user.slice/user-1000.slice/user@1000.service/app.slice/tmux-spawn-59815c4d-58ff-4d03-9a06-c7d5c67b2ed0.scope"
+          },
+          "recordedIdentityStillLive": false
+        },
+        {
+          "pid": 1842829,
+          "exists": false,
+          "job": "d7b7a517-a1cc-4d25-bf18-2f61a54d2e97",
+          "role": "owner",
+          "recordedIdentity": {
+            "pid": 1842829,
+            "start": "24292435",
+            "boot": "90eb862c-6494-424a-9a4c-39230eed8346",
+            "cgroup": "0::/user.slice/user-1000.slice/user@1000.service/app.slice/tmux-spawn-59815c4d-58ff-4d03-9a06-c7d5c67b2ed0.scope"
+          },
+          "recordedIdentityStillLive": false
+        },
+        {
+          "pid": 1843202,
+          "exists": false,
+          "job": "d7b7a517-a1cc-4d25-bf18-2f61a54d2e97",
+          "role": "executor",
+          "recordedIdentity": {
+            "pid": 1843202,
+            "start": "24292531",
+            "boot": "90eb862c-6494-424a-9a4c-39230eed8346",
+            "cgroup": "0::/user.slice/user-1000.slice/user@1000.service/app.slice/tmux-spawn-59815c4d-58ff-4d03-9a06-c7d5c67b2ed0.scope"
+          },
+          "recordedIdentityStillLive": false
+        }
+      ],
+      "ownedPort": 44889,
+      "speechSocket": "/tmp/g2847-aud012-1845645.sock",
+      "nativeSocket": "/tmp/g2847-native-1845645.sock",
+      "orcaDocumentSocket": "/tmp/rezics-owned-orca-document-1845645.sock",
+      "sink": "rezics_aud012_g2847_1845645",
+      "sinkModule": "536870918",
+      "remainingOwnedProcessesOrGroupMembers": [],
+      "ownedPortAndSocketsClosed": true,
+      "ownedPulseSinkAndModuleRemoved": true,
+      "cleanupNeeded": true,
+      "cleanupOwner": "SAME G-2831 only after this actual G-2862 release",
+      "cleanupOperation": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/source-custody/CAS13/same-owner-cleanup-operation.json",
+        "sha256": "48e738fd4dc7d753dddc10da7450065b23f769280e53a91b1a31aeb35d8b0ee8",
+        "bytes": 3550
+      },
+      "privateBeforeBackup": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/source-custody/CAS13/private/before-backup.json",
+        "sha256": "a14400d9fcff4804bfe564326d1c8d17a934afc5fb062d180cf31ddef9c6b97a",
+        "bytes": 11270
+      },
+      "privateHeldState": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/source-custody/CAS13/private/lease-state.json",
+        "sha256": "27d1634835c1d3dce14bbb0f1ea8a49f5012eb75be59b3aa70d90ea816c5eb44",
+        "bytes": 5778
+      },
+      "semanticStatusDateCleanupPerformedByBorrower": false,
+      "restorationClaimed": false
+    },
+    "preservation": {
+      "allPriorReportFieldsAndHistoryPreserved": true,
+      "reportPreservationReceipt": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/G2862-report-preservation.json",
+      "G2823SoleRuntimeCustodyAndImageDefaultLeasesPreserved": true,
+      "KEEPTask1677097Hosts77717And78038PeerActions": false,
+      "broadStopResetImportRestoreOrCorpusPreparation": false,
+      "backendLifecycleModelAccountProxyChange": false,
+      "readerInterveningChangesOverwritten": false,
+      "D2_003Reopened": false,
+      "imageWork": false,
+      "newSourceReviewOrGeneralResearchDependency": false,
+      "originalFindingsClosed": []
+    },
+    "instructionDisposition": {
+      "file": "docs/goals/audit-remediation-20261019/tasks/G-2862.md",
+      "quote": "Do not modify any assertion, callback or template",
+      "effect": "Preserved exact bytes and retained this actual setup refusal without patching or rerunning the original observation.",
+      "cleanupQuote": "G-2831 ALONE owns subsequent guarded semantic status/date cleanup after real release",
+      "cleanupEffect": "Explicit G-2862 release and exact owned shutdown are delivered; no semantic restoration was attempted or claimed.",
+      "parkedProcedure": {
+        "file": ".agents/skills/goal-worker/SKILL.md",
+        "quote": "End that turn immediately with RESULT: parked",
+        "effect": "The original job parked once and this same worker continued only on its completed-job wake."
+      }
+    },
+    "documentationValidation": {
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task docs:check",
+      "receipt": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context/G2862-docs-check-receipt.json",
+      "resultReportedInWorkerHandoff": true,
+      "scope": "Administrative append-only report validation only; no product integration acceptance.",
+      "generalGoalCheckNotRun": "Brief limits checks to the single named recorded original test and docs:check for additive report changes."
+    },
+    "managerNext": "Consume G2862-explicit-borrower-release.json and hashes, then resume SAME G-2831 for its existing guarded semantic status/date cleanup. Route the concrete live DE/FR AT-SPI accessible/258 selection refusal to existing G-2747 support ownership; preserve the original test and all accepted evidence. No automatic original rerun, replacement producer, source-review chain or class closure is authorized by this report."
   }
 }
