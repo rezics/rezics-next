@@ -76,3 +76,33 @@ Preserve peer edits, especially current native lifecycle changes on main and the
 pre-existing G-2845 brief deletion. Keep G-2823 runtime/data/start-stop custody,
 KEEP services and actual active borrowers intact. Conversion remains an external
 library; independent citations and native-only ordinary interfaces are settled.
+
+## Replacement Catalogue execution checkpoint, 2026-10-21 18:08
+
+The latest maintainer order limits work to the 61 original audit findings;
+the separately commissioned broad product/frontend optimization is stopped.
+The replacement Catalogue session continues the stopped role on the authorized
+codex-2/Sol/ultra account; Site retains its live role. The missed 15:39 deadline
+and original 24/61 accepted result are unchanged.
+
+The replacement manager composed the preserved G-2757 Recipe frame/transport
+recovery source: the method and Cook no longer await reader state, artwork,
+Statements or ratings. The actual checks passed 26 Recipe owner tests with 487
+assertions, 16 frame controls with 153 assertions, seven recovery stories and
+22 detail stories; pending/refused screenshots were viewed and localization
+passed. A08 alone was updated with exact source/check receipt under
+`one-hour-20261021/replacement-catalogue/g2757-source-receipt.json` in the
+existing recovery directory. Original Artusi assertion 11 remains unproved.
+G-2758's retained consumer cut is composed with 75 basic tests/575 assertions
+passing. The omitted native collection/selector source passes 30 tests/265
+assertions, four freshness tests/eight assertions and Main types. The remaining
+association-evidence closure and integrated checks are executing; original
+continuation/predicate guard failures were sent to Program's existing G-2860
+owner without changing assertions or disguising source syntax. Current code
+is not yet a landed or independently accepted candidate.
+
+G-2823 retains sole runtime/data custody for unchanged original Book/Recipe
+acceptance; G-2791 remains the sole corpus producer. The original 113/30 Artusi
+corpus and five chapter hashes, live services, peer source and pre-existing
+G-2845 deletion remain protected. No alternate account/proxy or duplicate
+corpus is part of this recovery.
