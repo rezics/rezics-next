@@ -396,33 +396,30 @@ test('SEARCH18: a native index mutation during the phrase relation still rejects
 test('SEARCH18: Content audits a later metadata cut and pins its phrase to that cut', async () => {
   const source = fake();
   const owner = contentOwnerProof();
+  const position = { owner: 'content' as const, dataEpoch: 'content-epoch', sequence: '3' };
   const originalHealth = source.fuseki.commandHealth.bind(source.fuseki);
   source.fuseki.commandHealth = async () => ({ ...await originalHealth(), profiles: {
     'content-match-unit-v1': profileRegistry['content-match-unit-v1'].sha256,
     'content-search-eligibility-v1': profileRegistry['content-search-eligibility-v1'].sha256,
   } });
   const originalQuery = source.fuseki.query.bind(source.fuseki);
+  const originalProof = source.fuseki.searchDeltaSince.bind(source.fuseki);
+  source.fuseki.searchDeltaSince = async (...args) => ({
+    ...await originalProof(...args),
+    contentQualification: { population: '1', ownerDataEpoch: position.dataEpoch,
+      ownerSequence: position.sequence, publicDomain: false },
+  });
   let advanced = false;
   source.fuseki.query = async (sparql: string, maxResponseBytes?: number) => {
-    if (sparql.includes('SELECT ?epoch ?routing ?sequence WHERE')) {
+    if (sparql.includes('SELECT ?epoch ?sequence ?generation')) {
       if (!advanced) { source.advance(); advanced = true; }
-      return { results: { bindings: [{ epoch: binding('epoch'), routing: binding('routing'), sequence: binding('8') }] } };
+      return originalQuery(sparql, maxResponseBytes);
     }
-    if (sparql.includes('(COUNT(DISTINCT ?resource) AS ?resourceCount)')) {
-      return { results: { bindings: [{ variant: uri(owner.variant), resourceCount: binding('1'),
-        resource: uri(work), publicationCount: binding('1'), publication: uri(owner.publication),
-        eligibilityCount: binding('1'), eligibility: uri(owner.eligibility) }] } };
+    if (sparql.includes('SELECT DISTINCT ?resource WHERE') && sparql.includes('rv:searchBody')) {
+      return { results: { bindings: [{ resource: uri(work) }] } };
     }
-    if (sparql.includes('SELECT ?eligibility') && sparql.includes('?decisionTypeCount')) {
-      return { results: { bindings: [owner.eligibilityRow] } };
-    }
-    if (sparql.includes('SELECT ?publication') && sparql.includes('?decisionTypeCount')) {
-      return { results: { bindings: [owner.publicationRow] } };
-    }
-    if (sparql.includes('?declared ?heads')) {
-      return { results: { bindings: [{ epoch: binding('epoch'), sequence: binding('8'),
-        generation: binding(generation), declared: binding('1'), heads: binding('1'),
-        missing: binding('0'), eligible: binding('1'), contentUnits: binding('1') }] } };
+    if (sparql.includes('SELECT DISTINCT ?work ?structure ?occurrence')) {
+      return { results: { bindings: [] } };
     }
     if (sparql.includes('?resource ?variant ?revision ?decision ?eligibility ?language')) {
       return { results: { bindings: [{ epoch: binding('epoch'), sequence: binding('8'),
@@ -434,7 +431,6 @@ test('SEARCH18: Content audits a later metadata cut and pins its phrase to that 
     }
     return originalQuery(sparql, maxResponseBytes);
   };
-  const position = { owner: 'content' as const, dataEpoch: 'content-epoch', sequence: '3' };
   const content = { ownerPosition: async () => position } as ContentCore;
   const cursor = { read: async () => position } as ContentProjectionCursor;
   const result = await queryPublicContentPhrase({ fuseki: source.fuseki,
