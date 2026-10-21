@@ -10,6 +10,7 @@ import zhHant from './messages/zh-Hant.ts';
 
 const en = {
   primaryActions: 'Primary actions', reactions: 'Reactions',
+  savedStatus: 'Your saved status', artwork: 'Artwork',
   moreActions: insert('More actions for {{title}}', { title: String }),
   editionsView: 'Editions',
   connectionsView: 'Connections',

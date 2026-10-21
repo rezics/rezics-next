@@ -3,6 +3,8 @@ import { LocalizedText } from '@rezics/ui/localized-text';
 import Link from '../shell/localized-link.tsx';
 import { figuresOfRating } from '../scoped-rating/score.ts';
 import { SummaryLink } from '../work-levels/names.tsx';
+import { UnrenderedRelations } from '../work-levels/connections.tsx';
+import { copyOf as levelsCopy } from '../work-levels/messages.ts';
 import type { AvailableSummary } from '../work-levels/types.ts';
 import { Distribution, Mean } from '../work-page/ratings.tsx';
 import { Region, RegionFailure } from '../work-page/region.tsx';
@@ -21,13 +23,15 @@ import { summaryHref } from './views.tsx';
 
 export function identityContinuation(
   href: string,
-  section: 'family' | 'relations',
+  section: 'family' | 'relations' | 'variants',
   cursor: string | null,
 ): string {
   const url = new URL(href, 'https://rezics.invalid');
   if (cursor === null) url.searchParams.delete(section);
   else url.searchParams.set(section, cursor);
-  url.hash = section === 'family' ? 'identity-family' : 'relations';
+  // A discovery page can name another hub; its former hub's token cannot follow it.
+  if (section === 'variants') url.searchParams.delete('family');
+  url.hash = section === 'relations' ? 'relations' : 'identity-family';
   return url.pathname + url.search + url.hash;
 }
 
@@ -150,7 +154,10 @@ function IdentitySection({
   currentHref?: string;
 }) {
   const { t, hrefFor } = props;
-  if (!section.members.length && !section.hidden) return null;
+  const discovery = section.discovery;
+  if (!section.members.length && !section.hidden && !section.fallback?.length
+    && !section.next && !section.cursor && !discovery?.fallback.length
+    && !discovery?.page.next && !discovery?.cursor) return null;
   const titles: Record<IdentitySectionKind, string> = {
     family: t.variantFamily,
     units: t.units,
@@ -170,8 +177,10 @@ function IdentitySection({
   const next = section.next;
   const destination =
     props.currentHref ??
-    (next ? summaryHref(hrefFor)(section.kind === 'family' ? self : next.resource) : null);
-  const cursorKey = section.kind === 'family' && ownHub ? 'family' : 'relations';
+    summaryHref(hrefFor)(section.kind === 'family' ? self : next?.resource ?? self);
+  const cursorKey = section.cursorKey ?? (section.kind === 'family' && ownHub ? 'family' : 'relations');
+  const pending = section.next || section.cursor || discovery?.page.next || discovery?.cursor;
+  const fallback = [...section.fallback ?? [], ...discovery?.fallback ?? []];
   return (
     <Region id={`identity-${section.kind}`} title={titles[section.kind]}>
       {ownHub ? (
@@ -222,9 +231,14 @@ function IdentitySection({
         </ul>
       ) : (
         <p className="rounded-xl bg-muted/60 p-4 text-muted-foreground text-sm">
-          {section.hidden ? t.visibleRelationsOnly : empty[section.kind]}
+          {section.hidden || pending || fallback.length ? t.visibleRelationsOnly : empty[section.kind]}
         </p>
       )}
+      <UnrenderedRelations entries={fallback} t={levelsCopy(props.locale)} hrefFor={summaryHref(hrefFor)} />
+      {section.cursor && destination ? <Link href={identityContinuation(destination, cursorKey, null)}
+        className="w-fit rounded-sm text-primary text-sm underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring">
+        {props.messages.firstPage}
+      </Link> : null}
       {next && destination ? (
         <Link
           href={identityContinuation(destination, cursorKey, next.cursor)}
@@ -232,6 +246,21 @@ function IdentitySection({
         >
           {t.moreIdentityRelations}
         </Link>
+      ) : null}
+      {discovery && destination && (discovery.cursor || discovery.page.next) ? (
+        <nav aria-label={t.variantOf} className="grid gap-2">
+          <p className="text-muted-foreground text-sm">{t.variantOf}</p>
+          <div className="flex flex-wrap gap-3">
+            {discovery.cursor ? <Link href={identityContinuation(destination, 'variants', null)}
+              className="text-primary text-sm underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring">
+              {props.messages.firstPage}
+            </Link> : null}
+            {discovery.page.next ? <Link href={identityContinuation(destination, 'variants', discovery.page.next)}
+              className="text-primary text-sm underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring">
+              {t.moreIdentityRelations}
+            </Link> : null}
+          </div>
+        </nav>
       ) : null}
     </Region>
   );
@@ -258,11 +287,11 @@ export function IdentitySectionsView({
           title={props.t.relationsUnavailable}
           failure={data.failure}
           messages={props.messages}
-          restartHref={identityContinuation(
+          restartHref={identityContinuation(identityContinuation(
             props.hrefFor({ kind: 'continue', section: 'relations', cursor: null }),
             'family',
             null,
-          )}
+          ), 'variants', null)}
         />
       </Region>
     );

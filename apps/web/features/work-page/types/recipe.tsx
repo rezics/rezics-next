@@ -14,7 +14,7 @@ import type { RecipeExport, RecipeExportApi } from '../../recipe-editor/export-a
 import { RecipeExchange } from '../../recipe-editor/recipe-exchange.tsx';
 import { messages as exchangeMessages } from '../../recipe-editor/messages.ts';
 import { readingLine, type IngredientQualifier } from '../../recipe-editor/ingredient-line.ts';
-import { formatMeasure } from '../../recipe-editor/quantity.ts';
+import { formatMeasure, formatQuantity, wholeAmount } from '../../recipe-editor/quantity.ts';
 import Link from '../../shell/localized-link.tsx';
 import { recipePageReader } from '../recipe-reading-recorded-page.ts';
 import type { WorkPageMessages } from '../messages.ts';
@@ -22,6 +22,10 @@ import { Region, RegionFailure } from '../region.tsx';
 import type { ReadFailure, RecipeWorkPage } from '../types.ts';
 import { InstructionReading } from '../../recipe-editor/instruction-reading.tsx';
 import { recipeMethodReady, RECIPE_METHOD_STATE, type Instruction } from '../../recipe-editor/instructions.ts';
+import { sourceHref } from '../../entity-page/sources.tsx';
+import { nameOf } from '../../work-levels/names.tsx';
+import type { Names } from '../../work-levels/types.ts';
+import { recipeNutritionMessages } from './recipe-nutrition-messages.ts';
 
 /** A known Recipe keeps its task and explanation while the owner read remains explicitly failed and retryable. */
 export function RecipeReadFailure({ failure, messages }: { failure: ReadFailure; messages: WorkPageMessages }) {
@@ -62,6 +66,7 @@ interface ReadableOccurrence {
     instructionText?: { value: string; language?: string };
     originalText?: { value: string; language?: string };
     usesIngredient?: readonly string[];
+    substituteFor?: readonly string[];
   };
 }
 
@@ -69,6 +74,24 @@ interface ReadableMeasure {
   kind: string;
   value: { numerator: number; denominator: number };
   unitText?: string;
+  nutrient?: string;
+  unit?: string;
+  basis?: 'per-serving' | 'whole-recipe';
+  coverage?: 'complete' | 'partial' | 'unknown';
+  provenance?: 'declared' | 'source-stated' | 'computed';
+  evidence?: string;
+}
+
+const ingredientAnchor = (occurrence: string) => `recipe-ingredient-${occurrence}`;
+
+/** Kitchen fractions are useful only when exact: nutrient observations must never be rounded. */
+function exactMeasure(value: ReadableMeasure['value'], unit?: string): string {
+  const kitchen = formatQuantity(value);
+  const parsed = wholeAmount(kitchen)?.amount;
+  const exact = parsed && BigInt(parsed.numerator) * BigInt(value.denominator)
+    === BigInt(value.numerator) * BigInt(parsed.denominator);
+  const amount = exact ? kitchen : `${value.numerator}/${value.denominator}`;
+  return unit ? `${amount} ${unit}` : amount;
 }
 
 function stepSeconds(instruction: string): number | null {
@@ -153,7 +176,7 @@ function IngredientList({ page, units, messages: t }: {
         : item.reason === 'unparsed' ? t.scaleUnparsed
           : item.reason ? t.scaleHeld : null;
       return <li key={item.occurrence} className="border-border/60 flex flex-col gap-0.5 border-b py-2 last:border-0">
-        <span data-ingredient={item.occurrence} lang={language} dir={language ? directionOf(language) : undefined}
+        <span id={ingredientAnchor(item.occurrence)} data-ingredient={item.occurrence} lang={language} dir={language ? directionOf(language) : undefined}
           className="font-medium text-pretty">{text}</span>
         {quiet ? <span lang={language} dir={language ? directionOf(language) : undefined} className="text-muted-foreground text-sm">{quiet}</span> : null}
         {note ? <span className="text-muted-foreground text-xs">{note}</span> : null}
@@ -320,21 +343,111 @@ export function RecipeFacts({ page, messages: t }: { page: ReadableRecipe; messa
   if (!facts.some(([, measure]) => measure)) return null;
   return <dl className="flex flex-wrap gap-x-6 gap-y-2 text-sm" data-recipe-facts>
     {facts.map(([label, measure]) => measure ? <div key={label} className="flex gap-1">
-      <dt className="font-semibold">{label}</dt><dd>{formatMeasure(measure.value, measure.unitText)}</dd>
+      <dt className="font-semibold">{label}</dt><dd>{measure.kind.endsWith('-duration')
+        ? formatMeasure(measure.value, measure.unitText) : exactMeasure(measure.value, measure.unitText)}</dd>
     </div> : null)}
   </dl>;
 }
 
+/** Names come from the disclosed Resource summary batch; an IRI is never guessed into a label. */
+function NutrientName({ measure, names, locale }: { measure: ReadableMeasure; names: Names; locale: UiLocale }) {
+  const name = measure.nutrient ? nameOf(names, measure.nutrient) : null;
+  return name ? <bdi lang={name.language} dir={name.direction}>{name.value}</bdi>
+    : <span>{recipeNutritionMessages[locale].unnamedNutrient}</span>;
+}
+
+function RecipeNutrition({ page, names, locale, messages: t, known }: {
+  page: ReadableRecipe; names: Names; locale: UiLocale; messages: WorkPageMessages; known: boolean;
+}) {
+  const heading = useId();
+  const copy = recipeNutritionMessages[locale];
+  const nutrients = page.measures.filter(measure => measure.kind === 'nutrient');
+  if (!known && !nutrients.length) return null;
+  return <section aria-labelledby={heading} className="grid min-w-0 gap-3">
+    <h3 id={heading} className="font-semibold text-lg">{t.recipeNutrition}</h3>
+    {nutrients.length ? <table className="w-full table-fixed text-start text-sm">
+      <thead className="sr-only"><tr><th scope="col">{copy.nutrient}</th>
+        <th scope="col">{copy.amount}</th><th scope="col">{copy.qualification}</th></tr></thead>
+      <tbody>{nutrients.map((measure, index) => {
+        const unit = measure.unitText ?? (measure.unit ? nameOf(names, measure.unit)?.value : undefined);
+        return <tr key={index} data-source-key={measure.evidence} data-nutrient={measure.nutrient}
+          data-unit={measure.unit} className="border-border/60 border-b align-top last:border-0">
+          <th scope="row" className="break-words py-3 pe-3 text-start font-medium">
+            <NutrientName measure={measure} names={names} locale={locale} /></th>
+          <td className="break-words py-3 pe-3 tabular-nums">{exactMeasure(measure.value, unit)}
+            {!unit && measure.unit ? <span className="block text-muted-foreground text-xs">{copy.unnamedUnit}</span> : null}</td>
+          <td className="py-3"><div className="flex flex-wrap gap-x-3 gap-y-1 text-muted-foreground">
+            {measure.basis ? <span>{measure.basis === 'per-serving' ? copy.perServing : copy.wholeRecipe}</span> : null}
+            {measure.coverage ? <span>{measure.coverage}</span> : null}
+            {measure.provenance ? <span>{measure.provenance}</span> : null}
+          </div></td>
+        </tr>;
+      })}</tbody>
+    </table> : <p className="text-muted-foreground text-sm">{t.recipeNutritionNotProvided}</p>}
+  </section>;
+}
+
+/** The shared page footer owns evidence links; the nutrition table retains only its exact evidence identity. */
+export function RecipeNutritionSources({ page, names = new Map(), locale = 'en', messages: t }: {
+  page: ReadableRecipe; names?: Names; locale?: UiLocale; messages: WorkPageMessages;
+}) {
+  const sources = new Map<string, ReadableMeasure[]>();
+  for (const measure of page.measures) if (measure.kind === 'nutrient' && measure.evidence) {
+    const existing = sources.get(measure.evidence) ?? [];
+    existing.push(measure);
+    sources.set(measure.evidence, existing);
+  }
+  if (!sources.size) return null;
+  return <ul className="grid min-w-0 gap-3">{[...sources].map(([evidence, measures]) => {
+    const href = sourceHref(evidence);
+    return <li key={evidence} data-source-key={evidence} className="grid min-w-0 gap-1">
+      <p className="font-medium">{t.recipeNutrition}</p>
+      <p className="text-muted-foreground">{measures.map((measure, index) => <span key={index}>
+        {index ? ' · ' : null}<NutrientName measure={measure} names={names} locale={locale} /></span>)}</p>
+      {href ? <a href={href} rel="noreferrer noopener" className="w-fit rounded-sm text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:ring-2 focus-visible:ring-ring">{t.evidence}</a>
+        : <span className="text-muted-foreground [overflow-wrap:anywhere]">{evidence}</span>}
+    </li>;
+  })}</ul>;
+}
+
+function RecipeSubstitutions({ page, units, authors, locale, messages: t }: {
+  page: ReadableRecipe; units: Units; authors: readonly string[]; locale: UiLocale; messages: WorkPageMessages;
+}) {
+  const heading = useId();
+  const copy = recipeNutritionMessages[locale];
+  const substitutions = page.occurrences.filter(item => item.qualifier?.type === 'ingredient-line'
+    && item.qualifier.substituteFor?.length);
+  if (!substitutions.length) return null;
+  return <section aria-labelledby={heading} className="grid min-w-0 gap-3">
+    <h3 id={heading} className="font-semibold text-lg">{copy.substitutions}</h3>
+    <ul className="grid gap-4">{substitutions.map(occurrence => {
+      const ingredient = page.ingredients.find(item => item.occurrence === occurrence.occurrence);
+      return <li key={occurrence.occurrence} className="grid gap-1">
+        <p className="font-medium">{ingredient ? shownLine(ingredient, units, page) : occurrence.qualifier?.originalText?.value}</p>
+        <p className="text-muted-foreground text-sm">{authors.length ? authors.map((author, index) => <span key={index}>
+          {index ? ' · ' : null}<bdi>{author}</bdi></span>) : t.unknownAuthor}</p>
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm">{occurrence.qualifier!.substituteFor!.map((target, index) => {
+          const line = page.ingredients.find(item => item.occurrence === target);
+          return <a key={`${target}:${index}`} href={`#${encodeURIComponent(ingredientAnchor(target))}`} data-occurrence={target}
+            className="rounded-sm text-primary underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring">
+            {line ? shownLine(line, units, page) : copy.ingredientNotLoaded}</a>;
+        })}</div>
+      </li>;
+    })}</ul>
+  </section>;
+}
+
 /** Yield, times, ingredients and method, shared by the Work page and the editor's preview. */
-export function RecipeContent({ page, units, messages: t, notes, controls, columns = true, recordingFetch, nutritionKnown = false }: {
+export function RecipeContent({ page, units, messages: t, notes, controls, columns = true, recordingFetch, nutritionKnown = false,
+  names = new Map(), authors = [], locale = 'en' }: {
   page: ReadableRecipe; units: Units; messages: WorkPageMessages; notes?: string | null; controls?: ReactNode;
+  names?: Names; authors?: readonly string[]; locale?: UiLocale;
   /** Side by side from the `md` viewport. A narrow preview stacks instead. */
   columns?: boolean;
   recordingFetch?: typeof fetch;
   /** Only a successful structured Recipe read establishes absence; an empty editor draft does not. */
   nutritionKnown?: boolean;
 }) {
-  const nutritionHeading = useId();
   return <div className="grid gap-4">
     <RecipeFacts page={page} messages={t} />
     {controls}
@@ -344,10 +457,8 @@ export function RecipeContent({ page, units, messages: t, notes, controls, colum
       <section className="grid content-start gap-3"><h3 className="font-semibold text-lg">{t.method}</h3>
         <Steps page={page} units={units} messages={t} recordingFetch={recordingFetch} /></section>
     </div>
-    {nutritionKnown && !page.measures.some(item => item.kind === 'nutrient') ? <section aria-labelledby={nutritionHeading} className="grid gap-2">
-      <h3 id={nutritionHeading} className="font-semibold text-lg">{t.recipeNutrition}</h3>
-      <p className="text-muted-foreground text-sm">{t.recipeNutritionNotProvided}</p>
-    </section> : null}
+    <RecipeNutrition page={page} names={names} locale={locale} messages={t} known={nutritionKnown} />
+    <RecipeSubstitutions page={page} units={units} authors={authors} locale={locale} messages={t} />
     {notes ? <section className="grid gap-2"><h3 className="font-semibold">{t.recipeNotes}</h3>
       <p className="whitespace-pre-wrap leading-7">{notes}</p></section> : null}
   </div>;
@@ -358,6 +469,12 @@ export type RecipePageRead = (query: { cursor?: string; servings?: number }) => 
   data: RecipeWorkPage | null; error: { status: number; value?: unknown } | null;
 }>;
 
+/** Disclosed Resource names and actual author credits enhance an already admitted Recipe body. */
+export interface RecipePresentation {
+  names: Names;
+  authors: readonly string[];
+}
+
 function wholeServings(page: RecipeWorkPage | null): number | null {
   const value = page?.measures.find(item => item.kind === 'servings')?.value;
   if (!value || value.denominator === 0) return null;
@@ -365,7 +482,8 @@ function wholeServings(page: RecipeWorkPage | null): number | null {
   return Number.isInteger(amount) && amount >= 1 && amount <= 100 ? amount : null;
 }
 
-export function RecipeExperience({ resource, initial, href, actingSubject, text, edit, locale, messages: t, readPage, exportApi, saveExport, recordingFetch }: {
+export function RecipeExperience({ resource, initial, href, actingSubject, text, edit, locale, messages: t, readPage, exportApi, saveExport, recordingFetch,
+  names, authors, presentation }: {
   exportApi?: RecipeExportApi; saveExport?: (value: RecipeExport) => void;
   /** The exact Work identity already admitted by the host read; the Recipe body identifies its Structure instead. */
   resource: string;
@@ -375,8 +493,25 @@ export function RecipeExperience({ resource, initial, href, actingSubject, text,
   /** Stories answer a later page without the network. Showing more reads that one page. */
   readPage?: RecipePageRead;
   recordingFetch?: typeof fetch;
+  names?: Names; authors?: readonly string[];
+  /** A slow or failed name/credit read never delays the independently admitted method. */
+  presentation?: Promise<RecipePresentation>;
 }) {
   const [page, setPage] = useState(initial);
+  const [resolvedPresentation, setResolvedPresentation] = useState<{
+    promise: Promise<RecipePresentation>; resource: string; href: string; actingSubject: string | null;
+    value: RecipePresentation;
+  } | null>(null);
+  useEffect(() => {
+    let current = true;
+    setResolvedPresentation(null);
+    if (presentation) void presentation.then(value => {
+      if (current) setResolvedPresentation({ promise: presentation, resource, href, actingSubject, value });
+    }, () => { /* The body and explicit unavailable metadata remain usable. */ });
+    return () => { current = false; };
+  }, [presentation, resource, href, actingSubject]);
+  const details = resolvedPresentation && resolvedPresentation.promise === presentation && resolvedPresentation.resource === resource
+    && resolvedPresentation.href === href && resolvedPresentation.actingSubject === actingSubject ? resolvedPresentation.value : null;
   const [servings, setServings] = useState(() => wholeServings(initial) ?? 1);
   // Quantities show as the cook wrote them; converting is the reader's choice.
   const [units, setUnits] = useState<Units>('written');
@@ -505,7 +640,8 @@ export function RecipeExperience({ resource, initial, href, actingSubject, text,
   return <Region id="recipe-experience" title={t.recipeMethod}>
     {page ? <>
       <div aria-busy={busy || continuing || undefined} className="grid gap-4">
-        <RecipeContent page={page} units={units} messages={t} notes={text} recordingFetch={recordingFetch} nutritionKnown controls={<>
+        <RecipeContent page={page} units={units} messages={t} notes={text} recordingFetch={recordingFetch}
+          names={details?.names ?? names} authors={details?.authors ?? authors} locale={locale} nutritionKnown controls={<>
           {controls}
           {!recipeMethodReady(page) ? <p className="text-muted-foreground text-sm">
             {page.next ? t.recipeCookNeedsMore : t.recipeUnavailable}</p> : null}

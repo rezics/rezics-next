@@ -88,9 +88,11 @@ export const KnownEmptyChinesePhone: Story = { ...KnownEmptyPhone, args: { local
 export const OtherMeasuresStillHaveNoNutrients: Story = { args: { state: 'non-nutrient' }, play: knownEmpty };
 export const NutrientPresentIsNotAbsent: Story = {
   args: { state: 'nutrient' },
-  async play(context) {
-    await noFalseAbsence(context);
-    const canvas = within(context.canvasElement);
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('region', { name: messages[args.locale].recipeNutrition })).toBeVisible();
+    await expect(canvas.queryByText(messages[args.locale].recipeNutritionNotProvided, { exact: true })).not.toBeInTheDocument();
+    await expect(canvas.getByRole('cell', { name: '42 kcal' })).toBeVisible();
     await expect(canvas.getByText('2 carrots', { exact: true, selector: '[data-ingredient]' })).toBeVisible();
   },
 };

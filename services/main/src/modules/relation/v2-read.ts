@@ -99,13 +99,22 @@ export async function readAttributedOccurrence(env: WorkActivationEnvironment, o
 }
 
 /** Exact definition, field, citation and correspondence verification before every V2 field emission. */
-export async function validateAttributedOccurrence(env: WorkActivationEnvironment,
-  read: Awaited<ReturnType<typeof readAttributedOccurrence>>, definition: ExactDefinition,
-  attribution: RelationAttributionVerifier) {
+export function validateAttributedOccurrenceIdentity(
+  read: Awaited<ReturnType<typeof readAttributedOccurrence>>, definition: ExactDefinition) {
   if (read.state.definition !== definition.revision) throw new PendingActivation('relation definition differs from its sealed revision');
   const parts = read.state.participations.map(({ iri: _iri, node: _node, ...item }) => item);
   const checked = checkedParticipationsV2(definition.roles, parts);
   if (canonicalAttribution(checked) !== canonicalAttribution(parts)) throw new PendingActivation('relation allocations differ from the exact definition');
+  return checked;
+}
+
+/** Optional attribution has its own current evidence owner. Commands and views
+ * emitting those fields retain this strict proof path; an identity-only native
+ * reader can validate allocations separately and withhold unsupported fields. */
+export async function validateAttributedOccurrence(env: WorkActivationEnvironment,
+  read: Awaited<ReturnType<typeof readAttributedOccurrence>>, definition: ExactDefinition,
+  attribution: RelationAttributionVerifier) {
+  const checked = validateAttributedOccurrenceIdentity(read, definition);
   const verified = await attribution(definition, checked);
   const retained = (proof: typeof verified.proofs[number] | undefined) => {
     if (!proof) return null;
