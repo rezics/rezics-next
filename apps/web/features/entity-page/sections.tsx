@@ -4,13 +4,13 @@ import { readRealm, readReviewer, type SuppliedClient } from '../work-page/read.
 import { TargetRatingsRegion } from '../work-page/ratings.tsx';
 import { ReviewsSection } from '../work-page/reviews.tsx';
 import { idOf } from '../work-page/route.ts';
-import type { Reviewer } from '../work-page/types.ts';
+import type { Loaded, Reviewer } from '../work-page/types.ts';
 import { inSentence } from './messages.ts';
 import { readDiscussion, readRatings, readRelations, readReviews, readStatements } from './read.ts';
 import type { EntityProjection, EntitySection } from './types.ts';
 import { DiscussionView, RelationsView, type SectionProps, StatementsView } from './views.tsx';
 import { ProjectionFactsView } from './projection-views.tsx';
-import { readIdentityDefinitions } from './identity-read.ts';
+import { remainingIdentityRelations, type IdentityData } from './identity-relations.ts';
 import { readPredicateLabels } from './predicate-labels.ts';
 import { getMessages } from '../../i18n/server.ts';
 import { StatementSourcesView } from './sources.tsx';
@@ -39,16 +39,14 @@ export async function StatementsSection({ section, cursor, position, frame, proj
 }
 
 
-export async function RelationsSection({ section, cursor, position, frame, hideIdentity = false, ...rest }: SectionProps
-  & { cursor: string | undefined; position?: string; frame?: readonly string[]; hideIdentity?: boolean }) {
+export async function RelationsSection({ section, cursor, position, frame, hideIdentity = false, identity, ...rest }: SectionProps
+  & { cursor: string | undefined; position?: string; frame?: readonly string[]; hideIdentity?: boolean;
+    identity?: Promise<Loaded<IdentityData>> | Loaded<IdentityData> }) {
   let page = await readRelations(section, cursor, position, frame);
   if (hideIdentity && page.ok) {
-    const definitions = await readIdentityDefinitions();
-    if (definitions.ok) {
-      const own = new Set(definitions.data.values());
-      page = { ok: true, data: { ...page.data, items: page.data.items.filter(item => !item.rendering || !own.has(item.rendering.meaning.definition)) } };
-      if (!page.data.items.length && !page.data.next && !cursor) return null;
-    }
+    const items = remainingIdentityRelations(page.data, await identity);
+    page = { ok: true, data: { ...page.data, items, next: page.data.next } };
+    if (!items.length && !page.data.next && !cursor) return null;
   }
   return <RelationsView page={page} cursor={cursor} hrefFor={rest.hrefFor}
     locale={rest.locale} t={rest.t} messages={rest.messages} />;

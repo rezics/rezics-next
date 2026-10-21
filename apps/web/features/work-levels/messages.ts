@@ -24,7 +24,7 @@ const en = {
 
   connections: 'Connections', connectionsUnavailable: 'Connections could not be loaded.',
   allConnections: 'All connections',
-  noConnections: 'No connections yet', noConnectionsBody: 'No franchise or relation names this Work yet.',
+  noConnections: 'No connections yet', noConnectionsBody: 'No collection or relation names this Work yet.',
   relationsList: 'Relations', rolesList: 'Roles', relationsPages: 'Relations pages',
   relatedFallback: 'Related',
   creditedAs: 'as',
@@ -32,10 +32,11 @@ const en = {
   labelIn: insert('in {{language}}', { language: String }),
   unresolvedSource: 'Source version unresolved',
   unresolvedHint: 'The link is on record, but which revision of the source it follows is not.',
-  franchises: 'Franchises', thisWork: 'This Work',
+  collections: 'Collections', readingLists: 'Reading lists', recipeSelections: 'Recipe selections', series: 'Series',
+  franchises: 'Franchises', members: 'Members', collectionGrainSwitch: 'Collection level', thisWork: 'This Work',
   grainLabel: 'Show', grainSwitch: 'Franchise level', grainSeries: 'Series', grainParts: 'Volumes and parts',
-  noMembers: 'This franchise places no Works you can read.',
-  membersUnavailable: 'This franchise’s members could not be loaded.',
+  noMembers: 'This collection contains no Works you can read.',
+  membersUnavailable: 'This collection’s members could not be loaded.',
   morePartsExist: 'More parts…',
 
   editions: 'Editions and releases', editionsUnavailable: 'Editions and releases could not be loaded.',
