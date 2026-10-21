@@ -1,5 +1,60 @@
 # Execution reset: implement and verify complete slices
 
+## Manager continuity decision, 2026-10-21
+
+Program found all workers idle while both recovery managers repeatedly waited
+for internal lifecycle and runtime decisions. This is a management failure, not
+an allowance or external-account block. The existing audit managers must turn
+ready inputs into execution and own each exit within five minutes; checking the
+same unchanged inbox is not a disposition. Coverage is currently 24 of 61
+original classes, with D2-003 newly accepted. Use the live coverage ledger for
+later figures.
+
+For a verified, archived task, create a normal successor task for the genuinely
+new scope. Record its predecessor, report and unproved outcomes in the brief;
+retain the assigned account, independence and append-only evidence custody.
+Do not mutate a terminal ledger record or change tooling to resurrect its ID.
+This explicitly permits Site to create the G-2822 successor for the first
+review of native candidate 2f51112e22461f5987c0299dbee464fe34ec105c and the
+G-2847 successor for the remaining original Home speech observation. Both use
+codex-1, GPT-6.1 Sol, xhigh. Their accepted earlier reviews are reused.
+
+Site may bind the already delivered CAS13 Home custody from G-2831 and issue
+the next bounded original observation, without another Root authorization.
+Check the existing READY, current version and lawful actor; retain G-2831's
+guarded cleanup custody and release after the actual run. A stale binding is
+an exact prerequisite for that owner, not permission for another full setup.
+
+Site owns coordination of the existing G-2823 runtime task for both audits.
+Program delegates the specific Product-task disposition to Site, acting with
+that task's existing Goal identity. Record its coherent next decision, then
+resume the same custodian for the smallest source-matched Book attachment and
+isolated writable Recipe session. Actual source, authority and borrower release
+must match. Preserve KEEP services, current data and leases; reuse the prepared
+copy. No new corpus preparation, competing producer or broad runtime reset.
+Catalogue consumes the exact handoffs and executes the original positive Book,
+Collection and Recipe commands, retaining sole producer G-2791.
+
+Catalogue owns disposition of G-2758's executable scanner counterexample.
+Commission a bounded codex-2/Sol/max tooling task for the current continuation
+and page-filtering recognizers if the counterexample confirms a recognition
+defect. Preserve every loss-detecting assertion, inventory and limit; add paired
+correct-page and actual-loss controls. Fix recognition rather than rewriting
+equivalent UI syntax or suppressing diagnostics. Route any remaining real
+consumer failures to their actual owners. Independent Storybook UI proof need
+not wait for the scanner task; normal landing gates still apply.
+
+Each role reconciles its stalled landing processes through supported Task
+operations and handles the terminal result. An accepted source verdict is
+reused; no repeated source-review chain. Routine inference/schema and composed
+gate repairs remain delegated to their existing owners. Internal referrals,
+three-disposition turn limits and historical no-successor instructions do not
+justify leaving ready workers idle. End a finite turn after durable dispatch;
+the supervisor must wake the owning role on its worker exit or decision input.
+Keep the hourly monitor and three-hour efficiency audit required by the
+manager charter, with automatic local escalation to Program when a ready exit
+has no disposition for five minutes. This grants no external messaging.
+
 The maintainer's 2026-10-19 direction is to improve actual audit resolution
 efficiency and token value. This decision supersedes the accumulated internal
 Program-reading and all-builds-first holds described below. It changes execution
