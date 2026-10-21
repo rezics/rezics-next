@@ -92,6 +92,11 @@ const meta = {
       await assertPreviews(list, works);
       await expect(within(list).getByRole('link', { name: works[0]!.title!.value })).toBe(firstTitle);
     }
+    const why = within(list).getAllByRole('link', { name: /^Why .* is here$/ })[0]!;
+    why.focus();
+    await expect(why).toHaveFocus();
+    await expect(why).toHaveTextContent(why.getAttribute('aria-label')!);
+    await waitFor(() => expect(why.querySelector('span')).toBeVisible());
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
 } satisfies Meta<typeof ZoneCatalogue>;
