@@ -4,7 +4,9 @@ import { browseCategories } from '../catalogue/registry.ts';
 import { browseSearchFields, browseHref, browseQuery, changeBrowse, emptyBrowse, parseBrowseState } from './browse-state.ts';
 import { chapterProgress, chapterSearchState } from './chapter-text-read.ts';
 import { readBrowse, readBrowseScan, BROWSE_SCAN_PAGES } from './browse-read.ts';
-import { BrowseReadError, type ListPage } from './api.ts';
+import { BrowseReadError, discoveryApi, type ListPage } from './api.ts';
+import { browserMainApi } from '../api/browser.ts';
+import { searchText } from '../search/state.ts';
 import type { SearchHit, SearchResultPage } from '../search/types.ts';
 
 beforeEach(seedServedTypes);
@@ -56,6 +58,32 @@ test('chapters retain Work filters and never appear in a different resource dest
   for (const tab of browseCategories().filter(category => category.id !== 'works')) {
     expect(chapterSearchState({ ...state, tab: tab.id })).toBeNull();
   }
+});
+
+test('the resource request carries the same literal keyword/exact intent as chapters with all selection and cursor values', async () => {
+  const requests: unknown[] = [];
+  const main = browserMainApi('https://story.invalid', { anonymous: true,
+    fetcher: Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
+      requests.push(await new Request(input, init).json());
+      return Response.json({ result: { profile: 'resource-list-v1', items: [], nextCursor: null, complete: true,
+        count: { value: 0, kind: 'exact' }, stale: false,
+        sourcePosition: { datasetId: 'product', dataEpoch: 'fixture', sequence: '1' } } });
+    }, { preconnect: fetch.preconnect }) });
+  const api = discoveryApi(main, 'ja');
+  const selected = { ...emptyBrowse, tab: 'works', language: 'ja', includeTypes: [book],
+    conditions: { include: [topic], exclude: [other], match: 'any' as const },
+    scope: { kind: 'realm' as const, realm: topic }, cursor: 'opaque:+/%?=&雪' };
+  for (const q of ['night library', '"night library"', '雨', '𠮷'.repeat(80), 'cafe\u0301　夜']) {
+    const query = browseQuery({ ...selected, q });
+    await api.resources(query);
+    const text = searchText(q);
+    expect(requests.at(-1)).toEqual({ ...query,
+      ...('keywords' in text ? { q: text.keywords, matchMode: 'keywords' } : { q: text.phrase, matchMode: 'phrase' }) });
+    expect(chapterSearchState({ ...selected, q })?.phrase).toBe(q);
+  }
+  const unsearched = browseQuery({ ...selected, q: '' });
+  await api.resources(unsearched);
+  expect(requests.at(-1)).toEqual(unsearched);
 });
 
 const page = <T>(items: T[], nextCursor: string | null): ListPage<T> => ({ items, nextCursor,

@@ -11,6 +11,7 @@ import type { SectionReason } from './api.ts';
 import { browseMessages } from './browse-messages.ts';
 import { browseHref, changeBrowse, type BrowseState } from './browse-state.ts';
 import type { BrowseResult, LoadedBrowse } from './load.ts';
+import { browseReadFailure } from './browse-read.ts';
 import { messages } from './messages.ts';
 import { BrowseContinuation, ResourceList } from './resource-list.tsx';
 import type { TopicItem } from './topic-picker.tsx';
@@ -50,12 +51,13 @@ function Failure({
   locale: UiLocale;
 }) {
   const t = browseMessages[locale];
-  if (read.pending) return <p role="status" aria-busy="true">{messages[locale].preparing}</p>;
+  const failure = browseReadFailure(read);
+  if (failure === 'pending') return <p role="status" aria-busy="true">{messages[locale].preparing}</p>;
   const copy = materializeData(searchMessages[locale], { locale });
-  if (read.failure === 'unsupported' || read.failure === 'invalid') return <div role="alert"
+  if (failure === 'unsupported' || failure === 'invalid') return <div role="alert"
     className="grid gap-2 rounded-2xl border border-border p-5">
-    <p>{read.failure === 'unsupported' ? copy.unsupportedTitle : copy.invalidTitle}</p>
-    {read.failure === 'unsupported' ? <p className="text-muted-foreground text-sm">{copy.unsupportedHelp}</p> : null}
+    <p>{failure === 'unsupported' ? copy.unsupportedTitle : copy.invalidTitle}</p>
+    {failure === 'unsupported' ? <p className="text-muted-foreground text-sm">{copy.unsupportedHelp}</p> : null}
   </div>;
   return (
     <div

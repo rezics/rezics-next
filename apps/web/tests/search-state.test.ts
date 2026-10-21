@@ -44,7 +44,7 @@ describe('search URL state', () => {
 
   test('phrase bounds count characters, not UTF-16 units', () => {
     expect(phraseStatus('')).toBe('empty');
-    expect(phraseStatus('西')).toBe('short');
+    expect(phraseStatus('""')).toBe('short');
     expect(phraseStatus('西游')).toBe('ok');
     expect(phraseStatus('𠀀'.repeat(80))).toBe('ok');
     expect(phraseStatus('a'.repeat(81))).toBe('long');
@@ -62,7 +62,7 @@ describe('search requests', () => {
   });
 
   test('each scope and Condition enters one Query document', () => {
-    expect(searchRequest(global)).toEqual({ context: 'global', scope: { kind: 'all' },
+    expect(searchRequest({ ...global, phrase: '"Pride"' })).toEqual({ context: 'global', scope: { kind: 'all' },
       text: { phrase: 'Pride' }, sort: 'relevance', filter: { all: [] }, page: { size: 10 } });
     expect(searchRequest({ ...global, language: 'en', term })).toMatchObject({ filter: { all: [
       { facet: 'language', any: ['en'] }, { facet: 'concept', all: [iri(term)] },

@@ -4,7 +4,9 @@ import { uiLocales } from '../../i18n/define.ts';
 import { direction } from '@rezics/main/language';
 import { localizedPath } from '../../i18n/locale.ts';
 import { chapterHref, workHref } from '../work-page/route.ts';
-import type { SearchContinuation, SearchLoaded, SearchResultPage } from '../search/types.ts';
+import { releaseHref } from '../work-levels/route.ts';
+import { copyOf as levelsCopy } from '../work-levels/messages.ts';
+import type { SearchContinuation, SearchHit, SearchLoaded, SearchResultPage } from '../search/types.ts';
 import type { SearchLoader } from '../search/query.ts';
 import { Providers } from '../shell/providers.tsx';
 import { attributed, creditedOnly, unassessed } from '../rights-mark/fixtures.ts';
@@ -42,6 +44,83 @@ export const TraditionalChinesePhone: Story = { args: { locale: 'zh-Hant' },
   globals: { locale: 'zh-Hant', theme: 'dark', viewport: { value: 'phone' } },
   async play({ canvasElement }) {
     await expect(within(canvasElement).getByRole('region', { name: chapterTextMessages['zh-Hant'].title })).toBeVisible();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(innerWidth);
+  } };
+
+// Contract-shaped presentation fixtures; matching and access are proved by the producer's tests.
+const excerpt: NonNullable<SearchHit['excerpt']> = { status: 'available',
+  text: 'The library stayed open through the night. <strong>Lanterns</strong> lit the harbour.', language: 'en',
+  revision: 'urn:rezics:content:revision:00000000-0000-4000-8000-000000000011', resource: book,
+  variant: 'urn:rezics:content:variant:00000000-0000-4000-8000-000000000012' };
+const excerptRead: Extract<SearchLoaded, { ok: true }> = { ok: true, page: { ...read.page, total: 3,
+  hits: [{ ...read.page.hits[0]!, excerpt, factObligations: attributed },
+    { ...read.page.hits[0]!, matchUnit: 'unavailable', excerpt: { status: 'unavailable', reason: 'not-hydrated' } },
+    { ...read.page.hits[0]!, matchUnit: 'missing' }] } };
+export const DisclosedExcerptAndUnknowns: Story = { args: { read: excerptRead }, async play({ canvasElement }) {
+  const canvas = within(canvasElement);
+  const passage = canvas.getByText(excerpt.text);
+  await expect(passage).toBeVisible();
+  await expect(passage).toHaveAttribute('lang', 'en');
+  await expect(passage).toHaveAttribute('data-content-revision', excerpt.revision);
+  await expect(passage).toHaveAttribute('data-content-resource', excerpt.resource);
+  await expect(passage).toHaveAttribute('data-content-variant', excerpt.variant);
+  await expect(passage.querySelector('strong')).toBeNull();
+  await expect(canvas.getAllByText(chapterTextMessages.en.noExcerpt)).toHaveLength(2);
+  await expect(canvas.getByRole('link', { name: 'Example' })).toHaveAttribute('href', 'https://example.test/records/1');
+  await expect(canvas.getAllByRole('link', { name: 'At the harbour' })[0]).toHaveAttribute('href', localizedPath(chapter, 'en'));
+} };
+
+const chineseExcerpt = { ...excerpt, text: '夜雨中，图书馆仍为远行的人亮着灯。港口的风翻过书页。', language: 'zh-Hans' };
+const formalRelease = 'https://rezics.com/id/00000000-0000-4000-8000-000000000021';
+const webRelease = 'https://rezics.com/id/00000000-0000-4000-8000-000000000022';
+const details: NonNullable<SearchHit['disambiguation']> = { context: 'main-version-default',
+  contentFormat: { status: 'available', value: 'rezics-content-json-v1' }, releases: { status: 'available', values: [
+    { release: formalRelease, revision: 'formal-revision', kind: 'formal', year: 1898, platform: 'print',
+      sourceEvidence: [{ provider: 'Example archive', namespace: 'books', externalId: 'lantern-road', sourceRevision: null,
+        datasetSnapshotDigest: 'a'.repeat(64), recordDigest: 'b'.repeat(64), fieldLocator: 'publicationYear',
+        record: book, observation: book, href: 'https://example.test/lantern-road' }] },
+    { release: webRelease, revision: 'web-revision', kind: 'web', year: 2021, platform: 'web', sourceEvidence: [] },
+  ] } };
+const unknownDetails: NonNullable<SearchHit['disambiguation']> = {
+  context: null, contentFormat: { status: 'available', value: 'internal-format-without-a-reader-label' },
+  releases: { status: 'unavailable' },
+};
+export const EqualTitlesKeepNativeReleaseFacts: Story = { args: { read: { ok: true, page: { ...excerptRead.page,
+  hits: [{ ...excerptRead.page.hits[0]!, disambiguation: details },
+    { ...excerptRead.page.hits[1]!, disambiguation: { ...details,
+      context: { kind: 'realm-local', id: 'https://rezics.com/id/12345678-0000-4000-8000-000000000001' },
+      releases: { status: 'available', values: [] } } },
+    { ...excerptRead.page.hits[2]!, disambiguation: unknownDetails }] } } }, async play({ canvasElement }) {
+  const canvas = within(canvasElement);
+  const cards = canvas.getAllByRole('link', { name: 'At the harbour' }).map(link => link.closest('li')!);
+  await expect(within(cards[0]!).getByText(/Main Version/)).toBeVisible();
+  const formal = within(cards[0]!).getByRole('link', { name: /Published edition.*1898/ });
+  await expect(formal).toHaveAttribute('href', localizedPath(releaseHref(formalRelease), 'en'));
+  await expect(formal.closest('li')).toHaveAttribute('data-release-revision', 'formal-revision');
+  await expect(within(cards[0]!).getByRole('link', { name: /Web publication.*2021/ }))
+    .toHaveAttribute('href', localizedPath(releaseHref(webRelease), 'en'));
+  await expect(within(cards[0]!).getByRole('link', { name: 'Example archive' }))
+    .toHaveAttribute('href', 'https://example.test/lantern-road');
+  await expect(within(cards[1]!).getByText(/Community 12345678/)).toBeVisible();
+  await expect(within(cards[1]!).queryByRole('list', { name: 'Releases' })).toBeNull();
+  await expect(within(cards[2]!).queryByText(/internal-format-without-a-reader-label|Main Version|1898|2021/)).toBeNull();
+  await userEvent.tab();
+  await expect(canvas.getAllByRole('link', { name: 'The Lantern Road' })[0]).toHaveFocus();
+  await userEvent.tab();
+  await expect(formal).toHaveFocus();
+  await userEvent.tab();
+  await expect(within(cards[0]!).getByRole('link', { name: 'Example archive' })).toHaveFocus();
+} };
+export const SimplifiedChineseExcerptPhone: Story = { args: { locale: 'zh-Hans',
+  read: { ok: true, page: { ...read.page, hits: [{ ...read.page.hits[0]!, excerpt: chineseExcerpt,
+    disambiguation: details }] } } },
+  globals: { locale: 'zh-Hans', theme: 'dark', viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText(chineseExcerpt.text)).toBeVisible();
+    await expect(canvas.getByText(chineseExcerpt.text)).toHaveAttribute('lang', 'zh-Hans');
+    await expect(canvas.queryByText(chapterTextMessages['zh-Hans'].noExcerpt)).toBeNull();
+    await expect(canvas.getByRole('link', { name: new RegExp(`${levelsCopy('zh-Hans').kindFormal}.*1898`) })).toBeVisible();
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(innerWidth);
   } };
 export const NoChapterHitsLeaveNoTrace: Story = { args: { read: { ok: true, page: { ...read.page,

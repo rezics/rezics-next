@@ -72,10 +72,10 @@ export const DirectLastDestination: Story = { args: { state: { ...emptyBrowse, t
   async play({ canvasElement }) {
     const nav = within(canvasElement).getByRole('navigation', { name: 'Type' });
     const active = within(nav).getByRole('link', { name: 'Topics' });
-    await waitFor(() => {
+    await waitFor(async () => {
       const item = active.getBoundingClientRect(), container = nav.getBoundingClientRect();
-      expect(item.left).toBeGreaterThanOrEqual(container.left - 1);
-      expect(item.right).toBeLessThanOrEqual(container.right + 1);
+      await expect(item.left).toBeGreaterThanOrEqual(container.left - 1);
+      await expect(item.right).toBeLessThanOrEqual(container.right + 1);
     });
     await expect(active).toHaveAttribute('aria-current', 'page');
     await expect(within(canvasElement).getByRole('heading', { name: 'Topics', level: 2 })).toBeVisible();
@@ -104,7 +104,7 @@ export const ExhaustedEmpty: Story = { args: { results: { ok: true, data: fixtur
   },
 };
 export const UnsupportedKeepsTheTask: Story = { args: { results: { ok: false, moved: false,
-  status: 400, failure: 'unsupported', problem: { code: 'unsupported_query_shape' } } },
+  status: 400, problem: { code: 'unsupported_query_shape' } } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { name: 'Found in titles and names' })).toBeVisible();

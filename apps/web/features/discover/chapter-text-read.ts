@@ -7,7 +7,7 @@ import { browseCategories } from '../catalogue/registry.ts';
 import { registryEntries } from '../catalogue/types.ts';
 
 /**
- * The phrase selection behind Discover's chapter matches. It carries the
+ * The text selection behind Discover's chapter matches. It carries the
  * query, scope, language, type and topic choices but never the resource
  * list's cursor, so the two traversals cannot advance each other.
  */
@@ -19,7 +19,7 @@ export function chapterSearchState(state: BrowseState): SearchState | null {
     concepts: state.conditions, includeTypes: state.includeTypes, excludeTypes: state.excludeTypes };
 }
 
-/** One independent first page of Work phrase matches; resource cursors and counts never enter this read. */
+/** One independent first page of Work text matches; resource cursors and counts never enter this read. */
 export async function readChapterText(main: MainClient, state: BrowseState, locale: string): Promise<SearchLoaded | null> {
   const search = chapterSearchState(state);
   return search ? readSearchPage({ search: main, names: main }, search, { language: locale }) : null;

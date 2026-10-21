@@ -1,11 +1,12 @@
 import { isUuid, type SearchParams, single, withQuery } from '../discover/scope.ts';
 import { type WorkTypeKey, workTypeIri } from '../discover/state.ts';
+import type { ResourceQuery } from '../../../../model/definitions/filter-document-v1.ts';
 
 // `/search?q&scope&realm&lang&term` as the URL gives it. Pure functions shared
 // by the route, its components and tests.
 
-/** Main's phrase bounds (`services/main/src/routes/search.ts`), measured after trimming. */
-export const PHRASE = { min: 2, max: 80 } as const;
+/** Search input bounds, in Unicode code points after normalization (including explicit quotes). */
+export const PHRASE = { min: 1, max: 80 } as const;
 
 /** Phrase search covers Global and public Realms; Main has no personal phrase profile. */
 export type SearchScope = { kind: 'global' } | { kind: 'realm'; realm: string };
@@ -42,11 +43,20 @@ export function normalizeLanguage(raw: string): string | null {
 /** The phrase Main receives: trimmed, inner whitespace collapsed, NFC. */
 export const normalizePhrase = (raw: string) => raw.normalize('NFC').trim().replace(/\s+/gu, ' ');
 
+/** Quotes select exact matching; the URL retains them so reload and history retain that intent. */
+export function searchText(raw: string): Extract<NonNullable<ResourceQuery['text']>, { keywords: string } | { phrase: string }> {
+  const text = normalizePhrase(raw);
+  return text.startsWith('"') && text.endsWith('"') && text.length >= 2
+    ? { phrase: text.slice(1, -1).trim() } : { keywords: text };
+}
+
 export function phraseStatus(phrase: string): 'empty' | 'short' | 'long' | 'ok' {
-  const length = [...phrase].length;
+  const normalized = normalizePhrase(phrase);
+  const length = [...normalized].length;
   if (!length) return 'empty';
-  if (length < PHRASE.min) return 'short';
-  return length > PHRASE.max ? 'long' : 'ok';
+  if (length > PHRASE.max) return 'long';
+  const text = searchText(normalized);
+  return ('phrase' in text ? text.phrase : text.keywords).length < PHRASE.min ? 'short' : 'ok';
 }
 
 export function parseSearchState(params: SearchParams): ParsedSearch {

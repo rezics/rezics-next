@@ -16,7 +16,7 @@ test('chapter text uses the Work phrase contract and an independent bounded firs
         matchedChapter: { post, book, title: 'At the harbour' } }],
     } } };
   } }, resources: { summaries: { async post() { return { error: null, data: { summaries: [] } }; } } } } } as unknown as MainClient;
-  const read = await readChapterText(main, { ...emptyBrowse, q: 'lanternroad', cursor: 'resource-next-page' }, 'en');
+  const read = await readChapterText(main, { ...emptyBrowse, q: '"lanternroad"', cursor: 'resource-next-page' }, 'en');
   expect(request).toMatchObject({ context: 'global', scope: { kind: 'all' }, text: { phrase: 'lanternroad' },
     sort: 'relevance', page: { size: 10 } });
   expect((request as { page: unknown }).page).toEqual({ size: 10 });
@@ -28,8 +28,8 @@ test('chapter text uses the Work phrase contract and an independent bounded firs
   }
 });
 
-test('chapter text makes no request without a phrase or below the Work phrase bound', async () => {
+test('chapter text makes no request without text or for empty explicit quotes', async () => {
   const main = { v1: { query: { post() { throw new Error('Unexpected query'); } } } } as unknown as MainClient;
   expect(await readChapterText(main, emptyBrowse, 'en')).toBeNull();
-  expect(await readChapterText(main, { ...emptyBrowse, q: 'a' }, 'en')).toBeNull();
+  expect(await readChapterText(main, { ...emptyBrowse, q: '""' }, 'en')).toBeNull();
 });

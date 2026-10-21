@@ -10,10 +10,10 @@ type PagePost = MainClient['v1']['queries']['page']['post'];
 
 export type SearchPageRequest = Parameters<PagePost>[0];
 /** Work-grain pages; this UI never asks for the Content-variant profile. */
-export type SearchPage = Exclude<Ok<PagePost>, { profile: 'public-content-phrase-page-v1' }>;
 type QueryResult = Ok<MainClient['v1']['query']['post']>['result'];
-export type SearchContinuation = NonNullable<SearchPage['next']>
-  | NonNullable<Extract<QueryResult, { profile: 'public-concept-set-phrase-v1' }>['next']>;
+export type SearchPage = Exclude<Ok<PagePost>, { profile: 'public-content-phrase-page-v1' }>
+  | Extract<QueryResult, { profile: 'public-concept-set-phrase-v1' }>;
+export type SearchContinuation = NonNullable<SearchPage['next']>;
 type Match = SearchPage['results'][number];
 
 /** Where the phrase was found: Main ranks title matches first, then credited names, taglines and text. */
@@ -40,6 +40,10 @@ export interface MatchReasons {
 /** One result with the title and cover hydrated from Main's resource summaries. */
 export interface SearchHit {
   factObligations?: import('../rights-mark/rights-mark.tsx').DisplayObligations;
+  /** Only Main can supply a bounded excerpt from the disclosed exact Content revision. */
+  excerpt?: Match['excerpt'];
+  /** Disclosed native release facts stay grouped by their own identity and revision. */
+  disambiguation?: Match['disambiguation'];
   matchUnit: string;
   work: string;
   mainVersion: string;
@@ -62,7 +66,7 @@ export interface SearchResultPage {
   hits: SearchHit[];
   /** Labels of the Concepts in the Condition bar, in the reader's language when the scheme has one. */
   concepts?: { id: string; name: string; language: string }[];
-  facets?: SearchPage['facets'];
+  facets?: Extract<SearchPage, { facets: unknown }>['facets'];
   /** False when Main answered but could not name the results; hits then show IDs. */
   titles: boolean;
 }

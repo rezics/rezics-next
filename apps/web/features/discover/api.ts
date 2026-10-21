@@ -3,6 +3,7 @@ import type {
   FilterDocument,
 } from '../../../../model/definitions/filter-document-v1.ts';
 import { browseCategories } from '../catalogue/registry.ts';
+import { searchText } from '../search/state.ts';
 import type { DiscoveryPage, MainClient, WorkName } from './types.ts';
 
 /** Main's shared list envelope for resource browsing and remote pickers. */
@@ -56,13 +57,10 @@ export interface ListInput {
   cursor?: string;
   limit?: number;
 }
-export interface ResourceQuery extends ListInput {
-  profile: 'resource-list-v1';
-  context: 'global' | { realm: string };
-  scope: { kind: 'all' } | { kind: 'realm'; realm: string };
-  sort: 'newest' | 'updated' | 'relevance';
+export type ResourceQuery = Omit<Extract<Parameters<MainClient['v1']['query']['post']>[0],
+  { profile: 'resource-list-v1' }>, 'filter'> & {
   filter?: FilterDocument;
-}
+};
 type Answer<T> = { data: T | null; error: { status: number; value: unknown } | null; response?: { status: number } };
 export class BrowseReadError extends Error {
   constructor(
@@ -122,7 +120,11 @@ export function discoveryApi(main: Pick<MainClient, 'v1'>, locale: string, actin
   const headers = { 'accept-language': locale };
   return {
     async resources(query: ResourceQuery) {
-      const result = await value(contract.v1.query.post(query, { headers }));
+      const text = query.q ? searchText(query.q) : null;
+      const request = !text ? query : 'keywords' in text
+        ? { ...query, q: text.keywords, matchMode: 'keywords' as const }
+        : { ...query, q: text.phrase, matchMode: 'phrase' as const };
+      const result = await value(contract.v1.query.post(request, { headers }));
       if (result.result.profile !== 'resource-list-v1') throw new BrowseReadError(503);
       return servedPage(result.result, 'resource-list-v1', query.cursor);
     },
