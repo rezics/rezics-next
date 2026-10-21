@@ -7413,5 +7413,510 @@
       "priorReportSha256": "8681f8a2d6f432ac5d10e52dff8f6516bec4d209d7135ac47ccc72b7368b21ad",
       "newKeyOnly": "boundedProfileAcknowledgementRepairReview"
     }
+  },
+  "originalPublicSharedProfileCompositionProof": {
+    "recordedAt": "2026-10-21T06:30:50.811617+00:00",
+    "authority": "Maintainer 2026-10-21 original shared-profile public proof and finite original proof scope cut 2026-10-21T06:17:07Z; same G-2846 independent reviewer continuation. Execute only the unchanged original public case. On exact setup failure inspect once, preserve failure/assertions and route the smallest prerequisite to its existing owner.",
+    "reviewer": {
+      "worker": "G-2846",
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "sameReviewerContinuation": true,
+      "newSourceReviews": 0,
+      "nestedAgentsUsed": false,
+      "accountFallbackUsed": false
+    },
+    "acceptedSourceReview": {
+      "reportCommit": "1be686180c8e3dadf77a56fe1e28bd5e944b33e0",
+      "reportKey": "boundedProfileAcknowledgementRepairReview",
+      "verdictUnchanged": true,
+      "reusedOwnerChecks": [
+        {
+          "qa": "20261020t104753-57f5a1",
+          "job": "ec077566-393e-4cd2-8ce7-bfe5c14bbd36",
+          "tests": 19,
+          "assertions": 342,
+          "result": "pass"
+        },
+        {
+          "qa": "20261020t111019-156160",
+          "job": "c1fa0d05-33ab-4160-ba12-5356eea1938f",
+          "tests": 27,
+          "assertions": 234,
+          "result": "pass"
+        }
+      ],
+      "qualification": "Retained controlled owner evidence; neither rerun nor added to current public-case counts. Historical failures and the separate inherited web diagnostics remain in prior report fields."
+    },
+    "sourceAndTest": {
+      "workerHead": "1be686180c8e3dadf77a56fe1e28bd5e944b33e0",
+      "executionMode": "Disposable detached local shared-object clone entirely under this worker .temp, pinned to clean current-main source; no worker rebase or peer source mutation. Private dependency copy refreshed only through supported Task install.",
+      "executionRoot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2846/.temp/read-availability-public-profile-execution-20261021",
+      "sourcePin": "bf7f8fe1dd87791f4e3a736dcca3f981924bf7fe",
+      "sourceFingerprint": "4d4095a5bbc46326bd6ef620f08ee5db88e92bb20cabf94ccbbce12953b90861",
+      "cleanBefore": true,
+      "cleanAfter": true,
+      "sourceStable": true,
+      "requiredAcceptedBlobsMatch": true,
+      "paths": [
+        {
+          "path": "services/main/src/modules/composition/disclosure-read.ts",
+          "blob": "95c50887b23ceeb4f8251d8dbaf727d5f812cba6",
+          "sha256": "40a1bb305c342bf8d2cb340c9f3ca8bf5db86ff2bf2b78f5bccc1dbc92ea8d8c"
+        },
+        {
+          "path": "services/main/src/modules/structure/native-basis.ts",
+          "blob": "15f0721bdceaeb72c39b7e12ea52ec6bbe7b8d72",
+          "sha256": "f9341859e63991ebe9d52a408198965eb29e30daee445a031cb531fb1acd90e5"
+        },
+        {
+          "path": "tests/qa/integration/composition-target-batches.test.ts",
+          "blob": "8e78a5189d610890267141197ae765708ff739ad",
+          "sha256": "40c81a8fc2314f1fc6a6fbcfee001b745b642aa535fff94a5d57c426a3d32c16"
+        },
+        {
+          "path": "tests/qa/fixtures/author-credit.ts",
+          "blob": "9de540387e115b40fa88bae3901dc9565ce360f8",
+          "sha256": "9143cc4c8395cab6c33a6e82c764a920385db2949a907eea35b1bdb0210e6d41"
+        },
+        {
+          "path": "tests/qa/support/rating-account.ts",
+          "blob": "cc6b38f28959057a4a719bc38f94eac56f7b92ef",
+          "sha256": "0af30c30b1c801caf6ae01ea32ffdb853a2e86700a4ec3123a48b58d217c93a5"
+        },
+        {
+          "path": "scripts/goal/goalctl.ts",
+          "blob": "79ae1a7484acc4d6cd793c79aae05d5a94d61273",
+          "sha256": "cf06b6b0727f466917913fc2a607194323c43037439b8636ce8bc84342d6ccac"
+        },
+        {
+          "path": "scripts/qa/test.ts",
+          "blob": "81c4fa2ae7770c68b359f86ae910069aca509c08",
+          "sha256": "3f57d88efe82ff83e300594443f5c8bb824711003525ff3db615ef15a2165a80"
+        },
+        {
+          "path": "scripts/qa/cli.ts",
+          "blob": "c9a1cdd94e351875ffb8466fae071204ffaad2f9",
+          "sha256": "9779ed6bb4dd927084c9496604ad572d7c80481d218110e0413af7fad19b5efd"
+        },
+        {
+          "path": "Taskfile.yml",
+          "blob": "30cfc2093436fab2cc18a589404a2f589783f7c7",
+          "sha256": "9ebb829d62cd74ab42b1fa2bd4ad2786cd9ef8d16e61ef4f3637d9a40693516f"
+        },
+        {
+          "path": "yarn.lock",
+          "blob": "e70dcbe4159d3fcab2585962a1cf3688937eb0e5",
+          "sha256": "026c93ddc3085e43b1ff6727a42f7c55b03a03cc1aa4c11cbf57438ce5b9d391"
+        }
+      ],
+      "dependencyAndHarnessPins": [
+        {
+          "path": "infra/dev/compose.yaml",
+          "blob": "5b0a7efe84487f3ea5f08881752a5e77eadda476",
+          "sha256": "2f08d11bd3f9236bee1bde07390494127863a832c800252f356328b5179aba1d"
+        },
+        {
+          "path": "infra/jena/fuseki-text.ttl",
+          "blob": "107171694e8c8bdd7f2d6cc927104b2ab3a8cee9",
+          "sha256": "eba7fc0de3722ab3d24ee414acafc79eca284eed6bcbd5ca4e2ed0ff7d292ffa"
+        },
+        {
+          "path": "scripts/qa/stack-environment.ts",
+          "blob": "1dcf0171f89241380f266599a6ceef1fbbbc2c76",
+          "sha256": "ee403c500c5fd8fb2eb8b47493dc6014db8d374ef533743aaae6ae7af7bb0c3f"
+        },
+        {
+          "path": "scripts/qa/isolated-integration-files.ts",
+          "blob": "d761e190e64bf0957def227623b301aa7e0b99e8",
+          "sha256": "3f5964d176fa193268a2079854343428a8184f18366905c93fa936599336d0f3"
+        },
+        {
+          "path": "tests/qa/integration/support/counting-fuseki.ts",
+          "blob": "eaf5dc9a0061098c8be8e421d66952324cf7f37a",
+          "sha256": "3c08a8f90209f92c6d63992e03ef0e857a4f7dfc009e20f48c68a3eaff38e1d3"
+        },
+        {
+          "path": "tests/qa/integration/support/query-cost-meter.ts",
+          "blob": "03207139c79ff6ea9f6401dfffa72b32aafa6d85",
+          "sha256": "c9d13ad1587f06002bf4ce1f423b1d90fe9df79eeb67af40137fd16679ffcaee"
+        },
+        {
+          "path": "services/main/src/modules/work/read-contract.ts",
+          "blob": "d1aca76967ca4a564f0fd5908042ab99c7383a48",
+          "sha256": "98b6f6e424dfc743f7f5a3d3a584270a46793861373bf0c77d29e471c5ec06f6"
+        },
+        {
+          "path": "services/main/src/infrastructure/fuseki.ts",
+          "blob": "7aa4919f57f878348ecf1ba2a737dabbae456d72",
+          "sha256": "913bd1d766a215932a0efd88e0362b083b2e0a0843d0f2f19b7ad47c9171de13"
+        },
+        {
+          "path": "tests/qa/fixtures/authored-work.ts",
+          "blob": "6d70acee62e7e6b591fdc48e283780062076795f",
+          "sha256": "fbf95e62684781fd617bf8f9809bb1bea1634ad192ff3669659bcc38afae7099"
+        }
+      ],
+      "manifest": ".temp/read-availability-review/original-public-profile-20261021/source-manifest.json",
+      "mainRecorderPins": ".temp/read-availability-review/original-public-profile-20261021/main-recorder-pins.json",
+      "originalTestUnchanged": true,
+      "assertionsOrTimeoutsEdited": false,
+      "overlay": null,
+      "runtimeDescription": "Original authorCreditFixture composes production Main app.handle routes against real isolated Account/Access/Content/PostgreSQL/native graph/object owners. OAuth, authority grants, rights and CAS remain original. This is an API fixture proof, with no browser or deployed Main-network persona claim.",
+      "native": {
+        "selectedImageTagFromImmutableCompose": "rezics/fuseki:6.2.0-cmd0.5.43-4b30ff33d025",
+        "inspectedAt": "2026-10-21T06:28:20.523240+00:00",
+        "localImageId": "sha256:2e786a8fc1d07e904c2d4bd7604c63f45c841ecb5b1159ef9bfa5a0acc3b9e19",
+        "repoDigests": [
+          "rezics/fuseki@sha256:2e786a8fc1d07e904c2d4bd7604c63f45c841ecb5b1159ef9bfa5a0acc3b9e19"
+        ],
+        "imageCreatedAt": "2026-10-20T11:57:18.017979668+08:00",
+        "qualification": "Native tag selected by exact source compose; local immutable image ID resolved after teardown. The runner did not retain a live container image-inspect receipt; no independent runtime digest measurement is invented. No native build or tag override was requested."
+      }
+    },
+    "execution": {
+      "job": "0e0ff88c-de89-49be-a665-14bce28fba37",
+      "attempt": 23,
+      "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts slot -- task --dir .temp/read-availability-public-profile-execution-20261021 goal -- test tests/qa/integration/composition-target-batches.test.ts",
+      "taskSelection": "task --dir .temp/read-availability-public-profile-execution-20261021 goal -- test tests/qa/integration/composition-target-batches.test.ts",
+      "qa": "20261021t062217-cb4a89",
+      "shard": "20261021t062217-cb4a89-1",
+      "jobExitCode": 201,
+      "taskChildExitCode": 1,
+      "jobResultClass": "assertion",
+      "caseResult": "failed",
+      "semanticFailureClass": "mid-case fixture prerequisite; legacy raw graph write returned HTTP 404, before later outcome assertions",
+      "counts": {
+        "executed": 1,
+        "passed": 0,
+        "failed": 1,
+        "skipped": 0,
+        "reportedExpectCalls": 215,
+        "terminalOperationErrors": 1,
+        "failedExpectAssertionsObserved": 0,
+        "errorsOutsideCases": 0
+      },
+      "timing": {
+        "caseMs": 62982.05,
+        "integrationMs": 64905,
+        "startupMs": 15551,
+        "bootstrapMs": 2033,
+        "cleanupMs": 5066,
+        "admittedActiveBudgetMs": 480000,
+        "originalCaseTimeoutMs": 600000,
+        "jobElapsedMs": 118475
+      },
+      "admission": "Normal recorded worker-root Main-code slot owner, inherited by supported current-source Task/goalctl QA runner. One named file, ordinary resource class, normal memory/CPU/lifetime admission. No heavy/wide run or bypass. The outer wrapper warned that the historical report tree was seven harness commits behind; actual test/harness execution used the clean current-main sibling.",
+      "preparation": "Original test-local API fixture commands created 100 distinct public semantic Episodes and their Composition. No catalogue import, retained corpus preparation, shared reset, peer restart or manual/shared account or credential changes; the original isolated OAuth fixture remained unchanged.",
+      "acceptanceLedger": {
+        "passed": 0,
+        "partialPass": 0,
+        "failed": 0,
+        "uncovered": 292,
+        "qualification": "The original case has no acceptance-ID mapping; partial observed criteria below do not override the runner ledger."
+      },
+      "logs": {
+        "job": ".temp/read-availability-review/original-public-profile-20261021/jobs/0e0ff88c-de89-49be-a665-14bce28fba37.log",
+        "jobReceipt": ".temp/read-availability-review/original-public-profile-20261021/jobs/0e0ff88c-de89-49be-a665-14bce28fba37.json",
+        "junit": ".temp/read-availability-review/original-public-profile-20261021/qa/integration.xml",
+        "test": ".temp/read-availability-review/original-public-profile-20261021/qa/integration-1.log",
+        "stack": ".temp/read-availability-review/original-public-profile-20261021/qa/integration-1-stack.log",
+        "acceptance": ".temp/read-availability-review/original-public-profile-20261021/qa/acceptance.json"
+      }
+    },
+    "httpAndCostEvidence": {
+      "publicReadStatus": 200,
+      "publicReadSamples": [
+        {
+          "label": "current-100",
+          "graphCalls": 34,
+          "graphTransportBytes": 394732,
+          "ownerSql": 38,
+          "workProbes": 0,
+          "ms": 733.5481939999954
+        },
+        {
+          "label": "exact-100",
+          "graphCalls": 34,
+          "graphTransportBytes": 394732,
+          "ownerSql": 38,
+          "workProbes": 0,
+          "ms": 509.1522550000009
+        },
+        {
+          "label": "parts-exclude-100-Episodes",
+          "graphCalls": 32,
+          "graphTransportBytes": 393972,
+          "ownerSql": 38,
+          "workProbes": 0,
+          "ms": 528.5694800000056
+        },
+        {
+          "label": "duplicate-lookahead",
+          "graphCalls": 34,
+          "graphTransportBytes": 394732,
+          "ownerSql": 38,
+          "workProbes": 0,
+          "ms": 494.3593340000007
+        },
+        {
+          "label": "duplicate-continuation",
+          "graphCalls": 23,
+          "graphTransportBytes": 12588,
+          "ownerSql": 20,
+          "workProbes": 0,
+          "ms": 329.83988600000157
+        },
+        {
+          "label": "exact-after-new-head",
+          "graphCalls": 34,
+          "graphTransportBytes": 394732,
+          "ownerSql": 38,
+          "workProbes": 0,
+          "ms": 502.6756549999991
+        }
+      ],
+      "boundsActuallyCheckedPerSample": {
+        "graphCalls": 40,
+        "productionGraphCalls": 160,
+        "graphResponseBytes": 4194304,
+        "wallMsExclusive": 10000,
+        "ownerSql": 48,
+        "workProbes": 0
+      },
+      "scope": "Six anonymous/public foreground reads; graph transport bytes, graph calls, Access-owner SQL and wall time are real counters from the original measured helper. Independent engine work, aggregate mixed load, SQL drain and cancellation were not measured by these samples. The original authenticated and rights-race samples were not reached.",
+      "costExport": "Terminal test cost-export statement was not reached; six samples were preserved unchanged from stdout in .temp/read-availability-review/original-public-profile-20261021/costs-from-original-stdout.json"
+    },
+    "originalAssertionReach": [
+      {
+        "criterion": "100 distinct semantic Resource-grain Episodes created through the original APIs; independent graph type check excludes CreativeWork",
+        "result": "proved-in-this-run",
+        "lines": [
+          206,
+          208,
+          213
+        ]
+      },
+      {
+        "criterion": "Current and exact Composition pages return all 100 distinct Episode targets in caller order and no next cursor, within original public budgets",
+        "result": "proved-in-this-run",
+        "lines": [
+          234,
+          237
+        ],
+        "samples": [
+          "current-100",
+          "exact-100"
+        ]
+      },
+      {
+        "criterion": "Work-only parts exclude all 100 semantic Episodes and have no next cursor, within original budgets",
+        "result": "proved-in-this-run",
+        "lines": [
+          239,
+          241
+        ],
+        "samples": [
+          "parts-exclude-100-Episodes"
+        ]
+      },
+      {
+        "criterion": "Duplicate placement identity preserved, private trailing Episode omitted, continuation yields only visible duplicate and terminates",
+        "result": "proved-in-this-run",
+        "lines": [
+          243,
+          252
+        ],
+        "samples": [
+          "duplicate-lookahead",
+          "duplicate-continuation"
+        ]
+      },
+      {
+        "criterion": "Exact original revision preserves original occurrence identities after current-head append",
+        "result": "proved-in-this-run",
+        "lines": [
+          253,
+          254
+        ],
+        "samples": [
+          "exact-after-new-head"
+        ]
+      },
+      {
+        "criterion": "Rights restriction, title protection and three strong-closed semantic gates prepared",
+        "result": "fixture-commands-completed-only",
+        "lines": [
+          256,
+          270
+        ],
+        "qualification": "Original command expectations reached; subsequent live read withholding was not reached and is not inferred."
+      },
+      {
+        "criterion": "Erased Episode and source-withdrawal support fixture; current/exact/granted mixed withholding, Work-only mixed parts, no private counts or positional disclosure",
+        "result": "pending-fixture-prerequisite",
+        "lines": [
+          272,
+          304
+        ],
+        "outcomeAssertionsReached": false
+      },
+      {
+        "criterion": "Sparse 17-item continuation returns every expected visible target without empty intermediate pages or omissions",
+        "result": "pending-fixture-prerequisite",
+        "lines": [
+          306,
+          316
+        ],
+        "outcomeAssertionsReached": false
+      },
+      {
+        "criterion": "Restriction committed during hydration wins final exact-revision authority fence",
+        "result": "pending-fixture-prerequisite",
+        "lines": [
+          318,
+          338
+        ],
+        "outcomeAssertionsReached": false
+      }
+    ],
+    "failureAndOwningPrerequisite": {
+      "severity": "P1 proof prerequisite; no confirmed reader product defect from this stop",
+      "existingOwner": "G-2763",
+      "path": "tests/qa/integration/composition-target-batches.test.ts",
+      "line": 272,
+      "observation": "Unchanged nativeFuseki.update(INSERT DATA ... ErasedRevision) posts /rezics/update, receives HTTP 404. Native log: No Fuseki dispatch /rezics/update. FusekiClient.update throws at services/main/src/infrastructure/fuseki.ts:936. All six earlier public reads returned 200 and completed their original assertions.",
+      "smallestReproduction": "Run the exact recorded one-file Task selection at source bf7f8fe1dd87791f4e3a736dcca3f981924bf7fe on the original isolated ordinary QA fixture. After 215 expect calls, the erasure mutation at line 272 fails before the later withholding/source/sparse/final-race assertions. No assertion or fixture was altered to reach this.",
+      "diagnosis": "Current isolated settings record REZICS_STACK_RAW_UPDATE=0. Immutable product assembler infra/jena/fuseki-text.ttl:16-21 declares query and native command, with no legacy update endpoint. CLI selects raw updates only for persistent non-command-only selections (scripts/qa/cli.ts:555-562). The original fixture still requires a legacy raw write. This is a fixture/native capability mismatch in the later erasure setup, not an observed failure of the accepted shared-profile reader.",
+      "requiredNextStep": "G-2763 and the existing owning harness/native task must supply or identify the supported isolated erasure-fixture transition preserving this exact mutation semantics and every original assertion. Manager must resolve that prerequisite before another original-case attempt. This worker neither enables raw updates nor changes source, test, assertions, storage, image or corpus.",
+      "ownerLookup": {
+        "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts owner tests/qa/integration/composition-target-batches.test.ts",
+        "exitCode": 0,
+        "result": "unclaimed",
+        "qualification": "Existing G-2763 outcome custody in the assignment remains authoritative; no duplicate implementation task or expanded claim was created."
+      },
+      "retriesAfterThisExactSetupFailure": 0
+    },
+    "cleanup": {
+      "observedAt": "2026-10-21T06:28:20.598437+00:00",
+      "project": "rezics-qa-20261021t062217-cb4a89-1",
+      "runnerDestroyedShard": true,
+      "cleanupMs": 5066,
+      "dockerPostchecks": [
+        {
+          "resource": "containers",
+          "command": [
+            "docker",
+            "ps",
+            "-a",
+            "--filter",
+            "label=com.docker.compose.project=rezics-qa-20261021t062217-cb4a89-1",
+            "--format",
+            "{{.ID}} {{.Names}}"
+          ],
+          "exitCode": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        {
+          "resource": "volumes",
+          "command": [
+            "docker",
+            "volume",
+            "ls",
+            "--filter",
+            "label=com.docker.compose.project=rezics-qa-20261021t062217-cb4a89-1",
+            "--format",
+            "{{.Name}}"
+          ],
+          "exitCode": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        {
+          "resource": "networks",
+          "command": [
+            "docker",
+            "network",
+            "ls",
+            "--filter",
+            "label=com.docker.compose.project=rezics-qa-20261021t062217-cb4a89-1",
+            "--format",
+            "{{.Name}}"
+          ],
+          "exitCode": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      ],
+      "remainingWorkerOrdinarySlotIdentities": [],
+      "job": {
+        "id": "0e0ff88c-de89-49be-a665-14bce28fba37",
+        "phase": "woken",
+        "code": 201,
+        "ended": 1792563842795
+      },
+      "sourceCleanAfter": true,
+      "sourceHeadAfter": "bf7f8fe1dd87791f4e3a736dcca3f981924bf7fe",
+      "limits": "Runner destruction and Docker label postchecks prove run containers, volumes and networks removed. Job processes exited and no current ordinary-slot identity names this task. Per-SQL-connection drain, pending-to-zero and complete lease-token accounting were not independently measured.",
+      "jobProcessPostcheck": {
+        "owner": {
+          "pid": 1799395,
+          "pidExistsAtPostcheck": false
+        },
+        "executor": {
+          "pid": 1799741,
+          "pidExistsAtPostcheck": false
+        }
+      },
+      "leaseObservationQualification": "No current ordinary-slot identity carries this task. All examined residual identities belong to other PIDs without task metadata; no slot token was snapshotted while this run was held. Job owner/executor have exited and the recorded slot command completed. Independent all-lease token accounting was not retained."
+    },
+    "productAudit": {
+      "skill": ".agents/skills/product-audit/SKILL.md",
+      "scope": "Bounded original proof fixture only; accepted product source not rereviewed.",
+      "brokenInvariant": "A fixture transition must use a write capability admitted by the same isolated product assembler used for its read proof.",
+      "inScopeInstances": "One nativeFuseki.update call in the unchanged original single-case file, at line 272; it prevents all subsequent adverse-state observations. No broader read-surface audit or replacement assertions were run.",
+      "guardOwnership": "Existing fixture/native/harness owner must preserve original erasure and authority coverage through a supported transition. No source or new guard was authored by this report-only worker."
+    },
+    "verdict": {
+      "result": "partial-public-proof-blocked-on-original-erasure-fixture-prerequisite",
+      "fullOriginalCasePass": false,
+      "sourceApprovalReopened": false,
+      "newActionableReaderSourceDefects": 0,
+      "originalClassClosure": false,
+      "coveredCriteria": "Initial public current/exact 100-target completeness and original cost bounds, Work-only parts, duplicate/private continuation and historical exact identities are reached and pass.",
+      "pendingCriteria": "Live mixed current/exact/granted withholding, erasure/source withdrawal, sparse pagination and hydration-time final rights fence are unreached. No public/native/mixed-load class is closed.",
+      "separateOwnersRemain": "Notification mixed-load, G-2762 Runtime binding, other original UI/persona/native outcomes and all historical report residuals remain with their existing owners; none was used to hold this execution."
+    },
+    "reportCheck": {
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task docs:check",
+      "job": "9a197dce-c716-4bf4-8e68-6b98f55ea50f",
+      "exitCode": 0,
+      "result": "pass",
+      "tests": 13,
+      "markdownFiles": 249,
+      "log": ".temp/read-availability-review/original-public-profile-20261021/jobs/9a197dce-c716-4bf4-8e68-6b98f55ea50f.log",
+      "limits": "Links, fragments and documentation navigation; no runtime behavior or external URLs tested. Receipt added after the successful recorded command."
+    },
+    "historyPreservation": {
+      "previousReportCommit": "1be686180c8e3dadf77a56fe1e28bd5e944b33e0",
+      "previousTopLevelKeys": 36,
+      "priorReportSha256": "6bd5acab0a97a91a2f03bb2b5721da853d3f57a7a84f4c9a06bba644870fb047",
+      "allPreviousValuesUnchanged": true,
+      "newKeyOnly": "originalPublicSharedProfileCompositionProof",
+      "priorReportSnapshot": ".temp/read-availability-review/original-public-profile-20261021/report-before.json"
+    },
+    "privateEvidenceRoot": ".temp/read-availability-review/original-public-profile-20261021",
+    "personas": {
+      "anonymousPublicReader": {
+        "measuredReads": 6,
+        "allSixReturned200": true,
+        "reachedSegments": "Current/exact 100-Episode completeness/costs, Work-only parts, duplicate/private continuation and old exact identities passed.",
+        "fullOriginalCasePassed": false
+      },
+      "signedInAuthor": "Original OAuth/authored fixture commands executed; not counted as a public read persona pass.",
+      "signedInGrantedReader": "Original mixed-granted read at line 296 was not reached; no pass claimed."
+    }
   }
 }
