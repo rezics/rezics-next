@@ -28,10 +28,14 @@ import { RELATION_CHANGE_FAMILY, type OccurrenceState } from '../src/modules/rel
 import { RELATION_V2_PROFILE } from '../src/modules/relation/v2-schema.ts';
 import { RightsDenied, RightsStore } from '../src/modules/rights/store.ts';
 import { STATEMENT_FAMILIES } from '../src/modules/statement/receipt-family.ts';
+import { readSubjectStatements } from '../src/modules/statement/subject-read.ts';
+import { ReadingBoundary } from '../src/modules/reading-position/boundary.ts';
+import * as targetOwner from '../src/modules/target/resolve.ts';
 import { decisionSlotIri } from '../src/modules/statement/schema.ts';
 import { OCCURRENCE_ASSERTION_NOTATION, STATEMENT_V2_PROFILE, statementMeaningKeyV2,
   type StatementMeaningV2 } from '../src/modules/statement/v2-schema.ts';
 import { hash, RV, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
+import { WorkReadSession, WorkReadMoved, withWorkReadSession } from '../src/modules/work/read-session.ts';
 import { nativeEpoch, nativeId, nativePrincipal, semanticFixture, statementFixture } from './support/source-field-native-fixture.ts';
 
 let cluster: PostgresCluster, contentPool: Pool, accessPool: Pool;
@@ -56,7 +60,7 @@ afterEach(() => { for (const restore of restores.splice(0).reverse()) restore();
 afterAll(async () => {
   await contentPool?.end(); await accessPool?.end(); await cluster?.stop();
   rmSync(directory, { recursive: true, force: true });
-});
+}, 120_000);
 
 /** Real composition, Access/Content owners and retained Source bytes. Only the
  * immutable-object/graph transports and native reference visibility are controlled;
@@ -163,6 +167,93 @@ async function retained(principalId: string, basis: NativeBasisVerificationInput
         valueDigest: canonicalDigest(text), language: 'ja' } } };
   return input;
 }
+
+/** Keep target inventory and reading position outside this owner regression.
+ * Native property/receipt reads, Source SQL settlement, public Rights projection
+ * and selected-dependency rereads all use the actual composed owners. */
+function propertyReader(composed: Awaited<ReturnType<typeof composition>>, native: Awaited<ReturnType<typeof semanticFixture>>) {
+  const target = native.input.native.target;
+  const resolved = spyOn(targetOwner, 'resolveTargets').mockResolvedValue([
+    { resource: target, base: 'resource', types: [], work: null, revision: native.revision, disclosure: 'public' },
+  ]);
+  const require = spyOn(ReadingBoundary.prototype, 'require').mockResolvedValue();
+  const binding = spyOn(ReadingBoundary.prototype, 'binding').mockResolvedValue('fixture-reading-boundary');
+  const visible = spyOn(ReadingBoundary.prototype, 'visible').mockImplementation(async records => new Set(records));
+  const fence = spyOn(ReadingBoundary.prototype, 'fence').mockResolvedValue();
+  const seek = composed.dependencies.statementSeek!;
+  const coverage = spyOn(seek, 'coverage').mockResolvedValue({ complete: true, through_sequence: '4' });
+  const publication = spyOn(seek, 'capturePublicationBasis').mockResolvedValue(null);
+  const candidates = spyOn(seek, 'seek').mockResolvedValue({ candidates: [], visitedRows: 0 });
+  for (const mock of [resolved, require, binding, visible, fence, coverage, publication, candidates]) {
+    restores.push(() => mock.mockRestore());
+  }
+  return async (signed = false) => {
+    const session = new WorkReadSession(composed.dependencies,
+      new Request(`http://main.test/v1/resources/${target.slice(-36)}/statements`),
+      signed ? { actingSubject: native.input.actingSubject } : {}, { dataEpoch: nativeEpoch, sequence: '4' });
+    session.principal = signed ? composed.principal : null;
+    session.query = async query => {
+      if (query.includes('SELECT ?policy ?realm')) return [];
+      throw new Error('Unexpected public property reader query: ' + query);
+    };
+    const result = await withWorkReadSession(session, () => readSubjectStatements(session, target));
+    return { session, items: result.groups.flatMap(group => group.items) };
+  };
+}
+
+test('composed native properties cite only their exact settled Source value for signed and visitor reads', async () => {
+  const predicate = 'https://schema.org/alternateName';
+  const native = await semanticFixture([
+    { predicate, value: { kind: 'language-string', lexical: '原作', language: 'ja' } },
+    { predicate, value: { kind: 'language-string', lexical: '別名', language: 'ja' } },
+  ]);
+  const composed = await composition(native), input = await retained(composed.principalId, native.input);
+  const attached = await composed.store.attach(composed.principal, composed.principalId, randomUUID(), input);
+  expect((await composed.store.read(composed.principalId, attached.support, attached.step, composed.principal))
+    ?.publicEvidence?.id).toBe(input.sourceRecord);
+  const read = propertyReader(composed, native);
+  for (const signed of [true, false]) {
+    const { session, items } = await read(signed);
+    expect(items).toHaveLength(2);
+    expect(items).toContainEqual(expect.objectContaining({ kind: 'component-property', revision: native.revision,
+      predicate, value: { kind: 'language-string', lexical: '原作', language: 'ja' }, sources: [input.sourceRecord] }));
+    expect(items).toContainEqual(expect.objectContaining({ kind: 'component-property', revision: native.revision,
+      predicate, value: { kind: 'language-string', lexical: '別名', language: 'ja' }, sources: [] }));
+    await session.fenceDependencies();
+  }
+});
+
+test('composed native property citations fence changed native heads and preserve historical Source custody', async () => {
+  const native = await semanticFixture(), composed = await composition(native);
+  const input = await retained(composed.principalId, native.input);
+  const attached = await composed.store.attach(composed.principal, composed.principalId, randomUUID(), input);
+  const read = propertyReader(composed, native), captured = await read();
+  expect(captured.items[0]!.sources).toEqual([input.sourceRecord]);
+  native.finalHeadMatches(false);
+  await expect(captured.session.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
+  expect((await read()).items[0]!.sources).toEqual([]);
+  native.finalHeadMatches(true);
+  const beforeHeadChange = await read();
+  native.head(nativeId(99));
+  await expect(beforeHeadChange.session.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
+  expect((await read()).items[0]).toMatchObject({ revision: nativeId(99), sources: [] });
+  expect((await composed.store.read(composed.principalId, attached.support, attached.step, composed.principal))
+    ?.publicEvidence).toBeNull();
+});
+
+test('composed native property citations retain withdrawal fences for visitors', async () => {
+  const native = await semanticFixture(), composed = await composition(native);
+  const input = await retained(composed.principalId, native.input);
+  const attached = await composed.store.attach(composed.principal, composed.principalId, randomUUID(), input);
+  const read = propertyReader(composed, native), beforeWithdrawal = await read();
+  expect(beforeWithdrawal.items[0]!.sources).toEqual([input.sourceRecord]);
+  const savedSupport = (await composed.store.read(composed.principalId, attached.support, attached.step, composed.principal))!;
+  await composed.dependencies.sourceFieldWithdrawals!.withdraw(composed.principalId, randomUUID(), {
+    support: attached.support, expectedSupport: savedSupport.supportIdentity, reason: 'Withdraw this exact field evidence',
+  });
+  expect((await read()).items[0]!.sources).toEqual([]);
+  await expect(beforeWithdrawal.session.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
+});
 
 async function saved(principalId: string) {
   return (await contentPool.query('SELECT native_acknowledgement FROM source.field_support_step WHERE principal_id=$1', [principalId])).rows;

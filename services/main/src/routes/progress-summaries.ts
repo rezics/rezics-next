@@ -48,14 +48,17 @@ export function progressSummariesRoutes(work: MainWorkDependencies) {
   };
   return new Elysia()
     .get('/v1/me/progress-summaries/:resource', { params: t.Object({ resource: readUuid }),
-      query: t.Object({ actingSubject: readId, language: t.Optional(readLanguage), parent: t.Optional(readId),
+      query: t.Object({ actingSubject: readId,
+        // Retained legacy releases can have an explicitly unknown language.
+        language: t.Optional(t.Union([readLanguage, t.Literal('null')])), parent: t.Optional(readId),
         after: t.Optional(t.String({ maxLength: 2048 })), sessionCursor: t.Optional(t.String({ maxLength: 2048 })),
         releaseCursor: t.Optional(t.String({ maxLength: 2048 })) }, { additionalProperties: false }),
       response: transportResponses(openApiOperations["/v1/me/progress-summaries/{resource}"].get, { 200: progressSummary, ...workReadProblems }, 'GET') }, async ({ request, params, query }) => {
       try {
         const owner = await own(request, query.actingSubject);
-        const result = await workRead(work, request, query,
-          session => readProgressSummary(session, owner, `https://rezics.com/id/${params.resource}`, query));
+        const options = { ...query, language: query.language === 'null' ? undefined : query.language };
+        const result = await workRead(work, request, options,
+          session => readProgressSummary(session, owner, `https://rezics.com/id/${params.resource}`, options));
         await own(request, query.actingSubject);
         return Response.json(result, { headers });
       } catch (error) { return failure(error); }

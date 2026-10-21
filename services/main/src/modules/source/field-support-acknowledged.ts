@@ -1,9 +1,9 @@
 import { readCommandReceipt } from '../context/command.ts';
 import { readSemanticTerminal } from '../semantic/command.ts';
-import { NativeBasisVerificationProblem, verifyAcknowledgedSemanticBasis,
+import { NativeBasisVerificationProblem, verifyAcknowledgedSemanticBasis, readAcknowledgedSemanticProperty,
   type AcknowledgedSemanticBasis } from '../semantic/native-basis.ts';
 import { STATEMENT_FAMILIES } from '../statement/receipt-family.ts';
-import { GRAPHS, RV, iri } from '../work/activate.ts';
+import { DATASET, GRAPHS, RV, iri, lit } from '../work/activate.ts';
 import { SourceFieldProblem, mappingUnverified, supportChanged, supportUnavailable,
   type VerifiedNativeAcknowledgement } from './field-support-contract.ts';
 import type { NativeSupportVerifier, SourceNativeVerifiers } from './field-support-native.ts';
@@ -27,7 +27,7 @@ async function readTerminal(work: AcknowledgedSourceNativeDependencies,native: A
  * private historical replay uses Source's immutable saved acknowledgement instead.
  * The native fence precedes Source settlement, not an atomic cross-owner commit. */
 export function acknowledgedSemanticSupportOwners(work: AcknowledgedSourceNativeDependencies):
-  Required<Pick<SourceNativeVerifiers, 'semantic' | 'statement'>> {
+  Required<Pick<SourceNativeVerifiers, 'semantic' | 'statement' | 'semanticRead'>> {
   const verify: NativeSupportVerifier = async (input,requireCurrent,context) => {
     const native = input.native;
     if (native.owner !== 'semantic' && native.owner !== 'statement') return mappingUnverified();
@@ -74,5 +74,38 @@ export function acknowledgedSemanticSupportOwners(work: AcknowledgedSourceNative
       return supportUnavailable();
     }
   };
-  return { semantic: verify,statement: verify };
+  const semanticRead: NonNullable<SourceNativeVerifiers['semanticRead']> = async (input, selected, session) => {
+    const native = input.native;
+    if (native.kind !== 'component-property' || native.owner !== 'semantic') return mappingUnverified();
+    // Disclosure belongs to the current reader; the saved import actor has no role.
+    const references = [...new Set([native.target, native.component, native.revision,
+      ...(native.property.value.kind === 'resource' ? [native.property.value.ref] : [])])];
+    const shown = await session.disclosure(references.map(resource => ({ owner: 'graph', resource, component: 'record' })));
+    if (shown.some(value => value !== 'visible')) return supportChanged('native-target');
+    try {
+      const basis = await readAcknowledgedSemanticProperty(work.environment, native, selected);
+      const terminal = basis.commandReceipt;
+      const current = await work.environment.fuseki.query(`PREFIX rv: <${RV}> ASK {
+        GRAPH ${iri(GRAPHS.current)} { ${iri(native.component)} rv:semanticHead ${iri(basis.revision)} }
+        GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(work.environment.lineage.dataEpoch)}
+          FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
+        GRAPH ${iri(GRAPHS.receipts)} { ${iri(basis.receipt)} a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
+          rv:revision ${iri(basis.revision)} ; rv:operation ${iri(basis.operation)} }
+      }`);
+      if (current.boolean !== true) return supportChanged('native-head');
+      return { receipt: terminal.receipt, admissionId: terminal.admissionId, scope: terminal.scope,
+        dataEpoch: terminal.dataEpoch, sequence: terminal.sequence, action: 'semantic.change',
+        component: native.component, revision: basis.revision, semantic: { operation: basis.operation,
+          manifest: basis.manifest, modelGeneration: basis.modelGeneration, headGuarantee: basis.headGuarantee,
+          commandReceipt: terminal } };
+    } catch (error) {
+      if (error instanceof NativeBasisVerificationProblem) {
+        if (error.code === 'native_head_mismatch' || error.code === 'native_receipt_mismatch') return supportChanged('native-head');
+        if (error.code === 'native_value_mismatch') return supportChanged('native-value');
+      }
+      if (error instanceof SourceFieldProblem) throw error;
+      return supportUnavailable();
+    }
+  };
+  return { semantic: verify,statement: verify,semanticRead };
 }

@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import type { SemanticProperty } from '../semantic/change.ts';
 import type { AccessAdmissionRegistry, VerifiedPrincipal } from '../access/admission.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
@@ -28,6 +29,8 @@ export interface RetainedFieldOwners extends SourceNativeVerifiers {
 export interface SourceEvidenceSelection {
   target: string; slot: string; occurrence: string | null; context: string;
   component: string; revision: string;
+  /** Exact typed property, so evidence for another value of this predicate is excluded. */
+  property?: SemanticProperty;
 }
 /** Owner-private frontier. The query owner seals it with its existing cursor;
  * neither this position nor private support identities are public citation data. */
@@ -284,8 +287,11 @@ export class SourceRetainedFieldSupportStore {
     const structure = input.native.kind === 'structure-occurrence';
     if (!row.withdrawal_id && (!structure || session?.principal && session.options.actingSubject)) {
       try {
-        const current = await verifySourceNative(this.env,input,this.owners,true,
-          principal ? { principal,selected: field.selected,session,evidence } : undefined);
+        const current = mode === 'window' && session && input.native.kind === 'component-property'
+          && input.native.owner === 'semantic' && this.owners.semanticRead
+          ? await this.owners.semanticRead(input,field.selected,session)
+          : await verifySourceNative(this.env,input,this.owners,true,
+            principal ? { principal,selected: field.selected,session,evidence } : undefined);
         if (canonicalJson(current) === canonicalJson(row.native_acknowledgement)) {
           if (!this.owners.publicEvidence) return supportUnavailable();
           publicEvidence = await this.owners.publicEvidence(evidence,field,input,{ principal: principal ?? null });
@@ -378,8 +384,10 @@ export class SourceRetainedFieldSupportStore {
         WHERE s.target=$1 AND s.slot=$2 AND s.occurrence IS NOT DISTINCT FROM $3 AND s.context=$4
           AND st.native_acknowledgement->>'component'=$5 AND st.native_acknowledgement->>'revision'=$6
           AND ($7::uuid IS NULL OR s.id>$7::uuid)
+          AND ($9::jsonb IS NULL OR a.request#>'{native,property}'=$9::jsonb)
         ORDER BY s.id LIMIT $8`, [selection.target,selection.slot,selection.occurrence,selection.context,
-        selection.component,selection.revision,frontier ? sourceId(frontier.after) : null,limit+1])).rows;
+        selection.component,selection.revision,frontier ? sourceId(frontier.after) : null,limit+1,
+        selection.property ? JSON.stringify(selection.property) : null])).rows;
       const items: T[] = [];
       for (const row of rows.slice(0,limit)) {
         const support = await this.readProjection(row.principal_id,row.id,undefined,session.principal ?? undefined,session,'window');

@@ -84,6 +84,42 @@ export function selectedNativeValueMatches(value: SemanticValue | StatementValue
     || typeof selected.value === 'boolean' && value.kind === 'boolean' && value.lexical === String(selected.value);
 }
 
+/** Native owner correspondence only. Callers separately disclose the exact target,
+ * revision and referenced value to their actual reader and fence this result.
+ * It neither creates a principal nor borrows the retained Source author's authority. */
+export async function readAcknowledgedSemanticProperty(
+  env: MainWorkDependencies['environment'],
+  basis: Extract<AcknowledgedSemanticBasis, { kind: 'component-property' }>,
+  selected: NativeBasisVerificationInput['selected'],
+): Promise<VerifiedSemanticBasis> {
+  if (!statementNativeId(basis.target) || !statementNativeId(basis.component) || !statementNativeId(basis.revision)
+    || !/^urn:rezics:receipt:[0-9a-f]{64}$/.test(basis.receipt)) return fail('native_target_mismatch', 'Exact Semantic property coordinates are required');
+  if (basis.owner !== 'semantic' || basis.target !== basis.component) return fail('native_target_mismatch', 'native property target differs from its component');
+  const receipt = await readSemanticTerminal(env, basis.receipt);
+  if (!receipt || receipt.outcome !== 'succeeded') return fail('native_basis_unavailable', 'native Semantic command receipt is unavailable');
+  if (familyReceiptIri(receipt.admissionId, SEMANTIC_CHANGE_FAMILY) !== basis.receipt
+    || receipt.component !== basis.component || receipt.revision !== basis.revision) return fail('native_receipt_mismatch', 'native receipt acknowledges another component or revision');
+  const current = await readCurrentComponent(env, basis.component, 'resource');
+  if (!current) return fail('native_basis_unavailable', 'native Semantic owner head is unavailable');
+  if (current.head !== basis.revision) return fail('native_head_mismatch', 'native Semantic owner head changed');
+  if (current.state.component !== 'resource' || current.state.lifecycle !== 'active') return fail('native_basis_unavailable', 'native Semantic component is inactive');
+  const value = checkedSemanticValue(basis.property.value);
+  if (!current.state.properties.some(property => property.predicate === basis.property.predicate && same(property.value, value))
+    || !selectedNativeValueMatches(value, selected)) return fail('native_value_mismatch', 'native Semantic property differs from the selected retained value or language');
+  const anchors = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?operation ?generation WHERE {
+    GRAPH ${iri(GRAPHS.revisions)} { ${iri(basis.revision)} a rv:SemanticRevision ; rv:component ${iri(basis.component)} ;
+      rv:manifest ${iri(current.manifest)} ; rv:operation ?operation ; rv:modelGeneration ?generation ;
+      rv:dataEpoch ${lit(receipt.dataEpoch)} ; rv:sequence ${receipt.sequence} }
+    GRAPH ${iri(GRAPHS.receipts)} { ${iri(basis.receipt)} a rv:OperationReceipt ; rv:outcome rv:Succeeded ; rv:operation ?operation }
+  } LIMIT 2`)).results?.bindings ?? [];
+  if (anchors.length !== 1 || !anchors[0]?.operation || !anchors[0]?.generation) return fail('native_basis_unavailable', 'native receipt does not bind its exact Semantic owner anchor');
+  return { native: { ...basis, property: { predicate: basis.property.predicate, value } }, receipt: receipt.receipt,
+    revision: basis.revision, operation: anchors[0].operation.value, modelGeneration: anchors[0].generation.value,
+    manifest: current.manifest, sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch, sequence: receipt.sequence },
+    commandReceipt: commandAcknowledgement(receipt, anchors[0].operation.value, basis.component, basis.revision),
+    headGuarantee: 'verified-before-commit' };
+}
+
 /** One owner entry point for Source. Source alone owns coordinate/mapping/rights checks and certificate settlement. */
 async function verifyNativeBasis(
   work: Pick<MainWorkDependencies, 'environment' | 'access' | 'contextSelections' | 'relationAttribution'>,
@@ -133,33 +169,11 @@ async function verifyNativeBasis(
   let headGuard: string;
   const completionChecks: (() => Promise<void>)[] = [];
   if (basis.kind === 'component-property') {
-    if (basis.owner !== 'semantic' || basis.target !== basis.component) return fail('native_target_mismatch', 'native property target differs from its component');
-    const receipt = await readSemanticTerminal(env, basis.receipt);
-    if (!receipt || receipt.outcome !== 'succeeded') return fail('native_basis_unavailable', 'native Semantic command receipt is unavailable');
-    if (familyReceiptIri(receipt.admissionId, SEMANTIC_CHANGE_FAMILY) !== basis.receipt
-      || receipt.component !== basis.component || receipt.revision !== basis.revision) return fail('native_receipt_mismatch', 'native receipt acknowledges another component or revision');
-    const current = await readCurrentComponent(env, basis.component, 'resource');
-    if (!current) return fail('native_basis_unavailable', 'native Semantic owner head is unavailable');
-    if (current.head !== basis.revision) return fail('native_head_mismatch', 'native Semantic owner head changed');
-    if (current.state.component !== 'resource' || current.state.lifecycle !== 'active') return fail('native_basis_unavailable', 'native Semantic component is inactive');
+    result = await readAcknowledgedSemanticProperty(env, basis, input.selected);
     const value = checkedSemanticValue(basis.property.value);
-    if (!current.state.properties.some(property => property.predicate === basis.property.predicate && same(property.value, value))
-      || !selectedNativeValueMatches(value, input.selected)) return fail('native_value_mismatch', 'native Semantic property differs from the selected retained value or language');
     if (value.kind === 'resource' && !(await readable([value.ref])).has(value.ref)) {
       return fail('native_basis_unavailable', 'native Semantic property reference is unavailable');
     }
-    const anchors = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?operation ?generation WHERE {
-      GRAPH ${iri(GRAPHS.revisions)} { ${iri(basis.revision)} a rv:SemanticRevision ; rv:component ${iri(basis.component)} ;
-        rv:manifest ${iri(current.manifest)} ; rv:operation ?operation ; rv:modelGeneration ?generation ;
-        rv:dataEpoch ${lit(receipt.dataEpoch)} ; rv:sequence ${receipt.sequence} }
-      GRAPH ${iri(GRAPHS.receipts)} { ${iri(basis.receipt)} a rv:OperationReceipt ; rv:outcome rv:Succeeded ; rv:operation ?operation }
-    } LIMIT 2`)).results?.bindings ?? [];
-    if (anchors.length !== 1 || !anchors[0]?.operation || !anchors[0]?.generation) return fail('native_basis_unavailable', 'native receipt does not bind its exact Semantic owner anchor');
-    result = { native: { ...basis, property: { predicate: basis.property.predicate, value } }, receipt: receipt.receipt,
-      revision: basis.revision, operation: anchors[0].operation.value, modelGeneration: anchors[0].generation.value,
-      manifest: current.manifest, sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch, sequence: receipt.sequence },
-      commandReceipt: commandAcknowledgement(receipt, anchors[0].operation.value, basis.component, basis.revision),
-      headGuarantee: 'verified-before-commit' };
     if (value.kind === 'resource') completionChecks.push(async () => {
       if (!(await readable([value.ref])).has(value.ref)) return fail('native_basis_unavailable', 'native property reference disclosure changed');
     });

@@ -1,4 +1,6 @@
 import type { Static } from 'typebox';
+import { fusekiReadBudget } from '../../infrastructure/fuseki.ts';
+import type { SemanticProperty } from '../semantic/change.ts';
 import { AccountAssertionDenied } from '../account/verify-assertion.ts';
 import {
   CLASSIFICATION_INHERIT_POLICY,
@@ -33,6 +35,28 @@ import { framePattern, matchFromScore } from '../projection/frame-read.ts';
 import type { Coordinate } from '../projection/dimension.ts';
 import { ContextCommandUnavailable } from '../context/command.ts';
 import { statementQualificationFromBindings } from './qualification.ts';
+
+/** Reuse Source's settled correspondence, withdrawal, disclosure and Rights
+ * projection for this exact typed native property. No converter runs on a read. */
+async function componentPropertySources(session: WorkReadSession, target: string, revision: string, property: SemanticProperty) {
+  const store = session.deps.sourceRetainedFieldSupports;
+  if (!store) return [];
+  const sources = new Set<string>();
+  let frontier: { generation: string; after: string } | undefined;
+  do {
+    session.checkDeadline();
+    const page = await store.readEvidenceWindow(session, { target, component: target, revision, property,
+      slot: 'component-property-v1#' + property.predicate, occurrence: null, context: 'global' }, frontier);
+    const budget = fusekiReadBudget.getStore();
+    if (budget) { budget.callsLeft -= 1; budget.bytesLeft -= Buffer.byteLength(JSON.stringify(page), 'utf8'); }
+    session.checkDeadline();
+    for (const source of page.items) sources.add(source.id);
+    if (page.more && (!page.next || frontier && (page.next.generation !== frontier.generation || page.next.after <= frontier.after))
+      || !page.more && page.next !== null) throw new WorkReadUnavailable('Native property Source frontier is unavailable');
+    frontier = page.next ?? undefined;
+  } while (frontier);
+  return [...sources].sort();
+}
 
 /** Bounded candidate/hydration batches fill a page from disclosed items, with one
  * disclosed lookahead. Withheld rows never produce a short continuing page.
@@ -365,7 +389,7 @@ export async function readSubjectStatements(
           predicate: property.predicate,
           value: property.value,
           qualifiers: { applicability: [], interpretationDefinitions: [] },
-          sources: [],
+          sources: await componentPropertySources(session, resource, component!.head, property),
           ...(frames ? { frameMatch: matchFromScore(0) } : {}),
         });
         positions.push({
