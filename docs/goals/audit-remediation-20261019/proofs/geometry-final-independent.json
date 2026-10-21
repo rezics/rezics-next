@@ -1,0 +1,263 @@
+{
+  "format": "G2832-final-original-criteria-acceptance-v1",
+  "role": "Existing G-2832 independent acceptance continuation; Program owns final bounded continuation; no new review chain",
+  "completedUTC": "2026-10-21T10:48:45.176260+00:00",
+  "late": true,
+  "originalDeadlineUTC": "2026-10-21T07:39:00Z",
+  "actor": {
+    "engine": "codex-1",
+    "model": "GPT-6.1 Sol",
+    "effort": "xhigh",
+    "authority": "geometry-final-independent-process.json in parent; explicitly requested native independent continuation outside Task ledger",
+    "nestedAgentsUsed": false,
+    "fallbackUsed": false,
+    "usageReported": false
+  },
+  "source": {
+    "immutableMain": "6e931b97f9211633d291523301ce1b6f80d3c782",
+    "checkout": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/one-hour-20261021/geometry-final-review-tree",
+    "cleanBeforeAndAfterChecks": true,
+    "trackedProductOrOriginalTestEdits": false,
+    "repairCommit": "41fa8a5e9d8eaaf74a0ab28c0f15de646866e95b",
+    "earlierEquivalent": "2e9326",
+    "resourceListAndGuardCommit": "2327e57c9ad791c37e1489d45cc6a893babf2df6",
+    "sourceBlobIDs": {
+      "apps/web/features/catalogue/catalogue-layout.stories.tsx": "ffb9bf7f7fc42061302d0b9d7ee85407971abeb2",
+      "apps/web/features/catalogue/catalogue-zone-layout.stories.tsx": "e38fccb5aaf5be3a4993a8fc5ea30af65b8e96e9",
+      "apps/web/features/zones/card.tsx": "9993eaeb36248c7dad1162ac485aa9831492daee",
+      "apps/web/features/discover/resource-list.tsx": "c466a32247f5d625be0fcd41f3786f103c1db0c7",
+      "apps/web/features/discover/resource-card.tsx": "a8b917e9abfcef905b4a0bf978d4bf1f8a212c36",
+      "scripts/static/web-continuations.inventory.json": "313e9d98cdd61de1157739fd72f7b7f476e8e8a5",
+      "scripts/static/web-continuations.test.ts": "9b2441af35c0f75088499a3783585c4c843ce04b",
+      "packages/ui/src/components/work-cover.tsx": "e64eb64b426cace334e0011ef9e7fabeea21b01e"
+    },
+    "byteComparison": "source-reuse-comparison.json",
+    "directByteComparisons": 20,
+    "localRuntimeDependencyByteComparisons": 559,
+    "unresolvedLocalImports": [],
+    "materialDeltaReview": "All20 original expectation expressions/tolerances unchanged:7 assertPacked and13 assertPreviews expressions now awaited in async waitFor/for-of loops. WhyHere uses one existing contextual localized label for aria-label and visible tooltip; focused regression checks focus, equal visible/accessibility text and visibility. Additive resource/post dispatch uses existing IdentityCard and does not change any retained known-kind branch, sizing or fixtures. No new untested geometry branch is substituted for retained cases.",
+    "guardInventory": "inventory-reuse-comparison.json;743 rows retained, one ResourceList context value changed, remaining11 entries unchanged."
+  },
+  "policy": "Latest local G-2832 decision and current maintainer instruction: meaningful asserted production-consumer Storybook interactions and actually viewed images establish these pure visual originals. Generic native/persona/full-backend or publication journeys are not additional AUD007/AUD013 prerequisites.",
+  "originalAcceptance": "original-acceptance.json",
+  "scope": [
+    "AUD-007",
+    "AUD-013"
+  ],
+  "excluded": "AUD-008 already accepted; not reviewed, reopened or assigned a new verdict.",
+  "independentVerdicts": {
+    "AUD-007": {
+      "independentAcceptance": true,
+      "verdict": "yes",
+      "originalAcceptance": [
+        "同一混合资源集在1440/1024/768/390/320下按自然卡高masonry排列；无由相邻高卡撑出的数百px空洞或横版卡内部竖向占位；SSR、图片加载、分页、重排后保持顺序和键盘可达。"
+      ],
+      "criteria": [
+        {
+          "criterion": "Same mixed resources use natural-height masonry at 1440/1024/768/390/320; no neighboring tall-card row voids.",
+          "accepted": true,
+          "evidence": [
+            "current-story-qa/summary.md: MixedCards, Phone, SmallPhone, RightToLeft, ContainerBreakpoints; all original packed-layout assertions now awaited",
+            "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2832/.temp/audit-remediation-20261019/proofs/catalogue-geometry-G-2832/checked-566aa304/rendered/geometry.spec.tsx: actual shell breakpoints, sidebar toggles, images, pagination, reading order and consumers",
+            "retained-independent-report-4232014.json: renderedMeasurements.shellMixed; required widths and both sidebar states; no page overflow"
+          ],
+          "measurements": "Retained steady same-column gaps 24.59375–27.25 CSS px; original authored gap bounds remain 23.5 <= gap < 28.1. Retained early pending-image outlier is preserved and is not used as a packing pass."
+        },
+        {
+          "criterion": "Landscape covers have no internal portrait-height placeholder.",
+          "accepted": true,
+          "evidence": [
+            "current-story-qa/summary.md: catalogue-layout stories assert 128px cover width and kind aspect ratio",
+            "screenshots/catalogue-small-phone.png",
+            "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2832/.temp/audit-remediation-20261019/proofs/catalogue-geometry-G-2832/checked-566aa304/rendered/geometry.spec.tsx",
+            "retained-independent-report-4232014.json: renderedMeasurements.naturalCoverDimensions"
+          ],
+          "measurements": "Book128x192; VideoGame128x72; DigitalDocument128x170.65625; Recipe128x128; complete card and following title measured."
+        },
+        {
+          "criterion": "SSR and hydration retain complete ordered readable cards and keyboard destinations.",
+          "accepted": true,
+          "evidence": [
+            "retained-independent-report-4232014.json: serverVersusHydrated, six required widths; actual renderToString markup measured before hydrateRoot and separately afterwards",
+            "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2832/.temp/audit-remediation-20261019/proofs/catalogue-geometry-G-2832/checked-566aa304/rendered/server-markup.html",
+            "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2832/.temp/audit-remediation-20261019/proofs/catalogue-geometry-G-2832/checked-566aa304/rendered/server-hydration-summary.json",
+            "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2832/.temp/audit-remediation-20261019/proofs/catalogue-geometry-G-2832/checked-566aa304/rendered/geometry.spec.tsx: React server HTML has readable non-masonry geometry before hydrateRoot; compare hydrated geometry"
+          ],
+          "limits": "Actual production-component server HTML and hydration, with unchanged runtime bytes. Twelve cards retained, zero recoverable errors, no horizontal overflow; no new live-route claim."
+        },
+        {
+          "criterion": "Image loading/failure, pagination and reorder preserve order and keyboard reachability.",
+          "accepted": true,
+          "evidence": [
+            "current-story-qa/summary.md: MixedCards, Phone, SmallPhone, RightToLeft; original load/show-more/reverse/next-page and keyboard interactions",
+            "retained-independent-report-4232014.json: stateTransitions.imageDelayAndFailure, pagination, reorderKeyboard, focusResize768to769 and focusSidebarToggle",
+            "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2832/.temp/audit-remediation-20261019/proofs/catalogue-geometry-G-2832/checked-566aa304/rendered/pending-stability-summary.json"
+          ],
+          "limits": "Retained pending/loaded/failed cover boxes remain128x192. Original early-mount snapshot discrepancy is retained with its focused passing settling probe; no claim of zero transient layout shift."
+        }
+      ],
+      "remainingOriginalAssertions": []
+    },
+    "AUD-013": {
+      "independentAcceptance": true,
+      "verdict": "yes",
+      "originalAcceptance": [
+        "为浏览列表和预览设明确尺寸/密度约束，包含维护者指出的普通近300px封面；同作品仅切All/Works或结果加入身份卡时不应放大近两倍。封面、占位槽、完整卡共同检查，320/390/768/1024/1440/1920与少量/多量结果均实测，保留原比例和交互可达。",
+        "按主详情/浏览预览/紧凑列表/图标分别确定尺寸口径与预算；同角色同UUID不因仅1-2项或混入身份卡而放大。保留profile单本和官方browse单结果不拉满的通过场景。"
+      ],
+      "criteria": [
+        {
+          "criterion": "Explicit dimensions and density for browse/preview roles, including the formerly near300px ordinary cover; check cover, slot and complete card.",
+          "accepted": true,
+          "evidence": [
+            "current-story-qa/summary.md: PreviewConsumers and ContainerBreakpoints; cover width128 and title-to-cover gap<20px",
+            "retained-independent-report-4232014.json: renderedMeasurements.shellMixed/shellWorks/consumerEvidence",
+            "retained-independent-report-4232014.json: existingAssertionsReached.workCoverStories includes BrowsePreviews"
+          ],
+          "measurements": "Browse Book128x192 with128px card tracks, natural kind ratio and no extra portrait slot; consumer cards remain bounded in wide/sparse containers."
+        },
+        {
+          "criterion": "Same UUID stays the same size across All/Works, identity-card insertion and sparse1–2item/full lists.",
+          "accepted": true,
+          "evidence": [
+            "current-story-qa/summary.md: ContainerBreakpoints exact list/title/cover node identity and cover dimensions on mixed→Works; title focus retained on incoming Works→mixed result update",
+            "current-story-qa/summary.md: PreviewConsumers single/full/All/WorkShelf/AlsoEnjoyedRow production consumers",
+            "retained-independent-report-4232014.json: seven passing units; catalogue-layout lone/full shelf assertion compares the same Work single-item grid against a two-Work shelf"
+          ],
+          "limits": "Focus preservation is on incoming result update; no pointer-click focus claim. Source-reviewed fixed preview budget also applies to sparse results."
+        },
+        {
+          "criterion": "Measure 320/390/768/1024/1440/1920, sparse/many results; preserve aspect ratio, density and interaction access.",
+          "accepted": true,
+          "evidence": [
+            "retained-independent-report-4232014.json: renderedMeasurements.requiredWidths, shellMixed, shellWorks, zoneMatrix, naturalCoverDimensions, stateTransitions",
+            "current-story-qa/summary.md: original keyboard, title/byline, bounds, ratio and normal a11y assertions across six catalogue and four Zone stories"
+          ],
+          "measurements": "All six original widths independently measured; zero page overflow; previews128px; natural ratios2:3,3:4,1:1,16:9. Current focused tooltip regression passes in all four Zone stories."
+        },
+        {
+          "criterion": "Separate detail/browse preview/compact/icon role budgets and preserve access.",
+          "accepted": true,
+          "evidence": [
+            "retained-independent-report-4232014.json: historicalCandidateProof.historicalCandidateProof.historicalProof.independentSourceReview.conclusions[1]",
+            "retained-independent-report-4232014.json: 14 independent WorkCover stories including Sizes, BrowsePreviews, Default, Kinds, Named and image states",
+            "packages/ui/src/components/work-cover.tsx: explicit size variants unchanged; catalogue/cover.tsx and WorkTile role selection unchanged"
+          ],
+          "limits": "Original independent source review plus actual retained Sizes/BrowsePreviews rendered checks establish the distinct role API. This does not claim new detailed-route screenshots or native image fidelity; these were never extra AUD013 size acceptance criteria."
+        },
+        {
+          "criterion": "Keep the passing profile single-Book and official browse single-result scenarios at normal column width.",
+          "accepted": true,
+          "evidence": [
+            "retained-independent-report-4232014.json: renderedMeasurements.singleBookProfile, six widths; exactly one128px card and128x192 cover",
+            "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2832/.temp/audit-remediation-20261019/proofs/catalogue-geometry-G-2832/checked-566aa304/rendered/geometry.spec.tsx: consumer single-Book profile shelf inside the actual shell",
+            "current-story-qa/summary.md: SingleResult",
+            "screenshots/zone-single-result.png"
+          ],
+          "measurements": "Profile list widths288,358,464,688,1072,1072 at320,390,768,1024,1440,1920; single card remains128px, never stretches to list width."
+        }
+      ],
+      "remainingOriginalAssertions": []
+    }
+  },
+  "newExecution": {
+    "commands": "command-receipts.json",
+    "storyQA": "20261021t104207-19498b",
+    "storiesPassed": 10,
+    "storyFiles": 2,
+    "normalAccessibility": "Original mandatory repository afterEach sweeps remain enabled, light/dark and standard responsive states; no assertions skipped or suppressed. Focused contextual tooltip regression reached in all four Zone stories.",
+    "currentGuardQA": "20261021t104347-ec9a90",
+    "guardTestsPassed": 93,
+    "guardAssertions": 119,
+    "typedLint": "pass;20 historical no-floating-promises diagnostics resolved on current blobs",
+    "types": "pass;1907files",
+    "ast": "pass"
+  },
+  "retainedIndependentEvidence": {
+    "reportCommit": "4232014a418ef6cd84afbecff959a16f09f59156",
+    "report": "retained-independent-report-4232014.json",
+    "renderedSource": "566aa3040e24f1a11d145d662e4332635072ce74",
+    "independentBrowserQA": "20261021t084621-6a7d65",
+    "independentRecordedJob": "d8b99fe4-281b-45bc-8c95-2358d42eacff",
+    "counts": {
+      "stories": 24,
+      "units": 7,
+      "originalGeometryCases": 6,
+      "newPNGsActuallyViewedByPriorIndependentContinuation": 56
+    },
+    "integrity": "retained-evidence-integrity.json",
+    "bundle": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2832/.temp/audit-remediation-20261019/proofs/catalogue-geometry-G-2832/checked-566aa304",
+    "manifest": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2832/.temp/audit-remediation-20261019/proofs/catalogue-geometry-G-2832/checked-566aa304/manifest.json",
+    "matchingSourceBytes": "source-reuse-comparison.json",
+    "originalIndependentProbeHashes": [
+      {
+        "file": "geometry.spec.tsx",
+        "currentSHA256": "ff1a0af5d7d8534bf56a14bc9eb18a355842b5e57a84e5f3fc9e7e8063828c11",
+        "previousSHA256": "ff1a0af5d7d8534bf56a14bc9eb18a355842b5e57a84e5f3fc9e7e8063828c11",
+        "identical": true
+      },
+      {
+        "file": "fixtures.tsx",
+        "currentSHA256": "9c3fe23b44b23e8b7c410575185f3e942af387201631886e96d2886d801c465b",
+        "previousSHA256": "9c3fe23b44b23e8b7c410575185f3e942af387201631886e96d2886d801c465b",
+        "identical": true
+      },
+      {
+        "file": "ssr.tsx",
+        "currentSHA256": "9f985bcadcff4aeb533e5b14cdf6b2f5da9151b81f0aa9ca19d5c2d2eaa95f8c",
+        "previousSHA256": "9f985bcadcff4aeb533e5b14cdf6b2f5da9151b81f0aa9ca19d5c2d2eaa95f8c",
+        "identical": true
+      }
+    ],
+    "noUnchangedRerun": true
+  },
+  "actuallyViewedScreenshotsThisContinuation": [
+    {
+      "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/one-hour-20261021/geometry-final-review-tree/.artifacts/qa/20261021t104207-19498b/story-screenshots/apps-web-features-catalogue-catalogue-zone-layout.stories.tsx/SingleResult.png",
+      "retained": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/one-hour-20261021/geometry-final-evidence/screenshots/zone-single-result.png",
+      "sha256": "b6ce05cd80d8bfc5b8e1a4c8b71e07b42db2e1d0d0178bb4035b649e9d49f826",
+      "actuallyViewedInThisContinuation": true,
+      "observation": "1024x900: Why Jane Eyre is here label is readable and fully within the viewport; stamp focus ring visible; single 128x192 Book cover, title and author remain readable."
+    },
+    {
+      "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/one-hour-20261021/geometry-final-review-tree/.artifacts/qa/20261021t104207-19498b/story-screenshots/apps-web-features-catalogue-catalogue-zone-layout.stories.tsx/BeforeFacetBreakpoint.png",
+      "retained": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/one-hour-20261021/geometry-final-evidence/screenshots/zone-before-facet-breakpoint.png",
+      "sha256": "24e69c682b137e74fad27823f25bd695f3e8276dc0e8f87ff9e1f912d1be8ae2",
+      "actuallyViewedInThisContinuation": true,
+      "observation": "1023x900: contextual Why Jane Eyre is here tooltip is readable without clipping; visible stamp focus ring; natural Book card heights and readable neighboring title/byline."
+    },
+    {
+      "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/one-hour-20261021/geometry-final-review-tree/.artifacts/qa/20261021t104207-19498b/story-screenshots/apps-web-features-catalogue-catalogue-layout.stories.tsx/SmallPhone.png",
+      "retained": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/one-hour-20261021/geometry-final-evidence/screenshots/catalogue-small-phone.png",
+      "sha256": "2d026a75113675a918b7507ab3470d9ddf2a9f678d33e3692fbc05c202ff4c4d",
+      "actuallyViewedInThisContinuation": true,
+      "observation": "320x844: mixed narrow cards pack naturally; landscape Nightfall cover has no portrait slot; identity cards and bylines fit; keyboard focus visible on the byline."
+    }
+  ],
+  "reusedActuallyViewedScreenshots": {
+    "report": "retained-independent-report-4232014.json: screenshotsActuallyViewed.manifest",
+    "count": 56,
+    "manifestIntegrity": "All328 prior bundle files verified against retained SHA256 manifest; no mismatches.",
+    "claim": "These56 were viewed by the prior independent G2832 continuation and are reused; only the3 new screenshots listed above were newly viewed in this continuation. Existing130 older private and24 normal-story PNGs remain retained, not re-counted as newly viewed."
+  },
+  "historicalFailuresPreserved": {
+    "evidence": "retained-independent-report-4232014.json and original328file bundle unchanged",
+    "items": [
+      "20 typed-lint diagnostics and historical47/48 continuation guard result retained at their original source; current checks supersede these bounded static failures only.",
+      "Historical heading-order, ambiguous-author,1023→1024 cover shrink and early pending snapshot results remain at their actual pins; passing corrected independent checks remain separately pinned.",
+      "All422/Search/empty-Zone/native/persona setup results remain recorded as failures or unavailable; none reclassified as passes. They are not extra acceptance requirements for the original two visual findings."
+    ]
+  },
+  "scopeAndCleanup": {
+    "newBackendCorpusImportResetNativeATDeployment": false,
+    "worktreePeersOrServicesStopped": false,
+    "ownedListenerReceipt": "owned-listeners.json",
+    "ownedListenersRemaining": 0,
+    "trackedDocsOrProductChanged": false,
+    "instructionCurrency": "instruction-currency.json; current local instructions match selected checkout",
+    "newWorktreeRetainedForReview": true,
+    "concurrentWorktreeObservations": "worktree-observations.json"
+  },
+  "remainingOriginalAssertionOrFailure": null,
+  "evidenceRoot": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/one-hour-20261021/geometry-final-evidence"
+}

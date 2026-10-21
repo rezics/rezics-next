@@ -422,9 +422,19 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "混合卡片没有 masonry，外部行高和内部占位共同制造大空洞",
-      "status": "build-briefed",
+      "status": "closed",
       "owner": "G-2754",
-      "proof": []
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "AUD-007",
+          "assessedMain": "1a5cb8bf72cacca21db087599b14e58d5f49eaa1",
+          "independentReport": "docs/goals/audit-remediation-20261019/proofs/geometry-final-independent.json",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "remainingValidation": []
     },
     {
       "id": "AUD-008",
@@ -476,9 +486,19 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "浏览卡片封面过大，并随混排分支改变尺寸",
-      "status": "build-briefed",
+      "status": "closed",
       "owner": "G-2754",
-      "proof": []
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "AUD-013",
+          "assessedMain": "1a5cb8bf72cacca21db087599b14e58d5f49eaa1",
+          "independentReport": "docs/goals/audit-remediation-20261019/proofs/geometry-final-independent.json",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "remainingValidation": []
     },
     {
       "id": "AUD-014",
