@@ -42,6 +42,8 @@ export interface SearchHit {
   factObligations?: import('../rights-mark/rights-mark.tsx').DisplayObligations;
   /** Only Main can supply a bounded excerpt from the disclosed exact Content revision. */
   excerpt?: Match['excerpt'];
+  /** Disclosed native release facts stay grouped by their own identity and revision. */
+  disambiguation?: Match['disambiguation'];
   matchUnit: string;
   work: string;
   mainVersion: string;

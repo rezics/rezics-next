@@ -15,6 +15,11 @@ import type { SearchState } from '../search/state.ts';
 import type { SearchFailure, SearchHit, SearchLoaded, SearchResultPage } from '../search/types.ts';
 import Link from '../shell/localized-link.tsx';
 import { RetryButton } from '../work-page/retry-button.tsx';
+import { messages as workMessages } from '../work-page/messages.ts';
+import { copyOf as levelsCopy } from '../work-levels/messages.ts';
+import { releaseHref } from '../work-levels/route.ts';
+import { formatLabel } from '../tracking/display.ts';
+import { copyOf as trackingCopy } from '../tracking/messages.ts';
 import { browseMessages } from './browse-messages.ts';
 import { chapterTextMessages } from './chapter-text-messages.ts';
 import { CHAPTER_SCAN_PAGES, chapterProgress } from './chapter-text-read.ts';
@@ -64,13 +69,38 @@ function languageName(tag: string, locale: UiLocale): string {
   try { return new Intl.DisplayNames([locale], { type: 'language' }).of(tag) ?? tag; } catch { return tag; }
 }
 
-/** What tells equal titles apart without inventing anything: the kind, credited names and the text's language. */
+/** Only supplied facts distinguish equal titles; Content format never implies an edition or carrier. */
 export function chapterHitContext(hit: SearchHit, locale: UiLocale): string[] {
   const entry = typeEntry(hit.types, 'work');
   const names = hit.authors.map(author => author.name);
+  const details = hit.disambiguation;
+  const format = details?.contentFormat.status === 'available' ? details.contentFormat.value : null;
+  const context = details?.context;
   return [...(entry && !entry.default ? [entryLabel(entry, locale)] : []),
     ...(names.length ? [new Intl.ListFormat(locale, { type: 'conjunction' }).format(names)] : []),
-    languageName(hit.reasons.language, locale)];
+    languageName(hit.reasons.language, locale),
+    ...(format === 'rezics-content-json-v1' ? [chapterTextMessages[locale].textFormat] : []),
+    ...(context === 'main-version-default' ? [levelsCopy(locale).mainVersion]
+      : context ? [materializeData(workMessages[locale], { locale }).realmFallback({ id: shortId(context.id) })] : [])];
+}
+
+const releaseKind = { formal: 'kindFormal', web: 'kindWeb', fixed: 'kindFixed', virtual: 'kindVirtual' } as const;
+function ReleaseDetails({ hit, locale }: { hit: SearchHit; locale: UiLocale }) {
+  const releases = hit.disambiguation?.releases;
+  if (releases?.status !== 'available' || !releases.values.length) return null;
+  const t = levelsCopy(locale), tracking = trackingCopy(locale);
+  return <ul aria-label={t.releases} className="grid min-w-0 gap-1 text-muted-foreground text-xs">
+    {releases.values.map(release => <li key={release.release} data-release-revision={release.revision}
+      className="min-w-0 [overflow-wrap:anywhere]">
+      <Link href={releaseHref(release.release)} className="underline underline-offset-4">
+        {[t[releaseKind[release.kind]], release.year?.toString(), formatLabel(release.platform, tracking)]
+          .filter(Boolean).join(' · ')}
+      </Link>
+      {release.sourceEvidence.flatMap(evidence => evidence.href && /^https?:\/\//i.test(evidence.href)
+        ? [<a key={evidence.observation} href={evidence.href} className="ms-2 underline underline-offset-4">
+          {evidence.provider}</a>] : [])}
+    </li>)}
+  </ul>;
 }
 
 function ChapterPages({ first, state, locale, actingSubject, signedIn = true, load, t }: ChapterTextProps & {
@@ -134,6 +164,7 @@ function ChapterPages({ first, state, locale, actingSubject, signedIn = true, lo
             <bdi lang={hit.title?.language} dir={hit.title?.direction}>{hit.title?.value ?? shortId(hit.work)}</bdi>
           </Link>
           <p className="min-w-0 break-words text-muted-foreground text-xs">{chapterHitContext(hit, locale).join(' · ')}</p>
+          <ReleaseDetails hit={hit} locale={locale} />
           <p className="flex min-w-0 items-start gap-2">
             <FileTextIcon aria-hidden="true" className="mt-1.5 size-4 shrink-0 text-muted-foreground" />
             <Link data-chapter-link href={hit.reasons.chapter!.href} className="min-w-0 break-words font-work-title text-lg

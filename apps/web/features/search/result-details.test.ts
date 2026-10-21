@@ -10,6 +10,13 @@ const available: NonNullable<SearchPage['results'][number]['excerpt']> = {
   status: 'available', text: 'The night library sheltered travellers. <strong>雨</strong>', language: 'en',
   resource, revision, variant,
 };
+const disambiguation: NonNullable<SearchPage['results'][number]['disambiguation']> = {
+  context: { kind: 'realm-local', id: resource }, contentFormat: { status: 'available', value: 'rezics-content-json-v1' },
+  releases: { status: 'available', values: [
+    { release: resource, revision: 'release-revision', kind: 'formal', year: 1898, platform: 'print', sourceEvidence: [] },
+    { release: variant, revision: 'other-release-revision', kind: 'web', year: null, platform: null, sourceEvidence: [] },
+  ] },
+};
 
 test('the typed adapter preserves exact excerpt provenance and each unavailable reason without fabricating text', async () => {
   const excerpts = [available, ...(['unavailable', 'not-matching', 'unsupported-format', 'not-hydrated'] as const)
@@ -21,7 +28,7 @@ test('the typed adapter preserves exact excerpt provenance and each unavailable 
       facets: { populationBasis: 'all-filters', resultGrain: 'work', languages: { precision: 'exact', values: [] },
         terms: { precision: 'lower-bound', values: [] }, types: { precision: 'exact', values: [] } },
       results: [{ matchUnit: 'unit', work: resource, mainVersion: resource, contribution: 'contribution',
-        revision, selection: 'selection', language: 'en', score: 1, types: [], matchedField: 'body', excerpt,
+        revision, selection: 'selection', language: 'en', score: 1, types: [], matchedField: 'body', excerpt, disambiguation,
         matchedChapter: { post: resource, book: resource, title: 'At the harbour' } }],
     };
     const main = browserMainApi('https://story.invalid', { anonymous: true,
@@ -33,6 +40,7 @@ test('the typed adapter preserves exact excerpt provenance and each unavailable 
       { phrase: 'night library', scope: { kind: 'global' }, language: null, term: null }, { language: 'en' });
     if (!read.ok) throw new Error('Expected the contract-shaped fixture page');
     expect(read.page.hits[0]?.excerpt).toEqual(excerpt);
+    expect(read.page.hits[0]?.disambiguation).toEqual(disambiguation);
     expect(read.page.hits[0]?.reasons.chapter?.href).toContain('/read/00000000-0000-4000-8000-000000000001?language=en');
     expect(read.page.hits[0]?.reasons.matchedText).toBeNull();
   }

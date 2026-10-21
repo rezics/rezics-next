@@ -4,6 +4,8 @@ import { uiLocales } from '../../i18n/define.ts';
 import { direction } from '@rezics/main/language';
 import { localizedPath } from '../../i18n/locale.ts';
 import { chapterHref, workHref } from '../work-page/route.ts';
+import { releaseHref } from '../work-levels/route.ts';
+import { copyOf as levelsCopy } from '../work-levels/messages.ts';
 import type { SearchContinuation, SearchHit, SearchLoaded, SearchResultPage } from '../search/types.ts';
 import type { SearchLoader } from '../search/query.ts';
 import { Providers } from '../shell/providers.tsx';
@@ -69,14 +71,50 @@ export const DisclosedExcerptAndUnknowns: Story = { args: { read: excerptRead },
 } };
 
 const chineseExcerpt = { ...excerpt, text: '夜雨中，图书馆仍为远行的人亮着灯。港口的风翻过书页。', language: 'zh-Hans' };
+const formalRelease = 'https://rezics.com/id/00000000-0000-4000-8000-000000000021';
+const webRelease = 'https://rezics.com/id/00000000-0000-4000-8000-000000000022';
+const details: NonNullable<SearchHit['disambiguation']> = { context: 'main-version-default',
+  contentFormat: { status: 'available', value: 'rezics-content-json-v1' }, releases: { status: 'available', values: [
+    { release: formalRelease, revision: 'formal-revision', kind: 'formal', year: 1898, platform: 'print',
+      sourceEvidence: [{ provider: 'Example archive', namespace: 'books', externalId: 'lantern-road', sourceRevision: null,
+        datasetSnapshotDigest: 'a'.repeat(64), recordDigest: 'b'.repeat(64), fieldLocator: 'publicationYear',
+        record: book, observation: book, href: 'https://example.test/lantern-road' }] },
+    { release: webRelease, revision: 'web-revision', kind: 'web', year: 2021, platform: 'web', sourceEvidence: [] },
+  ] } };
+const unknownDetails: NonNullable<SearchHit['disambiguation']> = {
+  context: null, contentFormat: { status: 'available', value: 'internal-format-without-a-reader-label' },
+  releases: { status: 'unavailable' },
+};
+export const EqualTitlesKeepNativeReleaseFacts: Story = { args: { read: { ok: true, page: { ...excerptRead.page,
+  hits: [{ ...excerptRead.page.hits[0]!, disambiguation: details },
+    { ...excerptRead.page.hits[1]!, disambiguation: { ...details,
+      context: { kind: 'realm-local', id: 'https://rezics.com/id/12345678-0000-4000-8000-000000000001' },
+      releases: { status: 'available', values: [] } } },
+    { ...excerptRead.page.hits[2]!, disambiguation: unknownDetails }] } } }, async play({ canvasElement }) {
+  const canvas = within(canvasElement);
+  const cards = canvas.getAllByRole('link', { name: 'At the harbour' }).map(link => link.closest('li')!);
+  await expect(within(cards[0]!).getByText(/Main Version/)).toBeVisible();
+  const formal = within(cards[0]!).getByRole('link', { name: /Published edition.*1898/ });
+  await expect(formal).toHaveAttribute('href', localizedPath(releaseHref(formalRelease), 'en'));
+  await expect(formal.closest('li')).toHaveAttribute('data-release-revision', 'formal-revision');
+  await expect(within(cards[0]!).getByRole('link', { name: /Web publication.*2021/ }))
+    .toHaveAttribute('href', localizedPath(releaseHref(webRelease), 'en'));
+  await expect(within(cards[0]!).getByRole('link', { name: 'Example archive' }))
+    .toHaveAttribute('href', 'https://example.test/lantern-road');
+  await expect(within(cards[1]!).getByText(/Community 12345678/)).toBeVisible();
+  await expect(within(cards[1]!).queryByRole('list', { name: 'Releases' })).toBeNull();
+  await expect(within(cards[2]!).queryByText(/internal-format-without-a-reader-label|Main Version|1898|2021/)).toBeNull();
+} };
 export const SimplifiedChineseExcerptPhone: Story = { args: { locale: 'zh-Hans',
-  read: { ok: true, page: { ...read.page, hits: [{ ...read.page.hits[0]!, excerpt: chineseExcerpt }] } } },
+  read: { ok: true, page: { ...read.page, hits: [{ ...read.page.hits[0]!, excerpt: chineseExcerpt,
+    disambiguation: details }] } } },
   globals: { locale: 'zh-Hans', theme: 'dark', viewport: { value: 'phone' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByText(chineseExcerpt.text)).toBeVisible();
     await expect(canvas.getByText(chineseExcerpt.text)).toHaveAttribute('lang', 'zh-Hans');
     await expect(canvas.queryByText(chapterTextMessages['zh-Hans'].noExcerpt)).toBeNull();
+    await expect(canvas.getByRole('link', { name: new RegExp(`${levelsCopy('zh-Hans').kindFormal}.*1898`) })).toBeVisible();
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(innerWidth);
   } };
 export const NoChapterHitsLeaveNoTrace: Story = { args: { read: { ok: true, page: { ...read.page,

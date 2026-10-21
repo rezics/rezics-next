@@ -87,6 +87,7 @@ export async function readSearchPage(clients: { search: MainClient; names: MainC
     mainVersion: match.mainVersion, types: match.types,
     factObligations: match.factObligations,
     excerpt: match.excerpt,
+    disambiguation: match.disambiguation,
     title: named?.get(match.work)?.name ?? match.title ?? null,
     cover: named?.get(match.work)?.avatar ?? (mediaCover(match.cover) ? match.cover! : null),
     authors: (match.primaryCredits ?? []).flatMap(credit => {
