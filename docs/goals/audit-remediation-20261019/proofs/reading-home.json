@@ -5667,5 +5667,409 @@
     "audit": "ACTIVE",
     "privateBundle": ".temp/reading-home-CAS11-cleanup-G-2831-20261020T1415Z",
     "manifest": ".temp/reading-home-CAS11-cleanup-G-2831-20261020T1415Z/artifact-manifest.json"
+  },
+  "homeDEFRStatusOnlyPreparationV4": {
+    "atUTC": "2026-10-21T04:27:54.853791+00:00",
+    "worker": "SAME G-2831 / codex-1 / GPT-6.1 Sol / xhigh",
+    "scope": "Finite fresh custody Decision2026-10-21T04:19:24Z; no support/source review, AT callback, borrower grant or repeated backend matrix",
+    "result": "NEW CAS13 READY. Fresh own normal OAuth and same lawful actor/Book/continuation; fresh actual CAS12 supported PUT200 -> reading/null dates CAS13; TWO complete five-API held readbacks pass. Owned Web stopped, browser provider and job exited. State held for separate Root lease and SAME-owner cleanup.",
+    "preparationComplete": true,
+    "cleanupNeeded": true,
+    "rootLeaseIssuedOrBorrowed": false,
+    "lawfulActor": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+    "book": {
+      "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+      "title": "The Lantern Road 8805d7a2",
+      "nextUnread": {
+        "occurrence": "https://rezics.com/id/5caa0cc4-f716-876a-8a46-fa048620c48d",
+        "title": "At the harbour",
+        "href": "/w/01a10aff-93e5-7069-b80a-cd33bb6ce57c/read/5caa0cc4-f716-876a-8a46-fa048620c48d?language=en"
+      }
+    },
+    "sourceAndRuntime": {
+      "reportBranchPinBeforeAppend": "9d1849a784bc4c8d818cc7077a7d17918a19802b",
+      "frontendProductAndTestPin": "8b8a2c0a97b5662e6283fa7531a8f1c600f37fd0",
+      "backendServedPin": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "mainOrigin": "http://127.0.0.1:3001",
+      "accountsOrigin": "http://127.0.0.1:3004",
+      "temporaryFrontend": "http://127.0.0.1:43131 (stopped)",
+      "sourceReceipt": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v4-G-2831-20261021T0435Z/source/frontend-source-receipt.json",
+        "sha256": "09e7d1760e3e9d987460143722cc1f9e37ae99b221e5629c60eb557e53dca1cf",
+        "bytes": 633
+      },
+      "runtimeReceipt": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v4-G-2831-20261021T0435Z/source/backend-served-revision.json",
+        "sha256": "fe78e239322186b28fb1f13583cdae6929852939d493b523212c05d9cc711980",
+        "bytes": 785
+      },
+      "sourceRuntimeCallbackHashes": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v4-G-2831-20261021T0435Z/source/runtime-and-callback-hashes.json",
+        "sha256": "c31a548a22c469623be9d6b4a7e5ae3dfecbdbc62e6f527fc7f0ad8eaa949498",
+        "bytes": 7280
+      },
+      "dependencyBinding": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v4-G-2831-20261021T0435Z/source/dependency-binding.json",
+        "sha256": "1cf11c317c02648a57116fc5651ce0216add50d94b32d0bd2880b9a28cea21ee",
+        "bytes": 3205
+      },
+      "scopeLimit": "Status-only frozen8b8a2c0a Web-consumer recovery on Main3001/Accounts3004 installed75409. Repeated per-record reads; no cross-store atomic snapshot, current native, Studio, Book, integration or regression acceptance."
+    },
+    "supportedCommand": {
+      "method": "PUT",
+      "url": "http://127.0.0.1:43131/api/main/v1/works/01a10aff-93e5-7069-b80a-cd33bb6ce57c/reader-status",
+      "requestBody": {
+        "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+        "expectedVersion": 12,
+        "status": "reading",
+        "startedOn": null,
+        "finishedOn": null
+      },
+      "idempotencyKey": "30af230f-f0f4-4074-a3e5-5883de5a8232",
+      "attemptedAtUTC": "2026-10-21T04:24:59.188Z",
+      "response": {
+        "status": 200,
+        "body": {
+          "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+          "status": "reading",
+          "startedOn": null,
+          "finishedOn": null,
+          "version": 13,
+          "changedAt": "2026-10-21 04:24:59.585799+00",
+          "replayed": false
+        },
+        "receivedAtUTC": "2026-10-21T04:24:59.610Z"
+      }
+    },
+    "beforeBackup": {
+      "path": ".temp/reading-home-HomeDEFR-preparation-v4-G-2831-20261021T0435Z/private/before-backup.json",
+      "sha256": "a14400d9fcff4804bfe564326d1c8d17a934afc5fb062d180cf31ddef9c6b97a",
+      "guardedSemanticStateSHA256": "4135f94ab95f69c7fbe461c706102298ea8358c1fe8d2b08a7a23e300214a28b",
+      "twoFreshCompleteFiveAPIReadSetsAgreed": true,
+      "statusBefore": {
+        "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+        "status": null,
+        "startedOn": null,
+        "finishedOn": null,
+        "version": 12,
+        "changedAt": "2026-10-20 14:19:11.728167+00"
+      },
+      "historicalVersionNeverForcedExpectedVersion": true,
+      "noAtomicSnapshotClaim": true
+    },
+    "postWriteVerification": {
+      "completeFiveAPIInvariantReadbackSets": 2,
+      "successfulGETs": 10,
+      "currentStatus": {
+        "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+        "status": "reading",
+        "startedOn": null,
+        "finishedOn": null,
+        "version": 13,
+        "changedAt": "2026-10-21 04:24:59.585799+00"
+      },
+      "invariants": {
+        "datesPreserved": true,
+        "progressUnchanged": true,
+        "customShelvesUnchanged": true,
+        "ratingUnchanged": true,
+        "followBasisUnchanged": true,
+        "continuationUnchanged": true,
+        "currentCASUsed": true,
+        "uniqueIdempotencyKey": true,
+        "twoActualReadbacks": true
+      },
+      "readingCount": {
+        "value": 1,
+        "kind": "exact-page",
+        "total": null
+      },
+      "rawActualAnswers": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v4-G-2831-20261021T0435Z/private/preparation-result.json",
+        "sha256": "81d26f6a701c0cfaf1dea207e1eb7c1e225e4e1d1caf404f93510847f7cf0080",
+        "bytes": 31538
+      }
+    },
+    "writeAccounting": {
+      "statusWriteAttempts": 1,
+      "progressWrites": 0,
+      "otherDirectDataWrites": 0,
+      "browserMainNonGetRequests": []
+    },
+    "execution": {
+      "recordedJob": "dac5376c-2577-455a-9897-d85ba7d83499",
+      "attempt": 47,
+      "exitStatus": 0,
+      "resultClass": "passed",
+      "normalTaskAdmission": true,
+      "qaId": null,
+      "qaIdQualification": "No standalone QA ID emitted; recorded job, admitted Task command and private logs retained.",
+      "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test ./.temp/reading-home-HomeDEFR-preparation-v4-G-2831-20261021T0435Z/capture.test.ts",
+      "qaCommand": "bun scripts/goal/goalctl.ts test ./.temp/reading-home-HomeDEFR-preparation-v4-G-2831-20261021T0435Z/capture.test.ts",
+      "browserCommand": "task web:e2e -- --config .temp/reading-home-HomeDEFR-preparation-v4-G-2831-20261021T0435Z/playwright.config.ts prepare.spec.ts",
+      "bunWrapper": {
+        "passed": 1,
+        "failed": 0,
+        "expectations": 8
+      },
+      "playwrightPreparation": {
+        "passed": 1,
+        "failed": 0,
+        "durationMs": 30472.619
+      },
+      "assertionReach": [
+        "Fresh own eligible normal OAuth and same genuine Book identity",
+        "Two complete fresh prewrite five-API snapshots agree with prior restored semantic state",
+        "One supported PUT200 using actual current CAS12 -> reading/null dates CAS13",
+        "Two complete held-state five-API readbacks preserve progress/shelves/rating/follow basis/exact continuation"
+      ],
+      "ATOrOriginalOutcomeReached": false,
+      "lifecycle": {
+        "startedAtUTC": "2026-10-21T04:24:22.244Z",
+        "source": "8b8a2c0a97b5662e6283fa7531a8f1c600f37fd0",
+        "normalTaskAdmission": true,
+        "qaRunId": null,
+        "jobId": null,
+        "browserExited": true,
+        "browserExit": 0,
+        "browserError": null,
+        "ownedWebStopExit": 0,
+        "ownedWebStopError": null,
+        "reportBranchReturned": true,
+        "returnError": null,
+        "endedAtUTC": "2026-10-21T04:25:04.833Z"
+      },
+      "completedJob": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v4-G-2831-20261021T0435Z/source/completed-preparation-job.json",
+        "sha256": "54182d29addf69901ae9774c7b05f749043150c2d7f148c30af804dc5d1bde13",
+        "bytes": 952
+      },
+      "log": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v4-G-2831-20261021T0435Z/recorded-job.log",
+        "sha256": "3f4aced6b93f1993cca085c6f7acb2a1e61e741748c83974e1f8fc004d1bae94",
+        "bytes": 429
+      }
+    },
+    "ownedShutdown": {
+      "atUTC": "2026-10-21T04:27:54.422017+00:00",
+      "knownOwnedRunnerAndJobPids": [
+        942742,
+        942900,
+        943486,
+        944795
+      ],
+      "remainingOwnedAndJobPids": [],
+      "ownedFrontendProcessGroup": 943486,
+      "remainingGroupMembers": [],
+      "priorBorrowerAndCleanupPids": [
+        2012185,
+        2012346,
+        2013622,
+        2014274,
+        2022559,
+        2022680,
+        2022683,
+        2023252,
+        2023255,
+        2023326,
+        2023389,
+        2023429,
+        2026563,
+        2448308,
+        2448695,
+        2452278,
+        2452566,
+        2453353,
+        2455628
+      ],
+      "remainingPriorBorrowerAndCleanupPids": [],
+      "portsListening": {
+        "43131": false,
+        "3001": true,
+        "3004": true
+      },
+      "recordedJobCompletedExit0": true,
+      "frontendStopReceipt": {
+        "ownedWebStopped": true,
+        "pid": 943486,
+        "origin": "http://127.0.0.1:43131",
+        "stoppedAtUTC": "2026-10-21T04:25:04.592Z",
+        "onlyOwnedProcessGroupTouched": true
+      },
+      "browserShutdownEvidence": "Admitted Task Playwright preparation and provider teardown exited0; known Playwright runner absent. Browser child PIDs were not captured; no separate per-child absence claim.",
+      "ownedATStarted": false,
+      "protected": {
+        "1677097": {
+          "exists": true,
+          "cwd": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2791",
+          "startTime": "10065363"
+        },
+        "77717": {
+          "exists": false,
+          "cwd": null,
+          "startTime": null
+        },
+        "78038": {
+          "exists": false,
+          "cwd": null,
+          "startTime": null
+        },
+        "1372265": {
+          "exists": true,
+          "cwd": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+          "startTime": "6976859"
+        },
+        "1370402": {
+          "exists": true,
+          "cwd": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+          "startTime": "6976343"
+        },
+        "1370400": {
+          "exists": true,
+          "cwd": "/home/edge/projects/rezics/rezics-next/apps/web",
+          "startTime": "6976343"
+        }
+      },
+      "readOnlyVerification": true,
+      "signalsSentByVerification": false,
+      "onlyOwnedFrontendStopped": true,
+      "backendAccountsKEEPAndPeerActionsPerformed": false
+    },
+    "ready": {
+      "path": ".temp/reading-home-HomeDEFR-preparation-v4-G-2831-20261021T0435Z/ready-for-G2847-HomeDEFR-CAS13.json",
+      "sha256": "92074fab1d345a57a39252d0d4932f4d9cea07569fd5b1c406986377dad676f1",
+      "bytes": 40577
+    },
+    "sameOwnerCleanupOperation": {
+      "path": ".temp/reading-home-HomeDEFR-preparation-v4-G-2831-20261021T0435Z/same-owner-cleanup-operation.json",
+      "sha256": "48e738fd4dc7d753dddc10da7450065b23f769280e53a91b1a31aeb35d8b0ee8",
+      "bytes": 3550
+    },
+    "cleanupPlan": {
+      "owner": "SAME G-2831",
+      "when": "Only after separate Root authorization and actual release of THIS new custody with owned borrower/job/frontend/browser/AT shutdown receipts; this READY authorizes no borrow.",
+      "supportedOperation": {
+        "method": "PUT",
+        "path": "/v1/works/01a10aff-93e5-7069-b80a-cd33bb6ce57c/reader-status",
+        "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+        "expectedVersion": "Fresh actual version from two complete five-API snapshots after exact held reading/null dates/version13 and all semantic guards; never force this or any spent CAS.",
+        "status": null,
+        "startedOn": null,
+        "finishedOn": null,
+        "idempotencyKey": "NEW unique command identity generated only at cleanup time"
+      },
+      "beforeBackup": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v4-G-2831-20261021T0435Z/private/before-backup.json",
+        "sha256": "a14400d9fcff4804bfe564326d1c8d17a934afc5fb062d180cf31ddef9c6b97a",
+        "bytes": 11270
+      },
+      "heldState": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v4-G-2831-20261021T0435Z/private/lease-state.json",
+        "sha256": "27d1634835c1d3dce14bbb0f1ea8a49f5012eb75be59b3aa70d90ea816c5eb44",
+        "bytes": 5778
+      },
+      "heldStatus": {
+        "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+        "status": "reading",
+        "startedOn": null,
+        "finishedOn": null,
+        "version": 13,
+        "changedAt": "2026-10-21 04:24:59.585799+00"
+      },
+      "guardedBeforeStateSHA256": "4135f94ab95f69c7fbe461c706102298ea8358c1fe8d2b08a7a23e300214a28b",
+      "retainedSupportedCleanupCallback": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v4-G-2831-20261021T0435Z/source/retained-supported-cleanup-callback.ts",
+        "sha256": "fd15dff6373243c994e153e8920ad8ba74c41ecb3e4944b401988ff133533f4c",
+        "bytes": 16776
+      },
+      "retainedCallbackBindingLimit": "Retained callback contains spent CAS11 release guards. Bind the same supported operation and semantic comparators to THIS new custody and actual future Root release before execution; no old authority revived.",
+      "exactSetupFailureCleanup": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v4-G-2831-20261021T0435Z/source/owned-failed-setup-cleanup-callback.ts.retained",
+        "sha256": "a28691b56008572ef974c1e12bb0516e9699ed2050c58f9952590e3553d8ed12",
+        "bytes": 2769
+      },
+      "executableSetupFailureCleanup": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v4-G-2831-20261021T0435Z/prepare.spec.ts",
+        "sha256": "1f7e80b0308acdc27f6927f741cbfc77705cdc392b564dcd659ba7b2fa00d58b",
+        "bytes": 14465
+      },
+      "guards": [
+        "Rehash THIS READY/before/held-state and verify actual new Root release plus owned borrower shutdown",
+        "Fresh own normal OAuth retains eligible actor71473997, Book01a10aff, frozen8b8a2c0a, Main3001/Accounts3004 installed75409 and nextUnread5caa0cc4",
+        "Two complete genuine five-API snapshots agree and match THIS held reading/null dates/version13 plus progress/shelves/rating/follow basis/exact continuation",
+        "Restore only original status/startedOn/finishedOn null using freshly read expectedVersion and a new command identity",
+        "Require TWO complete genuine five-API invariant readback sets; preserve actual version/changedAt history"
+      ],
+      "conflictHandling": "Return one exact conflict and existing owner without writing; never force stale CAS or overwrite intervening reader changes.",
+      "semanticRestorationOnly": true,
+      "byteExactRollbackOrHistoryDeletionClaimed": false,
+      "executedBySuccessfulPreparation": false
+    },
+    "documentContextSupportV4": {
+      "acceptedCommit": "951fb35c0c30",
+      "retainedOfflineResult": "155 hashes verified; 3 tests / 13 assertions / 6 Python cases and docs pass; reused without review/rerun",
+      "futureBinding": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v4-G-2831-20261021T0435Z/source/v4-future-binding.json",
+        "sha256": "395b0fd1e0b7497c4f8527d59c3386dd060bf2fd389e1d3b5dcbe8a101efcecd",
+        "bytes": 8815
+      },
+      "consumption": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v4-G-2831-20261021T0435Z/source/v4-binding-consumption.json",
+        "sha256": "312237453f92c015aa5a60678b684ba8094c5b4fdc46a3cdb3cec6fb2d4fca46",
+        "bytes": 1356
+      },
+      "frozenCallbackSHA256": "9c56d91f687e9a03a00ce05dc88171ba22d63beab60d7de6b55592d0296aa4e8",
+      "frozenTemplateSHA256": "22e5b9c90dc1fd0fce2cf412df44a46ab01bf354b72a9b74f6008a9b830868bc",
+      "futureOriginalStage": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v4-owned-document-context",
+      "callbackOrTemplatePatched": false,
+      "supportExecutedHere": false,
+      "rootSeparatelyAuthorizesOriginalTest": true
+    },
+    "preservation": {
+      "priorReportTopLevelFieldsUnchanged": 30,
+      "priorReportMemberBytesPreserved": true,
+      "priorReportSHA256": "9f464c56dc990428eba8162b5cce25d911cbfb3fb72f460a1853895e7775cb8a",
+      "allPriorBundlesAndFailuresRetained": true,
+      "acceptedCAS11Cleanup": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v4-G-2831-20261021T0435Z/source/accepted-CAS11-cleanup-receipt.json",
+        "sha256": "c39a73a30ec02e4a6894b043ea305e1c02e076c70e16fbc8cf0988d817369a6f",
+        "bytes": 1455
+      },
+      "oldCAS11AndOlderBorrowsSpent": true,
+      "sourceSupportReviewOrATCallbacksRepeated": false,
+      "productFilesOrOriginalTestsChanged": false,
+      "mainOtherWorktreesOrSharedControlFilesWritten": false,
+      "corpusRestoreImportResetSharedRefreshOrNativeBuild": false,
+      "backendStartedOrChanged": false,
+      "G2823RuntimeImageDefaultLeasesSoleStopCustodyStoragePreserved": true,
+      "Task1677097KEEPAndPeerResourcesPreserved": true,
+      "hosts77717And78038UntouchedAlreadyAbsent": true,
+      "originalFindingOrClassClosed": false
+    },
+    "findingAcceptance": {
+      "D4-003": "No new original outcome acceptance; all prior evidence and blockers retained.",
+      "D4-011": "Original Home speech remains for separately authorized SAME G-2847 callback. Readiness provides no AT acceptance.",
+      "acceptedOriginalClassesOverall": "24/61 unchanged",
+      "acceptedOriginalSiteClasses": "21/45 unchanged",
+      "audit": "ACTIVE"
+    },
+    "evidence": {
+      "privateBundle": ".temp/reading-home-HomeDEFR-preparation-v4-G-2831-20261021T0435Z",
+      "manifest": ".temp/reading-home-HomeDEFR-preparation-v4-G-2831-20261021T0435Z/artifact-manifest.json",
+      "managerCopy": "Not performed: write boundary is G-2831 worktree and /tmp. Root may copy private bundle."
+    },
+    "administrativeChecks": {
+      "affectedPreparationSelection": {
+        "recordedJob": "dac5376c-2577-455a-9897-d85ba7d83499",
+        "exitStatus": 0,
+        "bunPassed": 1,
+        "expectations": 8,
+        "playwrightPassed": 1
+      },
+      "docsCheck": "Pending required recorded task docs:check after additive append; separate administrative result will resolve this field.",
+      "noBroadGoalOrRegressionGate": "Latest finite Decision authorizes only affected preparation and docs:check."
+    },
+    "nextOwner": "Root: consume immutable custody and separately authorize SAME G-2847 original HomeDE390/HomeFR390 speech command; SAME G-2831 retains cleanup ownership"
   }
+
 }
