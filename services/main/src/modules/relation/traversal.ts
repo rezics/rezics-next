@@ -9,6 +9,8 @@ import {
 } from './change.ts';
 import { readCurrentComponent } from '../semantic/change.ts';
 import { relationSubjectWork } from './work-authority.ts';
+import { readAttributedOccurrence, validateAttributedOccurrence, validateAttributedOccurrenceIdentity } from './v2-read.ts';
+import { relationAttributionVerifier } from './attribution.ts';
 import { renderRelation, type RelationBinding, type RelationRendering } from '../lexicon/render.ts';
 import { selectedProjection, type RelationProjection } from '../lexicon/render.ts';
 import {
@@ -19,11 +21,11 @@ import {
 import { checkedNativeIri } from '../semantic/schema.ts';
 import type { ReferenceCheck } from '../semantic/read.ts';
 import type { ReferenceDisclosure } from '../target/disclosed-references.ts';
-import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
+import { DATASET, GRAPHS, RV, iri, lit, PendingActivation, type WorkActivationEnvironment } from '../work/activate.ts';
 import { RevisionCorrupt } from '../work/history.ts';
 import type { ResourceSummary } from '../media/summary.ts';
 import { discloseInventory, DISCLOSURE_COST } from '../disclosure/read.ts';
-import { currentDisclosureViewer } from '../disclosure/viewer.ts';
+import { currentDisclosureViewer, namePolicyPrincipal } from '../disclosure/viewer.ts';
 import { framePattern, matchFromScore, readContinuityMemberships,
   type ContinuityMembershipCursor } from '../projection/frame-read.ts';
 import { CONTINUITY_MEMBERSHIP_COST, type Coordinate } from '../projection/dimension.ts';
@@ -252,6 +254,26 @@ async function resolveCandidate(
         && (!selection || item.role === roleIri(selection.definition, selection.viewingRole)),
     );
     if (!own || selection && meaning.definition !== selection.definition) return null;
+    const attributedNames = new Set(current.state.participations.filter(item => item.creditedName
+      && item.attributionSupports?.some(support => support.fields.includes('creditedName'))).map(item => item.iri));
+    let attributionCurrent = false;
+    if (attributedNames.size && session) {
+      const read = async () => {
+        const owned = await readAttributedOccurrence(env, candidate.relation, current.head);
+        if (owned.manifest !== current.manifest) throw new RevisionCorrupt('occurrence manifest differs from its exact revision');
+        validateAttributedOccurrenceIdentity(owned, meaning);
+        try {
+          return await validateAttributedOccurrence(env, owned, meaning, relationAttributionVerifier(
+            session.deps.relationAttribution, session.principal ?? namePolicyPrincipal(session.viewer), session.options.actingSubject));
+        } catch (error) {
+          if (!(error instanceof PendingActivation || error instanceof SemanticChangeRejected)) throw error;
+          return null;
+        }
+      };
+      const attribution = await read();
+      session.observeDependency(`inverse-relation-attribution:${candidate.relation}:${current.head}`, attribution, read);
+      attributionCurrent = attribution !== null;
+    }
     return {
       entry: { ...base, revision: current.head, evidence: current.state.evidence ?? null },
       references: [...new Set(refs.filter((ref) => ref !== resource))],
@@ -261,7 +283,9 @@ async function resolveCandidate(
         role: meaning.roleKeys[item.role]!,
         participant: item.participant,
         ...(item.position === undefined ? {} : { position: item.position }),
-        ...(item.creditedName ? { creditedName: item.creditedName } : {}),
+        // Source names need their current owner; native allocations and names
+        // authored without Source support retain their existing authority.
+        ...(item.creditedName && (!attributedNames.has(item.iri) || attributionCurrent) ? { creditedName: item.creditedName } : {}),
       })),
     };
   }

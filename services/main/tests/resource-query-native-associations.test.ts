@@ -7,6 +7,7 @@ import { nativeAssociationCandidates, readNativeAssociationPage } from '../src/m
 import { selectAssociations } from '../src/modules/query/association-selection.ts';
 import { RELATION_CHANGE_FAMILY } from '../src/modules/relation/change.ts';
 import { checkedAttributionSupports, RELATION_V2_PROFILE } from '../src/modules/relation/v2-schema.ts';
+import { readResourceRelations } from '../src/modules/relation/traversal.ts';
 import { ASSOCIATION_QUERY } from '../src/modules/query/association-contract.ts';
 import { checkedComponentState } from '../src/modules/semantic/change.ts';
 import { familyReceiptIri, sealComponentState } from '../src/modules/semantic/command.ts';
@@ -223,8 +224,9 @@ test('hidden native candidates retain a bounded physical continuation and cannot
   await expect(nativeAssociationCandidates(session, selection, null, 0)).rejects.toThrow(WorkReadUnavailable);
 });
 
-async function publishedFixture(relation = false, attributed = false, sibling = false, nativeAnnotation = false) {
+async function publishedFixture(relation = false, attributed = false, sibling = false, nativeAnnotation = false, authoredName = false) {
   const f = await fixture(!nativeAnnotation, 1, attributed, sibling, nativeAnnotation), originalQuery = f.env.fuseki.query.bind(f.env.fuseki);
+  if (authoredName) f.state.participations[0]!.creditedName = { lexical: 'Independently authored name', language: 'en' };
   const occurrenceAdmission = id(172).slice(-36), occurrenceReceipt = familyReceiptIri(occurrenceAdmission, RELATION_CHANGE_FAMILY);
   const occurrenceManifest = relation ? await sealComponentState(f.env, f.state.credit, RELATION_V2_PROFILE, {
     profile: 'relation-change-v2', definition: f.state.mapping.revision, lifecycle: 'active', applicability: [],
@@ -329,8 +331,75 @@ async function publishedFixture(relation = false, attributed = false, sibling = 
   } as unknown as MainWorkDependencies['wikiEvidence'];
   f.live.candidates = [{ work: f.state.work, occurrence: f.state.credit, revision: f.revision,
     ...(relation ? { subjectParticipation: f.state.subjectParticipation } : {}), family: relation ? 'relation' : 'credit' }];
-  return { ...f, records, livePublication: live, session };
+  return { ...f, records, livePublication: live, session, occurrenceManifest };
 }
+
+test('inverse occurrence names consult the current attribution owner and fence withdrawal without losing identity', async () => {
+  const f = await publishedFixture(true, true, false, false, true), queryOwner = f.env.fuseki.query.bind(f.env.fuseki);
+  const supportState = { current: true, token: 'original-source-support', error: null as Error | null };
+  f.session.principal = { issuer: 'https://account.example', subject: 'reader' };
+  f.session.options.actingSubject = id(10);
+  f.session.deps.relationAttribution = { async verify({ requests, participations }) {
+    if (supportState.error) throw supportState.error;
+    return {
+    guard: 'current-source-annotation-guard', proofs: requests.map(({ participation, support }) => ({
+      basis: support.basis, participant: participation.participant,
+      receipt: `urn:rezics:receipt:${hash('original-source-citation')}`, revision: id(182),
+      validationToken: hash(supportState.token), state: supportState.current ? 'current' as const : 'withdrawn' as const,
+      fields: { creditedName: participation.creditedName,
+        ...participations.find(part => part.role === participation.role)?.sourceIdentity }, evidence: support.evidence,
+    })),
+  }; } };
+  f.env.fuseki.query = async query => {
+    if (query.includes('SELECT DISTINCT ?relation ?kind ?key')) return rows({ relation: f.state.credit,
+      kind: 'occurrence', key: `occurrence:${f.state.credit}` });
+    if (query.includes('SELECT ?head ?manifest ?model')) return rows({ head: f.revision,
+      manifest: f.occurrenceManifest!, model: RELATION_V2_PROFILE });
+    if (query.includes('SELECT ?p ?o')) return rows(
+      { p: 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', o: RV + 'RelationOccurrence' },
+      { p: RV + 'modelRevision', o: RELATION_V2_PROFILE },
+      { p: RV + 'relationDefinition', o: f.state.mapping.revision },
+      { p: RV + 'occurrenceHead', o: f.revision });
+    if (query.includes('SELECT ?presentation ?head ?language')) return rows();
+    return queryOwner(query);
+  };
+  const read = (session: WorkReadSession) => readResourceRelations(f.env, {
+    resource: f.state.work, languages: ['en'], limit: 10,
+    canRead: async () => true, canReadOccurrence: async () => true,
+    disclose: async references => new Set(references), summarize: references => session.summaries(references),
+  }, session);
+  const page = await read(f.session);
+  expect(page.items).toHaveLength(1);
+  expect(page.items[0]!.rendering).toMatchObject({ bindings: [
+    { participant: { kind: 'resource', ref: f.state.work }, creditedName: f.state.participations[0]!.creditedName },
+    { creditedName: f.state.participations[1]!.creditedName },
+  ] });
+  supportState.current = false;
+  await expect(f.session.fenceDependencies()).rejects.toThrow(WorkReadMoved);
+  const next = new WorkReadSession(f.session.deps, f.session.request, { actingSubject: id(10) }, f.session.position);
+  next.principal = f.session.principal;
+  const withdrawn = await read(next);
+  expect(withdrawn.items).toHaveLength(1);
+  expect(withdrawn.items[0]!.revision).toBe(f.revision);
+  expect(withdrawn.items[0]!.rendering).toMatchObject({ bindings: [
+    { participant: { kind: 'resource', ref: f.state.work }, creditedName: f.state.participations[0]!.creditedName },
+    { participant: f.state.participations[1]!.participant },
+  ] });
+  expect(JSON.stringify(withdrawn)).not.toContain('Exact credited alias');
+  await next.fenceDependencies();
+  supportState.current = true;
+  const restored = new WorkReadSession(next.deps, next.request, next.options, next.position);
+  restored.principal = next.principal;
+  expect(JSON.stringify(await read(restored))).toContain('Exact credited alias');
+  supportState.token = 'different-current-source-rights';
+  await expect(restored.fenceDependencies()).rejects.toThrow(WorkReadMoved);
+  supportState.error = new Error('Source transport failed');
+  await expect(read(next)).rejects.toThrow('Source transport failed');
+  delete next.deps.relationAttribution;
+  const unavailable = await read(next);
+  expect(JSON.stringify(unavailable)).not.toContain('Exact credited alias');
+  expect(JSON.stringify(unavailable)).toContain('Independently authored name');
+});
 
 test('native primary page projects its own adopted occurrence, participation and subject-global traits without conversion', async () => {
   const f = await publishedFixture();
