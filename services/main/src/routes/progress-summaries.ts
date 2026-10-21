@@ -7,6 +7,7 @@ import { readWorkBasis, fenceWorkBasis } from '../modules/work/read-header.ts';
 import { readWorkRealization } from '../modules/realization/read.ts';
 import { readWorkRelease } from '../modules/release/read.ts';
 import { parseStoredRelease } from '../modules/release/schema.ts';
+import { preferenceReleaseMatches } from '../modules/session/preference-release.ts';
 import { GRAPHS, iri } from '../modules/work/activate.ts';
 import { InvalidContentLanguages, recordedLanguageTag } from '../modules/release/languages.ts';
 import { SessionDenied } from '../modules/session/contract.ts';
@@ -87,7 +88,10 @@ export function progressSummariesRoutes(work: MainWorkDependencies) {
         if (!work.editionPreferences) throw new WorkReadUnavailable('Edition preferences are unavailable');
         const owner = await own(request, body.actingSubject);
         const resource = `https://rezics.com/id/${params.work}`;
-        const language = recordedLanguageTag(body.language);
+        const language = body.language === null ? null : recordedLanguageTag(body.language);
+        if (language === null && body.edition?.kind !== 'release') {
+          throw new InvalidEditionPreference('An unknown language requires a retained release');
+        }
         if (language === 'zxx' || language === 'und') throw new InvalidEditionPreference('Choose a realization language');
         await workRead(work, request, { actingSubject: body.actingSubject }, async session => {
           await readWorkBasis(session, resource);
@@ -103,9 +107,7 @@ export function progressSummariesRoutes(work: MainWorkDependencies) {
               ${iri(body.edition.revision)} a rv:ReleaseRevision ; rv:component ${iri(body.edition.resource)} ; rv:releaseState ?state
             } } LIMIT 2`, 1);
             const pinned = rows[0]?.state ? parseStoredRelease(rows[0].state.value) : null;
-            const matches = pinned?.profile === 'release-v2'
-              ? pinned.resolvedCoverage.some(entry => entry.work === resource && recordedLanguageTag(entry.language) === language)
-              : pinned?.work === resource && pinned.contentLanguages.some(tag => recordedLanguageTag(tag) === language);
+            const matches = pinned && preferenceReleaseMatches(pinned, resource, language);
             if (!matches) {
               throw new InvalidEditionPreference('Edition must pin this Work in the chosen language');
             }
