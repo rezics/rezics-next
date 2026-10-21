@@ -42,7 +42,8 @@ const scopeRealm = t.Object({ kind: t.Literal('realm'), realm: nativeId }, close
 const scopeMine = t.Object({ kind: t.Literal('mine') }, closed);
 const scopeV1 = t.Union([scopeAll, scopeRealm]);
 const scope = t.Union([scopeAll, scopeRealm, scopeMine]);
-const text = t.Union([t.Object({ phrase: t.String({ minLength: 2, maxLength: 80 }) }, closed),
+const text = t.Union([t.Object({ keywords: t.String({ minLength: 1, maxLength: 80 }) }, closed),
+  t.Object({ phrase: t.String({ minLength: 1, maxLength: 80 }) }, closed),
   t.Object({ title: t.String({ minLength: 2, maxLength: 80 }),
     body: t.String({ minLength: 2, maxLength: 80 }) }, closed)]);
 const page = t.Object({ size: t.Integer({ minimum: 1, maximum: QUERY_COST.searchPageSize }),

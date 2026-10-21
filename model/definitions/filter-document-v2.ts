@@ -11,7 +11,8 @@ export interface ResourceQuery {
   context: 'global' | { realm: string };
   scope: { kind: 'all' } | { kind: 'realm'; realm: string } | { kind: 'mine' };
   filter?: FilterDocument;
-  text?: { phrase: string } | { title: string; body: string };
+  /** Keywords need not be adjacent or ordered; phrase retains exact matching. */
+  text?: { keywords: string } | { phrase: string } | { title: string; body: string };
   sort: 'relevance' | 'newest' | 'updated' | 'top-rated';
   /** The standing rating Context a top-rated or Mine page ranks by. */
   ratingContext?: string;

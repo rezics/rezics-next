@@ -26,7 +26,8 @@ export class QueryRejected extends Error {
   constructor(readonly refusal: QueryRefusal, message: string) { super(message); }
 }
 
-type SearchRequest = { profile: string; phrase?: string; titleTerm?: string; bodyTerm?: string;
+type SearchRequest = { profile: string; phrase?: string; matchMode?: 'keywords' | 'phrase';
+  titleTerm?: string; bodyTerm?: string;
   language: string | null; author?: string; context?: { kind: 'realm-local'; id: string };
   includeTypes?: string[]; excludeTypes?: string[]; sense?: string;
   ratingContext?: string; minimumMeanTimes10?: number; pageSize?: number; continuation?: unknown };
@@ -224,10 +225,29 @@ export function compiledQueryCapabilities(plan: CompiledQuery): Exposure[] {
   return semanticTypeCapabilities(types);
 }
 
+/** Internal callers share the route's closed text alternatives and Unicode bound. */
+function admitText(text: ResourceQuery['text']): void {
+  if (text === undefined) return;
+  if (!text || typeof text !== 'object' || Array.isArray(text)) fail('Text needs an admitted alternative');
+  const keys = Object.keys(text);
+  const single = keys.length === 1 && (keys[0] === 'keywords' || keys[0] === 'phrase');
+  const fields = keys.length === 2 && keys.includes('title') && keys.includes('body');
+  if (!single && !fields) fail('Text needs keywords, phrase, or title and body');
+  for (const value of Object.values(text)) {
+    if (typeof value !== 'string' || !value.trim() || [...value].length < (fields ? 2 : 1)) {
+      fail('Search text is empty or malformed');
+    }
+    if ([...value].length > 80) {
+      throw new QueryRejected('query_budget_exceeded', 'Search text exceeds 80 Unicode code points');
+    }
+  }
+}
+
 function compileLegacyQuery(query: ResourceQuery | ResourceQueryV2): CompiledQuery {
   if (query.sourcePolicy !== undefined || query.asOf !== undefined) {
     throw new QueryRejected('unsupported_query_source', 'Only the current product source is admitted');
   }
+  admitText(query.text);
   const admitted = admit(query.filter, query.scope.kind === 'realm');
   const { conditions, facets, graphReads } = admitted;
   if (!Number.isInteger(query.page?.size) || query.page.size < 1) {
@@ -392,7 +412,10 @@ function compileLegacyQuery(query: ResourceQuery | ResourceQueryV2): CompiledQue
   const request: SearchRequest = { profile: '', language: null, pageSize: query.page.size,
     ...realm ? { context: { kind: 'realm-local', id: realm } } : {},
     ...query.page.continuation === undefined ? {} : { continuation: query.page.continuation } };
-  if (searchText && 'phrase' in searchText) request.phrase = searchText.phrase;
+  if (searchText && 'keywords' in searchText) {
+    request.phrase = searchText.keywords;
+    request.matchMode = 'keywords';
+  } else if (searchText && 'phrase' in searchText) request.phrase = searchText.phrase;
   else if (searchText) { request.titleTerm = searchText.title; request.bodyTerm = searchText.body; }
   const concepts: ConceptSelection[] = [];
   let includeMatch: 'all' | 'any' = 'all';
