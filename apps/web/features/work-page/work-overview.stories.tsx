@@ -4,6 +4,8 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { direction, selectDisplayName } from '@rezics/main/language';
 import { materializeData } from 'native-i18n';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
+import type { AnswerRecord } from '../../../../scripts/api/answer-record.ts';
+import progressRecord from '../../../../tests/qa/fixtures/outcomes/books/collection-tracking-and-progress.json';
 import type { UiLocale } from '../../i18n/define.ts';
 import { memoryReaderActions } from '../catalogue/fixtures.ts';
 import type { ReaderActions } from '../catalogue/reader-actions.tsx';
@@ -471,17 +473,57 @@ export const TitleAlreadyInReadersLanguage: Story = {
   },
 };
 
-/** A reader part-way through continues at the next unread chapter, which is named under the button. */
+const recordedProgress = progressRecord as AnswerRecord;
+function progressAnswer(label: string) {
+  const sample = recordedProgress.personas.owner.find(item => item.label === label);
+  if (!sample || sample.status !== 200) throw new Error(`Missing recorded Book progress answer: ${label}`);
+  return sample.answer;
+}
+const continuingWork = progressAnswer('book-card-and-chapter-count') as WorkHeader;
+const recordedResume = progressAnswer('continue-next-chapter') as {
+  work: string; lastPosition: unknown; nextUnread: { href: string; title: string } | null;
+};
+if (recordedResume.work !== continuingWork.id || !recordedResume.lastPosition || !recordedResume.nextUnread) {
+  throw new Error('Recorded Book resume must supply the same Work and next unread chapter');
+}
+const continuingStart: ReadStart = { kind: 'continue', href: recordedResume.nextUnread.href,
+  chapter: recordedResume.nextUnread.title };
+
+/** The recorded completion→nextUnread answer supplies this input; this is not a live progress save. */
 export const ContinueReading: Story = {
-  args: { readAction: { kind: 'continue', href: chapterHref(fixture.workRef, 'b5c7d9e1-f3a5-4b7c-9d1e-000000000004'),
-    chapter: 'Chapter 4: Neap Tide' } },
-  async play({ canvasElement }) {
+  args: { work: continuingWork, readAction: continuingStart },
+  parameters: { route: { pathname: localizedPath(workHref(continuingWork.id.slice(-36)), 'en') } },
+  render: ({ work, readAction, locale }) => <WorkFrame workRef={work.id.slice(-36)} work={work} credits={null}
+    locale={locale} messages={messages[locale]} readAction={<ReadButton workRef={work.id.slice(-36)}
+      start={readAction!} messages={messages[locale]} />}>
+    <WorkAbout work={work} locale={locale} messages={messages[locale]} />
+  </WorkFrame>,
+  globals: { viewport: { value: 'desktop1440' } },
+  async play({ canvasElement, args }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('link', { name: 'Continue reading' }))
-      .toHaveAttribute('href', localizedPath(chapterHref(fixture.workRef, 'b5c7d9e1-f3a5-4b7c-9d1e-000000000004'), 'en'));
-    await expect(canvas.getByText('Chapter 4: Neap Tide')).toBeVisible();
+    const continueReading = canvas.getByRole('link', { name: 'Continue reading' });
+    await expect(continueReading)
+      .toHaveAttribute('href', localizedPath(recordedResume.nextUnread!.href, 'en'));
+    await expect(canvas.getByRole('heading', { level: 1, name: continuingWork.title.value })).toBeVisible();
+    await expect(canvasElement.querySelector('[data-subject-header]')).toHaveAttribute('data-resource', recordedResume.work);
+    await expect(canvas.getByText(recordedResume.nextUnread!.title)).toBeVisible();
+    await expect(canvas.getAllByRole('link', { name: /^(Read|Start reading|Continue reading)$/ })).toHaveLength(1);
+    await expect(continueReading).toHaveAttribute('data-next-action');
+    let activated: string | null = null;
+    const capture = (event: MouseEvent) => {
+      event.preventDefault();
+      activated = continueReading.getAttribute('href');
+    };
+    continueReading.addEventListener('click', capture);
+    try { await userEvent.click(continueReading); }
+    finally { continueReading.removeEventListener('click', capture); }
+    await expect(activated).toBe(args.readAction?.kind === 'continue'
+      ? localizedPath(args.readAction.href, 'en') : null);
+    await expect(canvas.getByText(recordedResume.nextUnread!.title)).toBeVisible();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
 };
+export const ContinueReadingPhone: Story = { ...ContinueReading, globals: { viewport: { value: 'phone' } } };
 
 /** Anyone else starts at chapter 1; a Work with nothing to read has no Read button. */
 export const StartReading: Story = {

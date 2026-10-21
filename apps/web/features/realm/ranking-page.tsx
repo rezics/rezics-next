@@ -1,6 +1,6 @@
 import { buttonVariants } from '@rezics/ui/button';
 import { Skeleton, SkeletonText } from '@rezics/ui/skeleton';
-import { CalendarRangeIcon, MessagesSquareIcon, RefreshCwIcon, RotateCwIcon, TriangleAlertIcon } from 'lucide-react';
+import { RefreshCwIcon, RotateCwIcon, TriangleAlertIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import type { UiLocale } from '../../i18n/define.ts';
 import { signInPath } from '../auth/paths.ts';
@@ -10,7 +10,8 @@ import { failureText, type Loaded } from '../feed/types.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { EmptyState, failureDetail } from '../shell/empty-state.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
-import { DiscussionList } from './discussion-list.tsx';
+import { realmMessagesFor } from './catalog.ts';
+import { DiscussionListContent } from './discussion-content.tsx';
 /** Ranking coordinates and an optional opaque continuation, on the existing Discussions route. */
 export function rankingHref(path: string, sort: ThreadSort, window: ThreadWindow, cursor?: string): string {
   const query = new URLSearchParams();
@@ -56,21 +57,7 @@ export function RealmRankingPage({ page, path, sort, window, cursor, locale, fee
           <RotateCwIcon aria-hidden="true" />{moved ? t.refresh : t.retry}</LocalizedLink>}
     </EmptyState>;
   }
-  const hrefs = {
-    sorts: { best: rankingHref(path, 'best', window), new: rankingHref(path, 'new', window), top: rankingHref(path, 'top', window) },
-    windows: { week: rankingHref(path, 'top', 'week'), month: rankingHref(path, 'top', 'month'), all: rankingHref(path, 'top', 'all') },
-  };
-  const empty = sort === 'top' && window !== 'all'
-    ? <EmptyState icon={CalendarRangeIcon} headingLevel={3} title={t.emptyPeriod} description={t.emptyPeriodBody}
-      className="m-3 sm:m-4">
-      <LocalizedLink href={hrefs.windows.all} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-        {t.showAllTime}</LocalizedLink>
-      <LocalizedLink href={hrefs.sorts.new} className={buttonVariants({ variant: 'ghost', size: 'sm' })}>{t.new}</LocalizedLink>
-    </EmptyState>
-    : <EmptyState icon={MessagesSquareIcon} headingLevel={3} title={t.emptyDiscussions}
-      description={t.emptyDiscussionsBody} className="m-3 sm:m-4" />;
-  return <DiscussionList items={page.data.items} realmPath={path} realmId={page.data.realm} sort={sort} window={window} hrefs={hrefs}
-    next={page.data.nextCursor ? rankingHref(path, sort, window, page.data.nextCursor) : null}
-    first={cursor ? top : null} empty={empty} />;
+  return <DiscussionListContent page={page} path={path} query={{ sort, window, cursor }} locale={locale}
+    feed={feed} messages={realmMessagesFor(locale)} />;
 }
 

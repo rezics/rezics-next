@@ -10,6 +10,9 @@ import type { Loaded } from '../feed/types.ts';
 import type { ThreadsPage } from '../feed/thread.ts';
 import { rankingContractState, rankingNow } from './ranking-contract-states.ts';
 import { rankingHref, RealmRankingPage } from './ranking-page.tsx';
+import { DiscussionListContent } from './discussion-content.tsx';
+import { realmMessagesFor } from './catalog.ts';
+import { realmHref } from './route.ts';
 
 const path = spaceHref('ranking-garden', 'community');
 const router = { bfcacheId: 'ranking-test', back() {}, forward() {}, refresh() {}, hmrRefresh() {}, push() {}, replace() {}, prefetch() {} };
@@ -66,4 +69,88 @@ test('refused continuations offer a restart that discards the cursor and retains
     expect(html).not.toContain('No discussions');
     expect(html).not.toContain('role="feed"');
   }
+});
+
+test('an empty collection offers its Realm browse route without ordering empty results', () => {
+  const sample = rankingContractState({ persona: 'visitor', state: 'empty' });
+  if (!('items' in sample.answer)) throw new Error('Expected empty threads');
+  for (const sort of ['best', 'new', 'top'] as const) {
+    const html = renderToStaticMarkup(<AppRouterContext value={router}>
+      <FeedProvider locale="en" messages={messages} now={rankingNow} signedIn={false} actingSubject={null}
+        signInHref="/auth/start" avatarQuery="" tab="all" followedRealms={null}>
+        <RealmRankingPage page={{ ok: true, data: { ...sample.answer, sort } }} path={path} sort={sort} window="all"
+          locale="en" feed={messages} />
+      </FeedProvider>
+    </AppRouterContext>);
+    expect(html).toContain('No discussions yet');
+    expect(html).toContain(`href="${realmHref('en', sample.answer.realm, 'works')}"`);
+    expect(html).toContain('Browse works');
+    expect(html).not.toContain('aria-label="Sort:');
+    expect(html).not.toContain('aria-label="Period:');
+    expect(html).not.toContain('Create post');
+    expect(html).not.toContain('Sign in');
+  }
+});
+
+test('empty Top periods retain their recovery choices without claiming the whole collection is empty', () => {
+  const sample = rankingContractState({ persona: 'visitor', state: 'empty', sort: 'top', window: 'month' });
+  if (!('items' in sample.answer)) throw new Error('Expected empty threads');
+  const html = renderToStaticMarkup(<AppRouterContext value={router}>
+    <FeedProvider locale="en" messages={messages} now={rankingNow} signedIn={false} actingSubject={null}
+      signInHref="/auth/start" avatarQuery="" tab="all" followedRealms={null}>
+      <RealmRankingPage page={{ ok: true, data: sample.answer }} path={path} sort="top" window="month"
+        cursor="past-page" locale="en" feed={messages} />
+    </FeedProvider>
+  </AppRouterContext>);
+  expect(html).toContain('No discussions in this period');
+  expect(html).toContain('aria-label="Sort: Top"');
+  expect(html).toContain('aria-label="Period: This month"');
+  expect(html).toContain(`href="/en${path}/discussions?sort=top&amp;t=all"`);
+  expect(html).toContain('Show all time');
+  expect(html).not.toContain('Browse works');
+  expect(html).not.toContain('past-page');
+});
+
+test('an empty board or language view offers all discussions without retaining those filters or cursor', () => {
+  const sample = rankingContractState({ persona: 'visitor', state: 'empty' });
+  if (!('items' in sample.answer)) throw new Error('Expected empty threads');
+  for (const filter of [{ concept: 'board-id' }, { language: 'ja' }]) {
+    const html = renderToStaticMarkup(<AppRouterContext value={router}>
+      <FeedProvider locale="en" messages={messages} now={rankingNow} signedIn={false} actingSubject={null}
+        signInHref="/auth/start" avatarQuery="" tab="all" followedRealms={null}>
+        <DiscussionListContent page={{ ok: true, data: sample.answer }} path={path}
+          query={{ sort: 'best', window: 'all', cursor: 'past-page', ...filter }} locale="en"
+          feed={messages} messages={realmMessagesFor('en')} />
+      </FeedProvider>
+    </AppRouterContext>);
+    expect(html).toContain(`href="/en${path}/discussions"`);
+    expect(html).toContain('All discussions');
+    expect(html).not.toContain('Browse works');
+    expect(html).not.toContain('cursor=');
+    expect(html).not.toContain('aria-label="Sort:');
+  }
+});
+
+test('the rendered thread page forwards its native opaque frontier and resets only thread pagination on first-page recovery', () => {
+  const sample = rankingContractState({ persona: 'visitor', state: 'populated', sort: 'top', window: 'month' });
+  if (!('items' in sample.answer)) throw new Error('Expected threads');
+  const nextCursor = 'opaque:+/%?=&雪';
+  const html = renderToStaticMarkup(<AppRouterContext value={router}>
+    <FeedProvider locale="en" messages={messages} now={rankingNow} signedIn={false} actingSubject={null}
+      signInHref="/auth/start" avatarQuery="" tab="all" followedRealms={null}>
+      <DiscussionListContent page={{ ok: true, data: { ...sample.answer, nextCursor } }} path={path}
+        query={{ sort: 'top', window: 'month', concept: 'board-id', language: 'ja',
+          boardsCursor: 'board:page-2', cursor: 'thread:page-2' }} locale="en"
+        feed={messages} messages={realmMessagesFor('en')} />
+    </FeedProvider>
+  </AppRouterContext>);
+  const links = [...html.matchAll(/href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g)];
+  const hrefFor = (label: string) => new URL(links.find(([, , body]) => body.includes(label))![1]!.replaceAll('&amp;', '&'), 'https://rezics.com');
+  expect(Object.fromEntries(hrefFor(messages.moreThreads).searchParams)).toEqual({
+    sort: 'top', t: 'month', concept: 'board-id', language: 'ja', cursor: nextCursor, boardsCursor: 'board:page-2',
+  });
+  expect(Object.fromEntries(hrefFor(messages.firstThreads).searchParams)).toEqual({
+    sort: 'top', t: 'month', concept: 'board-id', language: 'ja', boardsCursor: 'board:page-2',
+  });
+  expect(html).not.toContain('thread%3Apage-2');
 });

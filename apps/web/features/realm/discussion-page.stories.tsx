@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useEffect, useState } from 'react';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
 import { browserMainApi } from '../api/browser.ts';
 import { FeedProvider } from '../feed/feed-context.tsx';
@@ -14,10 +14,12 @@ import de from '../feed/messages/de.ts';
 import fr from '../feed/messages/fr.ts';
 import es from '../feed/messages/es.ts';
 import { memoryThreads, storyRealm, storyThread, storyThreads, THREAD_NOW } from '../feed/thread-fixtures.ts';
+import { authorMessages } from '../feed/author-messages.ts';
 import type { ThreadRead, ThreadsPage } from '../feed/thread.ts';
 import type { Loaded } from '../feed/types.ts';
 import { zoneContentText } from '../language/untagged.ts';
 import { communityZone } from '../zones/fixtures.ts';
+import { reportHref } from '../safety/report.ts';
 import { DiscussionBoards, DiscussionListContent, DiscussionListSkeleton } from './discussion-content.tsx';
 import { realmDiscussionReads, type BoardPage } from './discussion-read.ts';
 import { RealmNotFound } from './states.tsx';
@@ -64,7 +66,9 @@ function contractClient(state: State) {
   return browserMainApi('https://contract.invalid', { anonymous: true, fetcher });
 }
 
-function DiscussionPage({ state, locale, signedIn }: { state: State; locale: UiLocale; signedIn: boolean }) {
+function DiscussionPage({ state, locale, signedIn, noBio = false, filtered = true }: {
+  state: State; locale: UiLocale; signedIn: boolean; noBio?: boolean; filtered?: boolean;
+}) {
   const [loaded, setLoaded] = useState<{ state: State; page: Loaded<ThreadsPage>; boards: Loaded<BoardPage> } | null>(null);
   const [thread, setThread] = useState<{ state: State; read: Loaded<ThreadRead> } | null>(null);
   const feed: FeedMessages = { ...english, ...feedCatalogs[locale] };
@@ -75,16 +79,17 @@ function DiscussionPage({ state, locale, signedIn }: { state: State; locale: UiL
     let active = true;
     const reads = realmDiscussionReads(contractClient(state), realm, actor);
     if (isThread) void reads.thread(storyThread.focus, 'best').then(read => { if (active) setThread({ state, read }); });
-    else void Promise.all([reads.threads({ sort: 'best', window: 'week', concept }), reads.boards()])
+    else void Promise.all([reads.threads({ sort: 'best', window: 'week', concept: filtered ? concept : undefined }), reads.boards()])
       .then(([page, boards]) => { if (active) setLoaded({ state, page, boards }); });
     return () => { active = false; };
-  }, [state, isThread, actor]);
+  }, [state, isThread, actor, filtered]);
   const here = isThread ? threadPath : `${storyRealm.path}/discussions`;
-  const query = { sort: 'best' as const, window: 'week' as const, concept };
+  const query = { sort: 'best' as const, window: 'week' as const, concept: filtered ? concept : undefined };
   if (loaded?.state === state && !loaded.page.ok && loaded.page.failure === 'missing') return <RealmNotFound messages={messages} />;
   if (thread?.state === state && !thread.read.ok && thread.read.failure === 'missing') return <RealmNotFound messages={messages} />;
   const zone = { ...communityZone(locale), realm: storyRealm.id,
     name: zoneContentText(storyRealm.name, 'en'),
+    ...(noBio ? { description: null } : {}),
     links: { home: realmHref(locale, realm), browse: '', works: '',
       discussions: realmHref(locale, realm, 'discussions'), decisions: realmHref(locale, realm, 'decisions'),
       about: realmHref(locale, realm, 'about') } };
@@ -113,7 +118,7 @@ function DiscussionPage({ state, locale, signedIn }: { state: State; locale: UiL
 }
 
 const meta = { title: 'Realm/Discussion pages/Contract states awaiting recording', component: DiscussionPage,
-  args: { state: 'populated', locale: 'en', signedIn: false }, globals: { viewport: { value: 'desktop' } },
+  args: { state: 'populated', locale: 'en', signedIn: false, noBio: false, filtered: true }, globals: { viewport: { value: 'desktop' } },
   render: (args, { globals }) => <DiscussionPage {...args} locale={(globals.locale as UiLocale | undefined) ?? args.locale} />,
 } satisfies Meta<typeof DiscussionPage>;
 export default meta;
@@ -125,9 +130,33 @@ export const Populated: Story = { async play({ canvasElement }) {
 export const PopulatedPhone: Story = { ...Populated, globals: phone };
 export const Empty: Story = { args: { state: 'empty' }, async play({ canvasElement, globals }) {
   const locale = (globals.locale as UiLocale | undefined) ?? 'en';
-  await expect(await within(canvasElement).findByText(({ ...english, ...feedCatalogs[locale] }).emptyDiscussions)).toBeVisible();
+  const canvas = within(canvasElement);
+  const messages = realmMessagesFor(locale);
+  await expect(await canvas.findByText(({ ...english, ...feedCatalogs[locale] }).emptyDiscussions)).toBeVisible();
+  await expect(canvas.queryByRole('button', { name: /^Sort:/ })).toBeNull();
+  const recovery = canvas.getAllByRole('link', { name: messages.allDiscussions })
+    .find(link => link.closest('[data-slot="empty-state"]'));
+  await expect(recovery).toBeVisible();
+  const href = new URL(recovery!.getAttribute('href')!, location.origin);
+  await expect(href.searchParams.has('concept')).toBe(false);
+  await expect(href.searchParams.has('language')).toBe(false);
+  await expect(href.searchParams.has('cursor')).toBe(false);
+  await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
 } };
 export const EmptyPhone: Story = { ...Empty, globals: phone };
+export const NoBioEmpty: Story = { args: { state: 'empty', noBio: true, filtered: false }, async play({ canvasElement, globals }) {
+  const locale = (globals.locale as UiLocale | undefined) ?? 'en';
+  const canvas = within(canvasElement);
+  const messages = realmMessagesFor(locale);
+  await expect(await canvas.findByText(({ ...english, ...feedCatalogs[locale] }).emptyDiscussions)).toBeVisible();
+  await expect(canvas.queryByRole('button', { name: /^Sort:/ })).toBeNull();
+  await expect(canvasElement.querySelector('#rail-about')).toBeNull();
+  await expect(canvas.getByRole('link', { name: messages.browse })).toHaveAttribute('href', realmHref(locale, storyRealm.id, 'works'));
+  await expect(canvas.getByRole('link', { name: ({ ...english, ...feedCatalogs[locale] }).moreAboutCommunity })).toBeVisible();
+  await expect(canvas.queryByRole('button', { name: messages.createPost })).toBeNull();
+  await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+} };
+export const NoBioEmptyPhone: Story = { ...NoBioEmpty, globals: phone };
 export const ServerError: Story = { args: { state: 'error' }, async play({ canvasElement, globals }) {
   const locale = (globals.locale as UiLocale | undefined) ?? 'en';
   await expect(await within(canvasElement).findByRole('alert')).toHaveTextContent(({ ...english, ...feedCatalogs[locale] }).serverBody);
@@ -149,11 +178,39 @@ export const PublicThread: Story = { args: { state: 'thread' }, async play({ can
   more.focus();
   await userEvent.keyboard('{Enter}');
   const report = await within(document.body).findByRole('menuitem', { name: 'Report this post' });
+  await waitFor(() => expect(report.closest('[role="menu"]')).toHaveFocus());
   const params = new URL(report.getAttribute('href')!, location.origin).searchParams;
   await expect(params.get('target')).toBe(storyThread.focus);
   await expect(params.get('realm')).toBe(storyRealm.id);
+  await expect(params.get('component')).toBe('body');
+  await expect(params.get('revision')).toBe(`urn:rezics:content:revision:${storyThread.items[0]!.revisionId}`);
   await userEvent.keyboard('{Escape}');
-  await expect(more).toHaveFocus();
+  await waitFor(() => expect(more).toHaveAttribute('aria-expanded', 'false'));
+  await waitFor(() => expect(more).toHaveFocus());
+  await expect(canvas.queryByRole('link', { name: 'Report this reply' })).toBeNull();
+  for (const article of canvasElement.querySelectorAll<HTMLElement>('article[id^="reply-"]')) {
+    const actions = article.querySelector<HTMLElement>(':scope > div > fieldset');
+    if (!actions || actions.closest('[hidden]')) continue;
+    const reply = storyThread.items.find(item => article.id === `reply-${item.reply.slice(-36)}`)!;
+    const menus = within(actions).getAllByRole('button').filter(button => button.getAttribute('aria-haspopup') === 'menu');
+    await expect(menus).toHaveLength(1);
+    const replyMore = menus[0]!;
+    await expect(replyMore).toHaveAccessibleName(english.moreOptions);
+    replyMore.focus();
+    await userEvent.keyboard('{Enter}');
+    const menuElement = await within(document.body).findByRole('menu');
+    await waitFor(() => expect(menuElement).toHaveFocus());
+    const menu = within(menuElement);
+    const replyReport = await menu.findByRole('menuitem', { name: 'Report this reply' });
+    await expect(replyReport).toHaveAttribute('href', `/en${reportHref(reply.reply, storyRealm.id)}`);
+    await expect(new URL(replyReport.getAttribute('href')!, location.origin).searchParams.get('target')).not.toBe(params.get('target'));
+    await expect(menu.queryByRole('menuitem', { name: 'Report this post' })).toBeNull();
+    await expect(menu.queryByRole('menuitem', { name: authorMessages.en.edit })).toBeNull();
+    await expect(menu.queryByRole('menuitem', { name: authorMessages.en.placement })).toBeNull();
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(replyMore).toHaveAttribute('aria-expanded', 'false'));
+    await waitFor(() => expect(replyMore).toHaveFocus());
+  }
   if (window.innerWidth < 1024) {
     const rules = canvas.getByRole('link', { name: 'Rules' });
     await expect(rules).toHaveAttribute('href', expect.stringContaining('#realm-rules'));
@@ -162,7 +219,28 @@ export const PublicThread: Story = { args: { state: 'thread' }, async play({ can
   await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
 } };
 export const PublicThreadPhone: Story = { ...PublicThread, globals: phone };
-export const MemberThread: Story = { args: { state: 'thread', signedIn: true } };
+export const MemberThread: Story = { args: { state: 'thread', signedIn: true }, async play({ canvasElement }) {
+  const canvas = within(canvasElement);
+  const post = storyThread.items[0]!;
+  await canvas.findByRole('heading', { level: 1, name: post.title! });
+  const header = canvasElement.querySelector('[data-subject-header]') as HTMLElement;
+  const menus = within(header).getAllByRole('button').filter(button => button.getAttribute('aria-haspopup') === 'menu');
+  await expect(menus).toHaveLength(1);
+  const more = menus[0]!;
+  more.focus();
+  await userEvent.keyboard('{Enter}');
+  const menuElement = await within(document.body).findByRole('menu');
+  await waitFor(() => expect(menuElement).toHaveFocus());
+  const menu = within(menuElement);
+  await expect(menu.getByRole('menuitem', { name: authorMessages.en.edit })).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: authorMessages.en.placement })).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: 'Report this post' })).toHaveAttribute('href',
+    `/en${reportHref(post.reply, storyRealm.id, { component: 'body', revision: `urn:rezics:content:revision:${post.revisionId}`, locator: null })}`);
+  await expect(menu.queryByRole('menuitem', { name: 'Report this reply' })).toBeNull();
+  await userEvent.keyboard('{Escape}');
+  await waitFor(() => expect(more).toHaveAttribute('aria-expanded', 'false'));
+  await waitFor(() => expect(more).toHaveFocus());
+} };
 export const MemberThreadPhone: Story = { ...MemberThread, globals: phone };
 export const ThreadError: Story = { args: { state: 'thread-error' } };
 export const ThreadErrorPhone: Story = { ...ThreadError, globals: phone };
