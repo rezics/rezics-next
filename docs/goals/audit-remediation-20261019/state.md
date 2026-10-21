@@ -1,6 +1,6 @@
 # Audit remediation state
 
-Checkpoint: 2026-10-21 14:06 Asia/Shanghai.
+Checkpoint: 2026-10-21 14:21 Asia/Shanghai.
 
 ## Accepted outcomes
 
@@ -19,7 +19,7 @@ ce2e3527f0 are on main. These do not by themselves close their original classes.
 The interaction and delivery designs completed codex-2/Sol/max research and
 codex-1/Sol/xhigh independent review; design acceptance is separate from the 61.
 
-At this checkpoint the ledger had zero live workers and free QA/lifecycle/gate
+At the earlier 14:06 checkpoint the ledger had zero live workers and free QA/lifecycle/gate
 admission. Recovery manager turns repeatedly inspected unchanged inputs while
 waiting for internal Program decisions. Program did not resolve them promptly;
 this is a management failure, not an exhausted-account or external condition.
@@ -31,10 +31,14 @@ activity measures, not cash cost or accepted outcomes.
 
 The new [continuity decision](execution-reset.md#manager-continuity-decision-2026-10-21)
 removes internal Root-only and no-successor holds. The supervisor's two role
-instructions now name these immediate executions; their actual attempt IDs
-must be checked before claiming resumed work.
+instructions now name these immediate executions. Program checked the actual
+ledger attempts and live native processes at 14:21: eight workers are running.
+Implementation is G-2823 attempt 52, G-2860 attempt 2, G-2753 attempt 46,
+G-2764 attempt 60 and G-2765 attempt 33, all codex-2/max. Independent review or
+proof is G-2861 attempt 1, G-2862 attempt 2 and G-2846 attempt 23, all
+codex-1/xhigh. These starts add no accepted original class.
 
-- Site creates normal codex-1/xhigh successor records for archived G-2822's
+- Site created G-2861 and G-2862 as normal codex-1/xhigh successor records for archived G-2822's
   first changed native-delta review and G-2847's remaining original Home speech
   observation. Prior accepted source reviews and original assertions remain.
   Bind G-2831's existing CAS13 READY, retain its guarded cleanup custody and
@@ -56,6 +60,13 @@ must be checked before claiming resumed work.
 
 Own ready worker exits within five minutes. Keep the hourly monitor and
 three-hour efficiency audit; escalate missed dispositions locally to Program.
+The local Program observer is running and has completed its initial actual-ledger
+snapshot and hourly Task status. It checks new exits every minute, sends only
+local Goal-mail escalations after five minutes, and records the twelve-hour
+efficiency window every three hours. The first read-only codex-2/Sol/max
+researcher is evaluating the new window and attribution limits. The existing
+recovery supervisor retains execution wake ownership; this observer neither
+starts competing managers nor changes task/lease state.
 Report new accepted classes, actual landed repairs, reached failures and next
 executors. An unchanged inbox or a live manager PID is not product progress.
 Independent ready findings continue during each dependency repair.
