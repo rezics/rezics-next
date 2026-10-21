@@ -26,6 +26,7 @@ export function outcomeTest(
   persona: Persona,
   fn: Parameters<typeof test>[1],
   recorder?: OutcomeRecorder,
+  options?: { pending?: 'assert' },
 ): void {
   const title = outcomeTitle(declaration, persona);
   const cell = declaration.cells[persona]!;
@@ -33,7 +34,7 @@ export function outcomeTest(
     onTestFinished(() => recorder.finish(persona));
     return recorder.prove(persona, fn as () => unknown);
   } : () => duringPersonaProof(fn as () => unknown, leave => onTestFinished(() => { leave(); }));
-  if (cell.state === 'pending') test.failing(title, proof);
+  if (cell.state === 'pending' && options?.pending !== 'assert') test.failing(title, proof);
   else test(title, proof);
 }
 
