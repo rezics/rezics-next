@@ -236,17 +236,17 @@ test('observer promise assimilation and settlement cannot inherit the request al
   const pending = new Promise<void>(resolve => { settle = resolve; });
   const then = pending.then.bind(pending);
   // Promise assimilation can execute user code, including a then getter.
-  Object.defineProperties(pending, {
+  const observed = Object.defineProperties(pending, {
     constructor: { value: undefined },
     then: { get() { contexts.push(fusekiReadBudget.getStore()); return then; } },
   });
   try {
-    const answer = await withFusekiReadRequest(request(), limits, () => f.graph.query('ASK {}'), () => pending);
+    const answer = await withFusekiReadRequest(request(), limits, () => f.graph.query('ASK {}'), () => observed);
     expect(answer).toEqual(result);
     expect(contexts.length).toBeGreaterThan(0);
     expect(contexts.every(context => context === undefined)).toBe(true);
     settle();
-    await pending;
+    await observed;
     expect(contexts.every(context => context === undefined)).toBe(true);
     expect(f.transports()).toBe(1);
   } finally { settle(); await f.stop(); }
