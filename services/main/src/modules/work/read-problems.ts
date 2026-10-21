@@ -6,7 +6,8 @@ import { ContextCommandUnavailable } from '../context/command.ts';
 import { SearchSnapshotMoved } from './search-readiness.ts';
 import { ReadingContinuityUnsupported } from '../reading-position/errors.ts';
 import { WorkReadInvalid, WorkReadLimit, WorkReadMissing, WorkReadMoved, WorkReadUnavailable } from './read-session.ts';
-import { FusekiReadBudgetExceeded, FusekiQueryResponseTooLarge, FusekiReadDeadlineExceeded } from '../../infrastructure/fuseki.ts';
+import { FusekiHttpError, FusekiReadBudgetExceeded, FusekiQueryResponseTooLarge,
+  FusekiReadDeadlineExceeded } from '../../infrastructure/fuseki.ts';
 
 export const invalidWorkRead = problemDefinition(400, 'invalid_work_read', 'Work read is invalid');
 export const workReadMissing = problemDefinition(404, 'work_unavailable', 'Resource is unavailable');
@@ -25,6 +26,7 @@ export function workReadFailure(error: unknown) {
     return problem({ ...readingContinuityUnsupported.body, title: error.message });
   }
   if (error instanceof WorkReadUnavailable || error instanceof FusekiReadDeadlineExceeded
+    || (error instanceof FusekiHttpError && error.status >= 500 && error.status < 600)
     || error instanceof MediaUnavailable || error instanceof ContextCommandUnavailable) {
     logWorkerFault('main.route.work_read_unavailable', error, { messages: false });
     return problem(workReadUnavailable.body);
