@@ -127,14 +127,14 @@ export function notificationReadPool(pool: Pool): Pool {
       if (property === 'query') return async (...args: Parameters<PoolClient['query']>) => {
         // Rollback is cleanup, never a new subject read. A retired connection
         // has already rolled back at the server when its socket was closed.
-        if (args[0] === 'ROLLBACK') return released ? undefined : Reflect.apply(target.query, target, args);
+        if (args[0] === 'ROLLBACK') return released ? undefined : target.query(...args);
         const signal = allocation.getStore();
         signal?.throwIfAborted();
         if (released) throw new Error('Notification SQL checkout is released');
         const abort = () => release(true);
         signal?.addEventListener('abort', abort, { once: true });
         try {
-          const result = await Reflect.apply(target.query, target, args);
+          const result = await target.query(...args);
           signal?.throwIfAborted();
           return result;
         } finally { signal?.removeEventListener('abort', abort); }

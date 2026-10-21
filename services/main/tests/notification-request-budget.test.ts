@@ -50,7 +50,7 @@ test('fifty distinct subjects reuse graph inputs while all live owner decisions 
     expect(ownerDecisions).toBe(100);
     expect(fixture.calls).toHaveLength(54);
     expect(fixture.calls.length).toBeLessThanOrEqual(NOTIFICATION_READ_COST.graphCalls);
-  } finally { fixture.stop(); }
+  } finally { await fixture.stop(); }
 });
 
 test('a graph movement discards retained inputs and retries without renewing the allocation', async () => {
@@ -68,7 +68,7 @@ test('a graph movement discards retained inputs and retries without renewing the
     expect(result).toBe(2);
     expect(fixture.calls.filter(query => query === 'SELECT ?title WHERE { }')).toHaveLength(2);
     expect(meters[1]).toBeLessThan(meters[0]!);
-  } finally { fixture.stop(); }
+  } finally { await fixture.stop(); }
 });
 
 test('retained graph inputs never cross requests or concurrent readers', async () => {
@@ -83,7 +83,7 @@ test('retained graph inputs never cross requests or concurrent readers', async (
         }))));
       expect(fixture.calls.length - start).toBe(readers * 3);
     }
-  } finally { fixture.stop(); }
+  } finally { await fixture.stop(); }
 });
 
 test('graph inputs without a native version are read live on both sides of owner checks', async () => {
@@ -94,7 +94,7 @@ test('graph inputs without a native version are read live on both sides of owner
       await fixture.environment.fuseki.query('SELECT ?policy WHERE { }', 4096);
     }));
     expect(fixture.calls).toHaveLength(4);
-  } finally { fixture.stop(); }
+  } finally { await fixture.stop(); }
 });
 
 test('nested owner reads debit their parent allocation and a fresh request recovers', async () => {
@@ -151,6 +151,33 @@ test('cancellation retires an in-flight SQL checkout and prevents the next state
   expect(queries).toEqual(['SELECT first']);
   expect(releases).toBe(1);
 });
+
+for (const statement of ['SELECT subject WHERE id = $1', 'ROLLBACK']) {
+  test(`an asynchronous ${statement} failure reaches the caller and releases its SQL checkout once`, async () => {
+    const failure = new Error('statement failed asynchronously');
+    const values = statement === 'ROLLBACK' ? undefined : [epoch];
+    const queries: unknown[][] = [];
+    const releases: (Error | boolean | undefined)[] = [];
+    let later = 0;
+    const client = {
+      async query(this: unknown, sql: string, parameters?: unknown[]) {
+        expect(this).toBe(client);
+        queries.push([sql, parameters]);
+        await Promise.resolve();
+        throw failure;
+      },
+      release(error?: Error | boolean) { releases.push(error); },
+    };
+    const pool = notificationReadPool({ connect: async () => client } as unknown as Pool);
+    await expect(notificationRead(undefined, async () => {
+      await pool.query(statement, values);
+      later++;
+    })).rejects.toBe(failure);
+    expect(queries).toEqual([[statement, values]]);
+    expect(releases).toEqual([failure]);
+    expect(later).toBe(0);
+  });
+}
 
 test('cancelling during an owner read stops later adapters even if that owner swallows the abort', async () => {
   const controller = new AbortController();
@@ -241,7 +268,7 @@ test('a shared Account key refresh drains after cancellation without starting la
     fixture.keys(); fixture.finishIntrospection();
     expect(await fixture.verify()).toMatchObject({ subject: 'recipient' });
     expect(fixture.counts()).toEqual({ keyCalls: 1, introspections: 1 });
-  } finally { fixture.keys(); fixture.finishIntrospection(); fixture.stop(); }
+  } finally { fixture.keys(); fixture.finishIntrospection(); await fixture.stop(); }
 });
 
 test('cancelling Account introspection permits a fresh independently verified retry', async () => {
@@ -256,7 +283,7 @@ test('cancelling Account introspection permits a fresh independently verified re
     fixture.finishIntrospection();
     expect(await fixture.verify()).toMatchObject({ subject: 'recipient' });
     expect(fixture.counts()).toEqual({ keyCalls: 1, introspections: 2 });
-  } finally { fixture.keys(); fixture.finishIntrospection(); fixture.stop(); }
+  } finally { fixture.keys(); fixture.finishIntrospection(); await fixture.stop(); }
 });
 
 test('deferred work cannot use an allocation after its response completes', async () => {
