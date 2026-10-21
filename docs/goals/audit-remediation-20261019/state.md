@@ -1,6 +1,6 @@
 # Audit remediation state
 
-Checkpoint: 2026-10-22 00:04 Asia/Shanghai.
+Checkpoint: 2026-10-22 00:59 Asia/Shanghai.
 
 ## Scope and actual progress
 
@@ -17,7 +17,9 @@ code states, not 49 accepted classes or a count of live workers. Its renderer
 now derives acceptance from coverage.json rather than stale initial statuses.
 The retained evidence directory is
 `.temp/audit-remediation-20261019/one-hour-20261021/`; read `PROGRESS.md` and
-`PROGRESS.json`. The 14:39–15:39 target was missed and has not been restarted.
+`PROGRESS.json`. The 14:39–15:39 target was missed. The maintainer's new target
+is 2026-10-22 06:28 Asia/Shanghai, with no reduced quality or weakened original
+assertions. It includes all 61 findings.
 
 ## Efficiency repair actually landed
 
@@ -34,8 +36,8 @@ parallel attempt minutes, with 145.35 union minutes; neither is a billing
 figure. The stock token report has session-start and worktree-reference
 attribution limits. `EFFICIENCY-REPORT.md` and `execution-efficiency-12h.json`
 hold evidence, rejected options, measures and Program's own duplicate-brief
-mistake. An independent codex-2/Sol/max diagnosis is retained separately;
-implementation remains codex-2/Sol/ultra.
+mistake. The historical independent diagnosis is retained separately; current
+execution follows the maintainer's latest locally configured account policy.
 
 ## Current execution and acceptance
 
@@ -48,34 +50,43 @@ attempt remained. Do not restart those old account-bound runners. Current
 account, allowance and one-time resource authorization stay in local settings
 and the retained untracked recovery receipts.
 
-Program follows actual tools, edits, checks and exits. The independent
-credit/Synopsis review completed and reproduced two production validator
-rejections: native-command-proved identity with empty citations, and explicit
-supported null treated as an omitted field. The Catalogue manager has changed
-the contract and validator and is extending the actual producer/bind/read
-regression, without treating the source delta as a closed finding. A bounded
-Sol/max researcher separately investigates the unchanged Main/Eden inference
-gate; it writes no shared product source. The independent review log is under
-`.temp/manager-peer-protocol-20261021/catalogue-review-2314.jsonl`.
-The origin adapter already handled the native case, while the downstream public
-schema and validator refused it. Program's pre-correction two-file
-Source/association basic run passed 28 tests with zero failing files, JUnit
-`.temp/repository-guards/run-swzQWJ/unit.xml`, but stopped before complete binding.
-That run does not establish the changed source. Integrated source, unchanged
-inference gates and original acceptance remain; no class closes on those basics.
+Catalogue source 161cc04d33a7 and generated Main c73c0631d644 are landed:
+131 exact source paths, preserving peer work. Native identity-only support,
+explicit-null binding and actual annotation citation projection are repaired.
+Actual SQL producer/bind/read/citation regression passed 88 tests; native
+annotation dispatch and selection fences passed nine. Normal Main/Web/UI/scripts
+types, 56 affected/guard files, unchanged Main/Eden/Web inference caps, lint and
+AST passed. Two timeout-only files passed normal isolated retries.
+
+The separate exact-Main Sol/xhigh source review completed with no confirmed
+new blocker. Its report is
+`.temp/manager-peer-protocol-20261021/catalogue-main-review-0030/final-report.md`.
+An inverse-renderer Source-name withdrawal observation remains unconfirmed;
+the Catalogue original manager checks it alongside A05, preserving native and
+human-authored names under their own authority. Source review is not whole
+original acceptance. The same Catalogue manager has resumed the 15 original
+pending rows without repeating passed source inventories or gates.
+
+The bounded inference researcher completed its advisory handoff. The actual
+source owner's independently typed schema boundaries cleared the unchanged
+Main/Eden limits. Do not apply another optional patch or rerun an unchanged
+benchmark while the gate is green.
 
 The Site manager now also holds Program's delegated G-2823 runtime custody;
-the previous physical worker and managers are stopped. It has identified the
-retained served r5 source as older than the committed reserved-read repair and
-is executing live qualification before a compatible transition. Keep that one
-runtime owner and the existing data/lease boundaries; the Catalogue source
-writer does not independently change the shared runtime.
+the previous physical worker and managers are stopped. Its actual same-volume
+native/model transition passed in 20,490 ms, preserving the application and three
+sibling lifetimes, all sessions and the genuine corpus. Native profiles match
+checked source and model generation 2 succeeds generation 1. Receipt:
+`.temp/manager-peer-protocol-20261021/site-book-transition-0032.json`.
+The application still needs qualified adoption of c73c0631 and migrations
+2707/2708 for the combined campaign. Keep one runtime owner; Catalogue stages
+cases and borrows it rather than preparing another environment.
 
 Main includes the final search consumer 95d89386c5, read-allocation repair
-98a93b6fa3 and Reader support 34cbb3b687. Catalogue's dirty native/media/detail
-source remains preserved and unlanded; the last complete source gate failed
-the unchanged Main/Eden inference limits. Do not blindly rerun that same tree
-or count passing source slices as a complete Catalogue delivery.
+98a93b6fa3 and Reader support 34cbb3b687, followed by the coherent Catalogue
+landing. Six actual default-selection requests passed on the qualified exact
+allocation-repair candidate. That does not establish current-Main whole-stack
+equivalence or the remaining Reader and identity outcomes.
 
 Original C28 traversed Book/header/credits/releases/contents and five exact
 chapter/hash bodies, then reached preference 400 and cleanup failures. Later
@@ -103,5 +114,4 @@ changes close no audit class and do not prove continuous tracking worked.
 
 Preserve all peer edits, the pre-existing G-2845 deletion, G-2823 custody, KEEP
 services and actual borrowers. Native ordinary APIs, external conversion
-library and independent source annotation remain settled. No proxy or account
-fallback was used.
+library and independent source annotation remain settled. No proxy changes.

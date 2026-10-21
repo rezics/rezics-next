@@ -3,8 +3,18 @@ areas: []
 ---
 # Audit remediation
 
-The maintainer's latest [one-hour functional delivery](one-hour-delivery-20261021.md)
-sets the current deadline and execution mode: finish all original functionality
+The maintainer's latest direction, received at 2026-10-22 00:28 Asia/Shanghai,
+sets a six-hour target of **2026-10-22 06:28 Asia/Shanghai** for all 61 original
+findings. Preserve quality, original assertions, affected checks and independent
+acceptance while continuously removing wasted work. Reuse compatible data,
+runtime and exact-source evidence; repair prerequisites rather than repeat
+unchanged attempts. Current maintainer account authorizations supersede the
+historical assignments below; configuration and resource limits remain local.
+Standalone frontend optimization stays stopped. The target does not authorize
+stopping unfinished work or calling a partial delivery complete.
+
+The earlier [one-hour functional delivery](one-hour-delivery-20261021.md)
+set the previous deadline and execution mode: finish all original functionality
 and affected basic tests by 2026-10-21 15:39 Asia/Shanghai, then consolidate
 independent acceptance. It supersedes conflicting historical sequencing below.
 
