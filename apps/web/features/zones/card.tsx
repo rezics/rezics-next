@@ -4,7 +4,6 @@ import { StampIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import type { UiLocale } from '../../i18n/define.ts';
 import { BFF_PREFIX } from '../api/browser.ts';
-import { messages as catalogueMessages } from '../catalogue/messages.ts';
 import type { CatalogueWork } from '../catalogue/work.ts';
 import { AuthorNames } from '../catalogue/author-names.tsx';
 import { ShelfMark } from '../catalogue/reader-actions.tsx';
@@ -57,7 +56,7 @@ export function catalogueWork(work: ZoneWork): CatalogueWork {
 
 /**
  * The link to the public Decision that placed a Work here: a stamp that says
- * "Why it's here" on hover and focus. It sits outside package slots, so a
+ * why this Work is here on hover and focus. It sits outside package slots, so a
  * Zone design can restyle a card but never hide why a pick is in the Zone.
  */
 export function WhyHere({ work, locale, messages, className }: {
@@ -65,7 +64,8 @@ export function WhyHere({ work, locale, messages, className }: {
 }) {
   if (!work.decision) return null;
   const t = materializeData(messages, { locale });
-  return <LocalizedLink href={work.decision} aria-label={t.whyHere({ title: workTitle(work, messages) })}
+  const label = t.whyHere({ title: workTitle(work, messages) });
+  return <LocalizedLink href={work.decision} aria-label={label}
     className={cn('group/why pointer-events-auto relative z-10 inline-grid size-7 shrink-0 place-items-center rounded-full',
       'text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground',
       'focus-visible:ring-2 focus-visible:ring-ring', className)}>
@@ -73,7 +73,7 @@ export function WhyHere({ work, locale, messages, className }: {
     <span aria-hidden="true" className="pointer-events-none absolute end-0 bottom-full z-20 mb-1 w-max max-w-48
       rounded-md bg-foreground px-2 py-1 font-medium text-background text-xs opacity-0 shadow-md transition-opacity
       group-hover/why:opacity-100 group-focus-visible/why:opacity-100 motion-reduce:transition-none">
-      {catalogueMessages[locale].whyItsHere}</span>
+      {label}</span>
   </LocalizedLink>;
 }
 

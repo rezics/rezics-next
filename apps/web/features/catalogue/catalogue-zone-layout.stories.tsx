@@ -30,36 +30,36 @@ function ZoneCatalogue({ single = false }: { single?: boolean }) {
 
 async function assertPreviews(list: HTMLElement, works: readonly ZoneWork[]) {
   await waitFor(() => expect(list).toHaveAttribute('data-masonry', 'true'));
-  await waitFor(() => {
+  await waitFor(async () => {
     const bounds = list.getBoundingClientRect();
     const cards = [...list.querySelectorAll('article')];
-    expect(cards).toHaveLength(works.length);
-    expect(cards.length).toBeGreaterThan(0);
+    await expect(cards).toHaveLength(works.length);
+    await expect(cards.length).toBeGreaterThan(0);
     const boxes = cards.map(card => card.getBoundingClientRect());
-    cards.forEach((card, index) => {
+    for (const [index, card] of cards.entries()) {
       const work = works[index]!;
       const cover = card.querySelector<HTMLElement>('[data-slot="work-cover"]')!;
       const image = cover.getBoundingClientRect();
       const heading = card.querySelector('h3')!;
       const title = heading.getBoundingClientRect();
-      expect(image.width).toBeCloseTo(128, 1);
-      expect(image.width / image.height).toBeCloseTo(workCoverRatio[cover.dataset.kind as WorkCoverKind], 2);
-      expect(title.width).toBeGreaterThanOrEqual(96);
-      expect(Number.parseFloat(getComputedStyle(heading).fontSize)).toBeGreaterThanOrEqual(16);
-      expect(heading).toHaveTextContent(work.title!.value);
+      await expect(image.width).toBeCloseTo(128, 1);
+      await expect(image.width / image.height).toBeCloseTo(workCoverRatio[cover.dataset.kind as WorkCoverKind], 2);
+      await expect(title.width).toBeGreaterThanOrEqual(96);
+      await expect(Number.parseFloat(getComputedStyle(heading).fontSize)).toBeGreaterThanOrEqual(16);
+      await expect(heading).toHaveTextContent(work.title!.value);
       const author = within(card).getByText(work.author!.value,
         { exact: true, selector: ':scope > p *' }).closest('p')!;
-      expect(author.getBoundingClientRect().width).toBeCloseTo(128, 1);
-      expect(Number.parseFloat(getComputedStyle(author).fontSize)).toBeGreaterThanOrEqual(14);
+      await expect(author.getBoundingClientRect().width).toBeCloseTo(128, 1);
+      await expect(Number.parseFloat(getComputedStyle(author).fontSize)).toBeGreaterThanOrEqual(14);
       const box = boxes[index]!;
-      expect(box.left).toBeGreaterThanOrEqual(bounds.left - 0.5);
-      expect(box.right).toBeLessThanOrEqual(bounds.right + 0.5);
+      await expect(box.left).toBeGreaterThanOrEqual(bounds.left - 0.5);
+      await expect(box.right).toBeLessThanOrEqual(bounds.right + 0.5);
       const previous = boxes[index - 1];
       if (previous) {
-        expect(box.top).toBeGreaterThanOrEqual(previous.top - 0.5);
-        if (Math.abs(box.top - previous.top) < 0.5) expect(box.left).toBeGreaterThanOrEqual(previous.right);
+        await expect(box.top).toBeGreaterThanOrEqual(previous.top - 0.5);
+        if (Math.abs(box.top - previous.top) < 0.5) await expect(box.left).toBeGreaterThanOrEqual(previous.right);
       }
-    });
+    }
   });
   const links = within(list).getAllByRole('link').filter(link => link.tabIndex !== -1);
   links[0]!.focus();
@@ -92,6 +92,11 @@ const meta = {
       await assertPreviews(list, works);
       await expect(within(list).getByRole('link', { name: works[0]!.title!.value })).toBe(firstTitle);
     }
+    const why = within(list).getAllByRole('link', { name: /^Why .* is here$/ })[0]!;
+    why.focus();
+    await expect(why).toHaveFocus();
+    await expect(why).toHaveTextContent(why.getAttribute('aria-label')!);
+    await waitFor(() => expect(why.querySelector('span')).toBeVisible());
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
 } satisfies Meta<typeof ZoneCatalogue>;

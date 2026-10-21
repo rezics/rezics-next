@@ -63,27 +63,27 @@ function MixedCatalogue({ rtl = false }: { rtl?: boolean }) {
 
 async function assertPacked(list: HTMLElement) {
   await waitFor(() => expect(list).toHaveAttribute('data-masonry', 'true'));
-  await waitFor(() => {
+  await waitFor(async () => {
     const cards = [...list.children].map(item => item.firstElementChild!.getBoundingClientRect());
     const bounds = list.getBoundingClientRect();
     const rtl = getComputedStyle(list).direction === 'rtl';
-    cards.forEach((box, index) => {
-      expect(box.left).toBeGreaterThanOrEqual(bounds.left - 0.5);
-      expect(box.right).toBeLessThanOrEqual(bounds.right + 0.5);
+    for (const [index, box] of cards.entries()) {
+      await expect(box.left).toBeGreaterThanOrEqual(bounds.left - 0.5);
+      await expect(box.right).toBeLessThanOrEqual(bounds.right + 0.5);
       const previous = cards[index - 1];
       if (previous) {
-        expect(box.top).toBeGreaterThanOrEqual(previous.top - 0.5);
+        await expect(box.top).toBeGreaterThanOrEqual(previous.top - 0.5);
         if (Math.abs(box.top - previous.top) < 0.5) {
-          expect(rtl ? box.right <= previous.left : box.left >= previous.right).toBe(true);
+          await expect(rtl ? box.right <= previous.left : box.left >= previous.right).toBe(true);
         }
       }
       const above = cards.slice(0, index).filter(other => Math.abs(other.left - box.left) < 0.5);
       if (above.length) {
         const gap = box.top - Math.max(...above.map(other => other.bottom));
-        expect(gap).toBeGreaterThanOrEqual(23.5);
-        expect(gap).toBeLessThan(28.1);
-      } else expect(box.top).toBeCloseTo(bounds.top, 0);
-    });
+        await expect(gap).toBeGreaterThanOrEqual(23.5);
+        await expect(gap).toBeLessThan(28.1);
+      } else await expect(box.top).toBeCloseTo(bounds.top, 0);
+    }
   });
   for (const cover of list.querySelectorAll<HTMLElement>('[data-slot="work-cover"]')) {
     const box = cover.getBoundingClientRect();
