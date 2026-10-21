@@ -86,6 +86,7 @@ export async function readSearchPage(clients: { search: MainClient; names: MainC
   const hits = matches.map(({ match, reasons }) => ({ matchUnit: match.matchUnit, work: match.work,
     mainVersion: match.mainVersion, types: match.types,
     factObligations: match.factObligations,
+    excerpt: match.excerpt,
     title: named?.get(match.work)?.name ?? match.title ?? null,
     cover: named?.get(match.work)?.avatar ?? (mediaCover(match.cover) ? match.cover! : null),
     authors: (match.primaryCredits ?? []).flatMap(credit => {

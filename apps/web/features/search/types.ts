@@ -40,6 +40,8 @@ export interface MatchReasons {
 /** One result with the title and cover hydrated from Main's resource summaries. */
 export interface SearchHit {
   factObligations?: import('../rights-mark/rights-mark.tsx').DisplayObligations;
+  /** Only Main can supply a bounded excerpt from the disclosed exact Content revision. */
+  excerpt?: Match['excerpt'];
   matchUnit: string;
   work: string;
   mainVersion: string;

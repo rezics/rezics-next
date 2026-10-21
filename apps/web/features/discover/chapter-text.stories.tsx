@@ -4,7 +4,7 @@ import { uiLocales } from '../../i18n/define.ts';
 import { direction } from '@rezics/main/language';
 import { localizedPath } from '../../i18n/locale.ts';
 import { chapterHref, workHref } from '../work-page/route.ts';
-import type { SearchContinuation, SearchLoaded, SearchResultPage } from '../search/types.ts';
+import type { SearchContinuation, SearchHit, SearchLoaded, SearchResultPage } from '../search/types.ts';
 import type { SearchLoader } from '../search/query.ts';
 import { Providers } from '../shell/providers.tsx';
 import { attributed, creditedOnly, unassessed } from '../rights-mark/fixtures.ts';
@@ -42,6 +42,41 @@ export const TraditionalChinesePhone: Story = { args: { locale: 'zh-Hant' },
   globals: { locale: 'zh-Hant', theme: 'dark', viewport: { value: 'phone' } },
   async play({ canvasElement }) {
     await expect(within(canvasElement).getByRole('region', { name: chapterTextMessages['zh-Hant'].title })).toBeVisible();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(innerWidth);
+  } };
+
+// Contract-shaped presentation fixtures; matching and access are proved by the producer's tests.
+const excerpt: NonNullable<SearchHit['excerpt']> = { status: 'available',
+  text: 'The library stayed open through the night. <strong>Lanterns</strong> lit the harbour.', language: 'en',
+  revision: 'urn:rezics:content:revision:00000000-0000-4000-8000-000000000011', resource: book,
+  variant: 'urn:rezics:content:variant:00000000-0000-4000-8000-000000000012' };
+const excerptRead: Extract<SearchLoaded, { ok: true }> = { ok: true, page: { ...read.page, total: 3,
+  hits: [{ ...read.page.hits[0]!, excerpt, factObligations: attributed },
+    { ...read.page.hits[0]!, matchUnit: 'unavailable', excerpt: { status: 'unavailable', reason: 'not-hydrated' } },
+    { ...read.page.hits[0]!, matchUnit: 'missing' }] } };
+export const DisclosedExcerptAndUnknowns: Story = { args: { read: excerptRead }, async play({ canvasElement }) {
+  const canvas = within(canvasElement);
+  const passage = canvas.getByText(excerpt.text);
+  await expect(passage).toBeVisible();
+  await expect(passage).toHaveAttribute('lang', 'en');
+  await expect(passage).toHaveAttribute('data-content-revision', excerpt.revision);
+  await expect(passage).toHaveAttribute('data-content-resource', excerpt.resource);
+  await expect(passage).toHaveAttribute('data-content-variant', excerpt.variant);
+  await expect(passage.querySelector('strong')).toBeNull();
+  await expect(canvas.getAllByText(chapterTextMessages.en.noExcerpt)).toHaveLength(2);
+  await expect(canvas.getByRole('link', { name: 'Example' })).toHaveAttribute('href', 'https://example.test/records/1');
+  await expect(canvas.getAllByRole('link', { name: 'At the harbour' })[0]).toHaveAttribute('href', localizedPath(chapter, 'en'));
+} };
+
+const chineseExcerpt = { ...excerpt, text: '夜雨中，图书馆仍为远行的人亮着灯。港口的风翻过书页。', language: 'zh-Hans' };
+export const SimplifiedChineseExcerptPhone: Story = { args: { locale: 'zh-Hans',
+  read: { ok: true, page: { ...read.page, hits: [{ ...read.page.hits[0]!, excerpt: chineseExcerpt }] } } },
+  globals: { locale: 'zh-Hans', theme: 'dark', viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText(chineseExcerpt.text)).toBeVisible();
+    await expect(canvas.getByText(chineseExcerpt.text)).toHaveAttribute('lang', 'zh-Hans');
+    await expect(canvas.queryByText(chapterTextMessages['zh-Hans'].noExcerpt)).toBeNull();
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(innerWidth);
   } };
 export const NoChapterHitsLeaveNoTrace: Story = { args: { read: { ok: true, page: { ...read.page,

@@ -126,7 +126,6 @@ function ChapterPages({ first, state, locale, actingSubject, signedIn = true, lo
       t.checked({ checked: format.format(progress.checked), total: format.format(progress.total) })].join(' · ');
   return <>
     {progress.hits.length ? <>
-      <p className="text-muted-foreground text-sm">{t.noExcerpt}</p>
       <ol ref={list} className="grid min-w-0 gap-3 sm:grid-cols-2">
         {progress.hits.map(hit => <li key={hit.matchUnit} className="grid min-w-0 content-start gap-2 rounded-2xl
           border border-border/70 bg-card p-4">
@@ -142,6 +141,14 @@ function ChapterPages({ first, state, locale, actingSubject, signedIn = true, lo
               <bdi lang={hit.reasons.language}>{hit.reasons.chapter!.title}</bdi>
             </Link>
           </p>
+          {hit.excerpt?.status === 'available'
+            ? <blockquote lang={hit.excerpt.language} dir="auto"
+              data-content-revision={hit.excerpt.revision} data-content-resource={hit.excerpt.resource}
+              data-content-variant={hit.excerpt.variant}
+              className="min-w-0 whitespace-pre-wrap break-words border-s-2 border-border ps-3 text-sm">
+              {hit.excerpt.text}
+            </blockquote>
+            : <p className="text-muted-foreground text-sm">{t.noExcerpt}</p>}
           {hit.factObligations ? <RightsMark rights={hit.factObligations} locale={locale} /> : null}
         </li>)}
       </ol>
