@@ -89,17 +89,19 @@ test('a second event writer waits for the first and a permanent lock ends with t
   let writer: Bun.Subprocess<'ignore', 'ignore', 'pipe'> | undefined;
   try {
     const first = f.open();
-    const second = f.open({storeWaitMs:1000});
+    const second = f.open({storeWaitMs:5000});
     const bounded = f.open({storeWaitMs:75});
     const ready = join(f.dir, 'writer-ready');
+    const release = join(f.dir, 'writer-release');
     const sql = 'INSERT INTO events(goal,event_key,body,due_at) VALUES(?,?,?,?)';
     const pending = second.db.query(sql);
     const timed = bounded.db.query(sql);
-    const source = `import { Database } from 'bun:sqlite'; import { writeFileSync } from 'node:fs';
+    const source = `import { Database } from 'bun:sqlite'; import { existsSync, writeFileSync } from 'node:fs';
       const db = new Database(${JSON.stringify(join(f.stateDir, 'coordinator.sqlite'))});
       db.exec('BEGIN EXCLUSIVE');
       db.query(${JSON.stringify(sql)}).run('program','first','first writer',0);
       writeFileSync(${JSON.stringify(ready)}, 'locked');
+      while (!existsSync(${JSON.stringify(release)})) await Bun.sleep(10);
       await Bun.sleep(500); db.exec('COMMIT'); db.close();`;
     writer = Bun.spawn([process.execPath, '-e', source], {stdout:'ignore',stderr:'pipe'});
     await waitFor(() => existsSync(ready));
@@ -107,6 +109,8 @@ test('a second event writer waits for the first and a permanent lock ends with t
     expect(() => timed.run('program','bounded','must fail',0)).toThrow(`Event store statement ${JSON.stringify(sql)} failed after waiting 75 ms`);
     expect(performance.now() - start).toBeGreaterThanOrEqual(70);
     expect(performance.now() - start).toBeLessThan(300);
+    // Hold through the bounded failure, then leave the successful retry room for QA scheduling.
+    writeFileSync(release, 'release');
     pending.run('program','second','second writer',0);
     expect(await writer.exited, await new Response(writer.stderr).text()).toBe(0);
     expect(first.db.query('SELECT event_key FROM events ORDER BY event_key').all()).toEqual([{event_key:'first'},{event_key:'second'}]);
