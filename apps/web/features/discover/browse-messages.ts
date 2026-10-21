@@ -95,7 +95,7 @@ export const browseMessages = defineMessages({
     popular: '热门内容',
     followedTopics: '你关注主题中的热门内容',
     readerLanguages: '使用你阅读语言的社区',
-    newSites: '新网站',
+    newSites: '新站点',
     personalize: '使用我的关注与阅读语言',
     otherCommunities: '其他社区…',
     chooseCommunity: '查找社区',

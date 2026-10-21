@@ -145,7 +145,7 @@ export const FailedSimplifiedChinesePhone: Story = {
 
 const regionLabels = {
   en: { recommendations: 'Recommendations', results: 'All results', unavailable: 'Couldn’t load this list.', retry: 'Try again', sites: 'New sites' },
-  'zh-Hans': { recommendations: '推荐内容', results: '全部结果', unavailable: '无法加载此列表。', retry: '重试', sites: '新网站' },
+  'zh-Hans': { recommendations: '推荐内容', results: '全部结果', unavailable: '无法加载此列表。', retry: '重试', sites: '新站点' },
 };
 async function expectUnavailableRegions(canvasElement: HTMLElement, locale: keyof typeof regionLabels) {
   const canvas = within(canvasElement), labels = regionLabels[locale];
