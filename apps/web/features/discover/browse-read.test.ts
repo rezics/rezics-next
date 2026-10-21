@@ -11,7 +11,9 @@ test.each([true, false])('scan failure classification preserves the actual succe
     return page;
   }, null);
   expect(scan.checkedPages).toBe(hasMatch ? 1 : BROWSE_SCAN_PAGES);
-  expect(scan.result).toBe(pages.at(-1));
+  const last = pages.at(-1);
+  if (!last) throw new Error('Expected the scan to read a page');
+  expect(scan.result).toBe(last);
   expect(scan.result).toMatchObject({ data: { nextCursor: `opaque:+/%?=&雪:${pages.length - 1}`,
     count: { value: 7, kind: 'at-least' } } });
 });
