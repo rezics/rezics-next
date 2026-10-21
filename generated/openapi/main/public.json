@@ -227230,7 +227230,9 @@
                                         "site",
                                         "agent",
                                         "collection",
-                                        "concept"
+                                        "concept",
+                                        "resource",
+                                        "post"
                                       ],
                                       "type": "string"
                                     },
@@ -618922,7 +618924,9 @@
                                           "site",
                                           "agent",
                                           "collection",
-                                          "concept"
+                                          "concept",
+                                          "resource",
+                                          "post"
                                         ],
                                         "type": "string"
                                       },
