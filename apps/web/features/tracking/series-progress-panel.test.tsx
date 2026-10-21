@@ -1,9 +1,9 @@
 import { expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { editions as fixture, indexSummary, iri, saoOne } from './fixtures.ts';
+import { editions as fixture, equivalentDefinition, indexSummary, iri, saoOne, spiderRelations } from './fixtures.ts';
 import { createMemoryMain, memoryTracking } from './memory.ts';
 import { copyOf } from './messages.ts';
-import { mergeSeriesSetup, PreferenceForm } from './series-progress-panel.tsx';
+import { equivalentCounterparts, mergeSeriesSetup, PreferenceForm } from './series-progress-panel.tsx';
 import { applyEditionPage, editionRequest } from './tracking-sheet.tsx';
 import type { EditionPreference, Editions } from './types.ts';
 
@@ -14,6 +14,18 @@ const releases = Array.from({ length: 45 }, (_, index) => ({
   contentLanguages: [index === 40 ? 'pl' : 'en'],
 }));
 const firstPage: Editions = { realizations: [], releases: releases.slice(0, 20), releasesCursor: '20', more: true };
+
+test('equivalent batch actions require a complete incidence answer and leave its opaque frontier intact', () => {
+  const webRelations = spiderRelations();
+  const expected = equivalentCounterparts(webRelations, equivalentDefinition);
+  expect(expected).not.toHaveLength(0);
+  const next = 'opaque:+/%?=&雪';
+  const partial = { ...webRelations, next };
+  expect(equivalentCounterparts(partial, equivalentDefinition)).toEqual([]);
+  expect(partial.items).toBe(webRelations.items);
+  expect(partial.next).toBe(next);
+  expect(equivalentCounterparts(webRelations, equivalentDefinition)).toEqual(expected);
+});
 
 function render(editions: Editions | null) {
   return renderToStaticMarkup(<PreferenceForm work={saoOne} preference={preference} language="pl"

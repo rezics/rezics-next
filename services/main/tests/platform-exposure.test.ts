@@ -252,7 +252,17 @@ test('every served Main route, including transports, has a reviewed exposure', (
     expect(matrix.find(entry => entry.path === path && entry.method === 'get'))
       .toMatchObject({ exposure: 'public', rateLimitFamily: 'read', bearer: true });
   }
-  expect(publicOperations).toHaveLength(540);
+  // Each mixed Source operation dispatches native annotation authority before
+  // retaining the server-selected catalogue-import gate for its legacy branch.
+  for (const path of ['/v1/sources/field-supports', '/v1/sources/withdrawals']) {
+    expect(matrix.find(entry => entry.path === path && entry.method === 'post'))
+      .toMatchObject({ exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true });
+  }
+  for (const path of ['/v1/sources/field-supports/{support}', '/v1/sources/supports/{support}']) {
+    expect(matrix.find(entry => entry.path === path && entry.method === 'get'))
+      .toMatchObject({ exposure: 'public', rateLimitFamily: 'read', bearer: true });
+  }
+  expect(publicOperations).toHaveLength(544);
   expect(publicOperations.filter((id) => libraryCopiesAndLoans.includes(id)).sort()).toEqual(
     libraryCopiesAndLoans,
   );
@@ -260,7 +270,7 @@ test('every served Main route, including transports, has a reviewed exposure', (
   const closedOperations = matrix
     .filter((entry) => entry.exposure !== 'public')
     .map((entry) => exposureOperationId(entry.method, entry.path));
-  expect(closedOperations).toHaveLength(249);
+  expect(closedOperations).toHaveLength(245);
   expect(matrix.find(entry => entry.path === '/v1/sources/observations/{observation}/conversions'
     && entry.method === 'post')).toMatchObject({ exposure: 'platform:catalogue-import', rateLimitFamily: 'write' });
   expect(closedOperations).toContain('postV1RealmsByRealmAbout-posts');

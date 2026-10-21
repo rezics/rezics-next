@@ -1,6 +1,8 @@
 import { expect, test } from 'bun:test';
 import { planExport, type VerifiedExportMember } from '../src/modules/export/planner.ts';
 import { exportSupportedObligationKinds, projectWikiDisplay, unassessedExportBasis } from '../src/modules/rights/store.ts';
+import { wikiDisplayObligations } from '../src/modules/work/read-contract.ts';
+import { Value } from 'typebox/value';
 
 const member: VerifiedExportMember = {
   sourceOwner: 'graph', sourceNamespace: 'fixture:rights', sourceGrain: 'work',
@@ -46,4 +48,25 @@ test('wiki display keeps display obligations and a hidden head reveals nothing',
   expect(hidden).toEqual({ status: 'unassessed' });
   expect(JSON.stringify(hidden)).not.toContain('do not leak');
   expect(JSON.stringify(hidden)).not.toContain('secret');
+});
+
+test('wiki display retains the exact assessed material and only its supplied source/evidence identity', () => {
+  const row = { assessmentId: '00000000-0000-4000-8000-000000000011',
+    materialId: '00000000-0000-4000-8000-000000000012', component: 'synopsis',
+    sourceRecordId: '00000000-0000-4000-8000-000000000013',
+    wikiEvidenceId: 'https://rezics.com/id/00000000-0000-4000-8000-000000000014',
+    licenseInstrument: 'https://example.test/by', obligations: [
+      { kind: 'attribution', instrument: 'https://example.test/by', appliesTo: 'display',
+        notice: 'Archive, https://example.test/record' },
+    ] };
+  const identity = { assessmentId: row.assessmentId, materialId: row.materialId, component: row.component,
+    sourceRecordId: row.sourceRecordId, wikiEvidenceId: row.wikiEvidenceId };
+  const projected = projectWikiDisplay(row, false);
+  expect(projected).toMatchObject({ identity });
+  expect(Value.Check(wikiDisplayObligations, projected)).toBe(true);
+  expect(Value.Check(wikiDisplayObligations, { ...projected, identity: { ...identity, sourceUrl: 'https://example.test/record' } })).toBe(false);
+  expect(projectWikiDisplay({ ...row, sourceRecordId: null, wikiEvidenceId: null }, false))
+    .toMatchObject({ identity: { ...identity, sourceRecordId: null, wikiEvidenceId: null } });
+  expect(projectWikiDisplay(row, true)).toEqual({ status: 'unassessed' });
+  expect(Value.Check(wikiDisplayObligations, { status: 'unassessed', identity })).toBe(false);
 });

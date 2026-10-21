@@ -8,10 +8,6 @@ export const RELATION_ATTRIBUTION_LIMITS = { supports: 16, bases: 32, evidence: 
 export type SourceIdentity = NonNullable<RetainedCreditParticipation['sourceIdentity']>;
 export type AttributedParticipation = Participation & { sourceIdentity?: SourceIdentity; attributionSupports: CreditAttributionSupport[] };
 const fields: CreditAttributionField[] = ['creditedName', 'provider', 'namespace', 'key', 'alias', 'eid', 'note'];
-const attributionBasisKeys = new Map<string, string[]>([
-  ['source-credit', ['kind', 'support']], ['native-credit', ['kind', 'credit', 'revision']],
-  ['source-binding', ['kind', 'binding']], ['selected-publication', ['kind', 'decision']],
-]);
 const native = (value: unknown): value is string => typeof value === 'string'
   && /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value);
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
@@ -24,9 +20,9 @@ export const canonicalAttribution = (value: unknown): string => JSON.stringify(v
 const invalid = (message: string): never => { throw new InvalidRelationOccurrence(message); };
 
 export class UnsupportedRelationModel extends SemanticChangeRejected {
-  readonly modelRevision = RELATION_V2_PROFILE;
-  readonly schema = RELATION_V2_PROFILE;
-  constructor() { super('unsupported-model-revision', 'Select relation-change-v2 for this authored occurrence'); }
+  constructor(readonly modelRevision: string = RELATION_V2_PROFILE, readonly schema: string = modelRevision) {
+    super('unsupported-model-revision', 'Select relation-change-v2 for this authored occurrence');
+  }
 }
 
 export class InvalidParticipationAttribution extends SemanticChangeRejected {
@@ -49,11 +45,14 @@ export function checkedAttributionSupports(value: unknown): CreditAttributionSup
   const result = value.map(item => {
     if (!object(item) || !keys(item, ['basis', 'fields', 'evidence']) || !object(item.basis)) return invalid('attribution support is closed');
     const basis = item.basis;
-    const basisKeys = attributionBasisKeys.get(String(basis.kind));
+    const basisKeys = ({ 'source-credit': ['kind', 'support'], 'native-credit': ['kind', 'credit', 'revision'],
+      'source-binding': ['kind', 'binding'], 'selected-publication': ['kind', 'decision'] } as Record<string, string[]>)[String(basis.kind)];
     if (!basisKeys || !keys(basis, basisKeys) || basisKeys.filter(key => key !== 'kind').some(key => !native(basis[key]))) return invalid('attribution basis must name its exact existing owner');
     if (!Array.isArray(item.fields) || item.fields.length < 1 || item.fields.length > 7
       || new Set(item.fields).size !== item.fields.length || item.fields.some(field => !fields.includes(field))) return invalid('attribution fields are distinct admitted field names');
-    if (!Array.isArray(item.evidence) || item.evidence.length < 1 || item.evidence.length > RELATION_ATTRIBUTION_LIMITS.perSupportEvidence
+    const nativeIdentity = basis.kind === 'native-credit'
+      && item.fields.every(field => ['provider', 'namespace', 'key'].includes(field));
+    if (!Array.isArray(item.evidence) || !nativeIdentity && item.evidence.length < 1 || item.evidence.length > RELATION_ATTRIBUTION_LIMITS.perSupportEvidence
       || new Set(item.evidence).size !== item.evidence.length || item.evidence.some(ref => !text(ref, 2048)
         || !/^(https:\/\/[^\s<>"{}|\\^`]+|urn:rezics:[a-z0-9-]+:[^\s<>"{}|\\^`]+)$/.test(ref))) return invalid('attribution evidence must identify exact bounded citations');
     return { basis: structuredClone(basis), fields: [...item.fields].sort(), evidence: [...item.evidence].sort() } as CreditAttributionSupport;
@@ -70,7 +69,7 @@ export function checkedParticipationsV2(roles: readonly RelationRoleDefinition[]
     const sourceIdentity = value.sourceIdentity === undefined ? undefined : checkedSourceIdentity(value.sourceIdentity);
     const attributionSupports = checkedAttributionSupports(value.attributionSupports ?? []);
     for (const support of attributionSupports) for (const field of support.fields) {
-      if (field === 'creditedName' ? value.creditedName === undefined : sourceIdentity?.[field] === undefined || sourceIdentity[field] === null) {
+      if (field === 'creditedName' ? !Object.hasOwn(value, field) : !sourceIdentity || !Object.hasOwn(sourceIdentity, field)) {
         return invalid('attribution support names an absent field');
       }
     }

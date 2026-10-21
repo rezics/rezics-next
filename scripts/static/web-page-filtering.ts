@@ -1,7 +1,7 @@
 import { dirname, join, normalize } from 'node:path';
 import { parseSync, type Node } from 'oxc-parser';
 import { isWebDataModule, webChildren as children, webProgram } from './web-source-scan.ts';
-import { pageOutputFlow, type WebSource } from './web-continuations.ts';
+import { pageOutputFlow, pageOutputFlows, type WebSource } from './web-continuations.ts';
 
 export interface PageSelection { path: string; consumer: string; operation: string; predicate: string }
 interface Unit { file: WebSource; name: string; nodes: Node[]; variables: Map<string, Node> }
@@ -22,8 +22,11 @@ export function pageSelections(sources: readonly WebSource[], paged = new Set<st
   const parents = new WeakMap<Node, Node>();
   const owners = new WeakMap<Node, Unit>();
   const imports = new Map<string, string>();
+  const opaqueImports = new Set<string>();
+  let unknownImport = false;
   const paths = new Set(sources.map(file => file.path));
   const outputFlows = new Map<WebSource, ReturnType<typeof pageOutputFlow>>();
+  const fileFlows = pageOutputFlows(sources);
   const resolve = (path: string, specifier: string) => {
     const target = normalize(join(dirname(path), specifier));
     return [target, `${target}.ts`, `${target}.tsx`, `${target}/index.ts`].find(path => paths.has(path)) ?? target;
@@ -31,8 +34,28 @@ export function pageSelections(sources: readonly WebSource[], paged = new Set<st
   const key = (unit: Unit) => `${unit.file.path}:${unit.name}`;
   for (const file of sources.filter(file => production(file.path))) {
     const program = webProgram(file);
+    const localExport = descendants(program).some(node => node.type === 'ExportDefaultDeclaration'
+      || node.type === 'ExportNamedDeclaration' && !node.source && node.specifiers.length > 0);
+    // Re-export-only modules are data modules for the consumer inventory, but
+    // their references still prevent an exhaustive named-caller proof.
+    for (const node of descendants(program)) {
+      if (node.type === 'ImportDeclaration' && node.importKind !== 'type'
+        && String(node.source.value).startsWith('.')
+        && (localExport || node.specifiers.some(specifier => specifier.type === 'ImportNamespaceSpecifier'))) {
+        opaqueImports.add(resolve(file.path, String(node.source.value)));
+      }
+      if (node.type === 'ImportExpression') {
+        if (node.source.type === 'Literal' && typeof node.source.value === 'string') {
+          opaqueImports.add(resolve(file.path, node.source.value));
+        } else unknownImport = true;
+      }
+      if ((node.type === 'ExportAllDeclaration' || node.type === 'ExportNamedDeclaration')
+        && node.source && String(node.source.value).startsWith('.')) {
+        opaqueImports.add(resolve(file.path, String(node.source.value)));
+      }
+    }
     if (isWebDataModule(program)) continue;
-    outputFlows.set(file, pageOutputFlow(program));
+    outputFlows.set(file, fileFlows.get(file.path)!);
     const root: Unit = { file, name: '<module>', nodes: [], variables: new Map() };
     units.push(root);
     const visit = (node: Node, unit: Unit, parent?: Node) => {
@@ -144,6 +167,33 @@ export function pageSelections(sources: readonly WebSource[], paged = new Set<st
       }
     }
   }
+  // A helper may select a presentation channel only when every page-bearing
+  // caller also returns the unchanged source envelope. This is checked against
+  // the current call sites, so adding a caller which returns only the subset
+  // removes the proof. Unknown references and indirect calls stay unproved.
+  const callerRetains = (unit: Unit, input: Node): boolean => {
+    const fn = unit.nodes[0];
+    if (unknownImport || opaqueImports.has(unit.file.path)
+      || input.type !== 'Identifier' || !fn || !('params' in fn)) return false;
+    const index = fn.params.findIndex(parameter => name(parameter) === input.name);
+    const flow = outputFlows.get(unit.file)!;
+    if (index < 0 || !flow.readOnlyExport(unit.name, index)) return false;
+    let found = false;
+    for (const caller of units) for (const node of caller.nodes) {
+      if (node.type !== 'Identifier' || callKey(caller, node) !== key(unit)) continue;
+      const parent = parents.get(node);
+      if (parent === fn || parent?.type === 'ImportSpecifier') continue;
+      if (parent?.type !== 'CallExpression' || parent.callee !== node) return false;
+      const argument = parent.arguments[index];
+      if (!argument || !pageArgument(caller, argument)) return false;
+      found = true;
+      const callerFlow = outputFlows.get(caller.file)!;
+      const envelope = callerFlow.envelope(argument);
+      if (!envelope || !callerFlow.retains(envelope, argument)
+        || !callerFlow.separate(argument, argument)) return false;
+    }
+    return found;
+  };
   for (const unit of units) {
     const origin = (node: Node, seen = new Set<Node>()): Set<string> => {
       if (seen.has(node)) return new Set();
@@ -175,6 +225,7 @@ export function pageSelections(sources: readonly WebSource[], paged = new Set<st
       const envelope = flow.envelope(input);
       if (selection === 'flatMap' && envelope && flow.projected(predicate) && flow.retains(envelope, input)
         && flow.separate(input, predicate)) return;
+      if (callerRetains(unit, input)) return;
       // A small result is complete only when a preceding failure branch rejects
       // this same envelope's continuation. Removing that branch removes the proof.
       const items = descendants(input).find(node => node.type === 'MemberExpression' && name(node.property) === 'items');
@@ -219,8 +270,21 @@ export function pageSelections(sources: readonly WebSource[], paged = new Set<st
       }
       if (node.type === 'ForOfStatement') {
         // Include imperative eligibility predicates, including join lookups assigned to aliases.
+        const continuesThisLoop = (statement: Node): boolean => {
+          if (statement.type !== 'ContinueStatement') return false;
+          let target = parents.get(statement);
+          while (target) {
+            if (statement.label) {
+              if (target.type === 'LabeledStatement' && name(target.label) === name(statement.label)) return target.body === node;
+            } else if (['ForOfStatement', 'ForInStatement', 'ForStatement', 'WhileStatement', 'DoWhileStatement'].includes(target.type)) {
+              return target === node;
+            }
+            target = parents.get(target);
+          }
+          return false;
+        };
         for (const branch of descendants(node.body)) if (branch.type === 'IfStatement'
-          && descendants(branch.consequent).some(child => child.type === 'ContinueStatement')
+          && descendants(branch.consequent).some(continuesThisLoop)
           && owners.get(branch) === unit) report(node.right, branch.test, 'continue');
       }
     }

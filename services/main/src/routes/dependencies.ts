@@ -25,6 +25,7 @@ import type { AccessRepresentedMembershipAuthority }
   from '../modules/access/represented-membership-authority.ts';
 import type { AccessEligibleOrgMemberSet } from '../modules/access/eligible-org-member-set.ts';
 import type { SourceIntakeStore } from '../modules/source/intake.ts';
+import type { SourceNativeCreditAnnotationStore } from '../modules/source/native-credit-annotation.ts';
 import type { SourceAuthorNameStore } from '../modules/source/author-name.ts';
 import type { RecipeSourceConversionStore } from '../modules/recipe/source-conversion.ts';
 import type { SourceAcquisitionServices } from '../modules/source/acquisition.ts';
@@ -253,6 +254,10 @@ export interface MainWorkDependencies {
   sourceFieldAttachments?: SourceFieldAttachmentStore;
   sourceFieldApplications?: SourceFieldApplicationStore;
   sourceRetainedFieldSupports?: SourceRetainedFieldSupportStore;
+  sourceNativeCreditAnnotations?: SourceNativeCreditAnnotationStore;
+  nativeCreditAnnotationProof?: (participation: import('../modules/relation/schema.ts').Participation,
+    support: import('../modules/work/credit-association-state.ts').CreditAttributionSupport) =>
+    Promise<import('../modules/relation/attribution.ts').RelationAttributionProof | null>;
   sourceReleaseEvidence?: Pick<SourceReleaseEvidenceOwner, 'read'>;
   sourceNativeChildren?: SourceNativeChildStore;
   sourceProviderIdentity?: ProviderIdentityStore;

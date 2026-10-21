@@ -97,7 +97,7 @@ export function WorkSources({ work, locale, messages, avatarQuery, statements, l
   const publication = publicationSource(work);
   return <SubjectSources locale={locale}><div data-work-sources className="grid min-w-0 gap-5">
     <PublicationSource source={publication} messages={messages} />
-    {rights.map(group => <div key={group.labels.join()} className="grid gap-1">
+    {rights.map(group => <div key={JSON.stringify(group.rights)} className="grid gap-1">
       <h3 className="font-medium text-sm">{group.labels.join(' · ')}</h3>
       <RightsMark rights={group.rights} locale={locale} linkedSourceHref={publication?.url} />
     </div>)}
@@ -127,7 +127,8 @@ function WorkFieldEvidence({ page, labels = new Map(), messages: t }: {
     })}</dl> : null}
     <details className="min-w-0">
       <summary className="w-fit cursor-pointer rounded-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring">{t.fieldEvidence}</summary>
-      <ul className="mt-3 grid min-w-0 gap-4">{rows.map((item, index) => <li key={`${item.revision}:${index}`} className="grid min-w-0 gap-1">
+      <ul className="mt-3 grid min-w-0 gap-4">{rows.map((item, index) => <li key={`${item.revision}:${index}`}
+        data-fact-revision={item.revision} className="grid min-w-0 gap-1">
         <p className="font-medium [overflow-wrap:anywhere]">{labels.has(item.predicate)
           ? <LocalizedText text={labels.get(item.predicate)!} /> : item.predicate}</p>
         <p className="text-muted-foreground text-xs [overflow-wrap:anywhere]">{t.recordRevision}: {item.revision}</p>
@@ -137,7 +138,9 @@ function WorkFieldEvidence({ page, labels = new Map(), messages: t }: {
             {t.evidence} {index + 1}</a> : <span className="[overflow-wrap:anywhere]">{source}</span>}</li>;
         })}</ul> : !('evidence' in item && item.evidence?.length) ? <p className="text-muted-foreground">{t.fieldEvidenceUnavailable}</p> : null}
         {'evidence' in item && item.evidence?.length ? <ul className="grid min-w-0 gap-3 border-border border-s-2 ps-3">
-          {item.evidence.map(evidence => <li key={evidence.id} data-field-evidence className="grid min-w-0 gap-2">
+          {item.evidence.map(evidence => <li key={evidence.id} data-field-evidence data-source-key={evidence.id}
+            className="grid min-w-0 gap-2">
+            <p className="text-muted-foreground text-xs [overflow-wrap:anywhere]">{t.evidence}: {evidence.id}</p>
             <dl className="grid min-w-0 gap-2">
               {[[t.evidenceSource, evidence.sourceWork, 'work'],
                 [t.evidenceSubmitter, evidence.submitter, 'entity']].map(([label, value, base]) => {

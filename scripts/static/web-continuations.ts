@@ -110,7 +110,7 @@ function completeIteration(node: Node, parent: Node | undefined, parents: WeakMa
   const previous = block.body[block.body.indexOf(parent) - 1];
   if (previous?.type !== 'IfStatement' || previous.alternate) return false;
   const remainder = (test: Node): boolean => test.type === 'MemberExpression'
-    && name(test.property) === 'nextCursor' && syntax(test.object) === syntax(node.object)
+    && ['nextCursor', 'next'].includes(name(test.property)) && syntax(test.object) === syntax(node.object)
     || test.type === 'LogicalExpression' && test.operator === '||'
       && (remainder(test.left) || remainder(test.right));
   const exit = previous.consequent.type === 'BlockStatement' && previous.consequent.body.length === 1
@@ -119,8 +119,36 @@ function completeIteration(node: Node, parent: Node | undefined, parents: WeakMa
     || exit.type === 'ContinueStatement' && !exit.label);
 }
 
-type FunctionNode = Extract<Node, { type: 'FunctionDeclaration' | 'FunctionExpression' | 'ArrowFunctionExpression' }>;
-const isFunction = (node: Node): node is FunctionNode => ['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'].includes(node.type);
+/** A batch's explicit complete flag is different from a page frontier. Accept
+ * only an immediately dominating refusal of this very envelope's false flag. */
+function completeBatch(node: Node, parents: WeakMap<Node, Node>): boolean {
+  if (node.type !== 'MemberExpression') return false;
+  let statement: Node = node;
+  for (let parent = parents.get(statement); parent; parent = parents.get(statement)) {
+    if (isFunction(parent)) return false;
+    if (parent.type === 'BlockStatement') {
+      const previous = parent.body[parent.body.indexOf(statement as typeof parent.body[number]) - 1];
+      if (previous?.type !== 'IfStatement' || previous.alternate || previous.test.type !== 'UnaryExpression'
+        || previous.test.operator !== '!' || previous.test.argument.type !== 'MemberExpression'
+        || staticKey(previous.test.argument) !== 'complete' || syntax(previous.test.argument.object) !== syntax(node.object)) return false;
+      const exit = previous.consequent.type === 'BlockStatement' && previous.consequent.body.length === 1
+        ? previous.consequent.body[0] : previous.consequent;
+      if (exit?.type === 'ThrowStatement') return true;
+      const failure = exit?.type === 'ReturnStatement' && exit.argument ? unwrap(exit.argument) : undefined;
+      return failure?.type === 'ObjectExpression' && failure.properties.every(property => property.type === 'Property'
+        && !property.computed && !property.method && property.kind === 'init')
+        && failure.properties.filter(property => property.type === 'Property' && staticKey(property) === 'ok').length === 1
+        && failure.properties.some(property => property.type === 'Property' && staticKey(property) === 'ok'
+          && property.value.type === 'Literal' && property.value.value === false);
+    }
+    statement = parent;
+  }
+  return false;
+}
+
+type FunctionNode = Extract<Node, { expression: boolean; params: unknown }> & { body: Node };
+const isFunction = (node: Node): node is FunctionNode => ['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'].includes(node.type)
+  && !!(node as FunctionNode).body;
 const unwrap = (node: Node): Node => ['TSAsExpression', 'TSSatisfiesExpression', 'TSNonNullExpression', 'ParenthesizedExpression', 'ChainExpression'].includes(node.type)
   ? unwrap((node as Extract<Node, { expression: Node }>).expression) : node;
 const staticKey = (node: Extract<Node, { type: 'Property' | 'MemberExpression' }>): string | undefined => {
@@ -129,15 +157,69 @@ const staticKey = (node: Extract<Node, { type: 'Property' | 'MemberExpression' }
 };
 interface Address { root: Node; path: string[]; element?: boolean }
 interface Binding { value: Node; path: string[]; parameter?: boolean }
+type ConstructedKind = 'group' | 'array';
+interface InputProof { valid: boolean; count: number }
 
 /** Local, read-only evidence for native envelopes and incoming positions. Unknown
  * calls/branches/spreads cannot prove retention; aliases never outlive a write.
  * Both inventories use the same output lifetime, rather than naming enrichments. */
-export function pageOutputFlow(program: Node) {
+export function pageOutputFlow(program: Node, importedReadOnly?: (name: string, index: number) => boolean,
+  importedConstructed?: (name: string, path: string[], kind: ConstructedKind) => boolean,
+  exportedInputs?: (name: string, path: string[], kind: ConstructedKind) => InputProof) {
   const parents = new WeakMap<Node, Node>();
-  const index = (node: Node) => { for (const child of children(node)) { parents.set(child, node); index(child); } };
+  const programNodes: Node[] = [];
+  const index = (node: Node) => { programNodes.push(node); for (const child of children(node)) { parents.set(child, node); index(child); } };
   index(program);
   const scopes = new WeakMap<Node, ReturnType<typeof scope>>();
+  const declarations = new Map<string, FunctionNode>();
+  const unavailableDeclarations = new Set<string>();
+  for (const statement of children(program)) {
+    const node = statement.type === 'ExportNamedDeclaration' ? statement.declaration : statement;
+    if (node?.type === 'FunctionDeclaration' && node.id && isFunction(node)) {
+      if (declarations.has(node.id.name)) unavailableDeclarations.add(node.id.name);
+      declarations.set(node.id.name, node);
+    }
+  }
+  const bindingNames = (node: Node): string[] => node.type === 'Identifier' ? [node.name]
+    : children(node).flatMap(bindingNames);
+  const checkDeclarations = (node: Node) => {
+    const bindings = node.type === 'VariableDeclarator' ? [node.id]
+      : isFunction(node) ? node.params
+        : node.type === 'AssignmentExpression' ? [node.left]
+          : node.type === 'UpdateExpression' ? [node.argument]
+            : node.type === 'CatchClause' && node.param ? [node.param]
+              : node.type === 'ClassDeclaration' && node.id ? [node.id] : [];
+    for (const binding of bindings) for (const identifier of bindingNames(binding)) unavailableDeclarations.add(identifier);
+    if (node.type === 'FunctionDeclaration' && node.id && declarations.get(node.id.name) !== node) unavailableDeclarations.add(node.id.name);
+    for (const child of children(node)) checkDeclarations(child);
+  };
+  checkDeclarations(program);
+  for (const identifier of unavailableDeclarations) declarations.delete(identifier);
+  const checkingEffects = new Set<FunctionNode>();
+  const checkingOrigins = new Set<string>();
+  const checkingSelections = new Set<string>();
+  const functionFlow = (fn: FunctionNode) => {
+    const flow = scopes.get(fn) ?? scope(fn);
+    scopes.set(fn, flow);
+    return flow;
+  };
+  const returnedConstructed = (fn: FunctionNode, path: string[], kind: ConstructedKind): boolean => {
+    const key = `${fn.start}:${path.join('.')}:${kind}`;
+    if (checkingOrigins.has(key)) return false;
+    checkingOrigins.add(key);
+    const result = functionFlow(fn).returnedConstructed(path, kind);
+    checkingOrigins.delete(key);
+    return result;
+  };
+  const readOnlyArgument = (fn: FunctionNode, index: number): boolean => {
+    if (checkingEffects.has(fn)) return false;
+    checkingEffects.add(fn);
+    const flow = scopes.get(fn) ?? scope(fn);
+    scopes.set(fn, flow);
+    const result = flow.readOnlyArgument(index);
+    checkingEffects.delete(fn);
+    return result;
+  };
   function scope(fn: FunctionNode) {
     const nodes: Node[] = [];
     const all: Node[] = [];
@@ -238,7 +320,8 @@ export function pageOutputFlow(program: Node) {
         const origin = address(node.object, seen);
         return origin && { ...origin, path: [...origin.path, key ?? '*'] };
       }
-      if (node.type === 'CallExpression' || node.type === 'ObjectExpression') return { root: node, path: [] };
+      if (node.type === 'CallExpression' || node.type === 'ObjectExpression' || node.type === 'ArrayExpression'
+        || node.type === 'LogicalExpression' && node.operator === '??') return { root: node, path: [] };
     };
     const prefix = (left: Address, right: Address) => left.root === right.root && left.path.length <= right.path.length
       && left.path.every((key, index) => key === '*' || right.path[index] === '*' || key === right.path[index]);
@@ -260,7 +343,7 @@ export function pageOutputFlow(program: Node) {
       ? node.properties.flatMap(property => writes(property.type === 'Property' ? property.value : property.argument))
       : node.type === 'ArrayPattern' ? node.elements.flatMap(item => item ? writes(item) : [])
         : node.type === 'AssignmentPattern' ? writes(node.left) : [node];
-    const untouched = (target: Address, token = false) => !all.some(node => {
+    const untouched = (target: Address, token = false, appendOnly = false, arrayLengths = false): boolean => !all.some(node => {
       const modified = node.type === 'AssignmentExpression' ? node.left
         : node.type === 'UpdateExpression' || node.type === 'UnaryExpression' && node.operator === 'delete' ? node.argument : undefined;
       if (modified && writes(modified).some(item => {
@@ -270,21 +353,121 @@ export function pageOutputFlow(program: Node) {
       if (node.type === 'VariableDeclarator' && node.init && node.id.type === 'ObjectPattern'
         && node.id.properties.some(property => property.type === 'RestElement') && exposes(node.init, target, token)) return true;
       if (node.type !== 'CallExpression') return false;
-      if (node.arguments.some(argument => exposes(argument, target, token))) return true;
+      if (node.arguments.some((argument, index) => {
+        // The constructed-array proof may read its scalar length through a
+        // helper; passing that number cannot pass a writable array alias.
+        if (arrayLengths && argument.type === 'MemberExpression' && staticKey(argument) === 'length') return false;
+        const origin = appendOnly ? address(argument) : undefined;
+        if (!exposes(argument, target, token) && !(origin?.element && (prefix(origin, target) || prefix(target, origin)))) return false;
+        const callee = node.callee;
+        if (callee.type === 'MemberExpression' && staticKey(callee) === 'stringify'
+          && callee.object.type === 'Identifier' && callee.object.name === 'JSON'
+          && !unavailableDeclarations.has('JSON') && !bindings.has('JSON') && node.arguments.length === 1) return false;
+        if (!token && !appendOnly && callee.type === 'MemberExpression' && staticKey(callee) === 'push') {
+          const array = address(callee.object);
+          if (array?.root.type === 'ArrayExpression' && !array.path.length
+            && (untouched(array, false, true) || preservedInArray(argument, target, array))) return false;
+        }
+        // A local helper is evidence only when its parameter has no writes,
+        // opaque escapes or returned aliases. Recursive/unknown calls fail closed.
+        const resolved = value(node.callee);
+        const fn = isFunction(resolved) ? resolved : resolved.type === 'Identifier' && !bindings.has(resolved.name)
+          ? declarations.get(resolved.name) : undefined;
+        return fn ? !readOnlyArgument(fn, index) : resolved.type !== 'Identifier'
+          || unavailableDeclarations.has(resolved.name) || bindings.has(resolved.name)
+          || !importedReadOnly?.(resolved.name, index);
+      })) return true;
       const receiver = node.callee.type === 'MemberExpression' ? address(node.callee.object) : undefined;
       return !token && !!receiver && (prefix(receiver, target) || prefix(target, receiver))
-        && node.callee.type === 'MemberExpression' && !readMethods.has(name(node.callee.property));
+        && node.callee.type === 'MemberExpression' && (appendOnly
+          ? name(node.callee.property) !== 'push' : !readMethods.has(name(node.callee.property)));
     });
-    const contains = (node: Node, target: Address, seen = new Set<Node>()): boolean => {
+    // A native page may also be held below a local presentation record. Changes
+    // to a sibling legend do not change that page. Follow the exact literal
+    // property path through array elements; writes or opaque uses on that path
+    // (including a whole-record escape) are still rejected.
+    const preservedInArray = (argument: Node, target: Address, array: Address): boolean => {
+      const paths = (node: Node): string[][] | undefined => {
+        if (same(address(node), target)) return [[]];
+        node = value(node);
+        if (node.type !== 'ObjectExpression') return;
+        const result: string[][] = [];
+        for (const property of node.properties) {
+          if (property.type !== 'Property' || property.kind !== 'init' || property.method || staticKey(property) === undefined) return;
+          const nested = paths(property.value);
+          if (nested) result.push(...nested.map(path => [staticKey(property)!, ...path]));
+          else if (exposes(property.value, target, false)) return;
+        }
+        return result.length ? result : undefined;
+      };
+      const locations = paths(argument);
+      if (!locations) return false;
+      return locations.every(path => {
+        const protectedValue = { ...array, path: ['*', ...path] };
+        const overlaps = (node: Node) => {
+          const location = address(node);
+          return !!location && (prefix(location, protectedValue) || prefix(protectedValue, location));
+        };
+        return !all.some(node => {
+          const modified = node.type === 'AssignmentExpression' ? node.left
+            : node.type === 'UpdateExpression' || node.type === 'UnaryExpression' && node.operator === 'delete' ? node.argument : undefined;
+          if (modified && writes(modified).some(overlaps)) return true;
+          if (node.type !== 'CallExpression') return false;
+          if (node.arguments.some(overlaps)) return true;
+          if (node.callee.type !== 'MemberExpression' || !overlaps(node.callee.object)) return false;
+          const method = staticKey(node.callee);
+          return !(same(address(node.callee.object), array) && method === 'push');
+        });
+      });
+    };
+    const controls = (node: Node): Node[] => {
+      const result: Node[] = [];
+      for (let parent = parents.get(node); parent && parent !== fn; node = parent, parent = parents.get(parent)) {
+        if (isFunction(parent)) return [parent];
+        if (['IfStatement', 'ConditionalExpression', 'ForOfStatement', 'ForStatement', 'WhileStatement', 'DoWhileStatement', 'SwitchCase', 'TryStatement'].includes(parent.type)) result.push(node);
+      }
+      return result;
+    };
+    const contains = (node: Node, target: Address, seen = new Set<Node>(), at?: Node): boolean => {
       if (same(address(node), target)) return true;
       node = value(node);
       if (seen.has(node)) return false;
       seen = new Set(seen).add(node);
-      if (node.type === 'ConditionalExpression') return contains(node.consequent, target, seen) && contains(node.alternate, target, seen);
-      if (node.type === 'LogicalExpression') return contains(node.left, target, seen) && contains(node.right, target, seen);
-      if (node.type === 'ArrayExpression') return node.elements.some(item => item && item.type !== 'SpreadElement' && contains(item, target, seen));
+      if (node.type === 'ConditionalExpression') return contains(node.consequent, target, seen, at) && contains(node.alternate, target, seen, at);
+      if (node.type === 'LogicalExpression') return contains(node.left, target, seen, at) && contains(node.right, target, seen, at);
+      if (node.type === 'ArrayExpression') {
+        if (node.elements.some(item => item && item.type !== 'SpreadElement' && contains(item, target, seen, at))) return true;
+        const array = address(node);
+        return !!array && !!at && untouched(array, false, true) && all.some(call => call.type === 'CallExpression'
+          && call.end <= at.start && call.callee.type === 'MemberExpression' && staticKey(call.callee) === 'push'
+          && same(address(call.callee.object), array) && controls(call).every(control => controls(at).includes(control))
+          && call.arguments.some(argument => contains(argument, target, seen, at)));
+      }
       if (node.type !== 'ObjectExpression') return false;
       const keys = new Set<string>();
+      const spreadKeys = (node: Node, seen = new Set<Node>()): Set<string> | undefined => {
+        node = value(node);
+        if (seen.has(node)) return;
+        seen = new Set(seen).add(node);
+        if (node.type === 'ConditionalExpression') {
+          const left = spreadKeys(node.consequent, seen), right = spreadKeys(node.alternate, seen);
+          return left && right && new Set([...left, ...right]);
+        }
+        if (node.type !== 'ObjectExpression') return;
+        const result = new Set<string>();
+        for (const property of node.properties) {
+          if (property.type === 'SpreadElement') {
+            const nested = spreadKeys(property.argument, seen);
+            if (!nested) return;
+            for (const key of nested) result.add(key);
+          } else {
+            const key = staticKey(property);
+            if (key === undefined || property.kind !== 'init' || property.method) return;
+            result.add(key);
+          }
+        }
+        return result;
+      };
       const fields = (object: Extract<Node, { type: 'ObjectExpression' }>): boolean => {
         for (const property of [...object.properties].reverse()) {
           if (property.type === 'SpreadElement') {
@@ -292,15 +475,21 @@ export function pageOutputFlow(program: Node) {
               if (![...keys].some(key => key === 'items' || key === 'next' || continuations.has(key))) return true;
             } else {
               const spread = value(property.argument);
-              if (spread.type !== 'ObjectExpression') return false;
-              if (fields(spread)) return true;
+              if (spread.type === 'ObjectExpression') {
+                if (fields(spread)) return true;
+              } else {
+                const possible = spreadKeys(spread);
+                if (!possible) return false;
+                if (contains(spread, target, seen, at)) return true;
+                for (const key of possible) keys.add(key);
+              }
             }
           } else {
             const key = staticKey(property);
             if (key === undefined) return false;
             if (!keys.has(key)) {
               keys.add(key);
-              if (property.kind === 'init' && !property.method && contains(property.value, target, seen)) return true;
+              if (property.kind === 'init' && !property.method && contains(property.value, target, seen, at)) return true;
             }
           }
         }
@@ -310,6 +499,22 @@ export function pageOutputFlow(program: Node) {
     };
     const returns = fn.type === 'ArrowFunctionExpression' && fn.expression ? [fn.body]
       : nodes.flatMap(node => node.type === 'ReturnStatement' ? [node.argument] : []);
+    const failed = (output: Node | null | undefined): boolean => {
+      if (!output) return false;
+      const literal = value(output);
+      if (literal.type === 'ObjectExpression' && literal.properties.every(property => property.type === 'Property' && !property.computed)
+        && literal.properties.filter(property => property.type === 'Property' && name(property.key) === 'ok').length === 1
+        && literal.properties.some(property => property.type === 'Property' && name(property.key) === 'ok'
+          && property.value.type === 'Literal' && property.value.value === false)) return true;
+      const statement = parents.get(output);
+      let branch = statement && parents.get(statement);
+      if (branch?.type === 'BlockStatement' && branch.body.length === 1) branch = parents.get(branch);
+      return branch?.type === 'IfStatement' && !branch.alternate && branch.test.type === 'UnaryExpression'
+        && branch.test.operator === '!' && branch.test.argument.type === 'MemberExpression'
+        && staticKey(branch.test.argument) === 'ok' && syntax(branch.test.argument.object) === syntax(output)
+        && (branch.consequent === statement || branch.consequent.type === 'BlockStatement' && branch.consequent.body.length === 1
+          && branch.consequent.body[0] === statement);
+    };
     const altered = (node: Node, target: Address, seen = new Set<Node>()): boolean => {
       node = value(node);
       if (seen.has(node)) return false;
@@ -326,13 +531,206 @@ export function pageOutputFlow(program: Node) {
       if (node.type === 'ConditionalExpression') return altered(node.consequent, target, seen) || altered(node.alternate, target, seen);
       return false;
     };
+    // These item arrays are constructed locally for presentation, rather than
+    // read from a server envelope. A local Map is admitted only if every value
+    // ever inserted has the same literal-array origin; opaque writes fail shut.
+    const constructedItems = (envelope: Node, map = false): boolean => {
+      const maps = new Set<Node>();
+      const literalArray = (node: Node): boolean => {
+        node = value(node);
+        return node.type === 'ArrayExpression'
+          || node.type === 'ConditionalExpression' && literalArray(node.consequent) && literalArray(node.alternate)
+          || node.type === 'CallExpression' && !node.optional && node.callee.type === 'MemberExpression'
+            && staticKey(node.callee) === 'map' && node.arguments.length === 1 && isFunction(node.arguments[0]!)
+            && !node.arguments[0]!.async && node.arguments[0]!.params.length === 1;
+      };
+      const literal = (node: Node): boolean => {
+        node = value(node);
+        if (node.type === 'LogicalExpression' && node.operator === '??') return literal(node.left) && literal(node.right);
+        if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression'
+          && staticKey(node.callee) === 'get' && node.arguments.length === 1) return localMap(node.callee.object);
+        return node.type === 'ObjectExpression' && node.properties.every(property => property.type === 'Property'
+          && !property.computed && !property.method && property.kind === 'init'
+          && !['next', 'nextCursor', 'continuation', 'cursor', 'after', 'before'].includes(name(property.key)))
+          && node.properties.filter(property => property.type === 'Property' && name(property.key) === 'items').length === 1
+          && node.properties.some(property => property.type === 'Property' && name(property.key) === 'items'
+            && literalArray(property.value));
+      };
+      const cleanOrigin = (origin: Node): boolean => {
+        const container = address(origin);
+        const itemValue = propertyValue(origin, 'items');
+        const items = itemValue ? address(itemValue) : container && { ...container, path: [...container.path, 'items'] };
+        const protectedValues = [...(items ? [items] : []), ...(container
+          ? ['next', ...continuations].map(key => ({ ...container, path: [...container.path, key] })) : [])];
+        const touches = (node: Node) => protectedValues.some(target => exposes(node, target, false));
+        return !all.some(candidate => {
+          if (candidate.type === 'AssignmentExpression' || candidate.type === 'UpdateExpression'
+            || candidate.type === 'UnaryExpression' && candidate.operator === 'delete') {
+            const modified = candidate.type === 'AssignmentExpression' ? candidate.left : candidate.argument;
+            let target = modified;
+            while (target.type === 'MemberExpression') target = target.object;
+            if (value(target) === origin || touches(modified)) return true;
+          }
+          if (candidate.type !== 'CallExpression') return false;
+          const callee = candidate.callee;
+          const inserted = callee.type === 'MemberExpression' && staticKey(callee) === 'set'
+            && maps.has(value(callee.object));
+          if (!inserted && candidate.arguments.some(argument => value(argument) === origin
+            || !(argument.type === 'MemberExpression' && staticKey(argument) === 'length') && touches(argument))) return true;
+          if (callee.type !== 'MemberExpression') return false;
+          // The receiver itself is a writable alias, even with no arguments.
+          // Locally constructed item arrays allow their builder's push and
+          // ordinary reads; an opaque receiver can replace their contents.
+          if (value(callee.object) === origin) return true;
+          return touches(callee.object) && !readMethods.has(staticKey(callee) ?? '') && staticKey(callee) !== 'push';
+        });
+      };
+      const localMap = (node: Node): boolean => {
+        const origin = value(node);
+        if (origin.type !== 'NewExpression' || origin.callee.type !== 'Identifier' || origin.callee.name !== 'Map'
+          || origin.arguments.length || bindings.has('Map') || unavailableDeclarations.has('Map')) return false;
+        if (maps.has(origin)) return true;
+        maps.add(origin);
+        let inserted = false;
+        for (const candidate of all) {
+          const modified = candidate.type === 'AssignmentExpression' ? candidate.left
+            : candidate.type === 'UpdateExpression' || candidate.type === 'UnaryExpression' && candidate.operator === 'delete'
+              ? candidate.argument : undefined;
+          if (modified && value(modified) === origin) return false;
+          if (candidate.type !== 'CallExpression') continue;
+          const callee = candidate.callee;
+          if (candidate.arguments.some(argument => value(argument) === origin)) return false;
+          if (callee.type !== 'MemberExpression' || value(callee.object) !== origin) continue;
+          const method = staticKey(callee);
+          if (method === 'set' && candidate.arguments.length === 2) {
+            inserted = true;
+            if (!literal(candidate.arguments[1]!) || !cleanOrigin(value(candidate.arguments[1]!))) return false;
+          } else if (!['get', 'values', 'entries', 'keys', 'has'].includes(method ?? '')) return false;
+        }
+        return inserted;
+      };
+      if (map) return localMap(envelope);
+      const origin = value(envelope);
+      if (!literal(origin)) return false;
+      return cleanOrigin(origin);
+    };
+    // Follow only explicit construction paths: literal fields, known returned
+    // values and element callbacks. The terminal group must still be a local
+    // literal-array construction, never a server object with a frontier. This
+    // distinguishes `group.items` from `page.items` without trusting a name or
+    // an annotation. Unknown calls, cycles and aliases with writes fail shut.
+    const deriveConstructed = (node: Node, path: string[], kind: ConstructedKind, seen: Set<string>): boolean => {
+      node = unwrap(node);
+      const key = `${node.type}:${node.start}:${node.end}:${path.join('.')}:${kind}`;
+      if (seen.has(key)) return false;
+      seen = new Set(seen).add(key);
+      if (!path.length && kind === 'group' && constructedItems(node)) return true;
+      const location = address(node);
+      // Protect the selected construction and its aliases. A disjoint sibling
+      // (such as a retained native page's cursor) cannot mutate these groups.
+      const protectedPaths = kind === 'group' ? ['items', 'next', ...continuations].map(key => [...path, key]) : [path];
+      if (location && protectedPaths.some(path => !untouched({ ...location, path: [...location.path, ...path] }, false, false, true))) return false;
+      if (node.type === 'Identifier') {
+        if (ambiguous.has(node.name)) return false;
+        const binding = bindings.get(node.name);
+        if (binding && !binding.parameter) return derivedConstructed(binding.value, [...binding.path, ...path], kind, seen);
+        if (binding?.parameter) {
+          const callback = parents.get(fn);
+          if (callback?.type === 'CallExpression' && callback.arguments[0] === fn
+            && callback.callee.type === 'MemberExpression'
+            && ['map', 'flatMap', 'filter', 'find', 'some', 'every', 'forEach'].includes(staticKey(callback.callee) ?? '')
+            && fn.params.length === 1 && fn.params[0] === binding.value) {
+            return forNode(callback)?.derivedConstructed(callback.callee.object, ['*', ...binding.path, ...path], kind) ?? false;
+          }
+          if (fn.type !== 'FunctionDeclaration' || !fn.id || fn.params[0] !== binding.value) return false;
+          const select = [...binding.path, ...path];
+          const own = namedInputs(fn.id.name, select, kind);
+          const exported = parents.get(fn)?.type === 'ExportNamedDeclaration'
+            ? exportedInputs?.(fn.id.name, select, kind) : { valid: true, count: 0 };
+          return own.valid && !!exported?.valid && own.count + exported.count > 0;
+        }
+        const outer = parents.get(fn);
+        const outerFlow = outer && forNode(outer);
+        return !!outerFlow && outerFlow !== scopes.get(fn) && outerFlow.derivedConstructed(node, path, kind);
+      }
+      if (node.type === 'MemberExpression') {
+        const property = staticKey(node);
+        return property !== undefined && derivedConstructed(node.object, [property, ...path], kind, seen);
+      }
+      if (node.type === 'ConditionalExpression') return derivedConstructed(node.consequent, path, kind, seen)
+        && derivedConstructed(node.alternate, path, kind, seen);
+      if (node.type === 'LogicalExpression' && node.operator === '??') return derivedConstructed(node.left, path, kind, seen)
+        && derivedConstructed(node.right, path, kind, seen);
+      if (node.type === 'ObjectExpression') {
+        if (path.length) {
+          const selected = propertyValue(node, path[0]!);
+          return !!selected && derivedConstructed(selected, path.slice(1), kind, seen);
+        }
+        if (kind !== 'group' || node.properties.some(property => property.type !== 'Property' || staticKey(property) === undefined
+          || property.method || property.kind !== 'init' || ['next', ...continuations].includes(staticKey(property)!))) return false;
+        const items = node.properties.filter(property => property.type === 'Property' && staticKey(property) === 'items');
+        return items.length === 1 && items[0]?.type === 'Property' && derivedConstructed(items[0].value, [], 'array', seen);
+      }
+      if (node.type === 'ArrayExpression') {
+        if (!path.length) return kind === 'array';
+        if (path[0] === '*') return node.elements.every(item => !item || (item.type === 'SpreadElement'
+          ? derivedConstructed(item.argument, path, kind, seen) : derivedConstructed(item, path.slice(1), kind, seen)));
+        const item = node.elements[Number(path[0])];
+        return !!item && item.type !== 'SpreadElement' && derivedConstructed(item, path.slice(1), kind, seen);
+      }
+      const mapSelection = (map: Node, selection: string[]) => constructedItems(map, true)
+        && (kind === 'group' && !selection.length || kind === 'array' && selection.length === 1 && selection[0] === 'items');
+      if (node.type === 'NewExpression') return path[0] === '*' && path[1] === '1' && mapSelection(node, path.slice(2));
+      if (node.type !== 'CallExpression' || node.optional) return false;
+      const callee = node.callee;
+      if (callee.type === 'Identifier') {
+        if (bindings.has(callee.name) || unavailableDeclarations.has(callee.name)) return false;
+        const target = declarations.get(callee.name);
+        return target ? returnedConstructed(target, path, kind) : importedConstructed?.(callee.name, path, kind) ?? false;
+      }
+      if (callee.type !== 'MemberExpression') return false;
+      const method = staticKey(callee);
+      if (method === 'get' && node.arguments.length === 1) return mapSelection(callee.object, path);
+      if (method === 'values' && !node.arguments.length && path[0] === '*') return mapSelection(callee.object, path.slice(1));
+      if (method === 'filter' && path[0] === '*') return derivedConstructed(callee.object, path, kind, seen);
+      const callback = node.arguments[0];
+      return path[0] === '*' && ['map', 'flatMap'].includes(method ?? '') && !!callback && isFunction(callback)
+        && callback.params.length === 1 && !callback.async
+        && returnedConstructed(callback, method === 'flatMap' ? path : path.slice(1), kind);
+    };
+    const derivedConstructed = (node: Node, path: string[], kind: ConstructedKind, seen = new Set<string>()): boolean => {
+      const key = `${fn.start}:${node.type}:${node.start}:${node.end}:${kind}`;
+      if (checkingSelections.has(key)) return false;
+      checkingSelections.add(key);
+      try { return deriveConstructed(node, path, kind, seen); }
+      finally { checkingSelections.delete(key); }
+    };
     return {
       value,
+      constructedItems,
+      derivedConstructed,
+      returnedConstructed(path: string[], kind: ConstructedKind) {
+        return returns.length > 0 && returns.every(output => !!output && derivedConstructed(output, path, kind));
+      },
+      readOnlyArgument(index: number) {
+        const parameter = fn.params[index];
+        const target = parameter && address(parameter);
+        return !!target && !target.path.includes('*') && untouched(target)
+          && !all.some(node => node.type === 'AssignmentExpression' && exposes(node.right, target, false)
+            || node.type === 'NewExpression' && node.arguments.some(argument => exposes(argument, target, false))
+            || node.type === 'CallExpression' && node.callee.type === 'MemberExpression'
+              && ['map', 'filter', 'flatMap', 'find', 'findIndex', 'some', 'every', 'forEach', 'reduce', 'reduceRight'].includes(name(node.callee.property))
+              && exposes(node.callee.object, target, false)
+              && (!node.arguments[0] || !isFunction(unwrap(node.arguments[0]))
+                || (unwrap(node.arguments[0]) as FunctionNode).params.length > 1
+                || ['reduce', 'reduceRight'].includes(name(node.callee.property))))
+          && returns.every(output => !output || !exposes(output, target, false));
+      },
       retains(envelope: Node, at: Node) {
         const target = address(envelope);
-        const outputs = returns.filter(output => !output || output.end >= at.end);
+        const outputs = returns.filter(output => (!output || output.end >= at.end) && !failed(output));
         return !!target && !target.path.includes('*') && untouched(target) && outputs.length > 0
-          && outputs.every(output => !!output && contains(output, target) && !altered(output, target));
+          && outputs.every(output => !!output && contains(output, target, new Set(), at) && !altered(output, target));
       },
       input(node: Node): boolean {
         node = unwrap(node);
@@ -398,7 +796,50 @@ export function pageOutputFlow(program: Node) {
     scopes.set(current, flow);
     return flow;
   };
+  // A component parameter is construction evidence only if every source use is
+  // an explicit call/JSX input with the same proven origin. An opaque reference
+  // or a spread that could replace that input invalidates the proof.
+  const namedInputs = (identifier: string, path: string[], kind: ConstructedKind): InputProof => {
+    if (unavailableDeclarations.has(identifier)) return { valid: false, count: 0 };
+    let count = 0;
+    const jsxName = (node: Node) => node.type === 'JSXIdentifier' ? node.name : name(node);
+    for (const node of programNodes) {
+      if (node.type === 'JSXOpeningElement' && jsxName(node.name) === identifier) {
+        count++;
+        if (!path.length || node.attributes.some(attribute => attribute.type === 'JSXSpreadAttribute')) return { valid: false, count };
+        const attributes = node.attributes.filter(attribute => attribute.type === 'JSXAttribute' && jsxName(attribute.name) === path[0]);
+        const attribute = attributes[0];
+        if (attributes.length !== 1 || attribute?.type !== 'JSXAttribute' || attribute.value?.type !== 'JSXExpressionContainer'
+          || attribute.value.expression.type === 'JSXEmptyExpression'
+          || !forNode(attribute.value.expression)?.derivedConstructed(attribute.value.expression, path.slice(1), kind)) return { valid: false, count };
+      }
+      if (node.type === 'JSXIdentifier' && node.name === identifier) {
+        const parent = parents.get(node);
+        if (parent?.type !== 'JSXOpeningElement' && parent?.type !== 'JSXClosingElement') return { valid: false, count };
+      }
+      if (node.type !== 'Identifier' || node.name !== identifier) continue;
+      const parent = parents.get(node);
+      if (parent?.type === 'FunctionDeclaration' && parent.id === node || parent?.type === 'ImportSpecifier'
+        || parent?.type === 'Property' && parent.key === node && !parent.computed) continue;
+      if (parent?.type !== 'CallExpression' || parent.callee !== node || parent.optional || !parent.arguments[0]) return { valid: false, count };
+      count++;
+      if (!forNode(parent)?.derivedConstructed(parent.arguments[0], path, kind)) return { valid: false, count };
+    }
+    return { valid: true, count };
+  };
   return {
+    readOnlyExport: (name: string, index: number) => {
+      const fn = declarations.get(name);
+      return !!fn && readOnlyArgument(fn, index);
+    },
+    constructedExport: (name: string, path: string[], kind: ConstructedKind) => {
+      const fn = declarations.get(name);
+      return !!fn && returnedConstructed(fn, path, kind);
+    },
+    namedInputs,
+    constructedItems: (envelope: Node, at: Node) => forNode(at)?.derivedConstructed(envelope, [], 'group') ?? false,
+    constructedPattern: (pattern: Extract<Node, { type: 'ObjectPattern' }>) => pattern.properties.every(property => property.type === 'Property'
+      && (name(property.key) !== 'items' || forNode(property.value)?.derivedConstructed(property.value, [], 'array'))),
     retains: (envelope: Node, at: Node) => forNode(at)?.retains(envelope, at) ?? false,
     input: (node: Node) => forNode(node)?.input(node) ?? false,
     fabricated: (node: Node) => forNode(node)?.fabricated(node) ?? false,
@@ -407,6 +848,80 @@ export function pageOutputFlow(program: Node) {
     projected: (callback: Node) => forNode(callback)?.projected(callback) ?? false,
     separate: (input: Node, callback: Node) => { const selection = parents.get(callback); return !!selection && (forNode(input)?.separate(selection) ?? false); },
   };
+}
+
+/** Named relative imports share the same finite argument proof. No package,
+ * namespace, dynamic, ambiguous or recursive binding is assumed read-only. */
+export function pageOutputFlows(sources: readonly WebSource[]) {
+  const files = new Map(sources.map(file => [file.path, file]));
+  const flows = new Map<string, ReturnType<typeof pageOutputFlow>>();
+  const importedBindings = new Map<string, Map<string, { path: string; name: string }>>();
+  const opaqueImports = new Map<string, Set<string>>();
+  const unknownDynamicImports = new Set<string>();
+  const inputChecks = new Set<string>();
+  const get = (path: string): ReturnType<typeof pageOutputFlow> | undefined => {
+    const previous = flows.get(path);
+    if (previous) return previous;
+    const file = files.get(path);
+    if (!file) return;
+    const program = webProgram(file);
+    const imports = new Map<string, { path: string; name: string }>();
+    const opaque = new Set<string>();
+    for (const statement of children(program)) {
+      const relative = statement.type === 'ImportDeclaration' && statement.importKind !== 'type' ? statement.source
+        : (statement.type === 'ExportAllDeclaration' || statement.type === 'ExportNamedDeclaration') && statement.exportKind !== 'type' ? statement.source : null;
+      if (!relative || !String(relative.value).startsWith('.')) continue;
+      const base = normalize(join(dirname(path), String(relative.value)));
+      const target = [base, `${base}.ts`, `${base}.tsx`, `${base}/index.ts`].find(path => files.has(path));
+      if (!target) continue;
+      if (statement.type !== 'ImportDeclaration') { opaque.add(target); continue; }
+      for (const specifier of statement.specifiers) {
+        if (specifier.type === 'ImportSpecifier' && specifier.importKind !== 'type') {
+          imports.set(name(specifier.local), { path: target, name: name(specifier.imported) });
+        } else if (specifier.type !== 'ImportSpecifier') opaque.add(target);
+      }
+    }
+    const dynamicImports = (node: Node) => {
+      if (node.type === 'ImportExpression') {
+        if (node.source.type !== 'Literal' || typeof node.source.value !== 'string') unknownDynamicImports.add(path);
+        else if (node.source.value.startsWith('.')) {
+          const base = normalize(join(dirname(path), node.source.value));
+          const target = [base, `${base}.ts`, `${base}.tsx`, `${base}/index.ts`].find(candidate => files.has(candidate));
+          if (target) opaque.add(target);
+        }
+      }
+      for (const child of children(node)) dynamicImports(child);
+    };
+    dynamicImports(program);
+    importedBindings.set(path, imports);
+    opaqueImports.set(path, opaque);
+    const flow = pageOutputFlow(program, (name, index) => {
+      const target = imports.get(name);
+      return !!target && (get(target.path)?.readOnlyExport(target.name, index) ?? false);
+    }, (name, selection, kind) => {
+      const target = imports.get(name);
+      return !!target && (get(target.path)?.constructedExport(target.name, selection, kind) ?? false);
+    }, (name, selection, kind) => {
+      const key = `${path}:${name}:${selection.join('.')}:${kind}`;
+      if (inputChecks.has(key)) return { valid: false, count: 0 };
+      inputChecks.add(key);
+      let count = 0, valid = true;
+      for (const file of sources) {
+        const candidate = get(file.path);
+        if (opaqueImports.get(file.path)?.has(path) || unknownDynamicImports.has(file.path)) valid = false;
+        for (const [alias, target] of importedBindings.get(file.path) ?? []) if (target.path === path && target.name === name) {
+          const proof = candidate!.namedInputs(alias, selection, kind);
+          count += proof.count;
+          valid &&= proof.valid;
+        }
+      }
+      inputChecks.delete(key);
+      return { valid, count };
+    });
+    flows.set(path, flow);
+    return flow;
+  };
+  return { get };
 }
 
 /** Conservative syntax guard. Projecting items requires an explicit sibling
@@ -418,11 +933,12 @@ export function pageOutputFlow(program: Node) {
  * alias initializer cannot silently inherit the exception. Trivia stays benign. */
 export function continuationInventory(sources: readonly WebSource[]): ContinuationInventory {
   const violations: ContinuationInventory = [];
+  const flows = pageOutputFlows(sources);
   for (const file of sources.filter(file => production(file.path))) {
     const program = webProgram(file);
     if (isWebDataModule(program)) continue;
     const linkBuilders = browseLinkBuilders(file, program);
-    const flow = pageOutputFlow(program);
+    const flow = flows.get(file.path)!;
     const visit = (node: Node, consumer: string, context: string, parent?: Node) => {
       if (['FunctionDeclaration', 'ArrowFunctionExpression', 'FunctionExpression'].includes(node.type)) {
         context = createHash('sha256').update(syntax(node)).digest('hex');
@@ -447,10 +963,11 @@ export function continuationInventory(sources: readonly WebSource[]): Continuati
           return (direct || link) && container.properties.slice(index + 1).every(later =>
             later.type === 'Property' && !later.computed && name(later.key) !== name(property.key));
         });
-        if (!forwarded && !completeIteration(node, parent, objectParents) && !flow.retains(node.object, node)) report('dropped-continuation');
+        if (!forwarded && !completeIteration(node, parent, objectParents) && !completeBatch(node, objectParents)
+          && !flow.constructedItems(node.object, node) && !flow.retains(node.object, node)) report('dropped-continuation');
       }
       if (node.type === 'ObjectPattern' && node.properties.some(property =>
-        property.type === 'Property' && name(property.key) === 'items')) report('dropped-continuation');
+        property.type === 'Property' && name(property.key) === 'items') && !flow.constructedPattern(node)) report('dropped-continuation');
       if (node.type === 'Property' && continuations.has(name(node.key))) {
         const direct = (value: Node): boolean => value.type === 'Identifier' && continuations.has(value.name)
           || value.type === 'MemberExpression' && continuations.has(name(value.property))

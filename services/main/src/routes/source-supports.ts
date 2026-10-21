@@ -4,6 +4,8 @@ import { Elysia, t } from 'elysia';
 import type { Static, TSchema, TUnsafe } from 'typebox';
 import type { FieldSupportResult } from '../modules/source/withdrawal.ts';
 import type { RetainedPublicEvidence } from '../modules/source/field-support-retained.ts';
+import type { NativeCreditAnnotationRequest, NativeCreditAnnotationResult } from '../modules/source/native-credit-annotation.ts';
+import { nativeCreditAnnotationRequest, nativeCreditAnnotationResult } from '../modules/source/native-credit-annotation-schema.ts';
 import type { FieldAttachmentCertificate, VerifiedRetainedSupportAdmission, RetainedSupportRequest } from '../modules/source/field-support-contract.ts';
 import type { AttachFieldSupportInput } from '../modules/source/support-attach.ts';
 import type { NativeWorkSourceSupport } from '../modules/source/native-work-adoption.ts';
@@ -32,6 +34,8 @@ import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import type { VerifiedPrincipal } from '../modules/access/admission.ts';
 import { commandError, problem } from './problems.ts';
+import { requireSelectedPlatformCapability } from '../modules/access/exposure.ts';
+import { exposureOperationId } from '../modules/access/exposure-routes.ts';
 import { groupAgent, groupUuid, sourceRightsEvidence, titleControlBasis } from './shared.ts';
 import { requireSourceImportAuthority } from './source-runs.ts';
 import { SYNOPSIS_TEXT_LIMIT } from '../modules/source/field-control-language.ts';
@@ -56,10 +60,10 @@ const publicLegacyReadPolicy = { exposure: 'public', rateLimitFamily: 'read' } a
 export const openApiOperations = {
   '/v1/works/{id}/author-credits/{credit}/retirements': { post: publicWritePolicy },
   '/v1/works/{id}/author-credits/{credit}/retirement': { get: publicReadPolicy },
-  '/v1/sources/supports/{support}': { get: sourceReadPolicy },
-  '/v1/sources/field-supports/{support}': { get: sourceReadPolicy },
-  '/v1/sources/field-supports': { post: sourceWritePolicy },
-  '/v1/sources/withdrawals': { post: sourceWritePolicy },
+  '/v1/sources/supports/{support}': { get: publicReadPolicy },
+  '/v1/sources/field-supports/{support}': { get: publicReadPolicy },
+  '/v1/sources/field-supports': { post: publicWritePolicy },
+  '/v1/sources/withdrawals': { post: publicWritePolicy },
   '/v1/works/{id}/fields/synopsis/control': { get: publicReadPolicy,
     post: publicWritePolicy },
   '/v1/works/{id}/source-children': { post: sourceWritePolicy },
@@ -180,7 +184,8 @@ const fieldSupport = ownerSchema<FieldSupportResponse>(t.Object({ profile: t.Lit
   createdAt: t.String(), withdrawal: t.Nullable(fieldWithdrawal),
   admission: t.Optional(retainedSupportAdmission), attachment: t.Optional(fieldAttachmentCertificate),
   publicEvidence: t.Optional(t.Nullable(retainedPublicEvidence)) }));
-const fieldSupportWrite = ownerSchema<FieldSupportWriteResponse>(t.Object({ support: fieldSupport, replayed: t.Boolean() }));
+const fieldSupportWrite = ownerSchema<FieldSupportWriteResponse | { support: NativeCreditAnnotationResult; replayed: boolean }>(
+  t.Object({ support: t.Union([fieldSupport, nativeCreditAnnotationResult]), replayed: t.Boolean() }));
 
 const creditRetirement = t.Object({ profile: t.Literal('work-author-credit-retirement-v1'),
   state: t.Literal('retired'), retirement: t.String(), work: t.String(), credit: t.String(),
@@ -294,10 +299,10 @@ const sourceSupportEntryResult = t.Union([
   }) }),
 ]);
 
-type AnySupportResponse = FieldSupportResponse | Static<typeof sourceSupportEntryResult>
+type AnySupportResponse = FieldSupportResponse | NativeCreditAnnotationResult | Static<typeof sourceSupportEntryResult>
   | { kind: 'author-credit'; support: Static<typeof authorCreditSupportResult> }
   | { kind: 'native-child'; support: Static<typeof nativeChildSupport> };
-const anySupportResult = ownerSchema<AnySupportResponse>(t.Union([fieldSupport, sourceSupportEntryResult,
+const anySupportResult = ownerSchema<AnySupportResponse>(t.Union([fieldSupport, nativeCreditAnnotationResult, sourceSupportEntryResult,
   t.Object({ kind: t.Literal('author-credit'), support: authorCreditSupportResult }),
   t.Object({ kind: t.Literal('native-child'), support: nativeChildSupport })]));
 interface AnySupportWriteResponse { support: AnySupportResponse; replayed: boolean }
@@ -447,7 +452,7 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
     });
   const fieldSupportRoutes = new Elysia()
     .post('/v1/sources/field-supports', {
-      body: ownerSchema<AttachFieldSupportInput | RetainedSupportRequest>(t.Union([t.Object({ profile: t.Literal('source-field-support-attachment-v1'),
+      body: ownerSchema<AttachFieldSupportInput | RetainedSupportRequest | NativeCreditAnnotationRequest>(t.Union([t.Object({ profile: t.Literal('source-field-support-attachment-v1'),
         target: groupAgent, slot: t.String({ minLength: 1, maxLength: 200 }),
         occurrence: t.Nullable(groupAgent), context: t.String({ minLength: 1, maxLength: 100 }),
         sourceRecord: groupAgent, conversion: groupAgent,
@@ -455,20 +460,27 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
         sourceField: t.String({ minLength: 1, maxLength: 200 }),
         sourceOccurrence: t.Nullable(t.String({ maxLength: 100 })),
         sourcePointer: t.String({ minLength: 1, maxLength: 200 }),
-        expectedHead: groupAgent, actingSubject: groupAgent }, { additionalProperties: false }),retainedSupportRequest])),
+        expectedHead: groupAgent, actingSubject: groupAgent }, { additionalProperties: false }),retainedSupportRequest,nativeCreditAnnotationRequest])),
       response: transportResponses(openApiOperations["/v1/sources/field-supports"].post, { 200: fieldSupportWrite, 201: fieldSupportWrite,
         ...writeProblems, 404: problemResult(404) }, 'POST'),
     }, async ({ request, body }): Promise<Response> => {
       try {
-        if (body.profile === 'source-field-support-attachment-v1'
-          && (!work.sourceFieldAttachments || !work.sourceFieldWithdrawals)) {
-          return problem(503, 'source_support_unavailable', 'Source field owner is unavailable');
-        }
         const key = request.headers.get('idempotency-key');
         if (!key) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
         const principal = await work.account.verify(request, ['source:adopt', 'work:edit']);
         const principalId = await work.access.activePrincipalId(principal);
         if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        if (body.profile === 'source-native-credit-annotation-v1') {
+          if (!work.sourceNativeCreditAnnotations) return problem(503, 'source_support_unavailable', 'Source annotation owner is unavailable');
+          const attached = await work.sourceNativeCreditAnnotations.attach(principal, principalId, key, body);
+          return Response.json(attached, { status: attached.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });
+        }
+        await requireSelectedPlatformCapability(work.platformAccess, principal, { exposure: 'platform:catalogue-import',
+          operationId: exposureOperationId('POST', '/v1/sources/field-supports') });
+        if (body.profile === 'source-field-support-attachment-v1'
+          && (!work.sourceFieldAttachments || !work.sourceFieldWithdrawals)) {
+          return problem(503, 'source_support_unavailable', 'Source field owner is unavailable');
+        }
         if (body.profile === 'source-field-support-attachment-v2') {
           if (!work.sourceRetainedFieldSupports) return problem(503,'source_support_unavailable','Source field owner is unavailable');
           await requireSourceImportAuthority(work,principal);
@@ -535,10 +547,13 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
       response: transportResponses(openApiOperations["/v1/sources/supports/{support}"].get, { 200: anySupportResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params }): Promise<Response> => {
       try {
-        if (!work.sourceFieldWithdrawals) return problem(503, 'source_support_unavailable', 'Source support owner is unavailable');
         const principal = await work.account.verify(request, ['source:read']);
         const principalId = await work.access.activePrincipalId(principal);
         if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const annotation = await work.sourceNativeCreditAnnotations?.read(principalId, params.support);
+        if (annotation) return Response.json(annotation, { headers: { 'cache-control': 'no-store' } });
+        await requireSelectedPlatformCapability(work.platformAccess, principal, { exposure: 'platform:catalogue-import',
+          operationId: exposureOperationId('GET', '/v1/sources/supports/{support}') });
         const support = await readAnySupport(work, principalId, params.support, principal);
         if (!support) return problem(404, 'source_support_unavailable', 'Source support is unavailable');
         return Response.json(support, { headers: { 'cache-control': 'no-store' } });
@@ -546,13 +561,17 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
     })
     .get('/v1/sources/field-supports/:support', {
       params: supportParams,
-      response: transportResponses(openApiOperations["/v1/sources/field-supports/{support}"].get, { 200: fieldSupport, ...authorizedReadProblems }, 'GET'),
+      response: transportResponses(openApiOperations["/v1/sources/field-supports/{support}"].get, { 200: t.Union([fieldSupport,nativeCreditAnnotationResult]), ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params }): Promise<Response> => {
       try {
-        if (!work.sourceFieldWithdrawals) return problem(503, 'source_support_unavailable', 'Source field owner is unavailable');
         const principal = await work.account.verify(request, ['source:read']);
         const principalId = await work.access.activePrincipalId(principal);
         if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const annotation = await work.sourceNativeCreditAnnotations?.read(principalId, params.support);
+        if (annotation) return Response.json(annotation, { headers: { 'cache-control': 'no-store' } });
+        await requireSelectedPlatformCapability(work.platformAccess, principal, { exposure: 'platform:catalogue-import',
+          operationId: exposureOperationId('GET', '/v1/sources/field-supports/{support}') });
+        if (!work.sourceFieldWithdrawals) return problem(503, 'source_support_unavailable', 'Source field owner is unavailable');
         const support = await work.sourceFieldWithdrawals.read(principalId, params.support, principal);
         if (!support) return problem(404, 'source_support_unavailable', 'Field support is unavailable');
         return Response.json(support, { headers: { 'cache-control': 'no-store' } });
@@ -563,16 +582,24 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
         t.Literal('source-field-withdrawal-v1')]),
         support: groupAgent, expectedSupport: groupAgent,
         reason: t.String({ minLength: 1, maxLength: 500 }) }, { additionalProperties: false }),
-      response: transportResponses(openApiOperations["/v1/sources/withdrawals"].post, { 200: anySupportWrite, 201: anySupportWrite,
+      response: transportResponses(openApiOperations["/v1/sources/withdrawals"].post, { 200: t.Union([anySupportWrite,fieldSupportWrite]), 201: t.Union([anySupportWrite,fieldSupportWrite]),
         ...writeProblems, 404: problemResult(404) }, 'POST'),
     }, async ({ request, body }): Promise<Response> => {
       try {
-        if (!work.sourceFieldWithdrawals) return problem(503, 'source_support_unavailable', 'Source field owner is unavailable');
         const key = request.headers.get('idempotency-key');
         if (!key) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
         const principal = await work.account.verify(request, ['source:adopt']);
         const principalId = await work.access.activePrincipalId(principal);
         if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const annotation = await work.sourceNativeCreditAnnotations?.read(principalId, body.support);
+        if (annotation) {
+          const withdrawn = await work.sourceNativeCreditAnnotations!.withdraw(principalId, key, body);
+          if (!withdrawn) return problem(404, 'source_support_unavailable', 'Source support is unavailable');
+          return Response.json(withdrawn, { status: withdrawn.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });
+        }
+        await requireSelectedPlatformCapability(work.platformAccess, principal, { exposure: 'platform:catalogue-import',
+          operationId: exposureOperationId('POST', '/v1/sources/withdrawals') });
+        if (!work.sourceFieldWithdrawals) return problem(503, 'source_support_unavailable', 'Source field owner is unavailable');
         const current = await readAnySupport(work, principalId, body.support, principal);
         if (!current) return problem(404, 'source_support_unavailable', 'Source support is unavailable');
         if ('kind' in current && body.profile !== 'source-support-withdrawal-v1') {

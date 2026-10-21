@@ -11,10 +11,10 @@ import type { AccessDownloadLeases, DownloadReadLease } from '../modules/access/
 import { ObjectIntegrityError, ObjectUnavailable } from '../infrastructure/immutable-objects.ts';
 import { activateUploadedBytes, changeAdmittedAssetState, MediaDenied, reserveAdmittedUpload,
   saveAdmittedMediaSet, changeAdmittedMediaField, recordAdmittedImageInference, createAdmittedDocumentImageUse,
-  createAdmittedCampaignArt,
+  createAdmittedCampaignArt, createAdmittedImportedArtUse,
   type MediaDependencies } from '../modules/media/commands.ts';
 import { concealCommand, documentUseCommand, imageLabelCommand, inferenceCommand,
-  importedCoverIntent, mediaDescriptor, metadataRead, metadataResult } from '../modules/media/presentation-contract.ts';
+  importedCoverIntent, importedArtUseCommand, mediaDescriptor, metadataRead, metadataResult } from '../modules/media/presentation-contract.ts';
 import type { MetadataBasis, MetadataRef } from '../modules/media/presentation.ts';
 import { ShowcaseRefused, campaignArtCommand } from '../modules/media/showcase-contract.ts';
 import { DEFAULT_MEDIA_CONTEXT, MAX_UPLOAD_BYTES, MediaConflict, MediaFenced, MediaInvalid, MediaMissing, MediaStale,
@@ -32,6 +32,8 @@ import { bindZoneCampaignReader, currentZoneCampaignUses } from '../modules/zone
 import { bindNativeAssetAudience, mediaVisibility } from '../modules/media/visibility.ts';
 import { readClosedRealmMediaSelection } from '../modules/media/closed-realm-media.ts';
 import { readableReplyAttachments } from '../modules/media/reply-attachments.ts';
+import { importedArtDeliveryEligible, importedArtMaterial } from '../modules/media/imported-art.ts';
+import { SourceCoverEvidenceUnavailable } from '../modules/source/cover-evidence.ts';
 
 declare module './dependencies.ts' {
   interface MainWorkDependencies {
@@ -337,6 +339,17 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       if (!basis || assetDecision!=='visible' || basis.target && !available.has(`${basis.context}\0${basis.target}`)
         || indexes[index]!.some(index=>decisions[index]!=='visible')
         || basis.disclosure!=='public' && !grantedUses.has(basis.metadata.use ?? '') && !(controlsActor && basis.owner===actingSubject)) return null;
+      if (basis.importedArt) {
+        if (!work.media!.sourceArtEvidence || !work.media!.artRights)
+          throw new MediaUnavailable('imported artwork delivery owners are unavailable');
+        try { await work.media!.sourceArtEvidence.verifyDelivery(basis.importedArt); }
+        catch (error) {
+          if (error instanceof SourceCoverEvidenceUnavailable) return null;
+          throw new MediaUnavailable('imported artwork Source owner is unavailable');
+        }
+        if (!importedArtDeliveryEligible(basis.importedArt,
+          await work.media!.artRights.currentMediaDelivery(importedArtMaterial(basis.importedArt)))) return null;
+      }
       const canProtectLabels=!!(administrator && principal && actingSubject && await work.access.canProtectMedia?.(principal,actingSubject,
         `https://rezics.com/id/${basis.metadata.representation}`));
       const canProtectConceal=!!(administrator && principal && actingSubject && basis.metadata.use
@@ -501,13 +514,16 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           return Response.json(result,{status:result.replayed?200:201,headers:{'cache-control':'no-store'}});
         } catch(error){return mediaError(error);}
       })
-    .post('/v1/media/uses',{body:documentUseCommand,response:transportResponses(openApiOperations["/v1/media/uses"].post, {200:t.Object({},{additionalProperties:true}),201:t.Object({},{additionalProperties:true}),...writeProblems,404:problemResult(404)}, 'POST')},
+    .post('/v1/media/uses',{body:t.Union([documentUseCommand, importedArtUseCommand]),response:transportResponses(openApiOperations["/v1/media/uses"].post, {200:t.Object({},{additionalProperties:true}),201:t.Object({},{additionalProperties:true}),...writeProblems,404:problemResult(404)}, 'POST')},
       async ({request,body})=>{
         if (!work.media) return problem(503,'media_unavailable','Media owner is unavailable');
         const key=idempotencyKey(request);if (!key) return problem(400,'invalid_idempotency_key','A valid Idempotency-Key header is required');
         try {
-          const result=await createAdmittedDocumentImageUse(work.environment,work.media,work.account,work.access,request,
-            {...body,context:body.context??DEFAULT_MEDIA_CONTEXT,conceal:body.conceal??false,idempotencyKey:key});
+          const result = 'profile' in body
+            ? await createAdmittedImportedArtUse(work.environment,work.media,work.account,work.access,request,
+              { ...body,context:body.context??DEFAULT_MEDIA_CONTEXT,idempotencyKey:key })
+            : await createAdmittedDocumentImageUse(work.environment,work.media,work.account,work.access,request,
+              {...body,context:body.context??DEFAULT_MEDIA_CONTEXT,conceal:body.conceal??false,idempotencyKey:key});
           return Response.json(result,{status:result.replayed?200:201,headers:{'cache-control':'no-store'}});
         } catch(error){return mediaError(error);}
       })

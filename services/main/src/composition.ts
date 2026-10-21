@@ -123,7 +123,8 @@ import { NotificationStore } from './modules/notification/store.ts';
 import { notificationRead, notificationReadPool } from './modules/notification/request-budget.ts';
 import { notificationError } from './routes/notifications.ts';
 import { SourceIntakeStore } from './modules/source/intake.ts';
-import { SourceCoverEvidenceVerifier } from './modules/source/cover-evidence.ts';
+import { SourceCoverEvidenceVerifier, SourceMediaEvidenceVerifier } from './modules/source/cover-evidence.ts';
+import { SourceArchiveEvidenceOwner } from './modules/source/archive-evidence.ts';
 import { SourceAuthorNameStore } from './modules/source/author-name.ts';
 import { RecipeSourceConversionStore } from './modules/recipe/source-conversion.ts';
 import { sourceAcquisitionServices } from './modules/source/acquisition.ts';
@@ -155,6 +156,9 @@ import { SourceRetainedFieldSupportStore, retainedFieldEvidenceOwners, type Reta
 import { acknowledgedSemanticSupportOwners } from './modules/source/field-support-acknowledged.ts';
 import { SourceRetainedRecordEvidenceOwner } from './modules/source/retained-evidence.ts';
 import { SourceReleaseEvidenceOwner } from './modules/source/release-evidence.ts';
+import { SourceAssociationEvidenceOwner } from './modules/source/association-evidence.ts';
+import { SourceNativeCreditAnnotationStore } from './modules/source/native-credit-annotation.ts';
+import { readNativeAssociationPage } from './modules/query/association-native.ts';
 import { SourceNativeChildStore } from './modules/source/child-native-support.ts';
 import { ProviderIdentityStore } from './modules/source/provider-identity.ts';
 import { SourceScoreStore } from './modules/source/score.ts';
@@ -339,8 +343,6 @@ export async function composeMain(input: ComposeMainInput) {
       hookExecutor: new DockerNodeHookExecutor(join(environment.objectDirectory, 'package-installations'),
         process.env.PATH ?? '/usr/bin:/bin') });
   const matcherMode = requiredMatcherMode(config.MAIN_REQUIRED_MEDIA_MATCHER, process.env.NODE_ENV === 'production');
-  const media = { store: new MediaStore(contentPool, content, matcherMode), content,
-    sourceCoverEvidence: new SourceCoverEvidenceVerifier(sourceIntake), objects: mediaObjects };
   const requiredMatcher = requiredSafetyMatcher(matcherMode);
   const account = input.overrides?.account ?? new AccountAssertionVerifier({
     issuer: config.ACCOUNT_ISSUER, audience: config.ACCOUNT_MAIN_RESOURCE,
@@ -348,6 +350,11 @@ export async function composeMain(input: ComposeMainInput) {
     clientId: config.ACCOUNT_MAIN_CLIENT_ID, clientSecret: config.ACCOUNT_MAIN_CLIENT_SECRET,
   });
   const access = new AccessAdmissionRegistry(pool, config.FUSEKI_TITLE_ADMISSION_KEY);
+  const media = { store: new MediaStore(contentPool, content, matcherMode), content,
+    sourceCoverEvidence: new SourceCoverEvidenceVerifier(sourceIntake),
+    sourceArtEvidence: new SourceMediaEvidenceVerifier(sourceIntake, contentPool, access,
+      new SourceArchiveEvidenceOwner(contentPool, sourceIntake, access, rightsStore, mediaObjects)),
+    artRights: rightsStore, objects: mediaObjects };
   await new AccessPlatformAdministrators(pool).designateFirst(config.ACCOUNT_ISSUER, config.PLATFORM_FIRST_ADMIN_ACCOUNT);
   access.configureBaseline(fuseki);
   const rankingContextSelections = new PrivateContextSelections(pool);
@@ -441,7 +448,9 @@ export async function composeMain(input: ComposeMainInput) {
   const sourceCorrespondences = new SourceChildCorrespondenceStore(contentPool, sourceConversions);
   const retainedEvidence = new SourceRetainedRecordEvidenceOwner(contentPool,sourceIntake,access,
     rightsStore,sourceConversions.retained,environment);
-  const relationAttribution = creditAttributionOwner(environment);
+  const sourceNativeCreditAnnotations = new SourceNativeCreditAnnotationStore(contentPool, sourceIntake,
+    environment, access, rightsStore);
+  const relationAttribution = creditAttributionOwner(environment, sourceNativeCreditAnnotations.attributionOwner());
   const sourceRetainedFieldSupports = new SourceRetainedFieldSupportStore(contentPool,environment,
     access,sourceConversions.retained,{ ...retainedFieldEvidenceOwners(retainedEvidence),
       ...acknowledgedSemanticSupportOwners({ environment,access,contextSelections: rankingContextSelections,
@@ -518,6 +527,15 @@ export async function composeMain(input: ComposeMainInput) {
     access,
     contextSelections: rankingContextSelections,
     relationAttribution,
+    nativeCreditAnnotationProof: (participation, support) => sourceNativeCreditAnnotations.proof(participation, support),
+    retainedCreditRelations: {
+      originLoaders: { nativeAttribution: sourceNativeCreditAnnotations.nativeAttribution() },
+      reads: { attribution: async ({ view, participation, support }) => {
+        const proof = await sourceNativeCreditAnnotations.proof({ ...participation, role: view.role }, support);
+        return proof && { basis: proof.basis, state: proof.state, receipt: proof.receipt,
+          validationToken: proof.validationToken, fields: proof.fields, evidence: proof.evidence };
+      } },
+    },
     eventQueries,
     downloadLeases,
     protectionSigner: new ProtectionAdmissionSigner(pool, config.FUSEKI_TITLE_ADMISSION_KEY),
@@ -576,6 +594,7 @@ export async function composeMain(input: ComposeMainInput) {
     roles: accessOwners.roles,
     accessPolicy: new AccessPolicyOwner(pool),
     sourceIntake,
+    sourceNativeCreditAnnotations,
     sourceAuthorNames,
     openLibraryFetch,
     recipeSourceConversions: new RecipeSourceConversionStore(contentPool, sourceIntake),
@@ -589,6 +608,8 @@ export async function composeMain(input: ComposeMainInput) {
       sourceCorrespondences, environment, account, access, sourceAuthorNames),
     sourceFieldWithdrawals,
     sourceRetainedFieldSupports,
+    relationEvidence: new SourceAssociationEvidenceOwner(sourceRetainedFieldSupports, sourceNativeCreditAnnotations),
+    subjectAssociations: { native: readNativeAssociationPage },
     sourceReleaseEvidence: new SourceReleaseEvidenceOwner(contentPool,sourceConversions.retained,retainedEvidence),
     sourceFieldApplications: new SourceFieldApplicationStore(contentPool, environment,
       account, access, sourceConversions, sourceAdoptions, sourceFieldWithdrawals, rightsStore),

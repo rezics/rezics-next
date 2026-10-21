@@ -7,11 +7,11 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { signInPath } from '../auth/paths.ts';
 import Link from '../shell/localized-link.tsx';
-import { RelationRows } from '../work-levels/connections.tsx';
+import { RelationRows, UnrenderedRelations } from '../work-levels/connections.tsx';
 import { copyOf as levelsCopy } from '../work-levels/messages.ts';
 import { SummaryLink, type SummaryHref } from '../work-levels/names.tsx';
-import type { Names } from '../work-levels/types.ts';
-import { franchisesOf, relationRows } from '../work-levels/relation-rows.ts';
+import type { Names, RelationEntry } from '../work-levels/types.ts';
+import { relationPageGroups } from '../work-levels/relation-rows.ts';
 import { DiscussionList } from '../work-page/discussion.tsx';
 import type { WorkPageMessages } from '../work-page/messages.ts';
 import type { ScopeRealm } from '../work-page/scope-bar.tsx';
@@ -327,6 +327,7 @@ export function StatementsView({
  */
 export function RelationsView({
   page,
+  presentation,
   cursor,
   hrefFor,
   locale,
@@ -334,6 +335,8 @@ export function RelationsView({
   messages,
 }: {
   page: Loaded<RelationsPage>;
+  /** A visible complement; Main's complete answer remains `page`. */
+  presentation?: { page: RelationsPage; entries: readonly RelationEntry[] };
   cursor: string | undefined;
   hrefFor: HrefFor;
   locale: UiLocale;
@@ -352,19 +355,21 @@ export function RelationsView({
       </Region>
     );
   }
-  const rows = relationRows(page.data.items, { together: true });
-  const franchises = franchisesOf(page.data.items);
+  const projection = relationPageGroups(page.data, { together: true,
+    ...(presentation?.page === page.data ? { entries: presentation.entries } : {}) });
+  const { rows, collections, unrendered } = projection;
   const levels = levelsCopy(locale);
   return (
     <Region id="relations" title={t.relations}>
-      {rows.length || franchises.length ? (
+      {rows.length || collections.length || unrendered.length ? (
         <div className="grid gap-5">
-          {franchises.length ? (
-            <div className="grid gap-1 sm:grid-cols-[minmax(9rem,14rem)_1fr] sm:gap-4">
-              <h3 className="font-medium text-muted-foreground text-sm">{levels.franchises}</h3>
+          {collections.map(group => (
+            <section key={group.heading} aria-labelledby={`relations-${group.heading}`}
+              className="grid gap-1 sm:grid-cols-[minmax(9rem,14rem)_1fr] sm:gap-4">
+              <h3 id={`relations-${group.heading}`} className="font-medium text-muted-foreground text-sm">{levels[group.heading]}</h3>
               <ul className="grid gap-1">
-                {franchises.map((summary) => (
-                  <li key={summary.reference}>
+                {group.items.map(({ relation, summary }, index) => (
+                  <li key={`${relation}-${summary.reference}-${index}`}>
                     <SummaryLink
                       summary={summary}
                       unavailable={t.unavailable}
@@ -375,16 +380,17 @@ export function RelationsView({
                   </li>
                 ))}
               </ul>
-            </div>
-          ) : null}
+            </section>
+          ))}
           <RelationRows rows={rows} locale={locale} t={levels} hrefFor={summaryHref(hrefFor)} />
+          <UnrenderedRelations entries={unrendered} t={levels} hrefFor={summaryHref(hrefFor)} />
         </div>
-      ) : (
+      ) : !cursor && !projection.page.next ? (
         <Quiet title={t.noRelations} body={t.noRelationsBody} />
-      )}
+      ) : null}
       <Pages
         cursor={cursor}
-        next={page.data.next}
+        next={projection.page.next}
         section="relations"
         hrefFor={hrefFor}
         messages={messages}

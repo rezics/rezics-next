@@ -82,3 +82,28 @@ test('SOURCE-COVER-READ: copyright mark comes only from revision source and hold
   expect(Value.Check(coverCreditSchema, { kind: 'copyright', text: '', holder: null,
     source: { name: 'Bangumi', href: source.href }, permittedRole: 'cover' })).toBe(false);
 });
+
+test('SOURCE-COVER-READ: recorded native source identity survives without promoting a public URL', () => {
+  const source = { displayName: 'Archive', href: 'https://example.test/record',
+    record: 'https://rezics.com/id/00000000-0000-4000-8000-000000000031',
+    observation: 'https://rezics.com/id/00000000-0000-4000-8000-000000000032',
+    component: '/images/cover', fieldLocator: '/cover/url' };
+  const identity = { record: source.record, observation: source.observation,
+    component: source.component, fieldLocator: source.fieldLocator };
+  const credit = coverCreditFromProvenance({ source, holderEvidence: null });
+  expect(credit).toMatchObject({ source: { identity } });
+  expect(Value.Check(coverCreditSchema, credit)).toBe(true);
+  expect(Value.Check(coverCreditSchema, { ...credit, source: { name: source.displayName, href: source.href,
+    identity: { ...identity, invented: true } } })).toBe(false);
+  for (const invalid of [{ record: source.href }, { observation: source.href }]) {
+    expect(Value.Check(coverCreditSchema, { ...credit, source: { name: source.displayName, href: source.href,
+      identity: { ...identity, ...invalid } } })).toBe(false);
+  }
+  expect(coverCreditFromProvenance({ source: { ...source, component: null }, holderEvidence: null }))
+    .toMatchObject({ source: { identity: { ...identity, component: null } } });
+  for (const unavailable of [{ record: source.href }, { observation: source.href }, { fieldLocator: '' }]) {
+    const unbound = coverCreditFromProvenance({ source: { ...source, ...unavailable }, holderEvidence: null });
+    expect(unbound?.source).not.toHaveProperty('identity');
+    expect(unbound?.source).toMatchObject({ name: source.displayName, href: source.href });
+  }
+});

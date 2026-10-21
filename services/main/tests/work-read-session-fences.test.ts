@@ -29,6 +29,8 @@ import { readRealmThreads } from '../src/modules/realm-reply/thread-read.ts';
 import { configureDisclosure } from '../src/modules/disclosure/read.ts';
 import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 import { realm as threadRealm, world as threadWorld } from './support/realm-thread-world.ts';
+import { projectWikiDisplay, type MaterialScope } from '../src/modules/rights/store.ts';
+import type { NativeFieldControlIntent } from '../src/modules/source/field-control-native.ts';
 
 const id = (number: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(number).padStart(12, '0')}`;
 const work = id(1), realm = id(2), actor = id(3);
@@ -79,11 +81,18 @@ function fixture() {
 function headerFixture() {
   const f = fixture();
   const header = { published: false, description: null as string | null, selection: null as string | null,
+    nativeSynopsis: null as null | { content: string; control: string | null; value: string; intent: string },
     profile: 'a'.repeat(64), otherProfile: 'b'.repeat(64),
     stats: { chapterCount: 2, wordCount: 200, lastUpdatedAt: null as string | null },
     unrelatedStats: { chapterCount: 1, wordCount: 20, lastUpdatedAt: null as string | null } };
   const originalQuery = f.graph.query.bind(f.graph);
   f.graph.query = async body => {
+    if (body.includes('SELECT ?content ?control ?value ?intent')) {
+      f.state.calls++;
+      const field = header.nativeSynopsis;
+      return result(field ? [{ content: term(field.content, 'uri'), ...field.control ? { control: term(field.control, 'uri') } : {},
+        value: term(field.value), intent: term(field.intent) }] : []);
+    }
     if (body.includes('SELECT ?text WHERE')) {
       f.state.calls++;
       return result(header.description ? [{ text: { ...term(header.description), 'xml:lang': 'en' } }] : []);
@@ -122,6 +131,115 @@ function headerFixture() {
   ]) } as unknown as SerialStatisticsProjection;
   return { ...f, header };
 }
+
+function sourceSynopsisFixture() {
+  const f = headerFixture();
+  f.header.description = 'Previous creation synopsis';
+  const intent: NativeFieldControlIntent = { profile: 'work-editorial-field-control-v1', work, field: 'synopsis',
+    expectedWorkHead: f.state.head, basis: { contentHead: null, head: null, epoch: '0', protection: null },
+    value: 'Current source synopsis', language: { state: 'value', value: 'en' }, origin: 'source',
+    source: { record: id(301), observation: id(302), conversion: id(303), mapping: 'fixture-synopsis-v1' } };
+  f.header.nativeSynopsis = { content: id(304), control: id(305), value: intent.value, intent: JSON.stringify(intent) };
+  const reads: MaterialScope[][] = [];
+  const restriction = { hidden: false };
+  Object.assign(f.deps, { rights: { store: {
+    currentWikiDisplayObligations: async (materials: readonly MaterialScope[]) => {
+      reads.push([...materials]);
+      return materials.map(material => projectWikiDisplay({ assessmentId: id(310).slice(-36),
+        materialId: id(311).slice(-36), component: material.component,
+        sourceRecordId: material.sourceRecordId, wikiEvidenceId: material.wikiEvidenceId,
+        licenseInstrument: 'https://example.test/license', obligations: [] }, false));
+    },
+    nativeSynopsisRestricted: async () => restriction.hidden,
+  } } });
+  return { ...f, intent, reads, restriction };
+}
+
+test('Work header selects the current native Synopsis and only its recorded Source-qualified material', async () => {
+  const f = sourceSynopsisFixture();
+  const page = await workRead(f.deps, f.request, {}, session => readWorkHeader(session, work));
+  expect(page.description).toMatchObject({ value: f.intent.value, language: 'en' });
+  expect(page.descriptionObligations).toMatchObject({ identity: { component: 'synopsis',
+    sourceRecordId: f.intent.source!.record.slice(-36), wikiEvidenceId: null } });
+  expect(f.reads[0]?.map(material => [material.component, material.sourceRecordId]))
+    .toEqual([['synopsis', f.intent.source!.record.slice(-36)], ['record', null]]);
+});
+
+test('a human native Synopsis replacement cannot retain the previous Source material', async () => {
+  const f = sourceSynopsisFixture();
+  f.header.nativeSynopsis = { ...f.header.nativeSynopsis!, value: 'Human replacement',
+    intent: JSON.stringify({ ...f.intent, origin: 'human', source: null, value: 'Human replacement' }) };
+  const page = await workRead(f.deps, f.request, {}, session => readWorkHeader(session, work));
+  expect(page.description?.value).toBe('Human replacement');
+  expect(page.descriptionObligations).toEqual({ status: 'unassessed' });
+  expect(f.reads[0]?.map(material => material.component)).toEqual(['record']);
+});
+
+test('a hidden current native Synopsis exposes neither stale fallback text nor its Source association', async () => {
+  const f = sourceSynopsisFixture(); f.restriction.hidden = true;
+  const page = await workRead(f.deps, f.request, {}, session => readWorkHeader(session, work));
+  expect(page.description).toBeNull();
+  expect(page.descriptionObligations).toEqual({ status: 'unassessed' });
+  expect(JSON.stringify(page)).not.toContain(f.intent.source!.record.slice(-36));
+});
+
+test('a native Synopsis whose current value differs from its control intent refuses stale Source attribution', async () => {
+  const f = sourceSynopsisFixture(); f.header.nativeSynopsis!.value = 'Unbound replacement';
+  await expect(workRead(f.deps, f.request, {}, session => readWorkHeader(session, work)))
+    .rejects.toBeInstanceOf(WorkReadUnavailable);
+});
+
+test('a cleared native Synopsis control cannot revive the old Source or creation fallback', async () => {
+  const f = sourceSynopsisFixture(); f.header.nativeSynopsis!.control = null;
+  await expect(workRead(f.deps, f.request, {}, session => readWorkHeader(session, work)))
+    .rejects.toBeInstanceOf(WorkReadUnavailable);
+});
+
+test('a moved native Synopsis head replays the current Source material within the same read session', async () => {
+  const f = sourceSynopsisFixture(); let attempts = 0;
+  const page = await workRead(f.deps, f.request, {}, async session => {
+    attempts++;
+    const page = await readWorkHeader(session, work);
+    if (attempts === 1) f.header.nativeSynopsis = { content: id(324), control: id(325), value: 'New source synopsis',
+      intent: JSON.stringify({ ...f.intent, value: 'New source synopsis',
+        source: { ...f.intent.source, record: id(321), observation: id(322) } }) };
+    return page;
+  });
+  expect(attempts).toBe(2);
+  expect(page.description?.value).toBe('New source synopsis');
+  expect(page.descriptionObligations).toMatchObject({ identity: { sourceRecordId: id(321).slice(-36) } });
+  expect(JSON.stringify(page)).not.toContain(f.intent.source!.record.slice(-36));
+});
+
+test('the public native Synopsis keeps its recorded language without inventing the requested language', async () => {
+  const f = sourceSynopsisFixture();
+  f.header.nativeSynopsis!.intent = JSON.stringify({ ...f.intent, language: { state: 'omitted' } });
+  const response = await new Elysia().use(workReadRoutes(f.deps)).handle(
+    new Request(`http://main.test/v1/works/${work.slice(-36)}?language=fr`));
+  expect(response.status).toBe(200);
+  const page = await response.json();
+  expect(page.description).toMatchObject({ value: f.intent.value, language: 'und', basis: 'fallback' });
+  expect(page.selectedLanguage).toBeNull();
+});
+
+test('a native Synopsis whose rights owner is absent cannot disclose unqualified replacement prose', async () => {
+  const f = sourceSynopsisFixture(); f.deps.rights = undefined;
+  await expect(workRead(f.deps, f.request, {}, session => readWorkHeader(session, work)))
+    .rejects.toBeInstanceOf(WorkReadUnavailable);
+});
+
+test('a native Synopsis disclosure change is fenced without reviving old Source obligations', async () => {
+  const f = sourceSynopsisFixture(); let attempts = 0;
+  const page = await workRead(f.deps, f.request, {}, async session => {
+    attempts++;
+    const page = await readWorkHeader(session, work);
+    if (attempts === 1) f.restriction.hidden = true;
+    return page;
+  });
+  expect(attempts).toBe(2);
+  expect(page.description).toBeNull();
+  expect(page.descriptionObligations).toEqual({ status: 'unassessed' });
+});
 
 test('an Account without a selected Agent reads the public header with its Account disclosure viewer and no implicit choice', async () => {
   const f = headerFixture(); f.header.selection = id(40);
