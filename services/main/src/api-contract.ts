@@ -114,8 +114,8 @@ const searchPlacement = t.Object({ resource: t.String(), work: t.String(), occur
 export const searchExcerpt = t.Union([
   t.Object({ status: t.Literal('available'), text: t.String({ maxLength: 480 }), language: t.String(),
     revision: t.String(), resource: t.String(), variant: t.String() }, { additionalProperties: false }),
-  t.Object({ status: t.Literal('unavailable'), reason: t.Union(['unavailable', 'not-matching', 'unsupported-format', 'not-hydrated']
-    .map(reason => t.Literal(reason))) }, { additionalProperties: false }),
+  t.Object({ status: t.Literal('unavailable'), reason: t.Union([t.Literal('unavailable'), t.Literal('not-matching'),
+    t.Literal('unsupported-format'), t.Literal('not-hydrated')]) }, { additionalProperties: false }),
 ]);
 
 export const searchDisambiguation = t.Object({
@@ -123,7 +123,8 @@ export const searchDisambiguation = t.Object({
   contentFormat: t.Union([t.Object({ status: t.Literal('available'), value: t.String() }),
     t.Object({ status: t.Literal('unavailable') })]),
   releases: t.Union([t.Object({ status: t.Literal('available'), values: t.Array(t.Object({
-    release: t.String(), revision: t.String(), kind: t.Union(['formal', 'web', 'fixed', 'virtual'].map(value => t.Literal(value))),
+    release: t.String(), revision: t.String(), kind: t.Union([t.Literal('formal'), t.Literal('web'),
+      t.Literal('fixed'), t.Literal('virtual')]),
     year: t.Nullable(t.Integer()), platform: t.Nullable(t.String()), sourceEvidence: releaseSourceEvidenceSchema,
   }), { maxItems: 20 }) }), t.Object({ status: t.Literal('unavailable') })]),
 }, { additionalProperties: false });
@@ -132,7 +133,7 @@ export const phraseMatch = t.Object({
   matchUnit: t.String(), work: t.String(), mainVersion: t.String(),
   contribution: t.String(), revision: t.String(), selection: t.String(),
   language: t.String(), score: t.Number(), types: t.Array(t.String(), { maxItems: 3 }),
-  matchedField: t.Optional(t.Union(['title', 'credit', 'tagline', 'body'].map(value => t.Literal(value)))),
+  matchedField: t.Optional(t.Union([t.Literal('title'), t.Literal('credit'), t.Literal('tagline'), t.Literal('body')])),
   excerpt: t.Optional(searchExcerpt), disambiguation: t.Optional(searchDisambiguation),
   matchedText: t.Optional(t.String()), matchedLanguage: t.Optional(t.Nullable(t.String())),
   matchedPlacements: t.Optional(t.Array(searchPlacement, { maxItems: 512 })),
