@@ -4122,8 +4122,9 @@
     },
     "materialBoundary": {
       "unit": "One synchronous ReadBoundaryFilter.doFilter invocation; starts at synchronized lifecycle entry and releases after downstream/boundary/ThreadLocal cleanup. Does not measure HTTP transport departure or engine/transaction lifetime.",
-      "pending": "This owner owns no acquisition queue; its pending=0 is valid only inside that synchronous invocation boundary. Before-filter Jetty dispatch/queues, asynchronous work outliving filter return, offline native work and engine/lock/transaction release are uncovered.",
-      "originalMapping": "Do not map this meter to broader native pending-zero or a later original Runtime field. Unless the complete binder independently covers every required boundary, original Observation.known remains false. Unknown, late, dropped, overflowed, failed or incomplete coverage never proves zero. No later field was inventoried."
+      "pending": "This owner owns no acquisition queue; its pending=0 is valid only inside that synchronous invocation boundary. Before-filter Jetty dispatch/queues, outer-filter pre/post-processing, asynchronous work outliving filter return, offline native work and engine/lock/transaction release are uncovered.",
+      "originalMapping": "Do not map this meter to broader native pending-zero or a later original Runtime field. Unless the complete binder independently covers every required boundary, original Observation.known remains false. Unknown, late, dropped, overflowed, failed or incomplete coverage never proves zero. No later field was inventoried.",
+      "installedOuterFilter": "CommandModule.prepare lines 68-69 registers PublicSearchPhaseEvidence before ReadBoundaryFilter. PublicSearchPhaseEvidence.doFilter lines 123-130 runs its own expire/endPhase/request-slot/ThreadLocal cleanup after the inner boundary has already released. Thus even synchronous outer filter cleanup is outside this meter, in addition to server response/connection completion. Static composition witness only; no new runtime capture or claim of whole-servlet idle."
     },
     "independentExecution": {
       "recordedJob": "82f37426-d529-4104-992f-9baf5f0fb606",
@@ -4250,12 +4251,73 @@
     "artifacts": {
       "root": ".temp/native-lifecycle-review-v1",
       "manifest": ".temp/native-lifecycle-review-v1/artifact-manifest.json",
-      "manifestSha256": "7e383f20c2b50668592f2db6a7259a1bf5315159a58bbe118cebf0dadc4acff5",
+      "manifestSha256": "dda970bc6da1820d1c4460f91d985f1c38b7e32f0239d1ac26d1f0ddf249f15a",
       "files": 44,
       "retained": "Immutable source Git copy, exact sealed evidence copies, comparison/pin verification, independent probe/harness, selected native and reused SQL receipts remain under this worktree .temp."
     },
     "checks": {
-      "status": "pending report validation, task docs:check and recorded affected worker check"
+      "status": "passed",
+      "recordedJob": "6b29c932-0920-4fd8-99f8-0c122db05302",
+      "steps": [
+        {
+          "command": "task -t .temp/native-lifecycle-review-v1/Taskfile.yml report:validate",
+          "exit": 0,
+          "log": ".temp/goal/jobs/6b29c932-0920-4fd8-99f8-0c122db05302.1.log",
+          "retainedLog": ".temp/native-lifecycle-review-v1/report-checks/6b29c932-0920-4fd8-99f8-0c122db05302.1.log",
+          "logSha256": "f133198ccff9dfd8e02a5ab5a3f910fa196689e63f70c4a58c35eb44c74e14a9"
+        },
+        {
+          "command": "task docs:check",
+          "exit": 0,
+          "log": ".temp/goal/jobs/6b29c932-0920-4fd8-99f8-0c122db05302.2.log",
+          "retainedLog": ".temp/native-lifecycle-review-v1/report-checks/6b29c932-0920-4fd8-99f8-0c122db05302.2.log",
+          "logSha256": "cf2d6ea979db51ca97b7a2fff6dfc313f33476c743672d4e4fdd431002197786"
+        },
+        {
+          "command": "env GOAL_CHECK_PREPARED_TREE=/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2861 task goal -- check",
+          "exit": 0,
+          "log": ".temp/goal/jobs/6b29c932-0920-4fd8-99f8-0c122db05302.3.log",
+          "retainedLog": ".temp/native-lifecycle-review-v1/report-checks/6b29c932-0920-4fd8-99f8-0c122db05302.3.log",
+          "logSha256": "8220336c5e922c215ec5ddd5e4cb37f9e8feca5f14600e059ae0159416abe7fb"
+        }
+      ],
+      "reportValidation": {
+        "status": "passed",
+        "priorFieldsPreserved": 22,
+        "sourcePaths": 2,
+        "sealedFiles": 57,
+        "priorSealedFiles": 62,
+        "evidenceFiles": 44,
+        "sourceUnchanged": true,
+        "onlyClaimedReportChanged": true
+      },
+      "documentation": {
+        "status": "passed",
+        "markdownFiles": 257,
+        "checkerTests": 13
+      },
+      "workerCheck": {
+        "status": "passed",
+        "types": "not selected; no TypeScript workspace changed",
+        "tests": "not selected; no test files named in brief",
+        "lint": "not selected; no source file changed",
+        "ast": "passed",
+        "guards": "passed; 1/45 files selected; 2 tests/6 assertions, no failure or skip; well-formed XML",
+        "output": ".temp/goal/check/run-82GWdU/output.log",
+        "retained": ".temp/native-lifecycle-review-v1/report-checks/run-82GWdU"
+      },
+      "currency": {
+        "preparedTree": true,
+        "workerHeadDuringChecks": "6928f7a614049813aa3c274f7dccfc00be5a60d4",
+        "reason": "Report-only worktree kept at its authorized dispatch pin, without check-time rebase. Exact product source is the independently verified immutable snapshot; only additive proof report authored here."
+      },
+      "gitCommitHousekeeping": {
+        "sourceCommit": "6928f7a614049813aa3c274f7dccfc00be5a60d4",
+        "commitSucceeded": true,
+        "warning": "Git automatic pack-refs maintenance was refused by the main reference-transaction hook during the successful report commit. No repair, main ref change or shared repository maintenance was attempted by this worker."
+      },
+      "retainedManifest": ".temp/native-lifecycle-review-v1/report-check-manifest.json",
+      "retainedManifestSha256": "e058327d141f4b1e5b14e0a8cd977ae46fdfe0fefbe45201625cf39de0c8adc2"
     },
     "landingDisposition": "Accept this additive report-only first native source verdict. G-2762 may supply the complete original callable Runtime and bindings next; G-2823 retains lifecycle/admission custody. No product landing, activation, new review-report chain or original finding closure follows from this source approval."
   }
