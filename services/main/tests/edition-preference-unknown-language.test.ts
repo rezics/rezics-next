@@ -46,12 +46,14 @@ const release = (languages: string[], work = id(2)) => checkedRelease({
   publicationYear: 1900, isbn13: null, originalUrl: null, fixedRelease: null, coverage: null, evidence: null,
 }, work);
 
-test('an unknown retained release language stays unknown, with exact Work coverage', () => {
+test('legacy release correspondence stays unknown independently of bibliographic languages', () => {
   const unknown = release([]);
   expect(preferenceReleaseMatches(unknown, id(2), null)).toBe(true);
   expect(preferenceReleaseMatches(unknown, id(9), null)).toBe(false);
   expect(preferenceReleaseMatches(unknown, id(2), 'en')).toBe(false);
-  expect(preferenceReleaseMatches(release(['en']), id(2), null)).toBe(false);
+  expect(preferenceReleaseMatches(release(['en']), id(2), null)).toBe(true);
+  expect(preferenceReleaseMatches(release(['fr']), id(2), null)).toBe(true);
+  expect(preferenceReleaseMatches(release(['fr']), id(9), null)).toBe(false);
   expect(preferenceReleaseMatches(release(['en']), id(2), 'en')).toBe(true);
   expect(preferenceReleaseMatches(release(['en']), id(2), 'fr')).toBe(false);
   expect(Value.Check(editionChoice, choice)).toBe(true);

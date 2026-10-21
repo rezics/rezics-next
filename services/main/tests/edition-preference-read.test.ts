@@ -6,6 +6,7 @@ import { AccountAssertionDenied } from '../src/modules/account/verify-assertion.
 import { configureDisclosure } from '../src/modules/disclosure/read.ts';
 import { EditionPreferenceStore } from '../src/modules/session/preference-store.ts';
 import type { EditionChoice } from '../src/modules/session/preference-contract.ts';
+import { checkedRelease, type AnyReleaseRecord } from '../src/modules/release/schema.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 
@@ -17,7 +18,9 @@ const literal = (value: string) => ({ type: 'literal' as const, value });
 
 /** The graph answers are the existing Work facade owner's bounded fixture.
  * The route, Work basis/session fences and SQL preference reader remain real. */
-function fixture(choice: EditionChoice | null = null, options: { revokeAfterRead?: boolean } = {}) {
+function fixture(choice: EditionChoice | null = null, options: {
+  revokeAfterRead?: boolean; release?: AnyReleaseRecord; pinnedRelease?: AnyReleaseRecord;
+} = {}) {
   const state = { graphQueries: [] as string[], sql: [] as { text: string; values: unknown[] }[],
     verifies: 0, recoveryFences: 0, ownChecks: [] as string[], active: true };
   class Graph extends FusekiClient {
@@ -27,6 +30,16 @@ function fixture(choice: EditionChoice | null = null, options: { revokeAfterRead
     }
     override async query(query: string): Promise<SparqlResult> {
       state.graphQueries.push(query);
+      if (options.release && query.includes('SELECT DISTINCT ?revision ?state WHERE')) {
+        return { results: { bindings: [{ revision: uri(id(9)), state: literal(JSON.stringify(options.release)) }] } };
+      }
+      if (options.release && query.includes('SELECT ?state WHERE')) {
+        return { results: { bindings: query.includes(`<${id(9)}>`)
+          ? [{ state: literal(JSON.stringify(options.pinnedRelease ?? options.release)) }] : [] } };
+      }
+      if (options.release && query.includes('SELECT ?work ?main WHERE')) {
+        return { results: { bindings: [{ work: uri(work), main: uri(main) }] } };
+      }
       if (query.includes('SELECT ?resource ?head WHERE')) {
         const resources = [...query.matchAll(/VALUES \?resource \{([^}]+)\}/g)].flatMap(match =>
           [...match[1]!.matchAll(/<([^>]+)>/g)].map(value => value[1]!));
@@ -52,12 +65,25 @@ function fixture(choice: EditionChoice | null = null, options: { revokeAfterRead
     }
   }
   const graph = new Graph('http://edition-preference-fixture.invalid');
-  const pool = { query: async (text: string, values: unknown[]) => {
+  let saved = choice ? { work, choice, version: '7' } : null;
+  const query = async (text: string, values: unknown[] = []) => {
     state.sql.push({ text, values });
-    if (!text.includes('FROM reader.edition_preference')) throw new Error('Unexpected preference SQL');
-    if (options.revokeAfterRead) state.active = false;
-    return { rows: choice ? [{ work, choice, version: '7' }] : [] };
-  } } as unknown as Pool;
+    if (text.includes('FROM reader.edition_preference_command')) return { rows: [] };
+    if (text.includes('FROM reader.edition_preference')) {
+      if (options.revokeAfterRead) state.active = false;
+      return { rows: saved ? [saved] : [] };
+    }
+    if (options.release) {
+      if (text.startsWith('INSERT INTO reader.edition_preference\n')) {
+        saved = { work, choice: JSON.parse(String(values[4])), version: String(values[5]) };
+      } else if (!/^(BEGIN|COMMIT|ROLLBACK|SET LOCAL |SELECT pg_advisory_xact_lock|INSERT INTO reader.edition_preference_command)/.test(text)) {
+        throw new Error(`Unexpected preference SQL: ${text}`);
+      }
+      return { rows: [] };
+    }
+    throw new Error('Unexpected preference SQL');
+  };
+  const pool = { query, connect: async () => ({ query, release: () => {} }) } as unknown as Pool;
   const deps = {
     environment: { fuseki: graph, lineage: { dataEpoch: 'epoch', routingEpoch: 'route' },
       objectDirectory: '.temp/edition-preference-unused' },
@@ -86,8 +112,57 @@ function fixture(choice: EditionChoice | null = null, options: { revokeAfterRead
       headers: authenticated ? { authorization: 'Bearer reader' } : {},
     }));
   };
-  return { state, get };
+  const readRelease = () => app.handle(new Request(
+    `http://main.test/v1/works/${work.slice(-36)}/releases/${id(8).slice(-36)}?actingSubject=${actor}`,
+    { headers: { authorization: 'Bearer reader' } }));
+  const put = (selection: EditionChoice) => app.handle(new Request(
+    `http://main.test/v1/me/edition-preferences/${work.slice(-36)}`, {
+      method: 'PUT', headers: { authorization: 'Bearer reader', 'content-type': 'application/json',
+        'idempotency-key': 'release-selection' },
+      body: JSON.stringify({ actingSubject: actor, expectedVersion: 0, ...selection }),
+    }));
+  return { state, get, readRelease, put };
 }
+
+const legacyRelease = checkedRelease({
+  profile: 'release-v1', expectedHead: null, actingSubject: actor, id: id(8),
+  kind: 'formal', status: 'official', contentLanguages: ['fr'], isTranslation: false,
+  originalLanguages: [], titleLanguage: 'fr', tracklistLanguage: null,
+  title: { value: 'Livre', language: 'fr' }, editionStatement: null, publisher: null,
+  publicationYear: 1900, isbn13: null, originalUrl: null, fixedRelease: null, coverage: null, evidence: null,
+}, work);
+
+test('Main saves the exact legacy release choice returned by its reader without inventing a realization language', async () => {
+  const f = fixture(null, { release: legacyRelease });
+  const releaseResponse = await f.readRelease(), release = await releaseResponse.json();
+  expect(releaseResponse.status, JSON.stringify(release)).toBe(200);
+  expect(release.contentLanguages).toEqual(['fr']);
+  expect(release.coverage).toEqual([{ realization: null, revision: null, work, mainVersion: main,
+    completeness: 'unknown', language: null }]);
+  const selection = { language: release.coverage[0].language,
+    edition: { kind: 'release' as const, resource: release.id, revision: release.revision } };
+  const written = await f.put(selection), result = await written.json();
+  expect(written.status, JSON.stringify(result)).toBe(200);
+  expect(result).toEqual({ work, ...selection, version: 1, replayed: false });
+  const read = await f.get();
+  expect(read.status).toBe(200);
+  expect(await read.json()).toEqual({ work, ...selection, version: 1 });
+  expect(f.state.sql.some(query => query.text.startsWith('INSERT INTO reader.edition_preference\n')
+    && query.values[4] === JSON.stringify(selection))).toBe(true);
+  expect((await (await f.readRelease()).json()).contentLanguages).toEqual(['fr']);
+});
+
+for (const [label, language, revision, pinnedRelease] of [
+  ['unrecorded language', 'en', id(9), legacyRelease],
+  ['unretained revision', null, id(90), legacyRelease],
+  ['another Work at the retained revision', null, id(9), { ...legacyRelease, work: id(90) }],
+] as const) test(`Main still rejects ${label} before storing a preference`, async () => {
+  const f = fixture(null, { release: legacyRelease, pinnedRelease });
+  const response = await f.put({ language, edition: { kind: 'release', resource: id(8), revision } });
+  expect(response.status).toBe(400);
+  expect((await response.json()).code).toBe('invalid_edition_preference');
+  expect(f.state.sql).toEqual([]);
+});
 
 for (const [label, choice] of [
   ['empty', null],
