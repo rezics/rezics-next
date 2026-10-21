@@ -8,7 +8,8 @@ import type { AccessAdmissionRegistry, VerifiedPrincipal } from '../modules/acce
 import { PrivateSearchConnection, privateSearchProblem, type PrivateSearchSocketDependencies }
   from '../modules/contribution/private-search-socket.ts';
 import { queryPublicMainClassifiedPhrase, queryPublicMainPhrase, queryPublicRealmClassifiedPhrase,
-  queryPublicRealmPhrase } from '../modules/work/search-public.ts';
+  queryPublicRealmPhrase, InvalidPublicQuery } from '../modules/work/search-public.ts';
+import { searchText } from '../modules/search/text.ts';
 import { pageCompletePublicRelation } from '../modules/work/search-continuation.ts';
 import { queryPublicRealmClassifiedRatedPhrase } from '../modules/work/search-joined.ts';
 import { queryPublicMainTitleBody } from '../modules/work/search-multifield.ts';
@@ -45,7 +46,7 @@ import { workReadError } from './work-reads.ts';
 import { readName, readAvatar } from '../modules/work/read-contract.ts';
 import { discoveryCredit } from '../modules/discovery/contract.ts';
 import { problemResult, phraseMatch, publicPhrasePageRequest, publicPhrasePageResult, publicQueryResult,
-  unsupportedPublicSearchSelectors, workTypeFilters } from '../api-contract.ts';
+  unsupportedPublicSearchSelectors, workTypeFilters, publicSearchTextRequest } from '../api-contract.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 import { requireSelectedPlatformCapability } from '../modules/access/exposure.ts';
@@ -63,7 +64,7 @@ const groupedStatementRequest = t.Object({
   ...unsupportedPublicSearchSelectors,
   actingSubject: groupedNative,
   context: t.Object({ kind: t.Literal('realm-local'), id: groupedNative }, { additionalProperties: false }),
-  phrase: t.String({ minLength: 2, maxLength: 80 }),
+  ...publicSearchTextRequest,
   language: t.String({ minLength: 2, maxLength: 35,
     pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }),
   relation: t.Object({ definition: groupedNative,
@@ -339,7 +340,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
     .post('/v1/queries', {
       body: t.Union([groupedStatementRequest, t.Object({ profile: t.Literal('public-disclosed-fields-phrase-v1'),
         ...unsupportedPublicSearchSelectors,
-        phrase: t.String({ minLength: 2, maxLength: 80 }),
+        ...publicSearchTextRequest,
         contexts: t.Array(t.String({ pattern: '^(https://rezics\\.com/id/[0-9a-f-]{36}|urn:rezics:semantic-context:global)$' }),
           { maxItems: 8 }),
         statements: t.Array(t.Object({ statement: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
@@ -355,7 +356,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
           maxLength: 35 }), t.Null()]),
       }, { additionalProperties: false }), t.Object({ profile: t.Literal('public-content-phrase-v1'),
         ...unsupportedPublicSearchSelectors,
-        phrase: t.String({ minLength: 2, maxLength: 80 }),
+        ...publicSearchTextRequest,
         // Canonical aliases can expand the admitted source spelling.
         language: t.Union([
           t.String({ minLength: 2, maxLength: 2 * CONTENT_TEXT_COST.languageUnits }), t.Null(),
@@ -370,7 +371,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
       }, { additionalProperties: false }), t.Object({ profile: t.Literal('public-main-phrase-v1'),
         ...unsupportedPublicSearchSelectors,
         ...workTypeFilters,
-        phrase: t.String({ minLength: 2, maxLength: 80 }),
+        ...publicSearchTextRequest,
         language: t.Union([
           t.String({ minLength: 2, maxLength: 35,
             pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }), t.Null(),
@@ -383,7 +384,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
         context: t.Object({ kind: t.Literal('realm-local'),
           id: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }) },
         { additionalProperties: false }),
-        phrase: t.String({ minLength: 2, maxLength: 80 }),
+        ...publicSearchTextRequest,
         language: t.Union([
           t.String({ minLength: 2, maxLength: 35,
             pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }), t.Null(),
@@ -393,7 +394,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
         profile: t.Literal('public-main-classified-phrase-v1'),
         ...unsupportedPublicSearchSelectors,
         ...workTypeFilters,
-        phrase: t.String({ minLength: 2, maxLength: 80 }),
+        ...publicSearchTextRequest,
         language: t.Union([
           t.String({ minLength: 2, maxLength: 35,
             pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }), t.Null(),
@@ -407,7 +408,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
         context: t.Object({ kind: t.Literal('realm-local'),
           id: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }) },
         { additionalProperties: false }),
-        phrase: t.String({ minLength: 2, maxLength: 80 }),
+        ...publicSearchTextRequest,
         language: t.Union([
           t.String({ minLength: 2, maxLength: 35,
             pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }), t.Null(),
@@ -421,7 +422,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
         context: t.Object({ kind: t.Literal('realm-local'),
           id: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }) },
         { additionalProperties: false }),
-        phrase: t.String({ minLength: 2, maxLength: 80 }),
+        ...publicSearchTextRequest,
         language: t.Union([
           t.String({ minLength: 2, maxLength: 35,
             pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }), t.Null(),
@@ -437,6 +438,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
     }, async ({ body, request }) => {
       const diagnostics: SearchAttemptDiagnostic[] | undefined = process.env.REZICS_LOAD_RUN_ID ? [] : undefined;
       try {
+        if ('phrase' in body) searchText(body.phrase, body.matchMode, InvalidPublicQuery);
         const unsupported = unsupportedSearchSelection(body);
         if (unsupported) return unsupported;
         // Only validated keyword profiles are admitted here; saved-view and LLM-index execution have no template yet.
@@ -474,8 +476,9 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
                 : undefined });
           }
           if (body.profile === 'public-content-phrase-v1') {
-            return queryPublicContentPhrase(work.environment, work.contentProjection!.content,
+            const relation = await queryPublicContentPhrase(work.environment, work.contentProjection!.content,
               work.contentProjection!.cursor, work.contentProjection!.consumer, body, work.rights?.store);
+            return enrichSearchCardPage(work, request, relation, body.language, body);
           }
           return withSearchGraphSnapshot(work.environment, async () => {
             const selection = await presentationSelection(request);
@@ -497,10 +500,11 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
                       { ...body, publicFields, contentProjection: work.contentProjection, rights: work.rights?.store }));
             const complete = await decoratePhraseRelation(work.environment, await present(selection, relation), body);
             const window = searchCardWindow(body, complete, selection?.generation);
-            const hydrated = await enrichSearchCardPage(work, request, window.page, body.language);
+            const hydrated = await enrichSearchCardPage(work, request, window.page, body.language, 'phrase' in body ? body : { phrase: body.bodyTerm });
             await fenceSearchFields(publicFields);
             const result = { ...complete, cardWindow: window.cardWindow,
-              results: [...hydrated.results, ...complete.results.slice(window.cardWindow.hydrated)] };
+              results: [...hydrated.results, ...complete.results.slice(window.cardWindow.hydrated).map(match => ({ ...match,
+                excerpt: { status: 'unavailable' as const, reason: 'not-hydrated' as const } }))] };
             if (Buffer.byteLength(JSON.stringify(result)) > MAX_SEARCH_RESPONSE_BYTES) {
               throw new PublicQueryBudgetExceeded('Hydrated search response exceeds its byte bound');
             }
@@ -524,6 +528,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
     }, async ({ body, request }) => {
       const diagnostics: SearchAttemptDiagnostic[] | undefined = process.env.REZICS_LOAD_RUN_ID ? [] : undefined;
       try {
+        if ('phrase' in body) searchText(body.phrase, body.matchMode, InvalidPublicQuery);
         const unsupported = unsupportedSearchSelection(body);
         if (unsupported) return unsupported;
         const capabilities = semanticTypeCapabilities('includeTypes' in body ? body.includeTypes ?? [] : []);
@@ -589,8 +594,9 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
             };
             const selected = await read();
             const result = selected.resultGrain === 'mainVersion'
-              ? await enrichSearchCardPage(work, request, selected, body.language)
-              : await enrichSerialSearch(selected, work.serialStats);
+              ? await enrichSearchCardPage(work, request, selected, body.language, 'phrase' in body ? body : { phrase: body.bodyTerm })
+              : await enrichSerialSearch(await enrichSearchCardPage(work, request, selected, body.language,
+                'phrase' in body ? body : { phrase: body.bodyTerm }), work.serialStats);
             await fenceSearchFields(publicFields);
             if (Buffer.byteLength(JSON.stringify(result)) > MAX_SEARCH_RESPONSE_BYTES) {
               throw new PublicQueryBudgetExceeded('Hydrated search page exceeds its byte bound');

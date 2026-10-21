@@ -1,3 +1,4 @@
+import { searchText, type SearchMatchMode } from '../search/text.ts';
 import { publicWork } from '../work/public-patterns.ts';
 import { searchablePlacement } from '../structure/searchable-placements.ts';
 import { canonicalContentLanguage, type ContentCore } from '../../../../content/src/core.ts';
@@ -93,16 +94,12 @@ async function prepareContentSearch(env: WorkActivationEnvironment,
 
 export async function queryPublicContentPhrase(env: WorkActivationEnvironment,
   content: ContentCore, cursor: ContentProjectionCursor, consumer: string,
-  input: { phrase: string; language: string | null },
+  input: { phrase: string; matchMode?: SearchMatchMode; language: string | null },
   rights?: Pick<RightsStore, 'currentPublicDomainAssessments'>) {
-  const phrase = input.phrase.normalize('NFC').trim().replace(/\s+/gu, ' ');
-  if (phrase.length < 2 || phrase.length > 80 || /[\u0000-\u001f\u007f]/u.test(phrase)) {
-    throw new InvalidContentPhrase('invalid public Content phrase');
-  }
+  const { lucene } = searchText(input.phrase, input.matchMode, InvalidContentPhrase);
   let language: string | null = null;
   try { language = input.language === null ? null : canonicalContentLanguage(input.language); }
   catch { throw new InvalidContentPhrase('invalid public Content language'); }
-  const lucene = `"${phrase.replace(/[\\"]/g, '\\$&')}"`;
   const { source, index, proof } = await prepareContentSearch(env, content, cursor, consumer);
   const placements = await searchablePlacement(env, lucene, '?resource', '?parentWork', '?parentMain', '?revision');
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>

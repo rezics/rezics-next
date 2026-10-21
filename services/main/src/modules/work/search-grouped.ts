@@ -1,3 +1,4 @@
+import { searchText, type SearchMatchMode } from '../search/text.ts';
 import { createHash } from 'node:crypto';
 import { GLOBAL_CLASSIFICATION_CONTEXT } from '../classification/context.ts';
 import { ContextCommandUnavailable, term } from '../context/command.ts';
@@ -200,6 +201,7 @@ export interface PublicGroupedStatementPhraseQuery {
   actingSubject: string;
   context: { kind: 'realm-local'; id: string };
   phrase: string;
+  matchMode?: SearchMatchMode;
   language: string;
   relation: { definition: string; workRole: string; participantRole: string };
   conditions: Array<{ predicate: string; relationDefinition: string; value: string;
@@ -272,6 +274,7 @@ export async function queryPublicGroupedStatementPhrase(env: WorkActivationEnvir
   input: PublicGroupedStatementPhraseQuery,
   admitPhrase?: (relation: Awaited<ReturnType<typeof queryPublicRealmPhrase>>) =>
     Promise<Awaited<ReturnType<typeof queryPublicRealmPhrase>>>) {
+  searchText(input.phrase, input.matchMode, InvalidPublicQuery);
   checkedGroupedInput(input);
   const facetMode = input.facetMode ?? 'fully-filtered';
   // System reader: only the role keys are used; no member list reaches a result.
@@ -304,13 +307,13 @@ export async function queryPublicGroupedStatementPhrase(env: WorkActivationEnvir
       semanticRevision: condition.semanticRevision, applicability: sorted(condition.applicability) });
   }
   const rated = input.rating ? await queryPublicGroupedRatedCore(env, {
-    realm: input.context.id, phrase: input.phrase, language: input.language,
+    realm: input.context.id, phrase: input.phrase, matchMode: input.matchMode, language: input.language,
     rating: input.rating, relationDefinition: input.relation.definition,
     workRole: role(input.relation.workRole), participantRole: role(input.relation.participantRole),
     predicates: sorted(resolved.map(condition => condition.predicate)),
   }) : null;
   const phraseRelation = rated?.phrase ?? await queryPublicRealmPhrase(env, { context: input.context,
-    phrase: input.phrase, language: input.language });
+    phrase: input.phrase, matchMode: input.matchMode, language: input.language });
   const phrase = admitPhrase ? await admitPhrase(phraseRelation) : phraseRelation;
   if (interpretations.some(item => item.sourcePosition.dataEpoch !== phrase.sourcePosition.dataEpoch
     || item.sourcePosition.sequence !== phrase.sourcePosition.sequence)) {

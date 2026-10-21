@@ -274,6 +274,37 @@ function parseRecord(raw: string, work: string, release: string): AnyReleaseReco
   }
 }
 
+/** A selected search page needs display facts, never a complete per-Work
+ * Release inventory. Reuse Release identity, parent coverage and disclosure
+ * admission. A lookahead means unavailable, rather than a fabricated absence. */
+export async function readSearchReleaseFacts(session: WorkReadSession, works: readonly string[]) {
+  if (works.length > 64) throw new WorkReadUnavailable('Search release page exceeds its bound');
+  const selected = await releasePage(session, { limit: RELEASE_COST.page, after: undefined,
+    binding: ['search-release-facts', works],
+    fetch: (probe, after, size) => probe.query(`SELECT DISTINCT ?release ?revision WHERE {
+      VALUES ?work { ${works.map(iri).join(' ')} }
+      GRAPH ${iri(GRAPHS.current)} { ?release a rv:Release ; rv:work|rv:coverageWork ?work ; rv:releaseHead ?revision }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ErasedRevision } }
+      ${after ? `FILTER(STR(?release) > ${lit(after)})` : ''}
+    } ORDER BY STR(?release) LIMIT ${size}`, size),
+    parse: (raw, release) => {
+      const record = parseStoredRelease(raw);
+      const work = coveredWorks(record).find(work => works.includes(work));
+      if (!work) throw new WorkReadUnavailable('Search Release coverage differs');
+      return parseRecord(raw, work, release);
+    } });
+  if (selected.lookahead) return null;
+  const views = await Promise.all(selected.page.map(async row => {
+    const view = selected.views.get(row.release!.value)!;
+    return { ...view, sourceEvidence: await releaseSourceEvidence(session,
+      { owner: 'release', component: view.id, revision: view.revision }) };
+  }));
+  return new Map(works.map(work => [work, views.filter(view =>
+    view.coverage.some(entry => entry.work === work) && !['withdrawn', 'cancelled'].includes(view.status))
+    .map(view => ({ release: view.id, revision: view.revision, kind: view.kind,
+      year: view.publicationYear, platform: view.platform, sourceEvidence: view.sourceEvidence }))]));
+}
+
 /** At most 64 identity/admission batches fill a page and admitted lookahead.
  * Coverage hydration is bounded per candidate batch; snapshots load only for
  * the returned page. Jena can scan/sort R identities: O(R log R) per seek. */

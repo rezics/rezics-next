@@ -1,3 +1,4 @@
+import { searchText, type SearchMatchMode } from '../search/text.ts';
 import type { AccessJudgments } from '../judgment/access.ts';
 import type { MediaStore } from '../media/store.ts';
 import type { SummaryReader } from '../media/summary.ts';
@@ -10,6 +11,7 @@ import { InvalidPublicQuery, PublicQueryUnavailable } from './search-public.ts';
 export interface PublicDisclosedFieldPhraseQuery extends PublicDisclosureInput {
   profile: 'public-disclosed-fields-phrase-v1';
   phrase: string;
+  matchMode?: SearchMatchMode;
 }
 
 /** Search only values admitted by their owners. No indexed hidden field enters
@@ -20,6 +22,7 @@ export async function queryPublicDisclosedFields(env: WorkActivationEnvironment,
   input: PublicDisclosedFieldPhraseQuery,
   restrictedTitles?: (heads: readonly { work: string; revision: string }[], context: string) =>
     Promise<ReadonlySet<string>>, reader: SummaryReader = {}) {
+  searchText(input.phrase, input.matchMode, InvalidPublicQuery);
   if (input.statements.length && !judgments) {
     throw new PublicQueryUnavailable('Statement disclosure owner is unavailable');
   }
@@ -31,7 +34,7 @@ export async function queryPublicDisclosedFields(env: WorkActivationEnvironment,
     throw new PublicQueryUnavailable('public field disclosure is unavailable', { cause: error });
   }
   let matched;
-  try { matched = matchPublicDisclosedPhrase(decision, input.phrase); }
+  try { matched = matchPublicDisclosedPhrase(decision, input.phrase, input.matchMode); }
   catch (error) {
     if (error instanceof InvalidPublicDisclosure) throw new InvalidPublicQuery(error.message);
     throw error;

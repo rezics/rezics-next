@@ -1,3 +1,4 @@
+import { releaseSourceEvidenceSchema } from './modules/source/release-evidence-contract.ts';
 import { t } from 'elysia';
 import './modules/types/registry.ts';
 import { registryWorkType } from './modules/types/contract.ts';
@@ -110,11 +111,30 @@ export function problemResult(status: number) {
 const searchPlacement = t.Object({ resource: t.String(), work: t.String(), occurrence: t.String(),
   profile: t.String(), title: t.String(), revision: t.Optional(t.String()) });
 
+export const searchExcerpt = t.Union([
+  t.Object({ status: t.Literal('available'), text: t.String({ maxLength: 480 }), language: t.String(),
+    revision: t.String(), resource: t.String(), variant: t.String() }, { additionalProperties: false }),
+  t.Object({ status: t.Literal('unavailable'), reason: t.Union([t.Literal('unavailable'),
+    t.Literal('not-matching'), t.Literal('unsupported-format'), t.Literal('not-hydrated')]) }, { additionalProperties: false }),
+]);
+
+export const searchDisambiguation = t.Object({
+  context: t.Union([t.Literal('main-version-default'), t.Object({ kind: t.Literal('realm-local'), id: t.String() }), t.Null()]),
+  contentFormat: t.Union([t.Object({ status: t.Literal('available'), value: t.String() }),
+    t.Object({ status: t.Literal('unavailable') })]),
+  releases: t.Union([t.Object({ status: t.Literal('available'), values: t.Array(t.Object({
+    release: t.String(), revision: t.String(), kind: t.Union([t.Literal('formal'), t.Literal('web'),
+      t.Literal('fixed'), t.Literal('virtual')]),
+    year: t.Nullable(t.Integer()), platform: t.Nullable(t.String()), sourceEvidence: releaseSourceEvidenceSchema,
+  }), { maxItems: 20 }) }), t.Object({ status: t.Literal('unavailable') })]),
+}, { additionalProperties: false });
+
 export const phraseMatch = t.Object({
   matchUnit: t.String(), work: t.String(), mainVersion: t.String(),
   contribution: t.String(), revision: t.String(), selection: t.String(),
   language: t.String(), score: t.Number(), types: t.Array(t.String(), { maxItems: 3 }),
-  matchedField: t.Optional(t.Union(['title', 'credit', 'tagline', 'body'].map(value => t.Literal(value)))),
+  matchedField: t.Optional(t.Union([t.Literal('title'), t.Literal('credit'), t.Literal('tagline'), t.Literal('body')])),
+  excerpt: t.Optional(searchExcerpt), disambiguation: t.Optional(searchDisambiguation),
   matchedText: t.Optional(t.String()), matchedLanguage: t.Optional(t.Nullable(t.String())),
   matchedPlacements: t.Optional(t.Array(searchPlacement, { maxItems: 512 })),
   matchedChapter: t.Optional(t.Object({ post: t.String(), book: t.String(), title: t.String() })),
@@ -169,6 +189,7 @@ const realmContext = t.Object({ kind: t.Literal('realm-local'), id: t.String() }
 const contentPosition = t.Object({ owner: t.Literal('content'), dataEpoch: t.String(),
   sequence: t.String({ pattern: '^[0-9]+$' }) });
 const contentPhraseMatch = t.Object({ matchUnit: t.String(), resource: t.String(),
+  excerpt: t.Optional(searchExcerpt), disambiguation: t.Optional(searchDisambiguation),
   matchedPlacements: t.Optional(t.Array(searchPlacement, { maxItems: 512 })),
   variant: t.String(), revision: t.String(), publicationDecision: t.String(),
   language: t.String(), score: t.Number() });
@@ -204,10 +225,14 @@ const contentPageContinuation = t.Object({
   nextOffset: t.Integer({ minimum: 1, maximum: 512 }),
   expiresAt: t.Integer({ minimum: 0 }),
 }, { additionalProperties: false });
+export const publicSearchTextRequest = {
+  phrase: t.String({ minLength: 1, description: 'After NFC and whitespace normalization: 1..80 Unicode code points with explicit matchMode; 2..80 when omitted' }),
+  matchMode: t.Optional(t.Union([t.Literal('phrase'), t.Literal('keywords')])),
+};
 const pageRequest = {
   ...unsupportedPublicSearchSelectors,
   ...workTypeFilters,
-  phrase: t.String({ minLength: 2, maxLength: 80 }),
+  ...publicSearchTextRequest,
   language: t.Union([t.String({ minLength: 2, maxLength: 35,
     pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }), t.Null()]),
   author: t.Optional(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' })),
@@ -229,7 +254,7 @@ const classifiedPageRequest = {
 export const publicPhrasePageRequest = t.Union([
   t.Object({ profile: t.Literal('public-content-phrase-page-v1'),
     ...unsupportedPublicSearchSelectors,
-    phrase: t.String({ minLength: 2, maxLength: 80 }),
+    ...publicSearchTextRequest,
     language: t.Union([t.String({ minLength: 2, maxLength: 35,
       pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }), t.Null()]),
     pageSize: t.Integer({ minimum: 1, maximum: 64 }),

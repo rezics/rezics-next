@@ -1,3 +1,5 @@
+import { normalizeSearchText, searchText, type SearchMatchMode } from '../search/text.ts';
+import { currentDisclosureViewer, namePolicyPrincipal } from '../disclosure/viewer.ts';
 import { createHash } from 'node:crypto';
 import { DISCLOSURE_COST } from '../disclosure/read.ts';
 import { MAX_PHRASE_CANDIDATES, PHRASE_HIT_PROBE, MAX_SEARCH_RESPONSE_BYTES } from './search-limits.ts';
@@ -46,6 +48,7 @@ export interface SearchContinuation {
 
 interface BasePublicPhrasePageRequest {
   language: string | null;
+  matchMode?: SearchMatchMode;
   author?: string;
   includeTypes?: string[];
   excludeTypes?: string[];
@@ -79,11 +82,18 @@ interface CompletePublicRelation<Row> {
 const digest = (value: unknown): string => createHash('sha256')
   .update(JSON.stringify(value)).digest('hex');
 
+/** Bind identity and current disclosure preferences, including anonymous readers. */
+export function searchReaderKey() {
+  const viewer = currentDisclosureViewer(), principal = namePolicyPrincipal(viewer);
+  return [principal?.issuer ?? null, principal?.subject ?? null, viewer];
+}
+
 function requestDigest(input: PublicPhrasePageRequest): string {
   return digest([input.profile,
-    'phrase' in input ? input.phrase.normalize('NFC').trim().replace(/\s+/gu, ' ') : null,
-    'titleTerm' in input ? input.titleTerm.normalize('NFC').trim().replace(/\s+/gu, ' ') : null,
-    'bodyTerm' in input ? input.bodyTerm.normalize('NFC').trim().replace(/\s+/gu, ' ') : null,
+    'phrase' in input ? searchText(input.phrase, input.matchMode, InvalidSearchContinuation).text : null,
+    input.matchMode ?? 'phrase', searchReaderKey(),
+    'titleTerm' in input ? normalizeSearchText(input.titleTerm) : null,
+    'bodyTerm' in input ? normalizeSearchText(input.bodyTerm) : null,
     input.language, input.author ?? null, 'context' in input ? input.context.id : null,
     'sense' in input ? input.sense : null,
     'ratingContext' in input ? input.ratingContext : null,

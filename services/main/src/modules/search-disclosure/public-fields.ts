@@ -1,3 +1,4 @@
+import { searchText, normalizeSearchText, type SearchMatchMode } from '../search/text.ts';
 import { ContextNotFound, readContextRevision } from '../context/read.ts';
 import { contextSkos } from '../context/preferences.ts';
 import type { AccessJudgments } from '../judgment/access.ts';
@@ -275,13 +276,12 @@ export async function disclosePublicSearchFields(env: WorkActivationEnvironment,
 
 /** The optional bounded phrase projection only matches admitted owner values.
  * Its score and facets cannot incorporate an undisclosed field. */
-export function matchPublicDisclosedPhrase(decision: PublicFieldDecision, phrase: string) {
-  const normalized = phrase.normalize('NFC').trim().toLocaleLowerCase('und');
-  if (normalized.length < 2 || normalized.length > 80 || /[\u0000-\u001f\u007f]/u.test(normalized)) {
-    throw new InvalidPublicDisclosure('invalid public disclosure phrase');
-  }
-  const matches = decision.fields.filter(field => field.text.normalize('NFC')
-    .toLocaleLowerCase('und').includes(normalized)).map(field => ({ ...field, score: 1 }));
+export function matchPublicDisclosedPhrase(decision: PublicFieldDecision, phrase: string, matchMode?: SearchMatchMode) {
+  const { tokens } = searchText(phrase, matchMode, InvalidPublicDisclosure);
+  const matches = decision.fields.filter(field => {
+    const text = normalizeSearchText(field.text).toLowerCase();
+    return tokens.every(token => text.includes(token.toLowerCase()));
+  }).map(field => ({ ...field, score: 1 }));
   return { complete: true as const, total: matches.length, matches,
     facets: { contexts: matches.filter(item => item.kind === 'context-label').length,
       statements: matches.filter(item => item.kind === 'statement-value').length,

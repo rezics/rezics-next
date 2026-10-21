@@ -1,3 +1,4 @@
+import { searchText, type SearchMatchMode } from '../search/text.ts';
 import { fallbackLanguage, realmLanguage } from './selection-heads.ts';
 import { discloseSearchMatches } from '../disclosure/search.ts';
 import { RATING_ACCOUNT_POPULATION, RATING_LATEST_MEAN_POLICY, RATING_STANDING_CADENCE }
@@ -8,7 +9,7 @@ import { SELECTION_POLICY } from '../space/create.ts';
 import { DATASET, GRAPHS, RV, iri, lit, PUBLIC_SEARCH_ANCHOR,
   type WorkActivationEnvironment } from './activate.ts';
 import { PublicQueryBudgetExceeded, PublicQueryUnavailable } from './search-budget.ts';
-import { PublicRealmUnavailable } from './search-public.ts';
+import { InvalidPublicQuery, PublicRealmUnavailable } from './search-public.ts';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
 import { assertPublicTextReady, assertSameTextInstance, assertSnapshotMoved, MAX_SEARCH_RESPONSE_BYTES,
   PHRASE_HIT_PROBE, SearchSnapshotMoved } from './search-readiness.ts';
@@ -44,7 +45,7 @@ const integer = (value: Binding | undefined) => {
  * the active relation occurrence and direct Statement subjects. A 21st row is
  * a budget result even when its text unit has no grouped Statement candidate. */
 export async function queryPublicGroupedRatedCore(env: WorkActivationEnvironment,
-  input: { realm: string; phrase: string; language: string; rating: GroupedRatingInput;
+  input: { realm: string; phrase: string; matchMode?: SearchMatchMode; language: string; rating: GroupedRatingInput;
     relationDefinition: string; workRole: string; participantRole: string;
     predicates: readonly string[] }): Promise<{
       phrase: { contractVersion: string; resultGrain: 'mainVersion';
@@ -56,9 +57,8 @@ export async function queryPublicGroupedRatedCore(env: WorkActivationEnvironment
           reason: string; score: number; rating: GroupedRating }> };
       bindings: RatedGroupBinding[]; ratingPopulation: number;
     }> {
+  const { lucene } = searchText(input.phrase, input.matchMode, InvalidPublicQuery);
   const index = await assertPublicTextReady(env.fuseki, env.lineage);
-  const normalized = input.phrase.normalize('NFC').trim().replace(/\s+/gu, ' ');
-  const lucene = `"${normalized.replace(/[\\"]/gu, '\\$&')}"`;
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>
     PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
     PREFIX schema: <https://schema.org/>

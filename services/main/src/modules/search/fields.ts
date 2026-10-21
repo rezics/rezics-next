@@ -1,3 +1,4 @@
+import { searchText, type SearchMatchMode } from './text.ts';
 import type { SearchPlacement } from '../structure/searchable-placements.ts';
 import type { SourceAuthorNameStore } from '../source/author-name.ts';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
@@ -41,12 +42,12 @@ export interface FieldMatch { work: string; mainVersion: string; matchUnit: stri
   matchedPlacements?: SearchPlacement[];
   matchedChapter?: { post: string; book: string; title: string } }
 export const normalizedSearchText = (value: string) => value.normalize('NFC').toLowerCase().trim().replace(/\s+/gu, ' ');
-export function matchesSearchText(text: string, term: string, prefix: boolean) {
+export function matchesSearchText(text: string, term: string, prefix: boolean, matchMode: SearchMatchMode = 'phrase') {
   const value = normalizedSearchText(text), query = normalizedSearchText(term);
   // A literal prefix at a word boundary works for Latin names; the beginning
   // of an unspaced CJK title is also a prefix, including a single ideograph.
   return prefix ? value.startsWith(query) || value.split(/[^\p{L}\p{N}]+/u).some(word => word.startsWith(query))
-    : value.includes(query);
+    : (matchMode === 'keywords' ? query.split(' ') : [query]).every(token => value.includes(token));
 }
 const tier = { title: 3, credit: 2, tagline: 1, body: 0 } as const;
 export function rankedSearchMatches<T extends { work: string; mainVersion: string; matchUnit: string;
@@ -75,12 +76,15 @@ export function rankedSearchMatches<T extends { work: string; mainVersion: strin
 /** Current selection and disclosure precede matching, counting and ranking.
  * No historical metadata, biography, private Agent or retired credit qualifies. */
 export async function querySearchFields(env: WorkActivationEnvironment,
-  input: { phrase: string; language: string | null; author?: string;
+  input: { phrase: string; matchMode?: SearchMatchMode; language: string | null; author?: string;
     context?: { kind: 'realm-local'; id: string } },
   position: { dataEpoch: string; sequence: string }, owners: SearchFieldOwners = {}) {
   const sourceNames = owners.names;
-  const term = normalizedSearchText(input.phrase);
-  const sourceRead = await sourceNames?.search(term, false);
+  const parsed = searchText(input.phrase, input.matchMode, PublicQueryUnavailable);
+  const term = normalizedSearchText(parsed.text);
+  const tokens = parsed.tokens.map(normalizedSearchText);
+  const contains = (variable: string) => tokens.map(token => `CONTAINS(LCASE(STR(${variable})), ${lit(token)})`).join(' && ');
+  const sourceRead = await sourceNames?.search(tokens.reduce((longest, token) => token.length > longest.length ? token : longest), false);
   const source = sourceRead?.names ?? new Map();
   const realm = input.context?.id;
   const sourceBranch = source.size ? `UNION {
@@ -126,18 +130,18 @@ export async function querySearchFields(env: WorkActivationEnvironment,
       FILTER(?unitContext = ?main)`}
     ${input.language ? `FILTER(LCASE(?language) = ${lit(input.language.toLowerCase())})` : ''}
     { { GRAPH ${iri(GRAPHS.current)} { ?work rdfs:label ?text }
-        FILTER(CONTAINS(LCASE(STR(?text)), ${lit(term)})) BIND("title" AS ?field) }
+        FILTER(${contains('?text')}) BIND("title" AS ?field) }
       UNION { GRAPH ${iri(GRAPHS.current)} { ?work rv:descriptiveMetadataHead ?metadata }
         GRAPH ${iri(GRAPHS.revisions)} { ?metadata a rv:WorkMetadataRevision ; rv:metadataState ?state .
           FILTER NOT EXISTS { ?metadata a rv:ErasedRevision } }
-        FILTER(CONTAINS(LCASE(STR(?state)), ${lit(term)})) BIND("metadata" AS ?field) }
+        FILTER(${contains('?state')}) BIND("metadata" AS ?field) }
       UNION { GRAPH ${iri(GRAPHS.current)} { ?credit a rv:NativeAgentCredit ; rv:work ?work ;
         rv:creditRevision ?creditRevision ; rv:agent ?agent ; schema:roleName "author" . }
         GRAPH ${iri(GRAPHS.revisions)} { ?creditRevision a rv:NativeAgentCreditRevision ;
           rv:component ?credit ; rv:agent ?agent . FILTER NOT EXISTS { ?creditRevision a rv:ErasedRevision } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?credit rv:retiredBy ?retirement } }
         ${publicAgent('?agent')} BIND(?displayName AS ?text)
-        FILTER(CONTAINS(LCASE(STR(?text)), ${lit(term)})) BIND("credit" AS ?field) }
+        FILTER(${contains('?text')}) BIND("credit" AS ?field) }
       ${sourceBranch}
     }
   } LIMIT ${SEARCH_FIELD_COST.candidates + 1}`, SEARCH_FIELD_COST.responseBytes)).results?.bindings ?? [];
@@ -170,7 +174,7 @@ export async function querySearchFields(env: WorkActivationEnvironment,
       if (!text || !['title', 'credit'].includes(row.field?.value ?? '')) throw new PublicQueryUnavailable('Search field is incomplete');
       values.push({ field: row.field!.value as 'title' | 'credit', text, language: row.text?.['xml:lang'] ?? null });
     }
-    for (const value of values.filter(value => matchesSearchText(value.text, term, false))) {
+    for (const value of values.filter(value => matchesSearchText(value.text, term, false, input.matchMode))) {
       const match: FieldMatch = { work: row.resultWork?.value ?? row.work.value,
         mainVersion: row.resultMain?.value ?? row.main.value, matchUnit: row.unit.value,
         contribution: row.contribution.value, revision: row.revision.value, selection: row.selection.value,

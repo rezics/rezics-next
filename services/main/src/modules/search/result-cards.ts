@@ -1,3 +1,5 @@
+import { readSearchReleaseFacts } from '../release/read.ts';
+import { enrichSearchExcerptPage, type ExcerptMatch, type ExcerptQuery } from './excerpts.ts';
 import { primaryDiscoveryCreditBatch } from '../discovery/credits.ts';
 import { observeSearchPhase } from './operation-evidence.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
@@ -125,11 +127,14 @@ export async function searchPageAuthors(session: WorkReadSession, works: readonl
 export async function enrichSearchCardPage<T extends { resultGrain: string;
   sourcePosition?: { dataEpoch: string; sequence: string };
   context?: 'main-version-default' | { kind: 'realm-local'; id: string };
-  results: Array<{ work: string; mainVersion?: string; rating?: unknown }> }>(
-  deps: MainWorkDependencies, request: Request, page: T, language?: string | null): Promise<T> {
-  if (page.resultGrain !== 'mainVersion' || !page.sourcePosition) return page;
-  const matches = page.results;
-  const ids = [...new Set(matches.map(match => match.work))];
+  results: Array<ExcerptMatch & { mainVersion?: string; rating?: unknown }> }>(
+  deps: MainWorkDependencies, request: Request, page: T, language?: string | null, query?: ExcerptQuery): Promise<T> {
+  if (page.resultGrain !== 'mainVersion' || !page.sourcePosition) return query ? enrichSearchExcerptPage(deps, page, query) : page;
+  const matches = page.results.map(match => {
+    if (!match.work) throw new WorkReadUnavailable('Search card identity is incomplete');
+    return { ...match, work: match.work };
+  });
+  const ids = [...new Set(matches.map(match => match.work!))];
   if (ids.length > SEARCH_CARD_COST.works) throw new WorkReadUnavailable('Search card page exceeds its bound');
   if (!ids.length) return page;
   const cards = await workRead(searchCardReadDependencies(deps), publicLanguageRequest(request),
@@ -144,6 +149,7 @@ export async function enrichSearchCardPage<T extends { resultGrain: string;
       observeSearchPhase('card-summaries', () => session.summaries(ids, true)),
       observeSearchPhase('card-serial', () => optionalPreview(session, () => searchPageSerial(session, ids, true))),
       observeSearchPhase('card-authors', () => optionalPreview(session, () => searchPageAuthors(session, ids, true, unavailableCredits))),
+      observeSearchPhase('card-release-facts', () => optionalPreview(session, () => readSearchReleaseFacts(session, ids))),
       observeSearchPhase('card-ratings', () => optionalPreview(session, async () => {
         try { return await searchPageRatings(session, matches, page.context); }
         catch (error) {
@@ -156,7 +162,7 @@ export async function enrichSearchCardPage<T extends { resultGrain: string;
     // running under an abandoned attempt while WorkRead starts another one.
     // The enclosing hydration allocation still bounds this join.
     await Promise.allSettled(pending);
-    const [summaries, serial, authors, ratings] = await Promise.all(pending);
+    const [summaries, serial, authors, releases, ratings] = await Promise.all(pending);
     const publicCard = (summary: ResourceSummary) => summary.status === 'available'
       && summary.type === 'work' && summary.disclosure === 'public';
     // A Realm may select a public contribution without adopting it globally.
@@ -185,6 +191,9 @@ export async function enrichSearchCardPage<T extends { resultGrain: string;
       const current = fenced[index]!;
       return [[id, { title: summary.name, cover: current.status === 'available' ? current.avatar : summary.avatar,
         factObligations: obligations.get(id),
+        disambiguation: { context: page.context ?? null,
+          contentFormat: { status: 'unavailable' as const },
+          releases: releases ? { status: 'available' as const, values: releases.get(id) ?? [] } : { status: 'unavailable' as const } },
         rating: ratings?.values.get(id) ?? null,
         ratingStatus: ratings?.values.has(id) || ratedMatch
           ? 'available' : ratingUnavailable ? 'unavailable' : ratings!.status === 'selected' ? 'unrated' : ratings!.status,
@@ -198,6 +207,7 @@ export async function enrichSearchCardPage<T extends { resultGrain: string;
     if (error instanceof WorkReadUnavailable) throw new PublicQueryUnavailable(error.message);
     throw error;
   });
-  return { ...page, results: matches.map(match => ({ ...match, ...cards.get(match.work),
+  const enriched = { ...page, results: matches.map(match => ({ ...match, ...cards.get(match.work!),
     ...(match.rating ? { rating: match.rating } : {}) })) } as T;
+  return query ? enrichSearchExcerptPage(deps, enriched, query) : enriched;
 }

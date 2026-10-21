@@ -1,3 +1,4 @@
+import { searchText, type SearchMatchMode } from '../search/text.ts';
 import { searchablePlacement } from '../structure/searchable-placements.ts';
 import { phraseMatchPattern } from './search-phrase-pattern.ts';
 import { DATASET, GRAPHS, RV, iri, lit, PUBLIC_SEARCH_ANCHOR,
@@ -28,6 +29,7 @@ export class PublicRealmUnavailable extends Error {}
 
 export interface PublicMainPhraseQuery {
   phrase: string;
+  matchMode?: SearchMatchMode;
   language: string | null;
   /** Exact author of the currently selected public Contribution. */
   author?: string;
@@ -44,16 +46,13 @@ const MAX_CLASSIFICATION_CANDIDATES = 256;
 /** One complete, bounded public Main Version phrase relation at a query snapshot. */
 async function queryPublicPhrase(env: WorkActivationEnvironment,
   input: PublicMainPhraseQuery & { context?: { kind: 'realm-local'; id: string } }) {
-  const phrase = input.phrase.normalize('NFC').trim().replace(/\s+/gu, ' ');
-  if (phrase.length < 2 || phrase.length > 80 || /[\u0000-\u001f\u007f]/u.test(phrase)
-    || (input.context !== undefined && (input.context.kind !== 'realm-local' || !nativeId.test(input.context.id)))
+  const { lucene } = searchText(input.phrase, input.matchMode, InvalidPublicQuery);
+  if ((input.context !== undefined && (input.context.kind !== 'realm-local' || !nativeId.test(input.context.id)))
     || (input.author !== undefined && !nativeId.test(input.author))
     || (input.language !== null
       && !/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(input.language))) {
     throw new InvalidPublicQuery('invalid public text query');
   }
-  // Quotes force a literal phrase; backslashes and quotes cannot add Lucene operators.
-  const lucene = `"${phrase.replace(/[\\"]/g, '\\$&')}"`;
   const realm = input.context?.id;
   const content = input.contentProjection;
   const contentReadiness = content

@@ -1,6 +1,7 @@
+import { searchText, type SearchMatchMode } from '../search/text.ts';
 import { createHash } from 'node:crypto';
 import { InvalidSearchContinuation, MAX_SEARCH_PAGE_SIZE, SEARCH_PAGE_TTL_MS,
-  SearchContinuationRestart } from '../work/search-continuation.ts';
+  SearchContinuationRestart, searchReaderKey } from '../work/search-continuation.ts';
 import { MAX_PHRASE_CANDIDATES } from '../work/search-readiness.ts';
 import type { queryPublicContentPhrase } from './search.ts';
 
@@ -19,6 +20,7 @@ export interface ContentSearchContinuation {
 export interface ContentPhrasePageRequest {
   profile: 'public-content-phrase-page-v1';
   phrase: string;
+  matchMode?: SearchMatchMode;
   language: string | null;
   pageSize: number;
   continuation?: ContentSearchContinuation;
@@ -49,7 +51,8 @@ export function pageCompleteContentRelation(input: ContentPhrasePageRequest,
     throw new InvalidSearchContinuation('Content page request or complete relation is invalid');
   }
   const queryDigest = digest([input.profile,
-    input.phrase.normalize('NFC').trim().replace(/\s+/gu, ' '), input.language, input.pageSize]);
+    searchText(input.phrase, input.matchMode, InvalidSearchContinuation).text, input.matchMode ?? 'phrase',
+    searchReaderKey(), input.language, input.pageSize]);
   const resultDigest = digest(relation.results);
   const prior = input.continuation;
   if (prior && (!/^[0-9a-f]{64}$/.test(prior.queryDigest)

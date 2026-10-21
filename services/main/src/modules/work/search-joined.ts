@@ -1,3 +1,4 @@
+import { searchText } from '../search/text.ts';
 import { searchablePlacement } from '../structure/searchable-placements.ts';
 import { phraseMatchPattern } from './search-phrase-pattern.ts';
 import { discloseSearchMatches } from '../disclosure/search.ts';
@@ -40,10 +41,9 @@ export interface PublicRealmClassifiedRatedPhraseQuery extends PublicMainPhraseQ
 /** One bounded graph/text/classification/current-standing-score ARQ relation. */
 export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationEnvironment,
   input: PublicRealmClassifiedRatedPhraseQuery) {
-  const phrase = input.phrase.normalize('NFC').trim().replace(/\s+/gu, ' ');
+  const { lucene } = searchText(input.phrase, input.matchMode, InvalidPublicQuery);
   if (input.context?.kind !== 'realm-local' || !nativeId.test(input.context.id)
     || !nativeId.test(input.sense) || !nativeId.test(input.ratingContext)
-    || phrase.length < 2 || phrase.length > 80 || /[\u0000-\u001f\u007f]/u.test(phrase)
     || (input.author !== undefined && !nativeId.test(input.author))
     || (input.language !== null
       && !/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(input.language))
@@ -52,7 +52,6 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
     throw new InvalidPublicQuery('invalid joined Realm query');
   }
   const realm = input.context.id;
-  const lucene = `"${phrase.replace(/[\\"]/g, '\\$&')}"`;
   const content = input.contentProjection;
   const readiness = content ? await assertPublicContentSearchReady(env, content.content, content.cursor, content.consumer) : null;
   const index = readiness?.index ?? await assertPublicTextReady(env.fuseki, env.lineage);
