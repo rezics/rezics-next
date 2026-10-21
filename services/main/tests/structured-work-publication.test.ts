@@ -12,7 +12,7 @@ import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './s
 import { readPublishedStructuredWorkSource } from '../src/modules/work/public-patterns.ts';
 import { selectedPublicationAttribution } from '../src/modules/work/sourced-structure-publication.ts';
 import { WorkReadMissing, WorkReadMoved, WorkReadSession } from '../src/modules/work/read-session.ts';
-import { AdmissionDenied, type RegisteredAdmission } from '../src/modules/access/admission.ts';
+import { AdmissionDenied, type GraphTerminalProof, type RegisteredAdmission } from '../src/modules/access/admission.ts';
 import { receiptFamilyFor } from '../src/modules/access/receipt-families.ts';
 import { ownerOutboxEventHandler } from '../src/modules/outbox/event-handlers.ts';
 import { changeAdmittedWorkStructurePublication } from '../src/modules/work/structured-publication-admitted.ts';
@@ -283,6 +283,7 @@ test('WORK10/COMP04: an Access claim denial is terminally recorded and cannot au
   let reads = 0;
   const env = environment(async query => {
     if (query.includes('ASK')) return { boolean: true };
+    if (query.includes('SELECT ?nativeDigest')) return { results: { bindings: [] } };
     reads++;
     return { results: { bindings: reads === 1 ? [] : [graphRow(cancelled)] } };
   });
@@ -312,6 +313,7 @@ test('WORK10/COMP04: a current publication restriction seals an authority-denied
   let reads = 0, writes = 0;
   const env = environment(async query => {
     if (query.includes('ASK')) return { boolean: true };
+    if (query.includes('SELECT ?nativeDigest')) return { results: { bindings: [] } };
     reads++;
     return { results: { bindings: reads === 1 ? [] : [graphRow(denied)] } };
   }, async envelope => {
@@ -449,7 +451,9 @@ function manualPublicationFixture() {
     revokeBeforeCommit: false, revokeAtEmission: false, rightsReads: 0, claims: 0,
     updates: [] as string[], terminal: null as WorkStructurePublicationReceipt | null,
     attribution: null as unknown, source: '', recorded: 0, structureVisible: true, publicationMoved: false,
-    invalidProfileReceipt: false, nativeProfileUnavailable: false, nativeDeadline: false };
+    invalidProfileReceipt: false, nativeProfileUnavailable: false, nativeDeadline: false,
+    expiredAdmission: false, nativeInvalidProof: null as Record<string, string> | null,
+    rejectNextPublication: false, duplicateNativeProof: false, recordedProofs: [] as GraphTerminalProof[] };
   const row = (values: Record<string, string>) => Object.fromEntries(Object.entries(values)
     .map(([key, value]) => [key, { value }]));
   const fuseki = {
@@ -458,6 +462,10 @@ function manualPublicationFixture() {
     query: async (query: string) => {
       if (query.includes('ASK')) return { boolean: query.includes('InvalidProfile')
         ? state.invalidProfileReceipt : true };
+      if (query.includes('SELECT ?nativeDigest')) return { results: { bindings: state.nativeInvalidProof
+        ? Array.from({ length: state.duplicateNativeProof ? 2 : 1 }, () => row(state.nativeInvalidProof!)) : [] } };
+      if (query.includes('SELECT ?digest ?outcome ?kind')) return { results: { bindings: state.nativeInvalidProof
+        ? [row({ digest: state.nativeInvalidProof.nativeDigest!, outcome: `${RV}Cancelled`, kind: `${RV}InvalidProfile` })] : [] } };
       if (query.includes('SELECT ?epoch ?sequence ?hold ?r')) return { results: { bindings: [{ ...row({
         epoch: dataEpoch, sequence: '27', r: work, type: 'work', work, head: workHead, public: 'true' }),
         label: { value: 'Native recipe', 'xml:lang': 'en' } }] } };
@@ -490,6 +498,13 @@ function manualPublicationFixture() {
     },
     commandWithReceipt: async (envelope: { update: string }) => {
       state.updates.push(envelope.update);
+      // The native receipt identity is immutable, including a generic rejection.
+      if (state.nativeInvalidProof) return { status: 'committed' };
+      if (state.rejectNextPublication && envelope.update.includes('rv:Published')) {
+        state.nativeInvalidProof = nativeInvalidPublicationProof();
+        state.invalidProfileReceipt = true;
+        return { status: 'invalid' };
+      }
       if (state.nativeProfileUnavailable) return { status: 'unknown-profile' };
       if (state.nativeDeadline) return { status: 'deadline' };
       if (envelope.update.includes('rv:Published')) {
@@ -510,11 +525,15 @@ function manualPublicationFixture() {
       expect(input).toMatchObject({ requireExplicitGrant: true, scope, action: 'work.publish' });
       expect(input.requestDigest).toBe(workStructurePublicationDigest(manualInput));
       if (state.denied) throw new AdmissionDenied('No Work publication grant');
+      if (state.expiredAdmission) return admission(manualInput, { state: 'claimed',
+        dispatchEligible: false, replayed: true, expiresAt: '2000-01-01T00:00:00.000Z' });
       return admission(manualInput, { state: state.terminal ? 'sealed' : 'registered',
         dispatchEligible: !state.terminal, replayed: !!state.terminal });
     }, claim: async () => { state.claims++; return { ...admission(manualInput,
       { state: 'claimed', dispatchEligible: true, replayed: false }), claimedAt: '2026-10-20T00:00:00Z' }; },
-    recordGraphOutcome: async () => { state.recorded++; } },
+    recordGraphOutcome: async (_id: string, proof: GraphTerminalProof) => {
+      state.recorded++; state.recordedProofs.push(proof);
+    } },
     governance: { store: { withPublicationFence: async (_resources: string[],
       dispatch: (allowed: boolean) => Promise<unknown>) => dispatch(state.allowed) } },
     sourceIntake: { read: async () => { throw new Error('Manual publication must never acquire retained bytes'); } },
@@ -561,6 +580,65 @@ test('publication returns a retained native validation rejection instead of retr
   expect(fixture.state.updates).toHaveLength(0);
   expect(fixture.state.terminal).toBeNull();
   expect(fixture.state.recorded).toBe(0);
+});
+
+function nativeInvalidPublicationProof() {
+  return { nativeDigest: workStructurePublicationDigest(manualInput), nativeId: admissionId,
+    nativeEpoch: authorityEpoch, nativeScope: scope, nativeDataEpoch: dataEpoch, nativeSequence: '88' };
+}
+
+test('fresh native publication validation failure seals the exact finalizer receipt before returning its rejection', async () => {
+  const fixture = manualPublicationFixture();
+  fixture.state.rejectNextPublication = true;
+  const response = await fixture.post();
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ code: 'invalid_request' });
+  expect(fixture.state.claims).toBe(1);
+  expect(fixture.state.updates).toHaveLength(2);
+  expect(fixture.state.updates[1]).toContain('rv:rejectionKind rv:InvalidProfile');
+  expect(fixture.state.terminal).toBeNull();
+  expect(fixture.state.recordedProofs).toEqual([{
+    receipt: workStructurePublicationReceiptIri(admissionId, 'work.publish'), outcome: 'cancelled',
+    admissionId, requestDigest: workStructurePublicationDigest(manualInput), authorityEpoch,
+    scope, dataEpoch, sequence: '88',
+  }]);
+});
+
+test('expired publication retry seals its exact retained native cancellation without claiming or dispatching', async () => {
+  const fixture = manualPublicationFixture();
+  fixture.state.invalidProfileReceipt = true;
+  fixture.state.expiredAdmission = true;
+  fixture.state.nativeInvalidProof = nativeInvalidPublicationProof();
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const response = await fixture.post();
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: 'invalid_request' });
+  }
+  expect(fixture.state.claims).toBe(0);
+  expect(fixture.state.updates).toHaveLength(0);
+  expect(fixture.state.rightsReads).toBe(0);
+  expect(fixture.state.recordedProofs).toEqual(Array.from({ length: 2 }, () => ({
+    receipt: workStructurePublicationReceiptIri(admissionId, 'work.publish'), outcome: 'cancelled',
+    admissionId, requestDigest: workStructurePublicationDigest(manualInput), authorityEpoch,
+    scope, dataEpoch, sequence: '88',
+  })));
+});
+
+test.each(['nativeDigest', 'nativeId', 'nativeEpoch', 'nativeScope', 'nativeDataEpoch', 'nativeSequence',
+  'duplicate'] as const)('expired native publication cancellation rejects mismatched %s proof', async field => {
+  const fixture = manualPublicationFixture();
+  fixture.state.invalidProfileReceipt = true;
+  fixture.state.expiredAdmission = true;
+  fixture.state.nativeInvalidProof = nativeInvalidPublicationProof();
+  if (field === 'duplicate') fixture.state.duplicateNativeProof = true;
+  else fixture.state.nativeInvalidProof[field] = 'different';
+  const response = await fixture.post();
+  expect(response.status).toBe(503);
+  expect(await response.json()).toMatchObject({ code: 'dependency_unavailable' });
+  expect(fixture.state.recorded).toBe(0);
+  expect(fixture.state.claims).toBe(0);
+  expect(fixture.state.updates).toHaveLength(0);
+  expect(fixture.state.rightsReads).toBe(0);
 });
 
 test('publication preserves a definite missing native profile as unavailable', async () => {

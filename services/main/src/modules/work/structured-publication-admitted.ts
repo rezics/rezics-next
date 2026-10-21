@@ -3,9 +3,9 @@ import { CommandRejected } from '../../infrastructure/fuseki.ts';
 import type { VerifiedPublicationAttribution } from './sourced-structure-publication.ts';
 import type { InstructionAdoption } from './instruction-adoption.ts';
 import { AdmissionDenied, AdmissionExpired, AdmissionUnavailable,
-  type AccessAdmissionRegistry, type VerifiedPrincipal } from '../access/admission.ts';
+  type AccessAdmissionRegistry, type RegisteredAdmission, type VerifiedPrincipal } from '../access/admission.ts';
 import { assertGraphAdmissionOpen } from './restore-lineage.ts';
-import { IdempotencyConflict, type WorkActivationEnvironment } from './activate.ts';
+import { GRAPHS, RV, iri, IdempotencyConflict, type WorkActivationEnvironment } from './activate.ts';
 import { PendingAdmittedWork } from './create-admitted.ts';
 import { InvalidPublicationInput, PublicationUnavailable, StalePublicationHead }
   from '../contribution/publish.ts';
@@ -13,8 +13,42 @@ import { changeStructuredWorkPublication, checkedWorkStructurePublicationReceipt
   readWorkStructurePublicationReceipt, sealWorkStructurePublicationAdmission,
   denyWorkStructurePublicationAdmission,
   WorkStructurePublicationRightsDenied,
-  workStructurePublicationDigest, type WorkStructurePublicationInput,
+  workStructurePublicationDigest, workStructurePublicationReceiptIri, type WorkStructurePublicationInput,
   type WorkStructurePublicationReceipt } from './structured-publication.ts';
+
+/** Native validation refusals precede the publication profile's own receipt.
+ * Preserve that immutable receipt and settle Access from its exact generic proof. */
+async function recordNativePublicationRejection(env: WorkActivationEnvironment,
+  access: Pick<AccessAdmissionRegistry, 'recordGraphOutcome'>, admission: RegisteredAdmission,
+  action: 'work.publish' | 'work.withdraw-publication'): Promise<boolean> {
+  const receipt = workStructurePublicationReceiptIri(admission.id, action);
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}>
+    SELECT ?nativeDigest ?nativeId ?nativeEpoch ?nativeScope ?nativeDataEpoch ?nativeSequence WHERE {
+      GRAPH ${iri(GRAPHS.receipts)} {
+        ${iri(receipt)} a rv:OperationReceipt ; rv:outcome rv:Cancelled ;
+          rv:rejectionKind rv:InvalidProfile ; rv:requestDigest ?nativeDigest ;
+          rv:admissionId ?nativeId ; rv:authorityEpoch ?nativeEpoch ;
+          rv:admittedScope ?nativeScope ; rv:dataEpoch ?nativeDataEpoch ; rv:sequence ?nativeSequence .
+      }
+    } LIMIT 2`);
+  const rows = result.results?.bindings ?? [];
+  if (!rows.length) return false;
+  const row = rows[0]!;
+  if (rows.length !== 1 || row.nativeDigest?.value !== admission.requestDigest
+    || row.nativeId?.value !== admission.id || row.nativeEpoch?.value !== admission.authorityEpoch
+    || row.nativeScope?.value !== admission.scope || row.nativeDataEpoch?.value !== env.lineage.dataEpoch
+    || !/^[0-9]+$/.test(row.nativeSequence?.value ?? '')) {
+    throw new AdmissionUnavailable('Native publication rejection does not match its admission');
+  }
+  try {
+    await access.recordGraphOutcome(admission.id, { receipt, outcome: 'cancelled', admissionId: admission.id,
+      requestDigest: admission.requestDigest, authorityEpoch: admission.authorityEpoch, scope: admission.scope,
+      dataEpoch: row.nativeDataEpoch.value, sequence: row.nativeSequence!.value });
+  } catch (cause) {
+    throw new AdmissionUnavailable('Native publication cancellation could not be recorded', { cause });
+  }
+  return true;
+}
 
 /** Access admission and the graph receipt together decide publish and withdrawal outcomes. */
 export async function changeAdmittedWorkStructurePublication(
@@ -38,9 +72,14 @@ export async function changeAdmittedWorkStructurePublication(
     baselineRelatedWork: input.work,
     requireExplicitGrant: input.operation === 'publish' && input.rightsBasis === 'public-domain', scope: `work:publish:${input.work}`, action,
     idempotencyKey: input.idempotencyKey, requestDigest: digest });
+  let nativeRejectionRecorded = false;
   try {
     let terminal: WorkStructurePublicationReceipt | null =
       await readWorkStructurePublicationReceipt(env, registered.id, action);
+    if (!terminal && await recordNativePublicationRejection(env, access, registered, action)) {
+      nativeRejectionRecorded = true;
+      throw new CommandRejected({ status: 'invalid' });
+    }
     if (!terminal && registered.state !== 'sealed') {
       let admission = registered;
       if (registered.dispatchEligible) {
@@ -81,6 +120,9 @@ export async function changeAdmittedWorkStructurePublication(
     return { ...checkedWorkStructurePublicationReceipt(terminal, registered, input, digest),
       replayed: registered.replayed };
   } catch (error) {
+    if (error instanceof CommandRejected && error.result.status === 'invalid' && !nativeRejectionRecorded) {
+      await recordNativePublicationRejection(env, access, registered, action);
+    }
     if (error instanceof CommandRejected || error instanceof IdempotencyConflict || error instanceof InvalidPublicationInput
       || error instanceof PublicationUnavailable || error instanceof StalePublicationHead
       || error instanceof WorkStructurePublicationRightsDenied
