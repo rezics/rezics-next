@@ -1,5 +1,22 @@
 # Execution reset: implement and verify complete slices
 
+## Audit-only execution and routing failures, 2026-10-21
+
+The maintainer stopped standalone frontend optimization. Work only on the
+original 61 findings and the runtime/data needed to prove them. Original audit
+UI repairs continue; domain-leader comparisons, new library research and broad
+polish do not. The Product Goal retains G-2823 only as audit runtime support.
+
+Workspace routing discovery failures are not model-capacity refusals. Leave
+that attempt exited and deliver its manager event instead of automatically
+restarting the same bootstrap. Preserve a working native session and change a
+failed prerequisite before a manager retries. Explicit model-capacity refusals
+retain their existing continuation policy. A zero-tool start counts as failed
+execution, never functional progress. The Program's measured twelve-hour
+attempt audit found 188 such routing failures among 281 attempts; its private
+receipts and limitations are in `one-hour-20261021/EFFICIENCY-REPORT.md` under
+the retained remediation evidence directory.
+
 ## Setup diagnosis and shared infrastructure, 2026-10-21
 
 The maintainer requires concrete alternatives, comparison and execution of the

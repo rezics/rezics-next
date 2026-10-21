@@ -754,9 +754,9 @@ test('a parked auto handoff stays unsettled across repeated passes', async () =>
   expect(existsSync(f.gate)).toBe(false);
 });
 
-// The service ended these turns before any work, with the session intact (16 Sol tasks from 08:25 to
-// 08:52 UTC on 2026-10-14 ended on the routing message).
-for (const message of ['at capacity', 'workspace routing discovery timed out']) test(`a turn refused with "${message}" continues the same session and makes no manager event`, async () => {
+// A real model-capacity refusal can recover in the same session. Workspace routing failures need
+// a manager disposition instead: repeating the same bootstrap does not change the route.
+for (const message of ['at capacity']) test(`a turn refused with "${message}" continues the same session and makes no manager event`, async () => {
   const f = fixture();
   const ledger = f.ledger(); ledger.tasks[f.task.id]!.attempts[0]!.engine = 'codex';
   ledger.tasks[f.task.id]!.attempts[0]!.session = ''; f.save(ledger);
@@ -781,4 +781,25 @@ for (const message of ['at capacity', 'workspace routing discovery timed out']) 
   try { process.kill(task.attempts[1]!.pid, 'SIGKILL'); } catch { /* exited */ }
   const mail = new GoalMailStore({ stateDir: f.state, goals: ['program'] });
   try { expect(managerEvents(f.state, 'program', mail)).toEqual([]); } finally { mail.close(); }
+});
+
+for (const message of ['workspace routing discovery timed out', 'workspace routing discovery failed']) test(`a routing failure "${message}" exits once and wakes its manager`, async () => {
+  const f = fixture();
+  const ledger = f.ledger();
+  ledger.tasks[f.task.id]!.attempts[0]!.engine = 'codex';
+  ledger.tasks[f.task.id]!.attempts[0]!.session = '';
+  f.save(ledger);
+  writeFileSync(f.output, `{"type":"thread.started","thread_id":"routing-session"}\n{"type":"turn.failed","error":{"message":"${message}"}}\n`);
+  await f.execute([`import { finishAttempt } from ${JSON.stringify(join(import.meta.dir, 'tasks.ts'))};
+    await finishAttempt('G-001', 1);`], true);
+  expect(f.ledger().tasks[f.task.id]!.state).toBe('exited');
+  expect(f.ledger().tasks[f.task.id]!.attempts).toHaveLength(1);
+  await f.execute(['settle']);
+  await until(() => !!f.ledger().tasks[f.task.id]!.settlement?.settledAt || existsSync(f.launches));
+  const task = f.ledger().tasks[f.task.id]!;
+  expect(task.state).toBe('exited');
+  expect(task.attempts).toHaveLength(1);
+  expect(existsSync(f.launches)).toBe(false);
+  const mail = new GoalMailStore({ stateDir: f.state, goals: ['program'] });
+  try { expect(managerEvents(f.state, 'program', mail)).toHaveLength(1); } finally { mail.close(); }
 });

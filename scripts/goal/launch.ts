@@ -357,12 +357,12 @@ export function cleanSessionEnd(attempt: Attempt): boolean {
   } catch { return false; }
 }
 
-/** The last event of a Codex attempt is a turn the service refused before any work: no capacity, or no workspace route. */
+/** Only model-capacity refusals retry automatically; routing failures need a manager disposition. */
 export function capacityRefusal(attempt: Attempt): boolean {
   if (!isCodex(engineOf(attempt))) return false;
   try {
     const last = readFileSync(attempt.output, 'utf8').trimEnd().split(/\r?\n/).at(-1) ?? '';
-    return /"type":"turn\.failed"/.test(last) && /at capacity|workspace routing discovery timed out/i.test(last);
+    return /"type":"turn\.failed"/.test(last) && /at capacity/i.test(last);
   } catch { return false; }
 }
 

@@ -3,6 +3,22 @@ areas: []
 ---
 # Product completeness
 
+## Current instruction: standalone frontend work stopped
+
+On 2026-10-21 the maintainer stopped the separately commissioned frontend
+optimization and directed all work to the original 61 audit findings. Do not
+dispatch broad frontend polish, domain-leader comparisons, library research or
+additional product capabilities from the scope below. It is retained as deferred
+intent and does not authorize execution. The separate about project is outside
+this cancellation.
+
+G-2823 remains active only to supply and execute the runtime/data prerequisites
+for the original audit tests. Keep its working services, prepared data and active
+commands intact. Frontend fixes required by the 61 findings continue under audit
+remediation; no standalone product work resumes without a maintainer instruction.
+
+## Deferred product direction
+
 Bring REZICS to a level of completeness that exceeds the strongest relevant
 products in each supported domain. The maintainer explicitly names VNDB and
 Bangumi for catalogue depth, Steam for games, and Reddit and Fandom for community
