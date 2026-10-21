@@ -104,7 +104,7 @@ export const ExhaustedEmpty: Story = { args: { results: { ok: true, data: fixtur
   },
 };
 export const UnsupportedKeepsTheTask: Story = { args: { results: { ok: false, moved: false,
-  status: 400, failure: 'unsupported', problem: { code: 'unsupported_query_shape' } } },
+  status: 400, problem: { code: 'unsupported_query_shape' } } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { name: 'Found in titles and names' })).toBeVisible();
