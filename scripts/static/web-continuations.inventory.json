@@ -510,7 +510,7 @@
       "operation": "<syntax>",
       "rule": "dropped-continuation",
       "expression": "{items:items,locale:locale,avatarQuery:{\"type\":\"AssignmentPattern\",\"decorators\":[],\"left\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"avatarQuery\",\"optional\":false,\"typeAnnotation\":null},\"right\":{\"type\":\"Literal\",\"value\":\"\"},\"optional\":false,\"typeAnnotation\":null},scope:{\"type\":\"AssignmentPattern\",\"decorators\":[],\"left\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"scope\",\"optional\":false,\"typeAnnotation\":null},\"right\":{\"type\":\"ObjectExpression\",\"properties\":[{\"type\":\"Property\",\"kind\":\"init\",\"key\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"kind\",\"optional\":false,\"typeAnnotation\":null},\"value\":{\"type\":\"Literal\",\"value\":\"global\"},\"method\":false,\"shorthand\":false,\"computed\":false,\"optional\":false}]},\"optional\":false,\"typeAnnotation\":null},headingLevel:{\"type\":\"AssignmentPattern\",\"decorators\":[],\"left\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"headingLevel\",\"optional\":false,\"typeAnnotation\":null},\"right\":{\"type\":\"Literal\",\"value\":3},\"optional\":false,\"typeAnnotation\":null}}",
-      "context": "80fa58d61136dd59894b491ff3edbd5b0ad42b5bc6bb030ebbcc99f680375ab7"
+      "context": "a88cb6021ba40a6a8015f5bd24cc5c014c6cca7a80e6cb43b53c2d58d0f81f93"
     },
     {
       "path": "apps/web/features/discover/search-recovery-read.ts",

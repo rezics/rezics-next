@@ -70,6 +70,24 @@ test.each([
 });
 
 
+// Accessibility descriptions and route selection changed these readers' syntax.
+// Their reviewed exceptions must still reject truncated items or altered tokens.
+test.each([
+  ['apps/web/features/home/continue-strip.tsx', 'const shown = items.filter(',
+    'const shown = items.slice(0, 1).filter('],
+  ['apps/web/features/zones/site-route.tsx', 'readMembers(site, route.mount.segment, route.items, locale, state)',
+    'readMembers(site, route.mount.segment, route.items.slice(0, 1), locale, state)'],
+  ['apps/web/features/zones/site-route.tsx',
+    'const { ref } = view.context;\n  const cursor = routeCursor(path, search);',
+    'const { ref } = view.context;\n  const cursor = routeCursor(path, search) + "suffix";'],
+] as const)('reviewed Home and routing contexts reject changed item or cursor flow: %s / %s', (path, before, after) => {
+  const original = readFileSync(join(root, path), 'utf8');
+  expect(original).toContain(before);
+  expect(changedContinuationGroups(continuationInventory([source(original, path)]), accepted.violations)).toEqual([]);
+  expect(changedContinuationGroups(continuationInventory([source(original.replace(before, after), path)]), accepted.violations).length)
+    .toBeGreaterThan(0);
+});
+
 test('stories stay outside production inventory', () => {
   expect(continuationInventory([source('api.get().items', 'apps/web/features/example/read.stories.tsx')])).toEqual([]);
 });

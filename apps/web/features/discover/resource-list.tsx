@@ -3,12 +3,11 @@ import { materializeData } from 'native-i18n';
 import type { UiLocale } from '../../i18n/define.ts';
 import Link from '../shell/localized-link.tsx';
 import { CatalogueGrid } from '../catalogue/catalogue-grid.tsx';
-import { WorkGrid } from '../catalogue/work-shelf.tsx';
 import type { ListPage, ResourceCard } from './api.ts';
 import { browseMessages } from './browse-messages.ts';
 import { browseHref, type BrowseState } from './browse-state.ts';
 import { browseCounts } from './count-messages.ts';
-import { DiscoverResourceCard, resourceWork } from './resource-card.tsx';
+import { DiscoverResourceCard } from './resource-card.tsx';
 import type { BrowseScope } from './scope.ts';
 import { pageMessages } from './page-messages.ts';
 
@@ -28,11 +27,11 @@ export function ResourceList({
   headingLevel?: 2 | 3 | 4;
 }) {
   const t = browseMessages[locale];
-  const works = items.filter(item => item.kind === 'work').map(item => resourceWork(item, scope, locale));
-  if (works.length && works.length === items.length) return <WorkGrid works={works}
-    locale={locale} avatarQuery={avatarQuery} headingLevel={headingLevel} />;
+  // Keep one keyed card tree when a result page changes between mixed and
+  // Works-only results, preserving retained title focus and loaded cover images.
+  const hasWorks = items.some(item => item.kind === 'work');
   return items.length ? (
-    <CatalogueGrid className={works.length ? undefined
+    <CatalogueGrid className={hasWorks ? undefined
       : 'grid-cols-[repeat(auto-fill,minmax(min(100%,16rem),1fr))]'}>
       {items.map((item) => (
         <li key={item.id} className="min-w-0">

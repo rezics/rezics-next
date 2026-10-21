@@ -183,7 +183,19 @@ export const ContainerBreakpoints: Story = {
     const workList = canvas.getByRole('list');
     await assertPacked(workList);
     await expect(within(workList).getByRole('link', { name: book.name.value })).toHaveAttribute('href', title.getAttribute('href'));
+    await expect(workList).toBe(list);
+    await expect(within(workList).getByRole('link', { name: book.name.value })).toBe(title);
+    await expect(workList.querySelector('[data-slot="work-cover"]')).toBe(cover);
     await expect(workList.querySelector('[data-slot="work-cover"]')!.getBoundingClientRect().width).toBeCloseTo(box.width, 1);
+    title.focus();
+    await expect(title).toHaveFocus();
+    // A result update can arrive while the reader is on a retained title.
+    canvas.getByRole('button', { name: 'Toggle All and Works' }).click();
+    await waitFor(() => expect(list.children.length).toBe(items.length));
+    await assertPacked(list);
+    await expect(within(list).getByRole('link', { name: book.name.value })).toBe(title);
+    await expect(list.querySelector('[data-slot="work-cover"]')).toBe(cover);
+    await expect(title).toHaveFocus();
   },
 };
 
