@@ -39,5 +39,6 @@ export async function readBrowseScan<T>(read: (cursor: string | null) => Promise
     result = await read(continuation);
     checkedPages += 1;
   }
-  return { result: result.ok ? result : { ...result, failure: browseReadFailure(result) }, checkedPages };
+  if (!result.ok) return { result: { ...result, failure: browseReadFailure(result) }, checkedPages };
+  return { result, checkedPages };
 }
