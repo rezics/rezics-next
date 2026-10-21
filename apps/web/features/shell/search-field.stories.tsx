@@ -11,7 +11,8 @@ function SearchEntry({ locale }: { locale: UiLocale }) {
   const [destination, setDestination] = useState('');
   return <ShellProvider locale={locale} messages={locale === 'zh-Hans' ? { ...messages, ...zhHans } : messages}
     initialTheme="light" initialCollapsed={false}>
-    <div className="grid max-w-xl gap-4 p-4" onSubmitCapture={event => {
+    <div className="grid max-w-xl gap-4 p-4" onSubmit={event => {
+      if (event.defaultPrevented) return;
       event.preventDefault();
       const form = event.target as HTMLFormElement;
       const url = new URL(form.action);
@@ -73,5 +74,34 @@ export const KeepsScopedConditions: Story = {
     await expect(destination.searchParams.get('include')).toBe('https://schema.org/Book');
     await expect(destination.searchParams.get('ci')).toBe('00000000-0000-4000-8000-000000000001');
     await expect(destination.searchParams.has('cursor')).toBe(false);
+  },
+};
+
+export const UnicodeBoundaryKeepsConditions: Story = {
+  ...KeepsScopedConditions,
+  globals: { viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement), input = canvas.getByRole('searchbox');
+    await userEvent.clear(input);
+    await userEvent.type(input, '𠮷'.repeat(80));
+    await userEvent.click(canvas.getByRole('button', { name: 'Search' }));
+    const output = canvas.getByLabelText('Destination');
+    const destination = new URL(output.textContent!, 'https://example.test');
+    await expect(destination.searchParams.get('q')).toBe('𠮷'.repeat(80));
+    for (const [key, value] of [['lang', 'ja'], ['tab', 'works'], ['include', 'https://schema.org/Book'],
+      ['ci', '00000000-0000-4000-8000-000000000001'], ['cm', 'any']]) {
+      await expect(destination.searchParams.get(key!)).toBe(value);
+    }
+    await expect(destination.searchParams.has('cursor')).toBe(false);
+    await userEvent.type(input, '𠮷');
+    await userEvent.click(canvas.getByRole('button', { name: 'Search' }));
+    await expect(input).toBeInvalid();
+    await expect(output.textContent).toBe(destination.pathname + destination.search);
+    await userEvent.clear(input);
+    await userEvent.type(input, '"雨"');
+    await userEvent.click(canvas.getByRole('button', { name: 'Search' }));
+    const exact = new URL(output.textContent!, 'https://example.test');
+    await expect(exact.searchParams.get('q')).toBe('"雨"');
+    await expect(exact.searchParams.get('lang')).toBe('ja');
   },
 };

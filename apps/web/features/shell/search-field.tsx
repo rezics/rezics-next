@@ -9,6 +9,8 @@ import { useShell } from './shell-provider.tsx';
 import { localizedPath } from '../../i18n/locale.ts';
 import { browseSearchFields } from '../discover/browse-state.ts';
 import { selectionMessages } from '../discover/selection-messages.ts';
+import { phraseStatus } from '../search/state.ts';
+import { messages as searchMessages } from '../search/messages.ts';
 
 function isEditable(target: EventTarget | null): boolean {
   return target instanceof HTMLElement
@@ -41,11 +43,18 @@ export function SearchField() {
     return () => window.removeEventListener('keydown', focusSearch);
   }, []);
 
-  return <form role="search" aria-label={t.searchRegion} action={localizedPath('/discover', locale)} method="get" className="relative w-full">
+  return <form role="search" aria-label={t.searchRegion} action={localizedPath('/discover', locale)} method="get" className="relative w-full"
+    onSubmit={event => {
+      const field = input.current;
+      if (!field) return;
+      field.setCustomValidity(phraseStatus(field.value) === 'long' ? searchMessages[locale].tooLong : '');
+      if (!event.currentTarget.reportValidity()) event.preventDefault();
+    }}>
     {fields.map(([name, value], index) => <input key={`${name}:${index}`} type="hidden" name={name} value={value} />)}
     <Input ref={input} key={current} defaultValue={current} name="q" type="search" size="lg"
-      aria-label={label} placeholder={fields.length ? label : t.searchPlaceholder} maxLength={80}
+      aria-label={label} placeholder={fields.length ? label : t.searchPlaceholder}
       autoComplete="off" enterKeyHint="search"
+      onInput={event => event.currentTarget.setCustomValidity('')}
       onKeyDown={event => {
         if (event.key === 'Enter' && (event.nativeEvent.isComposing || event.keyCode === 229)) event.preventDefault();
       }}
