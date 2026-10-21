@@ -7,9 +7,11 @@ import { selectTestGroups } from '../../../scripts/qa/test.ts';
 import { checkIdentityReaderPin, identityReaderFixture, identityReaderOriginals, identityReaderOutputDirectory,
   validatePreparedIdentityReaderCorpus, validatePreparedIdentityReaderInput, validateIdentityReaderLease,
   validateIdentityReaderAdmission, validatePartialReaderCorpus, validatePartialReaderLease, validatePartialReaderReport,
-  partialReaderSelection, partialReaderControls, readerInvalidBearerSurfaces,
+  partialReaderSelection, partialReaderControls, partialReaderAttachment, readerInvalidBearerSurfaces,
   type PartialReaderInput, type PartialReaderLease, type PartialReaderCorpus, type ReaderOriginalTest,
+  type PartialReaderDisposal, type PartialReaderSession,
   type PreparedIdentityReaderInput, type IdentityReaderLease } from '../support/identity-reader-fixture.ts';
+import { personaSession } from '../support/personas.ts';
 
 // These are stack-free shape examples, never live qualification or successful API answers.
 const sha = 'a'.repeat(64);
@@ -294,4 +296,197 @@ test('goalctl forwards the anchored whole-body selector and Bun executes exactly
     execFileSync('bun', ['test', path, ...flags], { stdio: 'pipe' });
     expect(() => validatePartialReaderReport(readFileSync(junit, 'utf8'), plan.selected)).not.toThrow();
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+// Behavioral unit boundary only: no real Account, OAuth server, custody or runtime cleanup is qualified here.
+function attachmentUnit() {
+  mkdirSync('.temp', { recursive: true });
+  const dir = mkdtempSync(resolve('.temp/identity-reader-cleanup-unit-'));
+  const admitted = partialInput(), controls = partialCorpus();
+  validatePartialReaderCorpus(controls, admitted);
+  const flags = { expired: false, tokenStatus: 200, signOutStatus: 200, absenceStatus: 200,
+    retainFailure: false, closeFailure: false, accountMismatch: false, sessionPersists: false };
+  const foreign = 'unit-foreign-cookie=untouched', live = new Set([foreign]);
+  const registered: PartialReaderSession[] = [], owned = new Map<string, PartialReaderSession>();
+  const events: string[] = [], cleanup: { method: string; path: string; cookie: string; origin: string | null }[] = [];
+  let count = 0, activeCalls = 0;
+  let mutate: (receipt: PartialReaderDisposal) => void = () => {};
+  const visitor = personaSession(admitted.mainOrigin, admitted.accountService, null);
+  visitor.account = async (method, path, body) => {
+    if (method !== 'POST' || path !== '/api/auth/sign-in/email') throw new Error('unexpected unit Account call');
+    const principal = Object.values(controls.realm.identities).find(identity => identity.email === (body as { email: string }).email);
+    if (!principal) throw new Error('unit login did not use a retained principal');
+    const cookie = `unit-child-${++count}=own`;
+    live.add(cookie); events.push('cookie');
+    return Response.json({ user: { id: flags.accountMismatch ? 'unexpected-unit-account' : principal.accountId } },
+      { headers: { 'set-cookie': cookie + '; HttpOnly; Path=/' } });
+  };
+  const current = Date.now();
+  const bound: PartialReaderLease = { ...partialLease(),
+    activatedAt: new Date(current - 1000).toISOString(), expiresAt: new Date(current + 599000).toISOString(),
+    assertActive() { activeCalls++; if (flags.expired) throw new Error('unit ordinary read lease expired'); },
+    retainSession(session) {
+      events.push(session.oauth ? 'retain-oauth' : 'retain-cookie');
+      registered.push({ ...session }); owned.set(session.cookie, { ...session });
+      if (flags.retainFailure) throw new Error('unit private registration rejected');
+    },
+    async closeAttachment() {
+      events.push('cleanup');
+      if (flags.closeFailure) throw new Error('unit custodian cleanup rejected');
+      const sessions: PartialReaderDisposal['sessions'] = [];
+      // Explicit fake custodian performs the real owner's two-request protocol for its exact registry only.
+      for (const session of owned.values()) {
+        const headers = { cookie: session.cookie, origin: admitted.accountOrigin };
+        const request = async (method: string, path: string) => {
+          cleanup.push({ method, path, cookie: headers.cookie, origin: headers.origin });
+          if (path === '/api/auth/sign-out') {
+            if (flags.signOutStatus === 200 && !flags.sessionPersists) live.delete(headers.cookie);
+            return Response.json({}, { status: flags.signOutStatus });
+          }
+          if (path === '/api/auth/get-session')
+            return Response.json(live.has(headers.cookie) ? { session: { id: 'unit-still-present' } } : null,
+              { status: flags.absenceStatus });
+          throw new Error('unexpected unit cleanup request');
+        };
+        const signOut = await request('POST', '/api/auth/sign-out');
+        const absence = await request('GET', '/api/auth/get-session');
+        const after: unknown = await absence.json();
+        sessions.push({ accountId: session.accountId, cookieSha256: createHash('sha256').update(session.cookie).digest('hex'),
+          signOutStatus: signOut.status, absenceStatus: absence.status, sessionAfterSignOut: after as null,
+          ownCookieSessionAbsenceConfirmed: signOut.status === 200 && absence.status === 200 && after === null });
+      }
+      const receipt: PartialReaderDisposal = { format: 'identity-reader-own-session-disposal-v1', leaseId: bound.id,
+        recordedJobId: bound.recordedJobId, accountService: admitted.accountService, accountOrigin: admitted.accountOrigin,
+        sessions, peerSessionsChanged: false, refreshFamilyRevocation: 'UNCONFIRMED', finalBearerIntrospection: 'UNCONFIRMED' };
+      mutate(receipt);
+      const path = resolve(dir, 'disposal.json'), bytes = JSON.stringify(receipt);
+      writeFileSync(path, bytes, { mode: 0o600 });
+      return { path, sha256: createHash('sha256').update(bytes).digest('hex') };
+    },
+  };
+  const attachment = partialReaderAttachment(controls, visitor, admitted, bound, async (url, init) => {
+    const target = new URL(url);
+    if (target.origin !== admitted.accountService) throw new Error('unit OAuth left retained Account boundary');
+    if (target.pathname === '/api/auth/oauth2/authorize') {
+      events.push('authorize');
+      expect(owned.has(new Headers(init?.headers).get('cookie')!)).toBe(true);
+      const callback = new URL(controls.realm.auth.redirectUris[0]!);
+      callback.searchParams.set('code', 'unit-code');
+      callback.searchParams.set('state', target.searchParams.get('state')!);
+      return new Response(null, { status: 302, headers: { location: callback.href } });
+    }
+    if (target.pathname === '/api/auth/oauth2/token') {
+      events.push('token');
+      return Response.json(flags.tokenStatus === 200
+        ? { access_token: 'unit-access-token', refresh_token: 'unit-refresh-token', token_type: 'Bearer',
+          expires_in: 300, scope: controls.realm.auth.scope } : { error: 'unit-token-refused' }, { status: flags.tokenStatus });
+    }
+    throw new Error('unexpected unit HTTP request');
+  });
+  return { attachment, flags, registered, events, cleanup, foreign, live,
+    activeCalls: () => activeCalls, mutateReceipt(fn: typeof mutate) { mutate = fn; },
+    expire() { flags.expired = true; bound.expiresAt = new Date(Date.now() - 1).toISOString(); },
+    remove() { rmSync(dir, { recursive: true, force: true }); } };
+}
+
+test('actual partial login retains its own cookie before OAuth failure and cleanup preserves the foreign session', async () => {
+  const unit = attachmentUnit();
+  try {
+    unit.flags.tokenStatus = 503;
+    await expect(unit.attachment.login('stranger', '/reader/next')).rejects.toThrow('unit-token-refused');
+    expect(unit.events).toEqual(['cookie', 'retain-cookie', 'authorize', 'token']);
+    expect(unit.registered).toHaveLength(1);
+    expect(unit.registered[0]!.oauth).toBeUndefined();
+    await unit.attachment.close();
+    expect(unit.cleanup).toEqual([
+      { method: 'POST', path: '/api/auth/sign-out', cookie: unit.registered[0]!.cookie, origin: input().accountOrigin },
+      { method: 'GET', path: '/api/auth/get-session', cookie: unit.registered[0]!.cookie, origin: input().accountOrigin },
+    ]);
+    expect([...unit.live]).toEqual([unit.foreign]);
+  } finally { unit.remove(); }
+});
+
+test('actual partial OAuth augments each same own cookie and closes exactly the five created sessions', async () => {
+  const unit = attachmentUnit();
+  try {
+    for (const name of ['stranger', 'member', 'owner', 'moderator', 'operator'] as const) {
+      const result = await unit.attachment.login(name, '/reader/next');
+      const [cookie, grant] = unit.registered.slice(-2);
+      expect(cookie!.accountId).toBe(`${name}-account`);
+      expect(grant!.cookie).toBe(cookie!.cookie);
+      expect(grant!.accountId).toBe(cookie!.accountId);
+      expect(cookie!.oauth).toBeUndefined();
+      expect(grant!.oauth!.accessToken).toBe('unit-access-token');
+      expect(result.person.accountId).toBe(grant!.accountId);
+      expect(result.callbacks).toHaveLength(1);
+      expect(JSON.parse(result.state).next).toBe('/reader/next');
+    }
+    await unit.attachment.close();
+    expect(unit.cleanup).toHaveLength(10);
+    expect(new Set(unit.cleanup.map(call => call.cookie)).size).toBe(5);
+    expect(unit.cleanup.some(call => call.cookie === unit.foreign)).toBe(false);
+    expect(unit.registered.some(session => session.cookie === unit.foreign)).toBe(false);
+    expect([...unit.live]).toEqual([unit.foreign]);
+  } finally { unit.remove(); }
+});
+
+test('partial close performs only own cleanup after ordinary reads expire and prevents further login', async () => {
+  const unit = attachmentUnit();
+  try {
+    const result = await unit.attachment.login('stranger', '/reader/next');
+    unit.expire();
+    expect(() => result.request('GET', '/api/me')).toThrow('fresh finite ten-minute lease');
+    await expect(unit.attachment.login('member', '/reader/next')).rejects.toThrow('fresh finite ten-minute lease');
+    const calls = unit.activeCalls();
+    await unit.attachment.close();
+    expect(unit.activeCalls()).toBe(calls);
+    expect(unit.cleanup).toHaveLength(2);
+    expect([...unit.live]).toEqual([unit.foreign]);
+    await expect(unit.attachment.login('member', '/reader/next')).rejects.toThrow('attachment is closing');
+  } finally { unit.remove(); }
+});
+
+for (const [flag, error] of [['retainFailure', 'private registration rejected'],
+  ['accountMismatch', 'changed Account identity']] as const)
+  test(`partial login ${flag} still retains the newly returned own cookie for cleanup`, async () => {
+    const unit = attachmentUnit();
+    try {
+      unit.flags[flag] = true;
+      await expect(unit.attachment.login('stranger', '/reader/next')).rejects.toThrow(error);
+      expect(unit.registered).toHaveLength(1);
+      expect(unit.events).not.toContain('authorize');
+      await unit.attachment.close();
+      expect([...unit.live]).toEqual([unit.foreign]);
+    } finally { unit.remove(); }
+  });
+
+for (const flag of ['signOutStatus', 'absenceStatus', 'sessionPersists', 'closeFailure'] as const)
+  test(`partial close propagates ${flag} failure rather than accepting cleanup`, async () => {
+    const unit = attachmentUnit();
+    try {
+      await unit.attachment.login('stranger', '/reader/next');
+      if (flag === 'signOutStatus' || flag === 'absenceStatus') unit.flags[flag] = 503;
+      else unit.flags[flag] = true;
+      unit.expire();
+      await expect(unit.attachment.close()).rejects.toThrow(flag === 'closeFailure' ? 'custodian cleanup rejected' : 'session absence not established');
+      expect(unit.live.has(unit.foreign)).toBe(true);
+    } finally { unit.remove(); }
+  });
+
+for (const [label, change] of [
+  ['foreign session substituted', (r: PartialReaderDisposal) => { r.sessions[0]!.cookieSha256 = createHash('sha256').update('unit-foreign-cookie=untouched').digest('hex'); }],
+  ['missing own session', (r: PartialReaderDisposal) => { r.sessions = []; }],
+  ['duplicate own session', (r: PartialReaderDisposal) => { r.sessions.push(r.sessions[0]!); }],
+  ['another Account', (r: PartialReaderDisposal) => { r.sessions[0]!.accountId = 'foreign-unit-account'; }],
+  ['another lease', (r: PartialReaderDisposal) => { r.leaseId = 'another-lease'; }],
+  ['unconfirmed absence', (r: PartialReaderDisposal) => { r.sessions[0]!.ownCookieSessionAbsenceConfirmed = false; }],
+  ['overstated revocation', (r: PartialReaderDisposal) => { Object.assign(r, { refreshFamilyRevocation: 'confirmed' }); }],
+] as const) test(`partial close rejects receipt with ${label}`, async () => {
+  const unit = attachmentUnit();
+  try {
+    await unit.attachment.login('stranger', '/reader/next');
+    unit.mutateReceipt(change);
+    await expect(unit.attachment.close()).rejects.toThrow('own-');
+    expect(unit.live.has(unit.foreign)).toBe(true);
+  } finally { unit.remove(); }
 });

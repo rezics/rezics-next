@@ -93,8 +93,16 @@ export type PartialReaderLease = Omit<IdentityReaderLease, 'fault'> & {
   selectedOriginalTests: ReaderOriginalTest[]; requiredControls: ReaderControl[];
   /** Private cleanup registry: first the real Account cookie, then the same cookie's OAuth grant. Never log either. */
   retainSession(session: PartialReaderSession): void;
-  /** Dispose the actual child OAuth attachment, preserving the parent's runtime custody. */
+  /** Bounded own-cookie sign-out/absence cleanup, also after the ordinary read lease expires.
+   * Return a pinned PartialReaderDisposal; refresh-family/final-bearer revocation remains unconfirmed. */
   closeAttachment(): Promise<IdentityReaderPin>;
+};
+export type PartialReaderDisposal = {
+  format: 'identity-reader-own-session-disposal-v1'; leaseId: string; recordedJobId: string;
+  accountService: string; accountOrigin: string;
+  sessions: { accountId: string; cookieSha256: string; signOutStatus: number; absenceStatus: number;
+    sessionAfterSignOut: null; ownCookieSessionAbsenceConfirmed: boolean }[];
+  peerSessionsChanged: false; refreshFamilyRevocation: 'UNCONFIRMED'; finalBearerIntrospection: 'UNCONFIRMED';
 };
 export type PartialReaderCustody = {
   attachIdentityReader(input: PartialReaderInput): Promise<PartialReaderLease>;
@@ -417,7 +425,6 @@ async function partialPreparedFixture(input: PartialReaderInput) {
   const lease = await owner.attachIdentityReader(input);
   const active = () => { validatePartialReaderLease(lease, input); lease.assertActive(); };
   active(); checkIdentityReaderPin(lease.activation);
-  const controls = partialReaderControls(corpus, input);
   const visitor = personaSession(input.mainOrigin, input.accountService, null, undefined, undefined,
     undefined, 'visitor', undefined, undefined, input.accountOrigin);
   const guarded = (call: PersonaSession['main']): PersonaSession['main'] => (...args) => { active(); return call(...args); };
@@ -429,10 +436,56 @@ async function partialPreparedFixture(input: PartialReaderInput) {
     sourceEquivalence: input.sourceEquivalence, productRevision: lease.productRevision, productTree: lease.productTree,
     selection: partialReaderSelection(input), assertionsReached: false,
   }) + '\n', { mode: 0o600 });
-  return { sessions: { visitor }, corpus: controls.corpus, get fault() { return controls.fault; }, mainOrigin: input.mainOrigin,
-    login: identityLogin(controls.corpus, visitor, input.mainOrigin, input.accountService, input.accountResource, active,
-      session => lease.retainSession(session)),
-    async close() { checkIdentityReaderPin(await lease.closeAttachment()); },
+  const attachment = partialReaderAttachment(corpus, visitor, input, lease);
+  return { sessions: { visitor }, mainOrigin: input.mainOrigin, corpus: attachment.corpus,
+    get fault() { return attachment.fault; }, login: attachment.login, close: attachment.close,
+  };
+}
+
+/** The executable attachment flow; tests may supply an explicit Account/OAuth HTTP boundary. */
+export function partialReaderAttachment(corpus: PartialReaderCorpus, visitor: PersonaSession,
+  input: PartialReaderInput, lease: PartialReaderLease, send: NonNullable<LocalOAuthClient['fetch']> = fetch) {
+  const controls = partialReaderControls(corpus, input), owned = new Map<string, PartialReaderSession>();
+  let closing = false;
+  const active = () => {
+    preparedRequired(!closing, 'attachment is closing');
+    validatePartialReaderLease(lease, input); lease.assertActive();
+  };
+  const retain = (session: PartialReaderSession) => {
+    const previous = owned.get(session.cookie);
+    preparedRequired(!previous || previous.accountId === session.accountId, 'own cookie Account binding differs');
+    // Keep the exact newly returned cookie even when registration or later OAuth setup fails.
+    owned.set(session.cookie, { ...session });
+    lease.retainSession({ ...session });
+  };
+  return { corpus: controls.corpus, get fault() { return controls.fault; },
+    login: identityLogin(controls.corpus, visitor, input.mainOrigin, input.accountService, input.accountResource,
+      active, retain, send),
+    async close() {
+      closing = true;
+      // Cleanup is an existing separate bounded capability, never an ordinary read guarded by active().
+      const receipt = await lease.closeAttachment();
+      const value: unknown = JSON.parse(readFileSync(checkIdentityReaderPin(receipt), 'utf8'));
+      preparedRequired(record(value) && value.format === 'identity-reader-own-session-disposal-v1'
+        && value.leaseId === lease.id && value.recordedJobId === lease.recordedJobId
+        && value.accountService === input.accountService && value.accountOrigin === input.accountOrigin,
+      'own-session disposal receipt binding differs');
+      preparedRequired(value.peerSessionsChanged === false && value.refreshFamilyRevocation === 'UNCONFIRMED'
+        && value.finalBearerIntrospection === 'UNCONFIRMED', 'own-session disposal scope differs');
+      const expected = new Map([...owned.values()].map(session =>
+        [createHash('sha256').update(session.cookie).digest('hex'), session.accountId]));
+      preparedRequired(Array.isArray(value.sessions) && value.sessions.length === expected.size,
+        'own-session disposal receipt does not cover exact child sessions');
+      for (const session of value.sessions) {
+        preparedRequired(record(session) && typeof session.cookieSha256 === 'string'
+          && expected.has(session.cookieSha256) && expected.get(session.cookieSha256) === session.accountId,
+        'own-session disposal includes a foreign or duplicate session');
+        expected.delete(session.cookieSha256);
+        preparedRequired(session.signOutStatus === 200 && session.absenceStatus === 200
+          && session.sessionAfterSignOut === null && session.ownCookieSessionAbsenceConfirmed === true,
+        'own-cookie sign-out and session absence not established');
+      }
+    },
   };
 }
 
@@ -578,18 +631,19 @@ async function withEnvironment<T>(values: Record<string, string>, fn: () => Prom
 
 function identityLogin(corpus: ReaderCorpus, visitor: PersonaSession, mainOrigin: string,
   accountService: string, resource = Bun.env.ACCOUNT_MAIN_RESOURCE, active: () => void = () => {},
-  retainSession?: (session: PartialReaderSession) => void) {
+  retainSession?: (session: PartialReaderSession) => void, send: NonNullable<LocalOAuthClient['fetch']> = fetch) {
   return async (name: SignedPersona | 'empty', next: string, scope?: string) => {
     const identity = name === 'empty' ? corpus.emptyIdentity : corpus.realm.identities[name];
     active();
     const login = await visitor.account('POST', '/api/auth/sign-in/email', {
       email: identity.email, password: identity.password,
     });
+    const cookie = login.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
+    // A returned cookie needs own-session cleanup even if the response body or OAuth stage fails.
+    if (cookie) retainSession?.({ accountId: identity.accountId, cookie });
     const account = await fixtureCommand<{ user: { id: string } }>(Promise.resolve(login));
     if (account.user.id !== identity.accountId) throw new Error('SETUP: sign-in changed Account identity');
-    const cookie = login.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
     if (!cookie) throw new Error('SETUP: Account sign-in returned no cookie');
-    retainSession?.({ accountId: identity.accountId, cookie });
     const state = JSON.stringify({ next, nonce: randomUUID() }), callbacks: string[] = [];
     const auth = corpus.realm.auth;
     const client: LocalOAuthClient = { account: auth.accountOrigin, service: accountService,
@@ -597,7 +651,7 @@ function identityLogin(corpus: ReaderCorpus, visitor: PersonaSession, mainOrigin
       resource,
       async fetch(input, init) {
         active();
-        const response = await fetch(input, init);
+        const response = await send(input, init);
         const location = response.headers.get('location');
         if (location) { const url = new URL(location, auth.accountOrigin);
           if (url.searchParams.has('code')) callbacks.push(url.href); }
@@ -617,7 +671,7 @@ function identityLogin(corpus: ReaderCorpus, visitor: PersonaSession, mainOrigin
     // A fixed captured bearer and one session key observe the first answer:
     // no identity substitution, bearer renewal or automatic read retries.
     const bearer = oauth.accessToken;
-    const request = (method: string, path: string, body?: unknown, key?: string) => { active(); return fetch(new URL(path, mainOrigin), {
+    const request = (method: string, path: string, body?: unknown, key?: string) => { active(); return send(new URL(path, mainOrigin), {
       method, redirect: 'manual', signal: AbortSignal.timeout(30_000),
       headers: { authorization: `Bearer ${bearer}`, 'x-session-key': sessionKey,
         ...(body === undefined ? {} : { 'content-type': 'application/json' }),
