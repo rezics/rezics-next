@@ -3,6 +3,7 @@ import type {
   FilterDocument,
 } from '../../../../model/definitions/filter-document-v1.ts';
 import { browseCategories } from '../catalogue/registry.ts';
+import { searchText } from '../search/state.ts';
 import type { DiscoveryPage, MainClient, WorkName } from './types.ts';
 
 /** Main's shared list envelope for resource browsing and remote pickers. */
@@ -122,7 +123,11 @@ export function discoveryApi(main: Pick<MainClient, 'v1'>, locale: string, actin
   const headers = { 'accept-language': locale };
   return {
     async resources(query: ResourceQuery) {
-      const result = await value(contract.v1.query.post(query, { headers }));
+      const text = query.q ? searchText(query.q) : null;
+      const request = !text ? query : 'keywords' in text
+        ? { ...query, q: text.keywords, matchMode: 'keywords' as const }
+        : { ...query, q: text.phrase, matchMode: 'phrase' as const };
+      const result = await value(contract.v1.query.post(request, { headers }));
       if (result.result.profile !== 'resource-list-v1') throw new BrowseReadError(503);
       return servedPage(result.result, 'resource-list-v1', query.cursor);
     },
