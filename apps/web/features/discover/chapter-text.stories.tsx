@@ -104,6 +104,12 @@ export const EqualTitlesKeepNativeReleaseFacts: Story = { args: { read: { ok: tr
   await expect(within(cards[1]!).getByText(/Community 12345678/)).toBeVisible();
   await expect(within(cards[1]!).queryByRole('list', { name: 'Releases' })).toBeNull();
   await expect(within(cards[2]!).queryByText(/internal-format-without-a-reader-label|Main Version|1898|2021/)).toBeNull();
+  await userEvent.tab();
+  await expect(canvas.getAllByRole('link', { name: 'The Lantern Road' })[0]).toHaveFocus();
+  await userEvent.tab();
+  await expect(formal).toHaveFocus();
+  await userEvent.tab();
+  await expect(within(cards[0]!).getByRole('link', { name: 'Example archive' })).toHaveFocus();
 } };
 export const SimplifiedChineseExcerptPhone: Story = { args: { locale: 'zh-Hans',
   read: { ok: true, page: { ...read.page, hits: [{ ...read.page.hits[0]!, excerpt: chineseExcerpt,
