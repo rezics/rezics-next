@@ -15,6 +15,7 @@ import { STATEMENT_FAMILIES } from './receipt-family.ts';
 import { checkedStatementMeaningV2, statementMeaningKeyV2, statementNativeId, StatementV2Rejected,
   STATEMENT_V2_PROFILE, type StatementCoverage, type StatementMeaningV2 } from './v2-schema.ts';
 import { resolveStatementCoverage, StatementCoverageHidden } from './v2-coverage.ts';
+import { retainedStatementCoverageReader } from './retained-coverage.ts';
 import { relationAttributionVerifier } from '../relation/attribution.ts';
 
 const RDF = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#';
@@ -278,12 +279,13 @@ export async function readAdoptedStatementV2(session: WorkReadSession, statement
   }
   let coverage;
   const attribution = relationAttributionVerifier(session.deps.relationAttribution, session.principal, session.options.actingSubject);
+  const retained = retainedStatementCoverageReader(session.deps, session.principal, session.options.actingSubject);
   try { coverage = await resolveStatementCoverage(env, snapshot.meaning, canRead, canRead, disclose,
-    refs => readableReferences(session, refs), attribution); }
+    refs => readableReferences(session, refs), attribution, retained); }
   catch (error) { if (error instanceof StatementCoverageHidden) throw new StatementNotFound('Statement is unavailable'); throw error; }
   session.observeDependency(`statement-coverage:${statement}:${revision}`, coverage,
     () => resolveStatementCoverage(env, snapshot.meaning, async ref => (await readableReferences(session, [ref])).has(ref),
-      async ref => (await readableReferences(session, [ref])).has(ref), disclose, refs => readableReferences(session, refs), attribution));
+      async ref => (await readableReferences(session, [ref])).has(ref), disclose, refs => readableReferences(session, refs), attribution, retained));
   const readMeaning = () => readStatementV2MeaningBasis(snapshot, (body, limit) => session.query(body, limit), canReadPrivate);
   const meaningBasis = await readMeaning();
   session.observeDependency(`statement-meaning-basis:${statement}:${revision}`, meaningBasis, readMeaning);

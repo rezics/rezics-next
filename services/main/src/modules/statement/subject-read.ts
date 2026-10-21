@@ -9,7 +9,9 @@ import { subjectStatementPage } from '../entity-page/contract.ts';
 import { isStructuralProperty } from '../entity-page/structural-properties.ts';
 import { visibleResourceReferences } from '../entity-page/read.ts';
 import { readCurrentComponent } from '../semantic/change.ts';
-import { resolveTargets } from '../target/resolve.ts';
+import { resolveTargets, TargetNotBound, TargetUnavailable } from '../target/resolve.ts';
+import { canReadCompositionResource } from '../composition/disclosure-read.ts';
+import { NATIVE_ID, readCompositionHeader } from '../structure/graph.ts';
 import { GRAPHS, RV, iri, lit } from '../work/activate.ts';
 import {
   decodeReadCursor,
@@ -60,7 +62,7 @@ type StatementInventory = 'publication' | 'raw' | 'neighbourhood';
  * or behind the read. The subject is bound, so the scan cannot walk the dataset.
  * A torn coverage row is refused by the caller; this path is only the lag. */
 async function subjectNeighbourhood(session: WorkReadSession, resource: string,
-  after: StatementSeekOrder | null, frames?: readonly Coordinate[]): Promise<StatementSeekCandidate[]> {
+  after: StatementSeekOrder | null, frames?: readonly Coordinate[], predicate?: string): Promise<StatementSeekCandidate[]> {
   const frame = frames ? framePattern(frames, '?statement', GRAPHS.current) : null;
   const score = frame ? frame.score : '0';
   const continued = after ? `FILTER(?neighbourScore < ${after.score} || (?neighbourScore = ${after.score} && (
@@ -71,6 +73,7 @@ async function subjectNeighbourhood(session: WorkReadSession, resource: string,
   const rows = await session.query(`SELECT ?statement ?predicate ?key ?neighbourScore WHERE {
     GRAPH ${iri(GRAPHS.current)} { ?statement rdf:subject ${iri(resource)} ; a rdf:Statement ;
       rv:statementState rv:Active ; rdf:predicate ?predicate ; rv:meaningKey ?key . }
+    ${predicate ? `FILTER(?predicate = ${iri(predicate)})` : ''}
     ${frame ? frame.filter : ''}
     BIND(${score} AS ?neighbourScore)
     ${continued}
@@ -192,21 +195,48 @@ function list(value: string | undefined, maximum: number): string[] {
   return values;
 }
 
+/** Collection facts use the existing membership Structure as their owner.
+ * This does not grant Collection a generic capability target or Work revision. */
+export async function requireCollectionStatementSubject(session: WorkReadSession, collection: string): Promise<void> {
+  if (!NATIVE_ID.test(collection) || !await canReadCompositionResource(session, collection)) {
+    throw new WorkReadMissing('Collection is unavailable');
+  }
+  await readingBoundary(session).require(collection);
+  const roots = await session.query(`SELECT ?structure WHERE {
+    GRAPH ${iri(GRAPHS.current)} { ${iri(collection)} a rv:Collection ;
+      rv:collectionState rv:Active ; rv:structure ?structure . } } LIMIT 2`, 2);
+  if (roots.length !== 1 || !roots[0]?.structure) throw new WorkReadUnavailable('Collection Structure is unavailable');
+  const header = await readCompositionHeader(session.deps.environment, roots[0].structure.value);
+  if (!header || header.profile !== 'collection-membership' || header.owner !== collection
+    || header.component !== collection) throw new WorkReadUnavailable('Collection Structure is unavailable');
+}
+
+async function requireStatementSubject(session: WorkReadSession, resource: string): Promise<void> {
+  try { await resolveTargets(session, [resource], 'discussion'); }
+  catch (error) {
+    if (!(error instanceof TargetNotBound || error instanceof TargetUnavailable)) throw error;
+    await requireCollectionStatementSubject(session, resource);
+  }
+}
+
 export async function readSubjectStatements(
   session: WorkReadSession,
   resource: string,
   context = GLOBAL_CLASSIFICATION_CONTEXT,
   frames?: readonly Coordinate[],
+  selection?: { predicate: string; adoptedOnly: true; limit: number; requireSubject: () => Promise<void> },
 ): Promise<Page> {
-  await resolveTargets(session, [resource], 'discussion');
+  const requireSubject = selection?.requireSubject ?? (() => requireStatementSubject(session, resource));
+  await requireSubject();
   const boundary = readingBoundary(session);
   await boundary.require(resource);
   const scope = await acceptanceScope(session, context);
+  if (selection && !scope) throw new WorkReadUnavailable('Statement acceptance scope is unavailable');
   const seek = session.deps.statementSeek;
   if (!seek) throw new WorkReadUnavailable('Statement seek owner is unavailable');
   // A null active-policy match is not absence: the owning basis query requires
   // no current Global facts of any predicate before enabling this narrow branch.
-  const publicationBasis = !frames && !scope && context === GLOBAL_CLASSIFICATION_CONTEXT
+  const publicationBasis = !selection && !frames && !scope && context === GLOBAL_CLASSIFICATION_CONTEXT
     ? await seek.capturePublicationBasis(resource) : null;
   // Coverage that has not been built, or has not reached this read, is lag.
   // The subject's own graph is already the answer: an empty subject is a complete
@@ -228,7 +258,10 @@ export async function readSubjectStatements(
     inventory = indexed?.complete && indexed.through_sequence === session.position.sequence
       ? 'raw' : 'neighbourhood';
   }
-  const limit = session.options.limit ?? SUBJECT_STATEMENT_COST.pageSize;
+  // A finite property read proves absence through its bound native subject and
+  // predicate, never through the first generic fact page or a lagging index.
+  if (selection) inventory = 'neighbourhood';
+  const limit = selection?.limit ?? session.options.limit ?? SUBJECT_STATEMENT_COST.pageSize;
   if (!Number.isInteger(limit) || limit < 1 || limit > SUBJECT_STATEMENT_COST.pageSize) {
     throw new WorkReadInvalid('Statement page size is invalid');
   }
@@ -240,11 +273,12 @@ export async function readSubjectStatements(
     session.options.actingSubject ?? null,
     await boundary.binding(),
     ...(frames ? [frames] : []),
+    ...(selection ? [selection.predicate, selection.adoptedOnly] : []),
   ];
-  const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
+  const cursor = decodeReadCursor(selection ? undefined : session.options.cursor, binding, session.position);
   let after: { phase: 'component' | 'statement'; predicate?: string; meaningKey?: string; score?: number;
     inventory?: 'neighbourhood';
-  } = { phase: frames ? 'statement' : 'component' };
+  } = { phase: frames || selection ? 'statement' : 'component' };
   if (cursor) {
     try {
       after = JSON.parse(cursor.order) as typeof after;
@@ -289,6 +323,7 @@ export async function readSubjectStatements(
     return allowed;
   };
   const items: Item[] = [];
+  const unavailableAcceptances = new Set<string>();
   const publishedEvidence = new Map<string,WikiEvidenceRow[]>();
   const positions: { phase: 'component' | 'statement'; key: string; predicate?: string; meaningKey?: string; score?: number;
   }[] = [];
@@ -340,7 +375,7 @@ export async function readSubjectStatements(
       }
     }
   };
-  if (!frames && after.phase === 'component') await appendProperties();
+  if (!selection && !frames && after.phase === 'component') await appendProperties();
   if (items.length <= limit && (!frames || after.phase === 'statement')) {
     const coverage = frames ? framePattern(frames, '?statement', GRAPHS.current) : null;
     let statementAfter: StatementSeekOrder | null =
@@ -364,25 +399,37 @@ export async function readSubjectStatements(
             ? await seek.seekPotentialPublication(publicationBasis!,statementAfter)
             : inventory === 'raw'
               ? await seek.seek(session.position,resource,statementAfter,frames)
-              : { candidates: await subjectNeighbourhood(session, resource, statementAfter, frames) };
+              : { candidates: await subjectNeighbourhood(session, resource, statementAfter, frames, selection?.predicate) };
           const rows: ReadRow[] = sought.candidates.map((row) => ({
             statement: {type: 'uri',value: row.statementId},predicate: {type: 'uri',value: row.predicate},
             key: {type: 'uri',value: row.meaningKey},specificity: {type: 'literal',value: String(row.score)},
           }));
-          if (scope && rows.length) {
+          const disclosedCandidates = selection ? await (async () => {
+            const refs = rows.map(row => row.statement!.value);
+            const disclosure = await session.disclosure(refs.map(resource => ({
+              owner: 'graph' as const, resource, component: 'record' as const,
+            })));
+            return boundary.visible(refs.filter((_ref, index) => disclosure[index] === 'visible'));
+          })() : null;
+          const acceptanceRows = disclosedCandidates
+            ? rows.filter(row => disclosedCandidates.has(row.statement!.value)) : rows;
+          if (scope && acceptanceRows.length) {
             const acceptance = scope.realm ? {kind: 'realm' as const,realm: scope.realm} : {kind: 'global' as const};
             const exact = await resolveStatementAcceptancesAt(session.deps.environment,
-              rows.map((row) => ({kind: 'statement',statement: row.statement!.value})),acceptance,session.position,
+              acceptanceRows.map((row) => ({kind: 'statement',statement: row.statement!.value})),acceptance,session.position,
             );
             const qualified = await resolveStatementAcceptancesAt(session.deps.environment,
-              [...new Set(rows.map((row) => row.key!.value))].map((meaningKey) => ({kind: 'qualified-fact',meaningKey,
+              [...new Set(acceptanceRows.map((row) => row.key!.value))].map((meaningKey) => ({kind: 'qualified-fact',meaningKey,
               })),
               acceptance,session.position,
             );
-            for (const row of rows) {
+            for (const row of acceptanceRows) {
               const results = [exact.get(row.statement!.value)!.result,qualified.get(row.key!.value)!.result,
               ];
-              if (results.some((result) => result.state === 'unavailable')) throw new WorkReadUnavailable('Statement acceptance is unavailable');
+              if (results.some((result) => result.state === 'unavailable')) {
+                if (!selection) throw new WorkReadUnavailable('Statement acceptance is unavailable');
+                unavailableAcceptances.add(row.statement!.value);
+              }
               const result = results.find((result) => result.state === 'accepted');
               if (result?.state === 'accepted') row.acceptance = {type: 'literal',value: result.decision+'|'+result.source};
             }
@@ -390,12 +437,16 @@ export async function readSubjectStatements(
           if (rows.some((row) => !row.statement || !row.predicate)) {
             throw new WorkReadUnavailable('Statement inventory is incomplete');
           }
-          const disclosed = rows.length
-            ? await readWikiClaimEvidence(session,rows.map((row) => row.statement!.value),'statement')
+          // Finite reads select adoption first. Their citation reads wait until
+          // hydration has established the Statement's Context and Realm access.
+          const evidenceRows = selection ? [] : acceptanceRows;
+          const disclosed = evidenceRows.length
+            ? await readWikiClaimEvidence(session,evidenceRows.map((row) => row.statement!.value),'statement')
             : new Map<string,WikiEvidenceRow[]>();
-          for (const row of rows) {
+          for (const row of acceptanceRows) {
             const evidence = disclosed.get(row.statement!.value) ?? [];
-            if (row.acceptance?.value || evidence.length) pending.push({row,evidence});
+            if (row.acceptance?.value || unavailableAcceptances.has(row.statement!.value)
+              || !selection?.adoptedOnly && evidence.length) pending.push({row,evidence});
           }
           rawExhausted = rows.length < batchSize;
           if (rows.length) {
@@ -453,9 +504,33 @@ export async function readSubjectStatements(
         ) {
           throw new WorkReadUnavailable('Statement hydration is incomplete or ambiguous');
         }
+        // A finite purpose read cannot let an unreadable Context's value,
+        // sources or incomplete adoption influence its public result.
+        const withheldHydrations = new Set<string>();
+        if (selection) for (const row of hydrated) {
+          if (row.pin && row.disclosure?.value !== `${RV}Public`
+            && !(row.disclosure?.value === `${RV}Private` && row.ctx && await canReadPrivate(row.ctx.value))) {
+            withheldHydrations.add(row.statement!.value);
+          }
+          if (!withheldHydrations.has(row.statement!.value) && row.speakerRealm) {
+            try { await session.realm(row.speakerRealm.value); }
+            catch (error) {
+              if (error instanceof WorkReadMissing) withheldHydrations.add(row.statement!.value);
+              else throw error;
+            }
+          }
+        }
+        const readableHydrated = hydrated.filter(row => !withheldHydrations.has(row.statement!.value));
+        if (selection) {
+          const accepted = new Set(page.filter(row => row.acceptance?.value).map(row => row.statement!.value));
+          const claims = readableHydrated.map(row => row.statement!.value).filter(ref => accepted.has(ref));
+          if (claims.length) for (const [claim, evidence] of await readWikiClaimEvidence(session, claims, 'statement')) {
+            wikiClaims.set(claim, evidence);
+          }
+        }
         const byId = new Map(hydrated.map((row) => [row.statement!.value, row]));
         const qualifications = new Map(
-          hydrated.map((row) => {
+          readableHydrated.map((row) => {
             try {
               return [row.statement!.value, statementQualificationFromBindings([row])] as const;
             } catch (error) {
@@ -466,7 +541,7 @@ export async function readSubjectStatements(
           }),
         );
         const allowed = await checkReferences(
-          hydrated.flatMap((row) => {
+          readableHydrated.flatMap((row) => {
             const value = statementValue(row);
             const qualification = qualifications.get(row.statement!.value);
             return [
@@ -488,6 +563,7 @@ export async function readSubjectStatements(
         const batchItems: Item[] = [];
         const batchPositions: typeof positions = [];
         for (const candidate of page) {
+          if (withheldHydrations.has(candidate.statement!.value)) continue;
           const row = byId.get(candidate.statement!.value);
           if (
             !row?.head ||
@@ -543,7 +619,7 @@ export async function readSubjectStatements(
           const sources = list(row.sources?.value, STATEMENT_LIMITS.evidence);
           const evidence = (wikiClaims.get(row.statement!.value) ?? []).filter((row) => sources.includes(row.id),
           );
-          if (!candidate.acceptance?.value && !evidence.length) continue;
+          if (!candidate.acceptance?.value && !evidence.length && !unavailableAcceptances.has(row.statement!.value)) continue;
           if (
             [...qualifiers.applicability, ...sources].some(
               (ref) => nativeReference.test(ref) && !allowed.has(ref) && !evidence.some((row) => row.id === ref),
@@ -551,6 +627,8 @@ export async function readSubjectStatements(
             qualificationReferences.some((ref) => nativeReference.test(ref) && !allowed.has(ref))
           )
             continue;
+          if (unavailableAcceptances.has(row.statement!.value))
+            throw new WorkReadUnavailable('Statement acceptance is unavailable');
           const [decision, source] = candidate.acceptance?.value.split('|') ?? [];
           if (candidate.acceptance?.value && (!decision || !['local', 'global', 'inherited-global'].includes(source!))) {
             throw new WorkReadUnavailable('Statement acceptance is incomplete');
@@ -613,7 +691,7 @@ export async function readSubjectStatements(
       if (rawExhausted && !pending.length) break;
     }
   }
-  if (frames && items.length <= limit) await appendProperties();
+  if (!selection && frames && items.length <= limit) await appendProperties();
   let nextCursor: string | null = null;
   if (items.length > limit) {
     const last = positions[limit - 1]!;
@@ -651,7 +729,7 @@ export async function readSubjectStatements(
     throw new WorkReadMissing('Reference is unavailable');
   for (const ctx of privateContexts)
     if (!(await canReadPrivate(ctx))) throw new WorkReadMissing('Context is unavailable');
-  await resolveTargets(session, [resource], 'discussion');
+  await requireSubject();
   await boundary.fence();
   if (inventory === 'publication' && publicationBasis) await seek.fencePublicationBasis(publicationBasis);
   const groups = new Map<string, Item[]>();
@@ -667,4 +745,14 @@ export async function readSubjectStatements(
     sourcePosition: session.position,
     count: { value: items.length, kind: 'exact-page', total: null },
   };
+}
+
+/** Internal finite-property read, with the same acceptance, disclosure, literal
+ * hydration and scan/deadline budgets as the public subject owner. The caller
+ * supplies its existing subject owner's admission, rechecked before emission;
+ * Collection Structures do not acquire a generic discussion-target revision. */
+export function readAdoptedSubjectProperty(session: WorkReadSession, resource: string, predicate: string,
+  requireSubject: () => Promise<void>) {
+  return readSubjectStatements(session, resource, GLOBAL_CLASSIFICATION_CONTEXT, undefined,
+    { predicate, adoptedOnly: true, limit: 2, requireSubject });
 }
