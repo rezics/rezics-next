@@ -226,7 +226,7 @@ function ownerProxy(upstream: string) {
   } });
   return { url: `${server.url.origin}${target.pathname.replace(/\/$/, '')}`,
     fail(value: boolean) { unavailable = value; }, get failures() { return failures; },
-    close() { server.stop(true); } };
+    close() { return server.stop(true); } };
 }
 
 export async function fixtureCommand<T>(pending: Promise<Response>, status = 200): Promise<T> {
@@ -422,7 +422,7 @@ export async function identityReaderFixture() {
   const target = `identity-reader-${randomUUID()}`;
   const backups = createCorpusBackupDriver({ sourceRunId, directory: join(directory, 'backups'),
     restoreResourceClass: 'ordinary',
-    async quiesce() { await source?.close(); source = undefined; proxy?.close(); proxy = undefined; },
+    async quiesce() { await source?.close(); source = undefined; await proxy?.close(); proxy = undefined; },
     async smokeRead(copy) {
       proxy = ownerProxy(copy.apps.FUSEKI_URL!);
       mainOrigin = `http://127.0.0.1:${copy.apps.MAIN_PORT}`;
@@ -430,7 +430,7 @@ export async function identityReaderFixture() {
       [sessions] = await withEnvironment({ ...copy.apps, FUSEKI_URL: proxy.url, REZICS_QA_RUN_ID: copy.runId },
         () => restorePersonaRealms([corpus.realm]));
       if (!sessions) throw new Error('SETUP: restored persona Realm is missing');
-      return async () => { await sessions?.close(); proxy?.close(); };
+      return async () => { await sessions?.close(); await proxy?.close(); };
     },
   });
   try {
@@ -509,7 +509,7 @@ export async function identityReaderFixture() {
       totalMs: Date.now() - started, budgetMs: 600_000, assertionsReached: false };
     console.info('IDENTITY_READER_PREPARATION', JSON.stringify(preparation));
     writeFileSync(join(directory, `preparation-${sourceRunId}-${target}.json`), JSON.stringify(preparation, null, 2) + '\n');
-    await source?.close(); await sessions?.close(); proxy?.close();
+    await source?.close(); await sessions?.close(); await proxy?.close();
     await backups.stop(target);
     throw error;
   }
