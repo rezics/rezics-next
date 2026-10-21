@@ -69,3 +69,42 @@ test('passing page items into an imported helper still guards its eligibility fi
   const caller = source('import {eligible} from "../example/read.ts"; async function view(api) { const page=await api.v1.works.get({query:{limit:20}}); return eligible(page.items); }', 'apps/web/features/view/read.ts');
   expect(pageSelections([helper, caller])).toHaveLength(1);
 });
+
+const enrichment = `export async function browse(api, hubSummary) {
+  const page = await api.v1.works.get({ query: { limit: 20 } });
+  const entries = page.items;
+  const kinds = entries.flatMap(entry => bindingSummary(entry, 'kind', hubSummary)?.reference ?? []);
+  const native = page;
+  const output = { result: { native }, kinds };
+  return output;
+}`;
+
+test.each([
+  enrichment,
+  enrichment.replaceAll('bindingSummary', 'lookup').replaceAll('reference', 'label').replaceAll('kinds', 'names'),
+  enrichment.replace('const native = page;', 'const wrapper = { page }; const native = wrapper.page;'),
+  enrichment.replace('return output;', 'return { ...output, label: "Kinds" };'),
+  enrichment.replace('const native = page;', 'const native = page; const allKinds = kinds;').replace('native }, kinds', 'native }, kinds: allKinds'),
+])('separate enrichment does not select an intact returned incidence page: %s', text => {
+  expect(pageSelections([source(text)])).toEqual([]);
+});
+
+test.each([
+  enrichment.replace('return output;', 'return kinds;'),
+  enrichment.replace('return output;', 'return { ...output, result: { native: other } };'),
+  enrichment.replace('return output;', 'return { ...output, ...other };'),
+  enrichment.replace('return output;', 'return { output, replacement: { ...page, items: kinds } };'),
+  enrichment.replace('return output;', 'return { output, replacement: { items: kinds, next: page.next } };'),
+  enrichment.replace('return output;', 'const replacement = { items: kinds }; return { output, replacement };'),
+  enrichment.replace('result: { native }', 'result: { native: { ...native, items: kinds } }'),
+  enrichment.replace('result: { native }', 'result: { native: { ...native, next: null } }'),
+  enrichment.replace('return output;', 'page.items = kinds; return output;'),
+  enrichment.replace('return output;', 'Object.assign(page, { items: kinds }); return output;'),
+  enrichment.replace('return output;', 'entries.pop(); return output;'),
+  enrichment.replace('return output;', 'return page.items.length ? output : { items: [], next: null };'),
+  enrichment.replace("bindingSummary(entry, 'kind', hubSummary)?.reference ?? []", 'entry.kind ? [entry] : []'),
+  enrichment.replace("bindingSummary(entry, 'kind', hubSummary)?.reference ?? []", 'bindingSummary(entry, "kind", hubSummary) ?? []'),
+  enrichment.replace('entries.flatMap', 'entries.filter'),
+])('the same enrichment syntax cannot cover lost pages, overrides, mutations or selected incidences: %s', text => {
+  expect(pageSelections([source(text)])).not.toHaveLength(0);
+});

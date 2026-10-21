@@ -1,7 +1,7 @@
 import { dirname, join, normalize } from 'node:path';
 import { parseSync, type Node } from 'oxc-parser';
 import { isWebDataModule, webChildren as children, webProgram } from './web-source-scan.ts';
-import type { WebSource } from './web-continuations.ts';
+import { pageOutputFlow, type WebSource } from './web-continuations.ts';
 
 export interface PageSelection { path: string; consumer: string; operation: string; predicate: string }
 interface Unit { file: WebSource; name: string; nodes: Node[]; variables: Map<string, Node> }
@@ -23,6 +23,7 @@ export function pageSelections(sources: readonly WebSource[], paged = new Set<st
   const owners = new WeakMap<Node, Unit>();
   const imports = new Map<string, string>();
   const paths = new Set(sources.map(file => file.path));
+  const outputFlows = new Map<WebSource, ReturnType<typeof pageOutputFlow>>();
   const resolve = (path: string, specifier: string) => {
     const target = normalize(join(dirname(path), specifier));
     return [target, `${target}.ts`, `${target}.tsx`, `${target}/index.ts`].find(path => paths.has(path)) ?? target;
@@ -31,6 +32,7 @@ export function pageSelections(sources: readonly WebSource[], paged = new Set<st
   for (const file of sources.filter(file => production(file.path))) {
     const program = webProgram(file);
     if (isWebDataModule(program)) continue;
+    outputFlows.set(file, pageOutputFlow(program));
     const root: Unit = { file, name: '<module>', nodes: [], variables: new Map() };
     units.push(root);
     const visit = (node: Node, unit: Unit, parent?: Node) => {
@@ -169,6 +171,10 @@ export function pageSelections(sources: readonly WebSource[], paged = new Set<st
       return new Set(children(node).flatMap(child => [...origin(child, seen)]));
     };
     const report = (input: Node, predicate: Node, selection: string) => {
+      const flow = outputFlows.get(unit.file)!;
+      const envelope = flow.envelope(input);
+      if (selection === 'flatMap' && envelope && flow.projected(predicate) && flow.retains(envelope, input)
+        && flow.separate(input, predicate)) return;
       // A small result is complete only when a preceding failure branch rejects
       // this same envelope's continuation. Removing that branch removes the proof.
       const items = descendants(input).find(node => node.type === 'MemberExpression' && name(node.property) === 'items');
