@@ -3,13 +3,13 @@ import { authorHref } from '../author/route.ts';
 import { workTypeIri } from '../discover/state.ts';
 import type { ResourceQuery } from '../../../../model/definitions/filter-document-v1.ts';
 import { type MainClient, problemCode, type WorkCover, type WorkName } from '../discover/types.ts';
-import type { SearchState } from './state.ts';
+import { searchText, type SearchState } from './state.ts';
 import { reasonsOf, type SearchContinuation, searchFailureOf, type SearchLoaded, type SearchPage,
   } from './types.ts';
 
 export const SEARCH_PAGE_SIZE = 10;
 
-/** One FilterDocument for the phrase; the UI keeps all chosen values in Query's grammar. */
+/** Ordinary input uses keywords; explicit quotes use the exact alternative. Conditions survive both. */
 export function searchRequest(state: SearchState, continuation?: SearchContinuation): ResourceQuery {
   const included = [...(state.term ? [state.term] : []), ...(state.concepts?.include ?? [])];
   const excluded = state.concepts?.exclude ?? [];
@@ -26,7 +26,7 @@ export function searchRequest(state: SearchState, continuation?: SearchContinuat
     ...(excluded.length ? [{ facet: 'concept', none: excluded.map(iriOf) }] : []),
   ] };
   return { context: state.scope.kind === 'realm' ? { realm: iriOf(state.scope.realm) } : 'global',
-    scope: { kind: 'all' }, text: { phrase: state.phrase }, sort: 'relevance', filter,
+    scope: { kind: 'all' }, text: searchText(state.phrase), sort: 'relevance', filter,
     page: { size: SEARCH_PAGE_SIZE, ...(continuation ? { continuation } : {}) } };
 }
 
@@ -68,9 +68,9 @@ export async function readSearchPage(clients: { search: MainClient; names: MainC
     const { data, error } = await clients.search.v1.query.post(searchRequest(state, options.continuation));
     if (error) return { ok: false, failure: searchFailureOf(error.status, problemCode(error.value)),
       status: error.status, problem: error.value };
-    if (!data || !('results' in data.result)
+    if (!data || !('results' in data.result) || !('next' in data.result) || !('sourcePosition' in data.result)
       || data.result.profile === 'public-content-phrase-page-v1') return { ok: false, failure: 'unavailable' };
-    page = data.result as SearchPage;
+    page = data.result;
   } catch {
     return { ok: false, failure: 'unavailable' };
   }
@@ -103,7 +103,7 @@ export async function readSearchPage(clients: { search: MainClient; names: MainC
       conceptName: named?.get(reasons.classification.concept
         ?? (selected.length === 1 ? selected[0]! : ''))?.name ?? null } : null } }));
   return { ok: true, page: { total: page.total, sequence: page.sourcePosition.sequence,
-    indexGeneration: page.indexGeneration, next: page.next as SearchContinuation | null,
+    indexGeneration: page.indexGeneration, next: page.next,
     facets: 'facets' in page ? page.facets : undefined,
     concepts: selected.flatMap(id => {
       const label = named?.get(id)?.name;

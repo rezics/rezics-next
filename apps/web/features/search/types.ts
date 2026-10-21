@@ -10,10 +10,10 @@ type PagePost = MainClient['v1']['queries']['page']['post'];
 
 export type SearchPageRequest = Parameters<PagePost>[0];
 /** Work-grain pages; this UI never asks for the Content-variant profile. */
-export type SearchPage = Exclude<Ok<PagePost>, { profile: 'public-content-phrase-page-v1' }>;
 type QueryResult = Ok<MainClient['v1']['query']['post']>['result'];
-export type SearchContinuation = NonNullable<SearchPage['next']>
-  | NonNullable<Extract<QueryResult, { profile: 'public-concept-set-phrase-v1' }>['next']>;
+export type SearchPage = Exclude<Ok<PagePost>, { profile: 'public-content-phrase-page-v1' }>
+  | Extract<QueryResult, { profile: 'public-concept-set-phrase-v1' }>;
+export type SearchContinuation = NonNullable<SearchPage['next']>;
 type Match = SearchPage['results'][number];
 
 /** Where the phrase was found: Main ranks title matches first, then credited names, taglines and text. */
