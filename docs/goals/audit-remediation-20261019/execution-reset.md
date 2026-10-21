@@ -17,6 +17,16 @@ attempt audit found 188 such routing failures among 281 attempts; its private
 receipts and limitations are in `one-hour-20261021/EFFICIENCY-REPORT.md` under
 the retained remediation evidence directory.
 
+Assess each class against its original acceptance array, not the accumulated
+breadth of an old task brief. Meaningful production-consumer Storybook
+interactions, actual screenshots and the required server/hydration checks can
+complete rendered-only criteria. Reuse valid matching API/data evidence where
+that criterion needs it; do not add a generic native/persona journey to the
+layout and cover-size classes AUD-007 and AUD-013. Their original assertions
+and independent codex-1 acceptance still stand. A genuine missing original
+assertion is executed, not waived. An already accepted class is not reopened
+because a combined historical report still lists it as open.
+
 ## Setup diagnosis and shared infrastructure, 2026-10-21
 
 The maintainer requires concrete alternatives, comparison and execution of the

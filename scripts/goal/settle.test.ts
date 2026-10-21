@@ -785,6 +785,9 @@ for (const message of ['at capacity']) test(`a turn refused with "${message}" co
 
 for (const message of ['workspace routing discovery timed out', 'workspace routing discovery failed']) test(`a routing failure "${message}" exits once and wakes its manager`, async () => {
   const f = fixture();
+  const worker = join(f.directory, '.temp/bin/codex');
+  copyFileSync(join(f.directory, '.temp/bin/cursor-agent'), worker);
+  chmodSync(worker, 0o755);
   const ledger = f.ledger();
   ledger.tasks[f.task.id]!.attempts[0]!.engine = 'codex';
   ledger.tasks[f.task.id]!.attempts[0]!.session = '';
