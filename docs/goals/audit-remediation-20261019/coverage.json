@@ -459,9 +459,19 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "New sites 后的全体结果缺少可见分区标题",
-      "status": "pending",
-      "owner": null,
-      "proof": []
+      "status": "closed",
+      "owner": "G-2783 + Site original acceptance0159",
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/AUD-009-discover-ui-20261022.json",
+          "finding": "AUD-009",
+          "assessedMain": "efd9afbc0dea69c47ed936524ed9c3935880d06f",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "remainingValidation": [],
+      "disposition": "All four canonical merged UI criteria independently accepted: bilingual default section boundaries at1440/768/390, searchtask/conditions/destination separation, responsive success/empty/unsupported/preparing states; nine currentStorybookplays,13unique newimages,20PNGhashes and16committedsourcepins. No backend or privacy acceptance inferred."
     },
     {
       "id": "AUD-011",

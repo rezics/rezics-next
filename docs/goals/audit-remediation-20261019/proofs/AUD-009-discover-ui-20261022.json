@@ -1,0 +1,220 @@
+{
+  "recordedAt": "2026-10-22T02:20:01.476350+08:00",
+  "finding": "AUD-009",
+  "status": "closed",
+  "assessedMain": "efd9afbc0dea69c47ed936524ed9c3935880d06f",
+  "canonicalSource": ".temp/site-audit-2026-10-18/round-3/all-findings.json#AUD-009",
+  "originalAcceptanceVerbatim": [
+    "搜索模式在正文主层级展示当前查询及匹配范围；探索模式先给可选内容分组或明确类型入口，不能只靠顶栏输入框辨认搜索任务。",
+    "390首屏将当前目的地与主要结果/状态放到全局主题建议之前，条件可展开且保留已选值；Topics筛选与Topics目的地可区分。",
+    "1440/390失败、空、加载和成功都保留区域名及当前条件；与D4-002当前项可见一起验收，不重复AUD-009的既有区段标题结论。",
+    "默认发现页推荐区与全体结果有清楚的可见边界和名称，1440/768/390及en/zh-Hans下读者无需查看aria-label便可区分；视觉标题与语义标题层级一致。"
+  ],
+  "originalAssertionsChanged": false,
+  "independentReview": {
+    "session": "01a15f35-30c7-7791-b4a0-58375f79511c",
+    "engine": "codex-1",
+    "model": "gpt-6.1-sol",
+    "effort": "xhigh",
+    "disposition": {
+      "accepted_canonical_criteria": {
+        "1": "Body-level query and matching scope, preserving previously accepted Explore/type-entry evidence.",
+        "2": "390 task/results ordering, expandable controls retaining selected conditions, and distinguishable Topics destination versus topic filter.",
+        "3": "Region names, selected conditions and current destination persist across success, empty, unsupported failure and Preparing at 1440/390; preserved failure-region evidence remains applicable.",
+        "4": "Prior0147 bilingual default section-boundary acceptance preserved without replay."
+      },
+      "remaining_canonical_ui_criteria": [],
+      "evidence": {
+        "normal_jobs": [
+          "088748ae-90fa-4454-80e2-52bc5e70341e",
+          "22ce83ec-e1f2-4885-adf8-03c314985f0e"
+        ],
+        "jobs_exit": 0,
+        "logical_cells": 9,
+        "official_play_completions": 9,
+        "play_errors": 0,
+        "unique_pngs_independently_viewed": 13,
+        "png_hashes_verified": 20,
+        "current_source_pins_matched": 16,
+        "unchanged_source_bridge_files_verified": 10,
+        "leases": "Both completed within fixed 30 seconds; recorded source/process pins unchanged",
+        "material_hash_checks": "58 matched; zero mismatches"
+      },
+      "limits": "English search/conditions evidence combines with previously accepted bilingual default evidence. Unsupported400 and pending202 are UI fixtures, not backend outcomes. No API/count/permission/native/source-freshness acceptance follows; D5-002 remains separate."
+    }
+  },
+  "committedSourcePinsVerified": [
+    {
+      "path": "apps/web/features/discover/browse-messages.ts",
+      "sha256": "bf95c3487b4d8efc79d61efd7098ea91db78bb66bff2eda7edf163fabbb15aa6"
+    },
+    {
+      "path": "apps/web/features/discover/discover-search.stories.tsx",
+      "sha256": "d8a4bc30790fd53372a38f5250eabcbd75998e5395f199d423ca7aa6998334a9"
+    },
+    {
+      "path": "apps/web/features/discover/selection-messages.ts",
+      "sha256": "4e76bd6191306ef7dd2394b4d0c356d5cc242696a46d0d30ad7d9752be27a78c"
+    },
+    {
+      "path": "apps/web/features/discover/browse-state.ts",
+      "sha256": "e54dd92c5961602522ec5233e1f7e93d84ec1d3bac9cb61c785f4ed2d6141ff0"
+    },
+    {
+      "path": "apps/web/features/discover/discover-view.tsx",
+      "sha256": "6c5cddae7b69e99ee62a3b5d2cd20dab76e577147cfb0bcc113a17029607ad70"
+    },
+    {
+      "path": "apps/web/features/discover/messages.ts",
+      "sha256": "e3e116cc2c5af1d018a02cd289aba3ae0c9e8c7de9a7b430e536cd725df2cbcc"
+    },
+    {
+      "path": "apps/web/features/discover/browse-read.ts",
+      "sha256": "db25f33d76723c06cb6a5691b0d9b103eaa9fb84287aad0205afeda2b380b92c"
+    },
+    {
+      "path": "apps/web/features/query/condition-bar.tsx",
+      "sha256": "b0a310d9e681fba92db1b33174ba029507c94012e7e6d79a343ac3bba43076d9"
+    },
+    {
+      "path": "apps/web/features/discover/selection-controls.tsx",
+      "sha256": "b9eee8083653cea4c17a62970fe42f0a0771f71ca9f47beed9a847ee5b072286"
+    },
+    {
+      "path": "apps/web/features/discover/browse-conditions.tsx",
+      "sha256": "10d7f592c6a77efbbe8da94e8afd4c66152439a99d67e6d9507d8d932b484878"
+    },
+    {
+      "path": "apps/web/features/discover/browse-tabs.tsx",
+      "sha256": "553532b726470de1668391053cd64c26b9200cee54aff21e56d1d9e965959e09"
+    },
+    {
+      "path": "apps/web/features/discover/topic-picker.tsx",
+      "sha256": "656775f811a0eed453c7b6fc1973a34cf218e22a0d79325767067668c4867b88"
+    },
+    {
+      "path": "apps/web/features/discover/browse-fixtures.ts",
+      "sha256": "1a18b2ec4945ce6a71500d4b4ae8ae68c33f8405aea4dc1537f8eeeaadebeffd"
+    },
+    {
+      "path": "apps/web/features/discover/resource-list.tsx",
+      "sha256": "9e4afc4940d008a27031417e6a4a008da145c81092cc19c55858c25786ed3294"
+    },
+    {
+      "path": "apps/web/features/search/messages.ts",
+      "sha256": "3d17c52d84ff825e8e9facb6fa9e7dc3695fe33adf88983a5936da5c6154ad7f"
+    },
+    {
+      "path": "apps/web/features/discover/chapter-text-messages.ts",
+      "sha256": "11a5427abd7efba67ece12bf7b749a816ae1453201bbb65ea0021ed26e5aaaeb"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": ".temp/manager-peer-protocol-20261021/site-current-acceptance-0159.final.md",
+      "sha256": "4a2d2d7372ff2a43030c9cc6dee50321c8a3ef1c1acfa2ab5834586c265675f3"
+    },
+    {
+      "path": ".temp/site-pending-proof-map-20261022/aud009-search-conditions-v1/visual-handoff.json",
+      "sha256": "1459cdbe5d58e6f708f0488fa388a1299fbfc9bf30ebae477a80396d7fc2c1e4"
+    },
+    {
+      "path": ".temp/site-pending-proof-map-20261022/aud009-search-conditions-v1/independent-request.json",
+      "sha256": "7a6d7d91dffeddce48f6504878f95398e75584cba2f14df2041658604940edfb"
+    },
+    {
+      "path": ".temp/site-pending-proof-map-20261022/aud009-search-conditions-v1/input.json",
+      "sha256": "b74542ddd412f4a40f6ccb1059a3acc71e96dafb5716208dbfa7bc762c92f6f1"
+    },
+    {
+      "path": ".temp/manager-peer-protocol-20261021/site-visual-acceptance-0147.final.md",
+      "sha256": "d29cf40ed5b424f19912759a99ad4fb9a126cd37ee27d4e570fe8e24fa281112"
+    },
+    {
+      "path": ".temp/site-pending-proof-map-20261022/aud009-storybook-matrix-v1/visual-handoff.json",
+      "sha256": "e9ccedab40ecae39eca6f6da7ef36a4c5f46876fa49f76da6a335ecd9ab81337"
+    },
+    {
+      "path": ".temp/site-pending-proof-map-20261022/aud009-search-conditions-v1/search/success-1440-viewport.png",
+      "sha256": "0dc746c7d3a14af4318fddab3dfa3f976399f140f0c71b1d0a5c67c924a75ac2"
+    },
+    {
+      "path": ".temp/site-pending-proof-map-20261022/aud009-search-conditions-v1/search/success-1440-full.png",
+      "sha256": "0dc746c7d3a14af4318fddab3dfa3f976399f140f0c71b1d0a5c67c924a75ac2"
+    },
+    {
+      "path": ".temp/site-pending-proof-map-20261022/aud009-search-conditions-v1/search/empty-1440-viewport.png",
+      "sha256": "2fe435ae3f899210f2123208cbc31251d575107aee76d5e02435e06521ada2c6"
+    },
+    {
+      "path": ".temp/site-pending-proof-map-20261022/aud009-search-conditions-v1/search/empty-1440-full.png",
+      "sha256": "2fe435ae3f899210f2123208cbc31251d575107aee76d5e02435e06521ada2c6"
+    },
+    {
+      "path": ".temp/site-pending-proof-map-20261022/aud009-search-conditions-v1/search/refused-1440-viewport.png",
+      "sha256": "c7c8d1c9bc159b9d48ba297264a50e24fc6c3563afe24289ac4c24a927f2ebd6"
+    },
+    {
+      "path": ".temp/site-pending-proof-map-20261022/aud009-search-conditions-v1/search/refused-1440-full.png",
+      "sha256": "c7c8d1c9bc159b9d48ba297264a50e24fc6c3563afe24289ac4c24a927f2ebd6"
+    },
+    {
+      "path": ".temp/site-pending-proof-map-20261022/aud009-search-conditions-v1/search/preparing-1440-viewport.png",
+      "sha256": "c30192be85a42bd8dd8577471138335d425e204f0a54bfc009290538644898a8"
+    },
+    {
+      "path": ".temp/site-pending-proof-map-20261022/aud009-search-conditions-v1/search/preparing-1440-full.png",
+      "sha256": "c30192be85a42bd8dd8577471138335d425e204f0a54bfc009290538644898a8"
+    },
+    {
+      "path": ".temp/site-pending-proof-map-20261022/aud009-search-conditions-v1/search/success-390-expanded-controls-viewport.png",
+      "sha256": "93c3b38d39f5f4be62a5ea708443ec5d733d25b38684c46ee1b869d36e677b03"
+    },
+    {
+      "path": ".temp/site-pending-proof-map-20261022/aud009-search-conditions-v1/search/success-390-viewport.png",
+      "sha256": "472ebdd0eae693ed74cd399e3382c4cfd8ba96589faba4c40d4d002cb4c7ed6e"
+    },
+    {
+      "path": ".temp/site-pending-proof-map-20261022/aud009-search-conditions-v1/search/success-390-full.png",
+      "sha256": "c7e13ad5278a68ee935554d35af471a806791327dda65119c19e5b90920cb82b"
+    },
+    {
+      "path": ".temp/site-pending-proof-map-20261022/aud009-search-conditions-v1/search/empty-390-viewport.png",
+      "sha256": "cc70419d6e1d1c33b417ae73db51e9e88a26d41a922c7197e5c02ce2e5564718"
+    },
+    {
+      "path": ".temp/site-pending-proof-map-20261022/aud009-search-conditions-v1/search/empty-390-full.png",
+      "sha256": "cc70419d6e1d1c33b417ae73db51e9e88a26d41a922c7197e5c02ce2e5564718"
+    },
+    {
+      "path": ".temp/site-pending-proof-map-20261022/aud009-search-conditions-v1/search/refused-390-viewport.png",
+      "sha256": "a43ea41edf77198352d60950cc7623b50cadac6dbf5c737f2048cc2905cf8c13"
+    },
+    {
+      "path": ".temp/site-pending-proof-map-20261022/aud009-search-conditions-v1/search/refused-390-full.png",
+      "sha256": "a43ea41edf77198352d60950cc7623b50cadac6dbf5c737f2048cc2905cf8c13"
+    },
+    {
+      "path": ".temp/site-pending-proof-map-20261022/aud009-search-conditions-v1/search/preparing-390-viewport.png",
+      "sha256": "52a6953253469837aa75a9ce918246449a10ff624096a9cfa5164ea74a6a34db"
+    },
+    {
+      "path": ".temp/site-pending-proof-map-20261022/aud009-search-conditions-v1/search/preparing-390-full.png",
+      "sha256": "52a6953253469837aa75a9ce918246449a10ff624096a9cfa5164ea74a6a34db"
+    },
+    {
+      "path": ".temp/site-pending-proof-map-20261022/aud009-search-conditions-v1/topics/topics-destination-390-viewport.png",
+      "sha256": "36d01320342d899c78b0b73e665b7c39137e1993d89f2030ea4fc01e874fb5bc"
+    },
+    {
+      "path": ".temp/site-pending-proof-map-20261022/aud009-search-conditions-v1/topics/topics-destination-390-full.png",
+      "sha256": "8aeb1bb88b4eaa43e414d39e2c3b4aa7b47e13f5389a60d2abb3ee3b34893d47"
+    },
+    {
+      "path": ".temp/site-pending-proof-map-20261022/aud009-search-conditions-v1/topics/topics-destination-390-topic-filter-expanded-viewport.png",
+      "sha256": "ab50d15ccc3c64bdac2243e4c22f4cf8f32c53fc263685eda4e431e1ef310e21"
+    }
+  ],
+  "managerVisualCheck": "Current search390success and1440unsupported images opened; independent reviewer opened13unique newPNG and retained bilingual1440/768/390default matrix.",
+  "limits": "Canonical UI/interaction scope only; no API/count/permission/native/source-freshness acceptance. D5-002 and D4-007 remain separate/pending."
+}
