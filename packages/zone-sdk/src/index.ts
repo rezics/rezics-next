@@ -67,7 +67,7 @@ export interface ZoneCoverCredit {
   text: string;
   holder: string | null;
   source: { name: string; href: string };
-  permittedRole: 'cover';
+  permittedRole: 'cover' | 'portrait' | 'screenshot';
 }
 
 /** An image Main serves; `url` is already a path the browser can load. */

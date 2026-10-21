@@ -69,11 +69,11 @@ test('G836: public SAO merge and unmerge require independent humans, survive los
     // Preserve pool/client identity so nested owners can join the held checkout.
     pool.connect = function (...args: unknown[]) {
       const callback = args[0];
-      if (typeof callback === 'function') return Reflect.apply(connect, pool, [
+      if (typeof callback === 'function') return connect.call(pool,
         (error: Error | undefined, client: PoolClient | undefined, release: unknown) => {
           if (client) observe(client);
           callback(error, client, release);
-        }]);
+        });
       return (Reflect.apply(connect, pool, args) as Promise<PoolClient>).then(client => { observe(client); return client; });
     } as Pool['connect'];
     return pool;

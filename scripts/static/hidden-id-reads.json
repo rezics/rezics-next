@@ -2040,6 +2040,9 @@
       "path:id",
       "path:revision",
       "query:actingSubject",
+      "query:claim",
+      "query:claimRevision",
+      "query:context",
       "query:position"
     ],
     "status": "unregistered"
@@ -2130,6 +2133,7 @@
     "ids": [
       "path:resource",
       "query:actingSubject",
+      "query:definition",
       "query:position"
     ],
     "status": "unregistered"

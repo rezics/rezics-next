@@ -65,9 +65,10 @@ export function recipePageReader(host: RecipeReadingHost, href: string) {
     const read = followHref<RecipeWorkPage | null>(host.main, href, recipePageQuery(host.actingSubject, query));
     let answer = await read();
     const problem = answer.error?.value;
-    // A cancelled owner read established no page. One fresh read retains the exact selection and caller deadline.
-    if (answer.error?.status === 503 && (problem instanceof Error
-      || typeof problem === 'object' && problem !== null && 'code' in problem && problem.code === 'work_read_unavailable')) {
+    // Only Main's cancelled-owner answer admits a fresh read. A transport error
+    // already exhausted the client's bounded attempts and must remain visible.
+    if (answer.error?.status === 503 && typeof problem === 'object' && problem !== null
+      && 'code' in problem && problem.code === 'work_read_unavailable') {
       answer = await read();
     }
     if (answer.data?.instructions?.length) return { ...answer, data: { ...answer.data,

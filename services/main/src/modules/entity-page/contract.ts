@@ -159,13 +159,22 @@ export const subjectStatementPage = t.Object(
   closed,
 );
 
+const collectionIncidenceRendering = t.Object({ ...relationRenderingSchema.properties,
+  meaning: t.Null(),
+  structuralBasis: t.Object({ profile: t.Literal('collection-membership'), collection: readId, member: readId }, closed),
+}, closed);
 export const resourceRelationEntry = t.Object({ relation: readId,
   kind: t.Union([t.Literal('occurrence'), t.Literal('derivation'), t.Literal('collection')]),
+  collectionPurpose: t.Optional(t.Nullable(t.Object({
+    kind: t.Union([t.Literal('reading-list'), t.Literal('recipe-selection'), t.Literal('series'), t.Literal('franchise')]),
+    statement: readId, revision: readId, sources: t.Array(t.String()),
+  }, closed))),
   revision: t.Nullable(readId), evidence: t.Nullable(t.String()), frameMatch: t.Optional(frameMatch),
   citations: t.Optional(t.Array(wikiClaimEvidence)),
   sourceVersionStatus: t.Optional(t.Union([t.Literal('exact'), t.Literal('unresolved')])),
   sourceMainVersion: t.Optional(t.Nullable(readId)), sourceMainRevision: t.Optional(t.Nullable(readId)),
-  targetMainRevision: t.Optional(readId), rendering: t.Nullable(relationRenderingSchema), counterparts: t.Array(resourceSummary) });
+  targetMainRevision: t.Optional(readId), rendering: t.Nullable(t.Union([relationRenderingSchema, collectionIncidenceRendering])),
+  counterparts: t.Array(resourceSummary) });
 export const resourceRelationPage = t.Object({ profile: t.Literal('resource-relations-v1'), resource: readId,
   items: t.Array(resourceRelationEntry), next: t.Nullable(t.String()), sourcePosition: readPosition });
 

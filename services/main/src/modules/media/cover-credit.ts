@@ -5,7 +5,7 @@ export interface CoverCredit {
   text: string;
   holder: string | null;
   source: { name: string; href: string };
-  permittedRole: 'cover';
+  permittedRole: 'cover' | 'portrait' | 'screenshot';
 }
 
 export const coverCreditSchema = t.Union([
@@ -22,7 +22,7 @@ export const coverCreditSchema = t.Union([
         },
         { additionalProperties: false },
       ),
-      permittedRole: t.Literal('cover'),
+      permittedRole: t.Union([t.Literal('cover'), t.Literal('portrait'), t.Literal('screenshot')]),
     },
     { additionalProperties: false },
   ),
@@ -32,6 +32,8 @@ export const coverCreditSchema = t.Union([
 export function coverCreditFromProvenance(value: unknown): CoverCredit | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const provenance = value as Record<string, unknown>;
+  const role = provenance.format === 'media-imported-art-v2' ? provenance.role : 'cover';
+  if (role !== 'cover' && role !== 'portrait' && role !== 'screenshot') return null;
   const source = provenance.source;
   const holderEvidence = provenance.holderEvidence;
   if (!source || typeof source !== 'object' || Array.isArray(source)) return null;
@@ -67,6 +69,6 @@ export function coverCreditFromProvenance(value: unknown): CoverCredit | null {
     text: holder ?? `(c) rights holder via ${sourceRecord.displayName}`,
     holder,
     source: { name: sourceRecord.displayName, href: sourceRecord.href },
-    permittedRole: 'cover',
+    permittedRole: role,
   };
 }

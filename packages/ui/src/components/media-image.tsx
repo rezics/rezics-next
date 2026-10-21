@@ -22,7 +22,7 @@ export interface CoverCredit {
   text: string;
   holder: string | null;
   source: { name: string; href: string };
-  permittedRole: 'cover';
+  permittedRole: 'cover' | 'portrait' | 'screenshot';
 }
 export type ImageMetadataResolver = (references: MediaImageReference[]) => Promise<MediaImageMetadata[]>;
 export interface MediaImageControl {

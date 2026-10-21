@@ -6,7 +6,7 @@ import type { Pool, PoolClient } from 'pg';
 import { withReferenceFence } from '../erasure/reference-fence.ts';
 import type { ContentCore, ContentPosition } from '../../../../content/src/core.ts';
 import { derivedId } from '../structure/graph.ts';
-import type { ImportedCoverProvenance } from './typed-schema.ts';
+import { importedArtRole, type ImportedCoverProvenance } from './typed-schema.ts';
 import { coverCreditFromProvenance, type CoverCredit } from './cover-credit.ts';
 import { advanceContentSequence, settledContentPosition } from '../content-sequence.ts';
 import { MediaPresentationStore } from './presentation.ts';
@@ -187,6 +187,11 @@ export interface AvatarSelectionInput {
   /** NULL records an explicit removal; the summary then resolves the fallback. */
   asset: string | null;
   crop: string | null;
+}
+
+export interface ImportedArtUseInput {
+  target: string; context: string; asset: string; variant: string; revision: string;
+  representation: string; occurrence: string; role: 'cover' | 'portrait' | 'screenshot';
 }
 
 export interface PublicationItemBasis {
@@ -391,8 +396,10 @@ export function validateImportedCoverProvenance(value: unknown, expectedBytes?: 
   mediaType: string;
 }): ImportedCoverProvenance {
   const root = object(value);
-  keys(root, ['format', 'targetWork', 'source', 'image', 'originalDigest', 'holderEvidence']);
-  if (root.format !== 'media-imported-cover-v1') throw new MediaInvalid('imported cover provenance is invalid');
+  const revisioned = root.format === 'media-imported-art-v2';
+  keys(root, ['format', 'targetWork', 'source', 'image', 'originalDigest', 'holderEvidence',
+    ...(revisioned ? ['role', 'archive'] : [])]);
+  if (!revisioned && root.format !== 'media-imported-cover-v1') throw new MediaInvalid('imported cover provenance is invalid');
   const targetWork = textField(root.targetWork, 80);
   if (!nativeId.test(targetWork)) throw new MediaInvalid('imported cover provenance is invalid');
 
@@ -464,8 +471,26 @@ export function validateImportedCoverProvenance(value: unknown, expectedBytes?: 
     holderEvidence = { name: textField(holder.name, 200), fieldLocator: textField(holder.fieldLocator, 500) };
   }
 
-  return { format: 'media-imported-cover-v1', targetWork, source: normalizedSource, image: normalizedImage,
-    originalDigest, holderEvidence };
+  const facts = { targetWork, source: normalizedSource, image: normalizedImage, originalDigest, holderEvidence };
+  if (!revisioned) return { format: 'media-imported-cover-v1', ...facts };
+  if (!['cover', 'portrait', 'screenshot'].includes(String(root.role))) throw new MediaInvalid('invalid capture role');
+  let archive: Extract<ImportedCoverProvenance, { format: 'media-imported-art-v2' }>['archive'] = null;
+  if (root.archive !== null) {
+    const witness = object(root.archive); keys(witness, ['admission', 'coordinate']);
+    if (typeof witness.admission !== 'string' || !nativeId.test(witness.admission)) throw new MediaInvalid('invalid archive admission');
+    const coordinate = object(witness.coordinate);
+    keys(coordinate, ['table', 'rowOrdinal', 'rowDigest', 'fieldLocator', 'imageId', 'namespace', 'externalId', 'role']);
+    if (!['vn', 'chars', 'vn_screenshots', 'releases_images', 'vn_image_votes'].includes(String(coordinate.table))
+      || !Number.isSafeInteger(coordinate.rowOrdinal) || Number(coordinate.rowOrdinal) < 0
+      || typeof coordinate.rowDigest !== 'string' || !sha.test(coordinate.rowDigest)
+      || coordinate.role !== root.role || !['vn', 'character', 'release'].includes(String(coordinate.namespace))
+      || ['fieldLocator', 'imageId', 'externalId'].some(key => typeof coordinate[key] !== 'string'
+        || !(coordinate[key] as string).length || (coordinate[key] as string).length > 500)) throw new MediaInvalid('invalid COPY coordinate');
+    archive = { admission: witness.admission, coordinate: { ...coordinate } as unknown as NonNullable<typeof archive>['coordinate'] };
+  }
+  if (normalizedSource.provider === 'vndb' ? !archive : archive !== null)
+    throw new MediaInvalid('archive profile differs from provider');
+  return { format: 'media-imported-art-v2', ...facts, role: root.role as 'cover' | 'portrait' | 'screenshot', archive };
 }
 
 function manifestProvenance(value: unknown): ImportedCoverProvenance | null {
@@ -1109,18 +1134,20 @@ export class MediaStore {
     variant: string; assetRevision: string; asset: string; actor: string; operationId: string;
     requestDigest: string; dataEpoch: string; sequence: string; objectNamespace: string;
     original: { id: string; sha256: string; byteLength: number }; provenance: ImportedCoverProvenance;
+    role: string;
   } | null> {
     if (!uuid.test(useId)) throw new MediaInvalid('invalid imported Use');
     const row = (await this.pool.query(`SELECT u.id,u.target,u.context,u.asset_variant_id,u.asset_revision_id,
       u.asset_id,u.actor,u.operation_id,r.request_digest,r.data_epoch,r.sequence::text,
-      selection.id AS selection,slot.head AS current_head,a.object_namespace,
+      COALESCE(selection.id,u.asset_revision_id) AS selection,
+      CASE WHEN u.role='avatar' THEN slot.head ELSE variant.draft_head END AS current_head,a.object_namespace,u.role,
       p.id AS representation,p.byte_digest,p.byte_length,revision.body
-      FROM media.use u JOIN media.selection_revision selection ON selection.use_id=u.id
+      FROM media.use u LEFT JOIN media.selection_revision selection ON selection.use_id=u.id
         AND selection.operation_id=u.operation_id AND selection.target=u.target
         AND selection.context=u.context AND selection.role=u.role
-      JOIN media.selection_slot slot ON slot.target=u.target AND slot.context=u.context AND slot.role=u.role
+      LEFT JOIN media.selection_slot slot ON slot.target=u.target AND slot.context=u.context AND slot.role=u.role
       JOIN content.receipt r ON r.operation_id=u.operation_id AND r.outcome='succeeded'
-        AND r.action='media.selection.change' AND r.sequence IS NOT NULL
+        AND r.action IN ('media.selection.change','media.use.create') AND r.sequence IS NOT NULL
       JOIN media.asset a ON a.id=u.asset_id AND a.variant_id=u.asset_variant_id
       JOIN media.asset_state state ON state.id=a.state_head AND state.lifecycle='active' AND state.moderation='none'
       JOIN content.variant variant ON variant.id=u.asset_variant_id AND variant.resource_id=$2 || a.id::text
@@ -1128,7 +1155,8 @@ export class MediaStore {
         AND revision.availability='available'
       JOIN media.representation p ON p.id=u.representation_id AND p.asset_id=a.id
         AND p.kind='original' AND p.availability='available'
-      WHERE u.id=$1 AND u.role='avatar' AND a.cover_only LIMIT 2`, [useId, ID])).rows;
+      WHERE u.id=$1 AND a.cover_only AND (u.role='avatar' AND selection.id IS NOT NULL
+        OR u.role='publication-item' AND u.operation_id LIKE 'media-art:%') LIMIT 2`, [useId, ID])).rows;
     if (row.length !== 1) return null;
     const item = row[0]!;
     const projection = await this.readImportedCoverRevision(item.asset_revision_id);
@@ -1140,7 +1168,63 @@ export class MediaStore {
       assetRevision: assetIri(item.asset_revision_id), asset: item.asset_id, actor: item.actor,
       operationId: item.operation_id, requestDigest: item.request_digest, dataEpoch: item.data_epoch,
       sequence: item.sequence, objectNamespace: item.object_namespace,
-      original: { id: item.representation, sha256: item.byte_digest, byteLength: Number(item.byte_length) }, provenance };
+      original: { id: item.representation, sha256: item.byte_digest, byteLength: Number(item.byte_length) }, provenance, role: item.role };
+  }
+
+  /** Only this Use's original or a successfully settled derivative of its exact
+   * source/crop is a representation witness. Similar bytes grant no association. */
+  async readImportedArtRepresentation(use: string, representation: string): Promise<{
+    id: string; sha256: string; byteLength: number; objectNamespace: string } | null> {
+    if (![use, representation].every(value => uuid.test(value))) return null;
+    const row = (await this.pool.query(`SELECT p.id,p.byte_digest,p.byte_length,a.object_namespace
+      FROM media.use u JOIN media.asset a ON a.id=u.asset_id
+      JOIN media.asset_state s ON s.id=a.state_head AND s.lifecycle='active' AND s.moderation='none'
+      JOIN media.representation source ON source.id=u.representation_id AND source.availability='available'
+      JOIN media.representation p ON p.id=$2 AND p.asset_id=a.id AND p.availability='available'
+      WHERE u.id=$1 AND media.delivery_clearance(p)='cleared'
+        AND (p.id=source.id OR p.kind='rendition' AND p.source_id=source.id AND p.crop IS NOT DISTINCT FROM u.crop
+          AND EXISTS (SELECT 1 FROM media.transform_job j WHERE j.id=p.transform_job_id
+            AND j.asset_id=a.id AND j.source_id=source.id AND j.input_digest=source.byte_digest
+            AND j.crop IS NOT DISTINCT FROM u.crop AND j.profile=p.profile AND j.status='succeeded'))`, [use, representation])).rows[0];
+    return row ? { id: row.id, sha256: row.byte_digest, byteLength: Number(row.byte_length), objectNamespace: row.object_namespace } : null;
+  }
+
+  /** An immutable imported-art occurrence, admitted by the target's existing
+   * media.avatar authority. Exact Asset variant/revision are returned by Content. */
+  async createImportedArtUse(admission: MediaAdmission, input: ImportedArtUseInput): Promise<CommandOutcome> {
+    checkAdmission(admission);
+    if (!nativeId.test(input.target) || !nativeId.test(input.context) && input.context !== DEFAULT_MEDIA_CONTEXT
+      || ![input.asset, input.revision, input.representation, input.occurrence].every(value => uuid.test(value))
+      || !['cover', 'portrait', 'screenshot'].includes(input.role)) throw new MediaInvalid('invalid imported artwork Use');
+    const operationId = `media-art:${admission.admissionId}`;
+    return this.positioned(operationId, await transaction(this.pool, async client => {
+      const previous = await prior(client, operationId, admission.requestDigest, 'media.use.create');
+      if (previous) {
+        if (previous.outcome !== 'succeeded') throw new MediaFenced('media artwork admission was fenced');
+        const row = (await client.query('SELECT id FROM media.use WHERE operation_id=$1', [operationId])).rows[0];
+        return { outcome: previous.outcome as CommandOutcome['outcome'], id: row?.id ?? null, predecessor: null, replayed: true };
+      }
+      const row = (await client.query(`SELECT revision.body,v.draft_head FROM media.asset a
+        JOIN media.asset_state s ON s.id=a.state_head AND s.lifecycle='active' AND s.moderation='none'
+        JOIN content.variant v ON v.id=a.variant_id AND v.id=$2
+        JOIN content.revision revision ON revision.id=$3 AND revision.variant_id=v.id AND revision.availability='available'
+        JOIN media.representation p ON p.id=$4 AND p.asset_id=a.id AND p.kind='original' AND p.availability='available'
+        WHERE a.id=$1 AND a.owner=$5 AND a.cover_only AND media.delivery_clearance(p)='cleared'
+        FOR SHARE OF a,s,v,p`, [input.asset, input.variant, input.revision, input.representation, admission.actingSubject])).rows[0];
+      if (!row) throw new MediaMissing('imported artwork basis is unavailable');
+      const provenance = manifestProvenance(row.body);
+      if (!provenance || provenance.format !== 'media-imported-art-v2' || provenance.targetWork !== input.target
+        || provenance.role !== input.role || row.body.representations?.[0]?.id !== input.representation)
+        throw new MediaInvalid('imported artwork target, role or representation differs');
+      if (row.draft_head !== input.revision) throw new MediaStale('imported artwork Asset head changed');
+      const id = operationUuid(operationId);
+      await receipt(client, { operationId, digest: admission.requestDigest, action: 'media.use.create', outcome: 'succeeded',
+        eventType: 'media.use.created', payload: { target: input.target, role: input.role, use: id, occurrence: input.occurrence } });
+      await client.query(`INSERT INTO media.use(id,asset_id,asset_variant_id,asset_revision_id,representation_id,
+        target,context,role,actor,operation_id,occurrence) VALUES($1,$2,$3,$4,$5,$6,$7,'publication-item',$8,$9,$10)`,
+      [id, input.asset, input.variant, input.revision, input.representation, input.target, input.context, admission.actingSubject, operationId, input.occurrence]);
+      return { outcome: 'succeeded' as const, id, predecessor: null, replayed: false };
+    }));
   }
 
   /** Whether an imported-cover provenance for these bytes is currently suppressed. */
@@ -1293,7 +1377,7 @@ export class MediaStore {
         }
         if (row.cover_only) {
           const provenance = manifestProvenance(row.body);
-          if (!provenance || provenance.targetWork !== input.target) {
+          if (!provenance || provenance.targetWork !== input.target || importedArtRole(provenance) === 'screenshot') {
             throw new MediaMissing('imported cover is unavailable for this Work');
           }
         }
@@ -1423,7 +1507,10 @@ export class MediaStore {
       LEFT JOIN content.outbox campaign_event ON campaign_event.operation_id = campaign_receipt.operation_id
         AND campaign_event.event_type = 'media.use.created'
       WHERE u.id = ANY($1::uuid[])
-        AND NOT a.cover_only AND media.delivery_clearance(p) = 'cleared'`,
+        AND (NOT a.cover_only OR u.role='publication-item' AND u.operation_id LIKE 'media-art:%'
+          AND revision.body->'importedCover'->>'format'='media-imported-art-v2'
+          AND revision.body->'importedCover'->>'targetWork'=u.target)
+        AND media.delivery_clearance(p) = 'cleared'`,
     [[...new Set(uses)]])).rows : [];
     return new Map(rows.map(row => [row.use as string, { target: row.target as string, asset: row.asset_id as string,
       representation: row.representation as string,
@@ -1696,6 +1783,33 @@ export class MediaStore {
     return { outcome: row.outcome, position: row.sequence
       ? { owner: 'content', dataEpoch: row.data_epoch, sequence: row.sequence }
       : await settledContentPosition(this.pool, operationId) };
+  }
+
+  /** Both native artwork and legacy selection use the same target authority.
+   * Fence their exact owner operations together, retaining any committed result. */
+  async cancelAvatarAdmission(admissionId: string, requestDigest: string): Promise<{
+    outcome: 'succeeded' | 'cancelled'; position: ContentPosition }> {
+    if (!uuid.test(admissionId) || !sha.test(requestDigest)) throw new MediaInvalid('invalid media admission fence');
+    const operations = [
+      { id: `media-art:${admissionId}`, action: 'media.use.create' },
+      { id: `media-avatar:${admissionId}`, action: 'media.selection.change' },
+    ];
+    const settled = await transaction(this.pool, async client => {
+      // All reconciliations acquire the same order; each writer holds its exact operation lock.
+      const outcomes = [];
+      for (const operation of operations) outcomes.push(await prior(client, operation.id, requestDigest, operation.action));
+      const committed = outcomes.findIndex(value => value?.outcome === 'succeeded');
+      if (committed >= 0) return { operation: operations[committed]!.id, outcome: 'succeeded' as const };
+      for (let index = 0; index < operations.length; index++) {
+        if (outcomes[index]) continue;
+        const operation = operations[index]!;
+        await receipt(client, { operationId: operation.id, digest: requestDigest, action: operation.action,
+          outcome: 'rejected', reason: 'admission-fenced', eventType: 'media.admission.fenced',
+          payload: { operationId: operation.id } });
+      }
+      return { operation: operations[1]!.id, outcome: 'cancelled' as const };
+    });
+    return this.positioned(settled.operation, { outcome: settled.outcome });
   }
 
   /** Fence an admission whose dispatch Access closed; an existing outcome is returned unchanged. */
