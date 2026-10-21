@@ -305,7 +305,7 @@ test('100 distinct public semantic Episodes fit current/exact Composition budget
     const collected: string[] = [];
     let after: string | null = null;
     do {
-      const page = await measured<Page>('sparse-page', `${path}?limit=17${after ? `&after=${encodeURIComponent(after)}` : ''}`);
+      const page: Page = await measured<Page>('sparse-page', `${path}?limit=17${after ? `&after=${encodeURIComponent(after)}` : ''}`);
       expect(page.occurrences.length).toBeGreaterThan(0);
       collected.push(...page.occurrences.map(item => item.target));
       after = page.next;
