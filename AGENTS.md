@@ -10,6 +10,12 @@ Use [docs/README.md](docs/README.md) to load only the documents the task needs.
 The [method](docs/goals/method.md) defines API outcomes before implementation
 and surfaces.
 
+All manager roles are peers. On a failure, blocker or abnormal waste, investigate
+the cause, compare remedies, coordinate affected owners, then execute and verify
+the best correct fix without routine upward approval. Notify every active manager
+when the problem is found and when it is resolved; see the
+[shared problem-solving duty](docs/goals/manager.md#shared-problem-solving-duty).
+
 Put task-created temporary files in `.temp/`. Run project commands through Task
 (`task --list`; arguments after `--`); Yarn installs dependencies. Update the
 [toolchain](docs/development/toolchain.md) when adding or replacing a tool.

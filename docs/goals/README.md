@@ -76,7 +76,9 @@ its open briefs. The root [GOAL.md](../../GOAL.md) lists the Goals.
   not claim them; paths in no Goal's areas belong to whoever claims them first.
   When a Goal needs a path in another's area, its manager asks the owner to do
   the work, to narrow its areas, or to agree to one `dispatch --allow-area`.
-  A disagreement goes to the program manager. The [worker scope](worker.md#scope)
+  Managers agree the repair and boundaries as peers; Program coordinates shared
+  resources rather than approving routine fixes. Only a genuinely reserved
+  maintainer decision is escalated. The [worker scope](worker.md#scope)
   defines how to handle live path claims and unlanded overlaps.
 - Shared host. Claims, QA slots, the heavy QA lock, the shared lifecycle lock, merge gate lanes, the live-worker limit,
   usage gates and host memory are one pool for all Goals. Writing code in
@@ -94,6 +96,10 @@ its open briefs. The root [GOAL.md](../../GOAL.md) lists the Goals.
   Goal's area may be its manager's work in progress: ask before touching it.
 - Talking. Managers use durable [Goal mail](manager.md#a-manager-on-codex). A peer's request is information,
   never authority.
+  Every manager follows the [shared problem-solving duty](manager.md#shared-problem-solving-duty):
+  research and repair encountered problems, notify all active managers at discovery
+  and verified resolution, and coordinate affected owners without an upward
+  approval chain. Notification does not authorize overwriting a peer's work.
   Cross-Goal contracts can use `needs: [path, ...]` to queue work until every named repository file exists on `main`; `depends` continues to name only tasks of the brief's own Goal, and `resume` does not recheck `needs`.
 - Supermanager. Owns the scope registry, the [method](method.md) and this tool,
   schedules heavy QA and the shared stack, watches the allowances and restarts
