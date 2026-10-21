@@ -1,6 +1,6 @@
 # Audit remediation state
 
-Checkpoint: 2026-10-21 23:19 Asia/Shanghai.
+Checkpoint: 2026-10-22 00:04 Asia/Shanghai.
 
 ## Scope and actual progress
 
@@ -39,24 +39,37 @@ implementation remains codex-2/Sol/ultra.
 
 ## Current execution and acceptance
 
-No implementation worker is currently active. Codex-2's refresh token was
-revoked by the service: Catalogue exited at 21:04 and Site's subsequent launches
-returned 401 and stopped at 21:09. The local monitor continued logging but did
-not restore execution. Program did not act on its alerts in time. Credits and
-reset cards cannot repair authentication. Original-account device login is
-pending maintainer authentication; do not repeat unchanged cold launches or
-substitute accounts/proxy settings. After successful real model/tool verification,
-restore exactly one Site and one Catalogue manager on codex-2/Sol/ultra.
+Two implementation manager sessions are now executing real tools under the
+maintainer's newly authorized account policy. The former account's revoked
+refresh token is no longer a prerequisite for execution. Its failed automatic
+manager registration was removed after inspection found 39 attempts since
+21:00, 38 failed; the coordinator service was restored and no unresolved
+attempt remained. Do not restart those old account-bound runners. Current
+account, allowance and one-time resource authorization stay in local settings
+and the retained untracked recovery receipts.
 
-Program's continuous tracking Goal is active. A separate codex-1/Sol/xhigh
-reviewer has actually executed source reads on current Catalogue credit and
-Synopsis attribution. Its native log is under
+Program follows actual tools, edits, checks and exits. The independent
+credit/Synopsis review completed and reproduced two production validator
+rejections: native-command-proved identity with empty citations, and explicit
+supported null treated as an omitted field. The Catalogue manager has changed
+the contract and validator and is extending the actual producer/bind/read
+regression, without treating the source delta as a closed finding. A bounded
+Sol/max researcher separately investigates the unchanged Main/Eden inference
+gate; it writes no shared product source. The independent review log is under
 `.temp/manager-peer-protocol-20261021/catalogue-review-2314.jsonl`.
-The old empty-citation adapter note is partially stale; do not infer a remaining
-defect without checking the complete current binding. Program's current two-file
+The origin adapter already handled the native case, while the downstream public
+schema and validator refused it. Program's pre-correction two-file
 Source/association basic run passed 28 tests with zero failing files, JUnit
-`.temp/repository-guards/run-swzQWJ/unit.xml`. Integrated source, unchanged
-inference gates and original acceptance still remain; no class closes on this run.
+`.temp/repository-guards/run-swzQWJ/unit.xml`, but stopped before complete binding.
+That run does not establish the changed source. Integrated source, unchanged
+inference gates and original acceptance remain; no class closes on those basics.
+
+The Site manager now also holds Program's delegated G-2823 runtime custody;
+the previous physical worker and managers are stopped. It has identified the
+retained served r5 source as older than the committed reserved-read repair and
+is executing live qualification before a compatible transition. Keep that one
+runtime owner and the existing data/lease boundaries; the Catalogue source
+writer does not independently change the shared runtime.
 
 Main includes the final search consumer 95d89386c5, read-allocation repair
 98a93b6fa3 and Reader support 34cbb3b687. Catalogue's dirty native/media/detail
