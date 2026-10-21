@@ -42,13 +42,14 @@ function failureText(failure: ReadFailure, t: WorkPageMessages): string {
  * a way forward; the rest of the page is unaffected. A list whose cursor went
  * stale restarts from its first page instead of retrying the same page.
  */
-export function RegionFailure({ title, failure, messages, restartHref }: {
+export function RegionFailure({ title, failure, messages, restartHref, role }: {
   title: string; failure: ReadFailure; messages: WorkPageMessages; restartHref?: string;
+  role?: 'status' | 'alert';
 }) {
   const restart = restartHref && (failure === 'moved' || failure === 'invalid');
   // An absent resource stays explicit and retryable; it is not a successful empty list or an urgent alert.
   const status = failure === 'pending' || failure === 'missing';
-  return <Alert variant={status ? 'default' : 'destructive'} role={status ? 'status' : 'alert'}>
+  return <Alert variant={status ? 'default' : 'destructive'} role={role ?? (status ? 'status' : 'alert')}>
     <TriangleAlertIcon aria-hidden="true" />
     <AlertTitle>{title}</AlertTitle>
     <AlertDescription>{failureText(failure, messages)}</AlertDescription>

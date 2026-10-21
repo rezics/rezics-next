@@ -1,10 +1,14 @@
 import { afterEach, expect, test } from 'bun:test';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { AppRouterContext, type AppRouterInstance } from 'next/dist/shared/lib/app-router-context.shared-runtime.js';
+import { messages } from './messages.ts';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import inventoryRecord from '../../../../tests/qa/fixtures/outcomes/books/navigate-a-thousand-chapter-inventory-thousand-chapters.json';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { recordedFetch, type RecordedState } from '../stories/recorded-fetch.ts';
 import {
-  booksContentsInventoryLimit, booksContentsInventoryQuery, booksContentsInventoryQueryFromPath,
+  BooksContentsRecordedPage, booksContentsInventoryLimit, booksContentsInventoryQuery, booksContentsInventoryQueryFromPath,
   contentsReadsInventory, mapBooksContentsRecordedPage, type BooksContentsRecordedView,
 } from './books-contents-recorded-page.tsx';
 import { iriOf } from './route.ts';
@@ -144,6 +148,30 @@ test('visitor continuation refusal keeps the recorded problem title', async () =
   expect(read.answer.error?.status).toBe(409);
   expect(view.restartHref).toContain('/contents');
   expect(view.restartHref).not.toContain('cursor=');
+});
+
+test('a primary inventory refusal announces the recorded concealed result and keeps a recovery action', async () => {
+  const read = await readRecorded('visitor', 'private-inventory', 'error');
+  const view = mapRecorded(read);
+  expect(view.kind).toBe('refusal');
+  if (view.kind !== 'refusal') return;
+  expect(read.answer.error?.status).toBe(404);
+  expect(view.failure).toBe('missing');
+  expect(view.problem).toEqual(read.chosen.answer);
+  const router: AppRouterInstance = { bfcacheId: '', refresh() {}, push() {}, replace() {}, back() {}, forward() {}, prefetch() {} };
+  const render = (selected: BooksContentsRecordedView) => renderToStaticMarkup(createElement(AppRouterContext.Provider,
+    { value: router }, createElement(BooksContentsRecordedPage, { view: selected, locale: 'en', messages: messages.en })));
+  const html = render(view);
+  expect(html).toContain('role="alert"');
+  expect(html).toContain(view.title!);
+  expect(html).toContain(messages.en.regionMissing);
+  expect(html).toContain(messages.en.retry);
+  expect(html).not.toContain('<ol');
+  expect(html).not.toContain(messages.en.noContents);
+  const pending = render({ ...view, failure: 'pending', status: 202 });
+  expect(pending).toContain('role="status"');
+  expect(pending).not.toContain('role="alert"');
+  expect(pending).toContain(messages.en.readPending);
 });
 
 test('member work header title is the recorded work title on the inventory page', async () => {

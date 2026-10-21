@@ -292,7 +292,7 @@ export function BooksContentsRecordedPage({ view, locale, messages }: {
     return <Region id="work-contents" title={t.contents}>
       {search}
       <RegionFailure title={view.title ?? t.contentsUnavailable} failure={view.failure} messages={messages}
-        restartHref={view.restartHref} />
+        restartHref={view.restartHref} role={view.failure === 'pending' ? 'status' : 'alert'} />
     </Region>;
   }
   const first = !view.cursor ? view.chapters.find(chapter => chapter.readable && chapter.href) : undefined;
