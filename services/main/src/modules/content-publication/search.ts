@@ -7,7 +7,7 @@ import { DATASET, GRAPHS, RV, iri, lit, PUBLIC_SEARCH_ANCHOR,
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { assertPublicTextReady, assertQuerySnapshotMoved, assertSameTextInstance,
   MAX_SEARCH_RESPONSE_BYTES, PHRASE_HIT_PROBE,
-  SearchSnapshotMoved } from '../work/search-readiness.ts';
+  SearchReadinessPending, SearchSnapshotMoved } from '../work/search-readiness.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
 import { assertContentProjectionProfiles, ContentProjectionUnavailable } from './relay.ts';
 import type { RightsStore } from '../rights/store.ts';
@@ -51,6 +51,12 @@ async function prepareContentSearch(env: WorkActivationEnvironment,
     content.ownerPosition(), cursor.read(consumer),
   ]));
   if (source.dataEpoch !== checkpoint.dataEpoch || source.sequence !== checkpoint.sequence) {
+    if (source.dataEpoch === checkpoint.dataEpoch
+      && /^(0|[1-9][0-9]*)$/.test(source.sequence)
+      && /^(0|[1-9][0-9]*)$/.test(checkpoint.sequence)
+      && BigInt(checkpoint.sequence) < BigInt(source.sequence)) {
+      throw new SearchReadinessPending('Content projection is catching up to its source');
+    }
     throw new ContentProjectionUnavailable('Content projection is behind its source');
   }
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
@@ -60,7 +66,11 @@ async function prepareContentSearch(env: WorkActivationEnvironment,
   // projection coverage in maintenance. Never let a reader synthesize a missing
   // witness, including an empty relation, or reuse one from another owner epoch.
   const proof = await observeSearchPhase('content-readiness-qualified-checkpoint', async () => {
-    if (!witness || witness.population > index.population
+    // A physical generation can be ready while its Content maintenance owner
+    // requalifies a delivered publication. Retry the whole read, so every graph
+    // and owner fence is recaptured; readers never perform that inventory.
+    if (!witness) throw new SearchReadinessPending('Content generation qualification is pending');
+    if (witness.population > index.population
       || !/^(0|[1-9][0-9]*)$/.test(source.sequence)
       || witness.ownerDataEpoch !== undefined && witness.ownerDataEpoch !== source.dataEpoch
       || BigInt(witness.ownerSequence) > BigInt(source.sequence)) {

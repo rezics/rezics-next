@@ -5,8 +5,9 @@ import type { ContentCore } from '../../content/src/core.ts';
 import type { ContentProjectionCursor } from '../../content/src/projection-cursor.ts';
 import { assertPublicContentSearchReady } from '../src/modules/content-publication/search.ts';
 import { ContentProjectionUnavailable } from '../src/modules/content-publication/relay.ts';
-import { SearchIndexUnavailable, SearchRequestTimedOut, SearchSnapshotMoved,
+import { SearchIndexUnavailable, SearchReadinessPending, SearchRequestTimedOut, SearchSnapshotMoved,
   withStableSearchSnapshot } from '../src/modules/work/search-readiness.ts';
+import { withSearchGraphSnapshot } from '../src/modules/search/snapshot.ts';
 import { searchOperationEvidence, type SearchPhaseEvidence } from '../src/modules/search/operation-evidence.ts';
 
 const lineage = { dataEpoch: 'graph-epoch', routingEpoch: 'routing' };
@@ -30,7 +31,9 @@ function fixture() {
   fuseki.query = async sparql => {
     queries.push(sparql);
     if (sparql.includes('ASK')) return { boolean: true };
-    if (!sparql.includes('textIndexProfile')) throw new Error('foreground population query');
+    if (!sparql.includes('textIndexProfile') && !sparql.includes('SELECT ?epoch ?sequence ?generation')) {
+      throw new Error('foreground population query');
+    }
     return { results: { bindings: [{ epoch: term(lineage.dataEpoch), sequence: term(sequence),
       generation: term(generation) }] } };
   };
@@ -47,7 +50,7 @@ function fixture() {
   } } as ContentCore;
   const cursor = { read: async () => checkpoint } as unknown as ContentProjectionCursor;
   const env = { fuseki, lineage, objectDirectory: '.temp/content-readiness' };
-  return { fuseki, queries, profiles,
+  return { env, fuseki, queries, profiles,
     read: () => assertPublicContentSearchReady(env, content, cursor, 'content-test'),
     moveGraph: () => { sequence = String(Number(sequence) + 1); writeEpoch = String(Number(writeEpoch) + 2); },
     qualification: (value: unknown) => { qualification = value; },
@@ -69,11 +72,18 @@ test('cold and warm Content readiness consume bounded native witnesses across gr
   expect(f.queries).toHaveLength(6);
 });
 
-test.each([undefined, null, {}, { ...witness, population: '-1' }, { ...witness, population: '10' },
-  { ...witness, ownerDataEpoch: 'foreign' }, { ...witness, ownerSequence: '11' },
+test.each([undefined, null, {}, { ...witness, population: '-1' },
   { ...witness, ownerSequence: '01' }, { ...witness, publicDomain: 'false' },
   { population: '2', ownerSequence: '0', publicDomain: false }])(
-  'missing, malformed and out-of-cut Content qualifications refuse without auditing: %j', async value => {
+  'missing or malformed Content witnesses stay pending without auditing: %j', async value => {
+    const f = fixture();
+    f.qualification(value);
+    await expect(f.read()).rejects.toBeInstanceOf(SearchReadinessPending);
+  });
+
+test.each([{ ...witness, population: '10' }, { ...witness, ownerDataEpoch: 'foreign' },
+  { ...witness, ownerSequence: '11' }])(
+  'out-of-cut Content qualifications refuse without auditing: %j', async value => {
     const f = fixture();
     f.qualification(value);
     await expect(f.read()).rejects.toBeInstanceOf(ContentProjectionUnavailable);
@@ -97,11 +107,66 @@ test('a never-qualified native generation remains a cold readiness failure', asy
 test('Content source checkpoint lag and movement retain distinct unavailable and retryable outcomes', async () => {
   const lag = fixture();
   lag.checkpoint({ dataEpoch: 'content-epoch', sequence: '9' });
-  await expect(lag.read()).rejects.toBeInstanceOf(ContentProjectionUnavailable);
+  await expect(lag.read()).rejects.toBeInstanceOf(SearchReadinessPending);
   expect(lag.proofs()).toBe(0);
   const moved = fixture();
   moved.afterSource({ dataEpoch: 'content-epoch', sequence: '11' });
   await expect(moved.read()).rejects.toBeInstanceOf(SearchSnapshotMoved);
+});
+
+test('one bounded search recaptures its graph after Content delivery and background qualification', async () => {
+  const f = fixture();
+  f.checkpoint({ dataEpoch: 'content-epoch', sequence: '9' });
+  let attempts = 0;
+  const diagnostics: import('../src/modules/work/search-readiness.ts').SearchAttemptDiagnostic[] = [];
+  const result = await withStableSearchSnapshot(f.fuseki, () => {
+    attempts++;
+    if (attempts === 2) {
+      f.source({ dataEpoch: 'content-epoch', sequence: '11' });
+      f.moveGraph();
+      f.qualification(undefined);
+    }
+    if (attempts === 3) {
+      f.moveGraph();
+      f.qualification({ ...witness, population: '3', ownerSequence: '11' });
+    }
+    return withSearchGraphSnapshot(f.env, f.read);
+  }, undefined, diagnostics);
+  expect(attempts).toBe(3);
+  expect(result).toMatchObject({ contentPosition: { dataEpoch: 'content-epoch', sequence: '11' },
+    index: { sequence: '27', contentQualification: { population: 3, ownerSequence: '11' } } });
+  expect(diagnostics.map(attempt => attempt.result)).toEqual(['readiness-pending', 'readiness-pending']);
+  expect(f.queries.some(query => /COUNT|publicTextInventory|ContentVariant/.test(query))).toBe(false);
+});
+
+test('pending projection or qualification exhausts the same wall deadline without becoming an empty page', async () => {
+  for (const phase of ['projection', 'qualification']) {
+    const f = fixture();
+    if (phase === 'projection') f.checkpoint({ dataEpoch: 'content-epoch', sequence: '9' });
+    else f.qualification(undefined);
+    let attempts = 0;
+    const phases: SearchPhaseEvidence[] = [];
+    await expect(searchOperationEvidence.run({ phases }, () => withStableSearchSnapshot(f.fuseki,
+      () => { attempts++; return f.read(); }, 220))).rejects.toBeInstanceOf(SearchRequestTimedOut);
+    expect(attempts).toBeGreaterThan(1);
+    expect(phases.some(entry => entry.phase === 'readiness-owner-wait')).toBe(true);
+    expect(f.queries.some(query => /COUNT|publicTextInventory|ContentVariant/.test(query))).toBe(false);
+  }
+});
+
+test('foreign or future checkpoints and out-of-cut witnesses do not retry as pending delivery', async () => {
+  const foreign = fixture();
+  foreign.checkpoint({ dataEpoch: 'foreign', sequence: '9' });
+  const future = fixture();
+  future.checkpoint({ dataEpoch: 'content-epoch', sequence: '11' });
+  const unqualified = fixture();
+  unqualified.qualification({ ...witness, ownerDataEpoch: 'foreign' });
+  for (const f of [foreign, future, unqualified]) {
+    let attempts = 0;
+    await expect(withStableSearchSnapshot(f.fuseki, () => { attempts++; return f.read(); }))
+      .rejects.toBeInstanceOf(ContentProjectionUnavailable);
+    expect(attempts).toBe(1);
+  }
 });
 
 test('public-domain generations require their retained eligibility profile before matching', async () => {
