@@ -1,3 +1,4 @@
+import { releaseSourceEvidenceSchema } from './modules/source/release-evidence-contract.ts';
 import { t } from 'elysia';
 import './modules/types/registry.ts';
 import { registryWorkType } from './modules/types/contract.ts';
@@ -123,7 +124,7 @@ export const searchDisambiguation = t.Object({
     t.Object({ status: t.Literal('unavailable') })]),
   releases: t.Union([t.Object({ status: t.Literal('available'), values: t.Array(t.Object({
     release: t.String(), revision: t.String(), kind: t.Union(['formal', 'web', 'fixed', 'virtual'].map(value => t.Literal(value))),
-    year: t.Nullable(t.Integer()), platform: t.Nullable(t.String()),
+    year: t.Nullable(t.Integer()), platform: t.Nullable(t.String()), sourceEvidence: releaseSourceEvidenceSchema,
   }), { maxItems: 20 }) }), t.Object({ status: t.Literal('unavailable') })]),
 }, { additionalProperties: false });
 
