@@ -745879,6 +745879,100 @@
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                     "type": "string"
                   },
+                  "nutrients": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "basis": {
+                          "enum": [
+                            "per-serving",
+                            "whole-recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "coverage": {
+                          "enum": [
+                            "complete",
+                            "partial",
+                            "unknown"
+                          ],
+                          "type": "string"
+                        },
+                        "evidence": {
+                          "maxLength": 2048,
+                          "minLength": 1,
+                          "pattern": "^[a-z][a-z0-9+.-]*:\\S+$",
+                          "type": "string"
+                        },
+                        "kind": {
+                          "const": "nutrient",
+                          "type": "string"
+                        },
+                        "nutrient": {
+                          "maxLength": 2048,
+                          "minLength": 1,
+                          "pattern": "^[a-z][a-z0-9+.-]*:\\S+$",
+                          "type": "string"
+                        },
+                        "provenance": {
+                          "enum": [
+                            "declared",
+                            "source-stated",
+                            "computed"
+                          ],
+                          "type": "string"
+                        },
+                        "unit": {
+                          "maxLength": 2048,
+                          "minLength": 1,
+                          "pattern": "^[a-z][a-z0-9+.-]*:\\S+$",
+                          "type": "string"
+                        },
+                        "unitText": {
+                          "maxLength": 100,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "value": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "denominator": {
+                              "maximum": 1000000000000,
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "numerator": {
+                              "maximum": 1000000000000,
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "numerator",
+                            "denominator"
+                          ],
+                          "type": "object"
+                        },
+                        "valueLexical": {
+                          "maxLength": 100,
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "nutrient",
+                        "value",
+                        "unit",
+                        "basis",
+                        "coverage",
+                        "provenance"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 64,
+                    "type": "array"
+                  },
                   "nutrition": {
                     "additionalProperties": false,
                     "properties": {
@@ -746096,6 +746190,100 @@
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                     "type": "string"
                   },
+                  "nutrients": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "basis": {
+                          "enum": [
+                            "per-serving",
+                            "whole-recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "coverage": {
+                          "enum": [
+                            "complete",
+                            "partial",
+                            "unknown"
+                          ],
+                          "type": "string"
+                        },
+                        "evidence": {
+                          "maxLength": 2048,
+                          "minLength": 1,
+                          "pattern": "^[a-z][a-z0-9+.-]*:\\S+$",
+                          "type": "string"
+                        },
+                        "kind": {
+                          "const": "nutrient",
+                          "type": "string"
+                        },
+                        "nutrient": {
+                          "maxLength": 2048,
+                          "minLength": 1,
+                          "pattern": "^[a-z][a-z0-9+.-]*:\\S+$",
+                          "type": "string"
+                        },
+                        "provenance": {
+                          "enum": [
+                            "declared",
+                            "source-stated",
+                            "computed"
+                          ],
+                          "type": "string"
+                        },
+                        "unit": {
+                          "maxLength": 2048,
+                          "minLength": 1,
+                          "pattern": "^[a-z][a-z0-9+.-]*:\\S+$",
+                          "type": "string"
+                        },
+                        "unitText": {
+                          "maxLength": 100,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "value": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "denominator": {
+                              "maximum": 1000000000000,
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "numerator": {
+                              "maximum": 1000000000000,
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "numerator",
+                            "denominator"
+                          ],
+                          "type": "object"
+                        },
+                        "valueLexical": {
+                          "maxLength": 100,
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "nutrient",
+                        "value",
+                        "unit",
+                        "basis",
+                        "coverage",
+                        "provenance"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 64,
+                    "type": "array"
+                  },
                   "nutrition": {
                     "additionalProperties": false,
                     "properties": {
@@ -746312,6 +746500,100 @@
                   "expectedHead": {
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                     "type": "string"
+                  },
+                  "nutrients": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "basis": {
+                          "enum": [
+                            "per-serving",
+                            "whole-recipe"
+                          ],
+                          "type": "string"
+                        },
+                        "coverage": {
+                          "enum": [
+                            "complete",
+                            "partial",
+                            "unknown"
+                          ],
+                          "type": "string"
+                        },
+                        "evidence": {
+                          "maxLength": 2048,
+                          "minLength": 1,
+                          "pattern": "^[a-z][a-z0-9+.-]*:\\S+$",
+                          "type": "string"
+                        },
+                        "kind": {
+                          "const": "nutrient",
+                          "type": "string"
+                        },
+                        "nutrient": {
+                          "maxLength": 2048,
+                          "minLength": 1,
+                          "pattern": "^[a-z][a-z0-9+.-]*:\\S+$",
+                          "type": "string"
+                        },
+                        "provenance": {
+                          "enum": [
+                            "declared",
+                            "source-stated",
+                            "computed"
+                          ],
+                          "type": "string"
+                        },
+                        "unit": {
+                          "maxLength": 2048,
+                          "minLength": 1,
+                          "pattern": "^[a-z][a-z0-9+.-]*:\\S+$",
+                          "type": "string"
+                        },
+                        "unitText": {
+                          "maxLength": 100,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "value": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "denominator": {
+                              "maximum": 1000000000000,
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "numerator": {
+                              "maximum": 1000000000000,
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "numerator",
+                            "denominator"
+                          ],
+                          "type": "object"
+                        },
+                        "valueLexical": {
+                          "maxLength": 100,
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "nutrient",
+                        "value",
+                        "unit",
+                        "basis",
+                        "coverage",
+                        "provenance"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 64,
+                    "type": "array"
                   },
                   "nutrition": {
                     "additionalProperties": false,

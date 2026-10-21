@@ -15,8 +15,9 @@ import { CompositionCorrupt, CompositionUnavailable, NATIVE_ID, readCompositionH
 import { readCompositionPage, readStructureMeasures, selectWorkCompositionRevision } from '../modules/structure/read.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable }
   from '../modules/structure/tree.ts';
-import { ingredientTextParts, RecipeMeasure, STRUCTURE_LIMITS, OccurrenceRecord }
+import { ingredientTextParts, InvalidStructureObject, RecipeMeasure, STRUCTURE_LIMITS, OccurrenceRecord }
   from '../modules/structure/format.ts';
+import { checkRecipeMeasureReferences } from '../modules/recipe/fact-projection.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import { AdmissionDenied, type VerifiedPrincipal } from '../modules/access/admission.ts';
 import { DisclosureUnavailable } from '../modules/disclosure/read.ts';
@@ -62,6 +63,10 @@ const nutritionBody = t.Object({ basis: t.Union([t.Literal('per-serving'), t.Lit
       unit: t.String({ minLength: 1, maxLength: 2048 }), amount: rational },
     { additionalProperties: false }), { maxItems: 64 }) }, { additionalProperties: false }), { maxItems: 512 }) },
 { additionalProperties: false });
+const nativeNutrientMeasure = t.Object({ ...RecipeMeasure.properties,
+  kind: t.Literal('nutrient'),
+  ...t.Required(t.Pick(RecipeMeasure, ['nutrient', 'unit'])).properties,
+}, { additionalProperties: false });
 const storedNutritionBody = t.Object({
   expectedHead: ref, actingSubject: ref,
   yield: t.Object({ value: rational, unit: t.Optional(t.String({ format: 'uri', maxLength: 2048 })),
@@ -81,6 +86,8 @@ const storedNutritionBody = t.Object({
         unit: t.String({ format: 'uri', maxLength: 2048 }), amount: rational },
       { additionalProperties: false }), { maxItems: 64 }) }, { additionalProperties: false }),
     { maxItems: 512 }) }, { additionalProperties: false })),
+  /** Omitted preserves nutrients; [] clears them. Native rows and calculation inputs are exclusive. */
+  nutrients: t.Optional(t.Array(nativeNutrientMeasure, { maxItems: STRUCTURE_LIMITS.measures })),
 }, { additionalProperties: false });
 const timing = t.Object({ value: rational, unit: t.Optional(t.String({ format: 'uri', maxLength: 2048 })),
   unitText: t.Optional(t.String({ minLength: 1, maxLength: 100 })),
@@ -208,6 +215,14 @@ function key(request: Request): string | null {
 }
 
 class RecipeImportPending extends Error {}
+
+function checkMeasureReferences(measures: readonly RecipeMeasure[]): void {
+  try { checkRecipeMeasureReferences(measures); }
+  catch (error) {
+    if (error instanceof InvalidStructureObject) throw new InvalidCompositionChange(error.message);
+    throw error;
+  }
+}
 
 function routeError(error: unknown): Response {
   if (error instanceof RecipeImportPending) {
@@ -470,6 +485,9 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       const idempotencyKey = key(request);
       if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
       try {
+        if (body.nutrition !== undefined && body.nutrients !== undefined) {
+          return problem(400, 'invalid_recipe_measure', 'Supply native nutrients or nutrition calculation inputs');
+        }
         if (!body.yield.unit && !body.yield.unitText) {
           return problem(400, 'invalid_recipe_measure', 'Yield requires a unit or unitText');
         }
@@ -486,7 +504,7 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           })),
         })), body.nutrition.basis) : null;
         const kept = stored.filter(item => durationKinds.has(item.kind)
-          || !nutrition && item.kind === 'nutrient');
+          || !nutrition && body.nutrients === undefined && item.kind === 'nutrient');
         const reduced = (value: { numerator: number; denominator: number }) => {
           const result = exactRational(BigInt(value.numerator), BigInt(value.denominator));
           return { numerator: Number(result.numerator), denominator: Number(result.denominator) };
@@ -506,11 +524,13 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
             value: { numerator: Number(item.amount.numerator), denominator: Number(item.amount.denominator) },
             basis: nutrition.basis, coverage: nutrition.coverage,
             provenance: 'computed' as const })) ?? []),
+          ...(body.nutrients ?? []),
           ...kept,
         ];
         if (measures.length > STRUCTURE_LIMITS.measures) {
           return problem(400, 'invalid_recipe_measure', 'Recipe has too many distinct measures');
         }
+        checkMeasureReferences(measures);
         const result = await changeAdmittedStructureMeasures(work.environment, work.account, work.access,
           request, { structure, expectedHead: body.expectedHead,
             actingSubject: body.actingSubject, idempotencyKey, measures });
@@ -552,6 +572,7 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         if (measures.length > STRUCTURE_LIMITS.measures) {
           return problem(400, 'invalid_recipe_measure', 'Recipe has too many distinct measures');
         }
+        checkMeasureReferences(measures);
         const result = await changeAdmittedStructureMeasures(work.environment, work.account, work.access,
           request, { structure, expectedHead: body.expectedHead,
             actingSubject: body.actingSubject, idempotencyKey, measures });

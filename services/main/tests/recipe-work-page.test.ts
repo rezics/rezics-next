@@ -447,6 +447,72 @@ test('a cursor resumes at the next section when a page ends on a section boundar
   expect(walked.pages).toBe(2);
 });
 
+test('every Recipe page scales whole-recipe nutrients exactly and preserves each qualified per-serving observation', async () => {
+  const records = Array.from({ length: 205 }, (_, order) => ingredient(structure, order, '1 cup flour'));
+  const source = fixture(records);
+  const measures: RecipeMeasure[] = [servingsMeasure(4)];
+  for (const basis of ['whole-recipe', 'per-serving'] as const) {
+    for (const coverage of ['complete', 'partial', 'unknown'] as const) {
+      for (const provenance of ['declared', 'source-stated', 'computed'] as const) {
+        measures.push({ ...nutrientMeasure, value: { numerator: 7, denominator: 3 },
+          valueLexical: '7/3', basis, coverage, provenance, evidence: id() });
+      }
+    }
+  }
+  measures.push({ ...nutrientMeasure, basis: 'whole-recipe', value: { numerator: 0, denominator: 1 } },
+    { ...nutrientMeasure, basis: 'whole-recipe', value: { numerator: 1_000_000_000_000, denominator: 3 } });
+  const original = structuredClone(measures), retainedRecords = structuredClone(records);
+  const expected: RecipeMeasure[] = original.map(measure => measure.kind !== 'nutrient' || measure.basis === 'per-serving'
+    ? measure : { ...measure, value: { numerator: measure.value.numerator === 7 ? 7
+      : measure.value.numerator === 0 ? 0 : 250_000_000_000,
+    denominator: measure.value.numerator === 7 ? 4 : 1 } });
+  let cursor: string | undefined, pages = 0, measureReads = 0;
+  const seen: string[] = [];
+  do {
+    const page = await readRecipeHierarchyPage({ structure, revision,
+      ...(cursor ? { cursor } : { servings: 3 }),
+      readMeasures: async () => { measureReads += 1; return { measures, pagesRead: 1 }; },
+      readChildren: source.readChildren, readParent: source.readParent });
+    expect(page.profile).toBe('recipe-work-page-v1');
+    if (page.profile !== 'recipe-work-page-v1') throw new Error('same revision must remain readable');
+    expect(page.revision).toBe(revision);
+    expect(page.measures).toEqual(expected);
+    expect(page.measures).toHaveLength(measures.length);
+    expect(page.ingredients.every(item => item.amount?.numerator === 3 && item.amount.denominator === 4)).toBe(true);
+    seen.push(...page.occurrences.map(item => item.occurrence));
+    pages += 1;
+    expect(pages).toBeLessThanOrEqual(3);
+    cursor = page.next;
+  } while (cursor);
+  expect(pages).toBe(3);
+  expect(measureReads).toBe(3);
+  expect(seen).toEqual(records.map(item => item.occurrence));
+  expect(new Set(seen).size).toBe(205);
+  expect(measures).toEqual(original);
+  expect(records).toEqual(retainedRecords);
+});
+
+test('Recipe scaling preserves nutrient absence and refuses exact quantity overflow without changing stored measures', async () => {
+  const source = fixture([ingredient(structure, 0, '1 cup flour')]);
+  const input = { structure, revision, servings: 100, readChildren: source.readChildren, readParent: source.readParent };
+  const absent = await readRecipeHierarchyPage({ ...input, measures: [servingsMeasure(1)] });
+  expect(absent.profile).toBe('recipe-work-page-v1');
+  if (absent.profile !== 'recipe-work-page-v1') throw new Error('absent nutrients must not block a Recipe');
+  expect(absent.measures).toEqual([servingsMeasure(1)]);
+  const large: RecipeMeasure = { ...nutrientMeasure, basis: 'whole-recipe',
+    value: { numerator: 1_000_000_000_000, denominator: 1 }, coverage: 'unknown', evidence: id() };
+  const measures = [servingsMeasure(1), large], original = structuredClone(measures);
+  await expect(readRecipeHierarchyPage({ ...input, measures })).rejects.toThrow(WorkReadLimit);
+  expect(measures).toEqual(original);
+  const perServing = { ...large, basis: 'per-serving' as const };
+  const unchanged = await readRecipeHierarchyPage({ ...input, measures: [servingsMeasure(1), perServing] });
+  if (unchanged.profile !== 'recipe-work-page-v1') throw new Error('per-serving values must remain readable');
+  expect(unchanged.measures[1]).toEqual(perServing);
+  const oversizedIngredient = ingredient(structure, 0, '1000000000000 cups flour', 1_000_000_000_000);
+  await expect(readRecipeHierarchyPage({ ...input, measures: [servingsMeasure(1)],
+    ...fixture([oversizedIngredient]) })).rejects.toThrow(WorkReadLimit);
+});
+
 test('many short sections stay inside the read bound and finish in order', async () => {
   const records: OccurrenceRecord[] = [];
   for (let index = 0; index < 20; index += 1) {
