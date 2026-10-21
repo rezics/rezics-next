@@ -67,7 +67,10 @@ function fixture(count = 6) {
     };
     const head = id(2000 + n), admission = uuid(2000 + n);
     const manifest = `urn:rezics:sha256:${prepareComponent(directory, state.credit, state, RETAINED_CREDIT_ASSOCIATIONS_PROFILE)}`;
-    return { state, head, admission, manifest, n };
+    // The compatibility command owns these immutable values independently of
+    // its credit, revision, admission and the currently active generation.
+    return { state, head, admission, manifest, n, operation: id(12000 + n),
+      modelGeneration: `urn:rezics:model-generation:${live.generation}` };
   });
   const generation = () => `urn:rezics:model-generation:${live.generation}`;
   const query = async (sparql: string): Promise<SparqlResult> => {
@@ -96,10 +99,13 @@ function fixture(count = 6) {
       manifest: entry.manifest, receipt: familyReceiptIri(entry.admission, RETAINED_CREDIT_ASSOCIATIONS),
       admission: entry.admission, digest: retainedCreditAssociationDigest(state, null), work: state.work,
       creditRevision: state.creditRevision, epoch: live.epoch, sequence: '90', scope: `work:edit:${state.work}`,
+      operation: entry.operation, receiptOperation: entry.operation, modelGeneration: entry.modelGeneration,
     }) : rows();
     if (sparql.includes('SELECT ?revision ?kind')) return rows({ revision: state.creditRevision, kind: `${RV}NativeAgentCredit` });
     if (sparql.includes('SELECT ?work ?head ?agent')) return rows({ work: state.work, head: state.workRevision, agent: id(50),
-      role: state.role, actor: id(4), epoch: 'credit-epoch', sequence: '12' });
+      role: state.role, actor: id(4), epoch: 'credit-epoch', sequence: '12',
+      model: 'https://rezics.com/definition/native-agent-credit-v1',
+      shape: 'https://rezics.com/definition/native-agent-credit-v1' });
     if (sparql.includes('SELECT DISTINCT ?receipt ?admission')) return rows({ receipt: workEditReceiptIri(uuid(1000 + n)),
       admission: uuid(1000 + n), nativeCommand: 'true' });
     if (sparql.includes('SELECT ?outcome ?reason')) return rows({ outcome: `${RV}Succeeded`,
