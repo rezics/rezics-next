@@ -7,6 +7,8 @@ import { seedServedTypes } from '../catalogue/type-fixtures.ts';
 import { DiscoverResourceCard } from '../discover/resource-card.tsx';
 import type { ResourceCard } from '../discover/api.ts';
 import { contentText, zoneContentText } from '../language/untagged.ts';
+import { zoneWork } from '../realm/adapt.ts';
+import { loadHeroModule } from '../realm/modules.ts';
 import { PageContainer } from '../shell/page.tsx';
 import { localizedPath } from '../../i18n/locale.ts';
 import { fictionZone, zoneMessagesFor } from '../zones/fixtures.ts';
@@ -90,14 +92,15 @@ export const SavedPreview: Story = { render: () => <Home preview />,
 export const SavedPreviewPhone: Story = { ...SavedPreview, globals: { viewport: { value: 'phone' } } };
 
 type SavedCollectionProps = { incomplete?: boolean; document?: boolean; compare?: boolean;
-  moduleType?: 'shelf' | 'editorial-list' | 'hero-carousel'; unavailable?: boolean; rtl?: boolean };
+  moduleType?: 'shelf' | 'editorial-list' | 'hero-carousel'; unavailable?: boolean; rtl?: boolean; clearedFields?: boolean };
 function SavedCollection({ incomplete = false, document = true, compare = false,
-  moduleType = 'shelf', unavailable = false, rtl = false }: SavedCollectionProps) {
+  moduleType = 'shelf', unavailable = false, rtl = false, clearedFields = false }: SavedCollectionProps) {
   const [savedModules, setSavedModules] = useState<PlacedModule[]>([]);
-  const book = useMemo(() => ({ ...previewShowcaseWork, title: compare ? {
+  const book = useMemo(() => ({ ...previewShowcaseWork, title: compare || clearedFields ? {
     ...contentText(rtl ? 'كبرياء وتحامل' : 'Pride and Prejudice', rtl ? 'ar' : 'en'),
     basis: 'requested' as const,
-  } : previewShowcaseWork.title }), [compare, rtl]);
+  } : previewShowcaseWork.title, ...(clearedFields ? { primaryCredits: [], tagline: null,
+    completionStatus: null, chapterCount: null, wordCount: null, lastUpdatedAt: null } : {}) }), [compare, rtl, clearedFields]);
   useEffect(() => {
     const preview = collectionPreview(incomplete ? 'partial' : 'complete');
     preview.presentation.modules[0]!.type = moduleType;
@@ -105,13 +108,22 @@ function SavedCollection({ incomplete = false, document = true, compare = false,
     const readers = { ...previewReaders(), async summaries(targets: readonly string[]) {
       return new Map(targets.flatMap(target => !unavailable && target === book.id ? [[target, book] as const] : []));
     } };
+    const context = { locale: 'en' as const, ref: 'harbor', realm: previewCollection,
+      mounts: new Map([[previewCollection, 'saved-reading']]) };
+    const presentation = localizedHomePresentation(preview.presentation, 'en');
+    // Exercise the saved scheduled-card adapter with a complete current Work and older Realm values.
+    const loaded = clearedFields ? loadHeroModule(preview.presentation.modules[0]!, presentation, context, [], undefined,
+      async () => new Map([[book.id, { ...zoneWork({ ...book, primaryCredits: previewShowcaseWork.primaryCredits }, context, previewCollection),
+        cover: { url: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="600"%3E%3Crect width="400" height="600" fill="tomato"/%3E%3C/svg%3E', width: 400, height: 600 },
+        tagline: zoneContentText('Outdated Realm tagline', 'en'), status: 'completed' as const,
+        chapters: 42, words: 123456, updatedAt: '2026-10-18T10:00:00.000Z' }]]),
+      async () => new Map([[book.id, book]])).then(state => [{ module: { id: 'saved-shelf', type: 'hero-carousel' as const,
+        title: 'Saved reading list', rail: false, layout: 'covers' as const, shuffle: false, more: null }, state }])
+      : loadPreviewHomeModules(preview, presentation, context, readers).then(result => result.modules);
     let active = true;
-    void loadPreviewHomeModules(preview, localizedHomePresentation(preview.presentation, 'en'), {
-      locale: 'en', ref: 'harbor', realm: previewCollection,
-      mounts: new Map([[previewCollection, 'saved-reading']]),
-    }, readers).then(loaded => { if (active) setSavedModules(loaded.modules); });
+    void loaded.then(modules => { if (active) setSavedModules(modules); });
     return () => { active = false; };
-  }, [incomplete, moduleType, unavailable, book]);
+  }, [incomplete, moduleType, unavailable, book, clearedFields]);
   const canonical: ResourceCard = { id: book.id, kind: 'work', types: book.types, name: book.title, icon: book.cover,
     work: { primaryCredits: book.primaryCredits.map(credit => ({ ...credit, identityStatus: 'active' as const })),
       creditCount: { value: book.primaryCredits.length, kind: 'exact' }, rating: null } };
@@ -174,6 +186,22 @@ export const SavedEditorialBook: Story = { render: () => <SavedCollection compar
   async play({ canvasElement }) { await checkBookIdentity(canvasElement); } };
 export const SavedScheduledBook: Story = { render: () => <SavedCollection compare moduleType="hero-carousel" />,
   async play({ canvasElement }) { await checkBookIdentity(canvasElement); } };
+export const SavedScheduledBookClearedFields: Story = {
+  render: () => <SavedCollection moduleType="hero-carousel" clearedFields document={false} />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('heading', { name: 'Pride and Prejudice' })).toBeVisible();
+    const covers = canvasElement.querySelectorAll('[data-slot="work-cover"]');
+    await expect(covers).toHaveLength(1);
+    await expect(covers[0]).toHaveAttribute('data-kind', 'book');
+    await expect(covers[0]!.querySelector('img')).toBeNull();
+    await expect(canvas.queryByText('Jane Austen', { exact: true })).not.toBeInTheDocument();
+    await expect(canvas.queryByText('Outdated Realm tagline')).not.toBeInTheDocument();
+    await expect(canvasElement.querySelector('.showcase-author')).not.toBeInTheDocument();
+    await expect(canvasElement.querySelector('.showcase-tagline')).not.toBeInTheDocument();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
 export const SavedRtlBook: Story = { render: () => <SavedCollection compare rtl />,
   async play({ canvasElement }) { await checkBookIdentity(canvasElement, true); } };
 export const SavedRtlBookPhone: Story = { ...SavedRtlBook, globals: { viewport: { value: 'phone' } } };
