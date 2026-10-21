@@ -57,13 +57,10 @@ export interface ListInput {
   cursor?: string;
   limit?: number;
 }
-export interface ResourceQuery extends ListInput {
-  profile: 'resource-list-v1';
-  context: 'global' | { realm: string };
-  scope: { kind: 'all' } | { kind: 'realm'; realm: string };
-  sort: 'newest' | 'updated' | 'relevance';
+export type ResourceQuery = Omit<Extract<Parameters<MainClient['v1']['query']['post']>[0],
+  { profile: 'resource-list-v1' }>, 'filter'> & {
   filter?: FilterDocument;
-}
+};
 type Answer<T> = { data: T | null; error: { status: number; value: unknown } | null; response?: { status: number } };
 export class BrowseReadError extends Error {
   constructor(
