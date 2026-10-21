@@ -105,6 +105,22 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+/** Every non-book kind keeps its shared reaction/menu cluster at the identity boundary, including wrapped rows. */
+async function sharedHeader(canvasElement: HTMLElement) {
+  await document.fonts.ready;
+  const identity = canvasElement.querySelector<HTMLElement>('[data-work-identity]')!;
+  const cluster = identity.querySelector<HTMLElement>('[data-work-reactions]')!;
+  const menus = cluster.querySelectorAll<HTMLButtonElement>('button[aria-haspopup="menu"]');
+  await expect(menus).toHaveLength(1);
+  const more = menus[0]!;
+  const heading = within(identity).getByRole('heading', { level: 1 });
+  await expect(Math.abs(cluster.getBoundingClientRect().right - identity.getBoundingClientRect().right)).toBeLessThanOrEqual(1);
+  await expect(Math.abs(more.getBoundingClientRect().right - cluster.getBoundingClientRect().right)).toBeLessThanOrEqual(1);
+  await expect(more.getBoundingClientRect().bottom).toBeLessThanOrEqual(heading.getBoundingClientRect().top);
+  await expect(identity.querySelectorAll('[data-next-action]').length).toBeLessThanOrEqual(1);
+  await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+}
+
 const typedWork = (type: string, title: string): WorkHeader => ({
   ...fixture.work,
   title: { ...fixture.work.title, value: title },
@@ -256,6 +272,7 @@ export const RecipeCooking: Story = {
   },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
+    await sharedHeader(canvasElement);
     await expect(canvas.getByRole('spinbutton', { name: 'Servings' })).toHaveValue(4);
     await expect(canvas.getByText(/Recipe · English/)).toBeVisible();
     await expect(canvas.getByText('2 cups flour')).toBeVisible();
@@ -277,6 +294,8 @@ export const RecipeCooking: Story = {
     await expect(canvas.getByRole('button', { name: 'Cook' })).toHaveFocus();
   },
 };
+
+export const RecipeCookingPhone: Story = { ...RecipeCooking, globals: { viewport: { value: 'phone' } } };
 
 export const RecipeCookingTimer: Story = {
   ...RecipeCooking,
@@ -542,6 +561,7 @@ export const PromptCopy: Story = {
   },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
+    await sharedHeader(canvasElement);
     await expect(canvas.getByText(/Prompt · English/)).toBeVisible();
     await expect(canvas.getByText('{{notes}}')).toBeVisible();
     await expect(canvas.getAllByRole('button', { name: 'Copy prompt' }).length).toBeGreaterThan(1);
@@ -556,6 +576,8 @@ export const PromptCopy: Story = {
     ).toBeVisible();
   },
 };
+
+export const PromptCopyPhone: Story = { ...PromptCopy, globals: { viewport: { value: 'phone' } } };
 
 export const SkillChinesePhone: Story = {
   parameters: at('overview'),
@@ -578,6 +600,7 @@ export const SkillChinesePhone: Story = {
   },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
+    await sharedHeader(canvasElement);
     await expect(canvas.getByText(/技能 · 英语/)).toBeVisible();
     await expect(canvas.getAllByRole('button', { name: '安装' }).length).toBeGreaterThan(1);
     await expect(canvas.getByText('.cursor/skills/recipe-scaling/SKILL.md')).toBeVisible();
@@ -607,6 +630,7 @@ export const GuideWithContents: Story = {
   },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
+    await sharedHeader(canvasElement);
     const nav = canvas.getByRole('navigation', { name: 'On this page' });
     await expect(within(nav).getAllByRole('link')).toHaveLength(2);
     await expect(canvas.getByText('1 min read')).toBeVisible();
@@ -623,6 +647,7 @@ const notABook = (type: string, title: string): Story => ({
   ),
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
+    await sharedHeader(canvasElement);
     await expect(canvas.getByRole('heading', { level: 1, name: title })).toBeVisible();
     await expect(
       canvas.queryAllByRole('link', { name: /^(read|start reading|continue reading)$/i }),

@@ -6,6 +6,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { chooseMenuItem } from '../stories/choose-option.ts';
 import { ThreadView } from '../realm/thread-view.tsx';
+import { reportHref } from '../safety/report.ts';
 import { AuthorActions } from './author-actions.tsx';
 import { authorFixture as f, authorTarget, authorTransport } from './author-fixtures.ts';
 import { authorMessages } from './author-messages.ts';
@@ -141,9 +142,17 @@ export const NestedReplyMenus: Story = {
   },
   async play({ canvasElement }) {
     const t = authorMessages.en;
-    const triggers = within(canvasElement).getAllByRole('button', { name: t.menu });
+    const actor = storyThread.items[1]!.author!.id;
+    const owned = storyThread.items.filter(reply => reply.author?.id === actor);
+    const triggers = owned.map(reply => within(canvasElement.querySelector<HTMLElement>(
+      `#reply-${reply.reply.slice(-36)} > div > fieldset`,
+    )!).getByRole('button', { name: messages.moreOptions }));
     await expect(triggers).toHaveLength(2);
-    for (const trigger of triggers) await expect(trigger.closest('article')).toHaveTextContent('Daniel Chen');
+    for (const trigger of triggers) {
+      await expect(trigger.closest('article')).toHaveTextContent('Daniel Chen');
+      await expect(within(trigger.closest('fieldset')!).getAllByRole('button')
+        .filter(button => button.getAttribute('aria-haspopup') === 'menu')).toHaveLength(1);
+    }
     const trigger = triggers[0]!;
     await userEvent.click(trigger);
     const menuElement = await within(document.body).findByRole('menu');
@@ -151,8 +160,27 @@ export const NestedReplyMenus: Story = {
     const menu = within(menuElement);
     await expect(menu.getByRole('menuitem', { name: t.edit })).toBeVisible();
     await expect(menu.getByRole('menuitem', { name: t.placement })).toBeVisible();
+    await expect(menu.getAllByRole('menuitem', { name: 'Report this reply' })).toHaveLength(1);
+    await expect(menu.getByRole('menuitem', { name: 'Report this reply' })).toHaveAttribute('href',
+      `/en${reportHref(owned[0]!.reply, storyRealm.id)}`);
     await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'false'));
     await waitFor(() => expect(trigger).toHaveFocus());
+    const foreign = storyThread.items.find(reply => reply.parent && reply.author?.id !== actor)!;
+    const foreignActions = canvasElement.querySelector<HTMLElement>(`#reply-${foreign.reply.slice(-36)} > div > fieldset`)!;
+    const foreignMore = within(foreignActions).getByRole('button', { name: messages.moreOptions });
+    foreignMore.focus();
+    await userEvent.keyboard('{Enter}');
+    const foreignMenuElement = await within(document.body).findByRole('menu');
+    await waitFor(() => expect(foreignMenuElement).toHaveFocus());
+    const foreignMenu = within(foreignMenuElement);
+    await expect(foreignMenu.getByRole('menuitem', { name: 'Report this reply' })).toHaveAttribute('href',
+      `/en${reportHref(foreign.reply, storyRealm.id)}`);
+    await expect(foreignMenu.queryByRole('menuitem', { name: t.edit })).toBeNull();
+    await expect(foreignMenu.queryByRole('menuitem', { name: t.placement })).toBeNull();
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(foreignMore).toHaveAttribute('aria-expanded', 'false'));
+    await waitFor(() => expect(foreignMore).toHaveFocus());
   },
 };
 

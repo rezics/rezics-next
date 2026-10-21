@@ -5,7 +5,6 @@ import { cn } from '@rezics/ui/utils';
 import { DocumentBody } from '@rezics/ui/document-body';
 import { ArrowRightIcon, CheckIcon, LinkIcon, MinusIcon, PlusIcon, ReplyIcon } from 'lucide-react';
 import { type ReactNode, useId, useState } from 'react';
-import { ReportAction } from '../safety/report-action.tsx';
 import { CommunityIcon } from '../shell/community-icon.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { VoteControl } from './actions.tsx';
@@ -251,15 +250,10 @@ function Reply({ node, context }: { node: ReplyNode; context: ThreadContext }) {
               </button>
             )}
             <CopyLink href={context.replyHref(reply.reply)} />
-            {!reply.blocked && reply.author ? <ReplyAuthorActions target={{ reply: reply.reply,
+            <ReplyAuthorActions target={!reply.blocked && reply.author ? { reply: reply.reply,
               realm: context.target.realm, author: reply.author.id, revisionId: reply.revisionId,
-              placement: reply.placement }} /> : null}
-            <ReportAction
-              target={reply.reply}
-              kind="reply"
-              realm={context.target.realm}
-              className={action}
-            />
+              placement: reply.placement } : null}
+              report={{ target: reply.reply, kind: 'reply', realm: context.target.realm }} />
             <button
               type="button"
               className={cn(action, 'sm:hidden')}

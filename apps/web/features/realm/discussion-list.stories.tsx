@@ -24,6 +24,7 @@ const base = `/en${storyRealm.path}/discussions`;
 const hrefs = {
   sorts: { best: base, new: `${base}?sort=new`, top: `${base}?sort=top` },
   windows: { week: `${base}?sort=top`, month: `${base}?sort=top&t=month`, all: `${base}?sort=top&t=all` },
+  next: (cursor: string) => `${base}?cursor=${encodeURIComponent(cursor)}`,
 };
 
 function Tab({ items, sort, window, next, locale }: Args) {
@@ -32,8 +33,8 @@ function Tab({ items, sort, window, next, locale }: Args) {
     <FeedProvider locale={locale} messages={t} now={THREAD_NOW} signedIn actingSubject={null} signInHref="/auth/start"
       avatarQuery="" tab="all" followedRealms={null} api={memoryFeed()}>
       <DiscussionColumns rail={null}>
-        <DiscussionList items={items} realmPath={storyRealm.path} sort={sort} window={window} hrefs={hrefs}
-          next={next ? `${base}?cursor=next` : null} first={null}
+        <DiscussionList page={{ threads: items, nextCursor: next ? 'next' : null }} realmPath={storyRealm.path}
+          sort={sort} window={window} hrefs={hrefs} first={null}
           empty={<EmptyState icon={MessagesSquareIcon} headingLevel={3} title={t.emptyDiscussions}
             description={t.emptyDiscussionsBody} />} />
       </DiscussionColumns>
@@ -99,7 +100,21 @@ export const TopThisMonth: Story = {
 export const Empty: Story = {
   args: { items: [], next: false },
   async play({ canvasElement }) {
-    await expect(within(canvasElement).getByRole('heading', { name: 'No discussions yet' })).toBeVisible();
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('heading', { name: 'No discussions yet' })).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: /^Sort:/ })).toBeNull();
+    await expect(canvas.queryByRole('button', { name: /^Period:/ })).toBeNull();
+  },
+};
+
+export const EmptyPeriod: Story = {
+  args: { items: [], next: false, sort: 'top', window: 'month' },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('button', { name: 'Period: This month' })).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: 'Period: This month' }));
+    await expect(await screen.findByRole('menuitemradio', { name: 'All time' })).toBeVisible();
+    await userEvent.keyboard('{Escape}');
   },
 };
 
