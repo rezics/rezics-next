@@ -20,7 +20,7 @@ function SearchEntry({ locale }: { locale: UiLocale }) {
       setDestination(url.pathname + url.search);
     }}>
       <SearchField />
-      <output aria-label="Destination">{destination}</output>
+      <output aria-label="Destination" className="min-w-0 break-all">{destination}</output>
     </div>
   </ShellProvider>;
 }
@@ -103,5 +103,6 @@ export const UnicodeBoundaryKeepsConditions: Story = {
     const exact = new URL(output.textContent!, 'https://example.test');
     await expect(exact.searchParams.get('q')).toBe('"雨"');
     await expect(exact.searchParams.get('lang')).toBe('ja');
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(innerWidth);
   },
 };
