@@ -33,7 +33,7 @@ export function equivalentCounterparts(relations: Relations, definition: string)
   const found = new Map<string, Counterpart>();
   for (const entry of relations.items) {
     const rendering = entry.rendering;
-    if (!rendering || rendering.meaning.definition !== definition) continue;
+    if (!rendering?.meaning || rendering.meaning.definition !== definition) continue;
     for (const projection of rendering.projections) {
       if (projection.fromRole !== rendering.viewingRole) continue;
       for (const argument of projection.arguments) {
