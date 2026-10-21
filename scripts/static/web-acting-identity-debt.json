@@ -11,9 +11,9 @@
     "id": "discovery-resource-list-public-query-branch",
     "path": "apps/web/features/discover/api.ts",
     "operation": "POST /v1/query",
-    "read": "contract.v1.query.post(query, { headers })",
-    "input": "query",
-    "reason": "Analyzer does not discriminate /v1/query branches: resources forwards ResourceQuery and resource-list uses publicWorkRead. Program debt: expose the public resource-list persona in the contract."
+    "read": "contract.v1.query.post(request, { headers })",
+    "input": "!text ? query : 'keywords' in text ? { ...query, q: text.keywords, matchMode: 'keywords' as const } : { ...query, q: text.phrase, matchMode: 'phrase' as const }",
+    "reason": "Analyzer does not discriminate /v1/query branches: resources forwards resource-list-v1 with normalized keyword/exact text; this branch has no actingSubject field and uses publicWorkRead. Program debt: expose the public resource-list persona in the contract."
   },
   {
     "id": "followed-concept-public-template-query",
