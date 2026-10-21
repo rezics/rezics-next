@@ -286,6 +286,28 @@ test('stable retained Structure evidence window completes its final dependency f
   });
 });
 
+test('support-aware Source windows retain actual independent identities and withheld physical rows', async () => {
+  const r = await evidenceWindowFixture(true);
+  await r.run(async () => {
+    const window = await r.store.readEvidenceSupportWindow(r.session, r.selection);
+    expect(window.items).toEqual([{ support: `https://rezics.com/id/${r.supportId}`,
+      supportIdentity: `https://rezics.com/id/${r.saved.step_id}`,
+      record: r.current.id, evidence: r.current }]);
+    expect((await r.store.readEvidenceWindow(r.session, r.selection)).items).toEqual([r.current]);
+  });
+  const hidden = await evidenceWindowFixture();
+  await hidden.run(async () => {
+    const window = await hidden.store.readEvidenceSupportWindow(hidden.session, hidden.selection);
+    expect(window.items).toEqual([{ support: `https://rezics.com/id/${hidden.supportId}`,
+      supportIdentity: `https://rezics.com/id/${hidden.saved.step_id}`,
+      record: hidden.current.id, evidence: null }]);
+    expect(window.more).toBe(false);
+    expect(window.next).toBeNull();
+    expect((await hidden.store.readEvidenceWindow(hidden.session, hidden.selection)).items).toEqual([]);
+    await hidden.session.fenceDependencies();
+  });
+});
+
 test('current Structure evidence and direct reads complete the same outer window fence', async () => {
   const r = await evidenceWindowFixture(true);
   await r.run(async () => {

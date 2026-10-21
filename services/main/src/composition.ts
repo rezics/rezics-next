@@ -155,6 +155,8 @@ import { SourceRetainedFieldSupportStore, retainedFieldEvidenceOwners, type Reta
 import { acknowledgedSemanticSupportOwners } from './modules/source/field-support-acknowledged.ts';
 import { SourceRetainedRecordEvidenceOwner } from './modules/source/retained-evidence.ts';
 import { SourceReleaseEvidenceOwner } from './modules/source/release-evidence.ts';
+import { SourceAssociationEvidenceOwner } from './modules/source/association-evidence.ts';
+import { readNativeAssociationPage } from './modules/query/association-native.ts';
 import { SourceNativeChildStore } from './modules/source/child-native-support.ts';
 import { ProviderIdentityStore } from './modules/source/provider-identity.ts';
 import { SourceScoreStore } from './modules/source/score.ts';
@@ -589,6 +591,8 @@ export async function composeMain(input: ComposeMainInput) {
       sourceCorrespondences, environment, account, access, sourceAuthorNames),
     sourceFieldWithdrawals,
     sourceRetainedFieldSupports,
+    relationEvidence: new SourceAssociationEvidenceOwner(sourceRetainedFieldSupports),
+    subjectAssociations: { native: readNativeAssociationPage },
     sourceReleaseEvidence: new SourceReleaseEvidenceOwner(contentPool,sourceConversions.retained,retainedEvidence),
     sourceFieldApplications: new SourceFieldApplicationStore(contentPool, environment,
       account, access, sourceConversions, sourceAdoptions, sourceFieldWithdrawals, rightsStore),

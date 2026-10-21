@@ -36,6 +36,15 @@ export interface SourceEvidenceWindow {
   items: RetainedPublicEvidence[];
   generation: string; next: SourceEvidenceFrontier | null; more: boolean;
 }
+/** Server-owned support coordinates, including withheld physical positions.
+ * A record can have several independent supports; its ID is never their ID. */
+export interface SourceEvidenceSupport {
+  support: string; supportIdentity: string; record: string;
+  evidence: RetainedPublicEvidence | null;
+}
+export interface SourceEvidenceSupportWindow extends Omit<SourceEvidenceWindow, 'items'> {
+  items: SourceEvidenceSupport[];
+}
 /** Compose the existing evidence and Rights owner without substituting import
  * authority for a public-read identity or inventing a SourceWork binding. */
 export function retainedFieldEvidenceOwners(owner: Pick<SourceRetainedRecordEvidenceOwner,
@@ -330,6 +339,24 @@ export class SourceRetainedFieldSupportStore {
    * Source dependency at its final fence. There is no independent read budget. */
   async readEvidenceWindow(session: WorkReadSession, selection: SourceEvidenceSelection,
     frontier?: SourceEvidenceFrontier, limit = 16): Promise<SourceEvidenceWindow> {
+    return this.evidenceWindow(session, selection, frontier, limit,
+      support => support.publicEvidence ?? undefined, 'public');
+  }
+
+  /** The same current native/Source/Rights reader, retaining actual independent
+   * support and settled-step identities for the association evidence adapter. */
+  async readEvidenceSupportWindow(session: WorkReadSession, selection: SourceEvidenceSelection,
+    frontier?: SourceEvidenceFrontier, limit = 16): Promise<SourceEvidenceSupportWindow> {
+    return this.evidenceWindow(session, selection, frontier, limit, support => ({
+      support: support.support, supportIdentity: support.supportIdentity,
+      record: support.sourceRecord, evidence: support.publicEvidence,
+    }), 'supports');
+  }
+
+  private async evidenceWindow<T>(session: WorkReadSession, selection: SourceEvidenceSelection,
+    frontier: SourceEvidenceFrontier | undefined, limit: number,
+    project: (support: RetainedFieldSupportResult) => T | undefined, projection: string):
+    Promise<{ items: T[]; generation: string; next: SourceEvidenceFrontier | null; more: boolean }> {
     if (currentWorkReadSession() !== session) return supportUnavailable();
     if (!sourceId(selection.target) || !sourceId(selection.revision)
       || !selection.component || selection.component.length > 200
@@ -341,7 +368,7 @@ export class SourceRetainedFieldSupportStore {
       return coordinateInvalid();
     }
     const generation = frontier?.generation ?? await this.evidenceGeneration(selection);
-    const load = async (): Promise<SourceEvidenceWindow> => {
+    const load = async () => {
       if (await this.evidenceGeneration(selection) !== generation) throw new WorkReadMoved('Source support position changed');
       const rows = (await this.pool.query<{ id: string; principal_id: string }>(`
         SELECT s.id,s.principal_id FROM source.field_support s
@@ -353,12 +380,12 @@ export class SourceRetainedFieldSupportStore {
           AND ($7::uuid IS NULL OR s.id>$7::uuid)
         ORDER BY s.id LIMIT $8`, [selection.target,selection.slot,selection.occurrence,selection.context,
         selection.component,selection.revision,frontier ? sourceId(frontier.after) : null,limit+1])).rows;
-      const items: SourceEvidenceWindow['items'] = [];
+      const items: T[] = [];
       for (const row of rows.slice(0,limit)) {
         const support = await this.readProjection(row.principal_id,row.id,undefined,session.principal ?? undefined,session,'window');
         if (!support) return supportUnavailable();
-        const evidence = support.publicEvidence;
-        if (evidence) items.push(evidence);
+        const selected = project(support);
+        if (selected !== undefined) items.push(selected);
       }
       if (await this.evidenceGeneration(selection) !== generation) throw new WorkReadMoved('Source support position changed');
       const more = rows.length > limit, last = rows[Math.min(rows.length,limit)-1];
@@ -366,8 +393,8 @@ export class SourceRetainedFieldSupportStore {
     };
     // The full current evidence projection is fenced, including rights changes
     // that do not themselves settle or withdraw a Source support.
-    let result: SourceEvidenceWindow | undefined;
-    await session.dependency(`source-field-evidence:${canonicalDigest({ selection,frontier: frontier ?? null,limit })}`,
+    let result: Awaited<ReturnType<typeof load>> | undefined;
+    await session.dependency(`source-field-evidence:${canonicalDigest({ selection,frontier: frontier ?? null,limit,projection })}`,
       async () => (result = await load()));
     return result!;
   }

@@ -154,7 +154,7 @@ async function accountReader() {
     );
     return { reader, state, close: () => server.stop(true) };
   } catch (error) {
-    server.stop(true);
+    await server.stop(true);
     throw error;
   }
 }
@@ -819,7 +819,7 @@ test('unadopted identity reads retain live Account callbacks, expiry and source/
     account.state.active = false;
     await expect(fenceRetainedCreditIdentityRead(f.deps, basis)).rejects.toBeInstanceOf(AccountAssertionDenied);
     await expect(openRetainedCreditIdentityRead(f.deps, account.reader)).rejects.toBeInstanceOf(AccountAssertionDenied);
-  } finally { f.clean(); account.close(); }
+  } finally { f.clean(); await account.close(); }
 });
 
 test('first binding without publication still refuses denied references, stale origin revisions and generation changes', async () => {
@@ -1090,7 +1090,7 @@ test('an Account-issued live principal can bind and cannot replay after revocati
     expect(account.state.calls).toBeGreaterThan(calls);
     expect(f.sealed.size).toBe(1);
     expect(f.terminals.size).toBe(1);
-  } finally { f.clean(); account.close(); }
+  } finally { f.clean(); await account.close(); }
 });
 
 test('a new exact mapping preserves participation IDs, original identity and immutable prior history', async () => {
@@ -1764,7 +1764,7 @@ test('Account-issued principals open, fence, page and hydrate without cloning li
       await expect(read()).rejects.toBeInstanceOf(AccountAssertionDenied);
   } finally {
     f.clean();
-    account.close();
+    await account.close();
   }
 });
 
@@ -1798,7 +1798,7 @@ test('Account expiry, unavailable enforcement and changed disclosure refuse ever
   } finally {
     setSystemTime();
     f.clean();
-    account.close();
+    await account.close();
   }
 });
 
@@ -1848,7 +1848,7 @@ for (const phase of [
       await expect(read).rejects.toBeInstanceOf(AccountAssertionDenied);
     } finally {
       f.clean();
-      account.close();
+      await account.close();
     }
   });
 }
@@ -1924,7 +1924,7 @@ for (const origin of ['source-binding', 'selected-publication'] as const) {
       expect(() => structuredClone(view)).not.toThrow();
     } finally {
       f.clean();
-      account.close();
+      await account.close();
     }
   });
 }

@@ -203,6 +203,206 @@ const retained = `export function project(page, positions) {
   return output;
 }`;
 
+test('a native next frontier is rejected before a non-navigable complete-batch iteration', () => {
+  const text = `export function actions(page) {
+    const actions = [];
+    if (page.next) return [];
+    for (const entry of page.items) actions.push(entry.id);
+    return actions;
+  }`;
+  expect(continuationInventory([source(text)])).toEqual([]);
+  expect(continuationInventory([source(text.replace('if (page.next) return [];', ''))])).toHaveLength(1);
+  expect(continuationInventory([source(text.replace('if (page.next)', 'if (other.next)'))])).toHaveLength(1);
+  expect(continuationInventory([source(text.replace('if (page.next) return [];', 'if (page.next) actions.push("more");'))])).toHaveLength(1);
+});
+
+test('an explicitly complete batch is refused before an item lookup and cannot borrow a different flag', () => {
+  const text = `export function read(batch, ref) {
+    if (!batch.complete) return { ok: false };
+    const item = batch.items.find(item => item.ref === ref);
+    return { ok: true, item };
+  }`;
+  expect(continuationInventory([source(text)])).toEqual([]);
+  for (const changed of [
+    text.replace('if (!batch.complete) return { ok: false };', ''),
+    text.replace('!batch.complete', '!other.complete'),
+    text.replace('!batch.complete', 'batch.complete'),
+    text.replace('return { ok: false };', 'observe(batch);'),
+    text.replace('return { ok: false };', 'return { items: [], complete: true };'),
+    text.replace('return { ok: false };', 'return { ok: true, items: [] };'),
+    text.replace('return { ok: false };', 'return { ok: false, ...unknown };'),
+    text.replace('const item =', 'batch = other; const item ='),
+  ]) expect(continuationInventory([source(changed)]).length).toBeGreaterThan(0);
+  const showcase = `export function readShowcase(read, reference) {
+    if (!read.ok) return read;
+    if (!read.data.complete) return { ok: false, failure: 'unavailable' };
+    const selection = read.data.items.find(item => item.reference === reference);
+    return { ok: true, data: selection };
+  }`;
+  expect(continuationInventory([source(showcase)])).toEqual([]);
+  expect(continuationInventory([source(showcase.replace("{ ok: false, failure: 'unavailable' }", '{ ok: true, data: [] }'))]).length)
+    .toBeGreaterThan(0);
+});
+
+test('constructed group admission checks opaque receiver and nested items lifetimes', () => {
+  for (const text of [
+    `export function view() { const group = { items: [], mutate: opaque }; group.mutate(); return group.items; }`,
+    `export function view() { const group = { items: [] }; opaque(group.items); return group.items; }`,
+    `export function view() { const group = { items: [], mutate: opaque }; const alias = group; alias.mutate(); return group.items; }`,
+    `export function view() { const group = { items: [] }; const items = group.items; opaque(items); return group.items; }`,
+    `export function view() { const group = { items: [] }; group.items.mutate(); return group.items; }`,
+    `export function view() { const group = { items: [] }; const alias = group; alias.items = page.items; return group.items; }`,
+  ]) expect(continuationInventory([source(text)]).length).toBeGreaterThan(0);
+  expect(continuationInventory([source(`export function view() { const group = { items: [], label: 'label' };
+    group.items.push({ label: 'one' }); label(group.label); return group.items.map(item => item.label); }`)])).toEqual([]);
+});
+
+test('locally constructed Map groups have no page frontier while injected native envelopes still require one', () => {
+  const text = `export function rows(entries) {
+    const groups = new Map();
+    for (const entry of entries) {
+      const group = groups.get(entry.kind) ?? { heading: entry.kind, items: [] };
+      group.items.push(entry);
+      groups.set(entry.kind, group);
+    }
+    return [...groups.values()];
+  }`;
+  expect(continuationInventory([source(text)])).toEqual([]);
+  for (const changed of [
+    text.replace('new Map()', 'externalMap'),
+    text.replace('groups.set(entry.kind, group);', 'groups.set(entry.kind, page);'),
+    text.replace('group.items.push(entry);', 'group.items = page.items; group.items.push(entry);'),
+    text.replace('group.items.push(entry);', 'mutate(group); group.items.push(entry);'),
+    text.replace('heading: entry.kind, items: []', 'heading: entry.kind, items: [], next: page.next'),
+  ]) expect(continuationInventory([source(changed)]).length).toBeGreaterThan(0);
+});
+
+const constructedGroups = `export function buildGroups(entries) {
+  const groups = new Map();
+  for (const entry of entries) {
+    const group = groups.get(entry.kind) ?? { label: entry.kind, items: [] };
+    group.items.push(entry);
+    groups.set(entry.kind, group);
+  }
+  return [...groups].map(([key, { label, items }]) => ({ key, label, items }));
+}
+export function project(page) {
+  return { page, groups: buildGroups(page.items) };
+}`;
+
+test('derived group items keep their finite literal/Map origin through returned fields and private JSX inputs', () => {
+  const component = `import { project } from './groups.ts';
+    function Groups({ result }) { return result.groups.map(group => <p>{group.items.map(item => item.label)}</p>); }
+    export function View({ page }) { const result = project(page); return <Groups result={result}/>; }`;
+  const sources = [source(constructedGroups, 'apps/web/features/example/groups.ts'), source(component, 'apps/web/features/example/view.tsx')];
+  expect(continuationInventory(sources)).toEqual([]);
+  const siblingCursor = component.replace('return <Groups result={result}/>;', 'return <div>{link(result.page.next)}<Groups result={result}/></div>;');
+  expect(continuationInventory([sources[0]!, source(siblingCursor, sources[1]!.path)])).toEqual([]);
+  const siblingMetadata = component.replace('<p>{group.items.map(item => item.label)}</p>', '<p>{label(group.label)}{group.items.map(item => item.label)}</p>');
+  expect(continuationInventory([sources[0]!, source(siblingMetadata, sources[1]!.path)])).toEqual([]);
+  for (const write of ['group.items = foreign;', 'group.next = token;', 'group.nextCursor = token;', 'mutate(group.items);', 'mutate(group);']) {
+    const changed = siblingMetadata.replace('group => <p>', `group => { ${write} return <p>`).replace('</p>);', '</p>; });');
+    expect(continuationInventory([sources[0]!, source(changed, sources[1]!.path)]).length).toBeGreaterThan(0);
+  }
+  for (const changed of [
+    constructedGroups.replace('groups.set(entry.kind, group);', 'groups.set(entry.kind, nativePage);'),
+    constructedGroups.replace('group.items.push(entry);', 'group.items = foreign; group.items.push(entry);'),
+    constructedGroups.replace('group.items.push(entry);', 'mutate(group); group.items.push(entry);'),
+    constructedGroups.replace('label: entry.kind, items: []', 'label: entry.kind, items: [], next: token'),
+    constructedGroups.replace('({ key, label, items })', '({ key, label, items: foreign })'),
+    constructedGroups.replace('return { page, groups: buildGroups(page.items) };', 'return { groups: buildGroups(page.items) };'),
+  ]) expect(continuationInventory([source(changed, sources[0]!.path), sources[1]!]).length).toBeGreaterThan(0);
+  for (const changed of [
+    component.replace('<Groups result={result}/>', '<Groups result={result} {...unknown}/>'),
+    component.replace('<Groups result={result}/>', '<Groups result={other}/>'),
+    component.replace('const result = project(page);', 'const result = project(page); result.groups = unknown;'),
+    component.replace('const result = project(page);', 'const result = project(page); mutate(result);'),
+    component.replace('const result = project(page);', 'const result = project(page); mutate(result.groups);'),
+    component.replace('export function View', 'observe(Groups); export function View'),
+    component.replace('export function View', 'export function Groups({ result }) { return null; } export function View'),
+  ]) expect(continuationInventory([sources[0]!, source(changed, sources[1]!.path)]).length).toBeGreaterThan(0);
+});
+
+test('an exported row component requires proved inputs at every relative-import caller', () => {
+  const component = `export function Rows({ rows }) { return rows.filter(row => row.label).map(row => row.items.map(item => item.label)); }`;
+  const consumer = `import { buildGroups } from './groups.ts'; import { Rows } from './rows.tsx';
+    export function View({ entries }) { const rows = buildGroups(entries); return <Rows rows={rows}/>; }`;
+  const sources = [source(constructedGroups, 'apps/web/features/example/groups.ts'), source(component, 'apps/web/features/example/rows.tsx'),
+    source(consumer, 'apps/web/features/example/view.tsx')];
+  expect(continuationInventory(sources)).toEqual([]);
+  for (const extra of [
+    `import { Rows } from './rows.tsx'; export function Lost({ page }) { return <Rows rows={page}/>; }`,
+    `import { Rows } from './rows.tsx'; export function Lost({ page }) { return <Rows rows={page.items}/>; }`,
+    `import { Rows } from './rows.tsx'; export const escape = Rows;`,
+    `import * as UI from './rows.tsx'; export function Lost({ page }) { return <UI.Rows rows={page}/>; }`,
+    `export { Rows } from './rows.tsx';`,
+    `export async function Lost({ page }) { const ns = await import('./rows.tsx'); return ns.Rows({ rows: page.items }); }`,
+    `export async function Lost({ page, target }) { const ns = await import(target); return ns.Rows({ rows: page.items }); }`,
+  ]) expect(continuationInventory([...sources, source(extra, 'apps/web/features/example/other.tsx')]).length).toBeGreaterThan(0);
+});
+
+const localRead = `function labels(entries) { return entries.map(entry => entry.label); }
+  export function project(page) {
+    const labelsOfPage = labels(page.items);
+    return { page, labels: labelsOfPage };
+  }`;
+
+test('a conditional spread can add known disjoint fields but cannot replace retained native data', () => {
+  const added = retained.replace('return output;', 'return { ...output, ...(show ? { rating: 1 } : {}) };');
+  expect(continuationInventory([source(added)])).toEqual([]);
+  for (const changed of [
+    added.replace('{ rating: 1 }', '{ nested: { native: other } }'),
+    added.replace('{ rating: 1 }', 'unknown'),
+    added.replace('{ rating: 1 }', '{ [key]: 1 }'),
+  ]) expect(continuationInventory([source(changed)]).length).toBeGreaterThan(0);
+});
+
+test('selected pages remain native when local section records add only unrelated presentation fields', () => {
+  const text = `export function project(page) {
+    const nativePages = [];
+    nativePages.push(page);
+    const records = [];
+    const entries = page.items;
+    records.push({ page, members: [] });
+    for (const record of records) record.legend = "example";
+    return { nativePages, records, labels: entries.map(entry => entry.label) };
+  }`;
+  expect(continuationInventory([source(text)])).toEqual([]);
+  for (const changed of [
+    text.replace('nativePages.push(page);', ''),
+    text.replace('nativePages.push(page);', 'if (flag) nativePages.push(page);'),
+    text.replace('nativePages.push(page);', 'nativePages.push(page); nativePages.pop();'),
+    text.replace('record.legend = "example"', 'record.page.items.pop()'),
+    text.replace('record.legend = "example"', 'record.page.next = null'),
+    text.replace('record.legend = "example"', 'mutate(record)'),
+    text.replace('record.legend = "example"', 'mutate(record.page)'),
+    text.replace('record.legend = "example"', 'record.page.items.map(unknown)'),
+    text.replace('for (const record of records) record.legend = "example";', 'const alias = records.at(0).page; alias.next = null;'),
+  ]) expect(continuationInventory([source(changed)]).length).toBeGreaterThan(0);
+});
+
+test('finite local helper evidence preserves the raw page and rejects writes, opaque escapes and returned aliases', () => {
+  expect(continuationInventory([source(localRead)])).toEqual([]);
+  for (const changed of [
+    localRead.replace('return { page, labels: labelsOfPage };', 'return { labels: labelsOfPage };'),
+    localRead.replace('return entries.map(entry => entry.label);', 'entries.pop(); return [];'),
+    localRead.replace('return entries.map(entry => entry.label);', 'mutate(entries); return [];'),
+    localRead.replace('return entries.map(entry => entry.label);', 'return entries;'),
+    localRead.replace('return entries.map(entry => entry.label);', 'return { nested: entries };'),
+    localRead.replace('return entries.map(entry => entry.label);', 'escaped = entries; return [];'),
+    localRead.replace('return entries.map(entry => entry.label);', 'new Sink(entries); return [];'),
+    localRead.replace('return entries.map(entry => entry.label);', 'return labels(entries);'),
+    localRead.replace('const labelsOfPage =', 'labels = unknown; const labelsOfPage ='),
+    localRead.replace('project(page)', 'project(page, labels)'),
+    localRead.replace('const labelsOfPage =', 'const labels = unknown; const labelsOfPage ='),
+    localRead.replace('const labelsOfPage =', 'function labels(entries) { entries.pop(); } const labelsOfPage ='),
+    localRead.replace('entries.map(entry => entry.label)', 'entries.map(entry => { entry.label = "changed"; return entry.label; })'),
+    localRead.replace('entries.map(entry => entry.label)', 'entries.map(unknown)'),
+    localRead.replace('entries.map(entry => entry.label)', 'entries.map((entry, index, original) => { original.pop(); return entry.label; })'),
+    localRead.replace('entries.map(entry => entry.label)', 'entries.reduce((all, entry) => all, [])'),
+  ]) expect(continuationInventory([source(changed)]).length).toBeGreaterThan(0);
+});
+
 test.each([
   retained,
   retained.replace('const native = page;', 'const wrapper = { original: page }; const native = wrapper.original;'),

@@ -1,16 +1,21 @@
 import { describe, expect, test } from 'bun:test';
-import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import type { CanonicalAddress } from '@rezics/model/address';
+import { createElement, type ReactElement } from 'react';
+import { renderToStaticMarkup as renderMarkup } from 'react-dom/server';
+import { AppRouterContext, type AppRouterInstance } from 'next/dist/shared/lib/app-router-context.shared-runtime.js';
 import { RatingInline, ratingsUntilMean } from '../catalogue/rating.tsx';
 import { figuresOfRating } from '../scoped-rating/score.ts';
+import { equivalentCounterparts } from '../tracking/series-progress-panel.tsx';
 import { RelationRows } from '../work-levels/connections.tsx';
 import { copyOf as levelsCopy } from '../work-levels/messages.ts';
-import { relationRows } from '../work-levels/relation-rows.ts';
+import { franchisesOf, relationPageGroups, relationRows } from '../work-levels/relation-rows.ts';
+import type { RelationEntry, RelationsPage } from '../work-levels/types.ts';
 import { Distribution, Mean } from '../work-page/ratings.tsx';
 import { messages as workMessages } from '../work-page/messages.ts';
 import {
   identityEntry,
   identityData,
+  identitySummary,
   alter,
   persona,
   saber,
@@ -20,17 +25,223 @@ import {
   bindingSummary,
   fromRole,
   identityEntries,
+  remainingIdentityRelations,
   resourceBinding,
+  type IdentityData,
 } from './identity-relations.ts';
 import { identityContinuation, IdentitySectionsView } from './identity-views.tsx';
 import { messages, copyOf } from './messages.ts';
 import { parseEntityCursors, standaloneHrefFor } from './route.ts';
 import { resourceHref } from '../address/path.ts';
 
+const router: AppRouterInstance = { bfcacheId: '', refresh() {}, push() {}, replace() {}, back() {}, forward() {}, prefetch() {} };
+const renderToStaticMarkup = (element: ReactElement) =>
+  renderMarkup(createElement(AppRouterContext.Provider, { value: router }, element));
+
 describe('Identity relations', () => {
+  test('a missing native meaning keeps repeated and refused counterparts as neutral rows for every helper consumer', () => {
+    const source = identityEntry('hub', 'variant', alter);
+    const unknown: RelationEntry = { ...source, rendering: { ...source.rendering!, meaning: null },
+      counterparts: [alter, alter, { reference: persona.reference, status: 'unavailable' }] };
+    const absent: RelationEntry = { ...source, rendering: null, counterparts: [] };
+    const entries = [unknown, absent, unknown];
+    const rows = relationRows(entries);
+    expect(rows.map(row => row.projection)).toEqual([null, null, null]);
+    expect(rows.map(row => row.label.text)).toEqual([null, null, null]);
+    expect(rows.map(row => row.items.map(item => item.target.kind))).toEqual([
+      ['resource', 'resource', 'resource'], ['withheld'], ['resource', 'resource', 'resource'],
+    ]);
+    expect(rows[0]!.items.map(item => item.evidence)).toEqual(Array(3).fill(source.evidence));
+    const html = renderToStaticMarkup(createElement(RelationRows, { rows, locale: 'en', t: levelsCopy('en') }));
+    expect(html.match(/Saber Alter/g)).toHaveLength(4);
+    expect(html).toContain(levelsCopy('en').relatedFallback);
+    expect(html).toContain(levelsCopy('en').nameNotShown);
+    expect(html).not.toContain('data-appearance-part');
+    const page: RelationsPage = { profile: 'resource-relations-v1', resource: saber.reference, items: entries,
+      next: 'opaque:+/%?=&雪', sourcePosition: { datasetId: 'product', dataEpoch: 'epoch', sequence: '1' } };
+    const grouped = relationPageGroups(page);
+    expect(grouped.page).toBe(page);
+    expect(grouped.rows).toEqual([]);
+    expect(grouped.unrendered).toEqual(entries);
+    expect(page.items).toBe(entries);
+    const structural: RelationEntry = { ...source, kind: 'collection', collectionPurpose: null,
+      counterparts: [alter, { reference: persona.reference, status: 'unavailable' }] };
+    const direct = relationRows([structural, structural]);
+    expect(direct.map(row => row.projection)).toEqual([null, null]);
+    expect(direct.map(row => row.items.map(item => item.target))).toEqual(Array(2).fill([
+      { kind: 'resource', reference: alter.reference, summary: alter },
+      { kind: 'resource', reference: persona.reference, summary: structural.counterparts[1] },
+    ]));
+    const groupedStructural = relationPageGroups({ ...page, items: [structural, structural] });
+    expect(groupedStructural.rows).toEqual([]);
+    expect(groupedStructural.unrendered).toEqual([]);
+    expect(groupedStructural.collections.flatMap(group => group.items.map(item => item.summary)))
+      .toEqual([...structural.counterparts, ...structural.counterparts]);
+  });
+
+  test('empty selected family and discovery pages keep their own current/next tokens and generic continuity', () => {
+    const current = 'family-current:+/%?=&雪', next = 'family-next:+/%?=&雪';
+    const variantCurrent = 'variant-current:+/%?=&雪', variantNext = 'variant-next:+/%?=&雪';
+    const base = resourceHref('/e/', alter.reference);
+    const query = new URLSearchParams({ family: current, variants: variantCurrent, relations: 'generic-current:+/%', position: 'at', frame: 'frame' });
+    const page: RelationsPage = { profile: 'resource-relations-v1', resource: alter.reference, items: [], next,
+      sourcePosition: { datasetId: 'product', dataEpoch: 'epoch', sequence: '1' } };
+    const html = renderToStaticMarkup(createElement(IdentitySectionsView, {
+      data: { ok: true, data: { sections: [{ kind: 'family', hub: null, members: [], page, cursor: current, cursorKey: 'family',
+        next: { resource: alter, cursor: next }, discovery: { page: { ...page, next: variantNext }, cursor: variantCurrent, fallback: [] } }] } },
+      self: alter, locale: 'en', t: copyOf('en'), messages: workMessages.en,
+      currentHref: `${base}?${query}`, hrefFor: standaloneHrefFor({}, base),
+    }));
+    const escaped = (href: string) => `/en${href}`.replaceAll('&', '&amp;');
+    const family = new URLSearchParams(query); family.set('family', next);
+    const discovery = new URLSearchParams(query); discovery.set('variants', variantNext); discovery.delete('family');
+    expect(html).toContain(`href="${escaped(`${base}?${family}#identity-family`)}"`);
+    expect(html).toContain(`href="${escaped(`${base}?${discovery}#identity-family`)}"`);
+    const firstFamily = new URLSearchParams(query); firstFamily.delete('family');
+    const firstDiscovery = new URLSearchParams(query); firstDiscovery.delete('family'); firstDiscovery.delete('variants');
+    expect(html).toContain(`href="${escaped(`${base}?${firstFamily}#identity-family`)}"`);
+    expect(html).toContain(`href="${escaped(`${base}?${firstDiscovery}#identity-family`)}"`);
+    expect(html.match(/First page/g)).toHaveLength(2);
+    expect(html.match(/More relations/g)).toHaveLength(2);
+    expect(html).not.toContain(copyOf('en').noVariants);
+    expect(html).toContain('id="identity-family"');
+    expect(page.items).toEqual([]);
+    expect(page.next).toBe(next);
+  });
+
+  test('a terminal empty selected page retains restart navigation and refused family counterparts stay unlinked', () => {
+    const entry = identityEntry('hub', 'variant', alter);
+    const withheld: RelationEntry = { ...entry, rendering: null,
+      counterparts: [{ reference: alter.reference, status: 'unavailable' }] };
+    const data: IdentityData = { sections: [{ kind: 'family', hub: null, members: [], next: null,
+      cursor: 'terminal:+/%', cursorKey: 'family', fallback: [withheld, { ...entry, counterparts: [persona, persona] }] }] };
+    const html = renderToStaticMarkup(createElement(IdentitySectionsView, {
+      data: { ok: true, data }, self: saber, locale: 'en', t: copyOf('en'), messages: workMessages.en,
+      currentHref: `${resourceHref('/e/', saber.reference)}?family=terminal%3A%2B%2F%25&relations=generic&variants=discovery`,
+      hrefFor: standaloneHrefFor({}, resourceHref('/e/', saber.reference)),
+    }));
+    expect(html).toContain('First page');
+    expect(html).not.toContain(copyOf('en').noVariants);
+    expect(html).not.toContain('More relations');
+    expect(html).not.toContain(alter.reference);
+    expect(html).toContain(copyOf('en').nameNotShown);
+    expect(html.match(/>Persona<\/bdi>/g)).toHaveLength(2);
+    expect(html).toContain(`href="/en${resourceHref('/e/', persona.address as CanonicalAddress)}"`);
+    expect(html).toContain('relations=generic&amp;variants=discovery#identity-family');
+  });
+
+  test('family discovery cursors are single bounded values and cannot carry a former hub token', () => {
+    expect(parseEntityCursors({ variants: 'opaque:+/%?=&雪' })).toEqual({ variants: 'opaque:+/%?=&雪' });
+    expect(parseEntityCursors({ variants: ['a', 'b'] })).toBeNull();
+    expect(parseEntityCursors({ variants: 'a'.repeat(2049) })).toBeNull();
+    const href = identityContinuation(`${resourceHref('/e/', saber.reference)}?relations=generic&family=former&position=at&frame=f`, 'variants', 'opaque:+/%?=&雪');
+    const url = new URL(href, 'https://rezics.test');
+    expect(url.searchParams.get('variants')).toBe('opaque:+/%?=&雪');
+    expect(url.searchParams.get('family')).toBeNull();
+    expect(url.searchParams.get('relations')).toBe('generic');
+    expect(url.searchParams.get('position')).toBe('at');
+    expect(url.searchParams.get('frame')).toBe('f');
+    expect(url.hash).toBe('#identity-family');
+  });
+
+  test('only actually displayed occurrences leave the generic page, with repetitions and the complete native page retained', () => {
+    const shown = identityEntry('unit', 'character', alter);
+    const unknownRole = identityEntry('unrecognized', 'character', saber);
+    const withheld: RelationEntry = { ...shown, relation: `${shown.relation}-withheld`,
+      counterparts: [{ reference: alter.reference, status: 'unavailable' }] };
+    const structural: RelationEntry = { ...shown, kind: 'collection', collectionPurpose: null, rendering: null };
+    const items = [shown, unknownRole, shown, withheld, structural];
+    const page: RelationsPage = { profile: 'resource-relations-v1', resource: saber.reference, items,
+      next: 'opaque:+/%?=&雪', sourcePosition: { datasetId: 'product', dataEpoch: 'epoch', sequence: '1' } };
+    const data: IdentityData = { relations: page, sections: [{ kind: 'represents', hub: null, next: null,
+      members: [{ summary: alter, entry: shown, hub: false, kind: null, ratings: null, applicability: [] }] }] };
+    const rest = remainingIdentityRelations(page, { ok: true, data });
+    expect(rest.entries).toEqual([unknownRole, shown, withheld, structural]);
+    expect(rest.entries[1]).toBe(shown);
+    expect(rest.page).toBe(page);
+    expect(rest.page.items).toBe(items);
+    expect(rest.page.sourcePosition).toBe(page.sourcePosition);
+    const grouped = relationPageGroups(rest.page, { entries: rest.entries });
+    expect(grouped.page).toBe(page);
+    expect(grouped.page.next).toBe('opaque:+/%?=&雪');
+    expect(grouped.rows.flatMap(row => row.items).filter(item => item.relation === shown.relation)).toHaveLength(1);
+    expect(data.relations).toBe(page);
+    expect(page.items).toBe(items);
+    expect(page.items).toEqual([shown, unknownRole, shown, withheld, structural]);
+    expect(page.next).toBe('opaque:+/%?=&雪');
+
+    const extra = { ...shown, counterparts: [alter, persona] };
+    const compound = { ...page, items: [extra] };
+    expect(remainingIdentityRelations(compound, { ok: true, data: { ...data, relations: compound } }).entries).toEqual([extra]);
+  });
+
+  test('a refused, absent, mismatched or empty specialized read cannot narrow the generic native page', () => {
+    const entry = identityEntry('unit', 'character', alter);
+    const page: RelationsPage = { profile: 'resource-relations-v1', resource: saber.reference, items: [entry], next: null,
+      sourcePosition: { datasetId: 'product', dataEpoch: 'epoch', sequence: '1' } };
+    expect(remainingIdentityRelations(page, undefined).entries).toBe(page.items);
+    for (const failure of ['identity', 'unavailable', 'missing'] as const)
+      expect(remainingIdentityRelations(page, { ok: false, failure }).entries).toBe(page.items);
+    expect(remainingIdentityRelations(page, { ok: true, data: { sections: [] } }).entries).toBe(page.items);
+    expect(remainingIdentityRelations(page, { ok: true, data: { relations: page, sections: [] } }).entries).toEqual(page.items);
+    const changed = { ...page, sourcePosition: { ...page.sourcePosition, sequence: '2' } };
+    expect(remainingIdentityRelations(page, { ok: true, data: { relations: changed, sections: [] } }).entries).toBe(page.items);
+    expect(remainingIdentityRelations({ ...page, items: [] }, { ok: true, data: { relations: page, sections: [] } }).entries).toEqual([]);
+  });
+
+  test('structural membership retains its Collection binding without becoming identity or equivalent progress', () => {
+    const collection = { ...identitySummary('520', 'Collection'), type: 'collection' as const };
+    const entry = identityEntry('member', 'collection', collection);
+    const structural: RelationEntry = {
+      ...entry,
+      kind: 'collection',
+      collectionPurpose: null,
+      rendering: {
+        ...entry.rendering!,
+        meaning: null,
+        structuralBasis: { profile: 'collection-membership', collection: collection.reference, member: saber.reference },
+      },
+    };
+    const variant = identityEntry('hub', 'variant', alter, persona);
+    const definitions = new Map([['variant-of' as const, variant.rendering!.meaning!.definition]]);
+    expect(identityEntries([structural, variant], definitions, 'variant-of')).toEqual([variant]);
+    expect(resourceBinding(structural, 'collection')).toBe(collection.reference);
+    expect(franchisesOf([structural])).toEqual([collection]);
+    const allRows = relationRows([structural, variant]);
+    expect(allRows[0]!.projection).toBeNull();
+    expect(allRows[0]!.items.map(item => item.target)).toEqual([{ kind: 'resource', reference: collection.reference, summary: collection }]);
+    expect(allRows.slice(1)).toEqual(relationRows([variant]));
+
+    const counterpart = identityEntry('original', 'equivalent', { ...alter, type: 'work' });
+    const relations: RelationsPage = {
+      profile: 'resource-relations-v1', resource: saber.reference, items: [structural, counterpart], next: 'next-page',
+      sourcePosition: { datasetId: 'product', dataEpoch: 'epoch', sequence: '1' },
+    };
+    expect(equivalentCounterparts({ ...relations, next: null }, counterpart.rendering!.meaning!.definition))
+      .toEqual([{ work: alter.reference, title: alter.name.value }]);
+    expect(equivalentCounterparts(relations, counterpart.rendering!.meaning!.definition)).toEqual([]);
+    expect(equivalentCounterparts({ ...relations, items: [structural] }, counterpart.rendering!.meaning!.definition))
+      .toEqual([]);
+    expect(structural.rendering?.meaning).toBeNull();
+    if (!structural.rendering || !('structuralBasis' in structural.rendering))
+      throw new Error('Collection structural basis unavailable');
+    expect(structural.rendering.structuralBasis).toEqual({
+      profile: 'collection-membership', collection: collection.reference, member: saber.reference,
+    });
+    expect(structural.collectionPurpose).toBeNull();
+    expect(relations.next).toBe('next-page');
+    const grouped = relationPageGroups(relations, { together: true });
+    expect(grouped.page).toBe(relations);
+    expect(grouped.page.next).toBe('next-page');
+    expect(grouped.collections[0]!.purpose).toBeNull();
+    expect(grouped.collections[0]!.items).toEqual([{ relation: structural.relation, summary: collection }]);
+    expect(grouped.rows).toEqual(relationRows([counterpart], { together: true }));
+    expect(grouped.unrendered).toEqual([]);
+  });
+
   test('exact definition and role select a variant; display labels cannot retarget the relation', () => {
     const entry = identityEntry('hub', 'variant', alter, persona);
-    const definitions = new Map([['variant-of' as const, entry.rendering!.meaning.definition]]);
+    const definitions = new Map([['variant-of' as const, entry.rendering!.meaning!.definition]]);
     expect(identityEntries([entry], definitions, 'variant-of')).toEqual([entry]);
     expect(identityEntries([entry], definitions, 'represents')).toEqual([]);
     expect(resourceBinding(entry, 'variant')).toBe(alter.reference);

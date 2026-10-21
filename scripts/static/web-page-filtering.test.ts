@@ -21,6 +21,13 @@ test('server selection and new correctly filtered consumers pass', () => {
   expect(pageSelections([source(correct), source(correct, 'apps/web/features/new/read.ts')])).toEqual([]);
 });
 
+test('an inner projection loop does not turn its containing branch into page selection', () => {
+  const nested = correct.replace('return page;', 'const rows=[]; for(const item of page.items) { if(item.meaning) { for(const part of item.parts) { if(!part.visible) continue; rows.push(part); } } else rows.push(item); } return {page,rows};');
+  expect(pageSelections([source(nested)])).toEqual([]);
+  expect(pageSelections([source(nested.replace('if(item.meaning) {', 'if(!item.meaning) continue; if(item.meaning) {'))])).not.toHaveLength(0);
+  expect(pageSelections([source(nested.replace('for(const item of page.items)', 'outer: for(const item of page.items)').replace('if(!part.visible) continue;', 'if(!part.visible) continue outer;'))])).not.toHaveLength(0);
+});
+
 test.each([
   filtered,
   filtered.replace('.filter(item => item.type === type)', '.find(item => item.type === type)'),
@@ -68,6 +75,46 @@ test('passing page items into an imported helper still guards its eligibility fi
   const helper = source('export function eligible(items) { return items.filter(item => item.year === 2020); }');
   const caller = source('import {eligible} from "../example/read.ts"; async function view(api) { const page=await api.v1.works.get({query:{limit:20}}); return eligible(page.items); }', 'apps/web/features/view/read.ts');
   expect(pageSelections([helper, caller])).toHaveLength(1);
+});
+
+const presented = source('export function presented(items) { return items.filter(item => item.meaning?.definition === "family"); }');
+const retainedCaller = source('import {presented} from "../example/read.ts"; async function view(api) { const page=await api.v1.works.get({query:{limit:20}}); const selected=presented(page.items); return {page, selected}; }', 'apps/web/features/view/read.ts');
+
+test('a helper presentation subset keeps every caller\'s raw envelope independently', () => {
+  expect(pageSelections([presented, retainedCaller])).toEqual([]);
+});
+
+test.each([
+  retainedCaller.source.replace('return {page, selected}', 'return selected'),
+  retainedCaller.source.replace('return {page, selected}', 'return {page:{...page,items:selected}, selected}'),
+  retainedCaller.source.replace('return {page, selected}', 'return {page, replacement:{items:selected,next:page.next}}'),
+  retainedCaller.source.replace('return {page, selected}', 'page.items.pop(); return {page, selected}'),
+  retainedCaller.source.replace('return {page, selected}', 'return page.items.length ? {page,selected} : {items:[],next:null}'),
+  retainedCaller.source.replace('const selected=presented(page.items)', 'const select=presented; const selected=select(page.items)'),
+  retainedCaller.source.replace('const selected=presented(page.items)', 'const selected=unknown(presented,page.items)'),
+  retainedCaller.source.replace('const selected=presented(page.items)', 'const {items}=page; const selected=presented(items)'),
+  retainedCaller.source.replace('const selected=presented(page.items)', 'let items; items=page.items; const selected=presented(items)'),
+  retainedCaller.source.replace('const selected=presented(page.items)', 'const items=opaque(page.items); const selected=presented(items)'),
+])('helper conservation rejects lost, replaced, mutated or indirectly selected pages: %s', text => {
+  expect(pageSelections([presented, retainedCaller, source(text, 'apps/web/features/other/read.ts')])).not.toHaveLength(0);
+});
+
+test('one conserving caller cannot cover a second lossy caller or helper mutation', () => {
+  const lossy = source(retainedCaller.source.replace('return {page, selected}', 'return selected'), 'apps/web/features/other/read.ts');
+  expect(pageSelections([presented, retainedCaller, lossy])).not.toHaveLength(0);
+  expect(pageSelections([source(presented.source.replace('return items.filter', 'items.pop(); return items.filter')), retainedCaller])).not.toHaveLength(0);
+});
+
+test.each([
+  'import * as rows from "../example/read.ts"; async function other(api) { const page=await api.v1.works.get({query:{limit:20}}); return rows.presented(page.items); }',
+  'async function other(api) { const rows=await import("../example/read.ts"); const page=await api.v1.works.get({query:{limit:20}}); return rows.presented(page.items); }',
+  'export {presented} from "../example/read.ts";',
+  'export * from "../example/read.ts";',
+  'import {presented as subset} from "../example/read.ts"; export {subset};',
+  'import {presented} from "../example/read.ts"; export default presented;',
+  'import {presented} from "../example/read.ts"; const alias=presented; export {alias};',
+])('unknown namespace, dynamic and re-export callers cannot inherit a named caller proof: %s', text => {
+  expect(pageSelections([presented, retainedCaller, source(text, 'apps/web/features/other/read.ts')])).not.toHaveLength(0);
 });
 
 const enrichment = `export async function browse(api, hubSummary) {
