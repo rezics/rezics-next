@@ -4,7 +4,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSy
 import { join } from 'node:path';
 import { git } from './ledger.ts';
 import { GoalCoordinator, TmuxLauncher, WAKE_LAST_MESSAGE, WAKE_PROMPT, claudeNativeSession, claudeProjectKey,
-  claudeWakeArgs, eventTasks, freshTurnDescriptor, MANAGER_ROLE_CARD, managerStartMessage, nativeOwner, nativeSession, processIdentity, runAttempt, sameProcess, tmuxServer, turnUsage,
+  claudeWakeArgs, eventTasks, freshTurnDescriptor, MANAGER_PROBLEM_SOLVING, MANAGER_ROLE_CARD, managerStartMessage, nativeOwner, nativeSession, processIdentity, runAttempt, sameProcess, tmuxServer, turnUsage,
   type CoordinatorOptions, type IndependentLauncher, type LaunchDescriptor, type WakeEvent } from './coordinator.ts';
 import { GoalMailStore } from './mail.ts';
 import { coordinatorStartDescriptor, coordinatorStartOptions, managerEvents } from './goalctl.ts';
@@ -68,8 +68,9 @@ test('the next pass loads landed tool code while a landing from the previous pas
   }
 });
 
-test('the manager role card sends program readings and rulings immediately with the path and question', () => {
-  expect(MANAGER_ROLE_CARD.split('\n')).toContain("If a brief needs a reading or a ruling by the program, mail the program at once with the brief's path and the question in one sentence.");
+test('startup and event managers receive the same shared problem-solving policy', () => {
+  expect(managerStartMessage('launch')).toContain(MANAGER_PROBLEM_SOLVING);
+  expect(MANAGER_ROLE_CARD).toContain(MANAGER_PROBLEM_SOLVING);
 });
 
 test('the manager role card requires decisions to be carried out and each brief committed before the turn ends', () => {

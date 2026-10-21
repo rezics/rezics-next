@@ -24,8 +24,9 @@ capacity defaults, read [settings](references/settings.md).
    dispatched.
 3. Brief the outcome. A brief names the row, its tests, the files likely to
    change and what not to build. It never names a mechanism to build; a shared
-   mechanism starts from a design note the owning manager and supermanager have
-   read before implementation. Use the operation index (`task operation -- <query>`)
+   mechanism starts from a design note the owning manager has read and whose
+   affected interfaces are agreed with peer owners, without routine Program
+   approval. Use the operation index (`task operation -- <query>`)
    and `task goal -- persona` for API questions; inspect source when those
    observations leave a decision unresolved.
 
@@ -75,6 +76,30 @@ deadlines and wakes. Decide the event, carry out its dispatch, queue, resume or
 landing, then end the turn. Edit `state.md` only on checkpoint turns.
 An exited task with ready work behind it gets an executable disposition within
 five minutes.
+
+On any failure, blocker or abnormal waste, apply the charter's
+[shared problem-solving duty](../../../docs/goals/manager.md#shared-problem-solving-duty)
+in this turn: investigate, compare remedies, coordinate peers, execute a repair
+and verify it. A notice or research assignment alone is not a disposition;
+retain the repair owner and the next executable action while independent work
+continues. No routine decision waits for Program or maintainer approval.
+
+## Shared problem notices
+
+Notify every active Goal manager and `program` both when a problem is found and
+when it is verified fixed. Use existing Goal mail, one send per recipient:
+`GOAL_ID=<sender> task goal -- mail send <recipient> --file <notice> --key <problem>:<phase>:<recipient>`.
+Use the same problem identifier and separate `discovered` and `resolved` phases.
+Discovery names evidence, impact and next action; resolution names the fix,
+source/check receipts, adoption steps and remaining limits. Coordinate the
+repair directly with affected owners. Notices do not request routine approval
+or require an all-manager reply before work proceeds. Avoid repeated unchanged
+broadcasts and reserve deadlines for a concrete required action.
+
+If several manager roles share a Goal mailbox, make sure each role receives the
+notice through its existing coordination channel; another role's mail
+acknowledgement is not proof it has read it. Record lasting changes in the
+existing owner document for future managers, without duplicating a report.
 
 ## Efficiency audit
 
