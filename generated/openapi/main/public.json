@@ -604965,9 +604965,23 @@
                           {
                             "additionalProperties": false,
                             "properties": {
+                              "keywords": {
+                                "maxLength": 80,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "keywords"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
                               "phrase": {
                                 "maxLength": 80,
-                                "minLength": 2,
+                                "minLength": 1,
                                 "type": "string"
                               }
                             },
@@ -605123,9 +605137,23 @@
                           {
                             "additionalProperties": false,
                             "properties": {
+                              "keywords": {
+                                "maxLength": 80,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "keywords"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
                               "phrase": {
                                 "maxLength": 80,
-                                "minLength": 2,
+                                "minLength": 1,
                                 "type": "string"
                               }
                             },
@@ -605200,6 +605228,13 @@
                         "maximum": 64,
                         "minimum": 1,
                         "type": "integer"
+                      },
+                      "matchMode": {
+                        "enum": [
+                          "keywords",
+                          "phrase"
+                        ],
+                        "type": "string"
                       },
                       "profile": {
                         "const": "resource-list-v1",
@@ -607259,9 +607294,23 @@
                           {
                             "additionalProperties": false,
                             "properties": {
+                              "keywords": {
+                                "maxLength": 80,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "keywords"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
                               "phrase": {
                                 "maxLength": 80,
-                                "minLength": 2,
+                                "minLength": 1,
                                 "type": "string"
                               }
                             },
@@ -607417,9 +607466,23 @@
                           {
                             "additionalProperties": false,
                             "properties": {
+                              "keywords": {
+                                "maxLength": 80,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "keywords"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
                               "phrase": {
                                 "maxLength": 80,
-                                "minLength": 2,
+                                "minLength": 1,
                                 "type": "string"
                               }
                             },
@@ -607494,6 +607557,13 @@
                         "maximum": 64,
                         "minimum": 1,
                         "type": "integer"
+                      },
+                      "matchMode": {
+                        "enum": [
+                          "keywords",
+                          "phrase"
+                        ],
+                        "type": "string"
                       },
                       "profile": {
                         "const": "resource-list-v1",
@@ -609553,9 +609623,23 @@
                           {
                             "additionalProperties": false,
                             "properties": {
+                              "keywords": {
+                                "maxLength": 80,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "keywords"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
                               "phrase": {
                                 "maxLength": 80,
-                                "minLength": 2,
+                                "minLength": 1,
                                 "type": "string"
                               }
                             },
@@ -609711,9 +609795,23 @@
                           {
                             "additionalProperties": false,
                             "properties": {
+                              "keywords": {
+                                "maxLength": 80,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "keywords"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
                               "phrase": {
                                 "maxLength": 80,
-                                "minLength": 2,
+                                "minLength": 1,
                                 "type": "string"
                               }
                             },
@@ -609788,6 +609886,13 @@
                         "maximum": 64,
                         "minimum": 1,
                         "type": "integer"
+                      },
+                      "matchMode": {
+                        "enum": [
+                          "keywords",
+                          "phrase"
+                        ],
+                        "type": "string"
                       },
                       "profile": {
                         "const": "resource-list-v1",
@@ -627100,9 +627205,23 @@
                                         {
                                           "additionalProperties": false,
                                           "properties": {
+                                            "keywords": {
+                                              "maxLength": 80,
+                                              "minLength": 1,
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "keywords"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
                                             "phrase": {
                                               "maxLength": 80,
-                                              "minLength": 2,
+                                              "minLength": 1,
                                               "type": "string"
                                             }
                                           },
