@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { Pool } from 'pg';
 import { readEnv } from '../../../scripts/dev/config.ts';
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
-import { signIn, type LocalOAuthClient } from '../../../scripts/lib/oauth-client.ts';
+import { signIn, type LocalOAuthClient, type LocalOAuthSession } from '../../../scripts/lib/oauth-client.ts';
 import { createCorpusBackupDriver } from '../../../scripts/load/corpus-backup-driver.ts';
 import { compatibleLoadStorage, loadCompatibility, type LoadCompatibility } from '../../../scripts/load/compatibility.ts';
 import { accountEmailQueue, smtpSender } from '../../../services/account/src/email.ts';
@@ -82,9 +82,12 @@ export type PartialReaderCorpus = {
   realm: RetainedPersonaRealm; publicBook?: PublicReaderReferences; phrase?: string; introduction?: string;
   emptyBook?: BookFixture; privateBook?: BookFixture; unpublishedBook?: BookFixture; unpublishedRevision?: string;
 };
+export type PartialReaderSession = { accountId: string; cookie: string; oauth?: LocalOAuthSession };
 export type PartialReaderLease = Omit<IdentityReaderLease, 'fault'> & {
   corpusSha256: string; qualificationSha256: string;
   selectedOriginalTests: ReaderOriginalTest[]; requiredControls: ReaderControl[];
+  /** Private cleanup registry: first the real Account cookie, then the same cookie's OAuth grant. Never log either. */
+  retainSession(session: PartialReaderSession): void;
   /** Dispose the actual child OAuth attachment, preserving the parent's runtime custody. */
   closeAttachment(): Promise<IdentityReaderPin>;
 };
@@ -316,7 +319,8 @@ export function validatePartialReaderLease(lease: PartialReaderLease, input: Par
   preparedRequired(Array.isArray(lease.selectedOriginalTests) && Array.isArray(lease.requiredControls)
     && JSON.stringify([...lease.selectedOriginalTests].sort()) === JSON.stringify([...plan.selected].sort())
     && JSON.stringify([...lease.requiredControls].sort()) === JSON.stringify([...plan.requiredControls].sort()), 'lease whole-body admission differs');
-  preparedRequired(typeof lease.assertActive === 'function' && typeof lease.closeAttachment === 'function', 'actual attachment active/disposal capability missing');
+  preparedRequired(typeof lease.assertActive === 'function' && typeof lease.retainSession === 'function'
+    && typeof lease.closeAttachment === 'function', 'actual attachment active/registration/disposal capability missing');
   pin(lease.activation, 'activation');
 }
 export function validatePartialReaderReport(xml: string, selected: readonly string[]) {
@@ -421,7 +425,8 @@ async function partialPreparedFixture(input: PartialReaderInput) {
     selection: partialReaderSelection(input), assertionsReached: false,
   }) + '\n', { mode: 0o600 });
   return { sessions: { visitor }, corpus: controls.corpus, get fault() { return controls.fault; }, mainOrigin: input.mainOrigin,
-    login: identityLogin(controls.corpus, visitor, input.mainOrigin, input.accountService, input.accountResource, active),
+    login: identityLogin(controls.corpus, visitor, input.mainOrigin, input.accountService, input.accountResource, active,
+      session => lease.retainSession(session)),
     async close() { checkIdentityReaderPin(await lease.closeAttachment()); },
   };
 }
@@ -567,7 +572,8 @@ async function withEnvironment<T>(values: Record<string, string>, fn: () => Prom
 }
 
 function identityLogin(corpus: ReaderCorpus, visitor: PersonaSession, mainOrigin: string,
-  accountService: string, resource = Bun.env.ACCOUNT_MAIN_RESOURCE, active: () => void = () => {}) {
+  accountService: string, resource = Bun.env.ACCOUNT_MAIN_RESOURCE, active: () => void = () => {},
+  retainSession?: (session: PartialReaderSession) => void) {
   return async (name: SignedPersona | 'empty', next: string, scope?: string) => {
     const identity = name === 'empty' ? corpus.emptyIdentity : corpus.realm.identities[name];
     active();
@@ -578,6 +584,7 @@ function identityLogin(corpus: ReaderCorpus, visitor: PersonaSession, mainOrigin
     if (account.user.id !== identity.accountId) throw new Error('SETUP: sign-in changed Account identity');
     const cookie = login.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
     if (!cookie) throw new Error('SETUP: Account sign-in returned no cookie');
+    retainSession?.({ accountId: identity.accountId, cookie });
     const state = JSON.stringify({ next, nonce: randomUUID() }), callbacks: string[] = [];
     const auth = corpus.realm.auth;
     const client: LocalOAuthClient = { account: auth.accountOrigin, service: accountService,
@@ -597,6 +604,7 @@ function identityLogin(corpus: ReaderCorpus, visitor: PersonaSession, mainOrigin
         return response;
       } };
     const oauth = await signIn(client, cookie, { state, attempts: 1 });
+    retainSession?.({ accountId: identity.accountId, cookie, oauth });
     const person = personaSession(mainOrigin, accountService, identity.accountId, cookie, oauth,
       undefined, name, undefined, undefined, auth.accountOrigin);
     person.actingSubject = name === 'empty' ? null : corpus.realm.identities[name].actingSubject;

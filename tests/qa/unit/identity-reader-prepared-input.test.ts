@@ -155,6 +155,7 @@ function partialLease(): PartialReaderLease {
   const { fault: _fault, ...bound } = lease();
   return { ...bound, corpusSha256: sha, qualificationSha256: sha,
     selectedOriginalTests: partialInput().selectedOriginalTests, requiredControls: partialInput().requiredControls,
+    retainSession() { throw new Error('shape-only session registry must not be invoked'); },
     async closeAttachment() { throw new Error('shape-only attachment must not be invoked'); },
   };
 }
@@ -255,6 +256,7 @@ test('partial lease binds exact selected bodies, pinned controls and real attach
     { ...partialLease(), qualificationSha256: 'b'.repeat(64) },
     { ...partialLease(), selectedOriginalTests: [] },
     { ...partialLease(), requiredControls: [] },
+    { ...partialLease(), retainSession: undefined },
     { ...partialLease(), closeAttachment: undefined },
     { ...partialLease(), expiresAt: '2026-10-21T10:00:01Z' },
     { ...partialLease(), mainOrigin: 'http://127.0.0.1:754' },
