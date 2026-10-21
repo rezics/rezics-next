@@ -6070,6 +6070,132 @@
       "noBroadGoalOrRegressionGate": "Latest finite Decision authorizes only affected preparation and docs:check."
     },
     "nextOwner": "Root: consume immutable custody and separately authorize SAME G-2847 original HomeDE390/HomeFR390 speech command; SAME G-2831 retains cleanup ownership"
+  },
+  "homeDEFRStatusOnlyPreparationV4AdministrativeCheck": {
+    "atUTC": "2026-10-21T04:29:35.667990+00:00",
+    "scope": "Administrative documentation check and immutable custody preservation only; resolves pending docsCheck in homeDEFRStatusOnlyPreparationV4. No additional API, preparation, support review or AT callback.",
+    "checkedReportCommit": "3b41ed5f7b35d38e569df543049f9ed61644d27e",
+    "command": "task docs:check",
+    "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task docs:check",
+    "recordedJob": "c7730c28-1486-4ec3-9624-aac364245aaf",
+    "exitStatus": 0,
+    "result": "passed",
+    "testsPassed": 13,
+    "markdownFilesChecked": 256,
+    "log": {
+      "path": ".temp/reading-home-HomeDEFR-preparation-v4-G-2831-20261021T0435Z/docs-check.log",
+      "sha256": "e4012fcc76a493e5234ec396d2acdc94b8ecec0412867d4300eb997acc835d06",
+      "bytes": 515
+    },
+    "affectedPreparationSelection": {
+      "recordedJob": "dac5376c-2577-455a-9897-d85ba7d83499",
+      "attempt": 47,
+      "exitStatus": 0,
+      "resultClass": "passed",
+      "normalTaskAdmission": true,
+      "qaId": null,
+      "qaIdQualification": "No standalone QA ID emitted; recorded job, admitted Task command and private logs retained.",
+      "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test ./.temp/reading-home-HomeDEFR-preparation-v4-G-2831-20261021T0435Z/capture.test.ts",
+      "qaCommand": "bun scripts/goal/goalctl.ts test ./.temp/reading-home-HomeDEFR-preparation-v4-G-2831-20261021T0435Z/capture.test.ts",
+      "browserCommand": "task web:e2e -- --config .temp/reading-home-HomeDEFR-preparation-v4-G-2831-20261021T0435Z/playwright.config.ts prepare.spec.ts",
+      "bunWrapper": {
+        "passed": 1,
+        "failed": 0,
+        "expectations": 8
+      },
+      "playwrightPreparation": {
+        "passed": 1,
+        "failed": 0,
+        "durationMs": 30472.619
+      },
+      "assertionReach": [
+        "Fresh own eligible normal OAuth and same genuine Book identity",
+        "Two complete fresh prewrite five-API snapshots agree with prior restored semantic state",
+        "One supported PUT200 using actual current CAS12 -> reading/null dates CAS13",
+        "Two complete held-state five-API readbacks preserve progress/shelves/rating/follow basis/exact continuation"
+      ],
+      "ATOrOriginalOutcomeReached": false,
+      "lifecycle": {
+        "startedAtUTC": "2026-10-21T04:24:22.244Z",
+        "source": "8b8a2c0a97b5662e6283fa7531a8f1c600f37fd0",
+        "normalTaskAdmission": true,
+        "qaRunId": null,
+        "jobId": null,
+        "browserExited": true,
+        "browserExit": 0,
+        "browserError": null,
+        "ownedWebStopExit": 0,
+        "ownedWebStopError": null,
+        "reportBranchReturned": true,
+        "returnError": null,
+        "endedAtUTC": "2026-10-21T04:25:04.833Z"
+      },
+      "completedJob": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v4-G-2831-20261021T0435Z/source/completed-preparation-job.json",
+        "sha256": "54182d29addf69901ae9774c7b05f749043150c2d7f148c30af804dc5d1bde13",
+        "bytes": 952
+      },
+      "log": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v4-G-2831-20261021T0435Z/recorded-job.log",
+        "sha256": "3f4aced6b93f1993cca085c6f7acb2a1e61e741748c83974e1f8fc004d1bae94",
+        "bytes": 429
+      }
+    },
+    "immutableCustodyReverified": {
+      "ready": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v4-G-2831-20261021T0435Z/ready-for-G2847-HomeDEFR-CAS13.json",
+        "sha256": "92074fab1d345a57a39252d0d4932f4d9cea07569fd5b1c406986377dad676f1",
+        "bytes": 40577
+      },
+      "beforeBackup": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v4-G-2831-20261021T0435Z/private/before-backup.json",
+        "sha256": "a14400d9fcff4804bfe564326d1c8d17a934afc5fb062d180cf31ddef9c6b97a",
+        "bytes": 11270
+      },
+      "heldState": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v4-G-2831-20261021T0435Z/private/lease-state.json",
+        "sha256": "27d1634835c1d3dce14bbb0f1ea8a49f5012eb75be59b3aa70d90ea816c5eb44",
+        "bytes": 5778
+      },
+      "cleanupOperation": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v4-G-2831-20261021T0435Z/same-owner-cleanup-operation.json",
+        "sha256": "48e738fd4dc7d753dddc10da7450065b23f769280e53a91b1a31aeb35d8b0ee8",
+        "bytes": 3550
+      },
+      "ownedShutdown": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v4-G-2831-20261021T0435Z/owned-shutdown-verification.json",
+        "sha256": "fce8e8e401dc677d509d678ae832583f4378f03f6d697026e9617630d7dc1517",
+        "bytes": 2209
+      },
+      "sourceRuntimeCallbackHashes": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v4-G-2831-20261021T0435Z/source/runtime-and-callback-hashes.json",
+        "sha256": "c31a548a22c469623be9d6b4a7e5ae3dfecbdbc62e6f527fc7f0ad8eaa949498",
+        "bytes": 7280
+      }
+    },
+    "allPriorReportMembersAndHistoricalBytesPreserved": true,
+    "allPrior43ArtifactHashesUnchanged": true,
+    "allOwnedJobRunnerPidsAbsent": [
+      942742,
+      942900,
+      943486,
+      944795,
+      974492,
+      974537
+    ],
+    "owned43131Closed": true,
+    "protectedProcessIdentitiesUnchanged": true,
+    "mainAndOtherWorktreesManuallyWritten": false,
+    "privateBundleCopyToMain": "Root owns copy; outside worker write boundary.",
+    "productSourceOrOriginalTestsChanged": false,
+    "wholeGoalCheckOrSupportReviewOrOriginalOutcomeRerun": false,
+    "checkScopeReason": "Latest finite Decision authorizes only affected preparation and docs:check, then commit and exit.",
+    "rootBorrowIssued": false,
+    "originalFindingOrClassClosed": false,
+    "acceptedOriginalClassesOverall": "24/61 unchanged",
+    "acceptedOriginalSiteClasses": "21/45 unchanged",
+    "audit": "ACTIVE",
+    "nextOwner": "Root to consume new immutable custody and separately authorize SAME G-2847 unchanged original Home speech command."
   }
 
 }
