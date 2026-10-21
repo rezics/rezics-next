@@ -143,6 +143,47 @@ public class WorkStructurePublicationGuardTest {
         assertTrue(data.contains(uri(CommandPolicy.CURRENT), uri(WORK), p("workStructurePublicationHead"), uri(DECISION)));
     }
 
+    @Test public void manualPublicDomainPublicationPinsAssessmentWithoutInventingSourceObservation() {
+        DatasetGraph data = publication();
+        data.begin(ReadWrite.WRITE);
+        try {
+            String revisions = CommandPolicy.REVISIONS, receipts = CommandPolicy.RECEIPTS;
+            Node assessment = uri("urn:rezics:rights:assessment:" + ADMISSION);
+            String profile = "work-structure-publication-v2";
+            for (String field : List.of("modelRevision", "shapeRevision"))
+                put(data, revisions, DECISION, field, uri("https://rezics.com/definition/" + profile));
+            put(data, revisions, DECISION, "rightsBasis", p("PublicDomain"));
+            for (String subject : List.of(DECISION, SOURCE))
+                put(data, revisions, subject, "rightsAssessment", assessment);
+            data.add(uri(revisions), uri(SOURCE), uri("https://schema.org/citation"),
+                NodeFactory.createLiteralString("{\"kind\":\"manual-citation\"}"));
+            bindReceipt(data);
+            put(data, receipts, RECEIPT, "rightsAssessment", assessment);
+            assertNull(CommandService.workStructurePublicationHeadScope(data, WORK,
+                focuses(profile, profile, profile), Set.of(WORK)));
+            assertNull(CommandService.workStructurePublicationDecisionLinks(data, RECEIPT, DECISION));
+            for (String subject : List.of(DECISION, SOURCE, RECEIPT)) {
+                String graph = subject.equals(RECEIPT) ? receipts : revisions;
+                data.deleteAny(uri(graph), uri(subject), p("rightsAssessment"), Node.ANY);
+                assertNotNull(subject, CommandService.workStructurePublicationDecisionLinks(data, RECEIPT, DECISION));
+                put(data, graph, subject, "rightsAssessment", uri("urn:rezics:rights:assessment:" + WORK.substring(WORK.length() - 36)));
+                assertNotNull(subject, CommandService.workStructurePublicationDecisionLinks(data, RECEIPT, DECISION));
+                put(data, graph, subject, "rightsAssessment", assessment);
+                data.add(uri(graph), uri(subject), p("rightsAssessment"), uri(OBSERVATION));
+                assertNotNull(subject, CommandService.workStructurePublicationDecisionLinks(data, RECEIPT, DECISION));
+                put(data, graph, subject, "rightsAssessment", assessment);
+                put(data, graph, subject, "sourceObservation", uri(OBSERVATION));
+                assertNotNull(subject, CommandService.workStructurePublicationDecisionLinks(data, RECEIPT, DECISION));
+                data.deleteAny(uri(graph), uri(subject), p("sourceObservation"), Node.ANY);
+                assertNull(CommandService.workStructurePublicationDecisionLinks(data, RECEIPT, DECISION));
+            }
+            for (String subject : List.of(DECISION, SOURCE, RECEIPT))
+                put(data, subject.equals(RECEIPT) ? receipts : revisions, subject, "rightsAssessment",
+                    uri("urn:rezics:rights:assessment:invalid"));
+            assertNotNull(CommandService.workStructurePublicationDecisionLinks(data, RECEIPT, DECISION));
+        } finally { data.abort(); data.end(); data.close(); }
+    }
+
     @Test public void truthfulPublicDomainPoststateAdmitsOnlyConsistentV2FocusesAndExactReceiptBindings() {
         DatasetGraph data = publication();
         data.begin(ReadWrite.WRITE);

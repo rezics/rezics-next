@@ -1733,6 +1733,9 @@ final class CommandService extends ActionService {
         if (profile == null) return "Work structure publication profile is unsupported or ambiguous: " + subject;
         boolean sourced = NodeFactory.createURI(RV + "PublicDomain").equals(
             exactlyOne(dataset, revisions, decision, "rightsBasis"));
+        Node assessment = exactlyOne(dataset, revisions, decision, "rightsAssessment");
+        boolean manual = sourced && dataset.contains(revisions, decision,
+            NodeFactory.createURI(RV + "rightsAssessment"), Node.ANY);
         if (published) {
             if (source == null || !source.isURI()
                 || !hasType(dataset, CommandPolicy.REVISIONS, source.getURI(), "WorkStructurePublicSource")
@@ -1745,11 +1748,19 @@ final class CommandService extends ActionService {
                 return "Work structure publication source is missing or has the wrong owner: " + subject;
             Node observation = exactlyOne(dataset, revisions, decision, "sourceObservation");
             // Main owns Source eligibility; this transaction preserves its exact evidence identity.
-            if (sourced ? observation == null || !observation.isURI()
+            if (sourced && !manual ? observation == null || !observation.isURI()
                 || !observation.equals(exactlyOne(dataset, revisions, source, "sourceObservation"))
                 : dataset.contains(revisions, decision, NodeFactory.createURI(RV + "sourceObservation"), Node.ANY)
                     || dataset.contains(revisions, source, NodeFactory.createURI(RV + "sourceObservation"), Node.ANY))
                 return "Work structure publication source observation mismatch: " + subject;
+            // A manual citation carries Main's current Rights assessment, independently
+            // of retained Source observations. It must stay exact across all owners.
+            if (manual ? assessment == null || !assessment.isURI()
+                    || !assessment.getURI().matches("urn:rezics:rights:assessment:[0-9a-f-]{36}")
+                    || !assessment.equals(exactlyOne(dataset, revisions, source, "rightsAssessment"))
+                : dataset.contains(revisions, decision, NodeFactory.createURI(RV + "rightsAssessment"), Node.ANY)
+                    || dataset.contains(revisions, source, NodeFactory.createURI(RV + "rightsAssessment"), Node.ANY))
+                return "Work structure publication rights assessment mismatch: " + subject;
             String sourceError = workStructureSourceEvidence(dataset, source);
             if (sourceError != null) return sourceError;
         } else if (dataset.contains(revisions, decision, NodeFactory.createURI(RV + "publicSource"), Node.ANY)) {
@@ -1796,9 +1807,12 @@ final class CommandService extends ActionService {
                 if (!same(dataset, revisions, decision, receipts, receiptNode, property))
                     return "Work structure publication receipt field mismatch: " + property;
             }
-            if (sourced ? !same(dataset, revisions, decision, receipts, receiptNode, "sourceObservation")
+            if (sourced && !manual ? !same(dataset, revisions, decision, receipts, receiptNode, "sourceObservation")
                 : dataset.contains(receipts, receiptNode, NodeFactory.createURI(RV + "sourceObservation"), Node.ANY))
                 return "Work structure publication receipt field mismatch: sourceObservation";
+            if (manual ? !same(dataset, revisions, decision, receipts, receiptNode, "rightsAssessment")
+                : dataset.contains(receipts, receiptNode, NodeFactory.createURI(RV + "rightsAssessment"), Node.ANY))
+                return "Work structure publication receipt field mismatch: rightsAssessment";
         }
         return null;
     }
