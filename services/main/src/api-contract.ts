@@ -114,8 +114,8 @@ const searchPlacement = t.Object({ resource: t.String(), work: t.String(), occur
 export const searchExcerpt = t.Union([
   t.Object({ status: t.Literal('available'), text: t.String({ maxLength: 480 }), language: t.String(),
     revision: t.String(), resource: t.String(), variant: t.String() }, { additionalProperties: false }),
-  t.Object({ status: t.Literal('unavailable'), reason: t.Union([t.Literal('unavailable'), t.Literal('not-matching'),
-    t.Literal('unsupported-format'), t.Literal('not-hydrated')]) }, { additionalProperties: false }),
+  t.Object({ status: t.Literal('unavailable'), reason: t.Union([t.Literal('unavailable'),
+    t.Literal('not-matching'), t.Literal('unsupported-format'), t.Literal('not-hydrated')]) }, { additionalProperties: false }),
 ]);
 
 export const searchDisambiguation = t.Object({
@@ -226,7 +226,7 @@ const contentPageContinuation = t.Object({
   expiresAt: t.Integer({ minimum: 0 }),
 }, { additionalProperties: false });
 export const publicSearchTextRequest = {
-  phrase: t.String({ minLength: 1, description: '1..80 Unicode code points after NFC and whitespace normalization' }),
+  phrase: t.String({ minLength: 1, description: 'After NFC and whitespace normalization: 1..80 Unicode code points with explicit matchMode; 2..80 when omitted' }),
   matchMode: t.Optional(t.Union([t.Literal('phrase'), t.Literal('keywords')])),
 };
 const pageRequest = {
