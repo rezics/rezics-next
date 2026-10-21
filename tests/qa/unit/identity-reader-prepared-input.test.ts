@@ -1,10 +1,14 @@
 import { expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { selectTestGroups } from '../../../scripts/qa/test.ts';
 import { checkIdentityReaderPin, identityReaderFixture, identityReaderOriginals, identityReaderOutputDirectory,
   validatePreparedIdentityReaderCorpus, validatePreparedIdentityReaderInput, validateIdentityReaderLease,
+  validateIdentityReaderAdmission, validatePartialReaderCorpus, validatePartialReaderLease, validatePartialReaderReport,
+  partialReaderSelection, partialReaderControls, readerInvalidBearerSurfaces,
+  type PartialReaderInput, type PartialReaderLease, type ReaderOriginalTest,
   type PreparedIdentityReaderInput, type IdentityReaderLease } from '../support/identity-reader-fixture.ts';
 
 // These are stack-free shape examples, never live qualification or successful API answers.
@@ -131,5 +135,155 @@ test('prepared original selection uses loose wrappers without starting a hosted 
     expect(groups[0]!.tier).toBeUndefined();
     expect(groups[0]!.command[0]).toBe('bun');
     expect(groups[0]!.command[1]).toEqual(['test', ...wrappers]);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+// Partial inputs are pure shape examples. They neither create nor qualify retained controls.
+function partialInput(): PartialReaderInput {
+  return { ...input(), format: 'identity-reader-partial-v1', requiredControls: ['oauth-principals', 'public-references', 'phrase'],
+    selectedOriginalTests: readerInvalidBearerSurfaces.map<ReaderOriginalTest>(surface =>
+      `D4-008 / invalid bearer: ${surface} returns authentication refusal without anonymous retry`),
+  };
+}
+function partialCorpus(): Record<string, any> {
+  const { realm, publicBook, phrase } = corpus();
+  // Five chapters are lawful for these seven refusal bodies, never for the two-chapter reader/search bodies.
+  publicBook.chapters = Array.from({ length: 5 }, (_, i) => ({ occurrence: `actual-occurrence-${i}`, revisionId: `actual-revision-${i}` }));
+  return { realm, publicBook, phrase };
+}
+function partialLease(): PartialReaderLease {
+  const { fault: _fault, ...bound } = lease();
+  return { ...bound, corpusSha256: sha, qualificationSha256: sha,
+    selectedOriginalTests: partialInput().selectedOriginalTests, requiredControls: partialInput().requiredControls,
+    async closeAttachment() { throw new Error('shape-only attachment must not be invoked'); },
+  };
+}
+const selected = (body: 'links' | 'search' | 'concealment'): PartialReaderInput => {
+  const title = { links: 'public Book contents, chapter and default links select the same published bytes',
+    search: 'audited public phrase search and its continuation lead to readable chapters',
+    concealment: 'empty, private, unpublished and missing reader data remain distinct' }[body];
+  return { ...partialInput(), selectedOriginalTests: [`D4-008 / visitor: ${title}` as ReaderOriginalTest],
+    requiredControls: body === 'concealment' ? ['oauth-principals', 'concealment']
+      : ['oauth-principals', 'public-references', 'two-chapter-book', 'original-introduction', ...(body === 'search' ? ['phrase' as const] : [])] };
+};
+test('partial seven-body admission needs genuine public references and five principals, without identity or fault controls', () => {
+  expect(() => validateIdentityReaderAdmission(partialInput())).not.toThrow();
+  expect(() => validatePartialReaderCorpus(partialCorpus(), partialInput())).not.toThrow();
+  expect(() => validatePartialReaderLease(partialLease(), partialInput(), now)).not.toThrow();
+  expect(() => validatePreparedIdentityReaderInput(partialInput())).toThrow('input format');
+  expect(() => validatePreparedIdentityReaderCorpus(partialCorpus())).toThrow('identities/alternatives');
+  const plan = partialReaderSelection(partialInput());
+  expect(plan.selected).toHaveLength(7);
+  expect(plan.unselected).toHaveLength(25);
+  const pattern = new RegExp(plan.pattern);
+  for (const title of plan.selected) {
+    expect(pattern.test(title)).toBe(true);
+    expect(pattern.test(`prefix ${title}`)).toBe(false);
+    expect(pattern.test(`${title} suffix`)).toBe(false);
+  }
+  for (const { title } of plan.unselected) expect(pattern.test(title)).toBe(false);
+});
+for (const [label, change, error] of [
+  ['missing OAuth persona', (c: ReturnType<typeof partialCorpus>) => { delete c.realm.identities.operator; }, 'operator retained identity'],
+  ['missing callback', (c: ReturnType<typeof partialCorpus>) => { c.realm.auth.redirectUris = []; }, 'OAuth client/scope/callback'],
+  ['duplicate principal', (c: ReturnType<typeof partialCorpus>) => { c.realm.identities.member.accountId = c.realm.identities.owner.accountId; }, 'Account duplicated'],
+  ['missing public chapter', (c: ReturnType<typeof partialCorpus>) => { c.publicBook.chapters = []; }, 'at least one'],
+  ['missing exact revision', (c: ReturnType<typeof partialCorpus>) => { delete c.publicBook.chapters[0].revisionId; }, 'chapter references'],
+  ['missing phrase', (c: ReturnType<typeof partialCorpus>) => { delete c.phrase; }, 'phrase control'],
+  ['fabricated alternatives', (c: ReturnType<typeof partialCorpus>) => { c.alternatives = {}; }, 'not an admitted control'],
+  ['fake fault capability', (c: ReturnType<typeof partialCorpus>) => { c.fault = {}; }, 'not an admitted control'],
+] as const) test(`partial admission rejects ${label} before runtime attachment`, () => {
+  const value = partialCorpus(); change(value);
+  expect(() => validatePartialReaderCorpus(value, partialInput())).toThrow(error);
+});
+test('partial selectors reject slicing, broad patterns, unsupported bodies and mismatched required controls', () => {
+  for (const title of ['D4-008', '.*', 'D4-008 / visitor: missing UUID',
+    'D4-008 / visitor: owner failure is unavailable and recovery retains the Book and Account',
+    'D4-008 / authenticated empty Account: public reading requires no anonymous authority change'])
+    expect(() => validateIdentityReaderAdmission({ ...partialInput(), selectedOriginalTests: [title] })).toThrow('unsupported whole-original');
+  expect(() => validateIdentityReaderAdmission({ ...partialInput(), selectedOriginalTests: [] })).toThrow('nonempty distinct');
+  expect(() => validateIdentityReaderAdmission({ ...partialInput(), selectedOriginalTests: [partialInput().selectedOriginalTests[0], partialInput().selectedOriginalTests[0]] })).toThrow('nonempty distinct');
+  expect(() => validateIdentityReaderAdmission({ ...partialInput(), requiredControls: ['oauth-principals'] })).toThrow('requiredControls differ');
+  expect(() => validateIdentityReaderAdmission({ ...partialInput(), requiredControls: ['oauth-principals', 'public-references', 'fault'] })).toThrow('requiredControls differ');
+});
+test('partial controls throw on all unavailable access including nested references and fault counters', () => {
+  const value = partialCorpus(); validatePartialReaderCorpus(value, partialInput());
+  const controls = partialReaderControls(value, partialInput());
+  expect(controls.corpus.publicBook.chapters[0]!.revisionId).toBe('actual-revision-0');
+  for (const key of ['emptyIdentity', 'alternatives', 'emptyBook', 'privateBook', 'unpublishedBook', 'unpublishedRevision'] as const)
+    expect(() => controls.corpus[key]).toThrow('unavailable partial control');
+  expect(() => controls.corpus.publicBook.chapters[0]!.byteDigest).toThrow('unavailable partial control');
+  expect(() => controls.fault.failures).toThrow('unavailable partial control fault');
+  expect(() => controls.fault.fail(true)).toThrow('unavailable partial control fault');
+  const extra = { ...value, emptyBook: corpus().emptyBook };
+  expect(() => partialReaderControls(extra, partialInput()).corpus.emptyBook).toThrow('unavailable partial control');
+});
+for (const body of ['links', 'search'] as const) test(`whole ${body} rejects the retained five-chapter Book and requires the original introduction`, () => {
+  expect(() => validatePartialReaderCorpus(partialCorpus(), selected(body))).toThrow('requires 2 exact chapters');
+  const { realm, publicBook, phrase } = corpus();
+  const value = { realm, publicBook, phrase, introduction: 'An original catalogue introduction about a garden beside a river.' };
+  expect(() => validatePartialReaderCorpus(value, selected(body))).not.toThrow();
+  expect(() => validatePartialReaderCorpus({ ...value, introduction: 'replacement' }, selected(body))).toThrow('exact original introduction');
+  if (body === 'search') expect(() => validatePartialReaderCorpus({ ...value, phrase: 'unmatched' }, selected(body))).toThrow('exact phrase');
+});
+test('admitted whole-link controls retain original iteration and previous/next array boundaries', () => {
+  const { realm, publicBook } = corpus();
+  const value = { realm, publicBook, introduction: 'An original catalogue introduction about a garden beside a river.' };
+  validatePartialReaderCorpus(value, selected('links'));
+  const { chapters } = partialReaderControls(value, selected('links')).corpus.publicBook;
+  expect(chapters.map(chapter => chapter.occurrence)).toEqual(publicBook.chapters.map((chapter: any) => chapter.occurrence));
+  for (const [index, chapter] of chapters.entries()) {
+    expect(chapter.revisionId).toBe(publicBook.chapters[index].revisionId);
+    expect(chapters[index - 1]?.occurrence ?? null).toBe(publicBook.chapters[index - 1]?.occurrence ?? null);
+    expect(chapters[index + 1]?.occurrence ?? null).toBe(publicBook.chapters[index + 1]?.occurrence ?? null);
+  }
+  expect(() => Reflect.get(chapters[0]!, 'unknown')).toThrow('unavailable partial control');
+});
+test('whole concealment requires empty, private, unpublished and successor controls together', () => {
+  const { realm, emptyBook, privateBook, unpublishedBook, unpublishedRevision } = corpus();
+  const value = { realm, emptyBook, privateBook, unpublishedBook, unpublishedRevision };
+  expect(() => validatePartialReaderCorpus(value, selected('concealment'))).not.toThrow();
+  for (const field of ['emptyBook', 'privateBook', 'unpublishedBook', 'unpublishedRevision'] as const) {
+    const missing = { ...value }; delete missing[field];
+    expect(() => validatePartialReaderCorpus(missing, selected('concealment'))).toThrow();
+  }
+  expect(() => validatePartialReaderCorpus({ ...value, privateBook: unpublishedBook }, selected('concealment'))).toThrow('substitutes');
+});
+test('partial lease binds exact selected bodies, pinned controls and real attachment disposal without requiring fault injection', () => {
+  for (const value of [
+    { ...partialLease(), corpusSha256: 'b'.repeat(64) },
+    { ...partialLease(), qualificationSha256: 'b'.repeat(64) },
+    { ...partialLease(), selectedOriginalTests: [] },
+    { ...partialLease(), requiredControls: [] },
+    { ...partialLease(), closeAttachment: undefined },
+    { ...partialLease(), expiresAt: '2026-10-21T10:00:01Z' },
+    { ...partialLease(), mainOrigin: 'http://127.0.0.1:754' },
+  ]) expect(() => validatePartialReaderLease(value as PartialReaderLease, partialInput(), now)).toThrow();
+});
+test('partial execution receipt rejects zero matches, skipped selected bodies, failures and unexpected extra bodies', () => {
+  const titles = partialReaderSelection(partialInput()).selected;
+  const passed = titles.map(title => `<testcase name="${title}"/>`).join('');
+  expect(() => validatePartialReaderReport(passed, titles)).not.toThrow();
+  expect(() => validatePartialReaderReport(passed + '<testcase name="unselected"><skipped/></testcase>', titles)).not.toThrow();
+  for (const xml of ['', passed.replace(/<testcase[^>]+\/>/, ''),
+    passed.replace('/>', '><skipped/></testcase>'), passed.replace('/>', '><failure/></testcase>'),
+    passed + passed, passed + '<testcase name="unadmitted"/>'])
+    expect(() => validatePartialReaderReport(xml, titles)).toThrow();
+});
+test('goalctl forwards the anchored whole-body selector and Bun executes exactly those complete tests', () => {
+  mkdirSync('.temp', { recursive: true });
+  const dir = mkdtempSync(resolve('.temp/identity-reader-partial-selector-'));
+  try {
+    const plan = partialReaderSelection(partialInput()), path = resolve(dir, 'selection.test.ts');
+    const junit = resolve(dir, 'selected.xml');
+    writeFileSync(path, `import {test} from 'bun:test';\n` + [...plan.selected, ...plan.unselected.map(cell => cell.title)]
+      .map(title => `test(${JSON.stringify(title)},()=>{${plan.selected.includes(title) ? '' : "throw Error('unselected body executed')"}});`).join('\n'));
+    const flags = ['--test-name-pattern', plan.pattern, '--reporter=junit', `--reporter-outfile=${junit}`];
+    const groups = selectTestGroups([path, ...flags]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.tier).toBeUndefined();
+    expect(groups[0]!.command).toEqual(['bun', ['test', path, ...flags]]);
+    execFileSync('bun', ['test', path, ...flags], { stdio: 'pipe' });
+    expect(() => validatePartialReaderReport(readFileSync(junit, 'utf8'), plan.selected)).not.toThrow();
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

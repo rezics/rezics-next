@@ -59,6 +59,40 @@ export type IdentityReaderCustody = {
   releaseIdentityReader(input: PreparedIdentityReaderInput, outcome: 'completed' | 'failed'): Promise<IdentityReaderPin>;
 };
 
+export const readerInvalidBearerSurfaces = ['header', 'contents', 'chapter', 'exact', 'default', 'search', 'search-page'] as const;
+type InvalidBearerSurface = typeof readerInvalidBearerSurfaces[number];
+const readerBodyTitles = {
+  links: 'public Book contents, chapter and default links select the same published bytes',
+  search: 'audited public phrase search and its continuation lead to readable chapters',
+  concealment: 'empty, private, unpublished and missing reader data remain distinct',
+} as const;
+export type ReaderOriginalTest =
+  | `D4-008 / invalid bearer: ${InvalidBearerSurface} returns authentication refusal without anonymous retry`
+  | `D4-008 / ${PersonaName}: ${typeof readerBodyTitles[keyof typeof readerBodyTitles]}`;
+export type ReaderControl = 'oauth-principals' | 'public-references' | 'phrase'
+  | 'two-chapter-book' | 'original-introduction' | 'concealment';
+export type PartialReaderInput = Omit<PreparedIdentityReaderInput, 'format'> & {
+  format: 'identity-reader-partial-v1'; selectedOriginalTests: ReaderOriginalTest[]; requiredControls: ReaderControl[];
+};
+export type IdentityReaderAdmission = PreparedIdentityReaderInput | PartialReaderInput;
+type PublicReaderReferences = Pick<BookFixture, 'work' | 'mainVersion'> & {
+  chapters: Pick<ChapterFixture, 'occurrence' | 'revisionId'>[];
+};
+export type PartialReaderCorpus = {
+  realm: RetainedPersonaRealm; publicBook?: PublicReaderReferences; phrase?: string; introduction?: string;
+  emptyBook?: BookFixture; privateBook?: BookFixture; unpublishedBook?: BookFixture; unpublishedRevision?: string;
+};
+export type PartialReaderLease = Omit<IdentityReaderLease, 'fault'> & {
+  corpusSha256: string; qualificationSha256: string;
+  selectedOriginalTests: ReaderOriginalTest[]; requiredControls: ReaderControl[];
+  /** Dispose the actual child OAuth attachment, preserving the parent's runtime custody. */
+  closeAttachment(): Promise<IdentityReaderPin>;
+};
+export type PartialReaderCustody = {
+  attachIdentityReader(input: PartialReaderInput): Promise<PartialReaderLease>;
+  releaseIdentityReader(input: PartialReaderInput, outcome: 'completed' | 'failed'): Promise<IdentityReaderPin>;
+};
+
 function preparedRequired(value: unknown, field: string): asserts value {
   if (!value) throw new Error(`TEST PREMISE: prepared identity reader ${field}; no outcome assertion reached`);
 }
@@ -142,6 +176,161 @@ export function validatePreparedIdentityReaderCorpus(value: unknown): asserts va
     preparedRequired(chapter.text.includes(value.phrase), 'public chapter lacks exact phrase control');
 }
 
+const originalIntroduction = 'An original catalogue introduction about a garden beside a river.';
+export function partialReaderSelection(input: PartialReaderInput) {
+  const catalog: { title: string; required: ReaderControl[] | null }[] = [];
+  for (const name of personaNames) {
+    for (const [body, title] of Object.entries(readerBodyTitles)) catalog.push({
+      title: `D4-008 / ${name}: ${title}`,
+      required: body === 'concealment' ? ['oauth-principals', 'concealment']
+        : ['oauth-principals', 'public-references', 'two-chapter-book', 'original-introduction', ...(body === 'search' ? ['phrase' as const] : [])],
+    });
+    catalog.push({ title: `D4-008 / ${name}: owner failure is unavailable and recovery retains the Book and Account`, required: null });
+  }
+  catalog.push({ title: 'D4-008 / authenticated empty Account: public reading requires no anonymous authority change', required: null });
+  for (const surface of readerInvalidBearerSurfaces) catalog.push({
+    title: `D4-008 / invalid bearer: ${surface} returns authentication refusal without anonymous retry`,
+    required: ['oauth-principals', 'public-references', 'phrase'],
+  });
+  preparedRequired(Array.isArray(input.selectedOriginalTests) && input.selectedOriginalTests.length > 0
+    && new Set(input.selectedOriginalTests).size === input.selectedOriginalTests.length, 'nonempty distinct whole-original selection required');
+  const requested = new Set<string>(input.selectedOriginalTests);
+  for (const title of requested)
+    preparedRequired(catalog.some(cell => cell.title === title && cell.required), 'unsupported whole-original selector');
+  const selected = catalog.filter(cell => requested.has(cell.title));
+  const required = [...new Set(selected.flatMap(cell => cell.required!))].sort();
+  preparedRequired(Array.isArray(input.requiredControls) && input.requiredControls.length === required.length
+    && [...input.requiredControls].sort().every((control, index) => control === required[index]), 'selected whole-body requiredControls differ');
+  const escape = (title: string) => title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return {
+    partial: true, selected: selected.map(cell => cell.title), requiredControls: required,
+    unselected: catalog.filter(cell => !requested.has(cell.title)).map(cell => ({ title: cell.title,
+      reason: cell.required ? 'not admitted by this partial selection' : 'requires the strict complete profile' })),
+    unselectedIdentity: { file: identityReaderOriginals[0].path, reason: 'all D4-007 original criteria require the strict complete profile' },
+    pattern: `^(?:${selected.map(cell => escape(cell.title)).join('|')})$`,
+  };
+}
+export function validateIdentityReaderAdmission(value: unknown): asserts value is IdentityReaderAdmission {
+  if (record(value) && value.format === 'identity-reader-partial-v1') {
+    validatePreparedIdentityReaderInput({ ...value, format: 'identity-reader-prepared-v1' });
+    partialReaderSelection(value as PartialReaderInput);
+  } else validatePreparedIdentityReaderInput(value);
+}
+/** Only required whole-body premises are checked. The custodian qualifies these exact pinned bytes. */
+export function validatePartialReaderCorpus(value: unknown, input: PartialReaderInput): asserts value is PartialReaderCorpus {
+  const plan = partialReaderSelection(input), needs = (control: ReaderControl) => plan.requiredControls.includes(control);
+  preparedRequired(record(value) && record(value.realm), 'partial retained realm missing');
+  const realm = value.realm;
+  preparedRequired(record(realm.identities) && record(realm.auth), 'partial OAuth principals/registration missing');
+  for (const field of ['realm', 'space', 'zone'] as const) preparedRequired(nonempty(realm[field]), `realm.${field} missing`);
+  preparedRequired(realm.visibility === 'public', 'public realm required');
+  origin(realm.auth.accountOrigin, 'realm.auth.accountOrigin');
+  preparedRequired(nonempty(realm.auth.clientId) && nonempty(realm.auth.scope)
+    && Array.isArray(realm.auth.redirectUris) && realm.auth.redirectUris.length > 0
+    && realm.auth.redirectUris.every(nonempty), 'partial retained OAuth client/scope/callback missing');
+  const accounts = new Set<string>();
+  for (const name of personaNames) if (name !== 'visitor') {
+    const identity = realm.identities[name];
+    preparedRequired(record(identity), `${name} retained identity missing`);
+    for (const field of ['email', 'password', 'accountId', 'actingSubject'] as const)
+      preparedRequired(nonempty(identity[field]), `${name}.${field} missing`);
+    preparedRequired(!accounts.has(identity.accountId as string), `${name} Account duplicated`);
+    accounts.add(identity.accountId as string);
+  }
+  // Identity-only controls cannot enter this profile through a relabelled public control.
+  for (const field of ['alternatives', 'emptyIdentity', 'fault'])
+    preparedRequired(!(field in value), `partial ${field} is not an admitted control`);
+  const works = new Set<string>(), revisions = new Set<string>(), occurrences = new Set<string>();
+  const book = (field: string, count?: number, exact = false) => {
+    const candidate = value[field];
+    preparedRequired(record(candidate) && nonempty(candidate.work) && nonempty(candidate.mainVersion), `${field} public/retained references missing`);
+    preparedRequired(!works.has(candidate.work), `${field} substitutes another Book control`); works.add(candidate.work);
+    preparedRequired(Array.isArray(candidate.chapters) && (count === undefined ? candidate.chapters.length > 0 : candidate.chapters.length === count),
+      `${field} requires ${count ?? 'at least one'} exact chapters`);
+    if (exact) for (const key of ['title', 'structure', 'compositionRevision'] as const)
+      preparedRequired(nonempty(candidate[key]), `${field}.${key} missing`);
+    for (const chapter of candidate.chapters) {
+      preparedRequired(record(chapter) && nonempty(chapter.occurrence) && nonempty(chapter.revisionId), `${field} chapter references missing`);
+      preparedRequired(!occurrences.has(chapter.occurrence) && !revisions.has(chapter.revisionId), `${field} duplicate chapter reference`);
+      occurrences.add(chapter.occurrence); revisions.add(chapter.revisionId);
+      if (exact) {
+        for (const key of ['post', 'variantId', 'compositionRevision', 'byteDigest', 'text'] as const)
+          preparedRequired(nonempty(chapter[key]), `${field} chapter.${key} missing`);
+        preparedRequired(/^[a-f0-9]{64}$/.test(chapter.byteDigest as string), `${field} chapter digest invalid`);
+      }
+    }
+    return candidate;
+  };
+  if (needs('public-references')) {
+    const publicBook = book('publicBook', needs('two-chapter-book') ? 2 : undefined, needs('two-chapter-book'));
+    if (needs('two-chapter-book')) preparedRequired(nonempty(publicBook.contribution) && nonempty(publicBook.publicationDecision), 'publicBook published default controls missing');
+  }
+  if (needs('phrase')) {
+    preparedRequired(nonempty(value.phrase), 'phrase control missing');
+    if (needs('two-chapter-book')) for (const chapter of (value.publicBook as BookFixture).chapters)
+      preparedRequired(chapter.text.includes(value.phrase), 'public chapter lacks exact phrase control');
+  }
+  if (needs('original-introduction')) preparedRequired(value.introduction === originalIntroduction, 'exact original introduction missing');
+  if (needs('concealment')) {
+    const empty = book('emptyBook', 0);
+    preparedRequired(nonempty(empty.contribution) && nonempty(empty.publicationDecision), 'emptyBook published controls missing');
+    book('privateBook', 1); book('unpublishedBook', 1);
+    preparedRequired(nonempty(value.unpublishedRevision) && !revisions.has(value.unpublishedRevision), 'distinct unpublished successor missing');
+  }
+}
+/** Missing properties fail at access; there are no placeholder Books, choices or fault providers. */
+export function partialReaderControls(value: PartialReaderCorpus, input: PartialReaderInput) {
+  const needs = new Set(partialReaderSelection(input).requiredControls);
+  const allowed = new Set(['realm',
+    ...(needs.has('public-references') ? ['publicBook'] : []), ...(needs.has('phrase') ? ['phrase'] : []),
+    ...(needs.has('original-introduction') ? ['introduction'] : []),
+    ...(needs.has('concealment') ? ['emptyBook', 'privateBook', 'unpublishedBook', 'unpublishedRevision'] : []),
+  ]);
+  const guard = (target: object, path: string): object => new Proxy(target, {
+    get(object, key, receiver) {
+      if (path === 'corpus') preparedRequired(typeof key === 'string' && allowed.has(key), `unavailable partial control corpus.${String(key)}`);
+      // Original chapter navigation reads the array's absent previous/next slot.
+      // This is a known boundary, rather than a missing fixture control.
+      if (Array.isArray(object) && typeof key === 'string' && /^-?\d+$/.test(key)
+        && (Number(key) < 0 || Number(key) >= object.length)) return undefined;
+      preparedRequired(Reflect.has(object, key), `unavailable partial control ${path}.${String(key)}`);
+      const child: unknown = Reflect.get(object, key, receiver);
+      preparedRequired(child !== undefined, `unavailable partial control ${path}.${String(key)}`);
+      return child && typeof child === 'object' ? guard(child, `${path}.${String(key)}`) : child;
+    },
+  });
+  return { corpus: guard(value, 'corpus') as ReaderCorpus,
+    get fault(): IdentityReaderLease['fault'] { throw new Error('TEST PREMISE: unavailable partial control fault; no outcome assertion reached'); },
+  };
+}
+export function validatePartialReaderLease(lease: PartialReaderLease, input: PartialReaderInput, now = Date.now()) {
+  const plan = partialReaderSelection(input);
+  preparedRequired(lease.borrower === 'G-2775' && lease.custodian === 'G-2823' && lease.id === input.leaseId
+    && nonempty(lease.recordedJobId), 'named recorded custody differs');
+  const start = Date.parse(lease.activatedAt), end = Date.parse(lease.expiresAt);
+  preparedRequired(start <= now && end > now && end - start <= 600_000, 'fresh finite ten-minute lease required');
+  for (const field of ['productRevision', 'productTree', 'mainOrigin', 'accountService', 'accountOrigin'] as const)
+    preparedRequired(lease[field] === input[field], `${field} lease binding differs`);
+  preparedRequired(lease.corpusSha256 === input.corpus.sha256 && lease.qualificationSha256 === input.qualification.sha256,
+    'qualified corpus binding differs');
+  preparedRequired(Array.isArray(lease.selectedOriginalTests) && Array.isArray(lease.requiredControls)
+    && JSON.stringify([...lease.selectedOriginalTests].sort()) === JSON.stringify([...plan.selected].sort())
+    && JSON.stringify([...lease.requiredControls].sort()) === JSON.stringify([...plan.requiredControls].sort()), 'lease whole-body admission differs');
+  preparedRequired(typeof lease.assertActive === 'function' && typeof lease.closeAttachment === 'function', 'actual attachment active/disposal capability missing');
+  pin(lease.activation, 'activation');
+}
+export function validatePartialReaderReport(xml: string, selected: readonly string[]) {
+  const found = new Set<string>();
+  for (const match of xml.matchAll(/<testcase\b([^>]*?)(?:\/>|>([\s\S]*?)<\/testcase>)/g)) {
+    const title = /\bname="([^"]*)"/.exec(match[1]!)?.[1];
+    if (/<skipped\b/.test(match[2] ?? '')) continue;
+    preparedRequired(title && selected.includes(title) && !found.has(title), 'unexpected or duplicate original test execution');
+    preparedRequired(!/<(?:failure|error)\b/.test(match[2] ?? ''), 'selected original test failed');
+    found.add(title);
+  }
+  preparedRequired(found.size === selected.length, 'not every admitted whole-original body executed');
+}
+
 export function checkIdentityReaderPin(value: IdentityReaderPin): string {
   pin(value, 'retained');
   const path = resolve(value.path);
@@ -161,7 +350,7 @@ function preparedInput() {
   const path = Bun.env.REZICS_IDENTITY_READER_PREPARED_INPUT;
   preparedRequired(path, 'REZICS_IDENTITY_READER_PREPARED_INPUT missing');
   const input: unknown = JSON.parse(readFileSync(path, 'utf8'));
-  validatePreparedIdentityReaderInput(input);
+  validateIdentityReaderAdmission(input);
   for (const field of ['qualification', 'sourceEquivalence', 'corpus', 'custodyModule', 'custodyInput'] as const)
     checkIdentityReaderPin(input[field]);
   const git = (revision: string) => execFileSync('git', ['rev-parse', revision], { cwd: input.sourceRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
@@ -182,6 +371,7 @@ export function validateIdentityReaderLease(lease: IdentityReaderLease, input: P
 }
 async function preparedFixture() {
   const input = preparedInput();
+  if (input.format === 'identity-reader-partial-v1') return partialPreparedFixture(input);
   for (const original of identityReaderOriginals) checkIdentityReaderPin(original);
   const corpus: unknown = JSON.parse(readFileSync(checkIdentityReaderPin(input.corpus), 'utf8'));
   validatePreparedIdentityReaderCorpus(corpus);
@@ -206,6 +396,33 @@ async function preparedFixture() {
   return { sessions: { visitor }, corpus, fault: lease.fault, mainOrigin: input.mainOrigin,
     login: identityLogin(corpus, visitor, input.mainOrigin, input.accountService, input.accountResource, active),
     async close() { lease.fault.fail(false); },
+  };
+}
+
+async function partialPreparedFixture(input: PartialReaderInput) {
+  for (const original of identityReaderOriginals) checkIdentityReaderPin(original);
+  const corpus: unknown = JSON.parse(readFileSync(checkIdentityReaderPin(input.corpus), 'utf8'));
+  validatePartialReaderCorpus(corpus, input);
+  preparedRequired(corpus.realm.auth.accountOrigin === input.accountOrigin, 'OAuth Account origin differs from custody');
+  const owner = await import(pathToFileURL(checkIdentityReaderPin(input.custodyModule)).href) as PartialReaderCustody;
+  const lease = await owner.attachIdentityReader(input);
+  const active = () => { validatePartialReaderLease(lease, input); lease.assertActive(); };
+  active(); checkIdentityReaderPin(lease.activation);
+  const controls = partialReaderControls(corpus, input);
+  const visitor = personaSession(input.mainOrigin, input.accountService, null, undefined, undefined,
+    undefined, 'visitor', undefined, undefined, input.accountOrigin);
+  const guarded = (call: PersonaSession['main']): PersonaSession['main'] => (...args) => { active(); return call(...args); };
+  visitor.main = guarded(visitor.main); visitor.account = guarded(visitor.account);
+  mkdirSync(input.outputDirectory, { recursive: true, mode: 0o700 });
+  appendFileSync(join(input.outputDirectory, 'attachments.ndjson'), JSON.stringify({
+    at: new Date().toISOString(), recordedJobId: lease.recordedJobId, leaseId: lease.id,
+    activation: lease.activation, corpus: input.corpus, qualification: input.qualification,
+    sourceEquivalence: input.sourceEquivalence, productRevision: lease.productRevision, productTree: lease.productTree,
+    selection: partialReaderSelection(input), assertionsReached: false,
+  }) + '\n', { mode: 0o600 });
+  return { sessions: { visitor }, corpus: controls.corpus, get fault() { return controls.fault; }, mainOrigin: input.mainOrigin,
+    login: identityLogin(controls.corpus, visitor, input.mainOrigin, input.accountService, input.accountResource, active),
+    async close() { checkIdentityReaderPin(await lease.closeAttachment()); },
   };
 }
 
@@ -527,16 +744,23 @@ export const identityReaderOriginals = [
 export async function runPreparedIdentityReader() {
   const input = preparedInput();
   const corpus: unknown = JSON.parse(readFileSync(checkIdentityReaderPin(input.corpus), 'utf8'));
-  validatePreparedIdentityReaderCorpus(corpus);
+  const selection = input.format === 'identity-reader-partial-v1' ? partialReaderSelection(input) : undefined;
+  if (input.format === 'identity-reader-partial-v1') validatePartialReaderCorpus(corpus, input);
+  else validatePreparedIdentityReaderCorpus(corpus);
+  preparedRequired(corpus.realm.auth.accountOrigin === input.accountOrigin, 'OAuth Account origin differs from custody');
   for (const original of identityReaderOriginals) checkIdentityReaderPin(original);
-  const owner = await import(pathToFileURL(checkIdentityReaderPin(input.custodyModule)).href) as IdentityReaderCustody;
+  const owner = await import(pathToFileURL(checkIdentityReaderPin(input.custodyModule)).href) as {
+    attachIdentityReader: unknown; releaseIdentityReader(input: IdentityReaderAdmission, outcome: 'completed' | 'failed'): Promise<IdentityReaderPin>;
+  };
   preparedRequired(typeof owner.attachIdentityReader === 'function' && typeof owner.releaseIdentityReader === 'function',
     'existing owner attachment/release exports missing');
   mkdirSync(input.outputDirectory, { recursive: true, mode: 0o700 });
   const runId = `identity-reader-prepared-${randomUUID()}`;
   // The runner classifies .temp files as loose Bun tests. Each wrapper imports
   // its frozen original; neither tests nor expected results are transformed.
-  const wrappers = identityReaderOriginals.map((original, index) => {
+  const originals = selection ? [identityReaderOriginals[1]] : identityReaderOriginals;
+  if (selection) writeFileSync(join(input.outputDirectory, 'selection.json'), JSON.stringify(selection, null, 2) + '\n', { mode: 0o600, flag: 'wx' });
+  const wrappers = originals.map((original, index) => {
     const wrapper = join(input.outputDirectory, `original-${index}.test.ts`);
     writeFileSync(wrapper, `import ${JSON.stringify(pathToFileURL(resolve(original.path)).href)};\n`, { mode: 0o600, flag: 'wx' });
     return wrapper;
@@ -545,6 +769,7 @@ export async function runPreparedIdentityReader() {
   let release: IdentityReaderPin | undefined, releaseFailed = false;
   try {
     const child = spawn('bun', ['scripts/goal/goalctl.ts', 'test', ...wrappers,
+      ...(selection ? ['--test-name-pattern', selection.pattern] : []),
       '--reporter=junit', `--reporter-outfile=${join(input.outputDirectory, 'original.junit.xml')}`],
     { stdio: 'inherit', env: { ...process.env, REZICS_QA_RUN_ID: runId } });
     const term = () => child.kill('SIGTERM'), interrupt = () => child.kill('SIGINT');
@@ -557,7 +782,10 @@ export async function runPreparedIdentityReader() {
       childExit = await new Promise<number | null>((accept, reject) => {
         child.once('error', reject); child.once('close', accept);
       });
-      code = childExit === 0 && !exceeded ? 0 : 1;
+      if (childExit === 0 && !exceeded) {
+        if (selection) validatePartialReaderReport(readFileSync(join(input.outputDirectory, 'original.junit.xml'), 'utf8'), selection.selected);
+        code = 0;
+      }
     } finally {
       clearTimeout(deadline); if (escalation) clearTimeout(escalation);
       process.off('SIGTERM', term); process.off('SIGINT', interrupt);
@@ -566,7 +794,7 @@ export async function runPreparedIdentityReader() {
     try { release = await owner.releaseIdentityReader(input, code === 0 ? 'completed' : 'failed'); checkIdentityReaderPin(release); }
     catch { releaseFailed = true; code = 1; }
     writeFileSync(join(input.outputDirectory, 'execution.json'), JSON.stringify({
-      code, childExit, exceeded, release, releaseFailed, runId, originals: identityReaderOriginals,
+      code, childExit, exceeded, release, releaseFailed, runId, originals, selection,
       originalSpecificationRevision: '8014f1fd4874f452a813554c5e5f2814c13f4b97',
       historicalSupportSha256: '7074631465842ef948a9d44c8b297be38186e5a2bdccadb71d9c2a308fbc0407',
       testRevision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
