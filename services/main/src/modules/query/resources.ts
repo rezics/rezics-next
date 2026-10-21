@@ -10,6 +10,7 @@ import {
   WorkReadMoved,
   WorkReadUnavailable,
   type ReadPosition,
+  type ReadRow,
   type WorkReadSession,
 } from '../work/read-session.ts';
 import { readResourceSummaries, type SummaryBatch } from '../media/summary.ts';
@@ -140,6 +141,21 @@ interface Candidate {
   types?: string[];
   head?: string;
 }
+/** A page uses one owner hydration plan. Work previews, Realm names, page
+ * visibility and Agent profiles have separate mandatory reads; accumulating
+ * those plans would exceed the shared allocation even for a small page. */
+const hydrationOwner = (kind: ResourceCard['kind']) => kind === 'realm' || kind === 'work' || kind === 'agent'
+  ? kind : kind === 'space' || kind === 'site' ? 'page' : 'name';
+
+export function resourceHydrationPrefix<T extends { id: string }>(candidates: readonly T[],
+  owners: ReadonlyMap<string, ResourceCard['kind']>): T[] {
+  const first = candidates.find(candidate => owners.has(candidate.id));
+  if (!first) return [...candidates];
+  const owner = hydrationOwner(owners.get(first.id)!);
+  const end = candidates.findIndex(candidate => owners.has(candidate.id)
+    && hydrationOwner(owners.get(candidate.id)!) !== owner);
+  return end < 0 ? [...candidates] : candidates.slice(0, end);
+}
 /** A Realm card consumes the record, just like the dedicated directory. Its
  * name alone is not authority to disclose a closed community. */
 export const resourceDisclosureTarget = (row: Pick<Candidate, 'id' | 'kind' | 'head'>) => ({
@@ -174,6 +190,73 @@ export function knownBrowsePrefix<T extends Pick<Candidate, 'id' | 'order'>>(
 /** Realm directory uses an ascending signed seek key. Browse uses the positive
  * owner order shared with native name directories and Discovery Works. */
 export const realmBrowseOrder = (rank: string) => (rank.startsWith('-') ? rank.slice(1) : rank);
+
+interface NameSourceRequest { kind: ResourceCard['kind']; limit: number;
+  order: 'identity' | 'newest' | 'updated'; after?: DirectoryAfter }
+
+/** Independent native directory seeks share one SELECT transaction. Each
+ * collector keeps its own row limit, continuation parser and selected-result
+ * fence. UNION preserves the branches without multiplying their rows.
+ * https://www.w3.org/TR/sparql11-query/#subqueries */
+export async function resourceNamePages(session: WorkReadSession, requests: readonly NameSourceRequest[]) {
+  const pages = new Map<ResourceCard['kind'], Awaited<ReturnType<typeof publicNamePage>>>();
+  if (!requests.length) return pages;
+  if (requests.length > 7 || new Set(requests.map(request => request.kind)).size !== requests.length
+    || !searchGraphSnapshot.getStore()?.clients.has(session.deps.environment.fuseki)) {
+    throw new WorkReadUnavailable('Resource source batch is unavailable');
+  }
+  const pending: { body: string; limit: number; fence?: (rows: readonly ReadRow[]) => ReadRow[];
+    resolve: (rows: ReadRow[]) => void; reject: (error: unknown) => void }[] = [];
+  const source = new Proxy(session, { get(target, key) {
+    if (key === 'query') return (body: string, limit: number, fence?: (rows: readonly ReadRow[]) => ReadRow[]) =>
+      new Promise<ReadRow[]>((resolve, reject) => { pending.push({ body, limit, fence, resolve, reject }); });
+    return Reflect.get(target, key, target) as unknown;
+  } });
+  const reads = Promise.all(requests.map(async request => [request.kind,
+    await publicNamePage(source, request.kind, request.order, request.limit, request.after)] as const));
+  try {
+    if (pending.length !== requests.length) throw new WorkReadUnavailable('Resource source qualification is incomplete');
+    const split = (rows: readonly ReadRow[]) => {
+      const groups: ReadRow[][] = pending.map(() => []);
+      for (const { resourceDirectorySource, ...row } of rows) {
+        const index = Number(resourceDirectorySource?.value);
+        if (!resourceDirectorySource || !Number.isSafeInteger(index) || index < 0 || index >= groups.length
+          || String(index) !== resourceDirectorySource.value) {
+          throw new WorkReadUnavailable('Resource source batch returned an unrelated row');
+        }
+        groups[index]!.push(row);
+      }
+      if (groups.some((rows, index) => rows.length !== pending[index]!.limit)) {
+        throw new WorkReadUnavailable('Resource source batch is incomplete');
+      }
+      return groups;
+    };
+    const rows = await session.query(`SELECT ?resourceDirectorySource ?page WHERE {
+      ${pending.map((read, index) => `{ { ${read.body} } BIND("${index}" AS ?resourceDirectorySource) }`).join(' UNION ')}
+    } LIMIT ${pending.length + 1}`, pending.length, rows => split(rows).flatMap((group, index) =>
+      (pending[index]!.fence?.(group) ?? group).map(row => ({ ...row,
+        resourceDirectorySource: { type: 'literal' as const, value: String(index) } }))));
+    split(rows).forEach((group, index) => pending[index]!.resolve(group));
+    for (const [kind, page] of await reads) pages.set(kind, page);
+    return pages;
+  } catch (error) {
+    pending.forEach(read => read.reject(error));
+    await reads.catch(() => undefined);
+    throw error;
+  }
+}
+
+function conceptSourcePosition(seek: { key: string } | undefined): {
+  phase: 'used' | 'unused'; count?: string; after?: DirectoryAfter;
+} {
+  if (!seek) return { phase: 'used' };
+  try {
+    const position = JSON.parse(seek.key) as ReturnType<typeof conceptSourcePosition>;
+    if (position && ['used', 'unused'].includes(position.phase)) return position;
+  } catch { /* The continuation is invalid, never a new source beginning. */ }
+  throw new WorkReadInvalid('Concept resource cursor is invalid');
+}
+
 interface PageCursor {
   after?: LabelAfter;
   seen: number;
@@ -540,11 +623,15 @@ async function readResourceListAtPosition(
   let cache: (Candidate & { source: string; key: string })[] = [];
   const tails = new Map<string, Candidate>();
   let fetched = 0;
+  const hydrationWindows = kinds.every(kind => kind === 'work')
+    ? RESOURCE_LIST_COST.windows : RESOURCE_LIST_COST.mixedWindows;
+  const hydrationWindow = kinds.every(kind => kind === 'work')
+    ? RESOURCE_LIST_COST.window : RESOURCE_LIST_COST.mixedWindow;
   while (
     kinds.length &&
     items.length < limit &&
     scanned < RESOURCE_LIST_COST.candidates &&
-    windows++ < RESOURCE_LIST_COST.windows
+    windows++ < hydrationWindows
   ) {
     let candidates: (Candidate & { source: string; key: string })[] = [];
     if (q && input.sort === 'relevance') {
@@ -592,12 +679,26 @@ async function readResourceListAtPosition(
                 ? 1
                 : 0,
         );
-      for (const [sourceIndex, kind] of pendingKinds.entries()) {
+      let planned = fetched;
+      const sourceLimits = new Map(pendingKinds.map((kind, sourceIndex) => {
+        const limit = Math.min(64, Math.floor((QUERY_COST.candidateRows - planned)
+          / (pendingKinds.length - sourceIndex)));
+        planned += limit;
+        return [kind, limit] as const;
+      }));
+      const namePages = await resourceNamePages(session, pendingKinds.flatMap(kind => {
+        const limit = sourceLimits.get(kind)!;
+        if (!limit || kind === 'work' || kind === 'realm') return [];
+        return [{ kind, limit, order: kind === 'concept' ? 'identity' as const
+          : input.sort === 'updated' ? 'updated' as const : 'newest' as const,
+        after: kind === 'concept' ? conceptSourcePosition(state.seeks[kind]).after
+          : state.seeks[kind] ? JSON.parse(state.seeks[kind]!.key) as DirectoryAfter : undefined }];
+      }));
+      for (const kind of pendingKinds) {
         if (fetched >= QUERY_COST.candidateRows) break;
         // Every unfinished source must supply a frontier before the merge can
         // emit a safe prefix. Share the existing allocation as owners grow.
-        const sourceLimit = Math.min(64, Math.floor(
-          (QUERY_COST.candidateRows - fetched) / (pendingKinds.length - sourceIndex)));
+        const sourceLimit = sourceLimits.get(kind)!;
         if (!sourceLimit) break;
         const seek = state.seeks[kind];
         const start = candidates.length;
@@ -629,18 +730,7 @@ async function readResourceListAtPosition(
         } else if (kind === 'concept') {
           // The Concept owner orders used definitions from immutable term
           // counts. Its zero-use tail seeks public definition names by identity.
-          let position: { phase: 'used' | 'unused'; count?: string; after?: DirectoryAfter } = {
-            phase: 'used',
-          };
-          if (seek) {
-            try {
-              position = JSON.parse(seek.key);
-            } catch {
-              throw new WorkReadInvalid('Concept resource cursor is invalid');
-            }
-            if (!['used', 'unused'].includes(position.phase))
-              throw new WorkReadInvalid('Concept resource cursor is invalid');
-          }
+          const position = conceptSourcePosition(seek);
           const used =
             position.phase === 'used'
               ? await session.deps.discovery!.conceptPage(
@@ -661,13 +751,7 @@ async function readResourceListAtPosition(
               })),
             );
           } else {
-            const page = await publicNamePage(
-              session,
-              kind,
-              'identity',
-              sourceLimit,
-              position.after,
-            );
+            const page = namePages.get(kind)!;
             complete = !page.more;
             candidates.push(
               ...page.rows.map((row) => ({
@@ -710,13 +794,7 @@ async function readResourceListAtPosition(
           );
           if (!page.rows.length) state.done.push(kind);
         } else {
-          const page = await publicNamePage(
-            session,
-            kind,
-            input.sort === 'updated' ? 'updated' : 'newest',
-            sourceLimit,
-            seek ? (JSON.parse(seek.key) as DirectoryAfter) : undefined,
-          );
+          const page = namePages.get(kind)!;
           complete = !page.more;
           candidates.push(
             ...page.rows.map((row) => ({
@@ -744,7 +822,7 @@ async function readResourceListAtPosition(
     if (!candidates.length) {
       break;
     }
-    const window = candidates.slice(0, Math.min(64, RESOURCE_LIST_COST.candidates - scanned));
+    let window = candidates.slice(0, Math.min(hydrationWindow, RESOURCE_LIST_COST.candidates - scanned));
     if (!(q && input.sort === 'relevance')) cache = candidates.slice(window.length);
     const rows = window.length
       ? await session.query(
@@ -765,6 +843,13 @@ async function readResourceListAtPosition(
           window.length * RESOURCE_LIST_COST.types,
         )
       : [];
+    const prefix = resourceHydrationPrefix(window, new Map(rows.map(row => [row.r!.value,
+      row.kind!.value as ResourceCard['kind']])));
+    if (prefix.length !== window.length) {
+      if (!(q && input.sort === 'relevance')) cache.unshift(...window.slice(prefix.length));
+      window = prefix;
+      more = true;
+    }
     const admitted = window.flatMap((candidate) => {
       const row = rows.find((row) => row.r!.value === candidate.id);
       return candidate.summary && row

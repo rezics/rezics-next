@@ -23,8 +23,8 @@ const plan: ResourceListPlan = { input: { profile: 'resource-list-v1', context: 
 
 /** Actual query continuation and immutable-manifest summary reader, with
  * controlled native/Access/Disclosure ports. This is not live public proof. */
-function fixture() {
-  const entries = Array.from({ length: 100 }, (_, n) => ({ id: id(n + 1), summary: id(n + 1),
+function fixture(count = 100) {
+  const entries = Array.from({ length: count }, (_, n) => ({ id: id(n + 1), summary: id(n + 1),
     kind: n % 3 ? 'resource' as const : 'post' as const, order: String(1000 - n),
     types: n % 3 ? [semanticType] : ['https://rezics.com/vocab/Post'] }));
   const state = { private: false, grantedOnly: false, withheld: false, deliveryHidden: false };
@@ -52,6 +52,15 @@ function fixture() {
   const refs = (body: string, variable: string) => [...(new RegExp(`VALUES \\?${variable} \\{([^}]+)\\}`)
     .exec(body)?.[1] ?? '').matchAll(/<([^>]+)>/g)].map(match => match[1]!);
   graph.query = async (body): Promise<SparqlResult> => {
+    if (body.startsWith('SELECT ?resourceDirectorySource ?page')) {
+      const bindings = [];
+      for (const match of body.matchAll(/\{ \{ (SELECT \?page WHERE \{[\s\S]+?\} LIMIT 1) \} BIND\("(\d+)" AS \?resourceDirectorySource\) \}/g)) {
+        const result = await graph.query(match[1]!);
+        bindings.push(...(result.results?.bindings ?? []).map(row => ({ ...row,
+          resourceDirectorySource: literal(match[2]!) })));
+      }
+      return { results: { bindings } };
+    }
     const control = { epoch: literal('epoch'), sequence: literal('7') };
     if (body.includes('SELECT ?page WHERE')) {
       const args = body.match(/"(?:\\.|[^"\\])*"/g)!.map(value => JSON.parse(value) as string);
@@ -152,6 +161,22 @@ test('generic Resource/Post pages share the bounded All seek, round-trip every c
   expect(seen).toHaveLength(100);
   expect(f.authorities.length).toBeGreaterThan(0);
   expect(f.authorities.every(args => args[0] === null && args[1] === null)).toBe(true);
+});
+
+test('mixed-owner hydration returns an advancing partial page and traverses beyond one request allocation', async () => {
+  const f = fixture(650), seen: string[] = [];
+  let cursor: string | undefined;
+  for (let pageNumber = 0; pageNumber < 100; pageNumber++) {
+    const page = await f.read({ ...plan, input: { ...plan.input, limit: 64, cursor } });
+    expect(page.items.length).toBeLessThanOrEqual(64);
+    seen.push(...page.items.map(item => item.id));
+    expect(new Set(seen).size).toBe(seen.length);
+    expect(page.count.kind).toBe(page.complete ? 'exact' : 'at-least');
+    if (page.complete) break;
+    expect(page.nextCursor).not.toBeNull();
+    cursor = page.nextCursor!;
+  }
+  expect(seen).toEqual(f.entries.map(entry => entry.id));
 });
 
 test('generic cards use exact semantic manifests, preserve Post identity and require current public Access', async () => {

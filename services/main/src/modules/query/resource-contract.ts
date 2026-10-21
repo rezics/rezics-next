@@ -134,14 +134,18 @@ export interface ResourceListPlan {
  * Two windows examine at most 128 candidates. Dense negation/disclosure returns
  * an advancing partial page when this allocation ends; zero matches then has
  * an at-least count, never exact empty. Source merges may fetch up to eight
- * bounded owner windows, but never hydrate more than the two admitted windows.
+ * bounded owner windows. Mixed owners hydrate one 32-candidate window, keeping
+ * names plus selected images in one 64-target disclosure batch. Work-only reads
+ * can hydrate two 64-candidate windows. Unexamined candidates retain their seeks.
  * One request owns native readiness and the final uncached graph/instance
  * fences. Work admission carries types/heads; Work topic matching uses SQL
  * postings and needs no resource-topic graph read. The Work path needs <=16
  * Fuseki calls (two positions, four readiness calls, one meaning/scope read,
  * two collectors/joins/summaries and page previews/fences) per attempt; all
  * owners and retries share
- * a 32-call allocation. The allocation includes denied/cold/stale paths and
+ * a 32-call allocation. Mixed sources hydrate one owner plan and at most 32
+ * candidates; unexamined candidates remain behind the continuation. The
+ * allocation includes denied/cold/stale paths and
  * cannot grow on retry. WorkReadSession and the Query budget enforce it.
  * SQL uses bounded owner batches, including public Agent policy before/after
  * hydration. The 96-statement cost contract covers two admitted windows and
@@ -153,14 +157,13 @@ export const RESOURCE_LIST_COST = {
   indexDocuments: 128,
   window: 64,
   windows: 2,
+  mixedWindows: 1,
+  mixedWindow: 32,
   types: 64,
   rankedJoinsPerWindow: 1,
   rankedCandidateTextRechecks: 0,
   conceptResolutionReads: 1,
   graphCalls: 32,
-  // Scope policy plus current Realm disclosure are read and fenced separately
-  // from the resource page. They do not grow with the candidate population.
-  realmGraphCalls: 4,
   postgresStatements: 96,
   deadlineMs: WORK_READ_COST.deadlineMs,
   graphBytes: WORK_READ_COST.graphBytes,
