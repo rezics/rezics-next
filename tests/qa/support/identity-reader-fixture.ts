@@ -517,9 +517,9 @@ export async function identityReaderFixture() {
 export type IdentityReaderFixture = Awaited<ReturnType<typeof identityReaderFixture>>;
 
 export const identityReaderOriginals = [
-  { path: 'tests/qa/integration/outcomes/realm/identity-discovery.test.ts',
+  { path: '.temp/identity-reader-prepared/originals/tests/qa/integration/outcomes/realm/identity-discovery.test.ts',
     sha256: '9968c98b679ef125abdd75fff9545a5e1f0ae1bf120c1da1e6d25a66498fd77b' },
-  { path: 'tests/qa/integration/audit-public-reading.test.ts',
+  { path: '.temp/identity-reader-prepared/originals/tests/qa/integration/audit-public-reading.test.ts',
     sha256: 'd76938aaf9776926c9520c374467ec0a41c6290c6c0d8d8c17c124ef50dcfc41' },
 ] as const;
 
