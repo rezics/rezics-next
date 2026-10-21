@@ -1,5 +1,37 @@
 # Execution reset: implement and verify complete slices
 
+## Setup diagnosis and shared infrastructure, 2026-10-21
+
+The maintainer requires concrete alternatives, comparison and execution of the
+most efficient correct solution when a task blocks. Classify the actual failing
+operation before choosing infrastructure work.
+
+SEARCH18 in `tests/qa/unit/search-budgets.test.ts` is a synthetic fixture mismatch:
+the fake omits native Content qualification and answers retired inventory
+queries. The call at line 440 fails before the assertions. Repair that fixture
+through independent task G-2865, preserving the metadata-cut and cost assertions;
+neither restarting a stack nor relaxing production qualification solves it.
+
+Reuse infrastructure by compatible service/native/model revision. G-2823 is
+the existing shared runtime custodian, not a new service to build for each task.
+Read-only cases share its prepared baseline and warm services. Mutating cases
+use isolated actors/resources or a necessary copy of the existing consistent
+snapshot. Performance/cancellation measurements acquire an exclusive observation
+window; they need not each rebuild the stack. Native assistive-technology tests
+retain exclusive window ownership. Pure unit tests use no stack; component
+interactions use the shared Storybook/browser harness with isolated contexts.
+
+Qualify a compatible runtime once for the integrated candidate and reuse its
+actual receipts. A documentation or unrelated frontend commit does not require
+a backend rebuild, corpus restore or new donor binding. Check the affected
+implementation, contract, native profile/model and data cut instead of treating
+an unrelated whole-repository HEAD change as incompatibility. Service/schema
+changes get one supported refresh/migration for their cohort, under existing
+custody and with active consumers preserved. Keep implementation concurrent,
+freeze the combined source, then run consolidated basic/full checks and
+independent acceptance. Do not repeat full-stack preparation for each source
+owner or create another framework around the existing lifecycle tools.
+
 ## Manager continuity decision, 2026-10-21
 
 Program found all workers idle while both recovery managers repeatedly waited
