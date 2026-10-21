@@ -448,14 +448,16 @@ function manualPublicationFixture() {
   const state = { rights: true, allowed: true, denied: false, stale: false,
     revokeBeforeCommit: false, revokeAtEmission: false, rightsReads: 0, claims: 0,
     updates: [] as string[], terminal: null as WorkStructurePublicationReceipt | null,
-    attribution: null as unknown, source: '', recorded: 0, structureVisible: true, publicationMoved: false };
+    attribution: null as unknown, source: '', recorded: 0, structureVisible: true, publicationMoved: false,
+    invalidProfileReceipt: false, nativeProfileUnavailable: false, nativeDeadline: false };
   const row = (values: Record<string, string>) => Object.fromEntries(Object.entries(values)
     .map(([key, value]) => [key, { value }]));
   const fuseki = {
     commandHealth: async () => ({ profiles: Object.fromEntries(Object.entries(profileRegistry)
       .map(([id, value]) => [id, value.sha256])) }),
     query: async (query: string) => {
-      if (query.includes('ASK')) return { boolean: !query.includes('InvalidProfile') };
+      if (query.includes('ASK')) return { boolean: query.includes('InvalidProfile')
+        ? state.invalidProfileReceipt : true };
       if (query.includes('SELECT ?epoch ?sequence ?hold ?r')) return { results: { bindings: [{ ...row({
         epoch: dataEpoch, sequence: '27', r: work, type: 'work', work, head: workHead, public: 'true' }),
         label: { value: 'Native recipe', 'xml:lang': 'en' } }] } };
@@ -483,10 +485,13 @@ function manualPublicationFixture() {
         structuredAssessment: `urn:rezics:rights:assessment:${manualInput.rightsAssessmentId}`, structuredExact: 'true',
       })] : [] } };
       if (query.includes('SELECT ?citation')) return { results: { bindings: [row({ citation: JSON.stringify(state.attribution) })] } };
+      if (query.includes('SELECT ?content ?control ?value ?intent')) return { results: { bindings: [] } };
       throw new Error(`Unexpected manual publication query: ${query}`);
     },
     commandWithReceipt: async (envelope: { update: string }) => {
       state.updates.push(envelope.update);
+      if (state.nativeProfileUnavailable) return { status: 'unknown-profile' };
+      if (state.nativeDeadline) return { status: 'deadline' };
       if (envelope.update.includes('rv:Published')) {
         const decisionId = envelope.update.match(/<(https:\/\/rezics\.com\/id\/[0-9a-f-]{36})> a rv:WorkStructurePublicationDecision/)?.[1];
         state.source = envelope.update.match(/urn:rezics:work-source:[0-9a-f]{64}/)![0];
@@ -542,6 +547,43 @@ test('manual cited public-domain publication binds citation and exact Rights wit
     { ...manualInput, citation: undefined }, { ...manualInput, citation: { ...manualInput.citation, url: 'javascript:alert(1)' } },
     { ...manualInput, rightsBasis: 'original-contribution' }])
     expect(() => workStructurePublicationDigest(invalid as never)).toThrow();
+});
+
+
+test('publication returns a retained native validation rejection instead of retrying it as pending', async () => {
+  const fixture = manualPublicationFixture();
+  fixture.state.invalidProfileReceipt = true;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const response = await fixture.post();
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: 'invalid_request' });
+  }
+  expect(fixture.state.updates).toHaveLength(0);
+  expect(fixture.state.terminal).toBeNull();
+  expect(fixture.state.recorded).toBe(0);
+});
+
+test('publication preserves a definite missing native profile as unavailable', async () => {
+  const fixture = manualPublicationFixture();
+  fixture.state.nativeProfileUnavailable = true;
+  const response = await fixture.post();
+  expect(response.status).toBe(503);
+  expect(await response.json()).toMatchObject({ code: 'dependency_unavailable' });
+  expect(fixture.state.updates).toHaveLength(1);
+  expect(fixture.state.terminal).toBeNull();
+  expect(fixture.state.recorded).toBe(0);
+});
+
+test('publication keeps an unresolved native deadline pending until its receipt is known', async () => {
+  const fixture = manualPublicationFixture();
+  fixture.state.nativeDeadline = true;
+  const response = await fixture.post();
+  expect(response.status).toBe(202);
+  expect(await response.json()).toMatchObject({ operationId: admissionId, status: 'reconciling',
+    phase: 'work-publication', result: null, retry: { allowed: true } });
+  expect(fixture.state.updates).toHaveLength(1);
+  expect(fixture.state.terminal).toBeNull();
+  expect(fixture.state.recorded).toBe(0);
 });
 
 test('actual publication route commits cited native identity atomically and replays without source or Rights re-admission', async () => {
