@@ -3,6 +3,11 @@ areas: []
 ---
 # Audit remediation
 
+The maintainer's latest [one-hour functional delivery](one-hour-delivery-20261021.md)
+sets the current deadline and execution mode: finish all original functionality
+and affected basic tests by 2026-10-21 15:39 Asia/Shanghai, then consolidate
+independent acceptance. It supersedes conflicting historical sequencing below.
+
 The 16:00 target on 2026-10-19 was missed. The maintainer has directed continued
 manager work: both codex-2 / GPT-6.1 Sol / ultra audit managers are resumed.
 A reporting deadline is not permission to stop unfinished authorized work.
