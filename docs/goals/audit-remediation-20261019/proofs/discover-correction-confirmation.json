@@ -3524,5 +3524,399 @@
     ],
     "source_verdict_commit": "e210bf0dd054b1de9a93fb9a48506e8644f4ef4e",
     "limit": "Checks validate this report change; they do not turn the recorded genuine 422/populated-default assertion failures into success. Final receipt and guard-count wording metadata added after checks; no product changes."
-  }
+  },
+  "changed_source_reviews": [
+    {
+      "version": 1,
+      "kind": "native-credit-name-projection-changed-source",
+      "source_verdict": {
+        "status": "confirmed",
+        "findings": [],
+        "summary": "The isolated repair projects each admitted native Agent attribution displayName onto its exact credit in the shared executor. No blocking defect found in the two-path change.",
+        "scope": "First independent review of G-2764 base..sealed-tip only; no repeated Discover, Source, Media, Access, native or runtime source review.",
+        "original_finding_closed": false,
+        "confirmed_at": "2026-10-20T17:15:44.902759+00:00"
+      },
+      "reviewer": {
+        "worker": "G-2853",
+        "engine": "codex-1",
+        "model": "gpt-6.1-sol",
+        "effort": "xhigh",
+        "independent": true,
+        "nested_agents": false,
+        "fallback": false
+      },
+      "source": {
+        "base": "1feb67de45ea8dd7c712dedac29d46c87fd7c9c9",
+        "production_commit": "6f881ce54011072872367f5cb9c1746b4f5db424",
+        "tip": "8e258035730cebecde7f84eedcb6490eaf5f2e03",
+        "tree": "0cccbfc27e4cf1f6923473ad6692ebf68745fa1b",
+        "candidate_read_only": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2764/.temp/goal/c28-credit-name-repair/candidate",
+        "production_delta": {
+          "insertions": 7,
+          "deletions": 2
+        },
+        "total_delta": {
+          "paths": 2,
+          "insertions": 206,
+          "deletions": 2
+        },
+        "unrelated_old_worker_commits_consumed": false,
+        "candidate_modified_by_reviewer": false,
+        "main_integration_claimed": false
+      },
+      "per_file_manifest": [
+        {
+          "path": "services/main/src/modules/query/template-read.ts",
+          "before": "35ac8d89b097b8d32b8e0fba08ba037525b714ec",
+          "after": "7b0dac67162c1a4ab49be7f225d81fed273e9cd9",
+          "sha256": "1602e9e0a2a4cbec955037c8a3fb6f3cf5bb2f1df1301ab0568a4806e3a062c3"
+        },
+        {
+          "path": "services/main/tests/resource-query-credit-attribution.test.ts",
+          "before": null,
+          "after": "55dd0ed1d838e5d6c503a837d5a0e0e89207eaf1",
+          "sha256": "e6a7180b588de97291cf139ef733d48cad9ca54241a19cd7be0b50787b6427f1"
+        }
+      ],
+      "reviewed_unchanged_dependency_blobs": [
+        {
+          "path": "services/main/src/modules/profiles/attribution.ts",
+          "blob": "4741740385afec2ffeb73980ba07d4509b1cc3d2",
+          "unchanged": true
+        },
+        {
+          "path": "services/main/src/modules/profiles/read.ts",
+          "blob": "2fda67958980707506832ea8dd27875f38662bd0",
+          "unchanged": true
+        },
+        {
+          "path": "services/main/src/modules/work/read-session.ts",
+          "blob": "85381184a0704f74645f97e0b0327a2b13d0d27d",
+          "unchanged": true
+        },
+        {
+          "path": "services/main/src/modules/query/templates/work-credits.schema.ts",
+          "blob": "29c0cd694ed4d619b71be04a034f40094e788fae",
+          "unchanged": true
+        },
+        {
+          "path": "services/main/src/modules/query/templates/work-credits.rq",
+          "blob": "fd0dd35c98d463d8ab1eb6a0903845f70e72addf",
+          "unchanged": true
+        },
+        {
+          "path": "services/main/src/routes/work-reads.ts",
+          "blob": "97443a6c90c5cddb1842270b6b456ee176415f3d",
+          "unchanged": true
+        },
+        {
+          "path": "services/main/src/routes/query.ts",
+          "blob": "070b9b2cd088613b14561878cd6ef8d8f4636d9c",
+          "unchanged": true
+        },
+        {
+          "path": "services/main/tests/work-credits-facade.test.ts",
+          "blob": "081bf883ea4bce1f632ed65a39ab17add0fd67c4",
+          "unchanged": true
+        },
+        {
+          "path": "services/main/src/modules/work/sourced-publication-credits.ts",
+          "blob": "2faaf80eac35cb1100d5b2c1c77ec098fd05f9c6",
+          "unchanged": true
+        },
+        {
+          "path": "services/main/src/modules/work/read-contract.ts",
+          "blob": "d1aca76967ca4a564f0fd5908042ab99c7383a48",
+          "unchanged": true
+        },
+        {
+          "path": "services/main/src/modules/source/author-name-read.ts",
+          "blob": "58d7f650946068294514831ce9b72d5cdce407d9",
+          "unchanged": true
+        }
+      ],
+      "authority": {
+        "brief": "docs/goals/audit-remediation-20261019/tasks/G-2853.md",
+        "brief_commit": "eff4f611b2",
+        "decision": "2026-10-20T17:06:59Z",
+        "instruction_verbatim": "This explicit retry-cap split reviews ONLY the new two-path G-2764 correction; it supersedes older original-browser work for this continuation.",
+        "effect": "Only this native credit-name source verdict is appended; all existing report fields, Discover evidence, original assertions and failures remain unchanged.",
+        "skills": [
+          ".agents/skills/goal-worker/SKILL.md",
+          ".agents/skills/product-audit/SKILL.md"
+        ]
+      },
+      "sealed_evidence": {
+        "packet_read_only": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2764/.temp/goal/c28-credit-name-repair",
+        "consumer_handoff_read": true,
+        "seal_receipt_read": true,
+        "manifest": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2764/.temp/goal/c28-credit-name-repair/sealed/manifest.json",
+        "manifest_sha256": "6cce36ea0a2c765070c3dd9c311f0fd2e2f18c8135086455a58faa534135b90b",
+        "artifact_hashes_and_lengths_verified": 75,
+        "artifact_mismatches": [],
+        "changed_file_hashes_verified": 2,
+        "dependency_hashes_verified": 4,
+        "dependency_inputs": [
+          {
+            "path": "yarn.lock",
+            "sha256": "026c93ddc3085e43b1ff6727a42f7c55b03a03cc1aa4c11cbf57438ce5b9d391"
+          },
+          {
+            "path": ".yarnrc.yml",
+            "sha256": "3a5fa848917bb984a50f6fe6c270e3b8270b2c1a1b905c5c7727c9263e35dc7b"
+          },
+          {
+            "path": "package.json",
+            "sha256": "487061c605dc753c9e60c657ecaa4dd7cf417a213ac65c2e906380367b98acaf"
+          },
+          {
+            "path": "node_modules/.rezics-dependencies",
+            "sha256": "649c835931f5082aeb3c390cfb4af012e0237a6f3445ba66431cbcb4fe1f49c3"
+          }
+        ],
+        "selected_artifact_pins": {
+          "inputs/handoff.md": {
+            "sha256": "0d6ff69861b7265f145abd98950040cfe6136a0a1b42aed4ec3dcd82d3c71bd8",
+            "bytes": 6808
+          },
+          "inputs/provenance.json": {
+            "sha256": "50b460a46f0957b665bf95a20340d7d04d82804d5df987ea906ae2f94aff6b40",
+            "bytes": 7260
+          },
+          "qa/setup-failure/owner.xml": {
+            "sha256": "8bec5f8767adc4e131d5f2138bca75cf6a641e3fbd2eb8c1427d8158f8b486fd",
+            "bytes": 9432
+          },
+          "qa/before/owner.xml": {
+            "sha256": "3fcc638bf5eab4ac6573059efec8e8d9ffc6872bb068cfff5cea2eaaa1f31f7e",
+            "bytes": 17941
+          },
+          "qa/before/logs/owner.log": {
+            "sha256": "09f3e929f44d462f94cb523601e82f6a2e88288f679e9df7dcf634d561021398",
+            "bytes": 11182
+          },
+          "qa/after/owner.xml": {
+            "sha256": "52417bb2672b9f82dd423a39498aaa4d989cf1ad01bd041af5a6d300996f81f2",
+            "bytes": 6428
+          },
+          "qa/after/summary.md": {
+            "sha256": "e17ee605c76028d0f1ca4edafa7aa4ee7812ad85b636d06a401502a16ad3450f",
+            "bytes": 474
+          },
+          "checks/fixture-type-failure/types-0.log": {
+            "sha256": "ff551f2b75225f348d924f559ed57b98f632f851d5c9bf290f33f8294c004257",
+            "bytes": 206011
+          },
+          "checks/after/guards-0.log": {
+            "sha256": "d3a538897657f568fcc0770770111557f390472157822e7fae16443ce2f936a2",
+            "bytes": 1508
+          },
+          "checks/after/guards-0-artifacts/unit.xml": {
+            "sha256": "bfee2dd13bebefbaae86eec02c658d81315f8ffa070946192547a111a19f2aec",
+            "bytes": 40188
+          },
+          "jobs/ce38f27a-acf0-4de7-b793-0535752dcf0f.1.log": {
+            "sha256": "ac7c93b3f81e634215c824d703cf5a8e062dd300618285dbb19eb61ebc5f730d",
+            "bytes": 1053
+          },
+          "jobs/ce38f27a-acf0-4de7-b793-0535752dcf0f.2.log": {
+            "sha256": "951be1927c0a6944f13abfbebbbf1e09e2c8068c4f6e11278166a823fc00bb13",
+            "bytes": 545
+          },
+          "inference/measurements.json": {
+            "sha256": "7c6be08ced67e8ddcc28d24f0bc64b71ff10908fa0a7279056094ea9f3d57676",
+            "bytes": 1126
+          }
+        },
+        "manager_bundle_verification_reused": true,
+        "tip_tree_and_two_commit_range_independently_checked": true
+      },
+      "invariant_review": [
+        {
+          "criterion": "Exact admitted native Agent / credit / role / name correspondence on default GET and reviewed-template POST",
+          "result": "confirmed by source and retained controlled-handler assertions",
+          "source": "executeTemplate indexes the existing admitted attribution map by item.agent, removes missing attribution and assigns only that attribution.displayName. It does not derive identities from a name or change credit id, Agent, role, key, ordinal or handle. Both default GET /v1/works/{id}/credits and template-query-v1 POST /v1/query call this executor; the separate association profile is outside this repair.",
+          "evidence": "The exact retained Jane Austen Work/credit/Agent identities are preserved in the new regression. A distinct translator exercises per-credit mapping on both consumers and across GET-to-POST / POST-to-GET continuation.",
+          "limit": "Controlled graph and owner ports, not installed native storage or a genuine public outcome run."
+        },
+        {
+          "criterion": "Withholding, missing attribution, retained deletion and current name visibility",
+          "result": "confirmed by source and retained controlled-handler assertions",
+          "source": "The existing readCreditAttributionCards call remains after bounded page construction. A missing map entry still removes the whole credit. The copied value is the admitted CreditAttribution union value, including Deleted author; no raw profile fallback is introduced. readAgentCards still validates profile kinds/heads, checks profile fences before/after, and the attribution reader performs its current visibleNames check and retained deletion proof checks.",
+          "evidence": "GET and POST omit withheld and missing identities, omit names withdrawn at the current owner check, and return only Deleted author for retained deletion."
+        },
+        {
+          "criterion": "Source-reported names, provenance and selected-publication priority",
+          "result": "confirmed by source and retained controlled-handler assertions with explicit static subcase",
+          "source": "Only participantKind=agent with confirmation other than source-reported receives native enrichment. Existing source row displayName remains the first fallback before the external author-name owner; nameSource is untouched. The source-reported publication transcriber also has participantKind=agent, so the explicit source-reported exclusion preserves its selected-publication attribution semantics. Source credit membership and author-name final fences are unchanged.",
+          "evidence": "Both routes retain external source name/nameSource and then the supplied publication-reported name while independently enriching the native author.",
+          "limit": "The linked-Agent source-reported transcriber exclusion is inspected statically; the retained regression source row has agent=null and does not independently execute that subcase."
+        },
+        {
+          "criterion": "Qualification, bounded continuation, response validation and final head/authority fences",
+          "result": "unchanged by the production diff; relevant retained support assertions passed",
+          "source": "The Work template schema, native current/revision SPARQL join and admitted role list are byte-identical. Candidate selection, page slice, cursor normalization, membership reread and second root admission are unchanged; attribution still runs on the bounded page before schema validation, exact-page count and ETag creation. The surrounding workRead position/dependency/authority fences remain intact.",
+          "evidence": "The unchanged 11-case Work credits facade suite exercises exact fields/counts/ETags, actor/language/page-bound cursor binding, bounded tail continuation, private/disclosure admission, read budgets, source/name/membership changes and rights/principal revocation during conditional hydration.",
+          "limit": "This review establishes preservation of these source mechanisms and retained controlled support coverage; it does not add fresh runtime race, latency or native qualification proof."
+        }
+      ],
+      "retained_checks": {
+        "reused_without_replay": true,
+        "final": {
+          "job": "ce38f27a-acf0-4de7-b793-0535752dcf0f",
+          "qa": "20261020t165745-e1ac2c",
+          "source": "8e258035730cebecde7f84eedcb6490eaf5f2e03",
+          "source_stable": true,
+          "result": "pass",
+          "tests": 25,
+          "assertions": 1299,
+          "failures": 0,
+          "suites": [
+            {
+              "path": "services/main/tests/resource-query-credit-attribution.test.ts",
+              "tests": 14,
+              "assertions": 70,
+              "failures": 0
+            },
+            {
+              "path": "services/main/tests/work-credits-facade.test.ts",
+              "tests": 11,
+              "assertions": 1229,
+              "failures": 0
+            }
+          ],
+          "check": "run-nLN0EW",
+          "types_including_web": "pass",
+          "inference": "pass",
+          "lint": "pass",
+          "ast": "pass",
+          "guard_files": 24,
+          "guard_tests": 172,
+          "guard_evidence_limit": "The combined guards-0-artifacts/unit.xml is not a single well-formed XML document under a strict parser (mismatched tag at line 220, column 2). Guard status/counts are taken from the preserved guard runner log and successful recorded check step, not a successful strict parse."
+        },
+        "reached_before_failure": {
+          "job": "1ca7eb6d-824a-415c-9536-1af9a1da713c",
+          "qa": "20261020t165354-a1fce3",
+          "executor_source": "1feb67de45ea8dd7c712dedac29d46c87fd7c9c9",
+          "fixture_present_before_product_repair": true,
+          "tests": 14,
+          "passed": 6,
+          "failed": 8,
+          "assertions": 50,
+          "assertion_reached": true,
+          "native_name_assertion_locations": [
+            "resource-query-credit-attribution.test.ts:136:24",
+            "resource-query-credit-attribution.test.ts:148:28",
+            "resource-query-credit-attribution.test.ts:178:42",
+            "resource-query-credit-attribution.test.ts:193:68"
+          ],
+          "observation": "For both GET and POST, the unchanged executor returned null instead of the exact native author/translator/deleted attribution name. Withheld, missing and current name-withdrawal checks passed. These are reached outcome assertions within a controlled owner fixture, not setup-only failures."
+        },
+        "preserved_setup_failure": {
+          "job": "eacdf448-20c9-4c15-9cca-2894c786e73b",
+          "qa": "20261020t165208-b6c3f0",
+          "result": "fail before intended name assertions",
+          "tests": 14,
+          "failures": 14,
+          "response_status": 503,
+          "cause": "Main initialization replaced the fixture disclosure reader; fixture registration order was corrected before the reached-before run.",
+          "interpretation": "Controlled setup failure, not genuine API or original C28 failure; preserved and not counted as the repair counterexample."
+        },
+        "preserved_first_pass_and_type_failure": {
+          "job": "b94c990e-079d-4b20-96b3-1ac27bd6fcc0",
+          "qa": "20261020t165439-e448ca",
+          "tests": 25,
+          "assertions": 1299,
+          "owner_result": "pass",
+          "types_and_inference_result": "fail",
+          "lint_ast_guards": "pass",
+          "type_errors": [
+            "resource-query-credit-attribution.test.ts(73,27): TS2322",
+            "resource-query-credit-attribution.test.ts(136,32): TS2769",
+            "resource-query-credit-attribution.test.ts(178,89): TS2769",
+            "resource-query-credit-attribution.test.ts(186,71): TS2769"
+          ],
+          "correction": "8e258035730cebecde7f84eedcb6490eaf5f2e03 changes only fixture types/satisfies annotations; production code and runtime assertion semantics match 6f881ce54011072872367f5cb9c1746b4f5db424. The final retained job passed both steps."
+        },
+        "new_product_test_runs": 0,
+        "replay_decision": "No additional focused run was necessary for this isolated source verdict: inspected reached before/after assertions, exact inputs, production diff and unchanged support/fences cover the correction. Static-only subcases are identified above and are not promoted to execution evidence.",
+        "native_builds_runtime_oauth_leases_corpus_preparation_or_original_outcome_runs": 0
+      },
+      "product_audit": {
+        "applied": true,
+        "scope": "The isolated native credit-name projection boundary and its two shared consumers.",
+        "broken_invariant": "A projection discarded a validated name while retaining the same native credit identity.",
+        "instances_checked": [
+          "default Work credits GET",
+          "reviewed Work credits template POST",
+          "multiple native credits and roles",
+          "cross-consumer continuation",
+          "missing/withheld/currently withdrawn attribution",
+          "retained deletion",
+          "external source name and provenance",
+          "source-reported selected-publication author/transcriber attribution"
+        ],
+        "source_recommendation": "The two-path repair is ready for normal composition and gated landing with no source blocker.",
+        "closure_recommendation": "Close no original class on source or controlled support evidence. Catalogue owns original C28 execution after landing; this continuation does not revisit original Discover classes."
+      },
+      "landing_conditions": [
+        "Consume only the sealed two-commit delta 1feb67de45ea8dd7c712dedac29d46c87fd7c9c9..8e258035730cebecde7f84eedcb6490eaf5f2e03 (production 6f881ce54011072872367f5cb9c1746b4f5db424), tree 0cccbfc27e4cf1f6923473ad6692ebf68745fa1b; never import the old worker branch eleven-commit range.",
+        "Manager composes this small candidate through normal gates/landing. This report does not land it or certify the composed main revision.",
+        "Preserve exact credit/Agent/role bindings, required attribution admission, source-reported priority, page/cursor semantics and final authority fences; if composition changes relevant reviewed blobs/dependencies, assess that delta and its affected checks before applying this verdict."
+      ],
+      "consumer_conditions": [
+        "After normal landing, Catalogue alone executes the unchanged original C28 command against compatible genuine backend/data. This source pass supplies its native-name repair dependency; later original assertions and live latency/mixed-load/cancellation proof remain pending.",
+        "Retain original baseline 69eac3ceeaf885be70205a70248bc951e9d81cc9, both original 113-identity epochs, all original assertions and historical QA 20261020t133845-a1efe2. All six personas reached tests/qa/integration/catalogue-real-book-reading.test.ts:86:19 and failed on displayName:null; the separate cleanup failure and 24 passed representation-control assertions remain explicit.",
+        "Do not rewrite original outcomes or counts based on source/unit/support passes. Canonical overall acceptance stays 24/61 and Site stays 21/45; no original class is closed here."
+      ],
+      "preservation": {
+        "report_before_commit": "dbd23c1a12f18371219dde3a6b81afdfa3142495",
+        "report_before_blob": "81132a7abf8da9a110854e21e421a91ce09344ca",
+        "report_before_sha256": "98ab7485dbaf663072ff350ca59846b6b4042a03cb1c14a9cd654d7ecb328df4",
+        "all_previous_fields_unchanged": true,
+        "append_only_versioned_verdict": true
+      },
+      "report_verification": {
+        "status": "passed",
+        "recorded_job": "04a85e46-ccef-4d21-949a-ede410d909cb",
+        "commands": [
+          {
+            "command": "task docs:check",
+            "exit": 0,
+            "markdown_files": 256,
+            "checker_tests": 13,
+            "log": ".temp/goal/jobs/04a85e46-ccef-4d21-949a-ede410d909cb.1.log"
+          },
+          {
+            "command": "task goal -- check",
+            "exit": 0,
+            "changed_paths": [
+              "docs/goals/audit-remediation-20261019/proofs/discover-correction-confirmation.json"
+            ],
+            "check": "run-rpKG01",
+            "types": "no TypeScript workspace changed",
+            "tests": "no test files named in brief",
+            "lint": "no source file changed",
+            "ast": "pass",
+            "guards": {
+              "files": 1,
+              "tests": 2,
+              "failed_files": 0
+            },
+            "log": ".temp/goal/jobs/04a85e46-ccef-4d21-949a-ede410d909cb.2.log"
+          }
+        ],
+        "log_sha256": {
+          ".temp/goal/jobs/04a85e46-ccef-4d21-949a-ede410d909cb.1.log": "8c1d10448cfbe375ee2fae4087f70c375ce7635ca1b28f9393bf4409411ddd62",
+          ".temp/goal/jobs/04a85e46-ccef-4d21-949a-ede410d909cb.2.log": "4c2b65bea1d48e2868a9266b294d34869541ced39a924408001b1e8e46772cb7",
+          ".temp/goal/check/run-rpKG01/output.log": "281530285de40dbd0c35951e15fe11542aaacf9f42e1f67a3229b5b09250c061",
+          ".temp/goal/check/run-rpKG01/guards-0.log": "48670c72919bdf087749075ead4574f014e3141e0677e4b236c712761bf7f657"
+        },
+        "product_check_replay": false,
+        "preservation_check": "Every previous top-level field is deeply equal to the report at dbd23c1a12f18371219dde3a6b81afdfa3142495; the versioned review is the sole new field. The original report prefix is retained byte-for-byte apart from the separator required for the appended field.",
+        "limit": "These checks validate the report change. They do not establish genuine API, native, browser or original C28 success. Only this final check receipt metadata was added after the recorded checks; source verdict and evidence were already present."
+      }
+    }
+  ]
 }
