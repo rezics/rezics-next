@@ -273634,7 +273634,7 @@
                         },
                         "step": {
                           "maximum": 1000000,
-                          "minimum": 1e-06,
+                          "minimum": 0.000001,
                           "type": "number"
                         }
                       },
@@ -274256,7 +274256,7 @@
                       },
                       "step": {
                         "maximum": 1000000,
-                        "minimum": 1e-06,
+                        "minimum": 0.000001,
                         "type": "number"
                       }
                     },
@@ -274311,7 +274311,7 @@
                       },
                       "step": {
                         "maximum": 1000000,
-                        "minimum": 1e-06,
+                        "minimum": 0.000001,
                         "type": "number"
                       }
                     },
@@ -274366,7 +274366,7 @@
                       },
                       "step": {
                         "maximum": 1000000,
-                        "minimum": 1e-06,
+                        "minimum": 0.000001,
                         "type": "number"
                       }
                     },
@@ -274447,7 +274447,7 @@
                         },
                         "step": {
                           "maximum": 1000000,
-                          "minimum": 1e-06,
+                          "minimum": 0.000001,
                           "type": "number"
                         }
                       },
@@ -274561,7 +274561,7 @@
                         },
                         "step": {
                           "maximum": 1000000,
-                          "minimum": 1e-06,
+                          "minimum": 0.000001,
                           "type": "number"
                         }
                       },
@@ -275560,7 +275560,7 @@
                         },
                         "step": {
                           "maximum": 1000000,
-                          "minimum": 1e-06,
+                          "minimum": 0.000001,
                           "type": "number"
                         }
                       },
@@ -407201,7 +407201,7 @@
                                       },
                                       "step": {
                                         "maximum": 1000000,
-                                        "minimum": 1e-06,
+                                        "minimum": 0.000001,
                                         "type": "number"
                                       }
                                     },
@@ -407321,7 +407321,7 @@
                                       },
                                       "step": {
                                         "maximum": 1000000,
-                                        "minimum": 1e-06,
+                                        "minimum": 0.000001,
                                         "type": "number"
                                       }
                                     },
@@ -628655,7 +628655,7 @@
                             },
                             "step": {
                               "maximum": 1000000,
-                              "minimum": 1e-06,
+                              "minimum": 0.000001,
                               "type": "number"
                             }
                           },
@@ -631495,7 +631495,7 @@
                               },
                               "step": {
                                 "maximum": 1000000,
-                                "minimum": 1e-06,
+                                "minimum": 0.000001,
                                 "type": "number"
                               }
                             },
@@ -632335,7 +632335,7 @@
                           },
                           "step": {
                             "maximum": 1000000,
-                            "minimum": 1e-06,
+                            "minimum": 0.000001,
                             "type": "number"
                           }
                         },
@@ -632639,7 +632639,7 @@
                           },
                           "step": {
                             "maximum": 1000000,
-                            "minimum": 1e-06,
+                            "minimum": 0.000001,
                             "type": "number"
                           }
                         },
@@ -632943,7 +632943,7 @@
                           },
                           "step": {
                             "maximum": 1000000,
-                            "minimum": 1e-06,
+                            "minimum": 0.000001,
                             "type": "number"
                           }
                         },
@@ -633265,7 +633265,7 @@
                             },
                             "step": {
                               "maximum": 1000000,
-                              "minimum": 1e-06,
+                              "minimum": 0.000001,
                               "type": "number"
                             }
                           },
@@ -633370,7 +633370,7 @@
                             },
                             "step": {
                               "maximum": 1000000,
-                              "minimum": 1e-06,
+                              "minimum": 0.000001,
                               "type": "number"
                             }
                           },
@@ -633479,7 +633479,7 @@
                             },
                             "step": {
                               "maximum": 1000000,
-                              "minimum": 1e-06,
+                              "minimum": 0.000001,
                               "type": "number"
                             }
                           },
@@ -633868,7 +633868,7 @@
                             },
                             "step": {
                               "maximum": 1000000,
-                              "minimum": 1e-06,
+                              "minimum": 0.000001,
                               "type": "number"
                             }
                           },
@@ -633973,7 +633973,7 @@
                             },
                             "step": {
                               "maximum": 1000000,
-                              "minimum": 1e-06,
+                              "minimum": 0.000001,
                               "type": "number"
                             }
                           },
@@ -634082,7 +634082,7 @@
                             },
                             "step": {
                               "maximum": 1000000,
-                              "minimum": 1e-06,
+                              "minimum": 0.000001,
                               "type": "number"
                             }
                           },
@@ -635438,7 +635438,7 @@
                             },
                             "step": {
                               "maximum": 1000000,
-                              "minimum": 1e-06,
+                              "minimum": 0.000001,
                               "type": "number"
                             }
                           },
@@ -635673,7 +635673,7 @@
                             },
                             "step": {
                               "maximum": 1000000,
-                              "minimum": 1e-06,
+                              "minimum": 0.000001,
                               "type": "number"
                             }
                           },
@@ -635916,7 +635916,7 @@
                             },
                             "step": {
                               "maximum": 1000000,
-                              "minimum": 1e-06,
+                              "minimum": 0.000001,
                               "type": "number"
                             }
                           },
@@ -637915,7 +637915,7 @@
                             },
                             "step": {
                               "maximum": 1000000,
-                              "minimum": 1e-06,
+                              "minimum": 0.000001,
                               "type": "number"
                             }
                           },
@@ -641134,7 +641134,7 @@
                             },
                             "step": {
                               "maximum": 1000000,
-                              "minimum": 1e-06,
+                              "minimum": 0.000001,
                               "type": "number"
                             }
                           },
@@ -641287,7 +641287,7 @@
                             },
                             "step": {
                               "maximum": 1000000,
-                              "minimum": 1e-06,
+                              "minimum": 0.000001,
                               "type": "number"
                             }
                           },
@@ -641426,7 +641426,7 @@
                             },
                             "step": {
                               "maximum": 1000000,
-                              "minimum": 1e-06,
+                              "minimum": 0.000001,
                               "type": "number"
                             }
                           },
@@ -641562,7 +641562,7 @@
                             },
                             "step": {
                               "maximum": 1000000,
-                              "minimum": 1e-06,
+                              "minimum": 0.000001,
                               "type": "number"
                             }
                           },
@@ -647931,7 +647931,7 @@
                                 },
                                 "step": {
                                   "maximum": 1000000,
-                                  "minimum": 1e-06,
+                                  "minimum": 0.000001,
                                   "type": "number"
                                 }
                               },
@@ -648107,7 +648107,7 @@
                                 },
                                 "step": {
                                   "maximum": 1000000,
-                                  "minimum": 1e-06,
+                                  "minimum": 0.000001,
                                   "type": "number"
                                 }
                               },
@@ -750691,7 +750691,7 @@
                                           },
                                           "step": {
                                             "maximum": 1000000,
-                                            "minimum": 1e-06,
+                                            "minimum": 0.000001,
                                             "type": "number"
                                           }
                                         },
@@ -1014437,7 +1014437,7 @@
                                 },
                                 "step": {
                                   "maximum": 1000000,
-                                  "minimum": 1e-06,
+                                  "minimum": 0.000001,
                                   "type": "number"
                                 }
                               },
@@ -1014557,7 +1014557,7 @@
                                 },
                                 "step": {
                                   "maximum": 1000000,
-                                  "minimum": 1e-06,
+                                  "minimum": 0.000001,
                                   "type": "number"
                                 }
                               },
