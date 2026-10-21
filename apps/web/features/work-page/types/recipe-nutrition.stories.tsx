@@ -5,14 +5,15 @@ import type { UiLocale } from '../../../i18n/define.ts';
 import { SubjectSources } from '../../entity-page/sources.tsx';
 import { messages } from '../messages.ts';
 import { RecipeExperience, RecipeNutritionSources, type RecipePresentation } from './recipe.tsx';
+import { CookThisButton } from './actions.tsx';
 import { nutrientNames, nutritionEvidence, nutritionPage, nutritionWork } from './recipe-nutrition.fixtures.ts';
 import { recipeNutritionMessages } from './recipe-nutrition-messages.ts';
 
 const initialRecipe = nutritionPage();
 let answerDelayedPresentation: ((value: RecipePresentation) => void) | undefined;
 
-function NativeNutrition({ locale, named = true, metadata = 'direct' }: {
-  locale: UiLocale; named?: boolean; metadata?: 'direct' | 'pending' | 'rejected' | 'delayed';
+function NativeNutrition({ locale, named = true, metadata = 'direct', cook = false }: {
+  locale: UiLocale; named?: boolean; metadata?: 'direct' | 'pending' | 'rejected' | 'delayed'; cook?: boolean;
 }) {
   const [page, setPage] = useState(initialRecipe);
   const [presentation] = useState(() => {
@@ -25,6 +26,8 @@ function NativeNutrition({ locale, named = true, metadata = 'direct' }: {
   });
   const names = named ? nutrientNames : new Map();
   return <div className="mx-auto grid w-full max-w-4xl gap-8 p-4 sm:p-6"><main>
+    {cook ? <CookThisButton label={messages[locale].cookThis} workRef={nutritionWork.slice(-36)}
+      recipeHref="/v1/recipes/works/00000000-0000-4000-8000-000000000001" /> : null}
     <RecipeExperience resource={nutritionWork} initial={initialRecipe} href="/v1/recipes/works/00000000-0000-4000-8000-000000000001"
       actingSubject={null} text={null} locale={locale} messages={messages[locale]} names={names}
       authors={named ? ['Actual recipe author'] : []} presentation={presentation} readPage={async query => {
@@ -153,5 +156,42 @@ export const MetadataArrivesAfterMethod: Story = {
     await expect(canvas.getByText('Actual recipe author')).toBeVisible();
     await expect(canvas.queryByText(messages.en.unknownAuthor)).not.toBeInTheDocument();
     await expect(canvas.getByText('Slice the vegetables, then simmer until tender.')).toBeVisible();
+  },
+};
+
+export const CookingRetainsDeclaredNutritionAndAlternatives: Story = {
+  args: { cook: true },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: messages.en.cookThis }));
+    const dialog = within(await canvas.findByRole('dialog', { name: messages.en.cookMode }));
+    const nutrition = within(dialog.getByRole('region', { name: messages.en.recipeNutrition }));
+    await expect(nutrition.getByRole('row', { name: /Energy/ })).toHaveTextContent('210 ½ kcal');
+    await expect(nutrition.getByRole('row', { name: /Protein/ })).toHaveTextContent('Whole recipe');
+    await expect(nutrition.getByRole('row', { name: /Fibre/ })).toHaveTextContent('unknown');
+    const alternative = dialog.getByText('1 turnip', { selector: '[data-ingredient]' }).closest('li')!;
+    await expect(alternative).toHaveTextContent(recipeNutritionMessages.en.substitutions);
+    const substitutions = within(dialog.getByRole('region', { name: recipeNutritionMessages.en.substitutions }));
+    await expect(substitutions.getByText('Actual recipe author')).toBeVisible();
+    const links = substitutions.getAllByRole('link');
+    await expect(links.map(link => link.getAttribute('data-occurrence')))
+      .toEqual([nutritionPage().ingredients[1]!.occurrence, nutritionPage().ingredients[0]!.occurrence]);
+    for (const link of links) {
+      const target = document.getElementById(decodeURIComponent(link.getAttribute('href')!.slice(1)));
+      await expect(target).toBeVisible();
+      await expect(canvas.getByRole('dialog')).toContainElement(target);
+    }
+    await expect(nutrition.queryByRole('link')).not.toBeInTheDocument();
+    await expect(dialog.getByRole('link', { name: messages.en.evidence })).toHaveAttribute('href', nutritionEvidence);
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+export const CookingNutritionPhone: Story = {
+  ...CookingRetainsDeclaredNutritionAndAlternatives, globals: { viewport: { value: 'phone' } },
+  async play(context) {
+    await CookingRetainsDeclaredNutritionAndAlternatives.play!(context);
+    const dialog = within(within(context.canvasElement).getByRole('dialog'));
+    dialog.getByRole('region', { name: recipeNutritionMessages.en.substitutions }).scrollIntoView();
+    await expect(dialog.getByRole('link', { name: messages.en.evidence })).toBeVisible();
   },
 };

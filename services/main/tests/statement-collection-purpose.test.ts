@@ -6,6 +6,7 @@ import { profileRegistry } from '../../../packages/model/src/generated/profiles.
 import { FusekiClient, type CommandEnvelope, type SparqlResult } from '../src/infrastructure/fuseki.ts';
 import type { RegisteredAdmission } from '../src/modules/access/admission.ts';
 import { GLOBAL_CLASSIFICATION_CONTEXT, CLASSIFICATION_INHERIT_POLICY } from '../src/modules/classification/context.ts';
+import { globalClassificationTerminal } from '../src/modules/classification/global.ts';
 import { commandReceiptIri, ContextCommandUnavailable, InvalidContextCommand,
   readCommandReceipt, StaleContextCommand } from '../src/modules/context/command.ts';
 import { recordStatement, recordStatementRequest, setStatementDecision, statementDecisionRequest,
@@ -45,7 +46,7 @@ function admission(request: { action: string; scope: string; digest: string }): 
 /** External transport stores the real command RDF and sealed objects. The
  * fixture enforces the emitted exact Definition/Statement/DecisionSlot guards;
  * application validation, native receipts and replay execute unchanged. */
-function fixture() {
+function fixture(globalContextPresent = true) {
   const graph = new FusekiClient('http://graph.invalid');
   const env: WorkActivationEnvironment = { fuseki: graph, objectDirectory: mkdtempSync(`${root}/objects-`),
     lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
@@ -76,6 +77,10 @@ function fixture() {
     publicSearchWriteEpoch: '0', publicSearchWriteActive: false,
     profiles: Object.fromEntries(Object.entries(profileRegistry).map(([name, profile]) => [name, profile.sha256])) });
   graph.query = async query => {
+    const globalPolicy = one(GRAPHS.current, GLOBAL_CLASSIFICATION_CONTEXT, `${RV}inheritancePolicy`);
+    if (query.includes('ASK') && query.includes('rv:GlobalClassification')) {
+      return { boolean: globalContextPresent || Boolean(globalPolicy) };
+    }
     if (query.includes('ASK')) return { boolean: !query.includes('rv:rejectionKind rv:InvalidProfile') };
     if (query.includes('SELECT ?outcome ?reason ?digest')) {
       const receipt = /GRAPH <urn:rezics:graph:receipts>\s*\{\s*<([^>]+)>/u.exec(query)?.[1];
@@ -91,8 +96,8 @@ function fixture() {
       ? [{ revision: uri(id(3)), definition: uri(id(2)), manifest: uri(manifest), kind: uri(definitionKindIri(state.kind)),
         lifecycle: uri(`${RV}${state.lifecycle === 'active' ? 'Active' : 'Retired'}`), head: uri(head) }] : []);
     if (query.includes('SELECT ?subject ?frame')) return rows([]);
-    if (query.includes('SELECT ?context ?revision ?policy')) return rows([{ context: uri(GLOBAL_CLASSIFICATION_CONTEXT),
-      policy: uri(CLASSIFICATION_INHERIT_POLICY) }]);
+    if (query.includes('SELECT ?context ?revision ?policy')) return rows(globalContextPresent || globalPolicy
+      ? [{ context: uri(GLOBAL_CLASSIFICATION_CONTEXT), policy: uri(globalPolicy?.value ?? CLASSIFICATION_INHERIT_POLICY) }] : []);
     if (query.includes('SELECT ?statement ?head ?key ?prior')) {
       const statement = /VALUES \?statement \{ <([^>]+)>/u.exec(query)?.[1];
       const slot = /OPTIONAL \{ GRAPH <urn:rezics:graph:current> \{ <([^>]+)> rv:decisionHead/u.exec(query)?.[1];
@@ -219,6 +224,21 @@ test('native adoption/rejection/withdrawal preserve actual DecisionSlot CAS and 
   expect(run.one(GRAPHS.revisions, withdrawn.revision!, `${RV}predecessor`)?.value).toBe(rejected.revision!);
   expect(run.one(GRAPHS.revisions, withdrawn.revision!, `${RV}outcome`)?.value).toBe(`${RV}Withdrawn`);
   await expect(setStatementDecision(run.env, firstAdmission, { ...first, outcome: 'rejected' })).rejects.toBeInstanceOf(IdempotencyConflict);
+});
+
+test('the first global Statement decision initializes its existing acceptance owner before adopting the actual Statement', async () => {
+  const run = fixture(false), recorded = await run.record('reading-list');
+  const input = run.decision(recorded.component!, null, 'accepted');
+  const admitted = admission(statementDecisionRequest(input));
+  const accepted = await setStatementDecision(run.env, admitted, input);
+  expect(accepted.outcome).toBe('succeeded');
+  expect(accepted.component).toBe(decisionSlotIri(input.target, GLOBAL_CLASSIFICATION_CONTEXT));
+  expect(run.commands.map(command => command.receipt)).toContain(globalClassificationTerminal(run.env.lineage.dataEpoch).receipt);
+  expect(run.one(GRAPHS.current, GLOBAL_CLASSIFICATION_CONTEXT, `${RV}contextState`)?.value).toBe(`${RV}Active`);
+  expect(run.one(GRAPHS.current, accepted.component!, `${RV}decisionHead`)?.value).toBe(accepted.revision!);
+  const commandCount = run.commands.length;
+  expect(await setStatementDecision(run.env, admitted, input)).toEqual(accepted);
+  expect(run.commands).toHaveLength(commandCount);
 });
 
 test('atomic decision CAS rejects a raced head and a per-Statement slot cannot enforce Collection-wide uniqueness', async () => {

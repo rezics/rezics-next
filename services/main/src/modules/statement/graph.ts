@@ -1,6 +1,7 @@
 import { profileValidations } from '../../infrastructure/profile.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { GLOBAL_CLASSIFICATION_CONTEXT } from '../classification/context.ts';
+import { ensureGlobalClassificationContext } from '../classification/global.ts';
 import { ContextCommandUnavailable, InvalidContextCommand, StaleContextCommand, checkedCommandReceipt,
   commandReceiptIri, commitCommand, readCommandReceipt, sealCommandTerminal, term,
   type ContextCommandReceipt } from '../context/command.ts';
@@ -481,6 +482,7 @@ export async function setStatementDecision(env: WorkActivationEnvironment, admis
   const family = STATEMENT_FAMILIES.decide;
   const existing = await readCommandReceipt(env, admission.id, family);
   if (existing) return checkedCommandReceipt(existing, admission, request.digest);
+  if (input.acceptance.kind === 'global') await ensureGlobalClassificationContext(env);
   const scope = await acceptanceScope(env, input.acceptance);
   const target: DecisionTarget = input.target.kind === 'statement'
     ? { kind: 'statement', statement: input.target.statement }

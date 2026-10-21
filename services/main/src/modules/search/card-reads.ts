@@ -43,8 +43,8 @@ export function searchCardReadDependencies(deps: MainWorkDependencies): MainWork
   const cached = new Map<string, Promise<SparqlResult>>();
   let pending: PendingRead[] = [];
   async function flush() {
-    const reads = pending;
-    pending = [];
+    const reads = pending.splice(0, 4);
+    if (pending.length) queueMicrotask(() => { void flush(); });
     try {
       if (reads.length > 4) throw new WorkReadUnavailable('Card fact batch exceeds its bound');
       const result = await native.query(reads.length === 1 ? reads[0]!.query

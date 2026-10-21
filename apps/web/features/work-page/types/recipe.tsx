@@ -162,22 +162,25 @@ function sectioned(page: ReadableRecipe): { key: string; heading: string | null;
     .sort((left, right) => Number(left.key !== '') - Number(right.key !== ''));
 }
 
-function IngredientList({ page, units, messages: t }: {
-  page: ReadableRecipe; units: Units; messages: WorkPageMessages;
+function IngredientList({ page, units, messages: t, locale = 'en', anchorPrefix = '' }: {
+  page: ReadableRecipe; units: Units; messages: WorkPageMessages; locale?: UiLocale; anchorPrefix?: string;
 }) {
   return <div className="grid gap-4">{sectioned(page).map(block => <div key={block.key} className="grid gap-1">
     {block.heading !== null ? <h4 lang={page.occurrences.find(item => item.occurrence === block.key)?.labels[0]?.language}
       className="font-medium text-muted-foreground text-sm">{block.heading}</h4> : null}
     {block.ingredients.length ? <ul className="grid gap-2">{block.ingredients.map(item => {
       const text = shownLine(item, units, page);
-      const language = item.language ?? page.occurrences.find(node => node.occurrence === item.occurrence)?.qualifier?.originalText?.language;
+      const qualifier = page.occurrences.find(node => node.occurrence === item.occurrence)?.qualifier;
+      const language = item.language ?? qualifier?.originalText?.language;
+      const alternative = qualifier?.type === 'ingredient-line' && Boolean(qualifier.substituteFor?.length);
       const quiet = text !== item.originalText && (units !== 'written' || item.hint) ? item.originalText : null;
       const note = item.judgment ? t.scaleByTaste
         : item.reason === 'unparsed' ? t.scaleUnparsed
           : item.reason ? t.scaleHeld : null;
       return <li key={item.occurrence} className="border-border/60 flex flex-col gap-0.5 border-b py-2 last:border-0">
-        <span id={ingredientAnchor(item.occurrence)} data-ingredient={item.occurrence} lang={language} dir={language ? directionOf(language) : undefined}
+        <span id={anchorPrefix + ingredientAnchor(item.occurrence)} data-ingredient={item.occurrence} lang={language} dir={language ? directionOf(language) : undefined}
           className="font-medium text-pretty">{text}</span>
+        {alternative ? <span className="text-muted-foreground text-xs">{recipeNutritionMessages[locale].substitutions}</span> : null}
         {quiet ? <span lang={language} dir={language ? directionOf(language) : undefined} className="text-muted-foreground text-sm">{quiet}</span> : null}
         {note ? <span className="text-muted-foreground text-xs">{note}</span> : null}
       </li>;
@@ -246,10 +249,11 @@ function Steps({ page, units, messages: t, recordingFetch, activeIndex }: {
 }
 
 /** A focused recipe task keeps the display awake while its steps are open. */
-function CookMode({ resource, page, messages: t, locale, units, onClose, recordingFetch }: {
+function CookMode({ resource, page, messages: t, locale, units, onClose, recordingFetch, names, authors }: {
   resource: string; page: RecipeWorkPage; messages: WorkPageMessages; locale: UiLocale; units: Units;
   onClose: () => void;
   recordingFetch?: typeof fetch;
+  names?: Names; authors?: readonly string[];
 }) {
   const close = useRef<HTMLButtonElement>(null);
   const dialog = useRef<HTMLDivElement>(null);
@@ -324,8 +328,14 @@ function CookMode({ resource, page, messages: t, locale, units, onClose, recordi
             {activeIndex === count - 1 ? t.cookFinish : t.cookNextStep}</Button> : null}
         </section>
         <section className="grid content-start gap-3"><h3 className="font-semibold text-xl">{t.ingredients}</h3>
-          <IngredientList page={page} units={units} messages={t} /></section>
+          <IngredientList page={page} units={units} messages={t} locale={locale} anchorPrefix="cook-" /></section>
       </div>
+      <RecipeNutrition page={page} names={names ?? new Map()} locale={locale} messages={t} known />
+      <RecipeSubstitutions page={page} units={units} authors={authors ?? []} locale={locale} messages={t} anchorPrefix="cook-" />
+      <footer aria-label={`${t.cookMode}: ${t.sourcesAndEvidence}`} className="grid min-w-0 gap-4 border-border/60 border-t pt-6">
+        <h3 className="font-semibold text-xl">{t.sourcesAndEvidence}</h3>
+        <RecipeNutritionSources page={page} names={names} locale={locale} messages={t} />
+      </footer>
     </div>
   </div>;
 }
@@ -410,8 +420,8 @@ export function RecipeNutritionSources({ page, names = new Map(), locale = 'en',
   })}</ul>;
 }
 
-function RecipeSubstitutions({ page, units, authors, locale, messages: t }: {
-  page: ReadableRecipe; units: Units; authors: readonly string[]; locale: UiLocale; messages: WorkPageMessages;
+function RecipeSubstitutions({ page, units, authors, locale, messages: t, anchorPrefix = '' }: {
+  page: ReadableRecipe; units: Units; authors: readonly string[]; locale: UiLocale; messages: WorkPageMessages; anchorPrefix?: string;
 }) {
   const heading = useId();
   const copy = recipeNutritionMessages[locale];
@@ -428,7 +438,7 @@ function RecipeSubstitutions({ page, units, authors, locale, messages: t }: {
           {index ? ' · ' : null}<bdi>{author}</bdi></span>) : t.unknownAuthor}</p>
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm">{occurrence.qualifier!.substituteFor!.map((target, index) => {
           const line = page.ingredients.find(item => item.occurrence === target);
-          return <a key={`${target}:${index}`} href={`#${encodeURIComponent(ingredientAnchor(target))}`} data-occurrence={target}
+          return <a key={`${target}:${index}`} href={`#${encodeURIComponent(anchorPrefix + ingredientAnchor(target))}`} data-occurrence={target}
             className="rounded-sm text-primary underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring">
             {line ? shownLine(line, units, page) : copy.ingredientNotLoaded}</a>;
         })}</div>
@@ -453,7 +463,7 @@ export function RecipeContent({ page, units, messages: t, notes, controls, colum
     {controls}
     <div className={cn('grid gap-8', columns && 'md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]')}>
       <section className="grid content-start gap-3"><h3 className="font-semibold text-lg">{t.ingredients}</h3>
-        <IngredientList page={page} units={units} messages={t} /></section>
+        <IngredientList page={page} units={units} messages={t} locale={locale} /></section>
       <section className="grid content-start gap-3"><h3 className="font-semibold text-lg">{t.method}</h3>
         <Steps page={page} units={units} messages={t} recordingFetch={recordingFetch} /></section>
     </div>
@@ -639,7 +649,7 @@ export function RecipeExperience({ resource, initial, href, actingSubject, text,
   </div>;
   return <Region id="recipe-experience" title={t.recipeMethod}>
     {page ? <>
-      <div aria-busy={busy || continuing || undefined} className="grid gap-4">
+      <div aria-busy={busy || continuing || undefined} inert={cooking || undefined} aria-hidden={cooking || undefined} className="grid gap-4">
         <RecipeContent page={page} units={units} messages={t} notes={text} recordingFetch={recordingFetch}
           names={details?.names ?? names} authors={details?.authors ?? authors} locale={locale} nutritionKnown controls={<>
           {controls}
@@ -656,6 +666,7 @@ export function RecipeExperience({ resource, initial, href, actingSubject, text,
       </div>
       {cooking && methodReady ? <CookMode key={`${resource}:${page.structure}:${page.revision}`} resource={resource}
         page={page} messages={t} locale={locale} units={units} recordingFetch={recordingFetch}
+        names={details?.names ?? names} authors={details?.authors ?? authors}
         onClose={() => {
           setCooking(false);
           if (window.location.hash === '#cook') {

@@ -60,6 +60,32 @@ test('a damaged card batch rejects every fact family instead of delivering a par
   });
 });
 
+test('five concurrent card families keep the four-branch transport bound without refusing the page', async () => {
+  const queries: string[] = [];
+  const deps = { environment: { lineage: { dataEpoch: 'epoch', routingEpoch: 'route' },
+    fuseki: { query: async (query: string): Promise<SparqlResult> => {
+      queries.push(query);
+      const branches = [...query.matchAll(/BIND\("(family-\d+)" AS \?value\)[\s\S]*?BIND\("(\d)" AS \?searchCardRead\)/g)];
+      if (branches.length) {
+        expect(branches.length).toBeLessThanOrEqual(4);
+        return { results: { bindings: branches.map(([, value, index]) => ({
+          searchCardRead: field(index!), value: field(value!),
+        })) } };
+      }
+      return { results: { bindings: [{ value: field(/BIND\("(family-\d+)"/.exec(query)![1]!) }] } };
+    } },
+  } } as unknown as MainWorkDependencies;
+  await searchGraphSnapshot.run({ clients: new Set([deps.environment.fuseki]),
+    lineage: deps.environment.lineage, position }, async () => {
+    const client = searchCardReadDependencies(deps).environment.fuseki;
+    const answers = await Promise.all(Array.from({ length: 5 }, (_, index) =>
+      client.query(`SELECT ?value WHERE { BIND("family-${index}" AS ?value) } LIMIT 1`)));
+    expect(answers.map(answer => answer.results?.bindings[0]?.value?.value))
+      .toEqual(['family-0', 'family-1', 'family-2', 'family-3', 'family-4']);
+    expect(queries).toHaveLength(2);
+  });
+});
+
 test('a search snapshot preserves the recovery hold outcome before any card can be returned', async () => {
   const deps = { environment: { lineage: { dataEpoch: 'epoch', routingEpoch: 'route' },
     fuseki: { query: async () => ({ boolean: false }),
