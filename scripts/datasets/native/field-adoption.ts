@@ -155,9 +155,10 @@ export async function adoptDatasetFields(context: DatasetFieldAdoptionContext, p
         });
       } catch (error) { semanticFailure = error; }
     }
+    const synopsisLabels = new Map<string, string>();
     for (const { field, evidence, entry } of entries) {
       const identity = sha256(canonical({ record: source.key, field: entry.field, native: field.native }));
-      const nativeLabel = field.native!.owner === 'semantic' ? semanticLabel : `synopsis:${identity}`;
+      let nativeLabel = field.native!.owner === 'semantic' ? semanticLabel : `synopsis:${identity}`;
       const supportLabel = `support:${identity}`;
       let stage = 'native-field-adoption';
       try {
@@ -186,6 +187,14 @@ export async function adoptDatasetFields(context: DatasetFieldAdoptionContext, p
           const property = field.native!.property, language = suppliedLanguage(evidence);
           requireReceipt(property.value.kind === 'string' || property.value.kind === 'language-string', 'synopsis text');
           const text = property.value.lexical;
+          // Multiple original pointers may support the same exact native value.
+          // Reuse this record's first command, retaining its historical label,
+          // while each pointer keeps its own independent Source support below.
+          // Supplied language, including its presence and spelling, is part of
+          // the key; a matching current read alone never authorizes a write.
+          const choice = canonical({ property, language });
+          nativeLabel = synopsisLabels.get(choice) ?? nativeLabel;
+          synopsisLabels.set(choice, nativeLabel);
           const path = `/v1/works/${short(target.id)}/fields/synopsis/control`;
           const readPath = `${path}?actingSubject=${encodeURIComponent(context.actingSubject)}`;
           entry.native = await context.execute(nativeLabel, path, async () => {

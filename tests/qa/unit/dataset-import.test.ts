@@ -2715,7 +2715,8 @@ test('preserves all 113 frozen source/native identities at each retained epoch w
 describe('retained field adoption through the actual importer', () => {
   function setup(settings: { multipart?: boolean; language?: string | null; human?: boolean;
     lostNativeReplies?: boolean; lostSupportReplies?: boolean; supportRefusal?: boolean; corruptBinding?: boolean; corruptSupport?: boolean;
-    withdrawn?: boolean; semantic?: boolean; editorDuringSupportRead?: boolean } = {}) {
+    withdrawn?: boolean; semantic?: boolean; editorDuringSupportRead?: boolean;
+    duplicateSummary?: 'same' | 'different-value' | 'different-language' } = {}) {
     const fixture = apiFixture(), directory = root();
     const work: DatasetRecord = { key: 'vndb:vn:v11', provider: 'vndb', kind: 'vn', externalId: 'v11',
       title: 'Fate/stay night', language: 'ja', native: 'work', sourceUrl: 'https://vndb.org/v11',
@@ -2723,7 +2724,14 @@ describe('retained field adoption through the actual importer', () => {
         ...(Object.hasOwn(settings, 'language') ? { description_language: settings.language } : {}) } };
     const person: DatasetRecord = { key: 'vndb:staff:s1', provider: 'vndb', kind: 'staff', externalId: 's1',
       title: '原名', language: 'ja', native: 'person', sourceUrl: 'https://vndb.org/s1', data: { country: '日本' } };
+    if (settings.duplicateSummary) {
+      Object.assign(work, { key: 'bangumi:subject:1014', provider: 'bangumi', kind: 'subject', externalId: '1014',
+        sourceUrl: 'https://bgm.tv/subject/1014', data: { summary: 'Exact retained synopsis.', summary_language: 'zh-Hans',
+          api_subject: { summary: settings.duplicateSummary === 'different-value' ? 'Another retained synopsis.' : 'Exact retained synopsis.',
+            summary_language: settings.duplicateSummary === 'different-language' ? 'zh-hans' : 'zh-Hans' } } });
+    }
     const source = snapshot(settings.semantic ? [work, person] : [work]);
+    source.sources[0]!.provider = work.provider;
     const file = join(directory, 'snapshots', source.id, 'snapshot.json');
     mkdirSync(dirname(file), { recursive: true });
     const frozen = JSON.stringify(source, null, 2); writeFileSync(file, frozen);
@@ -2849,6 +2857,37 @@ describe('retained field adoption through the actual importer', () => {
       editor() { control = { ...control, workHead: freshId(), contentHead: freshId(), controlHead: freshId(),
         controlEpoch: '2', mode: 'human-controlled', value: 'Later editor choice' }; },
     };
+  }
+
+  test('two exact Bangumi synopsis pointers retain independent supports for one acknowledged native command', async () => {
+    const fixture = setup({ duplicateSummary: 'same' });
+    const { adoptions, coverage } = await fixture.run();
+    const fields = adoptions.fields.filter(field => field.field.pointer.endsWith('/summary'));
+    expect(fields).toHaveLength(2);
+    expect(fields.map(field => field.status)).toEqual(['mapped', 'mapped']);
+    expect(fields.map(field => field.field.pointer)).toEqual(['/data/summary', '/data/api_subject/summary']);
+    expect(fields[0]!.native).toEqual(fields[1]!.native);
+    expect(fields[0]!.support!.key).not.toBe(fields[1]!.support!.key);
+    expect(fields.map(field => (field.support!.body as RetainedSupportRequest).evidence.field.pointer))
+      .toEqual(['/data/summary', '/data/api_subject/summary']);
+    expect(fixture.calls.filter(call => call.method === 'POST' && call.path.endsWith('/fields/synopsis/control'))).toHaveLength(1);
+    expect(fixture.calls.filter(call => call.method === 'POST' && call.path === '/v1/sources/field-supports')).toHaveLength(2);
+    for (const field of fields) expect(coverage.entries.find((entry: { path: string }) => entry.path === field.field.pointer).disposition.status).toBe('mapped');
+    fixture.editor();
+    const replay = await fixture.run();
+    expect(replay.adoptions.fields.filter(field => field.field.pointer.endsWith('/summary')).map(field => field.status)).toEqual(['pending', 'pending']);
+    expect(fixture.calls.filter(call => call.method === 'POST' && call.path.endsWith('/fields/synopsis/control'))).toHaveLength(1);
+    expect(fixture.calls.filter(call => call.method === 'POST' && call.path === '/v1/sources/field-supports')).toHaveLength(2);
+  });
+
+  for (const duplicateSummary of ['different-value', 'different-language'] as const) {
+    test(`a ${duplicateSummary} synopsis pointer cannot reuse or overwrite the first native choice`, async () => {
+      const fixture = setup({ duplicateSummary }), { adoptions } = await fixture.run();
+      expect(adoptions.fields.map(field => field.status)).toEqual(['mapped', 'pending']);
+      expect(adoptions.fields[1]!.reason).toContain('editor/source synopsis choice is preserved');
+      expect(fixture.calls.filter(call => call.method === 'POST' && call.path.endsWith('/fields/synopsis/control'))).toHaveLength(1);
+      expect(fixture.calls.filter(call => call.method === 'POST' && call.path === '/v1/sources/field-supports')).toHaveLength(1);
+    });
   }
 
   for (const multipart of [false, true]) for (const language of [undefined, null, 'pt-BR'] as const) {
