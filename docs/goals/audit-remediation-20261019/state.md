@@ -1,8 +1,8 @@
 # Audit remediation state
 
-Checkpoint: 2026-10-22 17:48 Asia/Shanghai; event d1ce23b2-014c-4f2f-a2d6-ef903587e850.
-Covered overdue deliveries: 24ed65a9, 8c5f6a44, 0d930e9f, d3cba47f, b28dd420,
-ed730974, 18afa925, 44747b42, 5a8ce36e and 6adf690b. All ten are acknowledged.
+Checkpoint: 2026-10-22 18:08 Asia/Shanghai; event b659a4fd-be62-45ef-b544-4417b87ec461.
+Covered overdue deliveries: 897fdec1, 1b0a7c9f, b5b2988a, e01fca91, 4aecc6c1,
+9803e56e, 7b4bcb68, 13ad327c, 1332f05f and cec81f25. All ten are acknowledged.
 Only the original 61 findings and necessary runtime/data support are in scope.
 Standalone frontend optimization/library research remain stopped; the missed
 2026-10-22 06:28 target has no replacement deadline or quality exception.
@@ -34,6 +34,43 @@ G-2828 runner is verified. G-2827's focused capture/fixture repair reached 21/21
 at 15683988b8; its overlay is no full-native/Main/API/persona proof. Its 207-commit
 ancestry requires isolated integration/review. G-2783 chapter review is G-2835.
 ## Reconciled handled events
+
+G-2781 attempt81's publication slice already landed at 74bafea082; all 17
+tested blobs match, with 43 tests/301 assertions retained. Existing later
+continuations govern; no duplicate resume/landing or broader original acceptance.
+G-2749 attempt27 failed routing before a Feed assertion. Decision 03b955c8d3
+reuses integrated source 260d3c7b and existing checks: 54 matched blobs,
+empty remaining code, 72 tests. No resume/relanding; eight live persona cells
+reached no Feed assertion, so D3-001 remains open with the consolidated campaign.
+G-2763 attempt32's repair is on main at c01e50b86e, with 48 tests/633 assertions;
+later attempt35 source is integrated at a70bb84b, with 30 tests/141 assertions.
+No source replay or duplicate runtime; aggregate/public-persona, 100-Episode,
+mixed-load and cancellation qualification remain incomplete.
+G-2839's canonical branch mismatch was repaired by c687d6eaad, preserving its
+old branch and matching all 26 delivered backend blobs. One partial landing
+returned already-landed dafc7be4f3; then the source task closed verified.
+Retain runs/G-2839/worktree-temp/goal/current-main-delivery evidence;
+D2-004/AMGT01 and GUI acceptance remain open with G-2823/existing owners.
+G-2757 attempt66 and G-2758 attempt89 closed cancelled as superseded workers.
+Their accepted source is integrated through 161cc04d33; no resume/relanding.
+Dirty worktrees and verified manifests remain in each run's continuity-66/89
+disposition directory. A08 and other original findings gain no closure; retain
+G-2758's old 14-error stage and absence of its three historical assertion paths.
+G-2752 decision a064e4984b reuses integrated 56c3cfff69 source, passed job
+1b7ea934 and independent G-2831 review. Receipt-only attempt47 executed tools;
+recover its missing handoff before landing, with no implementation or check replay.
+G-2747 decision 41c21927d6 resumed attempt86 on permitted ordinary codex-1;
+seven completed commands verified startup recovery. Continue the same two-file
+guard-selection cut, then separate independent codex-1/xhigh landing review.
+WEB-CLIENT-GUARD-SELECTION remains open. No credential/configuration repair,
+paid fallback or return to the old runtime/AT/navigation campaign is authorized.
+Both historical Book/C28 admission notices are superseded by joint original job
+facd0013: 50 manifest entries verified, six bodies reached preference failures
+and teardown failed. Visitor PUT expected 401/got 400; five signed-in GETs
+expected 200/got 400. The preference source fix landed/reviewed, but original
+C28 and exact-session cleanup remain unproved. Catalogue and G-2793/G-2790
+retain the remaining checks under G-2823 custody. Failed release/stale epoch
+grants no fresh admission; no stale rebind, reactivation or unchanged rerun.
 
 G-2764 attempt60/default binding requests are superseded by committed G-2823
 instructions and actual G-2750 job ad653d17: 12 unchanged bodies passed,
@@ -88,12 +125,15 @@ internal pause was wrongly attributed to the maintainer. Exact caller/gesture
 is unknown; maintainer denies pausing. Goal remains active.
 ## Measures and resource constraints
 
-Status: first attempts 20% (115/579), landed median two/max71; 2,526.9M input,
+Status: first attempts 20% (115/579), landed median two/max71; 2,527.9M input,
 19.8M output tokens, 18 unavailable sessions; tokens/proved-row unavailable.
 Separate 68/68 is not canonical acceptance. Prior overlapping 12-hour windows
-ended 04:40Z/06:21Z: 96.76M/73.79M input, other-session shares 16%/6%, no landing
-reviewers; no causal savings established. Reuse evidence, remove repeated setup/replay
-causes and keep independently ready work moving.
+ended 04:40Z/06:21Z: 96.76M/73.79M input, other-session shares 16%/6%. Latest
+recorded 12-hour window 2026-10-21 21:21:59Z–2026-10-22 09:21:59Z used
+144.87M input, other-session share 6%, no landing reviewers. These overlapping
+windows and unavailable tokens/proved-row do not establish savings. Reuse
+integrated source/checks, retire duplicate workers and repair setup causes;
+keep independently ready work moving.
 Use per-stage 600-second preparation policy and current G-2823 reconciliation;
 keep failed-stage costs, timed outcomes and recovery distinct. Preserve stores,
 corpus, identities, leases, sessions and G-2845 deletion/peer edits. No reimport,
