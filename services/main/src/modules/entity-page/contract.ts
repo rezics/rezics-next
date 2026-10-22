@@ -8,6 +8,7 @@ import { wikiClaimEvidence } from '../wiki/evidence-contract.ts';
 import { frameMatch } from '../projection/frame-read.ts';
 import { relationRenderingSchema } from '../../routes/lexicon.ts';
 import { statementQualificationSchema } from '../statement/contract.ts';
+import { retainedSourceFieldCitation } from '../relation/evidence-citation-contract.ts';
 
 const closed = { additionalProperties: false } as const;
 export const entityPageContext = t.Union([t.Literal(GLOBAL_CLASSIFICATION_CONTEXT), readId]);
@@ -133,6 +134,7 @@ const componentProperty = t.Object(
       closed,
     ),
     sources: t.Array(t.String()),
+    citations: t.Optional(t.Array(retainedSourceFieldCitation)),
     frameMatch: t.Optional(frameMatch),
   },
   closed,

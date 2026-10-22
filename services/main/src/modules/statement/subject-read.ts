@@ -35,27 +35,39 @@ import { framePattern, matchFromScore } from '../projection/frame-read.ts';
 import type { Coordinate } from '../projection/dimension.ts';
 import { ContextCommandUnavailable } from '../context/command.ts';
 import { statementQualificationFromBindings } from './qualification.ts';
+import { projectRetainedAssociationCitation } from '../relation/evidence-citation.ts';
+import type { RetainedSourceFieldCitation } from '../relation/evidence-citation-contract.ts';
 
 /** Reuse Source's settled correspondence, withdrawal, disclosure and Rights
  * projection for this exact typed native property. No converter runs on a read. */
 async function componentPropertySources(session: WorkReadSession, target: string, revision: string, property: SemanticProperty) {
   const store = session.deps.sourceRetainedFieldSupports;
-  if (!store) return [];
+  if (!store) return { sources: [] as string[], citations: [] as RetainedSourceFieldCitation[] };
   const sources = new Set<string>();
+  const citations = new Map<string, RetainedSourceFieldCitation>();
   let frontier: { generation: string; after: string } | undefined;
   do {
     session.checkDeadline();
-    const page = await store.readEvidenceWindow(session, { target, component: target, revision, property,
+    const page = await store.readEvidenceSupportWindow(session, { target, component: target, revision, property,
       slot: 'component-property-v1#' + property.predicate, occurrence: null, context: 'global' }, frontier);
     const budget = fusekiReadBudget.getStore();
     if (budget) { budget.callsLeft -= 1; budget.bytesLeft -= Buffer.byteLength(JSON.stringify(page), 'utf8'); }
     session.checkDeadline();
-    for (const source of page.items) sources.add(source.id);
+    for (const support of page.items) {
+      if (!support.evidence) continue;
+      if (support.record !== support.evidence.id) throw new WorkReadUnavailable('Native property Source record differs from its evidence');
+      sources.add(support.record);
+      const citation = projectRetainedAssociationCitation({ ...support, evidence: support.evidence });
+      const previous = citations.get(citation.id);
+      if (previous && JSON.stringify(previous) !== JSON.stringify(citation))
+        throw new WorkReadUnavailable('Native property Source citation changed during selection');
+      citations.set(citation.id, citation);
+    }
     if (page.more && (!page.next || frontier && (page.next.generation !== frontier.generation || page.next.after <= frontier.after))
       || !page.more && page.next !== null) throw new WorkReadUnavailable('Native property Source frontier is unavailable');
     frontier = page.next ?? undefined;
   } while (frontier);
-  return [...sources].sort();
+  return { sources: [...sources].sort(), citations: [...citations.values()].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0) };
 }
 
 /** Bounded candidate/hydration batches fill a page from disclosed items, with one
@@ -389,7 +401,7 @@ export async function readSubjectStatements(
           predicate: property.predicate,
           value: property.value,
           qualifiers: { applicability: [], interpretationDefinitions: [] },
-          sources: await componentPropertySources(session, resource, component!.head, property),
+          ...await componentPropertySources(session, resource, component!.head, property),
           ...(frames ? { frameMatch: matchFromScore(0) } : {}),
         });
         positions.push({

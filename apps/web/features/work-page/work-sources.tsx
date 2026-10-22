@@ -13,7 +13,8 @@ import type { HrefFor, StatementGroup, StatementPage } from '../entity-page/type
 import type { Names } from '../work-levels/types.ts';
 import type { PredicateLabels } from '../entity-page/predicate-labels.ts';
 import { externalIdentity, presentStatements, splitStatementSources, withoutOwnName } from '../entity-page/statement-groups.ts';
-import { sourceHref, SubjectSources } from '../entity-page/sources.tsx';
+import { RetainedCitationDetails, sourceHref, SubjectSources } from '../entity-page/sources.tsx';
+import { copyOf } from '../entity-page/messages.ts';
 import { HoldsIn, Pages, StatementsView, Value } from '../entity-page/views.tsx';
 import type { Copy } from '../entity-page/messages.ts';
 import { Region } from './region.tsx';
@@ -103,7 +104,7 @@ export function WorkSources({ work, locale, messages, avatarQuery, statements, l
     </div>)}
     <CatalogueCoverCredit work={{ id: work.id, title: work.title, cover: work.cover, kind: coverKindOf(work.types), authors: [] }}
       avatarQuery={avatarQuery} locale={locale} />
-    {statements?.ok ? <WorkFieldEvidence page={statements.data} labels={labels} messages={messages} /> : null}
+    {statements?.ok ? <WorkFieldEvidence page={statements.data} labels={labels} messages={messages} locale={locale} /> : null}
     {children ?? <WorkRecord work={work} locale={locale} messages={messages} />}
   </div></SubjectSources>;
 }
@@ -111,8 +112,8 @@ export function WorkSources({ work, locale, messages, avatarQuery, statements, l
 const sourceLink = 'rounded-sm text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:ring-2 focus-visible:ring-ring';
 
 /** Field evidence describes the supplied records; a provider identity alone never proves field adoption. */
-function WorkFieldEvidence({ page, labels = new Map(), messages: t }: {
-  page: StatementPage; labels?: PredicateLabels; messages: WorkPageMessages;
+function WorkFieldEvidence({ page, labels = new Map(), messages: t, locale }: {
+  page: StatementPage; labels?: PredicateLabels; messages: WorkPageMessages; locale: UiLocale;
 }) {
   const { sources } = workSourceGroups(page.groups);
   const rows = page.groups.flatMap(group => withoutOwnName(group));
@@ -127,16 +128,21 @@ function WorkFieldEvidence({ page, labels = new Map(), messages: t }: {
     })}</dl> : null}
     <details className="min-w-0">
       <summary className="w-fit cursor-pointer rounded-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring">{t.fieldEvidence}</summary>
-      <ul className="mt-3 grid min-w-0 gap-4">{rows.map((item, index) => <li key={`${item.revision}:${index}`}
+      <ul className="mt-3 grid min-w-0 gap-4">{rows.map((item, index) => {
+        const citations = item.kind === 'component-property' ? item.citations ?? [] : [];
+        const references = item.sources.filter(source => !citations.some(citation => citation.record === source));
+        return <li key={`${item.revision}:${index}`}
         data-fact-revision={item.revision} className="grid min-w-0 gap-1">
         <p className="font-medium [overflow-wrap:anywhere]">{labels.has(item.predicate)
           ? <LocalizedText text={labels.get(item.predicate)!} /> : item.predicate}</p>
         <p className="text-muted-foreground text-xs [overflow-wrap:anywhere]">{t.recordRevision}: {item.revision}</p>
-        {item.sources.length ? <ul className="flex flex-wrap gap-x-4 gap-y-1">{item.sources.map((source, index) => {
+        {references.length ? <ul className="flex flex-wrap gap-x-4 gap-y-1">{references.map((source, index) => {
           const href = sourceHref(source);
           return <li key={`${source}:${index}`}>{href ? <a href={href} rel="noreferrer noopener" className={sourceLink}>
             {t.evidence} {index + 1}</a> : <span className="[overflow-wrap:anywhere]">{source}</span>}</li>;
-        })}</ul> : !('evidence' in item && item.evidence?.length) ? <p className="text-muted-foreground">{t.fieldEvidenceUnavailable}</p> : null}
+        })}</ul> : !('evidence' in item && item.evidence?.length)
+          && !citations.length ? <p className="text-muted-foreground">{t.fieldEvidenceUnavailable}</p> : null}
+        {citations.map(citation => <RetainedCitationDetails key={citation.id} citation={citation} t={copyOf(locale)} />)}
         {'evidence' in item && item.evidence?.length ? <ul className="grid min-w-0 gap-3 border-border border-s-2 ps-3">
           {item.evidence.map(evidence => <li key={evidence.id} data-field-evidence data-source-key={evidence.id}
             className="grid min-w-0 gap-2">
@@ -159,7 +165,7 @@ function WorkFieldEvidence({ page, labels = new Map(), messages: t }: {
               : <p className="text-muted-foreground">{t.evidenceQuoteWithheld}</p>}
           </li>)}
         </ul> : null}
-      </li>)}</ul>
+      </li>; })}</ul>
     </details>
   </div>;
 }

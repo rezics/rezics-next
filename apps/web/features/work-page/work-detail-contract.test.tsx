@@ -252,6 +252,25 @@ test('field evidence preserves the exact supplied selection and never exposes a 
   expect(render(<WorkSources {...props} />)).toContain(t.evidenceQuoteWithheld);
 });
 
+test('Work footer renders retained native supports with their exact records, locators and quotation fences', () => {
+  const page = entity.retainedSourceStatements();
+  const html = render(<WorkSources work={fixture.work} locale="en" messages={t} statements={{ ok: true, data: page }} />);
+  expect(html.match(/data-retained-source-citation/g)).toHaveLength(2);
+  expect(html).toContain('/organization/founded');
+  expect(html).toContain('/history/0/year');
+  expect(html).toContain('Registry facts under CC BY 4.0');
+  expect(html.match(/Example Studio was founded in 1997\./g)).toHaveLength(1);
+  expect(html).toContain(entityCopy('en').quotationWithheld);
+  expect(html).not.toContain('data-field-evidence');
+  const item = page.groups[3]!.items[0]!;
+  if (item.kind !== 'component-property') throw new Error('Expected a component property');
+  for (const citation of item.citations!) {
+    expect(html).toContain(citation.supportIdentity);
+    expect(html).toContain(citation.record);
+    expect(html).not.toContain(`href="${citation.record}"`);
+  }
+});
+
 test('source records leave the fact list while domain facts, applicability and opaque continuation remain', () => {
   const page = sourcePage();
   expect(workSourceGroups(page.groups).sources).toHaveLength(1);
