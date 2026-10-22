@@ -104,7 +104,8 @@ export function WorkSources({ work, locale, messages, avatarQuery, statements, l
     </div>)}
     <CatalogueCoverCredit work={{ id: work.id, title: work.title, cover: work.cover, kind: coverKindOf(work.types), authors: [] }}
       avatarQuery={avatarQuery} locale={locale} />
-    {statements?.ok ? <WorkFieldEvidence page={statements.data} labels={labels} messages={messages} locale={locale} /> : null}
+    {statements?.ok ? <WorkFieldEvidence page={statements.data} labels={labels} messages={messages} locale={locale}
+      hrefFor={standaloneHrefFor({}, globalWorkHref(work.id))} /> : null}
     {children ?? <WorkRecord work={work} locale={locale} messages={messages} />}
   </div></SubjectSources>;
 }
@@ -112,8 +113,8 @@ export function WorkSources({ work, locale, messages, avatarQuery, statements, l
 const sourceLink = 'rounded-sm text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:ring-2 focus-visible:ring-ring';
 
 /** Field evidence describes the supplied records; a provider identity alone never proves field adoption. */
-function WorkFieldEvidence({ page, labels = new Map(), messages: t, locale }: {
-  page: StatementPage; labels?: PredicateLabels; messages: WorkPageMessages; locale: UiLocale;
+function WorkFieldEvidence({ page, labels = new Map(), messages: t, locale, hrefFor }: {
+  page: StatementPage; labels?: PredicateLabels; messages: WorkPageMessages; locale: UiLocale; hrefFor: HrefFor;
 }) {
   const { sources } = workSourceGroups(page.groups);
   const rows = page.groups.flatMap(group => withoutOwnName(group));
@@ -131,10 +132,14 @@ function WorkFieldEvidence({ page, labels = new Map(), messages: t, locale }: {
       <ul className="mt-3 grid min-w-0 gap-4">{rows.map((item, index) => {
         const citations = item.kind === 'component-property' ? item.citations ?? [] : [];
         const references = item.sources.filter(source => !citations.some(citation => citation.record === source));
+        const identity = externalIdentity(item);
         return <li key={`${item.revision}:${index}`}
         data-fact-revision={item.revision} className="grid min-w-0 gap-1">
         <p className="font-medium [overflow-wrap:anywhere]">{labels.has(item.predicate)
           ? <LocalizedText text={labels.get(item.predicate)!} /> : item.predicate}</p>
+        <div>{identity ? <span className="[overflow-wrap:anywhere]">{identity.provider} · {identity.namespace} · {identity.key}</span>
+          : <Value item={item} names={new Map()} hrefFor={hrefFor} t={copyOf(locale)} />}
+          <HoldsIn item={item} names={new Map()} t={copyOf(locale)} /></div>
         <p className="text-muted-foreground text-xs [overflow-wrap:anywhere]">{t.recordRevision}: {item.revision}</p>
         {references.length ? <ul className="flex flex-wrap gap-x-4 gap-y-1">{references.map((source, index) => {
           const href = sourceHref(source);

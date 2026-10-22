@@ -256,6 +256,7 @@ test('Work footer renders retained native supports with their exact records, loc
   const page = entity.retainedSourceStatements();
   const html = render(<WorkSources work={fixture.work} locale="en" messages={t} statements={{ ok: true, data: page }} />);
   expect(html.match(/data-retained-source-citation/g)).toHaveLength(2);
+  expect(html).toMatch(/>1997<\//);
   expect(html).toContain('/organization/founded');
   expect(html).toContain('/history/0/year');
   expect(html).toContain('Registry facts under CC BY 4.0');

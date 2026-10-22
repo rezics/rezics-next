@@ -30,6 +30,7 @@ async function inspect(canvasElement: HTMLElement) {
   const footer = canvas.getByRole('contentinfo', { name: 'Sources and licenses' });
   const disclosure = within(footer).queryByText(messages.en.fieldEvidence, { selector: 'summary' });
   if (disclosure) await userEvent.click(disclosure);
+  await expect(within(footer).getByText('1997', { exact: true })).toBeVisible();
   const citations = footer.querySelectorAll<HTMLElement>('[data-retained-source-citation]');
   await expect(citations).toHaveLength(2);
   await expect(within(citations[0]!).getByRole('link', { name: 'Example Studio registry' })).toHaveAttribute('href',
