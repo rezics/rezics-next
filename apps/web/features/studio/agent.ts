@@ -1,4 +1,4 @@
-import type { AgentOption } from '../auth/acting-identity.ts';
+import type { AgentOption, SessionAgent } from '../auth/acting-identity.ts';
 import { recipeEditHref } from '../recipe-editor/route.ts';
 import { idOf } from './types.ts';
 import { identityKeyUuid, uuidToSid } from '@rezics/model/address';
@@ -35,6 +35,12 @@ export function studioSegmentIri(segment: string): string | null {
 /** `/studio/@{agent}` plus a Studio path such as `/new` or `/works/<id>`. */
 export function studioHref(agent: Pick<AgentOption, 'iri' | 'handle'>, path = ''): string {
   return `/studio/${studioSegment(agent)}${path}`;
+}
+
+/** Main's publishing choices bound the workspace; choosing one never changes the session. */
+export function defaultStudioAgent(session: SessionAgent, publishing: readonly AgentOption[]): AgentOption | null {
+  if (session.status !== 'selected') return null;
+  return publishing.find(agent => agent.iri === session.agent.iri) ?? publishing[0] ?? null;
 }
 
 export type StudioAgent =

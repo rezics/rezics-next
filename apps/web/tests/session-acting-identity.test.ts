@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { agentName, agentOptions, resolveSessionAgent } from '../features/auth/acting-identity.ts';
+import { defaultStudioAgent, resolveStudioAgent, studioHref } from '../features/studio/agent.ts';
 import { isSessionKey } from '../features/auth/cookies.ts';
 import { messages } from '../features/auth/messages.ts';
 import { decodeSessionRecord, encodeSessionRecord, isAgentIri, tokenSubject } from '../features/auth/session-state.ts';
@@ -32,6 +33,28 @@ test('IAM03: a session Agent that lost eligibility is reported, never silently r
   expect(resolveSessionAgent([], null)).toEqual({ status: 'none' });
   // Main could not answer: keep what was chosen, unverified; commands still recheck it.
   expect(resolveSessionAgent(null, A)).toEqual({ status: 'unverified', previous: A });
+});
+
+test('default Studio uses a publishing workspace when the session identity cannot publish, preserving that session', () => {
+  const [person, group] = agentOptions(discovery([A, B]));
+  const session = { status: 'selected' as const, agent: group! };
+  const before = structuredClone(session);
+  const workspace = defaultStudioAgent(session, [person!]);
+  expect(workspace).toEqual(person!);
+  expect(studioHref(workspace!)).toBe('/studio/@ada');
+  expect(session).toEqual(before);
+  // A deliberate foreign identity address retains its own refusal semantics.
+  expect(resolveStudioAgent(`@${B.slice(-36)}`, [person!])).toEqual({ kind: 'foreign', slug: B.slice(-36) });
+});
+
+test('default Studio keeps a publishable selection and never manufactures authority from unknown selection or no choices', () => {
+  const [person, other] = agentOptions(discovery([A, B]));
+  expect(defaultStudioAgent({ status: 'selected', agent: other! }, [person!, other!])).toBe(other!);
+  expect(defaultStudioAgent({ status: 'selected', agent: other! }, [])).toBeNull();
+  for (const session of [
+    { status: 'unselected' as const }, { status: 'none' as const },
+    { status: 'unverified' as const, previous: B }, { status: 'ineligible' as const, previous: B },
+  ]) expect(defaultStudioAgent(session, [person!])).toBeNull();
 });
 
 test('IAM03: Agents without a label show a short, stable name', () => {
