@@ -1,0 +1,769 @@
+{
+  "recordedAt": "2026-10-22T12:34:09.974406+08:00",
+  "finding": "I1-001",
+  "aliases": [
+    "A16"
+  ],
+  "status": "closed",
+  "assessedMain": "5803d4add41e4c110a8f21fe0de11a601c2ccdba",
+  "recordingMain": "7334adf3ecf1093d70401b79b641fecee0c356bc",
+  "canonicalSource": ".temp/site-audit-2026-10-18/round-3/all-findings.json#I1-001",
+  "originalAcceptanceVerbatim": [
+    "1440与390的 Book、Recipe、非书籍 Work、profile、Person/Organization、Concept、Release、线程均有明确主体、分类型资料顺序和稳定页首动作区；主体⋯在右上角轻 reaction 旁；空能力不挤压已有正文、评分与评论；来源集中页末。",
+    "同一书籍 fixture 中，无发行、无 wiki 与空关联使用紧凑且准确的状态，已有评分、评论和讨论入口不会被多个大空面板隔开。",
+    "章节、可用版本等有实际内容且与主任务相关时保留其优先级；不机械把所有版本信息放到末尾。",
+    "读取失败保持局部恢复能力和已成功内容；多个相邻失败区块可汇总概况，但仍能定位并单独重试。",
+    "内容有无影响展示密度，不能改变 API 的未收录/空/失败/不可披露语义；窄屏保持相同信息优先级。",
+    "WorkFrame 定义同一身份、主任务、轻反应与右上 overflow 槽；book、recipe、guide、prompt、skill、plain 及经 plain 呈现的 game/media 都消费它，不各自重新堆动作。",
+    "Read/Continue、Cook、View guide、Copy/Use、真实播放/获取等以对象能力确定唯一主任务；收藏、评分与关注以紧凑可发现入口呈现，不能成为多个同权大面板。",
+    "1440/1024/768/390 均能在身份处预测主任务和页主体菜单位置；手机允许主任务换行，轻反应与 overflow 仍属于身份而非长 bio 或正文之后。",
+    "在 Work 所有公开子视图和 Zone 挂载中保持相同对象与动作归属；来源末尾按 A13，举报只在菜单按 A14，二者不能代替本类验收。",
+    "六族头部统一身份、对象专属主任务、轻反应与右上菜单的语义和位置；允许实体事实与内容不同，不允许操作随简介、定义或事实长度漂移。",
+    "Thread 用紧凑社区上下文与帖子身份开头；桌面侧栏放社区概况/规则，手机规则入口在回复前可发现；不重放整套社区 welcome 与 tabs。主帖和回复各自保留其菜单和目标。",
+    "Profile/Author 的 Follow、Concept 的相关内容入口、Release 的覆盖版本或真实获取、Entity 的相关语境浏览各有明确归属；不为统一外观造不存在的 API 操作。",
+    "Realm/Zone 已有独立右侧动作区不因自定义头部而自动判坏；reader 的沉浸 chrome、proposal/案件的权限工作流按其专门目标验收。举报位置单独服从 A14，不能用它覆盖整个头部契约。",
+    "无简介/无讨论状态不保留只重复名称的About舞台；在加入或发帖前给出已有真实用途信息或明确可用的了解入口，不编造内容。",
+    "390首屏在说明当前为空后，能看到有意义的下一步；隐藏对空集合无用的排序等工具。",
+    "有长简介时摘要并可展开，讨论入口仍可发现，避免重现参考站长简介挤满首屏。",
+    "主体 ⋯ 位于页首右上角轻量 reaction 区旁；统一已有关系动作，举报仅在菜单内，不并列两套重复 ⋯，无独立可见举报按钮。菜单可键盘展开、退出并归还焦点，390 下不遮挡/溢出；target 和组件/修订准确，需要登录时往返不丢；帖子/回复各保留自己的 ⋯。",
+    "主体⋯在页首右上角轻 reaction 旁，举报仅在对象⋯中；帖子和回复各有自己的菜单并保留精确目标。"
+  ],
+  "originalAssertionsChanged": false,
+  "independentReview": {
+    "engine": "codex-1",
+    "model": "gpt-6.1-sol",
+    "effort": "xhigh",
+    "session": "01a15f83-2150-7ae1-8b04-d0c1e4d23b1b",
+    "wholeOriginalScopePassed": true,
+    "passedCriteria": 18,
+    "imagesActuallyViewed": 60,
+    "artifactHashesVerifiedByReviewer": 86,
+    "normalManagerGate": "pass",
+    "sourceInputsQualified": 53
+  },
+  "criteria": [
+    {
+      "number": 1,
+      "canonical": "1440与390的 Book、Recipe、非书籍 Work、profile、Person/Organization、Concept、Release、线程均有明确主体、分类型资料顺序和稳定页首动作区；主体⋯在右上角轻 reaction 旁；空能力不挤压已有正文、评分与评论；来源集中页末。",
+      "status": "PASS",
+      "assessment": "Stable subject and typed order at 1440/390; six families, Person and Organization now explicit. Compact empty regions and footer placement retained.",
+      "source": [
+        "apps/web/features/work-page/work-frame.tsx",
+        "apps/web/features/entity-page/detail-contract.stories.tsx"
+      ],
+      "passingCaseReceipts": [
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/changed-stories.json",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/stories-repaired.json",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/stories-initial.json (passing Release Page only)"
+      ],
+      "screenshotsActuallyViewed": [
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/screens/apps-web-features-author-author-page.stories.tsx/HeaderActions1440.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/screens/apps-web-features-concept-concept-page.stories.tsx/LongDefinitionMenuPhone1440.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/screens/apps-web-features-entity-page-detail-contract.stories.tsx/LongDescriptionPhone390.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/screens/apps-web-features-entity-page-detail-contract.stories.tsx/PersonLongDescription1440.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/screens/apps-web-features-entity-page-detail-contract.stories.tsx/PersonLongDescription390.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/screens/apps-web-features-profile-profile-page.stories.tsx/LongBio1440.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/screens/apps-web-features-realm-thread-view.stories.tsx/NativeHeaderPhone.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/screens/apps-web-features-work-levels-editions.stories.tsx/ReleasePage1440.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-work-page-work-detail-contract.stories.tsx/LongEnglish1440.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-work-page-work-detail-contract.stories.tsx/LongEnglish390.png"
+      ],
+      "remainingInputOwner": null
+    },
+    {
+      "number": 2,
+      "canonical": "同一书籍 fixture 中，无发行、无 wiki 与空关联使用紧凑且准确的状态，已有评分、评论和讨论入口不会被多个大空面板隔开。",
+      "status": "PASS",
+      "assessment": "Same sparse Book retains compact accurate release/wiki/association emptiness followed by ratings and discussion.",
+      "source": [
+        "apps/web/features/work-page/work-detail-contract.stories.tsx:SparseBookWithRatings"
+      ],
+      "passingCaseReceipts": [
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/sparse-current-frame.json"
+      ],
+      "screenshotsActuallyViewed": [
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-work-page-work-detail-contract.stories.tsx/SparseBookWithRatingsDensity.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-work-page-work-detail-contract.stories.tsx/SparseBookWithRatingsRatings.png"
+      ],
+      "remainingInputOwner": null
+    },
+    {
+      "number": 3,
+      "canonical": "章节、可用版本等有实际内容且与主任务相关时保留其优先级；不机械把所有版本信息放到末尾。",
+      "status": "PASS",
+      "assessment": "Populated Book uses production availability/ContentsRegion and asserts about → availability → parts → ratings → discussion on desktop and phone.",
+      "source": [
+        "apps/web/features/work-page/work-detail-contract.stories.tsx:PopulatedBookOverview"
+      ],
+      "passingCaseReceipts": [
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/changed-stories.json",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/book-regions-thread-basics.json"
+      ],
+      "screenshotsActuallyViewed": [
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-work-page-work-detail-contract.stories.tsx/PopulatedBookOverviewAvailability.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-work-page-work-detail-contract.stories.tsx/PopulatedBookOverviewParts.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-work-page-work-detail-contract.stories.tsx/PopulatedBookOverviewPhoneAvailability.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-work-page-work-detail-contract.stories.tsx/PopulatedBookOverviewPhoneParts.png"
+      ],
+      "remainingInputOwner": null
+    },
+    {
+      "number": 4,
+      "canonical": "读取失败保持局部恢复能力和已成功内容；多个相邻失败区块可汇总概况，但仍能定位并单独重试。",
+      "status": "PASS",
+      "assessment": "Three real production RetryButton clicks invoke controlled route refresh snapshots; each target recovers. Successful about/ratings/discussion nodes stay connected with unchanged content.",
+      "source": [
+        "apps/web/features/work-page/work-detail-contract.stories.tsx:MixedReadFailures"
+      ],
+      "passingCaseReceipts": [
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/changed-stories.json"
+      ],
+      "screenshotsActuallyViewed": [
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-work-page-work-detail-contract.stories.tsx/MixedReadFailuresDensity.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-work-page-work-detail-contract.stories.tsx/MixedReadFailuresRatings.png"
+      ],
+      "remainingInputOwner": null
+    },
+    {
+      "number": 5,
+      "canonical": "内容有无影响展示密度，不能改变 API 的未收录/空/失败/不可披露语义；窄屏保持相同信息优先级。",
+      "status": "PASS",
+      "assessment": "Honest empty/missing/unavailable/disclosure UI semantics retained. New filtered/finite-period recovery keeps its distinct meaning; no backend semantic assertion is inferred.",
+      "source": [
+        "apps/web/features/realm/discussion-content.tsx",
+        "apps/web/features/realm/discussion-list.tsx",
+        "apps/web/features/realm/ranking-page.tsx"
+      ],
+      "passingCaseReceipts": [
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/empty-continuation-semantics.log",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/continuation-ui-final.json"
+      ],
+      "screenshotsActuallyViewed": [
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-realm-discussion-list.stories.tsx/EmptyPeriod.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-realm-discussion-page.stories.tsx/EmptyPhone.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-realm-discussion-page.stories.tsx/NoBioEmptyPhoneSettled.png"
+      ],
+      "remainingInputOwner": null
+    },
+    {
+      "number": 6,
+      "canonical": "WorkFrame 定义同一身份、主任务、轻反应与右上 overflow 槽；book、recipe、guide、prompt、skill、plain 及经 plain 呈现的 game/media 都消费它，不各自重新堆动作。",
+      "status": "PASS",
+      "assessment": "Shared WorkFrame slot fix applies to Book, Recipe, Guide, Prompt, Skill and plain/game/film/software. No independent action stack introduced.",
+      "source": [
+        "apps/web/features/work-page/work-frame.tsx",
+        "apps/web/features/work-page/work-views.stories.tsx:sharedHeader"
+      ],
+      "passingCaseReceipts": [
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/work-kinds-corrected.json",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/changed-stories.json"
+      ],
+      "screenshotsActuallyViewed": [
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-work-page-work-detail-contract.stories.tsx/LongEnglish390.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-work-page-work-views.stories.tsx/PromptCopyPhone.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-work-page-work-views.stories.tsx/RecipeCookingPhone.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-work-page-work-views.stories.tsx/SkillChinesePhone.png"
+      ],
+      "remainingInputOwner": null
+    },
+    {
+      "number": 7,
+      "canonical": "Read/Continue、Cook、View guide、Copy/Use、真实播放/获取等以对象能力确定唯一主任务；收藏、评分与关注以紧凑可发现入口呈现，不能成为多个同权大面板。",
+      "status": "PASS",
+      "assessment": "Existing capability-based Read/Cook/Guide/Copy actions retained. Continue consumes existing owner recorded Work header and completion→nextUnread chain, renders one typed ReadStart, and activation checks exact localized Chapter 2 href/query and same object.",
+      "source": [
+        "apps/web/features/work-page/work-overview.stories.tsx:ContinueReading",
+        "apps/web/features/work-page/work-views.stories.tsx"
+      ],
+      "passingCaseReceipts": [
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/continue-recorded-input.json",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/work-kinds-corrected.json"
+      ],
+      "screenshotsActuallyViewed": [
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-work-page-work-overview.stories.tsx/ContinueReading.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-work-page-work-overview.stories.tsx/ContinueReadingPhone.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-work-page-work-views.stories.tsx/PromptCopyPhone.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-work-page-work-views.stories.tsx/RecipeCookingPhone.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-work-page-work-views.stories.tsx/SkillChinesePhone.png"
+      ],
+      "remainingInputOwner": null
+    },
+    {
+      "number": 8,
+      "canonical": "1440/1024/768/390 均能在身份处预测主任务和页主体菜单位置；手机允许主任务换行，轻反应与 overflow 仍属于身份而非长 bio 或正文之后。",
+      "status": "PASS",
+      "assessment": "Guide captures/assertions cover exact 1440/1024/768/390. Supplemental non-Work geometry uses exact 1440/1024/768, Person/Organization also390; prior matching 390 family proof retained. Actions remain before expanded text.",
+      "source": [
+        "apps/web/features/work-page/work-detail-contract.stories.tsx:readableGuide",
+        "apps/web/features/entity-page/detail-contract.stories.tsx",
+        "apps/web/features/realm/thread-view.stories.tsx:NativeHeader"
+      ],
+      "passingCaseReceipts": [
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/changed-stories.json",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/stories-repaired.json",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/thread-long-final.json",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/thread-long-phone.json",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/organization-phone-final.json",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/stories-initial.json (passing Release Page only)"
+      ],
+      "screenshotsActuallyViewed": [
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/screens/apps-web-features-entity-page-detail-contract.stories.tsx/PersonLongDescription1024.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/screens/apps-web-features-entity-page-detail-contract.stories.tsx/PersonLongDescription768.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/screens/apps-web-features-realm-thread-view.stories.tsx/NativeHeader1024.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/screens/apps-web-features-realm-thread-view.stories.tsx/NativeHeader768.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/screens/apps-web-features-work-levels-editions.stories.tsx/ReleasePage1024.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/screens/apps-web-features-work-levels-editions.stories.tsx/ReleasePage768.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-work-page-work-detail-contract.stories.tsx/LongEnglish1024.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-work-page-work-detail-contract.stories.tsx/LongEnglish1440.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-work-page-work-detail-contract.stories.tsx/LongEnglish390.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-work-page-work-detail-contract.stories.tsx/LongEnglish768.png"
+      ],
+      "remainingInputOwner": null
+    },
+    {
+      "number": 9,
+      "canonical": "在 Work 所有公开子视图和 Zone 挂载中保持相同对象与动作归属；来源末尾按 A13，举报只在菜单按 A14，二者不能代替本类验收。",
+      "status": "PASS",
+      "assessment": "Accepted seven-view/global/Zone ownership and D1 navigation proof reused unchanged; shared frame change only end-aligns the existing reaction slot. Accepted source footer/report semantics retained.",
+      "source": [
+        "apps/web/features/work-page/work-frame.tsx",
+        "apps/web/features/work-page/route.ts",
+        "apps/web/features/work-page/work-detail-contract.test.tsx"
+      ],
+      "passingCaseReceipts": [
+        ".temp/manager-peer-protocol-20261021/ui-original-acceptance-0129/d1-contract.log",
+        ".temp/manager-peer-protocol-20261021/ui-original-acceptance-0129/i1-focused.json",
+        ".temp/manager-peer-protocol-20261021/ui-original-acceptance-0129/i1-density.json"
+      ],
+      "screenshotsActuallyViewed": [
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-work-page-work-detail-contract.stories.tsx/LongEnglish1440.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-work-page-work-detail-contract.stories.tsx/SparseBookWithRatingsRatings.png"
+      ],
+      "remainingInputOwner": null
+    },
+    {
+      "number": 10,
+      "canonical": "六族头部统一身份、对象专属主任务、轻反应与右上菜单的语义和位置；允许实体事实与内容不同，不允许操作随简介、定义或事实长度漂移。",
+      "status": "PASS",
+      "assessment": "Profile/Author, Concept, Entity Person/Organization, Release, Thread and Work retain typed subject/primary/reaction/menu ownership. Long-content stress captures place controls above text.",
+      "source": [
+        "apps/web/features/entity-page/detail-contract.stories.tsx",
+        "apps/web/features/realm/thread-view.stories.tsx",
+        "apps/web/features/work-page/work-frame.tsx"
+      ],
+      "passingCaseReceipts": [
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/stories-repaired.json",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/stories-initial.json (passing Release Page only)",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/thread-long-final.json"
+      ],
+      "screenshotsActuallyViewed": [
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/screens/apps-web-features-author-author-page.stories.tsx/HeaderActions1440.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/screens/apps-web-features-concept-concept-page.stories.tsx/LongDefinitionMenuPhone1440.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/screens/apps-web-features-entity-page-detail-contract.stories.tsx/PersonLongDescription1440.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/screens/apps-web-features-profile-profile-page.stories.tsx/LongBio1440.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/screens/apps-web-features-realm-thread-view.stories.tsx/NativeHeader1440.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/screens/apps-web-features-work-levels-editions.stories.tsx/ReleasePage1440.png"
+      ],
+      "remainingInputOwner": null
+    },
+    {
+      "number": 11,
+      "canonical": "Thread 用紧凑社区上下文与帖子身份开头；桌面侧栏放社区概况/规则，手机规则入口在回复前可发现；不重放整套社区 welcome 与 tabs。主帖和回复各自保留其菜单和目标。",
+      "status": "PASS",
+      "assessment": "Thread keeps compact community context, desktop overview/rules rail and phone Rules before replies. Opening post/replies each have one owning menu and exact separate target.",
+      "source": [
+        "apps/web/features/realm/thread-view.tsx",
+        "apps/web/features/realm/thread-rail.tsx",
+        "apps/web/features/feed/reply-tree.tsx",
+        "apps/web/features/feed/author-actions.tsx"
+      ],
+      "passingCaseReceipts": [
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/thread-focused-final.json",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/thread-owned-menu-visual.json",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/thread-long-final.json",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/thread-long-phone.json"
+      ],
+      "screenshotsActuallyViewed": [
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/screens/apps-web-features-realm-thread-view.stories.tsx/NativeHeader1440.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/screens/apps-web-features-realm-thread-view.stories.tsx/NativeHeaderPhone.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-realm-discussion-page.stories.tsx/MemberThreadPhonePostMenu.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-realm-discussion-page.stories.tsx/PublicThreadPhoneHeader.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-realm-discussion-page.stories.tsx/PublicThreadPhoneReplyMenu.png"
+      ],
+      "remainingInputOwner": null
+    },
+    {
+      "number": 12,
+      "canonical": "Profile/Author 的 Follow、Concept 的相关内容入口、Release 的覆盖版本或真实获取、Entity 的相关语境浏览各有明确归属；不为统一外观造不存在的 API 操作。",
+      "status": "PASS",
+      "assessment": "Existing typed Follow, related Works, Release coverage and Entity Relations commands retained; no new command/API introduced for visual uniformity.",
+      "source": [
+        "apps/web/features/feed/author-actions.tsx (existing author API retained)",
+        "apps/web/features/entity-page/detail-contract.stories.tsx"
+      ],
+      "passingCaseReceipts": [
+        ".temp/manager-peer-protocol-20261021/ui-original-acceptance-0129/i1-focused.json",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/stories-repaired.json",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/stories-initial.json (passing Release Page only)"
+      ],
+      "screenshotsActuallyViewed": [
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/screens/apps-web-features-author-author-page.stories.tsx/HeaderActions1440.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/screens/apps-web-features-concept-concept-page.stories.tsx/LongDefinitionMenuPhone1440.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/screens/apps-web-features-entity-page-detail-contract.stories.tsx/PersonLongDescription390.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/screens/apps-web-features-work-levels-editions.stories.tsx/ReleasePage1440.png"
+      ],
+      "remainingInputOwner": null
+    },
+    {
+      "number": 13,
+      "canonical": "Realm/Zone 已有独立右侧动作区不因自定义头部而自动判坏；reader 的沉浸 chrome、proposal/案件的权限工作流按其专门目标验收。举报位置单独服从 A14，不能用它覆盖整个头部契约。",
+      "status": "PASS",
+      "assessment": "Original custom Realm action/reader/proposal/case workflow exceptions respected. They are not new header redesign obligations; accepted Report A14 remains only its original sub-obligation.",
+      "source": [],
+      "passingCaseReceipts": [
+        ".temp/manager-peer-protocol-20261021/ui-original-acceptance-0129/acceptance-receipt.json"
+      ],
+      "screenshotsActuallyViewed": [
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/screens/apps-web-features-realm-thread-view.stories.tsx/NativeHeaderPhone.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-realm-discussion-page.stories.tsx/NoBioEmptySettled.png"
+      ],
+      "remainingInputOwner": null
+    },
+    {
+      "number": 14,
+      "canonical": "无简介/无讨论状态不保留只重复名称的About舞台；在加入或发帖前给出已有真实用途信息或明确可用的了解入口，不编造内容。",
+      "status": "PASS",
+      "assessment": "Actual no-bio/no-discussion production rendering removes name-only About stage; real About/Rules discovery remains and Browse works uses canonical Realm route without requiring fabricated content/post.",
+      "source": [
+        "apps/web/features/realm/thread-rail.tsx",
+        "apps/web/features/realm/discussion-content.tsx",
+        "apps/web/features/realm/discussion-page.stories.tsx:NoBioEmpty"
+      ],
+      "passingCaseReceipts": [
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/empty-settled-final.json",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/continuation-ui-final.json"
+      ],
+      "screenshotsActuallyViewed": [
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-realm-discussion-page.stories.tsx/NoBioEmptyPhoneSettled.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-realm-discussion-page.stories.tsx/NoBioEmptySettled.png"
+      ],
+      "remainingInputOwner": null
+    },
+    {
+      "number": 15,
+      "canonical": "390首屏在说明当前为空后，能看到有意义的下一步；隐藏对空集合无用的排序等工具。",
+      "status": "PASS",
+      "assessment": "At390 genuine empty state explains emptiness then shows Browse works in first screen without irrelevant sort. Filtered emptiness offers All discussions; finite Top period keeps meaningful period recovery.",
+      "source": [
+        "apps/web/features/realm/discussion-list.tsx",
+        "apps/web/features/realm/discussion-content.tsx",
+        "apps/web/features/realm/ranking-page.tsx"
+      ],
+      "passingCaseReceipts": [
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/continuation-ui-final.json",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/empty-continuation-semantics.log"
+      ],
+      "screenshotsActuallyViewed": [
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-realm-discussion-list.stories.tsx/EmptyPeriod.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-realm-discussion-page.stories.tsx/EmptyPhone.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-realm-discussion-page.stories.tsx/NoBioEmptyPhoneSettled.png"
+      ],
+      "remainingInputOwner": null
+    },
+    {
+      "number": 16,
+      "canonical": "有长简介时摘要并可展开，讨论入口仍可发现，避免重现参考站长简介挤满首屏。",
+      "status": "PASS",
+      "assessment": "Existing collapsed summary/expand and Discussion discovery proof retained; Person adds Show more/less and visible Discussion. Long Thread body preserves actions before all body paragraphs.",
+      "source": [
+        "apps/web/features/entity-page/detail-contract.stories.tsx:PersonLongDescription",
+        "apps/web/features/realm/thread-view.stories.tsx:NativeHeader"
+      ],
+      "passingCaseReceipts": [
+        ".temp/manager-peer-protocol-20261021/ui-original-acceptance-0129/i1-focused.json",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/stories-repaired.json",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/thread-long-final.json"
+      ],
+      "screenshotsActuallyViewed": [
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/screens/apps-web-features-entity-page-detail-contract.stories.tsx/PersonLongDescription390.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/screens/apps-web-features-profile-profile-page.stories.tsx/LongBio1440.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/family/screens/apps-web-features-realm-thread-view.stories.tsx/NativeHeaderPhone.png"
+      ],
+      "remainingInputOwner": null
+    },
+    {
+      "number": 17,
+      "canonical": "主体 ⋯ 位于页首右上角轻量 reaction 区旁；统一已有关系动作，举报仅在菜单内，不并列两套重复 ⋯，无独立可见举报按钮。菜单可键盘展开、退出并归还焦点，390 下不遮挡/溢出；target 和组件/修订准确，需要登录时往返不丢；帖子/回复各保留自己的 ⋯。",
+      "status": "PASS",
+      "assessment": "390 Guide cluster ends at374 versus old240. Report-only/owned/authorless reply and opening-post flows use one owning menu; keyboard opening, settled menu focus, Escape return and exact post body/revision vs child target asserted. Existing report login-return source/API proof reused.",
+      "source": [
+        "apps/web/features/work-page/work-frame.tsx",
+        "apps/web/features/feed/author-actions.tsx",
+        "apps/web/features/feed/reply-tree.tsx",
+        "apps/web/features/realm/thread-view.tsx",
+        "apps/web/features/realm/discussion-page.stories.tsx"
+      ],
+      "passingCaseReceipts": [
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/changed-stories.json",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/thread-focused-final.json",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/thread-owned-menu-visual.json",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/book-regions-thread-basics.json"
+      ],
+      "screenshotsActuallyViewed": [
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-realm-discussion-page.stories.tsx/MemberThreadPhonePostMenu.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-realm-discussion-page.stories.tsx/MemberThreadPhoneReplyMenu.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-realm-discussion-page.stories.tsx/PublicThreadPhoneReplyMenu.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-work-page-work-detail-contract.stories.tsx/LongEnglish390.png"
+      ],
+      "remainingInputOwner": null
+    },
+    {
+      "number": 18,
+      "canonical": "主体⋯在页首右上角轻 reaction 旁，举报仅在对象⋯中；帖子和回复各有自己的菜单并保留精确目标。",
+      "status": "PASS",
+      "assessment": "Same original placement/owning-post/reply-menu obligation as17 passes; not counted as a separate page or new class.",
+      "source": [
+        "apps/web/features/work-page/work-frame.tsx",
+        "apps/web/features/feed/author-actions.tsx",
+        "apps/web/features/feed/reply-tree.tsx",
+        "apps/web/features/realm/thread-view.tsx"
+      ],
+      "passingCaseReceipts": [
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/thread-focused-final.json",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/changed-stories.json"
+      ],
+      "screenshotsActuallyViewed": [
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-realm-discussion-page.stories.tsx/MemberThreadPhonePostMenu.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-realm-discussion-page.stories.tsx/PublicThreadPhoneReplyMenu.png",
+        ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-work-page-work-detail-contract.stories.tsx/LongEnglish390.png"
+      ],
+      "remainingInputOwner": null
+    }
+  ],
+  "sourceBridge": {
+    "currentSourcePins": [
+      {
+        "path": "apps/web/.storybook/next-navigation.ts",
+        "acceptedBlob": "f2d56ad4c2d45b12782c1b281a4a87f674bd5e03",
+        "currentBlob": "f2d56ad4c2d45b12782c1b281a4a87f674bd5e03"
+      },
+      {
+        "path": "apps/web/.storybook/story-screenshots.setup.ts",
+        "acceptedBlob": "92f97d8ac171d5dbb652b4506c0ceb4b038a03fd",
+        "currentBlob": "92f97d8ac171d5dbb652b4506c0ceb4b038a03fd"
+      },
+      {
+        "path": "apps/web/features/author/author-page.stories.tsx",
+        "acceptedBlob": "04b6699e455c45b4a2eec60fddd32977167ad6e0",
+        "currentBlob": "04b6699e455c45b4a2eec60fddd32977167ad6e0"
+      },
+      {
+        "path": "apps/web/features/author/author-page.tsx",
+        "acceptedBlob": "a27a1604662afc708a66f9d5d622ed13306223c9",
+        "currentBlob": "a27a1604662afc708a66f9d5d622ed13306223c9"
+      },
+      {
+        "path": "apps/web/features/concept/concept-follow.tsx",
+        "acceptedBlob": "26bb390b08207e17f3061fec0b3cb2e09a9a4583",
+        "currentBlob": "26bb390b08207e17f3061fec0b3cb2e09a9a4583"
+      },
+      {
+        "path": "apps/web/features/concept/concept-page.stories.tsx",
+        "acceptedBlob": "89aad9c0217026ed7ffe47f59eb1a4a06d00b57a",
+        "currentBlob": "89aad9c0217026ed7ffe47f59eb1a4a06d00b57a"
+      },
+      {
+        "path": "apps/web/features/concept/concept-page.tsx",
+        "acceptedBlob": "e26d30030e23c4cf9aa9437aed560709b9d3f029",
+        "currentBlob": "e26d30030e23c4cf9aa9437aed560709b9d3f029"
+      },
+      {
+        "path": "apps/web/features/entity-page/detail-contract.stories.tsx",
+        "acceptedBlob": "797732990afcd224ae538b2f15a5d0685c800a7b",
+        "currentBlob": "797732990afcd224ae538b2f15a5d0685c800a7b"
+      },
+      {
+        "path": "apps/web/features/entity-page/fixtures.ts",
+        "acceptedBlob": "918d0332db4e3e58e6d789b1e6e73ca434805473",
+        "currentBlob": "918d0332db4e3e58e6d789b1e6e73ca434805473"
+      },
+      {
+        "path": "apps/web/features/entity-page/header.tsx",
+        "acceptedBlob": "3a5fb4849a2452a123b1491e512b54e68cca7018",
+        "currentBlob": "3a5fb4849a2452a123b1491e512b54e68cca7018"
+      },
+      {
+        "path": "apps/web/features/entity-page/sources.tsx",
+        "acceptedBlob": "16978455cf768ae0f341ecdc8daec824111dc163",
+        "currentBlob": "16978455cf768ae0f341ecdc8daec824111dc163"
+      },
+      {
+        "path": "apps/web/features/entity-page/views.tsx",
+        "acceptedBlob": "99716d634ca2e5fdf2b88ece5cc79056db69d03f",
+        "currentBlob": "99716d634ca2e5fdf2b88ece5cc79056db69d03f"
+      },
+      {
+        "path": "apps/web/features/feed/author-actions.stories.tsx",
+        "acceptedBlob": "26355402b1a33ab365ec3ab89549bfb27a950324",
+        "currentBlob": "26355402b1a33ab365ec3ab89549bfb27a950324"
+      },
+      {
+        "path": "apps/web/features/feed/author-actions.tsx",
+        "acceptedBlob": "c536fce9d4a4a2f47ae5790b851eebd9d742f4f1",
+        "currentBlob": "c536fce9d4a4a2f47ae5790b851eebd9d742f4f1"
+      },
+      {
+        "path": "apps/web/features/feed/reply-tree.tsx",
+        "acceptedBlob": "94ecdf48fb97d5eecdb32d8ebde24d65b254f6cb",
+        "currentBlob": "94ecdf48fb97d5eecdb32d8ebde24d65b254f6cb"
+      },
+      {
+        "path": "apps/web/features/feed/thread-fixtures.ts",
+        "acceptedBlob": "9ac133d7325cd30715e9a88365d6b752c4d05649",
+        "currentBlob": "9ac133d7325cd30715e9a88365d6b752c4d05649"
+      },
+      {
+        "path": "apps/web/features/profile/follow-button.tsx",
+        "acceptedBlob": "2174b8d2e08a8f95ff101fbc15f593803f2fbc72",
+        "currentBlob": "2174b8d2e08a8f95ff101fbc15f593803f2fbc72"
+      },
+      {
+        "path": "apps/web/features/profile/profile-page.stories.tsx",
+        "acceptedBlob": "5c9a41f3f7f1d0415edb01763edd48db4e4f75bf",
+        "currentBlob": "5c9a41f3f7f1d0415edb01763edd48db4e4f75bf"
+      },
+      {
+        "path": "apps/web/features/profile/profile-page.tsx",
+        "acceptedBlob": "6e71d11012c7444452a9dd68ff750d8f87ada8f4",
+        "currentBlob": "6e71d11012c7444452a9dd68ff750d8f87ada8f4"
+      },
+      {
+        "path": "apps/web/features/realm/discussion-content.tsx",
+        "acceptedBlob": "0f1752f2e3b7190ee91f0aaa6bb3ee04aef735b0",
+        "currentBlob": "0f1752f2e3b7190ee91f0aaa6bb3ee04aef735b0"
+      },
+      {
+        "path": "apps/web/features/realm/discussion-list.stories.tsx",
+        "acceptedBlob": "5b04e6878d079854bfa235ed4534daf5c3cceccf",
+        "currentBlob": "5b04e6878d079854bfa235ed4534daf5c3cceccf"
+      },
+      {
+        "path": "apps/web/features/realm/discussion-list.tsx",
+        "acceptedBlob": "0b208fa54c937ec14a181cc1474aa2aeaa81dba1",
+        "currentBlob": "0b208fa54c937ec14a181cc1474aa2aeaa81dba1"
+      },
+      {
+        "path": "apps/web/features/realm/discussion-page.stories.tsx",
+        "acceptedBlob": "9024172d6ec1bda9d8643e10281e7c073d8f2a88",
+        "currentBlob": "9024172d6ec1bda9d8643e10281e7c073d8f2a88"
+      },
+      {
+        "path": "apps/web/features/realm/ranking-page.test.tsx",
+        "acceptedBlob": "3ff0572c12915f2b04b0a792ad16fd67d9898a3c",
+        "currentBlob": "3ff0572c12915f2b04b0a792ad16fd67d9898a3c"
+      },
+      {
+        "path": "apps/web/features/realm/ranking-page.tsx",
+        "acceptedBlob": "c6085272cf95aa380ef3ac188d3dd9c9cafbb5ac",
+        "currentBlob": "c6085272cf95aa380ef3ac188d3dd9c9cafbb5ac"
+      },
+      {
+        "path": "apps/web/features/realm/story-page.tsx",
+        "acceptedBlob": "5dca2fb9925977b45946d974be36d407ac72317f",
+        "currentBlob": "5dca2fb9925977b45946d974be36d407ac72317f"
+      },
+      {
+        "path": "apps/web/features/realm/thread-rail.tsx",
+        "acceptedBlob": "ea2f4d03406ecee0486a68e3dbf9eff0fc803a38",
+        "currentBlob": "ea2f4d03406ecee0486a68e3dbf9eff0fc803a38"
+      },
+      {
+        "path": "apps/web/features/realm/thread-view.stories.tsx",
+        "acceptedBlob": "a671e8c90e5b1ffff0a66ace96154c5b3464a2bb",
+        "currentBlob": "a671e8c90e5b1ffff0a66ace96154c5b3464a2bb"
+      },
+      {
+        "path": "apps/web/features/realm/thread-view.tsx",
+        "acceptedBlob": "d0ec6bb6949dc0d0fb857d2b7fadd9e1831cfa1a",
+        "currentBlob": "d0ec6bb6949dc0d0fb857d2b7fadd9e1831cfa1a"
+      },
+      {
+        "path": "apps/web/features/relationships/api.ts",
+        "acceptedBlob": "4553d9f67e39e11404e1c93cc27882fbf8951369",
+        "currentBlob": "4553d9f67e39e11404e1c93cc27882fbf8951369"
+      },
+      {
+        "path": "apps/web/features/relationships/control.tsx",
+        "acceptedBlob": "4f125f64975e5c8b255bb327634176071ccdf4b5",
+        "currentBlob": "4f125f64975e5c8b255bb327634176071ccdf4b5"
+      },
+      {
+        "path": "apps/web/features/rights-mark/fixtures.ts",
+        "acceptedBlob": "cf307b2f78e3b584e87514f27d2df881b0d62de1",
+        "currentBlob": "cf307b2f78e3b584e87514f27d2df881b0d62de1"
+      },
+      {
+        "path": "apps/web/features/rights-mark/rights-mark.stories.tsx",
+        "acceptedBlob": "4bc951eb4ca9f248924c356b91d44e18ab608f0f",
+        "currentBlob": "4bc951eb4ca9f248924c356b91d44e18ab608f0f"
+      },
+      {
+        "path": "apps/web/features/rights-mark/rights-mark.tsx",
+        "acceptedBlob": "1f2ca61cd9cdab848e6e7aa84fbe6c6d80d1e665",
+        "currentBlob": "1f2ca61cd9cdab848e6e7aa84fbe6c6d80d1e665"
+      },
+      {
+        "path": "apps/web/features/safety/report-action.tsx",
+        "acceptedBlob": "a6ac9b1c3d89f16a2b844fb7b2e83d1a7ce2d138",
+        "currentBlob": "a6ac9b1c3d89f16a2b844fb7b2e83d1a7ce2d138"
+      },
+      {
+        "path": "apps/web/features/work-levels/editions.stories.tsx",
+        "acceptedBlob": "77e2649ef747c1eafef9adfbf2d62c399900cb13",
+        "currentBlob": "77e2649ef747c1eafef9adfbf2d62c399900cb13"
+      },
+      {
+        "path": "apps/web/features/work-levels/fixtures.ts",
+        "acceptedBlob": "ce787e0dfd24f603c9dd1b93015271f48e310710",
+        "currentBlob": "ce787e0dfd24f603c9dd1b93015271f48e310710"
+      },
+      {
+        "path": "apps/web/features/work-levels/previews.tsx",
+        "acceptedBlob": "d20929232e94dc74c3bdacfc983556e1d36bed46",
+        "currentBlob": "d20929232e94dc74c3bdacfc983556e1d36bed46"
+      },
+      {
+        "path": "apps/web/features/work-levels/release-page.tsx",
+        "acceptedBlob": "9d825ab3afeec0d030a5243270ffb54549725aec",
+        "currentBlob": "9d825ab3afeec0d030a5243270ffb54549725aec"
+      },
+      {
+        "path": "apps/web/features/work-page/contents.tsx",
+        "acceptedBlob": "6d5e14247c30757205e844efcf4e435252026390",
+        "currentBlob": "6d5e14247c30757205e844efcf4e435252026390"
+      },
+      {
+        "path": "apps/web/features/work-page/expandable.tsx",
+        "acceptedBlob": "c44eec4e37141ee085cabeae5efd85dc7c4276a3",
+        "currentBlob": "c44eec4e37141ee085cabeae5efd85dc7c4276a3"
+      },
+      {
+        "path": "apps/web/features/work-page/region.tsx",
+        "acceptedBlob": "e91e187a1a9ddde408a399a042fda3ed6546c80b",
+        "currentBlob": "0648bc85c7de6c1136565ea851a32696ced42cf2"
+      },
+      {
+        "path": "apps/web/features/work-page/retry-button.tsx",
+        "acceptedBlob": "fdce17cfa966a582ded3179753f2b5a546b36174",
+        "currentBlob": "fdce17cfa966a582ded3179753f2b5a546b36174"
+      },
+      {
+        "path": "apps/web/features/work-page/route.ts",
+        "acceptedBlob": "2f5073aa044699ff0fac1579382cce1136755226",
+        "currentBlob": "2f5073aa044699ff0fac1579382cce1136755226"
+      },
+      {
+        "path": "apps/web/features/work-page/types/actions.tsx",
+        "acceptedBlob": "28de595a8b64092721295f00fdaac9a37566f72c",
+        "currentBlob": "28de595a8b64092721295f00fdaac9a37566f72c"
+      },
+      {
+        "path": "apps/web/features/work-page/work-detail-contract.stories.tsx",
+        "acceptedBlob": "fedbd09cb1b37ff62a07ebe07757425e59593447",
+        "currentBlob": "fedbd09cb1b37ff62a07ebe07757425e59593447"
+      },
+      {
+        "path": "apps/web/features/work-page/work-detail-contract.test.tsx",
+        "acceptedBlob": "5c068d8ff2ef1a8b9ad3f1694cf2909219f7b4ee",
+        "currentBlob": "5c068d8ff2ef1a8b9ad3f1694cf2909219f7b4ee"
+      },
+      {
+        "path": "apps/web/features/work-page/work-frame.tsx",
+        "acceptedBlob": "5aa56451769714a3636cb661405bace72b0143fd",
+        "currentBlob": "5aa56451769714a3636cb661405bace72b0143fd"
+      },
+      {
+        "path": "apps/web/features/work-page/work-header.tsx",
+        "acceptedBlob": "dce7f23ce93d1e634bf854607f209fe9494a89fb",
+        "currentBlob": "dce7f23ce93d1e634bf854607f209fe9494a89fb"
+      },
+      {
+        "path": "apps/web/features/work-page/work-nav.tsx",
+        "acceptedBlob": "1f0fd66950cfe350d5202608617ac520fdccbfd8",
+        "currentBlob": "1f0fd66950cfe350d5202608617ac520fdccbfd8"
+      },
+      {
+        "path": "apps/web/features/work-page/work-overview.stories.tsx",
+        "acceptedBlob": "9b41b62694b09c08385880355ab5f9c1b8646b92",
+        "currentBlob": "9b41b62694b09c08385880355ab5f9c1b8646b92"
+      },
+      {
+        "path": "apps/web/features/work-page/work-tabs.tsx",
+        "acceptedBlob": "978a1e1543764ef7e6f02b637668ed191786ea7c",
+        "currentBlob": "978a1e1543764ef7e6f02b637668ed191786ea7c"
+      },
+      {
+        "path": "apps/web/features/work-page/work-views.stories.tsx",
+        "acceptedBlob": "69dd61eae5f02971969007a446230775a6e148c8",
+        "currentBlob": "69dd61eae5f02971969007a446230775a6e148c8"
+      },
+      {
+        "path": "scripts/qa/story-screenshots.ts",
+        "acceptedBlob": "531b2bb355b48534fbbbd4b4d981fb599e8c2382",
+        "currentBlob": "531b2bb355b48534fbbbd4b4d981fb599e8c2382"
+      },
+      {
+        "path": "tests/qa/fixtures/outcomes/books/collection-tracking-and-progress.json",
+        "acceptedBlob": "f7f8f2c9a02619a2f3ebb3b3d1db4d23af0c4ce6",
+        "currentBlob": "f7f8f2c9a02619a2f3ebb3b3d1db4d23af0c4ce6"
+      }
+    ],
+    "onlyLaterChange": "RegionFailure gains optional role override; undefined/default behavior, retry action, content and layout are unchanged. Existing I1 region callers retain default. New primary contents refusal accessibility announcement at7334adf3ec is separately checked.",
+    "uncommittedPeerRightsMark": "Not part of accepted committed source or this closure; preserve the three peer edits."
+  },
+  "programVerification": {
+    "canonicalCriteriaExact": 18,
+    "allScreenshotHashesMatched": 60,
+    "imagesActuallyViewed": [
+      ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-work-page-work-detail-contract.stories.tsx/LongEnglish390.png",
+      ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-realm-discussion-page.stories.tsx/NoBioEmptyPhoneSettled.png",
+      ".temp/manager-peer-protocol-20261021/ui-contract-fix-0157/screens/apps-web-features-realm-discussion-page.stories.tsx/PublicThreadPhoneReplyMenu.png"
+    ]
+  },
+  "artifacts": [
+    {
+      "path": ".temp/manager-peer-protocol-20261021/ui-reacceptance-0245/acceptance-receipt.json",
+      "sha256": "099d98480c380063b9eceeda199788e83883e37558d89b59ec89f3ac1925e001"
+    },
+    {
+      "path": ".temp/manager-peer-protocol-20261021/ui-reacceptance-0245/acceptance-report.md",
+      "sha256": "a947f6f1c36bd0c070199a83f8153444491c96b0f98891b426ca1e558bc65686"
+    },
+    {
+      "path": ".temp/manager-peer-protocol-20261021/ui-reacceptance-0245/criterion-map.json",
+      "sha256": "dadf45c96f4fcfd0d2faf1b86fcec3484f8869d19577f101b047cecbf3a01d86"
+    },
+    {
+      "path": ".temp/manager-peer-protocol-20261021/ui-reacceptance-0245/verified-inputs.json",
+      "sha256": "a505f8b25646d2e3cd8d9835ce780b0b3ec37c56051f99a5ab0652439cfd5a12"
+    },
+    {
+      "path": ".temp/manager-peer-protocol-20261021/ui-reacceptance-0245/screenshots-viewed.json",
+      "sha256": "838c053730fa7ae54b8519e2cbe35bfff36a49d184a3ea6f64d38417fce79d48"
+    },
+    {
+      "path": ".temp/manager-peer-protocol-20261021/ui-reacceptance-0245/interaction-receipts.json",
+      "sha256": "f30fae590afb48cddb79d04d9a24ec75639390f04562e3ca9d0f17d69e0b1a0e"
+    }
+  ],
+  "limits": [
+    "UI acceptance uses versioned authored production-component Storybook interactions; no new live API/browser journey is claimed.",
+    "Continue uses the existing recorded owner direct-Work resume chain. No new current progress/CAS persistence or populated ranked-list /me/continue transport qualification.",
+    "Retry recovery uses production RetryButton/router.refresh with controlled successive story snapshots; this proves UI recovery and retained successful content, not injected backend fault behavior.",
+    "Unchanged accepted Report A14/AUD007/AUD013 source/API proof and D1/AUD009 are reused only within previous qualification. No backend corpus or other accepted class is reopened.",
+    "The capture candidate head remains older; qualification is by the 53 exact rendered blobs, including committed rights-mark inputs, not by an immutable whole candidate/root. The differing test-only ranking input ran in the normal gated snapshot/root focused check.",
+    "Existing shared dependencies were reused as declared; no install or environment change. Normal manager snapshot used local workspace aliases; initial wholesale symlink failure was excluded and full gates reran.",
+    "Original accessibility/screenshot setup and baselines are unchanged. The corrected supplemental geometry measures the owning action cluster (including existing follower count), while still checking menu adjacency; focus checks wait for actual menu focus before Escape.",
+    "Only passing selected cases count. Initial harness/short-input/font-race diagnostics, pending and skipped cases provide no acceptance coverage. Release Page uses its individually passing initial case; failed sibling cases have matching final replacements."
+  ]
+}

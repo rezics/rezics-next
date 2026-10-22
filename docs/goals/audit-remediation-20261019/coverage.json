@@ -317,9 +317,19 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "详情页缺少稳定的主体、分类型页头、动作区和信息顺序契约",
-      "status": "build-briefed",
-      "owner": "G-2757 + G-2758",
-      "proof": []
+      "status": "closed",
+      "owner": "G-2757 + G-2758 + UI implementation0157 / independent0245",
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/I1-001-detail-contract-20261022.json",
+          "finding": "I1-001",
+          "alias": "A16",
+          "assessedMain": "5803d4add41e4c110a8f21fe0de11a601c2ccdba",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "disposition": "All18 canonical detail-page UI criteria passed independent codex-1/Sol/xhigh acceptance. Production Storybook interactions and60 inspected screenshots establish UI outcomes; qualified API evidence retains its existing scope. A16 is this same canonical class, counted once."
     },
     {
       "id": "A02",
