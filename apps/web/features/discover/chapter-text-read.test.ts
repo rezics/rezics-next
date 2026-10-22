@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
-import { readChapterText } from './chapter-text-read.ts';
+import { chapterProgress, readChapterText } from './chapter-text-read.ts';
 import { emptyBrowse } from './browse-state.ts';
 import type { MainClient } from './types.ts';
+import type { SearchHit, SearchResultPage } from '../search/types.ts';
 
 test('chapter text uses the Work phrase contract and an independent bounded first page', async () => {
   let request: unknown;
@@ -32,4 +33,25 @@ test('chapter text makes no request without text or for empty explicit quotes', 
   const main = { v1: { query: { post() { throw new Error('Unexpected query'); } } } } as unknown as MainClient;
   expect(await readChapterText(main, emptyBrowse, 'en')).toBeNull();
   expect(await readChapterText(main, { ...emptyBrowse, q: '""' }, 'en')).toBeNull();
+});
+
+test('chapter progress retains distinct MainVersions sharing Content and suppresses replayed representatives', () => {
+  const hit = (mainVersion: string, chapter: string | null, matchUnit = 'shared-content'): SearchHit => ({
+    matchUnit, mainVersion, work: `work-${mainVersion}`, types: ['https://schema.org/Book'], title: null,
+    cover: null, authors: [], rating: null, tagline: null, completion: null,
+    reasons: { language: 'en', field: chapter ? 'body' : 'title', matchedText: null, matchedLanguage: null,
+      chapter: chapter ? { title: chapter, href: `/read/${mainVersion}` } : null, realm: null, classification: null },
+  });
+  const first: SearchResultPage = { total: 3, sequence: '1', indexGeneration: 'index', titles: false,
+    hits: [hit('first-main', 'First placement'), hit('title-main', null)],
+    next: { queryDigest: 'a'.repeat(64), resultDigest: 'b'.repeat(64),
+      sourcePosition: { datasetId: 'product', dataEpoch: 'test', sequence: '1' }, indexGeneration: 'index',
+      nextOffset: 2, expiresAt: 1 },
+  };
+  expect(chapterProgress([first])).toMatchObject({ checked: 2, complete: false });
+  const progress = chapterProgress([first, { ...first, next: null,
+    hits: [hit('first-main', 'First placement', 'replayed-unit'), hit('second-main', 'Second placement')] }]);
+  expect(progress.hits.map(result => result.mainVersion)).toEqual(['first-main', 'second-main']);
+  expect(progress.hits.map(result => result.reasons.chapter?.href)).toEqual(['/read/first-main', '/read/second-main']);
+  expect(progress).toMatchObject({ checked: 3, total: 3, complete: true });
 });

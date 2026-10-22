@@ -234,7 +234,7 @@ function Pages({ first, props, t }: { first: SearchResultPage; props: SearchResu
       <AlertDescription className="text-foreground">{t.titlesUnavailable}</AlertDescription>
     </Alert> : null}
     <ol ref={list} className="grid divide-y divide-border/70">
-      {hits.map(hit => <li key={hit.matchUnit} className="py-5 first:pt-1">
+      {hits.map(hit => <li key={hit.mainVersion} className="py-5 first:pt-1">
         <WorkRow work={hitWork(hit, state)} avatarQuery={avatarQuery} locale={locale}>
           <Reasons hit={hit} scopeLabel={scopeLabel} locale={locale} t={t} />
         </WorkRow>

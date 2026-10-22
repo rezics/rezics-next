@@ -29,7 +29,7 @@ export async function readChapterText(main: MainClient, state: BrowseState, loca
 export const CHAPTER_SCAN_PAGES = 4;
 
 export interface ChapterProgress {
-  /** Matches inside a chapter, each with its reader destination, in Main's order and without repeats. */
+  /** One chapter representative per MainVersion, with its reader destination, in Main's order. */
   hits: SearchHit[];
   /** Phrase results examined so far. Main ranks title and name matches before text matches. */
   checked: number;
@@ -41,10 +41,10 @@ export interface ChapterProgress {
 export function chapterProgress(pages: readonly SearchResultPage[]): ChapterProgress {
   const seen = new Set<string>();
   const hits = pages.flatMap(page => page.hits).filter(hit => {
-    if (!hit.reasons.chapter || seen.has(hit.matchUnit)) return false;
-    seen.add(hit.matchUnit);
+    if (!hit.reasons.chapter || seen.has(hit.mainVersion)) return false;
+    seen.add(hit.mainVersion);
     return true;
   });
-  return { hits, checked: new Set(pages.flatMap(page => page.hits.map(hit => hit.matchUnit))).size, total: pages[0]?.total ?? 0,
+  return { hits, checked: new Set(pages.flatMap(page => page.hits.map(hit => hit.mainVersion))).size, total: pages[0]?.total ?? 0,
     complete: (pages.at(-1)?.next ?? null) === null };
 }

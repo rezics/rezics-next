@@ -54,8 +54,10 @@ const excerpt: NonNullable<SearchHit['excerpt']> = { status: 'available',
   variant: 'urn:rezics:content:variant:00000000-0000-4000-8000-000000000012' };
 const excerptRead: Extract<SearchLoaded, { ok: true }> = { ok: true, page: { ...read.page, total: 3,
   hits: [{ ...read.page.hits[0]!, excerpt, factObligations: attributed },
-    { ...read.page.hits[0]!, matchUnit: 'unavailable', excerpt: { status: 'unavailable', reason: 'not-hydrated' } },
-    { ...read.page.hits[0]!, matchUnit: 'missing' }] } };
+    { ...read.page.hits[0]!, mainVersion: 'https://rezics.com/id/00000000-0000-4000-8000-000000000004',
+      matchUnit: 'unavailable', excerpt: { status: 'unavailable', reason: 'not-hydrated' } },
+    { ...read.page.hits[0]!, mainVersion: 'https://rezics.com/id/00000000-0000-4000-8000-000000000005',
+      matchUnit: 'missing' }] } };
 export const DisclosedExcerptAndUnknowns: Story = { args: { read: excerptRead }, async play({ canvasElement }) {
   const canvas = within(canvasElement);
   const passage = canvas.getByText(excerpt.text);
@@ -150,8 +152,9 @@ export const IndependentOfResourceCount: Story = { render: () => <DiscoverView s
 const token = (nextOffset: number): SearchContinuation => ({ queryDigest: 'a'.repeat(64), resultDigest: 'b'.repeat(64),
   sourcePosition: { datasetId: 'product', dataEpoch: 'story', sequence: '1' }, indexGeneration: 'index',
   nextOffset, expiresAt: 9999999999999 });
-const second = { ...read.page.hits[0]!, matchUnit: 'second', reasons: { ...read.page.hits[0]!.reasons,
-  chapter: { title: 'The last lantern', href: chapterHref(book, '00000000-0000-4000-8000-000000000003', 'en') } } };
+const secondBook = 'https://rezics.com/id/00000000-0000-4000-8000-000000000006';
+const second = { ...read.page.hits[0]!, work: secondBook, mainVersion: secondBook, reasons: { ...read.page.hits[0]!.reasons,
+  chapter: { title: 'The last lantern', href: chapterHref(secondBook, '00000000-0000-4000-8000-000000000003', 'en') } } };
 const firstPage = { ...read.page, total: 2, next: token(1) };
 const pagesLoader = (first: SearchResultPage, later: readonly SearchResultPage[]): SearchLoader => async continuation => {
   if (!continuation) return { ok: true, page: first };
@@ -162,6 +165,17 @@ const pagesLoader = (first: SearchResultPage, later: readonly SearchResultPage[]
 };
 const finalPage = { ...read.page, total: 2, hits: [read.page.hits[0]!, second] };
 const continueLoad = fn(pagesLoader(firstPage, [finalPage]));
+
+export const SharedContentAcrossMainVersions: Story = {
+  args: { read: { ok: true, page: finalPage } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('link', { name: 'At the harbour' })).toHaveAttribute('href', localizedPath(chapter, 'en'));
+    await expect(canvas.getByRole('link', { name: 'The last lantern' })).toHaveAttribute('href',
+      localizedPath(second.reasons.chapter.href, 'en'));
+    await expect(canvas.getByText('Showing all 2 chapter matches')).toBeVisible();
+  },
+};
 
 export const ContinueToTheLastChapter: Story = {
   args: { read: { ok: true, page: firstPage }, load: continueLoad },

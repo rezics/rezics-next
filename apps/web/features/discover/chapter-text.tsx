@@ -157,7 +157,7 @@ function ChapterPages({ first, state, locale, actingSubject, signedIn = true, lo
   return <>
     {progress.hits.length ? <>
       <ol ref={list} className="grid min-w-0 gap-3 sm:grid-cols-2">
-        {progress.hits.map(hit => <li key={hit.matchUnit} className="grid min-w-0 content-start gap-2 rounded-2xl
+        {progress.hits.map(hit => <li key={hit.mainVersion} className="grid min-w-0 content-start gap-2 rounded-2xl
           border border-border/70 bg-card p-4">
           <Link href={workHref(hit.work, state.scope)} className="min-w-0 text-muted-foreground text-sm underline-offset-4
             hover:underline">
