@@ -243,14 +243,19 @@ async function withGrantClient(db: PlatformGrantDb,
 /** Record platform:use for a principal an in-process test already inserted.
  * The exposure proof reads the live permission and its episode, so the test
  * passes AccessExposure on that same access pool to createMainApp. An active
- * unexpired row for the same group is left in place. The principal row is not
+ * unexpired row for the same group is left in place. A finite expiry must be
+ * supplied at creation because platform grant episodes are immutable.
+ * The principal row is not
  * updated, so an exposure summary cached before this grant stays stale. */
 export async function grantRecordedPlatformUse(db: PlatformGrantDb, principalId: string,
-  groups: readonly string[], issuerSubject = recordedIssuer): Promise<void> {
+  groups: readonly string[], issuerSubject = recordedIssuer, validUntil: string | null = null): Promise<void> {
   if (groups.length === 0) throw new Error('Platform use names an exposure group');
   const permissions = [...new Set(groups.map(platformUsePermission))];
   if (!principalIdPattern.test(principalId)) throw new Error('Platform use recipient must be a principal id');
   if (!agentIri.test(issuerSubject)) throw new Error('Platform grant issuer must be an agent');
+  if (validUntil !== null && (!Number.isFinite(Date.parse(validUntil)) || Date.parse(validUntil) <= Date.now())) {
+    throw new Error('Platform use expiry must be a future timestamp');
+  }
   try {
     await withGrantClient(db, async sql => {
       await sql.query(`INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')
@@ -269,8 +274,8 @@ export async function grantRecordedPlatformUse(db: PlatformGrantDb, principalId:
         await sql.query(
           `INSERT INTO access.principal_permission_grant
              (id, issuer_subject, principal_id, scope_id, action, valid_until)
-           VALUES ($1, $2, $3, 'platform:access', $4, 'infinity')`,
-          [id, issuerSubject, principalId, permission]);
+           VALUES ($1, $2, $3, 'platform:access', $4, $5::timestamptz)`,
+          [id, issuerSubject, principalId, permission, validUntil ?? 'infinity']);
         await sql.query(
           `INSERT INTO access.platform_grant_episode
              (id, principal_grant_id, issuer_subject, permission, scope_id, assigned_by_principal, receipt)
