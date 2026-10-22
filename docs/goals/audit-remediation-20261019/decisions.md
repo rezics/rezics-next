@@ -56,3 +56,24 @@ Membership, moderation or platform status does not grant another author's edit
 authority. Moderation and platform restrictions retain their existing separate
 operations. The UI offers only actions the corresponding API authorizes, and
 successful receipts remain readable after refresh and through recovery.
+
+## Native Recipe citation proof
+
+Apply the maintainer's existing [independent annotation contract](../../contracts/source-lifecycle.md#conversion-and-independent-source-annotation)
+to A19's lawful native-authored public positive. A nutrition citation does not
+require a converter run, mapping, Source observation or transcriber in the Work
+header. Validate the actual reference, rights, admitted target and displayed
+evidence under their own authority. Do not invent a Source observation merely
+to satisfy a conversion-specific test premise.
+
+Keep the original retained nutrition test and its historical result unchanged.
+Its extra header-observation premise supplies no evidence that native citation
+is wrong. Qualify the canonical A19 outcomes with actual anonymous API answers
+and production Read/Cook interactions: exact declared values and visible units,
+serving/whole basis, coverage, truthful absence, correct substitution targets
+and notes, and page-end references. Reuse the original assertions that cover
+those outcomes; an additional native-specific proof must preserve their meaning
+and disclose its distinct fixture premise. Never relabel a failed or skipped
+original body as passed. This resolves a fixture premise under the existing
+contract; it removes no canonical criterion, persona boundary or required
+independent acceptance.
