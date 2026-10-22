@@ -26,7 +26,7 @@ import type { Loaded, Realization } from '../work-levels/types.ts';
 import { AuthorPage } from '../author/author-page.tsx';
 import { authorFollow, prolificAuthor } from '../author/fixtures.ts';
 import { messages as authorMessages } from '../author/messages.ts';
-import { citationNames, citedStatements, importedSourceStatements, predicateLabels } from './fixtures.ts';
+import { citationNames, citedStatements, importedSourceStatements, predicateLabels, retainedSourceStatements } from './fixtures.ts';
 import { RelationshipControl } from '../relationships/control.tsx';
 import { ProfilePage } from '../profile/profile-page.tsx';
 import { storyProfile, noWorks, followState } from '../profile/fixtures.ts';
@@ -53,6 +53,26 @@ const target = 'https://rezics.com/id/00000000-0000-4000-8000-000000000101';
 const hrefFor = standaloneHrefFor({}, resourceHref('/e/', target));
 
 describe('non-Work detail sources', () => {
+  test('retained native citations keep independent support and quotation rights without inventing Wiki evidence', () => {
+    const page = retainedSourceStatements();
+    const html = render(<StatementSourcesView hrefFor={hrefFor} page={{ ok: true, data: page }} locale="en" t={t} />);
+    expect(html.match(/data-retained-source-citation/g)).toHaveLength(2);
+    expect(html).toContain('/organization/founded');
+    expect(html).toContain('/history/0/year');
+    expect(html.match(/Example Studio was founded in 1997\./g)).toHaveLength(1);
+    expect(html).toContain(t.quotationWithheld);
+    expect(html).toContain('Registry facts under CC BY 4.0');
+    expect(html).not.toContain('data-claim-evidence');
+    expect(html).not.toContain('&quot;rightsBasis&quot;');
+    expect(html).toContain('href="https://example.test/organizations/studio-42/revisions/3"');
+    const item = page.groups[3]!.items[0]!;
+    if (item.kind !== 'component-property') throw new Error('Expected a component property');
+    for (const citation of item.citations!) {
+      expect(html).toContain(citation.supportIdentity);
+      expect(html).toContain(citation.record);
+      expect(html).not.toContain(`href="${citation.record}"`);
+    }
+  });
   test('explicit source identities move to provenance while ordinary URLs and domain identifiers remain facts', () => {
     const page = importedSourceStatements();
     const split = splitStatementSources(page.groups);

@@ -41,6 +41,30 @@ function SourceValue({ item }: { item: StatementItem }) {
 }
 
 type Evidence = NonNullable<Extract<StatementItem, { kind: 'statement' }>['evidence']>[number];
+type RetainedCitation = NonNullable<Extract<StatementItem, { kind: 'component-property' }>['citations']>[number];
+
+/** The Source owner has already fenced this exact native value and quotation.
+ * A retained record has no Wiki source Work, recording method or submitter. */
+export function RetainedCitationDetails({ citation, t }: { citation: RetainedCitation; t: Copy }) {
+  const href = sourceHref(citation.attribution.sourceUrl);
+  const rights = citation.rightsBasis;
+  return <div data-retained-source-citation data-source-key={citation.id}
+    className="grid min-w-0 gap-3 border-border/60 border-s ps-3 text-xs">
+    <p className="[overflow-wrap:anywhere]">{href ? <a href={href} rel="noreferrer noopener" className={linkClass}>
+      {citation.attribution.sourceName}</a> : citation.attribution.sourceName}
+      {citation.attribution.licence ? <> · {citation.attribution.licence}</> : null}</p>
+    <dl className="grid min-w-0 gap-3">
+      {[[t.sourceRecord, citation.record], [t.evidenceReference, citation.supportIdentity],
+        [t.sourceRepresentation, citation.representationSha256], [t.sourceLocation, citation.locator.pointer],
+        [t.evidenceRights, rights.notice ?? rights.licenseExpression ?? rights.basisKind]].map(([label, value]) =>
+        <div key={label} className="grid min-w-0 gap-1"><dt className="font-medium text-muted-foreground">{label}</dt>
+          <dd className="whitespace-pre-wrap [overflow-wrap:anywhere]">{value}</dd></div>)}
+    </dl>
+    {citation.quoteWithheld ? <p className="text-muted-foreground">{t.quotationWithheld}</p>
+      : citation.quote !== null ? <figure><figcaption className="text-muted-foreground">{t.quotation}</figcaption>
+        <blockquote dir="auto" className="mt-1 whitespace-pre-wrap [overflow-wrap:anywhere]">{citation.quote}</blockquote></figure> : null}
+  </div>;
+}
 
 /** Retained locators/methods are structured public data, not executable links or a fresh rights assessment. */
 function RecordedValue({ value, t, quoteWithheld = false }: { value: unknown; t: Copy; quoteWithheld?: boolean }) {
@@ -93,7 +117,8 @@ export function StatementSourcesView({ page, labels = new Map(), names = new Map
   const { sources } = splitStatementSources(page.data.groups);
   // The header's own name is still a displayed fact, even though the body does not repeat it.
   const rows = page.data.groups.flatMap(group => group.items);
-  const evidenced = rows.filter(item => item.sources.length > 0 || (item.kind === 'statement' && item.evidence?.length));
+  const evidenced = rows.filter(item => item.sources.length > 0 || (item.kind === 'statement' && item.evidence?.length)
+    || (item.kind === 'component-property' && item.citations?.length));
   const sourceItems = new Set(sources.flatMap(group => group.items));
   const claims = rows.filter(item => !sourceItems.has(item) || evidenced.includes(item));
   const rights = page.data.factObligations;
@@ -109,7 +134,9 @@ export function StatementSourcesView({ page, labels = new Map(), names = new Map
       {claims.length ? <ul className="grid min-w-0 gap-4">
         {claims.map((item, index) => {
           const evidence = item.kind === 'statement' ? item.evidence ?? [] : [];
-          const references = item.sources.filter(source => !evidence.some(entry => entry.id === source));
+          const citations = item.kind === 'component-property' ? item.citations ?? [] : [];
+          const references = item.sources.filter(source => !evidence.some(entry => entry.id === source)
+            && !citations.some(entry => entry.record === source));
           return <li key={`${item.revision}:${index}`} data-fact-citation className="grid min-w-0 gap-2">
           <p className="font-medium">{labels.has(item.predicate) ? <LocalizedText text={labels.get(item.predicate)!} />
             : <span className="[overflow-wrap:anywhere]">{t.otherFacts} · {item.predicate}</span>}</p>
@@ -123,7 +150,8 @@ export function StatementSourcesView({ page, labels = new Map(), names = new Map
               {t.evidence} {sourceIndex + 1}</a> : <span className="text-muted-foreground [overflow-wrap:anywhere]">{source}</span>}</li>;
           })}</ul> : null}
           {evidence.map(entry => <EvidenceDetails key={entry.id} evidence={entry} t={t} />)}
-          {!references.length && !evidence.length ? <p className="text-muted-foreground text-xs">{t.noEvidence}</p> : null}
+          {citations.map(citation => <RetainedCitationDetails key={citation.id} citation={citation} t={t} />)}
+          {!references.length && !evidence.length && !citations.length ? <p className="text-muted-foreground text-xs">{t.noEvidence}</p> : null}
         </li>;})}
       </ul> : null}
       {!evidenced.length ? <p className="text-muted-foreground">{t.fieldEvidenceUnavailable}</p> : null}
