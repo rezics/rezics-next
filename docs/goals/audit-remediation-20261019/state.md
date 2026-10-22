@@ -1,8 +1,9 @@
 # Audit remediation state
 
-Checkpoint: 2026-10-22 18:08 Asia/Shanghai; event b659a4fd-be62-45ef-b544-4417b87ec461.
-Covered overdue deliveries: 897fdec1, 1b0a7c9f, b5b2988a, e01fca91, 4aecc6c1,
-9803e56e, 7b4bcb68, 13ad327c, 1332f05f and cec81f25. All ten are acknowledged.
+Checkpoint: 2026-10-22 18:22 Asia/Shanghai; event 27296d07-efda-40c9-9ed3-8fe5a14b6b76.
+Covered overdue deliveries: 574d4ca1, ef79b69b, 7660a262, 35a8fac7, 1d446e1d,
+a5d6d67b, 7824fb91, e0aa81e3, 90101275, 6869c69c and 8fbf8fbd. All eleven
+are acknowledged; previous reconciled decisions remain authoritative.
 Only the original 61 findings and necessary runtime/data support are in scope.
 Standalone frontend optimization/library research remain stopped; the missed
 2026-10-22 06:28 target has no replacement deadline or quality exception.
@@ -57,19 +58,65 @@ Dirty worktrees and verified manifests remain in each run's continuity-66/89
 disposition directory. A08 and other original findings gain no closure; retain
 G-2758's old 14-error stage and absence of its three historical assertion paths.
 G-2752 decision a064e4984b reuses integrated 56c3cfff69 source, passed job
-1b7ea934 and independent G-2831 review. Receipt-only attempt47 executed tools;
-recover its missing handoff before landing, with no implementation or check replay.
-G-2747 decision 41c21927d6 resumed attempt86 on permitted ordinary codex-1;
-seven completed commands verified startup recovery. Continue the same two-file
-guard-selection cut, then separate independent codex-1/xhigh landing review.
-WEB-CLIENT-GUARD-SELECTION remains open. No credential/configuration repair,
-paid fallback or return to the old runtime/AT/navigation campaign is authorized.
+1b7ea934 and independent G-2831 review. Receipt-only attempt47 recovered its
+handoff; normal landing completed and the task closed verified at 10:13Z.
+No implementation/check replay or additional canonical finding acceptance.
+G-2747 attempt85's routing failure is superseded by productive attempts86/87.
+The two-file guard-selection cut at 80f9fcf49114 retains reached red controls,
+24 tests/876 assertions, types/lint/45 guards/inference/AST and 30 verified hashes;
+retain the one automatic timeout retry and malformed first aggregate XML.
+Its one landing stopped before review/merge on stale kind:surface rows/stories
+requirements. Problem G2747-TOOLING-CLASSIFICATION-20261022 has Audit as sole
+repair owner; all manager roles and Program received discovery. Brief commits784c483955/0786646d5a classify only this cut as tooling and
+supersede historical wave execution. Manager rebased/reclaimed the same branch;
+source and lockfile blobs match the checked pin, and ordinary codex-1 attempt88
+is running receipt-only at7aa30d3a85f7. Its completed handoff goes to normal
+independent codex-1/xhigh review/landing, which must verify the failed admission.
+No fabricated outcome rows/stories, waived gates, credential/configuration repair,
+paid fallback or old runtime/AT/navigation campaign. Guard acceptance stays open;
+resolution notice follows successful review/landing, under the same problem ID.
+G-2783 attempt40 failed before a handoff; attempt51's complete frontend source
+already landed at 95d89386c5, matching all 21 delivered files. No duplicate
+resume/landing; actual continuation and canonical review remain with G-2835.
+G-2780 attempt33 failed routing before tools/assertions and closed cancelled
+as superseded. Catalogue's Media correction is integrated through
+161cc04d33/c73c0631d644; retain seven suites/30 tests/188 assertions and bounded
+catalogue-main-review-0030 source PASS. Its entire dirty worktree, eight source
+and five original assertion hashes remain in runs/G-2780/continuity-33-disposition;
+91,861 file sizes verified. No replay; Catalogue retains A03/native/persona/rights
+and original five-suite proofs; G-2778 and Site/G-2823 keep importer/runtime custody.
+G-2762 attempt69 is superseded by attempt83's two-path repair, landed at
+98a93b6fa36a. Current blobs match; reuse job50c59de2, 77 tests/445 assertions and
+affected checks, retaining RED/setup and malformed guard-XML limits. No duplicate
+resume/review/landing; original runtime/cancellation/persona/authority proof stays open.
+G-2864 attempt8 remains cancelled, archive81af7991b2. Its model/MCP setup failure
+produced no handoff; cd67bd4bb5 fixture repair is integrated and all 119 original
+assertion lines unchanged. Reuse selected search 29 tests/200 assertions and
+Content readiness 19/42 at QA20261022t091921-b9d5d1; no full-suite/D5-003 acceptance.
+G-2786 decision306271140888 replaced failed codex-2 authentication with permitted
+ordinary codex-1. Branch fast-forward/login/docs checks passed and SAME worker
+resumed fresh/sameScope/max as attempt54. Keep its bounded inherited-origin/
+affected-person correction running; original assertions and later independent
+codex-1/xhigh review remain required. Execution recovery is no product acceptance.
+G-2764's historical Resource/Post publication gap is repaired by authored
+4a419342d5dd/generated567c572dfe17, integrated through manager-a52d889c.
+Existing native public-name/search/query owners include resource/post with current
+public/head/withdrawal/erasure fences. Reuse 35 native passes, 15 unit tests/188
+assertions and 15 resource-card stories. No new D6-002 whole acceptance; AUD009
+retains actual Discover headings/order/task/topic proof, never a Work-header substitute.
+G-2791's old job9a92aaeb stopped at profile admission: zero native commands or
+original C27/C30/Collection assertions. Existing transition resolved that mismatch;
+later job39470297 retains 13 native publication receipts and session cleanup,
+without original acceptance. Catalogue reuses actual identities/acknowledgements;
+Collection still needs the full admitted corpus descriptor and compatible backup.
 Both historical Book/C28 admission notices are superseded by joint original job
 facd0013: 50 manifest entries verified, six bodies reached preference failures
 and teardown failed. Visitor PUT expected 401/got 400; five signed-in GETs
 expected 200/got 400. The preference source fix landed/reviewed, but original
-C28 and exact-session cleanup remain unproved. Catalogue and G-2793/G-2790
-retain the remaining checks under G-2823 custody. Failed release/stale epoch
+C28 and exact-session cleanup remain unproved. Later OAuth qualification/original
+execution did not repeat the503; its underlying cause remains unresolved with
+G-2790. The separate Fuseki restart/Java exception establishes no503 cause or
+product repair. Catalogue and G-2793/G-2790 retain remaining checks under G-2823 custody. Failed release/stale epoch
 grants no fresh admission; no stale rebind, reactivation or unchanged rerun.
 
 G-2764 attempt60/default binding requests are superseded by committed G-2823
@@ -125,8 +172,8 @@ internal pause was wrongly attributed to the maintainer. Exact caller/gesture
 is unknown; maintainer denies pausing. Goal remains active.
 ## Measures and resource constraints
 
-Status: first attempts 20% (115/579), landed median two/max71; 2,527.9M input,
-19.8M output tokens, 18 unavailable sessions; tokens/proved-row unavailable.
+Latest measured status, before the receipt-only resume: first attempts 20% (115/580), landed median two/max71; 2,529.9M input,
+19.9M output tokens, 18 unavailable sessions; tokens/proved-row unavailable.
 Separate 68/68 is not canonical acceptance. Prior overlapping 12-hour windows
 ended 04:40Z/06:21Z: 96.76M/73.79M input, other-session shares 16%/6%. Latest
 recorded 12-hour window 2026-10-21 21:21:59Z–2026-10-22 09:21:59Z used
