@@ -1,9 +1,9 @@
 # Audit remediation state
 
-Checkpoint: 2026-10-22 18:38 Asia/Shanghai; event 2b273697-1c64-49f9-85d9-35a70b423a91.
-Covered overdue deliveries: c2757ed2, e5ffa066, 10e085ee, c7cd501c, e7be6d7e,
-358205ea, 9ca98c26, 45afb6aa, 3cca51d0 and 2b299e40. All ten
-are acknowledged; previous reconciled decisions remain authoritative.
+Checkpoint: 2026-10-22 18:45 Asia/Shanghai; event 3efaf0b9-065b-4c45-9a94-da1b1acae9e5.
+Covered overdue deliveries: da691abf, 0496df17, f0e73ab5, ad1ab665, a8557428,
+f2e477a9, 6d0db791, 0b0ea0cb, c6fa82e5, 72921b59, 8dc610d2 and d91d972c.
+All twelve are acknowledged; previous reconciled decisions remain authoritative.
 Only the original 61 findings and necessary runtime/data support are in scope.
 Standalone frontend optimization/library research remain stopped; the missed
 2026-10-22 06:28 target has no replacement deadline or quality exception.
@@ -36,9 +36,12 @@ at 15683988b8; its overlay is no full-native/Main/API/persona proof. Its 207-com
 ancestry requires isolated integration/review. G-2783 chapter review is G-2835.
 ## Reconciled handled events
 
-G-2781 attempt81's publication slice already landed at 74bafea082; all 17
-tested blobs match, with 43 tests/301 assertions retained. Existing later
-continuations govern; no duplicate resume/landing or broader original acceptance.
+G-2781 decision e0d14b7c5899 closed the bounded producer verified at 10:29Z.
+Source a118810692/publication 74bafea082 are integrated; 17 publication blobs and
+33 artifact hashes verified, with 43 tests/301 assertions retained in
+runs/G-2781/worktree-temp and continuity-84-disposition. G2781-CONTINUITY84 is
+resolved and managers/Program notified. Never resume/reland; A01/all113/C27/C30
+and A17/C29 remain open; historical evidence is no fresh current-main/runtime proof.
 G-2749 attempt27 failed routing before a Feed assertion. Decision 03b955c8d3
 reuses integrated source 260d3c7b and existing checks: 54 matched blobs,
 empty remaining code, 72 tests. No resume/relanding; eight live persona cells
@@ -110,11 +113,14 @@ byte-matches the preserved dirty source; reuse QA20261021t085531-f72a79's comple
 Retain RED and runs/G-2865/event-e5ffa066-disposition; never resume/reland/recreate.
 Consolidated codex-1/Sol/xhigh independent review remains required. No D5-003,
 full native or general routing recovery follows from retiring this duplicate.
-G-2786 decision306271140888 replaced failed codex-2 authentication with permitted
+G-2786 attempt52 failed model/routing setup before tools/assertions, without a
+handoff. Decision 306271140888 replaced failed codex-2 authentication with permitted
 ordinary codex-1. Branch fast-forward/login/docs checks passed and SAME worker
-resumed fresh/sameScope/max as attempt54. Keep its bounded inherited-origin/
-affected-person correction running; original assertions and later independent
-codex-1/xhigh review remain required. Execution recovery is no product acceptance.
+resumed fresh/sameScope/max as attempt54; latest status has attempt55 running.
+Keep its bounded inherited-origin/affected-person correction running; original
+assertions and later independent
+codex-1/xhigh review remain required; no duplicate resume/landing. D5-006 stays open.
+Execution recovery is no product acceptance.
 G-2764's historical Resource/Post publication gap is repaired by authored
 4a419342d5dd/generated567c572dfe17, integrated through manager-a52d889c.
 Existing native public-name/search/query owners include resource/post with current
@@ -143,8 +149,8 @@ grants no fresh admission; no stale rebind, reactivation or unchanged rerun.
 G-2793 attempts42–47 failed routing before tools/assertions, without the named
 handoffs. Decision 088ffc5f48 prepared the preserved branch and resumed ordinary
 codex-1/max attempt48 for source-only supported borrowed-session cleanup; later
-continuation49 is running. Keep this sole cleanup successor and its own exit
-events; no duplicate resume/landing from the historical alerts. Its bounded
+continuation49 has exited. Its own exit event owns disposition; retain this sole
+cleanup successor, with no duplicate resume/landing from historical alerts. Its bounded
 source repair removes unsupported JWT access-token revocation while retaining
 refresh revocation and independently attempted exact cookie/origin sign-out.
 Original C28 failures/assertions, historical cleanup
@@ -155,6 +161,33 @@ archive f81d9665aa; claims released, branch/evidence retained in
 runs/G-2790/worktree-temp. Source 73fe6329aa is integrated; reuse its bounded
 independent APPROVE and job0463251a's 145 tests/1,114 assertions. No retry/relanding,
 new runtime, D4-007/D4-008 acceptance or historical503 causal claim follows.
+Attempt36's pre-tool alert is consumed. Book r2 and old Site composition/Access
+requests are superseded by facd0013 and current cleanup/producer ownership.
+Original book-startup-failure.json and three diagnostics remain preserved;
+later OAuth/Fuseki evidence establishes neither the missing Access causal stack
+nor a 503 repair. No expired admission or unchanged rebind/replay is authorized.
+
+G-2799 decision 0298d1e10c retains source integrated at ecf3e92e1a2d, six native
+blobs and Recipe measures API; reuse 42 tests/2,483 assertions and freshness 4/8.
+NATIVE-WORK-HEADER-FINGERPRINT-20261022 remains open: attempt117's obsolete full
+Work-header assertion has sole prerequisite owner G-2868, dispatched on ordinary
+codex-1/Sol/xhigh. Preserve historical fixture, production/helper source and
+unaffected invariants; require current-schema checks, meaningful negative
+mutations, affected checks and independent landing review. G-2799 stays exited
+behind this prerequisite; no replay or C27/C30/A17/C29 acceptance. G-2868's own
+exit event owns continuation.
+G-2832's attempt23 is superseded by completed attempt28 report c61502be7533.
+All 390 artifact hashes/sizes (19,055,402 bytes) verified and the private bundle
+was adopted into main. Retain ten stories/a11y, 93 guards, lint, three browser
+cases and historical RED/setup limits. One normal landing started;
+continuity-G-2832-attempt-23 resolves disposition/adoption only. Its result
+event owns merge repair/closure; no duplicate landing or canonical credit.
+G-2855's complete attempt6 report 67aa34d217 is semantically integrated at
+88dd7c29af, including six history entries and classClosed=false. Original branch
+archived; one normal landing started after reconciling the clean branch to main.
+G2855-CONTINUITY-20261022 resolves disposition only; result mail owns closure.
+No duplicate resume/landing; AUD-014 same-UUID parity stays with G-2793/G-2823.
+Managers/Program received both report continuity notices.
 
 G-2764 attempt60/default binding requests are superseded by committed G-2823
 instructions and actual G-2750 job ad653d17: 12 unchanged bodies passed,
@@ -165,14 +198,28 @@ against matching Web; G-2853 owns that selector. Earlier e93a7985 exact 100-byte
 capture and six-pool release remain retained, runtime/peer preserved, no replay.
 G-2764 attempt87's 11 authored blobs already integrated through 347a560b60;
 retain its source receipts without another landing or unchanged checks.
+Attempt80 source 5fefc3d9b85 is superseded by authored 2039f7cb3bc5/integrated
+347a560b603b and mixed-budget repair 5f38a41d69; D6-003 stays open.
+GOAL-MAIL-ACCOUNTING-CONTENTION-20261022 recovered acknowledgement after observed
+lock clearance and one supported retry; holder/durable fix remain unproved.
+Managers were notified. Historical generated/OpenAPI FF obstruction is verified
+resolved: original 42,688,302 dirty bytes remain hashed in
+product-event-74778b3d-generated-repair; G-2765 landed b1c332de3e79 and coherent
+G-2764 replacement 347a560b603b regenerated normally. Generated output is clean
+with seven keyword schemas; final gate retains 38 affected files/36 guards and
+types/inference/lint/AST. Failed manager 3fe3f22a stays superseded; preserved
+Catalogue snapshot 1530ae5c89 is no full-source landing. Existing owners/Program
+were notified; no duplicate clear/restore/regeneration/retry or broader acceptance.
 G-2750 attempt35's Page annotation is on main at 74e3ad78bf; later attempts
 supersede the alert, without original Composition acceptance or task closure.
 G-2765 attempt37's readiness is on main at 417fbd9a56, fixture cd67bd4; selected
 fresh checks passed. Later attempts govern; original D5-003 remains unaccepted.
-G-2755 attempt22 failed at routing before work. Later d6aedefe15/8c39b859f3,
-showcase-fidelity-review and G-2855 rendered review supersede it. AUD-014's
-same-UUID saved/Latest/related/search parity remains open; do not restart or
-individually land its wave build from this alert.
+G-2755 closed cancelled/superseded at 10:32Z, releasing claims and preserving branch
+45218f09323a and ignored evidence in runs/G-2755/worktree-temp. Both delivered files
+match integrated d6aedefe15; reuse story 8c39b859f3, job 8015b60f (224 tests/63,967
+assertions, 194 guards) and independent showcase/G-2855 rendered review.
+G2755-STALE-BUILD-DISPOSITION-20261022 is resolved and managers/Program notified.
+Never resume/reland; AUD-014 same-UUID saved/Latest/related/search parity stays open.
 G-2784 source/basic subset decision f84fa49e0a and partial landing 2f144f6770
 are recorded, with zero additional source files and no lock; landing-result
 handling owns terminal closure. Original desktop503/back-query proof stays open.
@@ -184,7 +231,12 @@ No resume/relanding; cancellation closes no finding.
 ## Current owners, repairs and next actions
 
 Site/G-2823 retains sole runtime/start-stop/admission custody and the same
-native manager session. Continue ready Collection personas, committed Studio
+native manager session. Attempt57's routing failure reached no handoff or
+assertions; successors through 75 supersede it. Reuse job 1918da88's seven unchanged
+invalid-bearer Reader bodies/14 assertions and job 6b3a4dff's 34 receipt checks:
+five exact owned-cookie sign-outs/readbacks and finite borrower release verified.
+No tracked source delta/new acceptance; existing result mail owns continuation.
+Continue ready Collection personas, committed Studio
 fix and Catalogue native/Source originals; visitor/stranger Collection meanings
 passed. Catalogue owns producers, actual visitor facts/music/relations/tags,
 A08/A13 and proper Source OAuth client-scope binding. Final fields failed at
@@ -209,9 +261,9 @@ internal pause was wrongly attributed to the maintainer. Exact caller/gesture
 is unknown; maintainer denies pausing. Goal remains active.
 ## Measures and resource constraints
 
-Latest measured status at 18:37: first attempts 20% (116/583), landed median
-two/max84 (G-2781); 2,536.1M input,
-19.9M output tokens, 18 unavailable sessions; tokens/proved-row unavailable.
+Latest measured status at 18:45: first attempts 20% (116/583), landed median
+two/max88 (G-2747); 2,539.9M input,
+20M output tokens, 18 unavailable sessions; tokens/proved-row unavailable.
 Separate 68/68 is not canonical acceptance. Prior overlapping 12-hour windows
 ended 04:40Z/06:21Z: 96.76M/73.79M input, other-session shares 16%/6%. Latest
 recorded 12-hour window 2026-10-21 21:21:59Z–2026-10-22 09:21:59Z used
