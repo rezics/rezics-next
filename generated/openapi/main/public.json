@@ -799685,6 +799685,245 @@
                                         {
                                           "additionalProperties": false,
                                           "properties": {
+                                            "citations": {
+                                              "items": {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "attribution": {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "licence": {
+                                                        "~elyTyp": 7,
+                                                        "nullable": true,
+                                                        "type": [
+                                                          "string",
+                                                          "null"
+                                                        ]
+                                                      },
+                                                      "sourceName": {
+                                                        "type": "string"
+                                                      },
+                                                      "sourceUrl": {
+                                                        "~elyTyp": 7,
+                                                        "nullable": true,
+                                                        "type": [
+                                                          "string",
+                                                          "null"
+                                                        ]
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "sourceName",
+                                                      "sourceUrl",
+                                                      "licence"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  "id": {
+                                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                    "type": "string"
+                                                  },
+                                                  "kind": {
+                                                    "const": "retained-source-field",
+                                                    "type": "string"
+                                                  },
+                                                  "language": {
+                                                    "anyOf": [
+                                                      {
+                                                        "additionalProperties": false,
+                                                        "properties": {
+                                                          "state": {
+                                                            "const": "omitted",
+                                                            "type": "string"
+                                                          }
+                                                        },
+                                                        "required": [
+                                                          "state"
+                                                        ],
+                                                        "type": "object"
+                                                      },
+                                                      {
+                                                        "additionalProperties": false,
+                                                        "properties": {
+                                                          "state": {
+                                                            "const": "null",
+                                                            "type": "string"
+                                                          }
+                                                        },
+                                                        "required": [
+                                                          "state"
+                                                        ],
+                                                        "type": "object"
+                                                      },
+                                                      {
+                                                        "additionalProperties": false,
+                                                        "properties": {
+                                                          "state": {
+                                                            "const": "value",
+                                                            "type": "string"
+                                                          },
+                                                          "value": {
+                                                            "maxLength": 255,
+                                                            "pattern": "^[^\u0000-\u001f]*$",
+                                                            "type": "string"
+                                                          }
+                                                        },
+                                                        "required": [
+                                                          "state",
+                                                          "value"
+                                                        ],
+                                                        "type": "object"
+                                                      }
+                                                    ]
+                                                  },
+                                                  "locator": {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "pointer": {
+                                                        "maxLength": 2048,
+                                                        "minLength": 1,
+                                                        "pattern": "^/",
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "pointer"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  "quote": {
+                                                    "~elyTyp": 7,
+                                                    "nullable": true,
+                                                    "type": [
+                                                      "string",
+                                                      "null"
+                                                    ]
+                                                  },
+                                                  "quoteWithheld": {
+                                                    "type": "boolean"
+                                                  },
+                                                  "record": {
+                                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                    "type": "string"
+                                                  },
+                                                  "representationSha256": {
+                                                    "pattern": "^[a-f0-9]{64}$",
+                                                    "type": "string"
+                                                  },
+                                                  "rightsBasis": {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "basisKind": {
+                                                        "enum": [
+                                                          "license_offering",
+                                                          "use_assessment",
+                                                          "public_domain",
+                                                          "unprotected_fact",
+                                                          "statutory_exception",
+                                                          "native_contribution",
+                                                          "unassessed"
+                                                        ]
+                                                      },
+                                                      "basisRef": {
+                                                        "~elyTyp": 7,
+                                                        "nullable": true,
+                                                        "type": [
+                                                          "string",
+                                                          "null"
+                                                        ]
+                                                      },
+                                                      "licenseExpression": {
+                                                        "~elyTyp": 7,
+                                                        "nullable": true,
+                                                        "type": [
+                                                          "string",
+                                                          "null"
+                                                        ]
+                                                      },
+                                                      "memberOrdinals": {
+                                                        "items": {
+                                                          "minimum": 0,
+                                                          "type": "integer"
+                                                        },
+                                                        "type": "array"
+                                                      },
+                                                      "notice": {
+                                                        "~elyTyp": 7,
+                                                        "nullable": true,
+                                                        "type": [
+                                                          "string",
+                                                          "null"
+                                                        ]
+                                                      },
+                                                      "obligations": {
+                                                        "items": {
+                                                          "enum": [
+                                                            "attribution",
+                                                            "share_alike",
+                                                            "non_commercial",
+                                                            "no_derivatives",
+                                                            "notice_retention",
+                                                            "change_indication",
+                                                            "access_restriction"
+                                                          ]
+                                                        },
+                                                        "type": "array"
+                                                      },
+                                                      "result": {
+                                                        "enum": [
+                                                          "supported",
+                                                          "conditional",
+                                                          "undetermined",
+                                                          "prohibited"
+                                                        ]
+                                                      },
+                                                      "useScope": {
+                                                        "enum": [
+                                                          "full",
+                                                          "excerpt",
+                                                          "quotation",
+                                                          "evaluation"
+                                                        ]
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "basisKind",
+                                                      "basisRef",
+                                                      "licenseExpression",
+                                                      "notice",
+                                                      "obligations",
+                                                      "useScope",
+                                                      "result",
+                                                      "memberOrdinals"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  "sourceWork": {
+                                                    "type": "null"
+                                                  },
+                                                  "supportIdentity": {
+                                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                    "type": "string"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "kind",
+                                                  "id",
+                                                  "supportIdentity",
+                                                  "record",
+                                                  "sourceWork",
+                                                  "representationSha256",
+                                                  "locator",
+                                                  "attribution",
+                                                  "rightsBasis",
+                                                  "quote",
+                                                  "quoteWithheld",
+                                                  "language"
+                                                ],
+                                                "type": "object"
+                                              },
+                                              "type": "array"
+                                            },
                                             "frameMatch": {
                                               "additionalProperties": false,
                                               "properties": {
@@ -816234,6 +816473,245 @@
                                 {
                                   "additionalProperties": false,
                                   "properties": {
+                                    "citations": {
+                                      "items": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "attribution": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "licence": {
+                                                "~elyTyp": 7,
+                                                "nullable": true,
+                                                "type": [
+                                                  "string",
+                                                  "null"
+                                                ]
+                                              },
+                                              "sourceName": {
+                                                "type": "string"
+                                              },
+                                              "sourceUrl": {
+                                                "~elyTyp": 7,
+                                                "nullable": true,
+                                                "type": [
+                                                  "string",
+                                                  "null"
+                                                ]
+                                              }
+                                            },
+                                            "required": [
+                                              "sourceName",
+                                              "sourceUrl",
+                                              "licence"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "id": {
+                                            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                            "type": "string"
+                                          },
+                                          "kind": {
+                                            "const": "retained-source-field",
+                                            "type": "string"
+                                          },
+                                          "language": {
+                                            "anyOf": [
+                                              {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "state": {
+                                                    "const": "omitted",
+                                                    "type": "string"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "state"
+                                                ],
+                                                "type": "object"
+                                              },
+                                              {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "state": {
+                                                    "const": "null",
+                                                    "type": "string"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "state"
+                                                ],
+                                                "type": "object"
+                                              },
+                                              {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "state": {
+                                                    "const": "value",
+                                                    "type": "string"
+                                                  },
+                                                  "value": {
+                                                    "maxLength": 255,
+                                                    "pattern": "^[^\u0000-\u001f]*$",
+                                                    "type": "string"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "state",
+                                                  "value"
+                                                ],
+                                                "type": "object"
+                                              }
+                                            ]
+                                          },
+                                          "locator": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "pointer": {
+                                                "maxLength": 2048,
+                                                "minLength": 1,
+                                                "pattern": "^/",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "pointer"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "quote": {
+                                            "~elyTyp": 7,
+                                            "nullable": true,
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ]
+                                          },
+                                          "quoteWithheld": {
+                                            "type": "boolean"
+                                          },
+                                          "record": {
+                                            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                            "type": "string"
+                                          },
+                                          "representationSha256": {
+                                            "pattern": "^[a-f0-9]{64}$",
+                                            "type": "string"
+                                          },
+                                          "rightsBasis": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "basisKind": {
+                                                "enum": [
+                                                  "license_offering",
+                                                  "use_assessment",
+                                                  "public_domain",
+                                                  "unprotected_fact",
+                                                  "statutory_exception",
+                                                  "native_contribution",
+                                                  "unassessed"
+                                                ]
+                                              },
+                                              "basisRef": {
+                                                "~elyTyp": 7,
+                                                "nullable": true,
+                                                "type": [
+                                                  "string",
+                                                  "null"
+                                                ]
+                                              },
+                                              "licenseExpression": {
+                                                "~elyTyp": 7,
+                                                "nullable": true,
+                                                "type": [
+                                                  "string",
+                                                  "null"
+                                                ]
+                                              },
+                                              "memberOrdinals": {
+                                                "items": {
+                                                  "minimum": 0,
+                                                  "type": "integer"
+                                                },
+                                                "type": "array"
+                                              },
+                                              "notice": {
+                                                "~elyTyp": 7,
+                                                "nullable": true,
+                                                "type": [
+                                                  "string",
+                                                  "null"
+                                                ]
+                                              },
+                                              "obligations": {
+                                                "items": {
+                                                  "enum": [
+                                                    "attribution",
+                                                    "share_alike",
+                                                    "non_commercial",
+                                                    "no_derivatives",
+                                                    "notice_retention",
+                                                    "change_indication",
+                                                    "access_restriction"
+                                                  ]
+                                                },
+                                                "type": "array"
+                                              },
+                                              "result": {
+                                                "enum": [
+                                                  "supported",
+                                                  "conditional",
+                                                  "undetermined",
+                                                  "prohibited"
+                                                ]
+                                              },
+                                              "useScope": {
+                                                "enum": [
+                                                  "full",
+                                                  "excerpt",
+                                                  "quotation",
+                                                  "evaluation"
+                                                ]
+                                              }
+                                            },
+                                            "required": [
+                                              "basisKind",
+                                              "basisRef",
+                                              "licenseExpression",
+                                              "notice",
+                                              "obligations",
+                                              "useScope",
+                                              "result",
+                                              "memberOrdinals"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "sourceWork": {
+                                            "type": "null"
+                                          },
+                                          "supportIdentity": {
+                                            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "kind",
+                                          "id",
+                                          "supportIdentity",
+                                          "record",
+                                          "sourceWork",
+                                          "representationSha256",
+                                          "locator",
+                                          "attribution",
+                                          "rightsBasis",
+                                          "quote",
+                                          "quoteWithheld",
+                                          "language"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "type": "array"
+                                    },
                                     "frameMatch": {
                                       "additionalProperties": false,
                                       "properties": {
