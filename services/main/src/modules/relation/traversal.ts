@@ -199,8 +199,7 @@ async function resolveCandidate(
   if (candidate.kind === 'collection') {
     if (!(await canRead(candidate.relation))) return null;
     if (!session) throw new WorkReadUnavailable('Collection purpose read session is unavailable');
-    const collectionPurpose = await readCollectionPurpose(session, candidate.relation);
-    return { entry: { ...base, collectionPurpose }, references: [candidate.relation] };
+    return { entry: base, references: [candidate.relation] };
   }
   if (candidate.kind === 'author-credit') {
     if (!(await canRead(resource))) return null;
@@ -491,9 +490,13 @@ async function readResourceRelationsAtPosition(
     exhausted = false;
   for (let scan = 0; scan < RELATION_PAGE_COST.maxScans; scan++) {
     const candidates = await relationCandidates(env, input.resource, after, input.frames, afterScore, selection);
-    for (let offset = 0; offset < candidates.length && !hasNext; offset += DISCLOSURE_COST.batch) {
+    for (let offset = 0; offset < candidates.length && !hasNext;) {
       const disclosed: { candidate: Candidate; resolved: Resolved }[] = [];
-      const batch = candidates.slice(offset, offset + DISCLOSURE_COST.batch);
+      // Admission needs the remaining page and one visible lookahead, not a
+      // whole disclosure batch of expensive unshown relation owners.
+      const batch = candidates.slice(offset, offset + Math.min(DISCLOSURE_COST.batch,
+        input.limit - selected.length + 1));
+      offset += batch.length;
       const decisions = await discloseInventory(
         env,
         batch.map((candidate) => ({
@@ -568,6 +571,11 @@ async function readResourceRelationsAtPosition(
   const items: RelationPageEntry[] = [];
   const renderings = new Map<string, RelationRendering>();
   for (const { candidate, resolved } of selected) {
+    // Purpose is descriptive selected-page evidence. Unshown Collections do
+    // not spend its Statement reads or register adoption fences for this page.
+    if (resolved.entry.kind === 'collection') {
+      resolved.entry.collectionPurpose = await readCollectionPurpose(session!, candidate.relation);
+    }
     let rendering: RelationRendering | CollectionIncidenceRendering | null = resolved.entry.kind === 'collection'
       ? renderCollectionIncidence(resolved.entry.relation, input.resource, resolved.entry.collectionPurpose ?? null, input.languages)
       : null;

@@ -60,7 +60,7 @@ function fixture() {
     acceptance: 'accepted' | 'rejected' | 'withdrawn' | 'unavailable' | null;
     sources: string[]; active: boolean; private: boolean }> = [];
   const hidden = new Set<string>(), queries: string[] = [], hydration: string[][] = [];
-  const citationReads: string[][] = [];
+  const citationReads: string[][] = [], admissionReads: string[] = [];
   let membershipHeader: CompositionHeader | undefined;
   const collections = [collection];
   const reseal = () => { manifest = `urn:rezics:sha256:${prepareComponent(objectDirectory, definition, state, PROFILES.definition)}`; };
@@ -191,7 +191,7 @@ function fixture() {
   })));
   const direct = (read: WorkReadSession, limit = 4, after?: string) => readResourceRelations(env, {
     resource: member, languages: ['en'], limit, after, readingPosition: 'public-selection',
-    canRead: async ref => !hidden.has(ref), canReadOccurrence: async ref => !hidden.has(ref),
+    canRead: async ref => { admissionReads.push(ref); return !hidden.has(ref); }, canReadOccurrence: async ref => !hidden.has(ref),
     disclose: async refs => new Set(refs.filter(ref => !hidden.has(ref))), summarize: summary,
   }, read);
   const membership = async () => {
@@ -219,7 +219,7 @@ function fixture() {
     return { records, read: (after?: string) => readCompositionPage(env, { structure, header: membershipHeader,
       after, limit: 1, canReadTarget: async target => target === member }) };
   };
-  return { env, member, collection, definition, claims, collections, queries, hydration, citationReads,
+  return { env, member, collection, definition, claims, collections, queries, hydration, citationReads, admissionReads,
     hidden, add, session, direct, membership,
     hideDefinition() { keyPresent = false; }, incomplete() { coverage = false; }, exhaustBudget() { deadline = true; },
     retireCollection() { collectionActive = false; },
@@ -346,6 +346,25 @@ test('collection relation continuation is selection bound and preserves incidenc
   await expect(run.direct(run.session(), 2, first.next!)).rejects.toThrow('cursor is invalid');
   expect(run.collections).toEqual(original);
   expect(run.queries.some(query => /INSERT|DELETE/u.test(query))).toBe(false);
+});
+
+test('a one-row relation page admits one lookahead and hydrates only its selected Collection purpose', async () => {
+  const run = fixture();
+  run.collections.push(...Array.from({ length: 11 }, (_, index) => id(11 + index)));
+  const claims = run.collections.map(collection => run.add('series', collection));
+  const read = run.session();
+  const first = await run.direct(read, 1);
+  expect(first.items.map(item => item.relation)).toEqual([run.collection]);
+  expect(first.next).not.toBeNull();
+  expect(run.admissionReads.filter(ref => run.collections.includes(ref))).toEqual(run.collections.slice(0, 2));
+  expect([...new Set(run.hydration.flat())]).toEqual([claims[0]!.statement]);
+  // A descriptive change outside the delivered page cannot invalidate it.
+  claims[1]!.acceptance = 'rejected';
+  await expect(read.fenceDependencies()).resolves.toBeUndefined();
+  expect([...new Set(run.hydration.flat())]).toEqual([claims[0]!.statement]);
+  // The selected adoption retains its current exact owner fence.
+  claims[0]!.acceptance = 'rejected';
+  await expect(read.fenceDependencies()).rejects.toThrow();
 });
 
 test('purpose adoption leaves repeated canonical membership identities, ordering and continuation intact', async () => {

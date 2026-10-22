@@ -1,4 +1,5 @@
 import type { MainClient } from '../discover/types.ts';
+import { publicVocabularyLabel } from '@rezics/model';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import type { RecordedSelection } from '../stories/recorded-fetch.ts';
 import { PREVIEW_COUNTS } from '../work-levels/previews.tsx';
@@ -18,11 +19,17 @@ export function animeRelationsReads({ main, actingSubject }: Host) {
   const readNames = async (resources: string, position?: string): Promise<Names> => {
     const refs = [...new Set(resources.split(' ').filter(Boolean))];
     const names = new Map<string, NameSummary>();
-    for (let offset = 0; offset < refs.length; offset += 64) {
+    const unresolved = refs.filter(reference => {
+      const name = publicVocabularyLabel(reference);
+      if (!name) return true;
+      names.set(reference, { reference, status: 'public-term', name });
+      return false;
+    });
+    for (let offset = 0; offset < unresolved.length; offset += 64) {
       const answer = await settle(() => main.v1.resources.summaries.post({ profile: 'resource-summary-batch-v1',
-        resources: refs.slice(offset, offset + 64), ...(position ? { position } : {}),
+        resources: unresolved.slice(offset, offset + 64), ...(position ? { position } : {}),
         ...(actingSubject ? { actingSubject } : {}) }));
-      const batch = refs.slice(offset, offset + 64);
+      const batch = unresolved.slice(offset, offset + 64);
       // A failed or partial batch cannot say that nobody has named these resources.
       for (const reference of batch) names.set(reference, { reference, status: 'unavailable-read' });
       if (answer.ok) for (const summary of answer.data.summaries) {

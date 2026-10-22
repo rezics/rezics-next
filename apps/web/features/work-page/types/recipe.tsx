@@ -359,7 +359,7 @@ export function RecipeFacts({ page, messages: t }: { page: ReadableRecipe; messa
   </dl>;
 }
 
-/** Names come from the disclosed Resource summary batch; an IRI is never guessed into a label. */
+/** Shared native names and public vocabulary labels; an IRI is never guessed into a label. */
 function NutrientName({ measure, names, locale }: { measure: ReadableMeasure; names: Names; locale: UiLocale }) {
   const name = measure.nutrient ? nameOf(names, measure.nutrient) : null;
   return name ? <bdi lang={name.language} dir={name.direction}>{name.value}</bdi>
