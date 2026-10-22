@@ -23,7 +23,13 @@ import { ACCESS_TOKEN_SECONDS, SIGNING_ALLOWANCE_SECONDS, signingKeyAccepts } fr
  * installation, consent and token history. Verified membership adds one current
  * user lookup by primary key; workload tokens never receive that assertion. */
 export async function currentIntrospection(pool: Pool, presented: string | null,
-  provider: Response, includeContentEvidence = false): Promise<Response> {
+  provider: Response, includeContentEvidence = false,
+  observeWork?: (state: 'pending' | 'active') => void | Promise<void>): Promise<Response> {
+  const observe = (state: 'pending' | 'active') => {
+    if (!observeWork) return;
+    try { void Promise.resolve(observeWork(state)).catch(() => undefined); }
+    catch { /* observation must not change current authority or cleanup */ }
+  };
   if (!provider.ok) return provider;
   let payload: Record<string, unknown>;
   try { payload = await provider.clone().json() as Record<string, unknown>; }
@@ -46,7 +52,9 @@ export async function currentIntrospection(pool: Pool, presented: string | null,
     || (expiresAt as number) <= now || (expiresAt as number) <= (issuedAt as number)
     || (expiresAt as number) > (issuedAt as number) + ACCESS_TOKEN_SECONDS) return inactive();
   try {
+    observe('pending');
     const client = await pool.connect();
+    observe('active');
     let committed = false;
     try {
       await client.query('BEGIN');

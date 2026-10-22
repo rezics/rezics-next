@@ -3,7 +3,7 @@ import { httpTelemetry } from '@rezics/observability/elysia';
 import { logWorkerFault } from '@rezics/observability/log';
 import { isIP } from 'node:net';
 import { toOpenAPISchema } from '@elysia/openapi';
-import { Pool, type PoolClient } from 'pg';
+import { Pool, type PoolClient, type PoolConfig } from 'pg';
 import type { createAccountAuth } from './auth.ts';
 import { currentInstallationIn, installClient, InstallationConflict, InstallationInvalid,
   InstallationNotFound, readInstallation, revokeInstallation } from './installations.ts';
@@ -39,6 +39,11 @@ import { AccountRecoveryConflict, AccountRecoveryDenied, AccountRecoveryStale, A
   readAccountRecoveryClaim, requestAccountRecovery } from './recovery-claim.ts';
 
 export interface AccountAppOptions {
+  /** Construct and attach private owner observation before the guard's first checkout.
+   * The app retains shutdown ownership; the factory preserves the supplied options. */
+  createGuardPool?: (config: PoolConfig) => Pool;
+  /** Private owner observation; attach before serving and never serialize Request. */
+  observeRequestWork?: (event: AccountRequestWork) => void | Promise<void>;
   /** Socket peers whose ingress replaces X-Forwarded-For with one client address. */
   trustedProxyPeers?: ReadonlySet<string>;
   /** Verified private user IDs allowed to change App installations. */
@@ -53,6 +58,17 @@ export interface AccountAppOptions {
   mailEventsSecret?: string;
 }
 
+export type AccountRequestMeter = Readonly<{
+  starts: number; released: number; active: number; pending: number;
+  lastStartAt: number | null; zeroSince: number | null;
+}>;
+
+export type AccountRequestWork = Readonly<{
+  kind: 'account-request-work'; at: number; request: Request | null;
+  state: 'idle' | 'started' | 'pending' | 'active' | 'released';
+  total: AccountRequestMeter;
+}>;
+
 const installationView = t.Object({ installationId: t.String(), clientId: t.String(),
   state: t.Union([t.Literal('active'), t.Literal('revoked')]), scopes: t.Array(t.String()),
   installedAt: t.String(), revokedAt: t.Nullable(t.String()) });
@@ -65,6 +81,49 @@ const recoveryView = t.Object({ claimId: t.String(), targetUserId: t.String(),
 
 export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, pool: Pool,
   options: AccountAppOptions = {}) {
+  // Only live Requests are held weakly. The owner keeps no trace/credential history.
+  const requestWork = options.observeRequestWork ? new WeakMap<Request, {
+    state: 'active' | 'pending'; responseSettled: boolean; readinessPending: boolean;
+  }>() : undefined;
+  const workTotal = { starts: 0, released: 0, active: 0, pending: 0,
+    lastStartAt: null as number | null, zeroSince: Date.now() as number | null };
+  const observeWork = (request: Request | null, state: AccountRequestWork['state']) => {
+    if (!requestWork) return;
+    const at = Date.now();
+    const previous = request && requestWork.get(request);
+    if (state === 'started' && request) {
+      if (previous) return;
+      requestWork.set(request, { state: 'active', responseSettled: false, readinessPending: false });
+      workTotal.starts++;
+      workTotal.active++;
+      workTotal.lastStartAt = at;
+      workTotal.zeroSince = null;
+    } else if (state !== 'idle') {
+      if (!previous || !request) return;
+      if (state === 'released') {
+        previous.responseSettled = true;
+        // Readiness may answer its timeout while its real database probe remains.
+        if (previous.readinessPending) return;
+        workTotal[previous.state]--;
+        workTotal.released++;
+        requestWork.delete(request);
+        if (workTotal.active + workTotal.pending === 0) workTotal.zeroSince = at;
+      } else if (state === 'pending' || state === 'active') {
+        if (previous.state === state) return;
+        workTotal[previous.state]--;
+        workTotal[state]++;
+        previous.state = state;
+      }
+    }
+    try {
+      // Sink completion or failure cannot hold up or change Account execution.
+      void Promise.resolve(options.observeRequestWork!(Object.freeze({
+        kind: 'account-request-work', at, request, state,
+        total: Object.freeze({ ...workTotal }),
+      }))).catch(() => undefined);
+    } catch { /* private observation grants no authority */ }
+  };
+  observeWork(null, 'idle');
   const origin = new URL(String(auth.options.baseURL)).origin;
   // pg-pool emits errors for idle clients on the pool, but removes its client
   // listener while a connection is checked out. A database cut can then reject
@@ -96,7 +155,7 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
   // pg-pool deliberately hides an explicit password from object spreads.
   // Preserve it when the guard uses its own pool (remote Account placements
   // commonly configure host, user and password separately).
-  const guard = () => guardPool ??= observePool(new Pool({ ...pool.options,
+  const guard = () => guardPool ??= observePool((options.createGuardPool ?? ((config: PoolConfig) => new Pool(config)))({ ...pool.options,
     ...('password' in pool.options ? { password: pool.options.password } : {}),
     max: options.codeGuardConnections ?? 4, connectionTimeoutMillis: 5_000,
     idleTimeoutMillis: 1_000, allowExitOnIdle: true }));
@@ -274,14 +333,24 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
         200: t.Object({ status: t.Literal('ready') }),
         503: t.Object({ status: t.Literal('unavailable') }),
       },
-    }, async ({ status }) => {
+    }, async ({ request, status }) => {
       // A partitioned database can leave a connection attempt unanswered;
       // readiness reports unavailable within two seconds instead of hanging.
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {
         const probe = pool.query('SELECT 1');
-        await Promise.race([process.env.NODE_ENV === 'production'
-          ? probe.then(() => accountSchemaReady(pool)) : probe, new Promise((_, reject) => {
+        const readiness = process.env.NODE_ENV === 'production'
+          ? probe.then(() => accountSchemaReady(pool)) : probe;
+        const work = requestWork?.get(request);
+        if (work) {
+          work.readinessPending = true;
+          const settled = () => {
+            work.readinessPending = false;
+            if (work.responseSettled) observeWork(request, 'released');
+          };
+          void readiness.then(settled, settled);
+        }
+        await Promise.race([readiness, new Promise((_, reject) => {
           timer = setTimeout(() => reject(new Error('readiness timeout')), 2_000);
         })]);
         return { status: 'ready' as const };
@@ -292,7 +361,8 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
     .post('/api/auth/oauth2/introspect', async ({ request }) => {
       const token = await presentedToken(request.clone());
       const evidenceAccess = await contentEvidenceAccess(request.clone(), options.contentEvidenceSecret);
-      return currentIntrospection(pool, token, await auth.handler(request), evidenceAccess);
+      return currentIntrospection(pool, token, await auth.handler(request), evidenceAccess,
+        requestWork ? state => observeWork(request, state) : undefined);
     })
     .use(options.notificationDigest ? notificationDigestApi(pool,
       options.notificationDigest.accountSecret, options.notificationDigest.mainSecret, origin) : new Elysia())
@@ -510,6 +580,13 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
             db => guardedAuthHandler(request, subject, db)));
       } catch (error) { return accountFailure(error); }
     });
+  if (requestWork) app.wrap(handle => async (request, ...rest) => {
+    observeWork(request, 'started');
+    try { return await handle(request, ...rest); }
+    // Elysia can skip afterResponse on cancellation. This is the actual Account
+    // handler's settlement, including awaited current authority and DB cleanup.
+    finally { observeWork(request, 'released'); }
+  });
   return app.get('/api/account/openapi.json', () => ({ openapi: '3.1.2',
     info: { title: 'REZICS Account API', version: '1' },
     ...toOpenAPISchema(app, { paths: [/^\/api\/auth\//, /^\/health\//, '/api/account/openapi.json'] }),

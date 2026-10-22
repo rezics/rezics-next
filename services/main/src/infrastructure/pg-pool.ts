@@ -218,6 +218,179 @@ function activeRequestTrace(): string | undefined {
   return traceId;
 }
 
+export interface SqlWorkMeter {
+  readonly starts: number;
+  readonly released: number;
+  readonly active: number;
+  readonly pending: number;
+  readonly lastStartAt: number | null;
+  readonly zeroSince: number | null;
+}
+
+/** Private owner transitions. Trace ids come from the acquiring caller's actual
+ * context, never from SQL, connection options or a later releasing caller. */
+export interface SqlWorkEvent {
+  readonly kind: 'snapshot' | 'pending' | 'active' | 'released';
+  readonly checkout: number | null;
+  readonly trace: string | undefined;
+  readonly at: number;
+  readonly complete: boolean;
+  readonly totals: SqlWorkMeter;
+}
+export type SqlWorkObserver = (event: SqlWorkEvent) => void | Promise<void>;
+export interface SqlPoolObservation {
+  status(): Readonly<{ attached: boolean; complete: boolean; failures: number;
+    dropped: number; pendingNotifications: number }>;
+  detach(): void;
+  drain(): Promise<void>;
+}
+interface SqlSubscriber {
+  observer?: SqlWorkObserver;
+  complete: boolean;
+  failures: number;
+  dropped: number;
+  notifications: number;
+  drained?: () => void;
+  drain?: Promise<void>;
+}
+interface SqlWorkObservation {
+  subscribers: Set<SqlSubscriber>;
+  meter: { -readonly [K in keyof SqlWorkMeter]: SqlWorkMeter[K] };
+}
+interface SqlPoolOwner { started: boolean; observation?: SqlWorkObservation }
+const sqlPoolOwners = new WeakMap<Pool, SqlPoolOwner>();
+const SQL_OBSERVER_LIMIT = 8;
+const SQL_OBSERVER_PENDING_LIMIT = 64;
+
+function sqlNotification(subscriber: SqlSubscriber, event: SqlWorkEvent): void {
+  if (!subscriber.observer) return;
+  if (subscriber.notifications >= SQL_OBSERVER_PENDING_LIMIT) { subscriber.dropped++; return; }
+  try {
+    const pending = subscriber.observer(Object.freeze({ ...event,
+      complete: event.complete && subscriber.complete && subscriber.failures === 0 && subscriber.dropped === 0 }));
+    if (pending) {
+      subscriber.notifications++;
+      void Promise.resolve(pending).catch(() => { subscriber.failures++; }).finally(() => {
+        if (--subscriber.notifications === 0) { subscriber.drained?.(); subscriber.drained = undefined; subscriber.drain = undefined; }
+      });
+    }
+  } catch { subscriber.failures++; }
+}
+
+/** Attach to the existing bounded pool before its first checkout. Late or
+ * interrupted coverage stays incomplete, even when its partial counters are zero.
+ * No history, Request, SQL or parameters are retained. detach stops delivery;
+ * drain waits only for already returned observer promises. The consumer must
+ * then drain/verify/close its own bounded sink and check status for lost events. */
+export function observeSqlPool(pool: Pool, observer: SqlWorkObserver): SqlPoolObservation {
+  const owner = sqlPoolOwners.get(pool);
+  if (!owner) throw new Error('SQL observation requires the actual bounded pool');
+  const state = owner.observation ??= { subscribers: new Set(), meter: {
+    starts: 0, released: 0, active: 0, pending: 0, lastStartAt: null,
+    zeroSince: owner.started ? null : Date.now(),
+  } };
+  if (state.subscribers.size >= SQL_OBSERVER_LIMIT) throw new Error('SQL observer limit reached');
+  const subscriber: SqlSubscriber = { observer, complete: !owner.started, failures: 0, dropped: 0, notifications: 0 };
+  state.subscribers.add(subscriber);
+  sqlNotification(subscriber, { kind: 'snapshot', checkout: null, trace: undefined,
+    at: Date.now(), complete: subscriber.complete, totals: Object.freeze({ ...state.meter }) });
+  return {
+    status: () => Object.freeze({ attached: !!subscriber.observer,
+      complete: subscriber.complete && subscriber.failures === 0 && subscriber.dropped === 0,
+      failures: subscriber.failures, dropped: subscriber.dropped, pendingNotifications: subscriber.notifications }),
+    detach: () => {
+      subscriber.observer = undefined;
+      state.subscribers.delete(subscriber);
+      if (!state.subscribers.size && owner.observation === state) owner.observation = undefined;
+    },
+    drain: () => {
+      if (!subscriber.notifications) return Promise.resolve();
+      return subscriber.drain ??= new Promise<void>(resolve => { subscriber.drained = resolve; });
+    },
+  };
+}
+
+function beginSqlCheckout(pool: Pool) {
+  const owner = sqlPoolOwners.get(pool)!;
+  owner.started = true;
+  const state = owner.observation;
+  if (!state) return;
+  let trace = activeRequestTrace();
+  const checkout = ++state.meter.starts;
+  state.meter.pending++;
+  state.meter.lastStartAt = Date.now();
+  state.meter.zeroSince = null;
+  let phase: 'pending' | 'active' | 'released' = 'pending';
+  const emit = (kind: SqlWorkEvent['kind']) => {
+    const event = Object.freeze({ kind, checkout, trace, at: Date.now(), complete: true,
+      totals: Object.freeze({ ...state.meter }) });
+    for (const subscriber of [...state.subscribers]) sqlNotification(subscriber, event);
+  };
+  const released = () => {
+    if (phase === 'released') return;
+    state.meter[phase]--;
+    phase = 'released';
+    state.meter.released++;
+    if (!state.meter.active && !state.meter.pending) state.meter.zeroSince = Date.now();
+    emit('released');
+    trace = undefined;
+  };
+  emit('pending');
+  return {
+    released,
+    acquired: (client: PoolClient) => {
+      state.meter.pending--;
+      state.meter.active++;
+      phase = 'active';
+      emit('active');
+      const release = client.release;
+      let returned = false, listening = false;
+      const driver = client as PoolClient & { _ended?: boolean; _ending?: boolean;
+        _activeQuery?: unknown; _queryQueue?: unknown[]; _sentQueryQueue?: unknown[];
+        readyForQuery?: boolean };
+      const idle = () => {
+        // pg 8's real protocol/queue state, including query_timeout callbacks
+        // that have returned while the wire query is still executing. Unknown
+        // client implementations cannot establish settled/known-zero work.
+        return driver._ended === true || (driver._ending !== true
+          && driver.readyForQuery === true && '_activeQuery' in driver && driver._activeQuery == null
+          && driver._queryQueue?.length === 0 && driver._sentQueryQueue?.length === 0);
+      };
+      const retire = () => {
+        client.removeListener('drain', settled);
+        client.removeListener('end', settled);
+        released();
+      };
+      const settled = () => {
+        if (returned && idle() && phase !== 'released') retire();
+      };
+      client.release = function (this: PoolClient, ...args: Parameters<PoolClient['release']>) {
+        if (!listening) {
+          listening = true;
+          client.on('drain', settled);
+          client.on('end', settled);
+        }
+        // A throwing/double release keeps the driver's error and cannot invent
+        // settlement. No query/callback/transaction overload is replaced.
+        const wasIdle = idle();
+        const result = Reflect.apply(release, this, args);
+        returned = true;
+        // release may synchronously lend this idle client to a queued callback
+        // that starts different SQL before the original release returns.
+        if (wasIdle && driver._ending !== true) retire();
+        else {
+          settled();
+          // pg delivers a fresh connect callback before finishing its initial
+          // readyForQuery, with no drain until SQL has run. Recheck once after
+          // that callback unwinds, using the same protocol and queue fence.
+          queueMicrotask(settled);
+        }
+        return result;
+      };
+    },
+  };
+}
+
 function nestedCheckoutError(pool: Pool, holds: readonly CheckoutHold[]): NestedPoolCheckoutError {
   const tick = currentWorkerTick();
   const request = activeRequestTrace();
@@ -272,12 +445,13 @@ function adoptHold(pool: Pool): CheckoutHold {
 type ConnectCallback = (
   err: Error | undefined,
   client: PoolClient | undefined,
-  done: (release?: unknown) => void,
+  done: PoolClient['release'],
 ) => void;
 
 function trackNestedCheckout(pool: Pool): void {
   const original = pool.connect.bind(pool) as Pool['connect'];
   const connect = (callback?: ConnectCallback) => {
+    const observation = beginSqlCheckout(pool);
     const nested = [...(checkoutHolds.getStore() ?? [])].filter(
       (hold) => hold.pool === pool && hold.active,
     );
@@ -287,9 +461,13 @@ function trackNestedCheckout(pool: Pool): void {
         if (typeof callback === 'function') {
           // pool.query has already created its promise. A synchronous throw
           // rejects that promise and also escapes connect().
-          process.nextTick(() => callback(error, undefined, () => undefined));
+          process.nextTick(() => {
+            observation?.released();
+            callback(error, undefined, () => undefined);
+          });
           return;
         }
+        observation?.released();
         return Promise.reject(error);
       }
       logReportedCheckout(error);
@@ -300,7 +478,16 @@ function trackNestedCheckout(pool: Pool): void {
       // checkout may be delivered by an unrelated request or worker's release;
       // its SQL and callbacks must keep the requesting caller's whole context.
       const resume = AsyncLocalStorage.snapshot();
-      return original((...args) => resume(() => callback(...args)));
+      try {
+        return original((error, client, done) => resume(() => {
+          if (client) observation?.acquired(client);
+          else observation?.released();
+          callback(error, client, client && observation ? client.release : done);
+        }));
+      } catch (error) {
+        observation?.released();
+        throw error;
+      }
     }
     const hold = adoptHold(pool);
     const clear = () => {
@@ -311,11 +498,13 @@ function trackNestedCheckout(pool: Pool): void {
       pending = original() as Promise<PoolClient>;
     } catch (error) {
       clear();
+      observation?.released();
       throw error;
     }
     // Return this chain so even an immediate release observes the wrapper.
     return pending.then(
       (client) => {
+        observation?.acquired(client);
         const release = client.release.bind(client);
         client.release = (err?: Error | boolean) => {
           clear();
@@ -325,6 +514,7 @@ function trackNestedCheckout(pool: Pool): void {
       },
       (error) => {
         clear();
+        observation?.released();
         throw error;
       },
     );
@@ -376,6 +566,7 @@ export function boundedPool(
     });
   });
   observeStatementPool(pool);
+  sqlPoolOwners.set(pool, { started: false });
   trackNestedCheckout(pool);
   return pool;
 }

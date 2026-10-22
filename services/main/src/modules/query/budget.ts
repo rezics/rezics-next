@@ -14,6 +14,8 @@ export function withResourceListBudget<T>(read: () => Promise<T>, _scope: 'all' 
   return fusekiReadBudget.run(
     {
       signal: outer ? AbortSignal.any([deadline, outer.signal]) : deadline,
+      // Stable owner attribution survives nested WorkReadSession phase changes.
+      readPhase: 'resource-list',
       get callsLeft() {
         return Math.min(callsLeft, outer?.callsLeft ?? callsLeft);
       },
