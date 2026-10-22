@@ -209,16 +209,20 @@ test('composed native properties cite only their exact settled Source value for 
   ]);
   const composed = await composition(native), input = await retained(composed.principalId, native.input);
   const attached = await composed.store.attach(composed.principal, composed.principalId, randomUUID(), input);
-  expect((await composed.store.read(composed.principalId, attached.support, attached.step, composed.principal))
-    ?.publicEvidence?.id).toBe(input.sourceRecord);
+  const supported = (await composed.store.read(composed.principalId, attached.support, attached.step, composed.principal))!;
+  expect(supported.publicEvidence?.id).toBe(input.sourceRecord);
   const read = propertyReader(composed, native);
   for (const signed of [true, false]) {
     const { session, items } = await read(signed);
     expect(items).toHaveLength(2);
     expect(items).toContainEqual(expect.objectContaining({ kind: 'component-property', revision: native.revision,
       predicate, value: { kind: 'language-string', lexical: '原作', language: 'ja' }, sources: [input.sourceRecord] }));
+    const cited = items.find(item => item.kind === 'component-property' && item.value.lexical === '原作');
+    expect(cited).toHaveProperty('citations', [{ ...supported.publicEvidence,
+      kind: 'retained-source-field', id: attached.support, record: input.sourceRecord,
+      supportIdentity: supported.supportIdentity }]);
     expect(items).toContainEqual(expect.objectContaining({ kind: 'component-property', revision: native.revision,
-      predicate, value: { kind: 'language-string', lexical: '別名', language: 'ja' }, sources: [] }));
+      predicate, value: { kind: 'language-string', lexical: '別名', language: 'ja' }, sources: [], citations: [] }));
     await session.fenceDependencies();
   }
 });
@@ -231,12 +235,12 @@ test('composed native property citations fence changed native heads and preserve
   expect(captured.items[0]!.sources).toEqual([input.sourceRecord]);
   native.finalHeadMatches(false);
   await expect(captured.session.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
-  expect((await read()).items[0]!.sources).toEqual([]);
+  expect((await read()).items[0]).toMatchObject({ sources: [], citations: [] });
   native.finalHeadMatches(true);
   const beforeHeadChange = await read();
   native.head(nativeId(99));
   await expect(beforeHeadChange.session.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
-  expect((await read()).items[0]).toMatchObject({ revision: nativeId(99), sources: [] });
+  expect((await read()).items[0]).toMatchObject({ revision: nativeId(99), sources: [], citations: [] });
   expect((await composed.store.read(composed.principalId, attached.support, attached.step, composed.principal))
     ?.publicEvidence).toBeNull();
 });
@@ -251,7 +255,7 @@ test('composed native property citations retain withdrawal fences for visitors',
   await composed.dependencies.sourceFieldWithdrawals!.withdraw(composed.principalId, randomUUID(), {
     support: attached.support, expectedSupport: savedSupport.supportIdentity, reason: 'Withdraw this exact field evidence',
   });
-  expect((await read()).items[0]!.sources).toEqual([]);
+  expect((await read()).items[0]).toMatchObject({ sources: [], citations: [] });
   await expect(beforeWithdrawal.session.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
 });
 

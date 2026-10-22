@@ -107,6 +107,28 @@ export function importedSourceStatements(): StatementPage {
   ], count: { value: 5, kind: 'exact-page', total: null } };
 }
 
+/** Contract-shaped retained supports; production-owner coverage lives in Main's composed Source test. */
+export function retainedSourceStatements(): StatementPage {
+  const page = importedSourceStatements();
+  const item = page.groups[3]!.items[0]!;
+  if (item.kind !== 'component-property') throw new Error('Expected a component property');
+  const record = revision(301);
+  const citation: NonNullable<typeof item.citations>[number] = {
+    kind: 'retained-source-field', id: revision(302), supportIdentity: revision(303), record, sourceWork: null,
+    representationSha256: 'ab'.repeat(32), locator: { pointer: '/organization/founded' },
+    attribution: { sourceName: 'Example Studio registry',
+      sourceUrl: 'https://example.test/organizations/studio-42/revisions/3', licence: 'CC BY 4.0' },
+    rightsBasis: { basisKind: 'license_offering', basisRef: null, licenseExpression: 'CC-BY-4.0',
+      notice: 'Registry facts under CC BY 4.0', obligations: ['attribution'], useScope: 'quotation',
+      result: 'supported', memberOrdinals: [0] },
+    quote: 'Example Studio was founded in 1997.', quoteWithheld: false, language: { state: 'value', value: 'en' },
+  };
+  item.sources = [record];
+  item.citations = [citation, { ...citation, id: revision(304), supportIdentity: revision(305),
+    locator: { pointer: '/history/0/year' }, quote: null, quoteWithheld: true }];
+  return page;
+}
+
 /** Distinct claims, their applicability, and a retained public evidence projection. Not a recorded API answer. */
 export function citedStatements(withheld = false): StatementPage {
   const name = statement(21, 'https://schema.org/name',
