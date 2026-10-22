@@ -1329,6 +1329,25 @@ describe('durable Goal wake coordinator', () => {
     } finally { f.cleanup(); }
   });
 
+  test('task runtimes and workers inheriting a manager session do not prevent its next wake', () => {
+    const f = fixture();
+    try {
+      const session = f.descriptor.session;
+      const inherited = [`CODEX_SESSION_ID=${session}`, `CODEX_THREAD_ID=${session}`, 'GOAL_TASK_ID=G-2823'];
+      const owner = () => nativeOwner(f.descriptor.home, session, undefined, f.procRoot);
+      // The manager exited, leaving a healthy retained task server reparented to init.
+      f.process(130, ['bun', 'adopt.ts', '--serve'], inherited, '100', 'S', 1);
+      f.process(131, ['/bin/bash', 'task-read.sh'], inherited, '100', 'S', 130);
+      expect(owner()).toBeUndefined();
+      // A task's own Codex invocation must not claim the manager, even with this argv.
+      f.process(132, ['codex', 'exec', 'resume', session], inherited);
+      expect(owner()).toBeUndefined();
+      // A genuine resumed manager continues to protect against a concurrent wake.
+      f.process(133, ['codex', 'exec', 'resume', session], inherited.slice(0, 2));
+      expect(owner()).toContain('process 133 (resume)');
+    } finally { f.cleanup(); }
+  });
+
   test('named previous owner enrolls while alive; status and first wake wait until its exact process exits', () => {
     const f = fixture();
     try {

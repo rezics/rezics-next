@@ -143,15 +143,16 @@ export function nativeOwner(_home: string, session: string, previousOwner?: Proc
   for (const entry of readdirSync(procRoot).filter(name => /^\d+$/.test(name))) {
     const pid = Number(entry);
     if (!processIdentity(pid, procRoot)) continue;
+    const env = procEnv(pid, procRoot);
+    // Task servers can outlive their manager while retaining its session variables.
+    if (envHas(env, 'GOAL_TASK_ID')) continue;
     let args: string[];
     try { args = readFileSync(join(procRoot, entry, 'cmdline'), 'utf8').split('\0').filter(Boolean); } catch { args = []; }
     // Codex allows options between resume and its session argument.
     if (args.some((arg, index) => arg === 'resume' && args.slice(index + 1).includes(session))) {
       return `Native session still owned by process ${pid} (resume)`;
     }
-    let env: string[];
-    try { env = readFileSync(join(procRoot, entry, 'environ'), 'utf8').split('\0'); } catch { continue; }
-    if ((env.includes(`CODEX_SESSION_ID=${session}`) || env.includes(`CODEX_THREAD_ID=${session}`))
+    if ((env?.includes(`CODEX_SESSION_ID=${session}`) || env?.includes(`CODEX_THREAD_ID=${session}`))
       && !underOtherCodexExec(pid, session, procRoot)) {
       return `Native session still owned by process ${pid} (environment)`;
     }
