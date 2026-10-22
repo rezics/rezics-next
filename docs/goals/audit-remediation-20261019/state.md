@@ -1,8 +1,8 @@
 # Audit remediation state
 
-Checkpoint: 2026-10-22 18:22 Asia/Shanghai; event 27296d07-efda-40c9-9ed3-8fe5a14b6b76.
-Covered overdue deliveries: 574d4ca1, ef79b69b, 7660a262, 35a8fac7, 1d446e1d,
-a5d6d67b, 7824fb91, e0aa81e3, 90101275, 6869c69c and 8fbf8fbd. All eleven
+Checkpoint: 2026-10-22 18:38 Asia/Shanghai; event 2b273697-1c64-49f9-85d9-35a70b423a91.
+Covered overdue deliveries: c2757ed2, e5ffa066, 10e085ee, c7cd501c, e7be6d7e,
+358205ea, 9ca98c26, 45afb6aa, 3cca51d0 and 2b299e40. All ten
 are acknowledged; previous reconciled decisions remain authoritative.
 Only the original 61 findings and necessary runtime/data support are in scope.
 Standalone frontend optimization/library research remain stopped; the missed
@@ -61,6 +61,13 @@ G-2752 decision a064e4984b reuses integrated 56c3cfff69 source, passed job
 1b7ea934 and independent G-2831 review. Receipt-only attempt47 recovered its
 handoff; normal landing completed and the task closed verified at 10:13Z.
 No implementation/check replay or additional canonical finding acceptance.
+G-2753 decision 9ecb900d23e5 closed the superseded worker cancelled and released
+its producer claims. Attempts53–56 failed routing before tools/assertions.
+Candidate 217759e6f5 and integrated 2327e57c9ad7 share full-file patchID bde5b1e1;
+three mutation regressions and 12 artifact hashes are preserved. Reuse job423bd4f9
+58 tests/158 assertions and web 4/36; artifact-only callbacks still bind G-2776.
+No replay/relanding: G-2848 retains original acceptance, G-2823 runtime custody
+and G-2776 author data. AUD-011 remains open.
 G-2747 attempt85's routing failure is superseded by productive attempts86/87.
 The two-file guard-selection cut at 80f9fcf49114 retains reached red controls,
 24 tests/876 assertions, types/lint/45 guards/inference/AST and 30 verified hashes;
@@ -70,8 +77,10 @@ requirements. Problem G2747-TOOLING-CLASSIFICATION-20261022 has Audit as sole
 repair owner; all manager roles and Program received discovery. Brief commits784c483955/0786646d5a classify only this cut as tooling and
 supersede historical wave execution. Manager rebased/reclaimed the same branch;
 source and lockfile blobs match the checked pin, and ordinary codex-1 attempt88
-is running receipt-only at7aa30d3a85f7. Its completed handoff goes to normal
-independent codex-1/xhigh review/landing, which must verify the failed admission.
+completed receipt-only at7aa30d3a85f7. This checkpoint verified its ready handoff
+had no competing owner/landing and started one normal independent codex-1/xhigh
+review/landing (pid1437970). Its result mail owns closure/resume; do not wait or
+start it again. Successful landing must verify the formerly failed admission.
 No fabricated outcome rows/stories, waived gates, credential/configuration repair,
 paid fallback or old runtime/AT/navigation campaign. Guard acceptance stays open;
 resolution notice follows successful review/landing, under the same problem ID.
@@ -85,7 +94,7 @@ catalogue-main-review-0030 source PASS. Its entire dirty worktree, eight source
 and five original assertion hashes remain in runs/G-2780/continuity-33-disposition;
 91,861 file sizes verified. No replay; Catalogue retains A03/native/persona/rights
 and original five-suite proofs; G-2778 and Site/G-2823 keep importer/runtime custody.
-G-2762 attempt69 is superseded by attempt83's two-path repair, landed at
+G-2762 attempts69/74 are superseded by attempt83's two-path repair, landed at
 98a93b6fa36a. Current blobs match; reuse job50c59de2, 77 tests/445 assertions and
 affected checks, retaining RED/setup and malformed guard-XML limits. No duplicate
 resume/review/landing; original runtime/cancellation/persona/authority proof stays open.
@@ -93,6 +102,14 @@ G-2864 attempt8 remains cancelled, archive81af7991b2. Its model/MCP setup failur
 produced no handoff; cd67bd4bb5 fixture repair is integrated and all 119 original
 assertion lines unchanged. Reuse selected search 29 tests/200 assertions and
 Content readiness 19/42 at QA20261022t091921-b9d5d1; no full-suite/D5-003 acceptance.
+G-2865 attempts1–5 likewise failed routing before tools/assertions, with no
+terminal handoff. Decision 0bdf3e5c89 closed it cancelled and released its stale
+claim; both overdue notices are consumed. Program's same cd67bd4bb5 fixture
+byte-matches the preserved dirty source; reuse QA20261021t085531-f72a79's complete
+48 tests/242 assertions, zero skips and four unchanged original assertions.
+Retain RED and runs/G-2865/event-e5ffa066-disposition; never resume/reland/recreate.
+Consolidated codex-1/Sol/xhigh independent review remains required. No D5-003,
+full native or general routing recovery follows from retiring this duplicate.
 G-2786 decision306271140888 replaced failed codex-2 authentication with permitted
 ordinary codex-1. Branch fast-forward/login/docs checks passed and SAME worker
 resumed fresh/sameScope/max as attempt54. Keep its bounded inherited-origin/
@@ -104,20 +121,40 @@ Existing native public-name/search/query owners include resource/post with curre
 public/head/withdrawal/erasure fences. Reuse 35 native passes, 15 unit tests/188
 assertions and 15 resource-card stories. No new D6-002 whole acceptance; AUD009
 retains actual Discover headings/order/task/topic proof, never a Work-header substitute.
-G-2791's old job9a92aaeb stopped at profile admission: zero native commands or
+G-2791 attempt52's old job9a92aaeb stopped at profile admission: zero native commands or
 original C27/C30/Collection assertions. Existing transition resolved that mismatch;
-later job39470297 retains 13 native publication receipts and session cleanup,
-without original acceptance. Catalogue reuses actual identities/acknowledgements;
+later job39470297 retains 13 native publication receipts and five owned-session cleanups,
+then nhlbi-tuna exceeded its own command-retry window and borrower release failed.
+No replay/landing/closure or original acceptance. Catalogue reuses actual
+identities/acknowledgements;
 Collection still needs the full admitted corpus descriptor and compatible backup.
 Both historical Book/C28 admission notices are superseded by joint original job
-facd0013: 50 manifest entries verified, six bodies reached preference failures
+facd0013: 50 manifest entries verified, 641 assertions recorded, six bodies reached preference failures
 and teardown failed. Visitor PUT expected 401/got 400; five signed-in GETs
 expected 200/got 400. The preference source fix landed/reviewed, but original
 C28 and exact-session cleanup remain unproved. Later OAuth qualification/original
-execution did not repeat the503; its underlying cause remains unresolved with
-G-2790. The separate Fuseki restart/Java exception establishes no503 cause or
-product repair. Catalogue and G-2793/G-2790 retain remaining checks under G-2823 custody. Failed release/stale epoch
+execution did not repeat the503; its underlying cause remains unresolved.
+The separate Fuseki restart/Java exception establishes no503 cause or product
+repair. G-2790's cancelled worker grants no ongoing ownership: G-2775/existing
+integrated original proof owners retain pending assertions and causal capture;
+Catalogue retains its preference correction/originals under G-2823 custody.
+Failed release/stale epoch
 grants no fresh admission; no stale rebind, reactivation or unchanged rerun.
+G-2793 attempts42–47 failed routing before tools/assertions, without the named
+handoffs. Decision 088ffc5f48 prepared the preserved branch and resumed ordinary
+codex-1/max attempt48 for source-only supported borrowed-session cleanup; later
+continuation49 is running. Keep this sole cleanup successor and its own exit
+events; no duplicate resume/landing from the historical alerts. Its bounded
+source repair removes unsupported JWT access-token revocation while retaining
+refresh revocation and independently attempted exact cookie/origin sign-out.
+Original C28 failures/assertions, historical cleanup
+uncertainty and independent codex-1/xhigh review remain; source/live disposal is
+not accepted; facd0013 is no C28 pass.
+G-2790 decision f51d0ff9b6 closed the superseded worker cancelled at 10:27Z,
+archive f81d9665aa; claims released, branch/evidence retained in
+runs/G-2790/worktree-temp. Source 73fe6329aa is integrated; reuse its bounded
+independent APPROVE and job0463251a's 145 tests/1,114 assertions. No retry/relanding,
+new runtime, D4-007/D4-008 acceptance or historical503 causal claim follows.
 
 G-2764 attempt60/default binding requests are superseded by committed G-2823
 instructions and actual G-2750 job ad653d17: 12 unchanged bodies passed,
@@ -172,7 +209,8 @@ internal pause was wrongly attributed to the maintainer. Exact caller/gesture
 is unknown; maintainer denies pausing. Goal remains active.
 ## Measures and resource constraints
 
-Latest measured status, before the receipt-only resume: first attempts 20% (115/580), landed median two/max71; 2,529.9M input,
+Latest measured status at 18:37: first attempts 20% (116/583), landed median
+two/max84 (G-2781); 2,536.1M input,
 19.9M output tokens, 18 unavailable sessions; tokens/proved-row unavailable.
 Separate 68/68 is not canonical acceptance. Prior overlapping 12-hour windows
 ended 04:40Z/06:21Z: 96.76M/73.79M input, other-session shares 16%/6%. Latest
@@ -181,6 +219,13 @@ recorded 12-hour window 2026-10-21 21:21:59Z–2026-10-22 09:21:59Z used
 windows and unavailable tokens/proved-row do not establish savings. Reuse
 integrated source/checks, retire duplicate workers and repair setup causes;
 keep independently ready work moving.
+AUDIT-COORDINATOR-STORE-CONTENTION-20261022: status first failed before metrics
+at recordTurnCommand/openStore's synchronous=FULL after 5s. A later lock snapshot
+was clear; one serialized normal status completed with turn logging intact.
+All manager roles and Program received discovery; operational recovery does not
+identify the historical holder or prove a durable contention fix. Program retains
+shared tooling ownership if it recurs; preserve healthy wrappers/pump and stop
+unchanged retries. No retry-cap, database, runtime or scheduler change was made.
 Use per-stage 600-second preparation policy and current G-2823 reconciliation;
 keep failed-stage costs, timed outcomes and recovery distinct. Preserve stores,
 corpus, identities, leases, sessions and G-2845 deletion/peer edits. No reimport,
