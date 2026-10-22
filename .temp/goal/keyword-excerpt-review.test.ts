@@ -34,6 +34,11 @@ function owners(policy = false) {
   const environment = { lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' },
     readCompositionTargets: async (_profile: string, resources: readonly string[]) => new Set(resources),
     fuseki: { query: async (sparql: string) => {
+      if (sparql.includes('SELECT ?resource ?head')) {
+        const values = /VALUES \?resource \{([^}]+)\}/u.exec(sparql)![1]!;
+        return { results: { bindings: [...values.matchAll(/<([^>]+)>/gu)]
+          .map(value => ({ resource: v(value[1]!), head: v('urn:rezics:head:one') })) } };
+      }
       if (sparql.includes('SELECT ?work ?head')) {
         const values = /VALUES \?work \{([^}]+)\}/u.exec(sparql)![1]!;
         return { results: { bindings: [...values.matchAll(/<([^>]+)>/gu)]
