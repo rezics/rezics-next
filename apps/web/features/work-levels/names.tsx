@@ -24,10 +24,10 @@ export function namedWorkHref(reference: string, names: Names): string | null {
   return summary?.status === 'available' && summary.type === 'work' ? summaryWorkHref(summary) : workLinkHref(reference);
 }
 
-/** What Main named a resource: its name in the language Main selected, or null when it is unavailable or unnamed. */
+/** A disclosed native name or an authored public vocabulary label, retaining its content language. */
 export function nameOf(names: Names, reference: string): NameText | null {
   const summary = names.get(reference);
-  return summary?.status === 'available' ? summary.name : null;
+  return summary?.status === 'available' || summary?.status === 'public-term' ? summary.name : null;
 }
 
 /**
@@ -42,6 +42,7 @@ export function SummaryLink({ summary, unavailable, unnamed, undisclosed = unava
 }) {
   let content;
   if (!summary || summary.status === 'unavailable-read') content = <span data-name-state="unavailable" className="text-muted-foreground">{unavailable}</span>;
+  else if (summary.status === 'public-term') content = <span className="font-medium"><LocalizedText text={summary.name} /></span>;
   else if (summary.status !== 'available') content = <span data-name-state="undisclosed" className="text-muted-foreground">{undisclosed}</span>;
   else {
     const href = hrefFor ? hrefFor(summary) : summaryWorkHref(summary);
