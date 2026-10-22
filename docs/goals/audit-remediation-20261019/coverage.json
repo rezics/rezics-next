@@ -497,9 +497,18 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "手机底栏可见名称与辅助名称不一致",
-      "status": "build-dispatched",
-      "owner": "G-2747",
-      "proof": []
+      "status": "closed",
+      "owner": "G-2747 + G-2752 / independent original1237",
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/AUD-012-accessible-names-20261022.json",
+          "finding": "AUD-012",
+          "assessedMain": "7a5f8a3329af6cf7620672d60a0d2b4386d304dc",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "disposition": "Canonical accessible-name/unread-description scope passed single independent codex-1/Sol/xhigh acceptance. Eight-language anonymous/signed-in navigation, retained actual speech/activation, production Home descriptions and keyboard evidence retain their exact qualification; no additional native Home rerun is imposed for component criteria under the maintainer direction."
     },
     {
       "id": "AUD-013",

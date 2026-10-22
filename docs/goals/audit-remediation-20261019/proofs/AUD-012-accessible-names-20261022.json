@@ -1,0 +1,180 @@
+{
+  "recordedAt": "2026-10-22T13:23:48.249359+08:00",
+  "finding": "AUD-012",
+  "status": "closed",
+  "assessedMain": "7a5f8a3329af6cf7620672d60a0d2b4386d304dc",
+  "canonicalSource": {
+    "path": ".temp/site-audit-2026-10-18/round-3/all-findings.json",
+    "sha256": "e2721c44e74305c694b02e81e757e4476c3a19de414d25b0689617316c5ebc3f"
+  },
+  "originalAcceptanceVerbatim": [
+    "手机导航的辅助名称包含对应可见标签；保留未读数等附加语义，覆盖八种UI语言及登录/匿名状态。重复axe检查并实际用语音或读屏验证；卡片的描述文本和状态不应因aria-label覆盖而不可获得。"
+  ],
+  "originalAssertionsChanged": false,
+  "acceptanceAuthority": "Current maintainer instruction: passed real Storybook interaction/accessibility and viewed screens establish pure component click/name/layout criteria. Qualified actual API evidence remains required for authority/semantic/data outcomes. No lowered original persona assertion and no success inferred from skipped/setup-failed tests.",
+  "independentReview": {
+    "engine": "codex-1",
+    "model": "gpt-6.1-sol",
+    "effort": "xhigh",
+    "wholeOriginalScopePassed": true,
+    "criterionMap": [
+      {
+        "ordinal": 1,
+        "canonicalCriterion": "手机导航的辅助名称包含对应可见标签；保留未读数等附加语义，覆盖八种UI语言及登录/匿名状态。重复axe检查并实际用语音或读屏验证；卡片的描述文本和状态不应因aria-label覆盖而不可获得。",
+        "status": "PASS under current maintainer acceptance instruction",
+        "evidence": "Eight UI locales en/de/fr/es/ja/ko/zh-Hans/zh-Hant, anon and signed-in390 navigation coverage and genuine corrected theme cells establish visible caption in accessible name. Retained native transport adds81/81 actual caption/backend speech deliveries and6 en/de/fr Enter activations to genuine destinations. Actual unread0 is preserved; component3/99+ fixtures establish additional unread semantics without manufacturing live unread data. Eight axe navigation cells have zero violations; label-content-name-mismatch had0applicable nodes and is not misreported as positive rule-node coverage. Production Home ContinueStrip uses aria-describedby; actual DE390light/FR390dark stories assert full localized title, full next-chapter text, exact3/lowerbound20+/exact1 unread and null-title fallback, with hide/Undo keyboard interaction and restored description. Jobb0da5c8a-a692-47ba-8699-19899598fab7, QA20261019t163721-5ffb64:57stories+6units/21assertions PASS. Actual PNGs personally inspected. Source qualification24 relevant source/message entries agrees with current7334. Latest maintainer explicitly accepts production browser accessibility/interaction evidence for these component criteria, so no extra native Home card/physical-device run is required. Canonical text and historical failed/setup-unreached native attempts remain unchanged."
+      }
+    ],
+    "report": ".temp/manager-peer-protocol-20261021/original-ready-acceptance-1237/consolidated-report.json",
+    "reportSha256": "a885431922e63e2c677b2d3676e70a79baffe7b6a20a7b8e3274e28b21ae8208"
+  },
+  "currentCommittedSourcePinsVerified": [
+    {
+      "path": "apps/web/features/home/continue-strip.tsx",
+      "blob": "980743f17fddc375c41738c8d16ed28b4abe760e"
+    },
+    {
+      "path": "apps/web/features/home/home-page.stories.tsx",
+      "blob": "e20f5da1aa212a84eee31961b78a1945a4f4907c"
+    },
+    {
+      "path": "apps/web/features/home/home-page.tsx",
+      "blob": "7dfbe62d13d21f523d2a4f815fc3bb71d4b3d35c"
+    },
+    {
+      "path": "apps/web/features/home/fixtures.ts",
+      "blob": "f2c51ee2e36bdb4b4b5cbb971db0f09b622ba276"
+    },
+    {
+      "path": "apps/web/features/home/messages.ts",
+      "blob": "0cf9d4b73c412b0af4d1d0092bfcd4cc4df8bd42"
+    },
+    {
+      "path": "apps/web/features/home/messages/de.ts",
+      "blob": "35a45e022126ad7d961767f17f744758bef4fea3"
+    },
+    {
+      "path": "apps/web/features/home/messages/fr.ts",
+      "blob": "1a2ddc54859467976711f516c55c1cba31654377"
+    },
+    {
+      "path": "apps/web/features/shell/localized-link.tsx",
+      "blob": "d9404ab5a2f79e3b01f9fc8311ef40ea1526baba"
+    },
+    {
+      "path": "apps/web/features/shell/bottom-nav.tsx",
+      "blob": "01b5eb673c0fef2555727da9e634606596fb7fd3"
+    },
+    {
+      "path": "apps/web/features/shell/app-shell.stories.tsx",
+      "blob": "861b5dbe52b38a1fa2f0767f2fb0d4d3db8607a9"
+    },
+    {
+      "path": "apps/web/features/shell/messages/de.ts",
+      "blob": "49e4de37738faf778bc8d0f18932407bdda4d244"
+    },
+    {
+      "path": "apps/web/features/shell/messages/es.ts",
+      "blob": "b6251c60e81e3e1b3abd1dbded31083afd0a07e8"
+    },
+    {
+      "path": "apps/web/features/shell/messages/fr.ts",
+      "blob": "84a1a70e738c31276b557bab37f8072d2eec6a8e"
+    },
+    {
+      "path": "apps/web/features/shell/messages/ja.ts",
+      "blob": "4cb54157cd71d47a9021cffe724177ce158f2da3"
+    },
+    {
+      "path": "apps/web/features/shell/messages/ko.ts",
+      "blob": "b765c3fb8b1d6370babb0e1641378275555fdd2c"
+    },
+    {
+      "path": "apps/web/features/shell/messages/zh-Hans.ts",
+      "blob": "413d9bfb176e24e099121335087d99f659bc6de7"
+    },
+    {
+      "path": "apps/web/features/shell/messages/zh-Hant.ts",
+      "blob": "e997048a5253fa8000cf8db4c70b625523dc4e0d"
+    },
+    {
+      "path": "apps/web/features/home/messages/de.ts",
+      "blob": "35a45e022126ad7d961767f17f744758bef4fea3"
+    },
+    {
+      "path": "apps/web/features/home/messages/es.ts",
+      "blob": "22e89462f9c28bc928976d43536d4e632985954e"
+    },
+    {
+      "path": "apps/web/features/home/messages/fr.ts",
+      "blob": "1a2ddc54859467976711f516c55c1cba31654377"
+    },
+    {
+      "path": "apps/web/features/home/messages/ja.ts",
+      "blob": "3513313ff2a082041f43f25860c366c5dcf0645d"
+    },
+    {
+      "path": "apps/web/features/home/messages/ko.ts",
+      "blob": "f9dfe3041ac5d9742fc589b81d4df657398e8551"
+    },
+    {
+      "path": "apps/web/features/home/messages/zh-Hans.ts",
+      "blob": "865395b642ccf05b597e864c21f10479279f2dc6"
+    },
+    {
+      "path": "apps/web/features/home/messages/zh-Hant.ts",
+      "blob": "97d040c56d7d83a831b8fb608f52524d5cb706d1"
+    }
+  ],
+  "evidence": [
+    {
+      "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca/reused-G2825-AUD012.json",
+      "sha256": "404fe4bd2d5ecd27447e7c8c5c678dd5ec586ab7e6fd29767590b01d16a02e64"
+    },
+    {
+      "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-signed-in-transport-evidence/disposition.json",
+      "sha256": "7633def2485719ad17d96822b2dd8c5c6137e6f3986d15f5f375d677cbbfa95e"
+    },
+    {
+      "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-signed-in-transport-evidence/artifact-manifest.json",
+      "sha256": "7386d854df4328db89fbc77e97a1b45fd248f2e31d10715a242c9f25a8befa37"
+    },
+    {
+      "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-criterion-evidence-map-20261020/retained-G2831/retained-candidate-evidence/owner-proof/evidence/home-qa.log",
+      "sha256": "82cfc832cedf033e7a3d7f23a20bb65e8c6c561b9f56fab89148c75926b988fe"
+    },
+    {
+      "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-criterion-evidence-map-20261020/retained-G2831/retained-candidate-evidence/owner-proof/evidence/qa-summary.md",
+      "sha256": "83e3b5114ecfd7238f70dd47d37f662ba51b03ee470bdf556da8c77103187421"
+    },
+    {
+      "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-criterion-evidence-map-20261020/matched-CAS11-api-evidence.json",
+      "sha256": "bfcde2a2391f013dc19ee1a26dac33f13173e71edd150948b88c289f8ff780ef"
+    }
+  ],
+  "sourceQualification": [
+    {
+      "path": ".temp/manager-peer-protocol-20261021/original-ready-acceptance-1237/aud012-current-source-qualification.json",
+      "sha256": "1a22869952a4d9b25bde285f993614770d01472ae85aa92f35b16001ee8ead15"
+    },
+    {
+      "path": ".temp/manager-peer-protocol-20261021/original-ready-acceptance-1237/narrow-source-qualification.json",
+      "sha256": "0d6285dc5d42f7a8557436f27b8a5c803d5f106cd3cd9d1553991ac8d264478c"
+    }
+  ],
+  "programVerification": {
+    "canonicalCriteriaExact": true,
+    "sourceBlobsMatched": 24,
+    "declaredEvidenceHashesMatched": true,
+    "relevantScreenshotHashesMatched": 3,
+    "imagesActuallyViewed": [
+      ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-criterion-evidence-map-20261020/retained-G2831/retained-candidate-evidence/owner-proof/screenshots/german-phone-light.png",
+      ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-criterion-evidence-map-20261020/retained-G2831/retained-candidate-evidence/owner-proof/screenshots/french-phone-dark.png"
+    ]
+  },
+  "limits": [
+    "Native Home setup/focus/transport failures remain historical failures; no failed or skipped body has been converted into a pass.",
+    "Production Storybook accessible-name/description, keyboard and screenshot evidence establishes component criteria under the maintainer instruction. Retained actual caption speech and activation proof is reused in its original scope.",
+    "No new API authority, data, live unread population, current whole-Web/runtime or other finding is accepted by this closure."
+  ]
+}
