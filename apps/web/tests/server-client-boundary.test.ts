@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import ts from 'typescript-6';
+import { selectRepositoryGuards } from '../../../scripts/qa/repository-guards.ts';
 import { addressFailureResponse } from '../features/address/edge.ts';
 import { resourceHref } from '../features/address/path.ts';
 import { getTranslation } from '../i18n/server.ts';
@@ -16,7 +17,7 @@ interface Module {
 }
 
 /** RSC routes and Worker entries may render client JSX, but cannot call it or run a DOM renderer. */
-function serverBoundaryViolations(entries: string[], read: (file: string) => string | undefined): string[] {
+function serverBoundaryViolations(entries: string[], read: (file: string) => string | undefined, visited = new Set<string>()): string[] {
   const modules = new Map<string, Module>();
   const target = (from: string, specifier: string): string | undefined => {
     const base = specifier.startsWith('.') ? resolve(dirname(from), specifier)
@@ -78,7 +79,6 @@ function serverBoundaryViolations(entries: string[], read: (file: string) => str
       }
     }
   }
-  const visited = new Set<string>();
   const violations: string[] = [];
   function visit(file: string) {
     if (visited.has(file)) return;
@@ -177,8 +177,37 @@ test('server routes, middleware and the Worker import graph respect React enviro
     return cache.get(file);
   };
   const routes = [...new Bun.Glob('**/*.{ts,tsx}').scanSync({ cwd: resolve('apps/web/app'), absolute: true })];
+  const visited = new Set<string>();
   expect(routes.length).toBeGreaterThan(100);
-  expect(serverBoundaryViolations([...routes, resolve('apps/web/worker/index.ts'), resolve('apps/web/proxy.ts')], read)).toEqual([]);
+  expect(serverBoundaryViolations([...routes, resolve('apps/web/worker/index.ts'), resolve('apps/web/proxy.ts')], read, visited)).toEqual([]);
+  const uncovered = [...visited].map(file => relative(process.cwd(), file)).sort()
+    .filter(file => !selectRepositoryGuards([file]).some(guard => guard.file === 'apps/web/tests/server-client-boundary.test.ts'));
+  expect(uncovered).toEqual([]);
+});
+
+test('server boundary selection covers its graph inputs without selecting unrelated backend or docs changes', () => {
+  const selected = (file: string) => selectRepositoryGuards([file])
+    .some(guard => guard.file === 'apps/web/tests/server-client-boundary.test.ts');
+  for (const file of [
+    'apps/web/app/[locale]/proposals/page.tsx',
+    'apps/web/features/proposals/list-state.ts',
+    'apps/web/features/proposals/proposal-list.tsx',
+    'apps/web/i18n/server.ts',
+    'packages/ui/src/utils.ts',
+    'packages/ui/src/components/button.tsx',
+    'apps/accounts/features/api/oauth-query.ts',
+    'apps/web/worker/client-ip.ts',
+    'apps/web/worker/index.ts',
+    'apps/web/proxy.ts',
+    'apps/web/zones/official/declared.ts',
+    'apps/web/zones/official/index.ts',
+    'generated/openapi/main/exposure.ts',
+    'apps/web/tests/server-client-boundary.test.ts',
+    'scripts/qa/repository-guards.ts',
+  ]) expect(selected(file), file).toBe(true);
+  for (const file of ['services/main/src/app.ts', 'services/account/src/app.ts', 'docs/README.md']) {
+    expect(selected(file), file).toBe(false);
+  }
 });
 
 test('pre-shell recovery documents retain localized tasks and HTTP failure semantics', async () => {
