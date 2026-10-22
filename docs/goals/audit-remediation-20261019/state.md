@@ -1,6 +1,6 @@
 # Audit remediation state
 
-Checkpoint: 2026-10-22 16:17 Asia/Shanghai.
+Checkpoint: 2026-10-22 17:18 Asia/Shanghai.
 
 Only the original 61 findings and necessary runtime/data support are in scope.
 Standalone frontend optimization and library research remain stopped. The
@@ -18,6 +18,12 @@ Latest whole acceptances remain I1-001's 18 detail-page criteria, AUD-012's
 accessible names and navigation, and A19's three nutrition/substitution/public
 criteria. Their qualified API/UI and independent receipts are preserved. A19
 did not close A08's nutrient-name gap or pass historical conversion assertions.
+The overdue NHLBI source decision was already delivered by G-2791 at
+`186134b1af` (42 tests / 378 assertions), preserving the original 30 records,
+173 rows, frozen IDs and source bytes. A19 retains NHLBI source-stated/unknown
+coverage and same-recipe USDA pepper calcium 5/16 mg per serving as
+computed/partial. Historical C27/C30 failures remain historical; no repeated
+source capture, converter, research or independent review is required.
 
 ## Delivered work and qualified subsets
 
@@ -31,6 +37,14 @@ assertions; identity eight bodies / 346 assertions; default-All and mixed cursor
 12 bodies / 1,206 assertions. The last subset's actual ResourceList owner starts
 at 32 calls and conserves every debit. Its private controls were absent: privacy,
 other scopes, growth/load, native work and cancellation remain unproved.
+
+The overdue current-copy handoff was already consumed. Job
+`e93a7985-c61e-46cd-8ae6-d2987142b6b0` captured the exact frozen 100-byte default
+request and released `default-capture-book-current-20261020-r1`; all six consumer
+pools closed while the runtime and peer lease remained intact. G-2764 and
+G-2823 already record that disposition. Preserve its receipts and prohibit
+replay or dataset recreation; historical per-consumer readiness grants no
+current admission or additional acceptance.
 
 Five native roots now have actual creation acknowledgements and independently
 accepted identity reads. Native fields, Source supports, relations and tags
@@ -69,6 +83,12 @@ serving the committed Studio fix, and executing Catalogue's remaining native
 and Source assertions. Visitor and stranger Collection meanings passed; the
 remaining personas are in progress. Catalogue owns the producer and binding
 repairs, actual visitor facts/music/relations/tags and A08/A13 evidence.
+
+The overdue G-2823 attempt-52 dispatch is a status receipt, not runtime
+admission. Book and writable Recipe inputs remain separate, with exact served
+source/data pins and actual finite borrower admission, invocation and release.
+Recipe read-only qualification grants no write authority. Existing owners and
+later handoffs govern; this old dispatch requires no restart or new landing.
 
 The final field stage reached real OAuth and failed with `invalid_scope`, before
 any Source/native command. Its exact issued cookie was disposed with verified
