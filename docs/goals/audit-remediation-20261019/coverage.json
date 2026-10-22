@@ -376,9 +376,18 @@
       "severity": "P2",
       "sourceConfidence": "inferred",
       "title": "菜谱阅读没有消费契约中的营养与替代关系",
-      "status": "pending",
-      "owner": null,
-      "proof": []
+      "status": "closed",
+      "owner": "Catalogue native/Recipe owner + Site G-2823 / independent original1335",
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/A19-native-nutrition-20261022.json",
+          "finding": "A19",
+          "assessedMain": "404a3954d5369aaa3fb88038e2ac593086819905",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "disposition": "All three canonical nutrition units/basis/coverage, authored substitution and actual anonymous public API plus Read/Cook criteria pass incremental independent codex-1/Sol/xhigh acceptance. Native citation is separate from conversion. General unavailable-name behavior remains unaccepted under A08, not waived."
     },
     {
       "id": "AUD-010",

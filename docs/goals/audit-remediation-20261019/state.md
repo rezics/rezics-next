@@ -1,6 +1,6 @@
 # Audit remediation state
 
-Checkpoint: 2026-10-22 13:25 Asia/Shanghai.
+Checkpoint: 2026-10-22 13:45 Asia/Shanghai.
 
 Only the original 61 findings and necessary runtime/data support are in scope.
 Standalone frontend optimization and library research remain stopped. The
@@ -9,44 +9,44 @@ has been declared.
 
 ## Accepted outcomes
 
-Canonical coverage is **30/61 closed; 31 remain open**. Read `coverage.json`
+Canonical coverage is **31/61 closed; 30 remain open**. Read `coverage.json`
 and the original criterion receipts in `proofs/`. D1-003 and AUD-009 were
 already formally accepted; later worker reports of 26/61 were stale. The new
 I1-001 acceptance includes all 18 original detail-page UI criteria and its A16
-alias, counted once. Independent review inspected 60 screenshots and verified
-production Storybook interactions and qualified source. Program matched all
-18 canonical criteria and every screenshot hash. The later optional region role
-override preserves existing default rendering. API qualification is unchanged.
+alias, counted once. All 18 criteria, 60 screenshot hashes and exact source
+qualification were verified; API qualification is unchanged.
 
-AUD-012 now also has whole original independent acceptance: eight-language
-navigation names, preserved unread semantics, retained speech/activation proof
-and production Home descriptions/keyboard stories. All 24 relevant committed
-source pins and declared receipt hashes match. Program inspected the German
-and French phone captures. The maintainer's component-proof instruction applies;
-historical native Home setup failures remain failed, rather than being passed
-retrospectively. No extra API authority or data outcome is inferred.
+AUD-012 has whole independent acceptance for eight-language names, unread
+semantics, speech/activation and production Home descriptions/keyboard proof.
+All 24 source pins and receipt hashes match; German/French phone captures were
+inspected. Historical native Home setup failures stay failed; no extra API
+authority or data outcome is inferred.
 
-The per-item table is generated from canonical coverage and the two owners'
-progress inputs in `.temp/audit-remediation-20261019/one-hour-20261021/`.
-Source/basic completion is reported separately from accepted outcomes.
+A19's three canonical nutrition/substitution/public-positive criteria now pass
+incremental independent acceptance: the actual anonymous answer contains ten
+usable units, and both production Read/Cook interactions and screenshots pass.
+Native citations use the existing independent annotation contract. Historical
+conversion-header failures stay unchanged. Standard nutrient IRIs still lack
+human-readable names in these captures; A08 remains open and owns that concrete
+name-resolution gap. A19 acceptance supplies no credit for it.
+
+The per-item table and owner inputs are in
+`.temp/audit-remediation-20261019/one-hour-20261021/`; source/basic completion
+is separate from accepted outcomes.
 
 ## Delivered work awaiting remaining acceptance
 
-Catalogue implementation and generated outputs landed through 161cc04d33a7,
-c73c0631d644, ef6d31cbd9 and aeb60ddb2d49. Native citations, unknown-language
-preferences, Recipe qualification and bounded card reads have source and normal
-gate receipts. Independent reviews of the original coherent implementation,
-inverse attribution, preference and Reader dependency classification passed.
-Those reviews alone close no additional original API finding.
+Native citations, inverse attribution, unknown-language preferences, publication
+and bounded-query repairs have landed with normal gates and independent source
+review. Source-only reviews close no additional original API finding.
 
 Site reports all 32 original Reader API bodies passed, with 858 assertions.
 Preserve those exact qualified receipts rather than repeat them. Additional
 production Reader and entry compositions have independent UI acceptance; actual
 Next transport, metadata, redirects, recovery and genuine Zone placement retain
 their distinct unproved criteria. Catalogue delivered 11 additional browser and
-accessibility cases with inspected screenshots. A single independent reviewer
-is consolidating ready original criteria, including merged A08, A19 and A13;
-passing subcriteria do not close a larger merged class.
+accessibility cases. Consolidated acceptance leaves merged A08/A13 and original
+Studio/summary parity criteria open; passing subcriteria do not close them.
 
 ## Active owners and next actions
 
@@ -54,6 +54,12 @@ The former Site and Catalogue native managers exited at 07:27 and 06:28 without
 a continuing owner. Program discovered the idle gap on the maintainer's next
 message and resumed both existing sessions at 12:30. Actual tool execution was
 observed; an account, quota or proxy failure did not cause this gap.
+
+The earlier thread history also records Program's successful `blocked` update
+at 2026-10-21 23:46:19, with no active transition until 2026-10-22 12:22:21,
+about 12 hours 36 minutes later. Useful native execution resumed during that
+interval, but Program did not ensure continuing supervision after recovery.
+This old management gap is separate from the later Desktop automatic pause.
 
 At 12:47:17, Desktop recorded an Interrupt and changed this thread's Goal to
 paused immediately before a progress inquiry. Program wrongly attributed the
@@ -80,13 +86,10 @@ a running monitor without a manager wake do not establish continuous tracking.
 
 ## Preparation and shared resources
 
-The governing storage policy bounds each genuine ordinary preparation stage
-at 600 seconds, including startup, migrations, readiness and small smoke checks.
-The historical cumulative ledger remains intact. Its last 4,793.755 ms balance
-does not impose a permanent ban on distinct preparation for still-missing
-controls. Program explicitly reconciled conflicting older dispatches; retries
-of one failed stage retain that stage's original wall and need a setup repair.
-Timed outcomes and final recovery are recorded separately.
+Use the governing per-stage 600-second preparation policy and G-2823's current
+reconciliation. Preserve the historical ledger and failed stages; do not turn
+the old 4,793.755 ms balance into a permanent campaign-wide ban or renew a
+failed stage with unchanged inputs. Timed outcomes/recovery stay separate.
 
 Keep one runtime custodian, existing stores and all peer leases and sessions.
 No whole-corpus reimport, reset, duplicate physical environment or automatic
@@ -94,8 +97,5 @@ conversion is selected. Small proper native API controls retain real authority,
 receipts, readback and cleanup. Source conversion remains an external library
 or separate operation; citation is independent.
 
-The three preserved rights-mark paths landed at a385f9f02d with normal gates;
-their material and Source identities remain distinct. Preserve the G-2845 deletion. Account direction
-and allowance stay in ignored local settings and recovery receipts. The separate
-global manager problem-solving policy landed at 3a625b716e; its SQLite fixture
-follow-up 4b23516a8f is verified. Neither counts as an audit closure.
+Rights-mark paths landed at a385f9f02d with normal gates. Preserve the G-2845
+deletion. Account policy stays in ignored local settings and recovery receipts.

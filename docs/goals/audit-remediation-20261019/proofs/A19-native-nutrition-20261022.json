@@ -1,0 +1,311 @@
+{
+  "recordedAt": "2026-10-22T13:45:07.499213+08:00",
+  "finding": "A19",
+  "origins": [
+    "C2-004"
+  ],
+  "status": "closed",
+  "assessedMain": "404a3954d5369aaa3fb88038e2ac593086819905",
+  "canonicalSource": {
+    "path": ".temp/site-audit-2026-10-18/round-3/all-findings.json",
+    "sha256": "e2721c44e74305c694b02e81e757e4476c3a19de414d25b0689617316c5ebc3f"
+  },
+  "originalAcceptanceVerbatim": [
+    "声明的营养按单位、每份/整份、coverage 表示，未知不当 0，资料来源位于页尾。",
+    "声明的替代项指向原材料并保留说明，不误作另一项必需材料；普通阅读与 CookMode 一致。",
+    "以匿名可读的公开正例补齐 API 与浏览器验收后才关闭。"
+  ],
+  "originalAssertionsChanged": false,
+  "independentReview": {
+    "engine": "codex-1",
+    "model": "gpt-6.1-sol",
+    "effort": "xhigh",
+    "wholeCanonicalScopePassed": true,
+    "criterionMap": [
+      {
+        "ordinal": 1,
+        "canonicalCriterion": "声明的营养按单位、每份/整份、coverage 表示，未知不当 0，资料来源位于页尾。",
+        "verdict": "PASS",
+        "evidence": [
+          "Qualified actual native job30e9fdf6-008e-4c76-9e91-83fb1c179d13: update200, publish201, anonymous public GET200 for Work01a15fc2-4a9a-7518-bada-8491fdc83a64. API sourceaeb60ddb, retained native339a qualification. Public replay is byte-identical SHA2565a62c612b5ef07cf4a8a5ec6ce2d9cb1bea485c70767c4185a56457b6180b332.",
+          "The complete public-answer delta is exactly ten nutrient unitText fields plus structure revision. Values, basis, coverage, provenance, evidence and ingredient/substitution relationships are unchanged. Declared Calories/g/mg are actual native public facts, not synthetic summary labels.",
+          "Read desktop and Cook phone production stories each PASS with mandatory standard accessibility setup. Every nutrient row asserts actual unitText, unit identity, source key, per-serving basis and coverage; calcium asserts exact5/16 partial. Personally viewed both actual PNGs: all ten values and units are visible, with calcium5/16mg partial/computed and truthful unknown nutrient names. No overflow or clipping observed.",
+          "Reuse the previously qualified positive/absence and exact rational/basis/scaling assertions within their existing scope. Unknown coverage and genuinely absent nutrition remain unknown/absent, never substituted with zero. The actual public per-serving control and original selected scaling assertions retain basis semantics; no newly executed whole-recipe API control is claimed.",
+          "RecipeNutritionSources is mounted after the reading main content and in the Cook end section. New Cook interaction verifies the exact unique actual evidence URLs; viewed desktop PNG shows Sources and licenses after nutrition/substitution. Prior qualified footer and substitution proof remains valid."
+        ]
+      },
+      {
+        "ordinal": 2,
+        "canonicalCriterion": "声明的替代项指向原材料并保留说明，不误作另一项必需材料；普通阅读与 CookMode 一致。",
+        "verdict": "PASS",
+        "evidence": [
+          "Actual alternative occurrence0bf4e2b9-d210-8030-8690-562654ba0df8 retains optional=true and substituteFor=[49bb860b-d467-8a35-8cd1-43b741470ae4], original explanatory text1Tbsp oregano,minced(or1tsp dried), and the1tsp dried alternative. Public update changes no occurrence/qualifier fields.",
+          "Both new production Read/Cook interactions assert exact data-occurrence destinations from the actual substituteFor list. The desktop PNG shows the author-declared substitution separately and links to1Tbsp oregano,minced; Cook uses the same production component/data. Unknown author remains Author not recorded. Retain prior qualified explanation/required-ingredient separation and six-persona exact-alternative assertions; no additional backend or browser journey is needed for unchanged outcomes."
+        ]
+      },
+      {
+        "ordinal": 3,
+        "canonicalCriterion": "以匿名可读的公开正例补齐 API 与浏览器验收后才关闭。",
+        "verdict": "PASS",
+        "evidence": [
+          "The public native positive now has actual anonymous API200 with usable units, plus exact-answer production Read/Cook browser2/2 and a11y PASS. Both PNGs personally viewed. Existing API declaration/author/substitution/scaling selected6tests/672assertions are reused only within their byte-selected functional scope.",
+          "Main404a3954 decision applies the already settled source-lifecycle contract: native facts can be cited without converter ID, mapping, Source observation or transcriber. The independent citation retains actual evidence URLs and admitted native facts; no Source or authority is fabricated. This distinct native-authored fixture premise is explicit and removes no canonical criterion.",
+          "The frozen nutrition-and-substitutions.test.ts remains unchanged atf75e92cfa4f0ec88cc787acbf28d01536b73083cb3c50a8a4d33481a88a4e8bc. Its conversion-specific header observation premise and historical failure remain historical; neither the whole frozen body nor skipped/excluded assertions are relabelled passed.0700 unavailable-unit UI remains a historical partial proof. Initial1245 setup/filter failures remain pre-execution failures."
+        ]
+      }
+    ],
+    "report": ".temp/manager-peer-protocol-20261021/a19-incremental-acceptance-1335/consolidated-report.json",
+    "reportSha256": "f6a2f5899be01a31fb58a3f9d82529f0489dc2b9b74c38e42c166c9fa50d0bc6"
+  },
+  "actualApiEvidence": {
+    "job": "30e9fdf6-008e-4c76-9e91-83fb1c179d13",
+    "task": "G-2823",
+    "updateStatus": 200,
+    "publicationStatus": 201,
+    "anonymousGetStatus": 200,
+    "changedPublicFields": [
+      "/answer/measures/2/unitText",
+      "/answer/measures/3/unitText",
+      "/answer/measures/4/unitText",
+      "/answer/measures/5/unitText",
+      "/answer/measures/6/unitText",
+      "/answer/measures/7/unitText",
+      "/answer/measures/8/unitText",
+      "/answer/measures/9/unitText",
+      "/answer/measures/10/unitText",
+      "/answer/measures/11/unitText",
+      "/answer/revision"
+    ],
+    "all10ActualNutrientUnits": [
+      {
+        "nutrient": "https://schema.org/calories",
+        "value": {
+          "numerator": 282,
+          "denominator": 1
+        },
+        "unit": "https://qudt.org/vocab/unit/KiloCAL",
+        "unitText": "Calories",
+        "basis": "per-serving",
+        "coverage": "unknown",
+        "provenance": "source-stated"
+      },
+      {
+        "nutrient": "https://schema.org/fatContent",
+        "value": {
+          "numerator": 10,
+          "denominator": 1
+        },
+        "unit": "https://qudt.org/vocab/unit/GM",
+        "unitText": "g",
+        "basis": "per-serving",
+        "coverage": "unknown",
+        "provenance": "source-stated"
+      },
+      {
+        "nutrient": "https://schema.org/saturatedFatContent",
+        "value": {
+          "numerator": 2,
+          "denominator": 1
+        },
+        "unit": "https://qudt.org/vocab/unit/GM",
+        "unitText": "g",
+        "basis": "per-serving",
+        "coverage": "unknown",
+        "provenance": "source-stated"
+      },
+      {
+        "nutrient": "https://schema.org/cholesterolContent",
+        "value": {
+          "numerator": 42,
+          "denominator": 1
+        },
+        "unit": "https://qudt.org/vocab/unit/MilliGM",
+        "unitText": "mg",
+        "basis": "per-serving",
+        "coverage": "unknown",
+        "provenance": "source-stated"
+      },
+      {
+        "nutrient": "https://schema.org/sodiumContent",
+        "value": {
+          "numerator": 418,
+          "denominator": 1
+        },
+        "unit": "https://qudt.org/vocab/unit/MilliGM",
+        "unitText": "mg",
+        "basis": "per-serving",
+        "coverage": "unknown",
+        "provenance": "source-stated"
+      },
+      {
+        "nutrient": "https://schema.org/fiberContent",
+        "value": {
+          "numerator": 5,
+          "denominator": 1
+        },
+        "unit": "https://qudt.org/vocab/unit/GM",
+        "unitText": "g",
+        "basis": "per-serving",
+        "coverage": "unknown",
+        "provenance": "source-stated"
+      },
+      {
+        "nutrient": "https://schema.org/proteinContent",
+        "value": {
+          "numerator": 31,
+          "denominator": 1
+        },
+        "unit": "https://qudt.org/vocab/unit/GM",
+        "unitText": "g",
+        "basis": "per-serving",
+        "coverage": "unknown",
+        "provenance": "source-stated"
+      },
+      {
+        "nutrient": "https://schema.org/carbohydrateContent",
+        "value": {
+          "numerator": 15,
+          "denominator": 1
+        },
+        "unit": "https://qudt.org/vocab/unit/GM",
+        "unitText": "g",
+        "basis": "per-serving",
+        "coverage": "unknown",
+        "provenance": "source-stated"
+      },
+      {
+        "nutrient": "https://schema.org/potassium",
+        "value": {
+          "numerator": 874,
+          "denominator": 1
+        },
+        "unit": "https://qudt.org/vocab/unit/MilliGM",
+        "unitText": "mg",
+        "basis": "per-serving",
+        "coverage": "unknown",
+        "provenance": "source-stated"
+      },
+      {
+        "nutrient": "https://schema.org/calcium",
+        "value": {
+          "numerator": 5,
+          "denominator": 16
+        },
+        "unit": "https://qudt.org/vocab/unit/MilliGM",
+        "unitText": "mg",
+        "basis": "per-serving",
+        "coverage": "partial",
+        "provenance": "computed"
+      }
+    ],
+    "answerHashAndReplay": {
+      "path": ".temp/manager-peer-protocol-20261021/catalogue-recipe-units-operator-0855/site-units-0281/after.json",
+      "sha256": "5a62c612b5ef07cf4a8a5ec6ce2d9cb1bea485c70767c4185a56457b6180b332"
+    },
+    "strictOwnCookieCleanup": "Signout200 and same issued cookie session check200/null; completed release. No cleanup/request performed by reviewer."
+  },
+  "newBrowserEvidence": {
+    "passed": 2,
+    "failed": 0,
+    "a11y": "Mandatory inherited standard setup; preview a11y.test=error",
+    "adapter": "Production RecipeExperience, CookThisButton, RecipeNutritionSources and SubjectSources; initial data exact actual after-answer, no fabricated labels/authors",
+    "checkedLog": {
+      "path": ".temp/manager-peer-protocol-20261021/catalogue-recipe-units-ui-1245/stories-named.log",
+      "sha256": "3c8e6ed4153031011f074e820c46bba6c7217b2bafb4041cb1cee3fc297c407b"
+    },
+    "checkedStory": {
+      "path": ".temp/manager-peer-protocol-20261021/catalogue-recipe-units-ui-1245/recipe-actual.stories.tsx",
+      "sha256": "c323c2486f9381510d62bc7b67106c69956015a887f87a0bc8f39225d8845821"
+    },
+    "personallyViewedActualPngs": [
+      {
+        "path": ".temp/manager-peer-protocol-20261021/catalogue-recipe-units-ui-1245/screens/.temp-manager-peer-protocol-20261021-catalogue-recipe-units-ui-1245-recipe-actual.stories.tsx/ReadDeclaredNutrition.png",
+        "sha256": "8d739d24f763d59bb7b8d720ae06c960cee0a40f44c2daba7801c6bcee6a5845",
+        "viewedWith": "view_image",
+        "result": "Actual declared units visible, truthful names/coverage retained; no overflow or clipping"
+      },
+      {
+        "path": ".temp/manager-peer-protocol-20261021/catalogue-recipe-units-ui-1245/screens/.temp-manager-peer-protocol-20261021-catalogue-recipe-units-ui-1245-recipe-actual.stories.tsx/CookDeclaredNutritionPhone.png",
+        "sha256": "32920f9823b0417a11ece03e11fcb8d344e893d6855c4f3176794860b8c22986",
+        "viewedWith": "view_image",
+        "result": "Actual declared units visible, truthful names/coverage retained; no overflow or clipping"
+      }
+    ]
+  },
+  "sourcePins": [
+    {
+      "path": "apps/web/features/work-page/types/recipe.tsx",
+      "sha256": "c07087a74988a567e1fde58d53374c01ff4ff14f90a97dbc2d1c9864de438279",
+      "currentBlob": "089c0e72dfedb1be0b4cc92f68d49243536c7412",
+      "pins": {
+        "aeb60ddb2d49f1b10ef076fef00333f37ad2fc5d": "089c0e72dfedb1be0b4cc92f68d49243536c7412",
+        "7a5f8a3329af6cf7620672d60a0d2b4386d304dc": "089c0e72dfedb1be0b4cc92f68d49243536c7412",
+        "404a3954d5369aaa3fb88038e2ac593086819905": "089c0e72dfedb1be0b4cc92f68d49243536c7412"
+      },
+      "receiptHashMatches": true,
+      "sameAsRendered7a5": true
+    },
+    {
+      "path": "apps/web/features/work-page/types/actions.tsx",
+      "sha256": "fed931416455739e84d5d467f65ae9923d0d0febecd06e5d2d7c11d4ef15f73e",
+      "currentBlob": "28de595a8b64092721295f00fdaac9a37566f72c",
+      "pins": {
+        "aeb60ddb2d49f1b10ef076fef00333f37ad2fc5d": "28de595a8b64092721295f00fdaac9a37566f72c",
+        "7a5f8a3329af6cf7620672d60a0d2b4386d304dc": "28de595a8b64092721295f00fdaac9a37566f72c",
+        "404a3954d5369aaa3fb88038e2ac593086819905": "28de595a8b64092721295f00fdaac9a37566f72c"
+      },
+      "receiptHashMatches": true,
+      "sameAsRendered7a5": true
+    },
+    {
+      "path": "apps/web/features/entity-page/sources.tsx",
+      "sha256": "17feabfe30d331430f4bb64efa349875aed89f52507bbd67af36e6dc9ca6383a",
+      "currentBlob": "16978455cf768ae0f341ecdc8daec824111dc163",
+      "pins": {
+        "aeb60ddb2d49f1b10ef076fef00333f37ad2fc5d": "16978455cf768ae0f341ecdc8daec824111dc163",
+        "7a5f8a3329af6cf7620672d60a0d2b4386d304dc": "16978455cf768ae0f341ecdc8daec824111dc163",
+        "404a3954d5369aaa3fb88038e2ac593086819905": "16978455cf768ae0f341ecdc8daec824111dc163"
+      },
+      "receiptHashMatches": true,
+      "sameAsRendered7a5": true
+    },
+    {
+      "path": "apps/web/features/rights-mark/rights-mark.tsx",
+      "sha256": "5d669f71f2973968431dbc48f60b55d978d34a5b4521251718ad60c51c276f71",
+      "currentBlob": "92b6d27da95f00e75244a4765d2654b262dd0a7a",
+      "pins": {
+        "aeb60ddb2d49f1b10ef076fef00333f37ad2fc5d": "1f2ca61cd9cdab848e6e7aa84fbe6c6d80d1e665",
+        "7a5f8a3329af6cf7620672d60a0d2b4386d304dc": "92b6d27da95f00e75244a4765d2654b262dd0a7a",
+        "404a3954d5369aaa3fb88038e2ac593086819905": "92b6d27da95f00e75244a4765d2654b262dd0a7a"
+      },
+      "receiptHashMatches": true,
+      "sameAsRendered7a5": true
+    }
+  ],
+  "nativeCitationContract": {
+    "documents": [
+      {
+        "path": "docs/goals/audit-remediation-20261019/decisions.md",
+        "sha256": "b3e20f928fcb6c5a38fe5da92069c694c91171d6543e9f5e78cc31b07fd19dd2"
+      },
+      {
+        "path": "docs/contracts/source-lifecycle.md",
+        "sha256": "508b5e77e45b5b599e78b2c6b68cb56d731a38d0547f3a9fcb5304846fca8fc4"
+      }
+    ],
+    "decisionSection": "Native Recipe citation proof",
+    "contractSection": "Conversion and independent source annotation, lines3-16",
+    "meaning": "Native data/citation uses its own admitted target, reference and rights. Source observation/transcriber is independent and is not required merely because another fixture came from external conversion. Frozen original header assertion remains unchanged; its historical failure is not reclassified."
+  },
+  "programVerification": {
+    "canonicalCriteriaExact": 3,
+    "currentProductHashesMatched": 4,
+    "newDeclaredEvidenceHashesMatched": true,
+    "bothActualReadCookPngsViewed": true
+  },
+  "limits": [
+    "The original conversion-specific header Source assertion and historical failed/skipped bodies stay unchanged and are not retrospectively passed. Native citations are independently qualified under the existing maintainer contract.",
+    "Known standard nutrient IRIs still display unavailable names in these captures; broader name-state completeness remains open under A08. No acceptance of that name-resolution behavior follows from A19 units/basis/coverage/substitution proof.",
+    "No whole-Web/Next/runtime equivalence or other canonical finding is inferred."
+  ]
+}
