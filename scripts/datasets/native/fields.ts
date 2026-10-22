@@ -477,6 +477,8 @@ export function projectDatasetFields(
     // A Work's original language does not establish the language of each alias.
     aliases(record.data, '/data', 'alias');
     aliases(record.data, '/data', 'aliases');
+    if (record.kind === 'vn')
+      text(record.data, '/data', 'olang', 'original-language', `${SCHEMA}inLanguage`, undefined);
     if (record.kind === 'producer')
       text(record.data, '/data', 'lang', 'language', `${SCHEMA}inLanguage`, undefined);
     if (record.kind === 'producer' || record.kind === 'staff')

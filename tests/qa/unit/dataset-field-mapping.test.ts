@@ -57,6 +57,35 @@ const valueAt = (plan: DatasetFieldPlan, path: string) =>
   at(plan, path)[0]?.native?.property?.value;
 
 describe('source field projection over retained shapes', () => {
+  test('VN original language is a supported native fact, independent of title and alias language', () => {
+    const input = record({ key: 'vndb:vn:v11', provider: 'vndb', kind: 'vn', externalId: 'v11',
+      native: 'work', language: 'en', sourceUrl: 'https://vndb.org/v11',
+      data: { olang: 'ja', alias: 'Exact alias' } });
+    const reference = source(input);
+    const plan = projectDatasetFields(input, reference);
+    expect(at(plan, '/data/olang')).toEqual([expect.objectContaining({
+      role: 'original-language', presence: 'value', disposition: 'candidate',
+      evidence: [expect.objectContaining({ source: reference, path: '/data/olang',
+        valueDigest: sha256(canonical('ja')) })],
+      native: expect.objectContaining({ owner: 'semantic', material: 'fact',
+        property: { predicate: `${SCHEMA}inLanguage`, value: { kind: 'string', lexical: 'ja' } } }),
+    })]);
+    expect(valueAt(plan, '/title')).toMatchObject({ language: 'en' });
+    expect(at(plan, '/data/alias')[0]?.native).toBeUndefined();
+    expect(at(plan, '/data/alias')[0]?.evidence[0]?.language).toBeUndefined();
+    for (const [presence, data] of [['omitted', {}], ['null', { olang: null }],
+      ['empty-string', { olang: '' }]] as const) {
+      const absent = projectDatasetFields({ ...input, data }, source({ ...input, data }));
+      const field = at(absent, '/data/olang')[0]!;
+      expect(field.presence).toBe(presence);
+      expect(field.native).toBeUndefined();
+      expect(field.evidence[0]!.valueDigest).toBe(presence === 'omitted'
+        ? undefined : sha256(canonical('olang' in data ? data.olang : undefined)));
+    }
+    expect(at(project({ provider: 'vndb', kind: 'producer', native: 'organization',
+      data: { lang: 'de', olang: 'ja' } }), '/data/olang').some(field => field.native)).toBe(false);
+  });
+
   test('retained Episode placement fields preserve exact source presence and remain occurrence candidates', () => {
     const plan = project({
       kind: 'episode',
