@@ -74,7 +74,10 @@ const repositoryIndexReads = ['tools/repo-index/**', 'scripts/lib/repo-index*.ts
 export const repositoryGuards = [
   {
     file: 'apps/web/tests/server-client-boundary.test.ts',
-    reads: ['apps/web/{app,features,i18n}/**/*.{ts,tsx}', 'packages/ui/src/**/*.{ts,tsx}'],
+    reads: [
+      'apps/web/{app,features,i18n,worker,zones}/**/*.{ts,tsx}', 'packages/ui/src/**/*.{ts,tsx}',
+      'apps/web/proxy.ts', 'apps/accounts/features/api/oauth-query.ts', 'generated/openapi/main/exposure.ts',
+    ],
     reason: 'Server routes and their server imports may render client components, but cannot invoke client references as ordinary functions.',
   },
   ...[
