@@ -84,26 +84,28 @@ function conserved(events: AccountRequestWork[]) {
     if (zeroSince !== null) expect(zeroSince).toBeLessThanOrEqual(event.at);
     expect(Object.isFrozen(event)).toBe(true);
     expect(Object.isFrozen(event.total)).toBe(true);
-    expect(Object.keys(event).sort()).toEqual(['at', 'kind', 'request', 'state', 'total']);
+    expect(Object.keys(event).sort()).toEqual(['at', 'kind', 'requestId', 'state', 'total', 'trace']);
   }
 }
 
-test('Account owner reports initial idle and exact Request start before provider work, release after settlement', async () => {
+test('Account owner reports initial idle and stable opaque request start before provider work, release after settlement', async () => {
   const provider = deferred<Response>();
   const f = fixture({ provider: () => provider.promise });
   try {
-    expect(f.events[0]).toMatchObject({ request: null, state: 'idle',
+    expect(f.events[0]).toMatchObject({ requestId: null, trace: null, state: 'idle',
       total: { starts: 0, released: 0, active: 0, pending: 0, lastStartAt: null } });
     expect(f.events[0]!.total.zeroSince).toBeNumber();
     const input = request();
     const response = f.app.handle(input);
     await until(() => f.events.some(event => event.state === 'started'));
-    expect(f.events[1]!.request).toBe(input);
+    const requestId = f.events[1]!.requestId;
+    expect(requestId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(f.events[1]!.trace).toBeNull();
     expect(f.events.at(-1)!.total).toMatchObject({ starts: 1, released: 0, active: 1, pending: 0, zeroSince: null });
     provider.resolve(Response.json({ active: false }));
     expect(await (await response).json()).toEqual({ active: false });
     await until(() => f.events.at(-1)!.state === 'released');
-    expect(f.events.at(-1)!.request).toBe(input);
+    expect(f.events.at(-1)!.requestId).toBe(f.events.find(event => event.state === 'started')!.requestId);
     expect(f.events.at(-1)!.total).toMatchObject({ starts: 1, released: 1, active: 0, pending: 0 });
     expect(f.connect).not.toHaveBeenCalled();
     conserved(f.events);
@@ -132,7 +134,7 @@ test('Account owner distinguishes pool wait from active authority work and relea
     expect(body.rezics_content_evidence).toBeUndefined();
     await until(() => f.events.at(-1)!.state === 'released');
     expect(f.releases).toBe(1);
-    expect(f.events.filter(event => event.request === input).map(event => event.state))
+    expect(f.events.filter(event => event.requestId === f.events.find(row => row.state === 'started')!.requestId).map(event => event.state))
       .toEqual(['started', 'pending', 'active', 'released']);
     conserved(f.events);
   } finally { await f.close(); }
@@ -147,13 +149,15 @@ test('caller departure does not report Account pool release, concurrent waiter a
     const leaving = request(caller.signal);
     const response = f.app.handle(leaving);
     await until(() => f.events.at(-1)!.state === 'pending');
+    const leavingId = f.events.find(event => event.state === 'started')!.requestId;
     caller.abort(new Error('caller left'));
     expect(f.events.at(-1)!.total).toMatchObject({ pending: 1, released: 0 });
     const unaffected = request();
     expect((await f.app.handle(unaffected)).status).toBe(200);
-    await until(() => f.events.some(event => event.request === unaffected && event.state === 'released'));
+    const unaffectedId = f.events.filter(event => event.state === 'started').at(-1)!.requestId;
+    await until(() => f.events.some(event => event.requestId === unaffectedId && event.state === 'released'));
     expect(f.events.at(-1)!.total).toMatchObject({ starts: 2, released: 1, pending: 1, active: 0, zeroSince: null });
-    expect(f.events.some(event => event.request === leaving && event.state === 'released')).toBe(false);
+    expect(f.events.some(event => event.requestId === leavingId && event.state === 'released')).toBe(false);
     acquisition.resolve(f.client);
     await response;
     await until(() => f.events.at(-1)!.total.released === 2);
@@ -161,8 +165,14 @@ test('caller departure does not report Account pool release, concurrent waiter a
     expect((await f.app.handle(retry)).status).toBe(200);
     await until(() => f.events.at(-1)!.total.released === 3);
     expect(f.releases).toBe(3);
-    expect(new Set(f.events.filter(event => event.state === 'started').map(event => event.request)))
-      .toEqual(new Set([leaving, unaffected, retry]));
+    const retryId = f.events.filter(event => event.state === 'started').at(-1)!.requestId;
+    expect(new Set([leavingId, unaffectedId, retryId]).size).toBe(3);
+    expect(new Set(f.events.filter(event => event.state === 'started').map(event => event.requestId)))
+      .toEqual(new Set([leavingId, unaffectedId, retryId]));
+    for (const requestId of [leavingId, unaffectedId, retryId]) {
+      expect(requestId).toMatch(/^[0-9a-f-]{36}$/);
+      expect(f.events.filter(event => event.requestId === requestId).at(-1)!.state).toBe('released');
+    }
     conserved(f.events);
   } finally { await f.close(); }
 });
@@ -276,7 +286,137 @@ test('Account readiness timeout retains owner work until its actual database pro
     expect(f.events.at(-1)!.total).toMatchObject({ starts: 1, released: 0, active: 1, pending: 0, zeroSince: null });
     probe.resolve({ command: 'SELECT', rowCount: 1, oid: 0, fields: [], rows: [{ '?column?': 1 }] });
     await until(() => f.events.at(-1)!.state === 'released');
-    expect(f.events.at(-1)!.request).toBe(input);
+    expect(f.events.at(-1)!.requestId).toBe(f.events.find(event => event.state === 'started')!.requestId);
     conserved(f.events);
   } finally { query.mockRestore(); await f.close(); }
+});
+
+
+test('observer cannot read dummy credentials or change the real recovery route authentication result', async () => {
+  const pool = new Pool();
+  const events: AccountRequestWork[] = [];
+  const origin = 'https://account.example.test';
+  const sessionHeaders: Headers[] = [];
+  const exposedCredentials: (string | null)[] = [], mutationResults: boolean[] = [];
+  const auth = { options: { baseURL: origin, secret: 'dummy-observation-secret' },
+    api: { getSession: async ({ headers }: { headers: Headers }) => { sessionHeaders.push(headers); return null; } },
+  } as unknown as Parameters<typeof createAccountApp>[0];
+  const ordinary = createAccountApp(auth, pool);
+  const observed = createAccountApp(auth, pool, { observeRequestWork: event => {
+    events.push(event);
+    const exposed = (event as unknown as { request?: Request }).request;
+    if (exposed) {
+      exposedCredentials.push(exposed.headers.get('authorization'), exposed.headers.get('cookie'));
+      exposed.headers.set('origin', 'https://observer.invalid');
+    }
+    // Assert after the request: the observer boundary intentionally catches a
+    // throwing sink, so assertions inside the callback cannot prove isolation.
+    mutationResults.push(Reflect.set(event, 'request', new Request('https://observer.invalid')),
+      Reflect.set(event, 'headers', new Headers({ origin: 'https://observer.invalid' })),
+      Reflect.set(event, 'trace', 'observer-replacement'), Reflect.set(event.total, 'active', 1_000_000));
+  } });
+  const recovery = () => new Request(origin + '/api/account/recovery-policy/read', {
+    method: 'POST', headers: { 'content-type': 'application/json', origin,
+      authorization: 'Bearer dummy-observation-token', cookie: 'dummy-session=observation' }, body: '{}',
+  });
+  try {
+    const baseline = await ordinary.handle(recovery());
+    const input = recovery();
+    const response = await observed.handle(input);
+    expect(baseline.status).toBe(401);
+    expect(response.status).toBe(401);
+    expect(await baseline.json()).toEqual({ error: 'unauthenticated' });
+    expect(await response.json()).toEqual({ error: 'unauthenticated' });
+    expect(input.headers.get('origin')).toBe(origin);
+    expect(exposedCredentials).toEqual([]);
+    expect(mutationResults).toHaveLength(events.length * 4);
+    expect(mutationResults.every(result => result === false)).toBe(true);
+    expect(sessionHeaders).toHaveLength(2);
+    expect(sessionHeaders[1]!.get('authorization')).toBe('Bearer dummy-observation-token');
+    expect(sessionHeaders[1]!.get('cookie')).toBe('dummy-session=observation');
+    const serialized = JSON.stringify(events);
+    expect(serialized).not.toContain('dummy-observation-token');
+    expect(serialized).not.toContain('dummy-session');
+    expect(serialized).not.toContain(origin);
+    expect(events.map(event => event.state)).toEqual(['idle', 'started', 'released']);
+    expect(events[1]!.requestId).toBe(events[2]!.requestId);
+    conserved(events);
+  } finally { await pool.end(); }
+});
+
+test('opaque owner events isolate the actual body, credentials and signal while preserving the initial valid trace', async () => {
+  const trace = '1a'.repeat(16);
+  const span = '2b'.repeat(8);
+  const events: AccountRequestWork[] = [];
+  const provider = deferred<Response>();
+  const received: { body: string; authorization: string | null; cookie: string | null } = {
+    body: '', authorization: null, cookie: null,
+  };
+  const f = fixture({ observer: event => { events.push(event); }, provider: async input => {
+    received.body = await input.text();
+    received.authorization = input.headers.get('authorization');
+    received.cookie = input.headers.get('cookie');
+    return provider.promise;
+  } });
+  const controller = new AbortController();
+  const form = new URLSearchParams({ token, client_secret: 'dummy-body-secret', password: 'dummy-body-password' }).toString();
+  const input = new Request('https://account.example.test/api/auth/oauth2/introspect', {
+    method: 'POST', signal: controller.signal, headers: { 'content-type': 'application/x-www-form-urlencoded',
+      authorization: 'Bearer dummy-body-token', cookie: 'dummy-body-session=value',
+      traceparent: `00-${trace}-${span}-01` }, body: form,
+  });
+  try {
+    const response = f.app.handle(input);
+    await until(() => received.body.length > 0);
+    const started = events.find(event => event.state === 'started')!;
+    expect(started.trace).toBe(trace);
+    input.headers.set('traceparent', `00-${'3c'.repeat(16)}-${span}-01`);
+    for (const event of events) {
+      expect(Object.values(event).some(value => value instanceof Request || value instanceof Headers
+        || value instanceof AbortSignal || value instanceof ReadableStream)).toBe(false);
+      expect(Reflect.set(event, 'body', 'observer-replacement')).toBe(false);
+      expect(Reflect.set(event, 'signal', new AbortController().signal)).toBe(false);
+    }
+    expect(controller.signal.aborted).toBe(false);
+    expect(received.body).toBe(form);
+    expect(received.authorization).toBe('Bearer dummy-body-token');
+    expect(received.cookie).toBe('dummy-body-session=value');
+    provider.resolve(Response.json({ active: false }));
+    expect(await (await response).json()).toEqual({ active: false });
+    await until(() => events.at(-1)!.state === 'released');
+    expect(events.filter(event => event.state !== 'idle').every(event =>
+      event.requestId === started.requestId && event.trace === trace)).toBe(true);
+    const serialized = JSON.stringify(events);
+    for (const privateValue of [token, 'dummy-body-secret', 'dummy-body-password', 'dummy-body-token', 'dummy-body-session'])
+      expect(serialized).not.toContain(privateValue);
+    conserved(events);
+  } finally { provider.resolve(Response.json({ active: false })); await f.close(); }
+});
+
+test('only a strict nonzero W3C trace is copied into owner events', async () => {
+  const f = fixture();
+  const trace = '4d'.repeat(16), span = '5e'.repeat(8);
+  const cases: [string | undefined, string | null][] = [
+    [`00-${trace}-${span}-00`, trace], [`00-${trace}-${span}-01`, trace],
+    [`00-${'0'.repeat(32)}-${span}-01`, null], [`00-${trace}-${'0'.repeat(16)}-01`, null],
+    [`00-${trace.toUpperCase()}-${span}-01`, null], [`00-${trace}-${span}-02`, null],
+    [`00-${trace}-${span}-01-extra`, null], ['Bearer dummy-untrusted-trace-credential', null], [undefined, null],
+  ];
+  try {
+    for (const [traceparent, expected] of cases) {
+      const response = await f.app.handle(new Request('https://account.example.test/health/live', {
+        headers: traceparent === undefined ? undefined : { traceparent },
+      }));
+      expect(response.status).toBe(200);
+      const released = f.events.at(-1)!;
+      expect(released.state).toBe('released');
+      expect(released.trace).toBe(expected);
+      const states = f.events.filter(event => event.requestId === released.requestId);
+      expect(states.map(event => event.state)).toEqual(['started', 'released']);
+      expect(states.every(event => event.trace === expected)).toBe(true);
+    }
+    expect(new Set(f.events.filter(event => event.state === 'started').map(event => event.requestId)).size).toBe(cases.length);
+    expect(JSON.stringify(f.events)).not.toContain('dummy-untrusted-trace-credential');
+    conserved(f.events);
+  } finally { await f.close(); }
 });

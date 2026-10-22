@@ -2,6 +2,7 @@ import { Elysia, NotFound, ParseError, ValidationError, t } from 'elysia';
 import { httpTelemetry } from '@rezics/observability/elysia';
 import { logWorkerFault } from '@rezics/observability/log';
 import { isIP } from 'node:net';
+import { randomUUID } from 'node:crypto';
 import { toOpenAPISchema } from '@elysia/openapi';
 import { Pool, type PoolClient, type PoolConfig } from 'pg';
 import type { createAccountAuth } from './auth.ts';
@@ -42,7 +43,7 @@ export interface AccountAppOptions {
   /** Construct and attach private owner observation before the guard's first checkout.
    * The app retains shutdown ownership; the factory preserves the supplied options. */
   createGuardPool?: (config: PoolConfig) => Pool;
-  /** Private owner observation; attach before serving and never serialize Request. */
+  /** Private immutable owner transitions; no Request, headers, body or signal escapes. */
   observeRequestWork?: (event: AccountRequestWork) => void | Promise<void>;
   /** Socket peers whose ingress replaces X-Forwarded-For with one client address. */
   trustedProxyPeers?: ReadonlySet<string>;
@@ -64,7 +65,11 @@ export type AccountRequestMeter = Readonly<{
 }>;
 
 export type AccountRequestWork = Readonly<{
-  kind: 'account-request-work'; at: number; request: Request | null;
+  kind: 'account-request-work'; at: number;
+  /** Opaque identity stable across one request; initial idle has no request. */
+  requestId: string | null;
+  /** Strictly validated trace correlation only, copied before handler execution. */
+  trace: string | null;
   state: 'idle' | 'started' | 'pending' | 'active' | 'released';
   total: AccountRequestMeter;
 }>;
@@ -81,19 +86,23 @@ const recoveryView = t.Object({ claimId: t.String(), targetUserId: t.String(),
 
 export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, pool: Pool,
   options: AccountAppOptions = {}) {
-  // Only live Requests are held weakly. The owner keeps no trace/credential history.
+  // Actual Requests remain internal weak keys; observers receive detached values.
   const requestWork = options.observeRequestWork ? new WeakMap<Request, {
-    state: 'active' | 'pending'; responseSettled: boolean; readinessPending: boolean;
+    requestId: string; trace: string | null; state: 'active' | 'pending'; responseSettled: boolean; readinessPending: boolean;
   }>() : undefined;
   const workTotal = { starts: 0, released: 0, active: 0, pending: 0,
     lastStartAt: null as number | null, zeroSince: Date.now() as number | null };
   const observeWork = (request: Request | null, state: AccountRequestWork['state']) => {
     if (!requestWork) return;
     const at = Date.now();
-    const previous = request && requestWork.get(request);
+    let previous = request && requestWork.get(request);
     if (state === 'started' && request) {
       if (previous) return;
-      requestWork.set(request, { state: 'active', responseSettled: false, readinessPending: false });
+      const parent = request.headers.get('traceparent');
+      const matched = parent?.match(/^00-((?!0{32}-)[0-9a-f]{32})-(?!0{16}-)[0-9a-f]{16}-0[01]$/);
+      previous = { requestId: randomUUID(), trace: matched?.[1] ?? null,
+        state: 'active', responseSettled: false, readinessPending: false };
+      requestWork.set(request, previous);
       workTotal.starts++;
       workTotal.active++;
       workTotal.lastStartAt = at;
@@ -118,7 +127,8 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
     try {
       // Sink completion or failure cannot hold up or change Account execution.
       void Promise.resolve(options.observeRequestWork!(Object.freeze({
-        kind: 'account-request-work', at, request, state,
+        kind: 'account-request-work', at, requestId: previous?.requestId ?? null,
+        trace: previous?.trace ?? null, state,
         total: Object.freeze({ ...workTotal }),
       }))).catch(() => undefined);
     } catch { /* private observation grants no authority */ }

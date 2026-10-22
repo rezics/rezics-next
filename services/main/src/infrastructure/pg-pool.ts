@@ -260,6 +260,38 @@ interface SqlWorkObservation {
 interface SqlPoolOwner { started: boolean; observation?: SqlWorkObservation }
 const sqlPoolOwners = new WeakMap<Pool, SqlPoolOwner>();
 const SQL_OBSERVER_LIMIT = 8;
+
+export interface SqlPoolCreationObservation {
+  status(): Readonly<{ attached: boolean; complete: boolean; failures: number; poolsSeen: number }>;
+  detach(): void;
+}
+type SqlPoolCreationSubscriber = { observer?: (pool: Pool) => void; complete: boolean; failures: number; poolsSeen: number };
+const sqlPoolCreationSubscribers = new Set<SqlPoolCreationSubscriber>();
+let sqlPoolsConstructed = 0;
+/** Optional process-owned observer installed by a preload before the relay
+ * constructs any pools. No Pool is retained by this registry. A late attach or
+ * throwing/async consumer permanently loses complete preconstructor coverage. */
+export function observeSqlPoolCreation(observer: (pool: Pool) => void): SqlPoolCreationObservation {
+  if (sqlPoolCreationSubscribers.size >= SQL_OBSERVER_LIMIT) throw new Error('SQL pool creation observer limit reached');
+  const state: SqlPoolCreationSubscriber = { observer, complete: sqlPoolsConstructed === 0, failures: 0, poolsSeen: 0 };
+  sqlPoolCreationSubscribers.add(state);
+  return { status: () => Object.freeze({ attached: !!state.observer, complete: state.complete && state.failures === 0,
+    failures: state.failures, poolsSeen: state.poolsSeen }),
+  detach: () => { state.observer = undefined; sqlPoolCreationSubscribers.delete(state); } };
+}
+function notifySqlPoolCreation(pool: Pool) {
+  sqlPoolsConstructed++;
+  for (const state of sqlPoolCreationSubscribers) {
+    state.poolsSeen++;
+    try {
+      const result = (state.observer as ((pool: Pool) => unknown) | undefined)?.(pool);
+      if (result && typeof (result as PromiseLike<unknown>).then === 'function') {
+        state.failures++; void Promise.resolve(result).catch(() => {});
+      }
+    } catch { state.failures++; }
+  }
+}
+
 const SQL_OBSERVER_PENDING_LIMIT = 64;
 
 function sqlNotification(subscriber: SqlSubscriber, event: SqlWorkEvent): void {
@@ -568,5 +600,6 @@ export function boundedPool(
   observeStatementPool(pool);
   sqlPoolOwners.set(pool, { started: false });
   trackNestedCheckout(pool);
+  notifySqlPoolCreation(pool);
   return pool;
 }
