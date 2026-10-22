@@ -1,6 +1,6 @@
 # Audit remediation state
 
-Checkpoint: 2026-10-22 15:57 Asia/Shanghai.
+Checkpoint: 2026-10-22 16:17 Asia/Shanghai.
 
 Only the original 61 findings and necessary runtime/data support are in scope.
 Standalone frontend optimization and library research remain stopped. The
@@ -45,6 +45,22 @@ recovery and the signed Library/Studio journey remain open. Component UI proof
 continues to use production Storybook plays, accessibility and actual images;
 server and transport clauses need their corresponding real observations.
 
+The G-2829/G-2830/G-2831/G-2832 partial handoffs retained and hash-verified
+their private evidence bundles and sent reached defects to
+G-2751/G-2748/G-2752/G-2754 respectively. Their report landings accepted qualified
+subsets; current closure follows the later original acceptances in coverage.
+Preserve reached failures separately from setup failures. Production Storybook
+interactions plus matching genuine API receipts can satisfy their respective
+clauses; visual-only criteria need no additional unrelated native campaign.
+
+G-2828's selected-test runner landed and is verified. G-2827's capture disconnect
+repair and authorized named-graph fixture correction reached 21/21 selected
+native tests at `15683988b8`. Retain that exact source and runner overlay as
+focused evidence, without implying full-native or Main/API/persona success. Its
+207-commit wave ancestry required an isolated integration candidate and
+independent review. G-2783's chapter source went to G-2835 for independent
+review, without accepting the outstanding original journeys.
+
 ## Active owners and next actions
 
 Site retains sole G-2823 physical/runtime custody and has resumed the same
@@ -70,8 +86,9 @@ in the existing UI owner; no new search API is selected.
 Program owns canonical closure, consolidated independent acceptance and the
 shared coordinator repair. A task server inherited its manager's session IDs,
 so the coordinator misidentified it as a live manager after the actual manager
-exited. Program resumed the manager without killing the healthy server and is
-fixing task-process ownership with a red-to-green regression and normal gates.
+exited. Program resumed the manager without killing the healthy server. Its
+task-process ownership fix is now on main at `c5277bd1fd`; runtime adoption and
+live supervision verification remain with Program.
 The current real manager must continue to prevent duplicate wakes. Exits with
 ready work require an executable disposition within five minutes.
 
@@ -82,6 +99,23 @@ internal marker to a human request and stopped actors at 12:49. The maintainer
 denies pausing. Completed client-source research confirms the generic pause
 path but cannot identify the exact UI gesture or caller from the available
 logs. Do not claim the maintainer clicked Pause. The Goal is active.
+
+G-2764 retains the single query/witness-page owner. Its earlier 13 controlled
+query tests did not prove native coverage or persona outcomes. Consume
+compiling published producer exports and exact source/support/cursor positions
+from G-2799/G-2800/G-2781; missing activation remains unavailable. The G-2785
+Claude queue refusal was handled at the time; it is not a current capacity hold.
+
+## Checkpoint measures
+
+The current ledger reports 20% first attempts (115/578), median two attempts per
+landed task and maximum 71. It has no qualified tokens-per-proved-row figure;
+its separate 68/68 scope summary does not replace the original 31/61 coverage.
+The recorded 12-hour windows ending 2026-10-22 04:40Z and 06:21Z used 96.76M
+and 73.79M input tokens respectively; reported other-session shares were 16% and
+6%, with no landing-review sessions. The windows overlap and do not establish
+causal savings. Reuse retained evidence and focused checks, preserve one runtime
+custodian and keep ready work moving under the named repair owners.
 
 ## Preparation and shared resources
 
