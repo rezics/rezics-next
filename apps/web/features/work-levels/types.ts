@@ -41,6 +41,7 @@ export type { Loaded, ReadFailure } from '../work-page/types.ts';
 export type People = ReadonlyMap<string, { name: string; handle: string | null }>;
 
 /** A transport failure is separate from Main's undisclosed resource answer. */
-export type NameSummary = Summary | { reference: string; status: 'unavailable-read' };
+export type NameSummary = Summary | { reference: string; status: 'unavailable-read' }
+  | { reference: string; status: 'public-term'; name: NameText };
 /** Names by resource IRI, including explicit failed reads so partial batches stay honest. */
 export type Names = ReadonlyMap<string, NameSummary>;
