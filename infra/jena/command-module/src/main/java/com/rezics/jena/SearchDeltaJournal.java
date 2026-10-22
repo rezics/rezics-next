@@ -102,16 +102,29 @@ final class SearchDeltaJournal {
     private static final java.util.concurrent.locks.ReentrantLock publication =
         new java.util.concurrent.locks.ReentrantLock();
     static final class PublicationFence implements AutoCloseable {
-        private PublicationFence() {}
-        @Override public void close() { publication.unlock(); }
+        private final QueryWorkService.ReadWorkerFlight read;
+        private PublicationFence() { this(null); }
+        private PublicationFence(QueryWorkService.ReadWorkerFlight read) { this.read = read; }
+        @Override public void close() {
+            try { publication.unlock(); }
+            catch (RuntimeException failure) { if (read != null) QueryWorkService.READ_LOCKS.fail(); throw failure; }
+            if (read != null) read.close();
+        }
     }
     static PublicationFence publicationFence() {
-        publication.lock();
-        return new PublicationFence();
+        var observed = QueryWorkService.pendingRead(QueryWorkService.READ_LOCKS);
+        try {
+            publication.lock();
+            if (observed != null) observed.activate();
+            return new PublicationFence(observed);
+        } catch (RuntimeException | Error failure) {
+            QueryWorkService.READ_LOCKS.fail();
+            if (observed != null) observed.close();
+            throw failure;
+        }
     }
     private static PublicationFence readPublicationFence() {
-        QueryWorkService.ReadBoundary.lockForRead(publication);
-        return new PublicationFence();
+        return new PublicationFence(QueryWorkService.ReadBoundary.lockForRead(publication));
     }
     private static final ThreadLocal<ReadCapture> captured = new ThreadLocal<>();
 
@@ -189,7 +202,7 @@ final class SearchDeltaJournal {
                     captured.set(this);
                 } catch (IOException | RuntimeException failure) {
                     try { if (opened != null) opened.close(); }
-                    finally { if (ownsTransaction && data.isInTransaction()) data.end(); }
+                    finally { if (ownsTransaction && data.isInTransaction()) QueryWorkService.endRead(data); }
                     throw failure;
                 }
             }
@@ -203,11 +216,11 @@ final class SearchDeltaJournal {
             closed = true;
             captured.remove();
             try { reader.close(); }
-            finally { if (ownsTransaction) data.end(); }
+            finally { if (ownsTransaction) QueryWorkService.endRead(data); }
         }
     }
     static ReadCapture captureRead(DatasetGraph data) throws IOException {
-        return new ReadCapture(data, () -> data.begin(org.apache.jena.query.ReadWrite.READ), true);
+        return new ReadCapture(data, () -> QueryWorkService.beginRead(data), true);
     }
     static ReadCapture captureRead(DatasetGraph data, Runnable begin) throws IOException {
         return new ReadCapture(data, begin, false);
@@ -375,13 +388,13 @@ final class SearchDeltaJournal {
     }
     private static boolean repairable(DatasetGraph data) {
         if (!exclusiveStartupProved(data)) return false;
-        data.begin(org.apache.jena.query.ReadWrite.READ);
+        QueryWorkService.beginRead(data);
         try {
             var position = CommandInvariant.readControl(data);
             return position != null && !position.held() && position.textGeneration() != null
                 && !CommandModule.hasRestoreHold(data)
                 && data.contains(PUBLIC, ANCHOR, RDF.type.asNode(), uri(RV + "SearchGraphAnchor"));
-        } finally { data.end(); }
+        } finally { QueryWorkService.endRead(data); }
     }
     static void stopRecovery(DatasetGraph data) {
         synchronized (recovering) {
@@ -603,7 +616,7 @@ final class SearchDeltaJournal {
     private static AuditResult auditGenerationBody(DatasetGraph data, TextIndexLucene lucene, boolean requireAnchor) {
         long deadline = System.nanoTime() + OccurrenceTextSchema.REBUILD_DEADLINE_MS * 1_000_000L;
         boolean ownsTransaction = !data.isInTransaction();
-        if (ownsTransaction) data.begin(org.apache.jena.query.ReadWrite.READ);
+        if (ownsTransaction) QueryWorkService.beginRead(data);
         try {
             CommandInvariant.Control position = CommandInvariant.readControl(data);
             if (position == null) return refuse("control position missing", null);
@@ -694,7 +707,7 @@ final class SearchDeltaJournal {
                 else auditFailed(auditReason(ex), null);
                 return new AuditResult(null, false);
             }
-        } finally { if (ownsTransaction) data.end(); }
+        } finally { if (ownsTransaction) QueryWorkService.endRead(data); }
     }
 
     static long auditPopulation(DatasetGraph data, TextIndexLucene lucene) {
@@ -1327,7 +1340,7 @@ final class SearchDeltaJournal {
     }
     private static Map<String, Object> proofBody(DatasetGraph data, long since, long writeEpoch) {
         boolean ownsTransaction = !data.isInTransaction();
-        if (ownsTransaction) data.begin(org.apache.jena.query.ReadWrite.READ);
+        if (ownsTransaction) QueryWorkService.beginRead(data);
         try {
             long head = ordinal(data);
             CommandInvariant.Control position = CommandInvariant.readControl(data);
@@ -1396,7 +1409,7 @@ final class SearchDeltaJournal {
             } catch (IOException | IllegalStateException | TextIndexException ex) {
                 return Map.of("available", false);
             }
-        } finally { if (ownsTransaction) data.end(); }
+        } finally { if (ownsTransaction) QueryWorkService.endRead(data); }
     }
 
     private static void verifySubject(DatasetGraph data, TextIndexLucene lucene,

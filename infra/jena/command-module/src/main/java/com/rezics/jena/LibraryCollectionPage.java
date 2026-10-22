@@ -97,7 +97,7 @@ final class LibraryCollectionPage {
             || !agent.matches("https://rezics.com/id/[0-9a-f-]{36}") || (phase!=4 && phase!=5) || limit<1 || limit>21)
             throw new IllegalArgumentException("Invalid Library export window");
         var reader=new LibraryCollectionPage();
-        data.begin(ReadWrite.READ);
+        QueryWorkService.beginRead(data);
         try {
             List<Map<String,Object>> rows=new ArrayList<>();
             String collectionKey=after,memberKey="-";
@@ -126,6 +126,6 @@ final class LibraryCollectionPage {
                 }
             }
             return Map.of("rows",rows,"examined",reader.examined,"position",TemplateIndexService.position(data));
-        } finally { data.end(); }
+        } finally { QueryWorkService.endRead(data); }
     }
 }

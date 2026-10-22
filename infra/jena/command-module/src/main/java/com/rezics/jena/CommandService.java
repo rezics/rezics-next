@@ -125,12 +125,12 @@ final class CommandService extends ActionService {
     }
     private static boolean prefixWalkAvailable(DatasetGraph data) {
         QueryWorkService.ReadBoundary.checkCurrent();
-        data.begin(ReadWrite.READ);
+        QueryWorkService.beginRead(data);
         try {
             QueryWorkService.ReadBoundary.checkCurrent();
             return prefixIndex(data) != null && PublicNameProjection.prefixWalkAvailable(data);
         }
-        finally { data.end(); }
+        finally { QueryWorkService.endRead(data); }
     }
     @Override public void execPost(HttpAction action) {
         if (!"application/json".equalsIgnoreCase(action.getRequestContentType())) {

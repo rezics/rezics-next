@@ -41,9 +41,11 @@ final class QueryWorkService extends SPARQL_QueryDataset {
             boolean complete, ReadWorkerMeter totals) {}
     record ReadWorkerStatus(boolean attached, boolean complete, long failures,
             long dropped, int pendingNotifications, Long detachedAt, ReadWorkerMeter totals) {}
+    record ReadWorkerSnapshot(long attachedAt, ReadWorkerStatus status,
+            java.util.Map<String, ReadWorkerMeter> traces) {}
 
     static final class ReadWorkerLifecycle {
-        private static final int SUBSCRIBERS = 8, QUEUED = 64;
+        private static final int SUBSCRIBERS = 8, QUEUED = 64, TRACES = 4096;
         private final java.util.Set<ReadWorkerObservation> subscribers = new java.util.HashSet<>();
         private boolean started;
         private long sequence;
@@ -57,10 +59,6 @@ final class QueryWorkService extends SPARQL_QueryDataset {
             return observation;
         }
         synchronized ReadWorkerFlight enter(jakarta.servlet.ServletRequest request) {
-            started = true;
-            if (subscribers.isEmpty()) return null;
-            var selected = subscribers.stream().filter(subscriber -> subscriber.detachedAt == null).toList();
-            if (selected.isEmpty()) return null;
             // Reuse the existing W3C propagation identity, never a new diagnostic
             // header or authority. Keep only a validated trace id, not headers.
             String trace = null;
@@ -70,22 +68,47 @@ final class QueryWorkService extends SPARQL_QueryDataset {
                         && !parent.substring(3, 35).equals("0".repeat(32))
                         && !parent.substring(36, 52).equals("0".repeat(16))) trace = parent.substring(3, 35);
             } catch (Throwable failure) {
-                for (var subscriber : selected) { subscriber.failures++; subscriber.complete = false; }
+                fail();
             }
+            return enter(trace, false);
+        }
+        synchronized void fail() {
+            for (var subscriber : subscribers) { subscriber.failures++; subscriber.complete = false; }
+        }
+        synchronized ReadWorkerFlight enter(String trace, boolean pending) {
+            started = true;
+            if (subscribers.isEmpty()) return null;
+            var selected = subscribers.stream().filter(subscriber -> subscriber.detachedAt == null).toList();
+            if (selected.isEmpty()) return null;
             long at = System.currentTimeMillis(), worker = ++sequence;
             for (var subscriber : selected) {
-                subscriber.starts++; subscriber.active++; subscriber.lastStartAt = at; subscriber.zeroSince = null;
-                subscriber.emit("started", worker, trace, at);
+                subscriber.starts++; if (pending) subscriber.pending++; else subscriber.active++;
+                subscriber.lastStartAt = at; subscriber.zeroSince = null;
+                subscriber.transition(trace, pending ? "pending" : "started", at);
+                subscriber.emit(pending ? "pending" : "started", worker, trace, at);
             }
-            return new ReadWorkerFlight(this, selected, worker, trace);
+            return new ReadWorkerFlight(this, selected, worker, trace, pending);
+        }
+        synchronized void activate(ReadWorkerFlight flight) {
+            if (flight.subscribers == null || !flight.pending) return;
+            long at = System.currentTimeMillis();
+            for (var subscriber : flight.subscribers) {
+                if (subscriber.detachedAt != null) continue;
+                subscriber.pending--; subscriber.active++;
+                subscriber.transition(flight.trace, "acquired", at);
+                subscriber.emit("acquired", flight.worker, flight.trace, at);
+            }
+            flight.pending = false;
         }
         synchronized void release(ReadWorkerFlight flight) {
             if (flight.subscribers == null) return;
             long at = System.currentTimeMillis();
             for (var subscriber : flight.subscribers) {
                 if (subscriber.detachedAt != null) continue;
-                subscriber.active--; subscriber.released++;
-                if (subscriber.active == 0) subscriber.zeroSince = at;
+                if (flight.pending) subscriber.pending--; else subscriber.active--;
+                subscriber.released++;
+                if (subscriber.active + subscriber.pending == 0) subscriber.zeroSince = at;
+                subscriber.transition(flight.trace, flight.pending ? "refused" : "released", at);
                 subscriber.emit("released", flight.worker, flight.trace, at);
             }
             flight.subscribers = null; flight.trace = null;
@@ -96,10 +119,12 @@ final class QueryWorkService extends SPARQL_QueryDataset {
         private java.util.List<ReadWorkerObservation> subscribers;
         private final long worker;
         private String trace;
+        private boolean pending;
         private ReadWorkerFlight(ReadWorkerLifecycle owner, java.util.List<ReadWorkerObservation> subscribers,
-                long worker, String trace) {
-            this.owner = owner; this.subscribers = subscribers; this.worker = worker; this.trace = trace;
+                long worker, String trace, boolean pending) {
+            this.owner = owner; this.subscribers = subscribers; this.worker = worker; this.trace = trace; this.pending = pending;
         }
+        void activate() { owner.activate(this); }
         @Override public void close() { owner.release(this); }
     }
     /** Attach before first native work/initial idle. Late attachment is sticky
@@ -113,10 +138,12 @@ final class QueryWorkService extends SPARQL_QueryDataset {
         private final ReadWorkerLifecycle owner;
         private java.util.function.Consumer<ReadWorkerEvent> sink;
         private final java.util.concurrent.ThreadPoolExecutor delivery;
-        private long starts, released, active, failures, dropped;
+        private long starts, released, active, pending, failures, dropped;
         private int notifications;
         private Long lastStartAt, zeroSince = System.currentTimeMillis(), detachedAt;
         private boolean complete;
+        private final long attachedAt = System.currentTimeMillis();
+        private final java.util.Map<String, ReadWorkerMeter> traces = new java.util.LinkedHashMap<>();
         private ReadWorkerObservation(ReadWorkerLifecycle owner,
                 java.util.function.Consumer<ReadWorkerEvent> sink, boolean complete) {
             this.owner = owner; this.sink = sink; this.complete = complete;
@@ -124,7 +151,30 @@ final class QueryWorkService extends SPARQL_QueryDataset {
                 java.util.concurrent.TimeUnit.MILLISECONDS, new java.util.concurrent.ArrayBlockingQueue<>(ReadWorkerLifecycle.QUEUED),
                 work -> { var thread = new Thread(work, "native-worker-observer"); thread.setDaemon(true); return thread; });
         }
-        private ReadWorkerMeter meter() { return new ReadWorkerMeter(starts, released, active, 0, lastStartAt, zeroSince); }
+        private ReadWorkerMeter meter() { return new ReadWorkerMeter(starts, released, active, pending, lastStartAt, zeroSince); }
+        private void transition(String trace, String kind, long at) {
+            if (trace == null) return;
+            var previous = traces.get(trace);
+            if (previous == null) {
+                if (traces.size() >= ReadWorkerLifecycle.TRACES) { dropped++; complete = false; return; }
+                previous = new ReadWorkerMeter(0, 0, 0, 0, null, attachedAt);
+            }
+            long starts = previous.starts(), released = previous.released(), active = previous.active(), pending = previous.pending();
+            Long last = previous.lastStartAt();
+            switch (kind) {
+                case "started" -> { starts++; active++; last = at; }
+                case "pending" -> { starts++; pending++; last = at; }
+                case "acquired" -> { pending--; active++; }
+                case "refused" -> { pending--; released++; }
+                case "released" -> { active--; released++; }
+                default -> throw new IllegalArgumentException("Unknown read owner transition");
+            }
+            traces.put(trace, new ReadWorkerMeter(starts, released, active, pending, last,
+                active + pending == 0 ? at : null));
+        }
+        ReadWorkerSnapshot snapshot() {
+            synchronized (owner) { return new ReadWorkerSnapshot(attachedAt, status(), java.util.Map.copyOf(traces)); }
+        }
         private void emit(String kind, Long worker, String trace, long at) {
             var event = new ReadWorkerEvent(kind, worker, trace, at, complete, meter());
             notifications++;
@@ -146,7 +196,7 @@ final class QueryWorkService extends SPARQL_QueryDataset {
             synchronized (owner) {
                 if (detachedAt != null) return;
                 detachedAt = System.currentTimeMillis();
-                if (active != 0) complete = false;
+                if (active + pending != 0) complete = false;
                 delivery.shutdown();
             }
         }
@@ -160,8 +210,59 @@ final class QueryWorkService extends SPARQL_QueryDataset {
         }
     }
     private static final ReadWorkerLifecycle READ_WORKERS = new ReadWorkerLifecycle();
+    static final ReadWorkerLifecycle READ_ENGINES = new ReadWorkerLifecycle();
+    static final ReadWorkerLifecycle READ_LOCKS = new ReadWorkerLifecycle();
+    static final ReadWorkerLifecycle READ_TRANSACTIONS = new ReadWorkerLifecycle();
+    static final ThreadLocal<String> READ_TRACE = new ThreadLocal<>();
+    static ReadWorkerLifecycle readWorkers() { return READ_WORKERS; }
     static ReadWorkerObservation observeReadWorkers(java.util.function.Consumer<ReadWorkerEvent> sink) {
         return READ_WORKERS.observe(sink);
+    }
+    static ReadWorkerFlight pendingRead(ReadWorkerLifecycle owner) { return owner.enter(READ_TRACE.get(), true); }
+    static void beginRead(org.apache.jena.sparql.core.DatasetGraph data) {
+        beginRead(() -> data.begin(org.apache.jena.query.ReadWrite.READ));
+    }
+    static void beginRead(Runnable begin) {
+        var flight = pendingRead(READ_TRANSACTIONS);
+        try { begin.run(); if (flight != null) flight.activate(); }
+        catch (RuntimeException | Error failure) {
+            READ_TRANSACTIONS.fail(); if (flight != null) flight.close(); throw failure;
+        }
+        TRANSACTIONS.get().push(flight == null ? NO_FLIGHT : flight);
+    }
+    private static final Object NO_FLIGHT = new Object();
+    private static final ThreadLocal<java.util.Deque<Object>> TRANSACTIONS = ThreadLocal.withInitial(java.util.ArrayDeque::new);
+    static void endRead(org.apache.jena.sparql.core.DatasetGraph data) { endRead(data::end); }
+    static void endRead(Runnable end) {
+        try { end.run(); }
+        catch (RuntimeException | Error failure) {
+            READ_TRANSACTIONS.fail(); TRANSACTIONS.remove(); throw failure;
+        }
+        var stack = TRANSACTIONS.get();
+        if (!stack.isEmpty()) { var flight = stack.pop(); if (flight instanceof ReadWorkerFlight observed) observed.close(); }
+        else READ_TRANSACTIONS.fail();
+        if (stack.isEmpty()) TRANSACTIONS.remove();
+    }
+    /** The native object's close is the release boundary; abort and result
+     * settlement cannot retire an engine while lazy consumption is still live. */
+    @SuppressWarnings("unchecked")
+    static <T> T readEngine(Class<T> type, java.util.function.Supplier<T> create) {
+        var flight = pendingRead(READ_ENGINES);
+        final T execution;
+        try { execution = create.get(); if (flight != null) flight.activate(); }
+        catch (RuntimeException | Error failure) { if (flight != null) flight.close(); throw failure; }
+        if (flight == null) return execution;
+        return (T) java.lang.reflect.Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[] {type},
+            (proxy, method, args) -> {
+                try {
+                    Object result = method.invoke(execution, args);
+                    if (method.getName().equals("close")) flight.close();
+                    return result;
+                } catch (java.lang.reflect.InvocationTargetException failure) {
+                    if (method.getName().equals("close")) READ_ENGINES.fail();
+                    throw failure.getCause();
+                }
+            });
     }
     /** A transport cancellation and the caller's remaining wall allocation
      * cover parse, readiness, engine execution and lazy response consumption. */
@@ -256,10 +357,11 @@ final class QueryWorkService extends SPARQL_QueryDataset {
         /** A capture can wait before an engine exists to watch. Use the same
          * deadline and interrupt that cancel that engine, including while a
          * publisher is still inside its atomic RDF/Lucene fence. */
-        static void lockForRead(java.util.concurrent.locks.ReentrantLock lock) {
+        static ReadWorkerFlight lockForRead(java.util.concurrent.locks.ReentrantLock lock) {
             ReadBoundary current = CURRENT.get();
             checkCurrent();
             if (current != null) current.monitorTransport();
+            var flight = pendingRead(READ_LOCKS);
             try {
                 if (current == null) lock.lockInterruptibly();
                 else if (!lock.tryLock(Math.max(0, current.deadline - System.nanoTime()),
@@ -268,12 +370,18 @@ final class QueryWorkService extends SPARQL_QueryDataset {
                     current.check();
                 }
             } catch (InterruptedException interrupted) {
+                if (flight != null) flight.close();
                 Thread.currentThread().interrupt();
                 checkCurrent();
                 throw new org.apache.jena.query.QueryCancelledException(interrupted);
+            } catch (RuntimeException | Error failure) {
+                if (flight != null) flight.close();
+                throw failure;
             }
+            if (flight != null) flight.activate();
             try { checkCurrent(); }
-            catch (RuntimeException cancelled) { lock.unlock(); throw cancelled; }
+            catch (RuntimeException cancelled) { lock.unlock(); if (flight != null) flight.close(); throw cancelled; }
+            return flight;
         }
         @Override public synchronized void close() {
             closed = true; execution = null; expiry.cancel(false);
@@ -289,7 +397,11 @@ final class QueryWorkService extends SPARQL_QueryDataset {
         ReadBoundaryFilter(ReadWorkerLifecycle workers) { this.workers = workers; }
         @Override public void doFilter(jakarta.servlet.ServletRequest request, jakarta.servlet.ServletResponse response,
                 jakarta.servlet.FilterChain chain) throws java.io.IOException, jakarta.servlet.ServletException {
-            try (var worker = workers.enter(request)) { filterRead(request, response, chain); }
+            String previous = READ_TRACE.get();
+            try (var worker = workers.enter(request)) {
+                if (worker == null || worker.trace == null) READ_TRACE.remove(); else READ_TRACE.set(worker.trace);
+                filterRead(request, response, chain);
+            } finally { if (previous == null) READ_TRACE.remove(); else READ_TRACE.set(previous); }
         }
         private void filterRead(jakarta.servlet.ServletRequest request, jakarta.servlet.ServletResponse response,
                 jakarta.servlet.FilterChain chain) throws java.io.IOException, jakarta.servlet.ServletException {
@@ -385,6 +497,9 @@ final class QueryWorkService extends SPARQL_QueryDataset {
                     catch (java.io.IOException failure) { throw new java.io.UncheckedIOException(failure); }
                     return;
                 }
+                // The inherited Jena transaction has no owned begin/end hook.
+                // It cannot silently become a known-zero transaction source.
+                READ_TRANSACTIONS.fail();
                 super.execute(queryString, action); return;
             }
             Query query;
@@ -400,7 +515,7 @@ final class QueryWorkService extends SPARQL_QueryDataset {
             boolean[] began = {false};
             try (var capture = SearchDeltaJournal.captureRead(data, () -> {
                 ReadBoundary.checkCurrent();
-                action.beginRead(); began[0] = true;
+                beginRead(action::beginRead); began[0] = true;
             })) {
                 ReadBoundary.checkCurrent();
                 String graphVersion = TemplateIndexService.graphReadVersion(data);
@@ -434,14 +549,14 @@ final class QueryWorkService extends SPARQL_QueryDataset {
                 org.apache.jena.fuseki.servlets.ActionExecLib.incCounter(action.getEndpoint().getCounters(),
                     org.apache.jena.fuseki.server.CounterName.QueryTimeouts);
                 throw cancelled;
-            } finally { if (began[0]) action.endRead(); }
+            } finally { if (began[0]) endRead(action::endRead); }
         }
     }
 
     @Override protected QueryExec createQueryExec(HttpAction action, Query query,
             org.apache.jena.sparql.core.DatasetGraph dataset) {
         ReadBoundary.checkCurrent();
-        QueryExec execution = super.createQueryExec(action, query, dataset);
+        QueryExec execution = readEngine(QueryExec.class, () -> super.createQueryExec(action, query, dataset));
         try { ReadBoundary.watch(execution); return execution; }
         catch (RuntimeException failure) { execution.close(); throw failure; }
     }

@@ -251,7 +251,7 @@ public final class ErasurePurge {
         requireEmpty(destinationPath);
         Dataset source = TDB2Factory.connectDataset(sourcePath.toString());
         try {
-            source.begin(ReadWrite.READ);
+            QueryWorkService.beginRead(source.asDatasetGraph());
             try {
                 DatasetGraph input = source.asDatasetGraph();
                 Map<Node, Node> epochs = validateTargets(input, campaign);
@@ -334,7 +334,7 @@ public final class ErasurePurge {
                     } finally { destination.end(); }
                 } finally { destination.close(); }
             } finally {
-                source.end();
+                QueryWorkService.endRead(source.asDatasetGraph());
             }
         } finally {
             source.close();

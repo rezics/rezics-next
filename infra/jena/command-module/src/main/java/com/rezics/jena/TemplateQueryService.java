@@ -145,7 +145,7 @@ final class TemplateQueryService {
         // Templates read fixed model graphs, without a committed text capture.
         // Preparation must not let a departed request start that transaction.
         QueryWorkService.ReadBoundary.checkCurrent();
-        dataset.begin(ReadWrite.READ);
+        QueryWorkService.beginRead(dataset);
         try {
             List<Binding> candidates=prepared.candidates().isEmpty()?List.of(org.apache.jena.sparql.engine.binding.BindingFactory.empty()):prepared.candidates();
             org.apache.jena.atlas.json.JsonArray collected=new org.apache.jena.atlas.json.JsonArray();
@@ -156,7 +156,8 @@ final class TemplateQueryService {
                 Query query=bind(prepared.query(),builder.build());
                 long remaining=(deadline-System.nanoTime())/1_000_000L;
                 if(remaining<=0) throw new IllegalArgumentException("template deadline exceeded");
-                try(QueryExecution execution=QueryExecution.dataset(DatasetFactory.wrap(dataset)).query(query).timeout(remaining).build()) {
+                try(QueryExecution execution=QueryWorkService.readEngine(QueryExecution.class,
+                        () -> QueryExecution.dataset(DatasetFactory.wrap(dataset)).query(query).timeout(remaining).build())) {
                     QueryWorkService.ReadBoundary.watch(execution);
                     ByteArrayOutputStream chunk=new ByteArrayOutputStream();
                     ResultSetFormatter.outputAsJSON(chunk,execution.execSelect());
@@ -182,7 +183,7 @@ final class TemplateQueryService {
             };
             JSON.write(output,result);
             return JSON.parse(output.toString(java.nio.charset.StandardCharsets.UTF_8));
-        } finally { dataset.end(); }
+        } finally { QueryWorkService.endRead(dataset); }
         }
     }
 

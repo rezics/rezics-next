@@ -397,7 +397,7 @@ final class TemplateIndexService {
         if ("statement-publication-page".equals(operation)) return StatementPublicationMembership.read(data,request);
         if ("membership-prepare".equals(operation)) return membershipPrepare(data,request,MembershipProfiles.VALUE);
         if ("membership-status".equals(operation)) return membershipStatus(data);
-        data.begin(ReadWrite.READ);
+        QueryWorkService.beginRead(data);
         try {
             if ("basis".equals(ProfileRegistry.required(request,"operation"))) {
                 var rows = request.get("keys").getAsArray();
@@ -450,7 +450,7 @@ final class TemplateIndexService {
                 Map<String,Object> result = new LinkedHashMap<>(snapshot(data,entities)); result.put("next",iter.hasNext()?last:"");
                 return result;
             } finally { Iter.close(iter); }
-        } finally { data.end(); }
+        } finally { QueryWorkService.endRead(data); }
     }
     private static final String SCHEMA = "https://schema.org/", PREPARATION = "urn:rezics:membership-preparation",
         NORMAL_FORM = "ordered-membership-v1", COMPLETED = RV+"membershipCompletedForm";
@@ -557,9 +557,9 @@ final class TemplateIndexService {
             CommandService.jsonObject(Map.of("revision",NORMAL_FORM,"dataEpoch",control.epoch().getLiteralLexicalForm())).toString()));
     }
     private static Map<String,Object> membershipStatus(DatasetGraph data) {
-        data.begin(ReadWrite.READ);
+        QueryWorkService.beginRead(data);
         try { return Map.of("needsPreparation",!membershipCompleted(data)); }
-        finally { data.end(); }
+        finally { QueryWorkService.endRead(data); }
     }
     /** Closed owner repair, authenticated by the existing native command envelope.
      * No query, graph, focus or update language is supplied by the caller. Each

@@ -407,12 +407,12 @@ final class AlsoEnjoyedCandidates {
             throw new IllegalArgumentException("invalid candidate envelope");
         List<String> types = new ArrayList<>();
         for (var type : request.get("types").getAsArray()) types.add(type.getAsString().value());
-        data.begin(ReadWrite.READ);
+        QueryWorkService.beginRead(data);
         try { return page(data, ProfileRegistry.required(request, "source"), types,
             request.get("language").isNull() ? null : request.get("language").getAsString().value(),
             request.get("realm").isNull() ? null : request.get("realm").getAsString().value(),
             Integer.parseInt(request.get("limit").toString())); }
-        finally { data.end(); }
+        finally { QueryWorkService.endRead(data); }
     }
     private AlsoEnjoyedCandidates() {}
 }

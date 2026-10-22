@@ -138,7 +138,7 @@ final class StatementPublicationMembership {
         var tdb = TDBInternal.requireStorage(base);
         if (tdb.isInTransaction()) throw new IllegalArgumentException("publication page owns its read transaction");
         PageWork work = new PageWork();
-        tdb.begin(ReadWrite.READ);
+        QueryWorkService.beginRead(tdb);
         try {
             String storage;
             synchronized (STORES) { storage = PROCESS + ":" + STORES.computeIfAbsent(tdb, ignored -> UUID.randomUUID().toString()); }
@@ -196,7 +196,7 @@ final class StatementPublicationMembership {
             }
             // A phase-2 certificate is checked against incarnation and exact source basis on every fence.
             return pageResult(basis,new Cursor(storage,2,"",seal(basis,2,"")),true,examined,work,references);
-        } finally { tdb.end(); }
+        } finally { QueryWorkService.endRead(tdb); }
     }
     private static Map<String,Object> pageResult(PageBasis basis, Cursor cursor, boolean complete, int examined, PageWork work, List<Map<String,Object>> references) {
         Map<String,Object> row = new LinkedHashMap<>();

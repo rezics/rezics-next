@@ -19,6 +19,7 @@ public final class CommandModule implements FusekiAutoModule {
     private static final Operation COMMAND = Operation.alloc("https://rezics.com/fuseki/command", "command", "REZICS transactional command");
     private final ProfileRegistry profiles = profiles();
     private final PublicSearchPhaseEvidence searchEvidence = new PublicSearchPhaseEvidence();
+    private NativeReadObservation readObservation;
 
     private static String version() {
         try (InputStream in = CommandModule.class.getResourceAsStream("module.properties")) {
@@ -64,6 +65,7 @@ public final class CommandModule implements FusekiAutoModule {
     }
 
     @Override public void prepare(FusekiServer.Builder builder, Set<String> datasetNames, Model configModel) {
+        readObservation = NativeReadObservation.install();
         searchEvidence.install();
         builder.addFilter("/*", searchEvidence);
         builder.addFilter("/*", new QueryWorkService.ReadBoundaryFilter());
@@ -135,6 +137,7 @@ public final class CommandModule implements FusekiAutoModule {
     }
 
     @Override public void serverStopped(FusekiServer server) {
+        if (readObservation != null) readObservation.close();
         searchEvidence.destroy();
         server.getDataAccessPointRegistry().accessPoints().forEach(point ->
             SearchDeltaJournal.stopRecovery(point.getDataService().getDataset()));
