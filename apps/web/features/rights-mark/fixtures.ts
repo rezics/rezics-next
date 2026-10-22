@@ -4,7 +4,10 @@ import type { MediaImageMetadata } from '@rezics/ui/media-image';
 /** Recorded cover provenance, without a text licence or an inferred holder. */
 export const knownCoverCredit: NonNullable<MediaImageMetadata['coverCredit']> = {
   kind: 'copyright', text: '© 海辺書房', holder: '海辺書房',
-  source: { name: 'Example archive', href: 'https://example.test/records/cover' },
+  source: { name: 'Example archive', href: 'https://example.test/records/cover',
+    identity: { record: 'https://rezics.com/id/00000000-0000-4000-8000-000000000031',
+      observation: 'https://rezics.com/id/00000000-0000-4000-8000-000000000032',
+      component: '/images/cover', fieldLocator: '/cover/url' } },
   permittedRole: 'cover',
 };
 
@@ -33,6 +36,20 @@ export const attributed: DisplayObligations = {
     { kind: 'share_alike', instrument: ccBySa, appliesTo: 'all', notice: null },
   ],
 };
+
+/** Equal credit and licence text do not erase different assessed materials. */
+export const distinctMaterials = [
+  { ...attributed, identity: { assessmentId: '00000000-0000-4000-8000-000000000011',
+    materialId: '00000000-0000-4000-8000-000000000012', component: 'record',
+    sourceRecordId: '00000000-0000-4000-8000-000000000013', wikiEvidenceId: null } },
+  { ...attributed, identity: { assessmentId: '00000000-0000-4000-8000-000000000021',
+    materialId: '00000000-0000-4000-8000-000000000022', component: 'synopsis',
+    sourceRecordId: '00000000-0000-4000-8000-000000000023',
+    wikiEvidenceId: 'https://rezics.com/id/00000000-0000-4000-8000-000000000024' } },
+  { ...attributed, identity: { assessmentId: '00000000-0000-4000-8000-000000000041',
+    materialId: '00000000-0000-4000-8000-000000000042', component: 'synopsis',
+    sourceRecordId: null, wikiEvidenceId: null } },
+] satisfies readonly DisplayObligations[];
 
 /** An attribution whose notice is only an address, so the visible name is the host. */
 export const hostOnly: DisplayObligations = {

@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import { localeNames, uiLocales, type UiLocale } from '../../i18n/define.ts';
-import { attributed, ccBySa, creditedOnly, instrumentOnly, knownCoverCredit, mixedScriptCoverCredit, sourceUrl, unassessed, unknownCoverCredit } from './fixtures.ts';
+import { attributed, ccBySa, creditedOnly, distinctMaterials, instrumentOnly, knownCoverCredit, mixedScriptCoverCredit, sourceUrl, unassessed, unknownCoverCredit } from './fixtures.ts';
 import { messages } from './messages.ts';
 import { CoverCreditMark, RightsMark, RightsRunRows, type DisplayObligations } from './rights-mark.tsx';
 
@@ -166,6 +166,8 @@ export const IdenticalRightsRun: Story = {
     await expect(canvas.getByText('Member of the Knights')).toBeVisible();
     await expect(canvasElement.querySelectorAll('[data-rights-mark]')).toHaveLength(1);
     await expect(canvasElement.querySelectorAll('[data-rights-run]')).toHaveLength(1);
+    await expect(canvasElement.querySelector('[data-rights-mark]')).not.toHaveAttribute('data-rights-material');
+    await expect(canvasElement.querySelector('[data-rights-mark]')).not.toHaveAttribute('data-source-key');
   },
 };
 
@@ -176,6 +178,57 @@ export const IdenticalRightsRunPhone: Story = {
     await IdenticalRightsRun.play!(context);
     await noOverflow();
   },
+};
+
+export const RecordedSourceIdentities: Story = {
+  args: { rights: unassessed },
+  render: () => <Pad><div className="grid gap-5">
+    <RightsRunRows rows={distinctMaterials.map((rights, index) =>
+      row(`material-${index}`, ['Catalogue facts', 'Synopsis', 'Synopsis without a recorded Source'][index]!, rights))} />
+    <CoverCreditMark credit={knownCoverCredit} />
+    <CoverCreditMark credit={{ ...unknownCoverCredit,
+      source: { name: unknownCoverCredit.source.name, href: unknownCoverCredit.source.href } }} />
+  </div></Pad>,
+  async play({ canvasElement }) {
+    const marks = [...canvasElement.querySelectorAll<HTMLElement>('[data-rights-mark]')];
+    await expect(canvasElement.querySelectorAll('[data-rights-run]')).toHaveLength(3);
+    await expect(marks).toHaveLength(3);
+    for (const [index, rights] of distinctMaterials.entries()) {
+      const identity = rights.identity;
+      await expect(marks[index]).toHaveAttribute('data-rights-assessment', identity.assessmentId);
+      await expect(marks[index]).toHaveAttribute('data-rights-material', identity.materialId);
+      await expect(marks[index]).toHaveAttribute('data-rights-component', identity.component);
+      if (identity.sourceRecordId) {
+        await expect(marks[index]).toHaveAttribute('data-source-key', `https://rezics.com/id/${identity.sourceRecordId}`);
+        await expect(marks[index]).toHaveAttribute('data-source-record', identity.sourceRecordId);
+      } else {
+        await expect(marks[index]).not.toHaveAttribute('data-source-key');
+        await expect(marks[index]).not.toHaveAttribute('data-source-record');
+      }
+      if (identity.wikiEvidenceId) await expect(marks[index]).toHaveAttribute('data-source-evidence', identity.wikiEvidenceId);
+      else await expect(marks[index]).not.toHaveAttribute('data-source-evidence');
+      await expect(within(marks[index]!).getByRole('link', { name: 'CC BY-SA 3.0' })).toBeVisible();
+    }
+    const credits = [...canvasElement.querySelectorAll('[data-cover-credit]')];
+    await expect(credits).toHaveLength(2);
+    const source = knownCoverCredit.source.identity!;
+    await expect(credits[0]).toHaveAttribute('data-source-key', source.record);
+    await expect(credits[0]).toHaveAttribute('data-source-record', source.record);
+    await expect(credits[0]).toHaveAttribute('data-source-observation', source.observation);
+    if (source.component === null) await expect(credits[0]).not.toHaveAttribute('data-source-component');
+    else await expect(credits[0]).toHaveAttribute('data-source-component', source.component);
+    await expect(credits[0]).toHaveAttribute('data-source-locator', source.fieldLocator);
+    await expect(credits[1]).not.toHaveAttribute('data-source-key');
+    await expect(credits[1]).not.toHaveAttribute('data-source-observation');
+    await expect(credits[1]).not.toHaveAttribute('data-source-locator');
+    await expect(canvasElement.querySelector('a[href^="https://rezics.com/id/"]')).toBeNull();
+    await noOverflow();
+  },
+};
+
+export const RecordedSourceIdentitiesPhone: Story = {
+  ...RecordedSourceIdentities,
+  globals: { viewport: { value: 'phone' } },
 };
 
 function LocaleList({ locale }: { locale?: UiLocale }) {

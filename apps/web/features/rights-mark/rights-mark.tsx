@@ -166,9 +166,12 @@ function sameRights(left: DisplayObligations, right: DisplayObligations): boolea
 
 function rightsKey(rights: DisplayObligations): string {
   if (rights.status === 'unassessed') return 'unassessed';
+  const identity = rights.identity;
+  const material = identity ? [identity.assessmentId, identity.materialId, identity.component,
+    identity.sourceRecordId ?? '', identity.wikiEvidenceId ?? ''].join('\u0000') : '';
   const obligations = rights.obligations.map(item =>
     [item.kind, item.instrument, item.appliesTo, item.notice ?? ''].join('\u0000')).join('\u0001');
-  return ['assessed', rights.instrument ?? '', obligations].join('\u0001');
+  return ['assessed', material, rights.instrument ?? '', obligations].join('\u0001');
 }
 
 /** Consecutive rows that carry the same rights. A page-level read is one run. */
@@ -196,7 +199,12 @@ export function RightsMark({ rights, locale = 'en', linkedSourceHref }: {
   if (rights.status !== 'assessed') return null;
   const pieces = markPieces(rights, messages[locale], linkedSourceHref ? httpUrl(linkedSourceHref)?.href : undefined);
   if (!pieces.length) return null;
+  const identity = rights.identity;
   return <p data-rights-mark dir="auto"
+    data-rights-assessment={identity?.assessmentId} data-rights-material={identity?.materialId}
+    data-rights-component={identity?.component}
+    data-source-key={identity?.sourceRecordId ? `https://rezics.com/id/${identity.sourceRecordId}` : undefined}
+    data-source-record={identity?.sourceRecordId ?? undefined} data-source-evidence={identity?.wikiEvidenceId ?? undefined}
     className="min-w-0 max-w-3xl text-pretty text-muted-foreground text-xs/5 [overflow-wrap:anywhere]">
     {pieces.map((piece, index) => <Fragment key={index}>{index > 0 ? ' · ' : null}{piece}</Fragment>)}
   </p>;
@@ -211,9 +219,12 @@ export function CoverCreditMark({ credit, locale = 'en', className }: {
   if (!credit) return null;
   const copy = messages[locale];
   const sourceUrl = httpUrl(credit.source.href);
+  const identity = credit.source.identity;
   return <p data-cover-credit dir="ltr" className={cn(
     'min-w-0 text-pretty text-muted-foreground text-xs/5 [overflow-wrap:anywhere]', className,
-  )}>
+  )} data-source-key={identity?.record} data-source-record={identity?.record}
+    data-source-observation={identity?.observation} data-source-component={identity?.component ?? undefined}
+    data-source-locator={identity?.fieldLocator}>
     {copy.coverCredit}<bdi dir="auto">{credit.text}</bdi>{' · '}{copy.source}
     {sourceUrl
       ? <a href={credit.source.href} rel="noreferrer noopener" className={linkClass}>
