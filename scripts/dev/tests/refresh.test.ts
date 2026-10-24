@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 // sql-relations-allow: public.refresh_probe_sequence -- Called sequence fixture in an isolated PostgreSQL container.
 // sql-relations-allow: public.refresh_probe_uncalled -- Uncalled sequence fixture in an isolated PostgreSQL container.
 import { spawnSync } from 'node:child_process';
+import { aspireSmokeOutput } from '../../observability/aspire-smoke.ts';
 import { randomBytes } from 'node:crypto';
 import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -37,7 +38,7 @@ import { officialTheme } from '../seed/official-plan.ts';
 import { parseOptions } from '../seed/cli.ts';
 import { stableId } from '../seed/state.ts';
 import { sqlMigration } from '../../lib/concurrent-index.ts';
-import { rehearsalDiagnostic, snapshotRefreshDatabase } from '../refresh-rehearsal.ts';
+import { rehearsalDiagnostic, rehearsalProcessEvidence, snapshotRefreshDatabase } from '../refresh-rehearsal.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const current: RefreshInputs = { revision: 'committed-main', previousRevision: 'committed-main',
@@ -1363,6 +1364,44 @@ WHERE note <> 'CONCURRENTLY;';`;
 });
 
 describe('rehearsal diagnostics', () => {
+  test('a host invocation timeout is retained separately from successful child status', () => {
+    const result = rehearsalProcessEvidence({ status: 0, signal: null, stderr: 'REHEARSAL cleanup terminate\nREHEARSAL cleanup drop\n',
+      error: Object.assign(new Error('sensitive postgres://owner:password@private/db'), { code: 'ETIMEDOUT' }) });
+    expect(result).toMatchObject({ status: 0, signal: null, hostInvocationError: 'ETIMEDOUT',
+      phases: ['REHEARSAL cleanup terminate', 'REHEARSAL cleanup drop'] });
+    expect(JSON.stringify(result)).not.toContain('sensitive');
+    expect(JSON.stringify(result)).not.toContain('postgres://');
+    expect(rehearsalProcessEvidence({ status: 124, signal: 'SIGTERM', stderr: '', error: undefined }))
+      .toMatchObject({ status: 124, signal: 'SIGTERM', hostInvocationError: null });
+    expect(rehearsalProcessEvidence({ status: null, signal: 'SIGKILL', stderr: '',
+      error: Object.assign(new Error('private process path'), { code: 'ETIMEDOUT' }) }))
+      .toMatchObject({ status: null, signal: 'SIGKILL', hostInvocationError: 'ETIMEDOUT' });
+  });
+
+  test('daemon absence, unavailable transport and permission failures remain distinct and redacted', () => {
+    const cases = [
+      ['Error response from daemon: No such container: private-name', 'object-absent'],
+      ['Cannot connect to the Docker daemon at unix:///private/socket. Is the docker daemon running?', 'daemon-unavailable'],
+      ['permission denied while trying to connect to private daemon', 'permission'],
+      ['Get private-endpoint: context deadline exceeded (Client.Timeout exceeded while awaiting headers)', 'transport-timeout'],
+      ['private-endpoint: connection reset by peer', 'transport-disconnected'],
+      ['arbitrary business row', 'unclassified'],
+    ];
+    for (const [stderr, expected] of cases) {
+      const result = rehearsalProcessEvidence({ status: 1, signal: null, stderr: `${stderr}\npostgres://owner:password@private/db`, error: undefined });
+      expect(result.stderrClasses).toContain(expected!);
+      expect(result.hostInvocationError).toBeNull();
+      for (const secret of ['private', 'postgres://', 'password', 'business row'])
+        expect(JSON.stringify(result)).not.toContain(secret);
+    }
+    const unknown = rehearsalProcessEvidence({ status: 0, signal: null,
+      stderr: 'REHEARSAL cleanup drop secret\nREHEARSAL cleanup done\n'.repeat(1000),
+      error: Object.assign(new Error('private message'), { code: 'private-code' }) });
+    expect(unknown).toMatchObject({ status: 0, hostInvocationError: 'other', phases: ['REHEARSAL cleanup done'] });
+    expect(JSON.stringify(unknown)).not.toContain('secret');
+    expect(JSON.stringify(unknown)).not.toContain('private');
+  });
+
   test('only fixed process and phase classifications survive arbitrary sensitive output', () => {
     const secret = 'postgres://owner:password@private:5432/business';
     const row = 'private-person@example.invalid confidential business text';
@@ -1382,6 +1421,10 @@ describe('isolated PostgreSQL migration rehearsal', () => {
   let container: string;
   let source: Client;
   let sourceUrl: string;
+  let observer: Client;
+  let observation: ReturnType<typeof setInterval>;
+  let sampling = false;
+  let sample = Promise.resolve();
   const fixtureName = `refresh-rehearsal-${randomBytes(8).toString('hex')}`;
   const image = readFileSync(join(root, 'infra/dev/compose.yaml'), 'utf8')
     .match(/postgres:\s*\n\s*image:\s*(\S+)/)![1]!;
@@ -1442,13 +1485,62 @@ describe('isolated PostgreSQL migration rehearsal', () => {
       BEGIN PERFORM nextval('public.refresh_probe_sequence'); RETURN NEW; END $$;
       CREATE TRIGGER refresh_probe_advance AFTER UPDATE ON access.principal
         FOR EACH ROW EXECUTE FUNCTION public.refresh_probe_advance();`);
+    observer = client(adminUrl);
+    await observer.connect();
+    const seen = new Map<number, { phase: string; wait: string; since: number; last: number; samples: number }>();
+    const started = Date.now();
+    observation = setInterval(() => {
+      if (sampling) return;
+      sampling = true;
+      // Observe the disposable container only. Fixed phase/wait labels cannot
+      // disclose SQL, business rows, identifiers, credentials or database URLs.
+      sample = observer.query(`SELECT pid, CASE WHEN query LIKE 'DROP DATABASE%' THEN 'drop' ELSE 'terminate' END AS phase,
+        CASE wait_event WHEN 'CheckpointDone' THEN 'checkpoint-done' WHEN 'CheckpointStart' THEN 'checkpoint-start'
+          WHEN 'ProcSignalBarrier' THEN 'process-barrier' WHEN 'WALSync' THEN 'wal-sync' WHEN 'WALWrite' THEN 'wal-write'
+          ELSE CASE wait_event_type WHEN 'Lock' THEN 'lock' WHEN 'IO' THEN 'io' WHEN 'IPC' THEN 'ipc'
+            WHEN 'Client' THEN 'client' ELSE 'running' END END AS wait
+        FROM pg_stat_activity WHERE application_name LIKE 'rezics_rehearsal_%_cleanup' AND state='active'`).then(result => {
+        const now = Date.now();
+        const active = new Set<number>();
+        for (const row of result.rows) {
+          active.add(row.pid);
+          const prior = seen.get(row.pid);
+          if (prior && prior.phase === row.phase && prior.wait === row.wait) {
+            prior.last = now;
+            prior.samples++;
+            continue;
+          }
+          if (prior) console.log(`Isolated cleanup +${now - started}ms phase=${prior.phase} wait=${prior.wait} sampled-span=${prior.last - prior.since}ms samples=${prior.samples} gap=${now - prior.last}ms`);
+          console.log(`Isolated cleanup +${now - started}ms phase=${row.phase} wait=${row.wait} start`);
+          seen.set(row.pid, { phase: row.phase, wait: row.wait, since: now, last: now, samples: 1 });
+        }
+        for (const [pid, prior] of seen) {
+          if (active.has(pid)) continue;
+          console.log(`Isolated cleanup +${now - started}ms phase=${prior.phase} wait=${prior.wait} sampled-span=${prior.last - prior.since}ms samples=${prior.samples} gap=${now - prior.last}ms active-end`);
+          seen.delete(pid);
+        }
+      }).catch(() => {}).finally(() => { sampling = false; });
+    }, 200);
   }, 90_000);
 
   afterAll(async () => {
+    clearInterval(observation);
+    await sample;
+    await observer?.end();
     try { await source?.end(); }
     // Container/volume removal can outlast SQL; it has its own cleanup budget.
     finally {
       const logs = spawnSync('docker', ['logs', '--tail', '100', fixtureName], { encoding: 'utf8', timeout: 1_000, maxBuffer: 65_536 });
+      // A synchronous owner call can pause sampling; spans cover samples only,
+      // and missing Docker evidence must not be mistaken for a healthy server.
+      console.log(`Isolated PostgreSQL log transport: ${JSON.stringify({ exit: logs.status,
+        signal: logs.signal, error: logs.error ? ('code' in logs.error && logs.error.code === 'ETIMEDOUT' ? 'timeout' : 'error') : null })}`);
+      for (const line of (logs.stdout + logs.stderr).split('\n')) {
+        const begin = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} [A-Z]+).*checkpoint starting: ((?:(?:shutdown|end-of-recovery|immediate|force|wait|wal|time|flush-all) ?)+)$/);
+        const end = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} [A-Z]+).*checkpoint complete:.*write=([0-9.]+) s, sync=([0-9.]+) s, total=([0-9.]+) s; sync files=([0-9]+), longest=([0-9.]+) s, average=([0-9.]+) s/);
+        if (begin) console.log(`Isolated checkpoint ${begin[1]} start=${begin[2]}`);
+        if (end) console.log(`Isolated checkpoint ${end[1]} write=${end[2]}s sync=${end[3]}s total=${end[4]}s files=${end[5]} longest=${end[6]}s average=${end[7]}s`);
+      }
       const health = (logs.stdout + logs.stderr).split('\n').flatMap(line => {
         const prefix = line.match(/\[(\d+)\] \[([^\]]+)\]/);
         const process = prefix ? [`pid-${prefix[1]}`, ...[
@@ -1692,7 +1784,7 @@ throw new Error('Pending migration completed before cancellation');
     }, 45_000);
   }
 
-  for (const failure of ['dump', 'restore', 'timeout', 'SIGINT', 'SIGTERM'] as const) {
+  for (const failure of ['dump', 'restore', 'timeout', 'SIGINT', 'SIGTERM', 'early-SIGINT', 'early-SIGTERM'] as const) {
     test(`copy-stage ${failure} preserves the checkpoint, writers and sibling database and removes its own artifacts`, async () => {
       const { dir, first, env } = migrations();
       const sibling = await snapshotRefreshDatabase(container, sourceUrl);
@@ -1710,7 +1802,8 @@ throw new Error('Pending migration completed before cancellation');
 const args = process.argv.slice(2);
 const index = args.findIndex(arg => arg.includes("echo 'REHEARSAL dump start'"));
 if (index >= 0) {
-  if (${JSON.stringify(failure)}.startsWith('SIG')) {
+  require('node:fs').writeFileSync(${JSON.stringify(join(dir, 'owned-copy'))}, args[index + 3]);
+  if (${JSON.stringify(failure)}.includes('SIG')) {
     args[index] = "trap 'trap \\\"\\\" TERM INT; wait; exit 124' TERM INT; echo 'REHEARSAL dump start' >&2; sleep 300";
   } else {
     console.error('REHEARSAL dump start');
@@ -1720,9 +1813,19 @@ if (index >= 0) {
     process.exit(${failure === 'timeout' ? 124 : 1});
   }
 }
+if (${JSON.stringify(failure)}.startsWith('early-') && index >= 0) {
+  const launch = args.indexOf('bash') + 2;
+  args[launch] = "echo DELAYED_COPY_READY >&2; sleep 3; " + args[launch];
+  args[index] = 'trap \\'trap "" TERM INT; wait; exit 124\\' TERM INT; touch "$4"; PGAPPNAME="$2"_dump psql --host=/var/run/postgresql --username="$3" --dbname="$1" -c \\'BEGIN; LOCK TABLE access.principal IN ACCESS SHARE MODE; SELECT pg_sleep(300)\\'';
+}
 // A QA Docker shim resolves the next executable through PATH. Exclude this
 // injected wrapper while forwarding, retaining the original QA scope labels.
-const child = Bun.spawn([${JSON.stringify(realDocker)}, ...args], {env:{...process.env,PATH:${JSON.stringify(originalPath)}},stdin:'inherit', stdout:'inherit', stderr:'inherit'});
+const child = Bun.spawn([${JSON.stringify(realDocker)}, ...args], {env:{...process.env,PATH:${JSON.stringify(originalPath)}},stdin:'inherit', stdout:'inherit', stderr:'pipe'});
+for await (const chunk of child.stderr) {
+  if (new TextDecoder().decode(chunk).includes('DELAYED_COPY_READY'))
+    require('node:fs').writeFileSync(${JSON.stringify(join(dir, 'delayed-ready'))}, 'ready');
+  process.stderr.write(chunk);
+}
 process.exit(await child.exited);
 `);
       chmodSync(executable, 0o700);
@@ -1757,23 +1860,39 @@ catch(error) { console.error(error.message); process.exitCode=1; }
       const stderr = new Response(child.stderr).text();
       const deadline = setTimeout(() => child.kill('SIGKILL'), 15_000);
       try {
+        if (failure.startsWith('early-')) {
+          const readyWall = Date.now() + 5000;
+          while (!existsSync(join(dir, 'delayed-ready')) && Date.now() < readyWall) await Bun.sleep(20);
+          expect(existsSync(join(dir, 'delayed-ready'))).toBe(true);
+          child.kill(failure.slice(6) as 'SIGINT' | 'SIGTERM');
+        }
         const status = await child.exited;
+        if (failure.startsWith('early-')) await Bun.sleep(4000);
         await stdout;
         const diagnostic = output + await stderr;
-        expect({ status, diagnostic }).toMatchObject({ status: failure === 'SIGINT' ? 130 : failure === 'SIGTERM' ? 143 : 1 });
+        expect({ status, diagnostic }).toMatchObject({ status: failure.endsWith('SIGINT') ? 130 : failure.endsWith('SIGTERM') ? 143 : 1 });
         expect(diagnostic).not.toContain('private-row@example.invalid');
         expect(diagnostic).not.toContain('postgres://');
         expect(diagnostic).not.toContain('password');
         expect(diagnostic).not.toContain('business row');
-        if (!failure.startsWith('SIG')) {
+        if (!failure.includes('SIG')) {
           expect(diagnostic).toContain('access database copy (before SQL)');
           expect(diagnostic).toContain(failure === 'timeout' ? 'exit 124' : 'details suppressed');
         }
         expect(readFileSync(checkpoint, 'utf8')).toBe('retained-checkpoint');
         expect(existsSync(join(dir, 'actions'))).toBe(false);
         expect((await source.query('SELECT value FROM access.principal')).rows).toEqual([{ value: 1 }]);
+        let sourceUnlocked = false;
+        await source.query('BEGIN');
+        try {
+          await source.query('LOCK TABLE access.principal IN ACCESS EXCLUSIVE MODE NOWAIT');
+          sourceUnlocked = true;
+        } catch {}
+        finally { await source.query('ROLLBACK'); }
+        expect(sourceUnlocked).toBe(true);
+        expect((await source.query("SELECT pid FROM pg_stat_activity WHERE application_name LIKE 'rezics_rehearsal_%_dump'")).rows).toEqual([]);
         expect({ databases: (await source.query("SELECT datname FROM pg_database WHERE datname LIKE 'rezics_rehearsal_%'")).rows,
-          cleanupFailed: diagnostic.includes('cleanup failed'), diagnostic: failure.startsWith('SIG') ? diagnostic : '' })
+          cleanupFailed: diagnostic.includes('cleanup failed'), diagnostic: failure.includes('SIG') ? diagnostic : '' })
           .toMatchObject({ databases: [{ datname: siblingDatabase }], cleanupFailed: false });
         // The successful sibling has no copy artifacts either. A cancelled copy
         // must leave neither its archive nor its in-container sleep process.
@@ -1783,6 +1902,13 @@ catch(error) { console.error(error.message); process.exitCode=1; }
         clearTimeout(deadline);
         child.kill('SIGKILL');
         await child.exited;
+        if (existsSync(join(dir, 'owned-copy'))) {
+          const owned = readFileSync(join(dir, 'owned-copy'), 'utf8');
+          // A failed early-cancellation assertion must not leave a source lock
+          // that changes the premise of the next case. This is the exact
+          // injected application's connection inside this fixture container.
+          await source.query('SELECT pg_terminate_backend(pid, 1000) FROM pg_stat_activity WHERE application_name=$1', [`${owned}_dump`]);
+        }
         await sibling.dispose();
         rmSync(dir, { recursive: true, force: true });
       }
@@ -1814,6 +1940,65 @@ catch(error) { console.error(error.message); process.exitCode=1; }
       rmSync(dir, { recursive: true, force: true });
     }
   }, 30_000);
+});
+
+describe('Aspire smoke process ownership', () => {
+  test('completed commands drain stderr and retain only successful stdout', async () => {
+    await expect(aspireSmokeOutput(['node', '-e', 'console.error("private diagnostic"); console.log("{ok:true}")'], 2000))
+      .resolves.toBe('{ok:true}\n');
+    await expect(aspireSmokeOutput(['node', '-e', 'console.error("private diagnostic"); process.exit(1)'], 2000))
+      .rejects.toThrow('Aspire command failed or exceeded its observation wall; inspect task aspire logs');
+  });
+  for (const launcherExits of [false, true]) {
+    test(`stalled native CLI with ${launcherExits ? 'exited' : 'running'} launcher cannot hold the observation open`, async () => {
+      const dir = mkdtempSync(join(root, '.temp/aspire-child-'));
+      const native = join(dir, 'native.js');
+      const launcher = join(dir, 'launcher.js');
+      const pidFile = join(dir, 'native.pid');
+      const launcherPidFile = join(dir, 'launcher.pid');
+      writeFileSync(native, `require('node:fs').writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
+process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);`);
+      writeFileSync(launcher, `require('node:fs').writeFileSync(${JSON.stringify(launcherPidFile)}, String(process.pid));
+require('node:child_process').spawn(process.execPath, [${JSON.stringify(native)}], {stdio:'inherit'});
+${launcherExits ? 'setTimeout(() => process.exit(0), 50);' : 'setInterval(() => {}, 1000);'}`);
+      const sibling = Bun.spawn(['node', '-e', 'setInterval(() => {}, 1000)'], { stdout: 'ignore', stderr: 'ignore' });
+      let bounded = false;
+      const wallMs = 2000;
+      const started = Date.now();
+      const result = aspireSmokeOutput(['node', launcher], wallMs).then(() => 'passed', () => 'failed');
+      // A failed implementation must release its exact fixture too. This outer
+      // wall is a test failure, never the owner's cancellation mechanism.
+      const rescue = setTimeout(() => {
+        bounded = true;
+        if (existsSync(pidFile)) {
+          try { process.kill(Number(readFileSync(pidFile, 'utf8')), 'SIGKILL'); } catch {}
+        }
+      }, wallMs + 500);
+      try {
+        expect(await result).toBe('failed');
+        expect(bounded).toBe(false);
+        expect(Date.now() - started).toBeLessThan(wallMs);
+        expect(existsSync(pidFile)).toBe(true);
+        for (const file of [pidFile, launcherPidFile]) {
+          const pid = Number(readFileSync(file, 'utf8'));
+          // An exited child can remain a zombie briefly under the host's init;
+          // it cannot execute, hold pipes or acquire another resource.
+          const status = existsSync(`/proc/${pid}/stat`) ? readFileSync(`/proc/${pid}/stat`, 'utf8') : '';
+          expect(status === '' || status.split(' ')[2] === 'Z').toBe(true);
+        }
+        expect(sibling.exitCode).toBeNull();
+        process.kill(sibling.pid, 0);
+      } finally {
+        clearTimeout(rescue);
+        if (existsSync(pidFile)) {
+          try { process.kill(Number(readFileSync(pidFile, 'utf8')), 'SIGKILL'); } catch {}
+        }
+        sibling.kill('SIGKILL');
+        await sibling.exited;
+        rmSync(dir, { recursive: true, force: true });
+      }
+    }, 5000);
+  }
 });
 
 describe('official Zone approval refresh', () => {
