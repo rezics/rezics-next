@@ -1,0 +1,10 @@
+{"type":"thread.started","thread_id":"fixture-session"}
+{"timestamp":"2026-10-25T00:00:00Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":1000,"cached_input_tokens":500,"output_tokens":100}}}}
+{"timestamp":"2026-10-25T00:01:00Z","type":"response_item","payload":{"type":"function_call","call_id":"read","name":"exec_command","arguments":"rg acceptance src"}}
+{"timestamp":"2026-10-25T00:01:01Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":1300,"cached_input_tokens":700,"output_tokens":130},"last_token_usage":{"input_tokens":300,"cached_input_tokens":200,"output_tokens":30}}}}
+{"timestamp":"2026-10-25T00:01:02Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":1300,"cached_input_tokens":700,"output_tokens":130},"last_token_usage":{"input_tokens":300,"cached_input_tokens":200,"output_tokens":30}}}}
+{"timestamp":"2026-10-25T00:01:03Z","type":"response_item","payload":{"type":"function_call","call_id":"patch","name":"apply_patch","arguments":"update"}}
+{"timestamp":"2026-10-25T00:01:04Z","type":"response_item","payload":{"type":"function_call","call_id":"check","name":"exec_command","arguments":"bun test"}}
+{"timestamp":"2026-10-25T00:01:05Z","type":"response_item","payload":{"type":"function_call","call_id":"commit","name":"exec_command","arguments":"git commit -m fix"}}
+{"timestamp":"2026-10-25T00:01:06Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":1800,"cached_input_tokens":1000,"output_tokens":180},"last_token_usage":{"input_tokens":500,"cached_input_tokens":300,"output_tokens":50}}}}
+{"timestamp":"2026-10-25T00:03:00Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":4000,"cached_input_tokens":2000,"output_tokens":400}}}}

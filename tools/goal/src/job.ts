@@ -1,0 +1,150 @@
+import { watch, type FSWatcher } from 'node:fs';
+import type { GateOutcome, GateOutcomeSink, LandingQueue, ManagerInbox, AttemptRef } from './contracts.ts';
+import { waitForProcess } from './process.ts';
+import { StaleAttemptError } from './contracts.ts';
+import { classifyFailure } from './failures.ts';
+import { evidenceBundle } from './evidence.ts';
+import { consult } from './consult.ts';
+import { readMeasurement } from './records.ts';
+import { readRouting } from './routing.ts';
+import { settle } from './settle.ts';
+import { git, type WorkerTasks, type RetryOptions } from './tasks.ts';
+import type { ManagerEventKind } from './contracts.ts';
+import type { RunningWorker } from './launch.ts';
+
+export class WorkerJob implements GateOutcomeSink {
+  private readonly pending = new Set<Promise<void>>();
+  constructor(readonly tasks: WorkerTasks, readonly landing: LandingQueue, readonly inbox: ManagerInbox,
+    readonly consultation: typeof consult = consult) {}
+  private track(work: Promise<void>): void {
+    const handled = work.catch(error => { if (!(error instanceof StaleAttemptError)) throw error; });
+    this.pending.add(handled);
+    // Observe errors immediately while retaining them for drain().
+    void handled.catch(() => {});
+  }
+  async drain(): Promise<void> {
+    while (this.pending.size) {
+      const batch = [...this.pending];
+      await Promise.all(batch);
+      for (const item of batch) this.pending.delete(item);
+    }
+  }
+  async start(taskId: string, options: RetryOptions = {}): Promise<void> {
+    const worker = await this.tasks.retry(taskId, options);
+    await this.follow(worker);
+  }
+  private hasCommit(ref: AttemptRef): boolean {
+    const task = this.tasks.store.task(ref.taskId);
+    return Number(git(task.worktree, ['rev-list', '--count', `${task.base}..HEAD`])) > 0;
+  }
+  async follow(worker: Pick<RunningWorker, 'attempt' | 'exited'>): Promise<void> {
+    const ref = worker.attempt, store = this.tasks.store;
+    const task = store.task(ref.taskId);
+    const limits = readRouting(this.tasks.settings.routingFile).classes[task.taskClass as Exclude<typeof task.taskClass, 'mechanical'>];
+    let watcher: FSWatcher | undefined;
+    let stopping: Promise<void> | undefined;
+    const stopIfStalled = (timeLimit: boolean) => {
+      try {
+        store.assertCurrent(ref);
+        const measurement = readMeasurement(store.attempt(ref));
+        const steps = Object.values(measurement.steps).reduce((a, b) => a + b, 0);
+        if ((timeLimit || steps > limits.maxSteps) && !this.hasCommit(ref) && !stopping) {
+          const evidencePath = evidenceBundle(task, store.attempt(ref));
+          const event = { managerId: task.brief.manager, taskId: task.id, kind: 'stalled' as const, summary: 'Worker exceeded its class limit without a commit', evidencePath };
+          store.updateAttempt(ref, a => { a.escalation = 'stalled'; });
+          store.event(ref, 'manager-event', event);
+          this.inbox.deliver(event);
+          stopping = this.tasks.stop(task.id);
+          void stopping.catch(() => {});
+        }
+      } catch (error) { if (!(error instanceof StaleAttemptError)) { stopping = Promise.reject(error); void stopping.catch(() => {}); } }
+    };
+    const timer = setTimeout(() => stopIfStalled(true), Math.max(0, limits.maxMs - (Date.now() - Date.parse(ref.startedAt))));
+    try {
+      watcher = watch(ref.logPath, () => stopIfStalled(false));
+      try { await settle(this.tasks, worker, this.landing); }
+      catch (error) { if (!stopping || !(error instanceof StaleAttemptError)) throw error; }
+      if (stopping) await stopping;
+    } finally { clearTimeout(timer); watcher?.close(); }
+  }
+  onGateOutcome(outcome: GateOutcome): void {
+    const store = this.tasks.store;
+    // Stale gate results must be refused to their caller, not silently discarded.
+    store.assertCurrent(outcome);
+    const task = store.task(outcome.taskId), attempt = store.attempt(outcome);
+    const record = store.record(outcome);
+    if (!record) throw new Error('attempt must be settled before gate outcomes');
+    let action: (() => Promise<void>) | undefined;
+    store.write(outcome, () => {
+      const duplicate = store.events(task.id).some(e => e.attempt === outcome.attempt && e.kind === 'gate-outcome' && JSON.parse(e.body).stage === outcome.stage);
+      if (duplicate) return;
+      store.event(outcome, 'gate-outcome', outcome);
+      record.diffLines = outcome.diffLines; record.changedFiles = [...outcome.changedFiles]; record.hostMs = (record.hostMs ?? 0) + outcome.hostMs;
+      record.firstFailure = outcome.firstFailure?.fingerprint ?? null; record.outcome = outcome.passed ? 'passed' : 'gate-failed';
+      if (outcome.passed) {
+        if (outcome.mergedCommit) store.updateTask(outcome, t => { t.state = 'merged'; t.mergedCommit = outcome.mergedCommit!; });
+        store.putRecord(record); return;
+      }
+      const limits = readRouting(this.tasks.settings.routingFile).classes[task.taskClass as Exclude<typeof task.taskClass, 'mechanical'>];
+      const failureClass = classifyFailure(outcome, task, attempt, record, limits, this.hasCommit(outcome));
+      record.escalation = failureClass; record.earlyStop = !attempt.blocker || /RESULT:\s*success/i.test(attempt.result);
+      store.updateAttempt(outcome, a => {
+        a.failure = outcome.firstFailure ?? null; a.escalation = failureClass;
+        a.approaches.push({ approach: `Attempt ${a.attempt}: ${a.profile.model}/${a.profile.effort}`,
+          result: outcome.firstFailure ? `${outcome.firstFailure.assertion}: ${outcome.firstFailure.excerpt}` : `Failed at ${outcome.stage}` });
+      });
+      const evidencePath = evidenceBundle(task, store.attempt(outcome));
+      const automatic = ['environment', 'pool-exhausted', 'repeated-assertion', 'new-failure', 'early-stop'].includes(failureClass);
+      if (!automatic) {
+        store.updateTask(outcome, t => { t.state = 'stopped'; });
+        const event = { managerId: task.brief.manager, taskId: task.id, kind: failureClass as ManagerEventKind,
+          summary: `${failureClass}: ${outcome.firstFailure?.assertion ?? outcome.stage}`, evidencePath };
+        store.event(outcome, 'manager-event', event); this.inbox.deliver(event);
+      } else {
+        const options: RetryOptions = { evidence: evidencePath, escalation: failureClass,
+          fixRound: attempt.fixRound + (['environment', 'pool-exhausted'].includes(failureClass) ? 0 : 1) };
+        if (failureClass === 'pool-exhausted') {
+          const key = this.tasks.settings.pools.find(p => p.name === attempt.pool)?.allowanceKey;
+          options.excludePools = this.tasks.settings.pools.filter(p => p.allowanceKey === key).map(p => p.name);
+        }
+        action = async () => {
+          store.assertCurrent(outcome);
+          if (failureClass === 'repeated-assertion') {
+            try {
+              options.consultation = await this.consultation(this.tasks, outcome, evidencePath);
+              options.consulted = true; record.consulted = true; store.putRecord(record);
+            } catch (error) {
+              store.assertCurrent(outcome);
+              // A failed consultation transport is a tool event, so it does not wake a manager.
+              store.event(outcome, 'consultation-unavailable', { error: String(error) });
+              options.escalation = 'environment'; options.fixRound = attempt.fixRound;
+              options.consulted = store.attempt(outcome).consulted;
+            }
+          }
+          await this.start(task.id, options);
+        };
+      }
+      store.putRecord(record);
+    });
+    if (action) this.track(action());
+  }
+  /** Reattach to a persisted running attempt after a controller restart using a kernel exit notification. */
+  async recover(taskId: string): Promise<void> {
+    const task = this.tasks.store.task(taskId);
+    const ref = { taskId, attempt: task.currentAttempt };
+    this.tasks.store.assertCurrent(ref);
+    if (this.tasks.store.events(taskId).some(event => event.attempt === ref.attempt && event.kind === 'landing-requested')) return;
+    const attempt = this.tasks.store.attempt(ref);
+    if (!['running', 'exited'].includes(attempt.state)) throw new Error('only a running or exited attempt can be recovered');
+    const exited = attempt.process ? waitForProcess(attempt.process).then(() => ({ code: null, signal: null }))
+      : Promise.resolve({ code: null, signal: null });
+    await this.follow({ attempt, exited });
+  }
+  async consultTask(taskId: string): Promise<void> {
+    const task = this.tasks.store.task(taskId), ref = { taskId, attempt: task.currentAttempt };
+    this.tasks.store.assertCurrent(ref);
+    const path = evidenceBundle(task, this.tasks.store.attempt(ref));
+    const answer = await this.consultation(this.tasks, ref, path);
+    await this.start(taskId, { evidence: path, consultation: answer, consulted: true, escalation: 'consultation' });
+  }
+}

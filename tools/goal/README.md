@@ -120,3 +120,79 @@ CODEX_HOME="$HOME/.codex-1" bun scripts/smoke-codex-manager.ts
 It starts a real stdio app-server, creates a tiny objective with a 20,000-token budget, starts and steers a turn, reads
 the goal, then pauses, interrupts and clears it. The run on 2026-10-25 accepted the steer, read active status with the
 20,000-token budget and zero tokens consumed at that instant, and confirmed that the cleared goal was null.
+
+## Worker side
+
+
+The controller saves the contract under the state directory and starts a fresh branch and worktree from main.
+`manager` defaults to `goal`. Additional observable features are `inseparable`, `citesSources` and `hostileInput`.
+Kinds are `implementation`, `interface`, `bulk-text`, `claim`, `specification`, `research` and `mechanical`. Mechanical
+steps are refused by model dispatch. A specified implementation must declare failing machine acceptance tests and
+fit within 400 lines and eight files. Critical-path classification requires both waiting tasks and `inseparable`.
+Risk paths, source citations and hostile input take precedence over cheaper classes.
+
+Declared paths use literals, `*`, `?` and whole-segment `**`; absolute paths, traversal and unsupported glob syntax are
+refused. Risk ownership is checked by intersecting path patterns, including broad claims such as `src/**`. Every risk
+area intersected by a declared path must be named. Extend the tracked ownership data when adding product modules.
+Acceptance tests are part of the contract; workers must not change them or expand scope.
+
+`routing.json` contains the version, first profile and step/time limits for every model class, plus open experiments.
+The implementation experiment alternates Luna `high` and `max` by durable task sequence, starting with `high`.
+Retries retain the original profile and table version. Research is read-only. Bulk text prompts prohibit translation
+services, scripts and character mappings. Workers finish with approach/result lines and commit on their branch.
+
+## Gate outcomes and evidence
+
+The deterministic failure classifier handles setup/tool failures, timeouts, failure on main, quota exhaustion,
+repeated assertions, new failures, specification conflicts, scope growth, stalls and the two-fix-round limit.
+Environment reruns retain the profile and do not consume a fix round. Repeating the first assertion triggers one
+read-only Sol `medium` consultation; the original profile receives its answer in a fresh session. An exit claiming
+success or naming no blocker followed by a failed gate is measured as an early stop and continued from evidence.
+Manager events are reserved for specification conflict, scope growth, stall, round limit and failure after consultation.
+
+The current gate contract has no typed failure reason. Until it gains one, a gate proving a specification conflict
+starts its first assertion with `SPEC_CONFLICT`; quota failures use a fingerprint such as `quota_exhausted`.
+Worker claims of specification conflict do not establish that classification. Setup stage, timeout and baseline
+failure fields already identify environment problems without text conventions.
+
+Each attempt has an evidence directory with `contract.md`, `diff.patch`, `failure.json` and `approaches.json`.
+The diff includes commits, tracked edits and untracked files. Only explicit approach/result fields and gate evidence
+enter it; session transcripts stay in raw run logs. A consultation adds its answer as `consultation.md`; its raw log
+stays in the runs directory. Consultation input is assembled solely from the four evidence artifacts, with project
+instruction loading and web search disabled, a read-only sandbox and a bounded host deadline.
+
+Retry atomically revokes the current attempt and creates the next sequence. It then identifies and terminates every
+old worker and consultation process group, waits for exit and finalizes revoked attempts' accounting under the new
+fence before launching. A termination failure leaves the replacement pending; it never launches alongside the old
+writer. `stop` revokes writes on the current sequence; explicit retry publishes a new sequence. The internal `event`
+command takes `<task> <attempt> <kind> [json]` and exercises the same fence as direct store writes. All mutating CLI
+commands also check an invoking worker's inherited `GOAL_TASK_ID` and `GOAL_ATTEMPT`.
+
+## Attempt measurements and import
+
+Attempt records contain the task/class/profile/pool, routing version and experiment, timing, step counts, critical-path
+flag, input/cached/output tokens, before/after quota, result, first-failure fingerprint, escalation, consultation flag,
+fix round, diff size, changed files, host gate time and fixed step classifier version. Classes are decision, read,
+edit, wait, check and commit. Consultation tokens and pool observations are also stored in consultation events.
+Cumulative usage snapshots are differenced against the session baseline; repeated and older snapshots add no tokens.
+A rollout's pre-window observation establishes the baseline for a resumed attempt. A separately captured resumed
+`codex exec --json` log needs its preceding token baseline supplied explicitly.
+
+Existing logs can be imported without launching a worker:
+
+```sh
+bun src/cli.ts import-attempt /path/to/exec.jsonl \
+  --brief /path/to/brief.md \
+  --start 2026-10-25T00:01:00Z --end 2026-10-25T00:02:00Z \
+  --pool '<local pool>' --model gpt-6-luna --effort high \
+  --baseline '{"input":1000,"cached":500,"output":100}'
+```
+
+Use `--task` instead of `--brief` to associate an existing task. `--table-version` preserves a known historical table;
+otherwise the record explicitly identifies a pre-control-plane import. `--outcome` supplies a known historical result;
+otherwise it remains pending gate verification. Unknown quota, diff and gate-time measurements remain null. Imported
+tasks are stopped for inspection and are never automatically submitted to landing.
+
+The worker slice deliberately excludes mail, review rounds, QA slots, product gates, Claude workers, in-tree briefs,
+manager sessions, inbox implementations, tmux window management and merging. Each belongs to a removed legacy flow or
+to the separate integration slice.
