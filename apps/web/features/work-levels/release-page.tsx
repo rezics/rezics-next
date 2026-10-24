@@ -118,6 +118,32 @@ export function ReleaseSources({ release, realizations, sources, sourceReads = [
     </SubjectSources>;
 }
 
+/** The selected Release's records, shared by standalone views and the server page-end slot. */
+export function ReleaseSources({ release, realizations, sources, sourceReads = [], names, locale, t }: ReleaseDetails) {
+  const loaded = [...[...realizations.values()].flatMap(item => (item.ok ? [item.data] : [])), ...sources];
+  // Identity/revision survives absent evidence; distinct retained revisions stay distinct.
+  const records = [...new Map(loaded.map(item => [`${item.id}\0${item.revision}`, item] as const)).values()];
+  const detail = detailCopy(locale);
+  return <SubjectSources locale={locale}>
+      <p className="text-muted-foreground text-xs [overflow-wrap:anywhere]">{detail.releaseRevision}: {release.revision}</p>
+      <ul className="grid gap-3">{records.map(item => <li key={`${item.id}:${item.revision}`} data-realization-record className="grid min-w-0 gap-1">
+        <p><NameLink reference={item.work} names={names} unavailable={t.unavailable} unnamed={t.unnamed} undisclosed={t.nameNotShown} />{' · '}
+          <LanguageName tag={item.language} locale={locale} /></p>
+        <p className="text-muted-foreground text-xs [overflow-wrap:anywhere]">{item.id}</p>
+        <p className="text-muted-foreground text-xs [overflow-wrap:anywhere]">{detail.realizationRevision}: {item.revision}</p>
+        {item.evidence ? <p className="[overflow-wrap:anywhere]">{detail.evidence}:{' '}{sourceHref(item.evidence)
+          ? <a href={sourceHref(item.evidence)!} rel="noreferrer noopener" className="rounded-sm text-primary underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring">
+            {item.evidence}</a> : <span>{item.evidence}</span>}</p>
+          : <p className="text-muted-foreground">{detail.noEvidence}</p>}
+      </li>)}</ul>
+      {sourceReads.map(item => item.read.ok ? null : <div key={`${item.id}:${item.revision}`} data-unavailable-source className="grid min-w-0 gap-1">
+        <p className="[overflow-wrap:anywhere]">{t.continuity}: {item.id}</p>
+        <p className="text-muted-foreground text-xs [overflow-wrap:anywhere]">{detail.realizationRevision}: {item.revision}</p>
+        <RegionFailure title={t.realizationUnavailable} failure={item.read.failure} messages={workMessages[locale]} />
+      </div>)}
+    </SubjectSources>;
+}
+
 export function ReleaseFailure({ failure, messages, t }: { failure: Extract<Loaded<Release>, { ok: false }>['failure'];
   messages: WorkPageMessages; t: Copy }) {
   return <Region id="release" title={t.release}>
