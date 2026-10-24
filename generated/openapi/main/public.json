@@ -777506,6 +777506,27 @@
                             "path"
                           ],
                           "type": "object"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "occurrence",
+                        "revision",
+                        "predecessor",
+                        "receipt",
+                        "sourcePosition",
+                        "replayed",
+                        "modelGeneration",
+                        "manifest",
+                        "participations"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "associationHead": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
                         },
                         "status": {
                           "const": 409,
