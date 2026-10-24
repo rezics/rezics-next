@@ -8,6 +8,10 @@ import { claimFixture, fixtureReasons } from './g-565-decision-support.ts';
 import { foregroundCounted } from './support/query-cost-meter.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { fusekiReadBudget } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { boundedPool } from '../../../services/main/src/infrastructure/pg-pool.ts';
+import { ErasureService } from '../../../services/main/src/modules/erasure/request.ts';
+import { readGraphErasureProof } from '../../../services/main/src/modules/erasure/graph.ts';
+import type { ErasureReport } from '../../../services/main/src/modules/erasure/journal.ts';
 import { GRAPHS, iri, RV } from '../../../services/main/src/modules/work/activate.ts';
 import { WORK_READ_COST } from '../../../services/main/src/modules/work/read-contract.ts';
 import { DisclosureStore } from '../../../services/main/src/modules/disclosure/read.ts';
@@ -17,6 +21,7 @@ import { ownerModerationEffects } from '../../../services/main/src/modules/gover
 import { ContentModeration } from '../../../services/content/src/moderation.ts';
 import { PROTECTION_RULE } from '../../../services/main/src/modules/protection/schema.ts';
 import { rightsRoutes } from '../../../services/main/src/routes/rights.ts';
+import { erasureRoutes } from '../../../services/main/src/routes/erasures.ts';
 
 interface Work { work: string; workRevision: string; mainVersion: string }
 interface Episode { component: string; revision: string }
@@ -29,10 +34,11 @@ interface Parts { parts: Array<{ occurrence: string; work: string }>; next: stri
 // alone cannot detect scalar hydration; Work parts must exclude these targets.
 test('100 distinct public semantic Episodes fit current/exact Composition budgets, with Work-only parts, live withholding and sparse continuation', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through goalctl test');
+  if (!Bun.env.ACCOUNT_RELAY_DATABASE_URL) throw new Error('Composition erasure needs the QA relay journal');
   const started = performance.now();
   const f = await authorCreditFixture(Bun.env as Record<string, string>,
     resolve('.temp', `composition-target-batches-${randomUUID()}`),
-    'openid work:create work:edit work:read work:protect source:intake source:acquire '
+    'openid access:manage work:create work:edit work:read work:protect source:intake source:acquire '
       + 'source:convert source:propose source:adopt source:correspond source:read governance:report rights:decide');
   const objects = new S3ImmutableObjects({ endpoint: Bun.env.MAIN_S3_ENDPOINT!, bucket: Bun.env.MAIN_S3_BUCKET!,
     region: Bun.env.MAIN_S3_REGION!, accessKeyId: Bun.env.MAIN_S3_ACCESS_KEY!,
@@ -56,6 +62,9 @@ test('100 distinct public semantic Episodes fit current/exact Composition budget
   const rightsCall = (path: string, body: object, token: string, key = randomUUID()) => rightsApp.handle(
     new Request(`http://main.local${path}`, { method: 'POST', headers: { authorization: `Bearer ${token}`,
       'idempotency-key': key, 'content-type': 'application/json' }, body: JSON.stringify(body) }));
+  const erasureRelay = boundedPool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL });
+  const erasureApp = new Elysia().use(erasureRoutes({ environment: f.env, account: f.account.verifier,
+    access: f.access, erasures: new ErasureService(erasureRelay, f.pool, f.accessPool) }));
   const publishWork = async (work: Pick<Work, 'work' | 'mainVersion'>, title: string) => {
     await f.grant(`contribution:create:${work.work}`, 'contribution.create');
     const draft = await f.json<{ contribution: string; draftRevision: string }>(await f.call('POST', '/v1/contributions', {
@@ -269,8 +278,21 @@ test('100 distinct public semantic Episodes fit current/exact Composition budget
     const closedEpisodes = [episodes[1]!, episodes[2]!, episodes[4]!];
     for (const episode of closedEpisodes) await f.access.strongCloseScope(`semantic:read:${episode.component}`, '0');
     const erased = episodes[3]!;
-    await f.nativeFuseki.update(`INSERT DATA { GRAPH ${iri(GRAPHS.revisions)} {
-      ${iri(erased.revision)} a <${RV}ErasedRevision> } }`);
+    // Admit the same Resource and exact revision through erasure's owner;
+    // a marker without the journal and terminal graph receipt is not a fixture.
+    await f.grant(`erasure:${erased.component}`, 'erasure.request');
+    const erasure = await f.json<Pick<ErasureReport, 'erasureId' | 'erasureEpoch' | 'suppression' | 'targets'>>(
+      await erasureApp.handle(new Request('http://main.local/v1/erasures', { method: 'POST', headers: {
+        authorization: `Bearer ${f.account.tokenA}`, 'idempotency-key': randomUUID(),
+        'content-type': 'application/json' }, body: JSON.stringify({ profile: 'content-revision-erasure-v1',
+        actingSubject: f.actor, resourceId: erased.component, revisionIds: [shortId(erased.revision)] }) })), 200);
+    const graphTargets = erasure.targets.filter(target => target.owner === 'graph');
+    if (erasure.suppression !== 'suppressed' || graphTargets.length !== 1
+      || graphTargets[0]!.kind !== 'semantic_revision' || graphTargets[0]!.ref !== shortId(erased.revision)
+      || erasure.targets.some(target => target.completionState !== 'completed' || target.completedAt === null)) {
+      throw new Error('Exact Episode erasure did not complete through its owner');
+    }
+    await readGraphErasureProof(f.env.fuseki, f.env.lineage, erasure.erasureId, erasure.erasureEpoch, [erased.revision]);
     const proposal = await f.propose(`OL${randomInt(1, 1_000_000_000_000)}W`, [], 'Withdrawn source title');
     const withdrawn = await f.adoptWork(proposal);
     await f.grant(`work:edit:${withdrawn.work}`, 'work.edit');
@@ -343,5 +365,6 @@ test('100 distinct public semantic Episodes fit current/exact Composition budget
     for (const [client, query] of clients) client.query = query;
     f.access.canReadWork = originalCanReadWork;
     await f.close();
+    await erasureRelay.end();
   }
 }, 600_000);

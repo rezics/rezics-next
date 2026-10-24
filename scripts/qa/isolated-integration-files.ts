@@ -227,6 +227,11 @@ export const isolatedIntegrationFileList = [
 
 /** Delta proofs require the product assembler, whose raw update endpoint is closed. */
 export const commandOnlyIntegrationFiles: ReadonlySet<string> = new Set([
+  // Bounded public reads retain API-built stores and restore the product assembler.
+  'tests/qa/integration/audit-bounded-reads.test.ts',
+  'tests/qa/integration/notification-read-budget.test.ts',
+  'tests/qa/integration/official-zone-read-budget.test.ts',
+  'tests/qa/integration/rating-population-read-budget.test.ts',
   // Imported licence delivery is proved through the production catalogue writer.
   'tests/qa/integration/imported-content-rights.test.ts',
   'services/main/tests/also-enjoyed-read-cost.integration.test.ts',
