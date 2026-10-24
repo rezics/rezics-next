@@ -774839,26 +774839,15 @@
                 "schema": {
                   "anyOf": [
                     {
-                      "additionalProperties": false,
                       "properties": {
-                        "basis": {
-                          "maxLength": 128,
-                          "minLength": 1,
-                          "type": "string"
+                        "applicability": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
                         },
-                        "code": {
-                          "type": "string"
-                        },
-                        "currentHead": {
-                          "~elyTyp": 7,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "detail": {
-                          "maxLength": 512,
+                        "associationHead": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                           "type": "string"
                         },
                         "status": {
@@ -774868,34 +774857,82 @@
                         "title": {
                           "type": "string"
                         },
-                        "type": {
+                        "compatibilityReceipt": {
                           "type": "string"
                         },
-                        "validation": {
-                          "additionalProperties": false,
+                        "definition": {
                           "properties": {
-                            "constraint": {
-                              "~elyTyp": 7,
-                              "maxLength": 180,
-                              "nullable": true,
-                              "type": [
-                                "string",
-                                "null"
-                              ]
+                            "association": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "kind": {
+                                  "enum": [
+                                    "appearance",
+                                    "credit"
+                                  ],
+                                  "type": "string"
+                                },
+                                "subjectRoles": {
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "maxItems": 15,
+                                  "type": "array"
+                                },
+                                "workRole": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "workRole",
+                                "subjectRoles"
+                              ],
+                              "type": "object"
                             },
-                            "path": {
+                            "definition": {
+                              "type": "string"
+                            },
+                            "lifecycle": {
+                              "type": "string"
+                            },
+                            "modelRevision": {
+                              "type": "string"
+                            },
+                            "revision": {
+                              "type": "string"
+                            },
+                            "roles": {
+                              "items": {},
+                              "type": "array"
+                            },
+                            "star": {
                               "~elyTyp": 7,
-                              "maxLength": 180,
                               "nullable": true,
+                              "properties": {
+                                "hub": {
+                                  "type": "string"
+                                },
+                                "leaf": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "leaf",
+                                "hub"
+                              ],
                               "type": [
-                                "string",
+                                "object",
                                 "null"
                               ]
                             }
                           },
                           "required": [
-                            "path",
-                            "constraint"
+                            "revision",
+                            "definition",
+                            "lifecycle",
+                            "roles",
+                            "star"
                           ],
                           "type": "object"
                         }
@@ -774941,10 +774978,11 @@
                           "const": 409,
                           "type": "number"
                         },
-                        "title": {
+                        "mappingRevision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                           "type": "string"
                         },
-                        "type": {
+                        "modelGeneration": {
                           "type": "string"
                         },
                         "validation": {
@@ -775775,7 +775813,7 @@
                           ],
                           "type": "object"
                         },
-                        "lifecycle": {
+                        "receipt": {
                           "type": "string"
                         },
                         "occurrence": {
@@ -777476,374 +777514,18 @@
                       "type": "object"
                     },
                     {
-                      "additionalProperties": false,
                       "properties": {
+                        "basis": {
+                          "maxLength": 128,
+                          "minLength": 1,
+                          "type": "string"
+                        },
                         "code": {
                           "const": "invalid_request",
                           "type": "string"
                         },
                         "status": {
                           "const": 400,
-                          "type": "number"
-                        },
-                        "title": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "type",
-                        "title",
-                        "status",
-                        "code"
-                      ],
-                      "type": "object"
-                    }
-                  ]
-                }
-              }
-            },
-            "description": "Response for status 400"
-          },
-          "401": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "basis": {
-                      "maxLength": 128,
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    },
-                    "currentHead": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "detail": {
-                      "maxLength": 512,
-                      "type": "string"
-                    },
-                    "status": {
-                      "const": 401,
-                      "type": "number"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "type": {
-                      "type": "string"
-                    },
-                    "validation": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "constraint": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "path": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "path",
-                        "constraint"
-                      ],
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "code"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Response for status 401"
-          },
-          "403": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "basis": {
-                      "maxLength": 128,
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    },
-                    "currentHead": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "detail": {
-                      "maxLength": 512,
-                      "type": "string"
-                    },
-                    "status": {
-                      "const": 403,
-                      "type": "number"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "type": {
-                      "type": "string"
-                    },
-                    "validation": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "constraint": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "path": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "path",
-                        "constraint"
-                      ],
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "code"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Response for status 403"
-          },
-          "404": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "basis": {
-                      "maxLength": 128,
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    },
-                    "currentHead": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "detail": {
-                      "maxLength": 512,
-                      "type": "string"
-                    },
-                    "status": {
-                      "const": 404,
-                      "type": "number"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "type": {
-                      "type": "string"
-                    },
-                    "validation": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "constraint": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "path": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "path",
-                        "constraint"
-                      ],
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "code"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Response for status 404"
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "additionalProperties": false,
-                      "properties": {
-                        "basis": {
-                          "maxLength": 128,
-                          "minLength": 1,
-                          "type": "string"
-                        },
-                        "code": {
-                          "type": "string"
-                        },
-                        "currentHead": {
-                          "~elyTyp": 7,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "detail": {
-                          "maxLength": 512,
-                          "type": "string"
-                        },
-                        "status": {
-                          "const": 409,
-                          "type": "number"
-                        },
-                        "title": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string"
-                        },
-                        "validation": {
-                          "additionalProperties": false,
-                          "properties": {
-                            "constraint": {
-                              "~elyTyp": 7,
-                              "maxLength": 180,
-                              "nullable": true,
-                              "type": [
-                                "string",
-                                "null"
-                              ]
-                            },
-                            "path": {
-                              "~elyTyp": 7,
-                              "maxLength": 180,
-                              "nullable": true,
-                              "type": [
-                                "string",
-                                "null"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "path",
-                            "constraint"
-                          ],
-                          "type": "object"
-                        }
-                      },
-                      "required": [
-                        "type",
-                        "title",
-                        "status",
-                        "code"
-                      ],
-                      "type": "object"
-                    },
-                    {
-                      "properties": {
-                        "basis": {
-                          "maxLength": 128,
-                          "minLength": 1,
-                          "type": "string"
-                        },
-                        "code": {
-                          "const": "unsupported_model_revision",
-                          "type": "string"
-                        },
-                        "currentHead": {
-                          "~elyTyp": 7,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "detail": {
-                          "maxLength": 512,
-                          "type": "string"
-                        },
-                        "modelRevision": {
-                          "type": "string"
-                        },
-                        "schema": {
-                          "type": "string"
-                        },
-                        "status": {
-                          "const": 409,
                           "type": "number"
                         },
                         "detail": {
@@ -777998,6 +777680,480 @@
                           "type": "number"
                         },
                         "title": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "title",
+                        "status",
+                        "code"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "basis": {
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "validation": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "constraint": {
+                          "~elyTyp": 7,
+                          "maxLength": 180,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "path": {
+                          "~elyTyp": 7,
+                          "maxLength": 180,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "constraint"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "basis": {
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "validation": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "constraint": {
+                          "~elyTyp": 7,
+                          "maxLength": 180,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "lifecycle": {
+                          "type": "string"
+                        },
+                        "manifest": {
+                          "type": "string"
+                        },
+                        "mappingRevision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "modelGeneration": {
+                          "type": "string"
+                        },
+                        "occurrence": {
+                          "type": "string"
+                        },
+                        "operation": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "origin": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "kind": {
+                                  "const": "stored-credit",
+                                  "type": "string"
+                                },
+                                "revision": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "revision"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "binding": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "conversion": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "source-binding",
+                                      "type": "string"
+                                    },
+                                    "observation": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "proposal": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "record": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "sourceOccurrence": {
+                                      "maxLength": 2048,
+                                      "minLength": 1,
+                                      "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                      "type": "string"
+                                    },
+                                    "sourceOrdinal": {
+                                      "maximum": 127,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "binding",
+                                    "proposal",
+                                    "conversion",
+                                    "record",
+                                    "observation",
+                                    "sourceOccurrence",
+                                    "sourceOrdinal"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "decision": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "selected-publication",
+                                      "type": "string"
+                                    },
+                                    "observation": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "record": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "source": {
+                                      "maxLength": 2048,
+                                      "pattern": "^urn:rezics:work-source:[^\\s<>\"{}|\\^`]+$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "decision",
+                                    "source",
+                                    "record",
+                                    "observation"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "path",
+                            "constraint"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "title",
+                        "status",
+                        "code"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "basis": {
+                          "maxLength": 128,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "code": {
+                          "const": "unsupported_model_revision",
+                          "type": "string"
+                        },
+                        "currentHead": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "detail": {
+                          "maxLength": 512,
+                          "type": "string"
+                        },
+                        "modelRevision": {
+                          "type": "string"
+                        },
+                        "schema": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "const": 409,
+                          "type": "number"
+                        },
+                        "detail": {
+                          "maxLength": 512,
+                          "type": "string"
+                        },
+                        "modelRevision": {
+                          "type": "string"
+                        },
+                        "schema": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "const": 409,
+                          "type": "number"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        },
+                        "validation": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "constraint": {
+                              "~elyTyp": 7,
+                              "maxLength": 180,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "path": {
+                              "~elyTyp": 7,
+                              "maxLength": 180,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "path",
+                            "constraint"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "title",
+                        "status",
+                        "code",
+                        "modelRevision",
+                        "schema"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "basis": {
+                          "maxLength": 128,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "currentHead": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "profile": {
+                          "const": "relation-change-v2",
+                          "type": "string"
+                        },
+                        "receipt": {
+                          "type": "string"
+                        },
+                        "revision": {
+                          "type": "string"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "occurrence",
+                        "revision",
+                        "predecessor",
+                        "lifecycle",
+                        "definition",
+                        "participations",
+                        "applicability",
+                        "sourcePosition",
+                        "modelGeneration",
+                        "manifest",
+                        "operation",
+                        "receipt",
+                        "attributionProofs",
+                        "associationHead",
+                        "compatibilityReceipt",
+                        "origin",
+                        "mappingRevision"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "claim": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "claimRevision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                           "type": "string"
                         },
                         "type": {
@@ -796778,6 +796934,485 @@
                                               "~elyTyp": 7,
                                               "nullable": true,
                                               "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                              "type": [
+                                                "string",
+                                                "null"
+                                              ]
+                                            }
+                                          },
+                                          "required": [
+                                            "reference",
+                                            "status",
+                                            "type",
+                                            "base",
+                                            "work",
+                                            "address",
+                                            "disclosure",
+                                            "name",
+                                            "avatar"
+                                          ],
+                                          "type": "object"
+                                        }
+                                      },
+                                      "required": [
+                                        "subject",
+                                        "frames"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "reference": {
+                                      "type": "string"
+                                    },
+                                    "resolution": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "hops": {
+                                          "maximum": 32,
+                                          "minimum": 1,
+                                          "type": "integer"
+                                        },
+                                        "source": {
+                                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                          "type": "string"
+                                        },
+                                        "state": {
+                                          "const": "merged",
+                                          "type": "string"
+                                        },
+                                        "survivor": {
+                                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "state",
+                                        "source",
+                                        "survivor",
+                                        "hops"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "status": {
+                                      "const": "available",
+                                      "type": "string"
+                                    },
+                                    "type": {
+                                      "enum": [
+                                        "work",
+                                        "main-version",
+                                        "space",
+                                        "realm",
+                                        "agent",
+                                        "zone",
+                                        "concept",
+                                        "character",
+                                        "context",
+                                        "role",
+                                        "relation-definition",
+                                        "release",
+                                        "occurrence",
+                                        "realization",
+                                        "resource",
+                                        "collection",
+                                        "projection"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "work": {
+                                      "~elyTyp": 7,
+                                      "nullable": true,
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "reference",
+                                    "status",
+                                    "type",
+                                    "base",
+                                    "work",
+                                    "address",
+                                    "disclosure",
+                                    "name",
+                                    "avatar"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            "type": "array"
+                          },
+                          "evidence": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "frameMatch": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "dimensions": {
+                                "maximum": 8,
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "exact": {
+                                "maximum": 8,
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "score": {
+                                "maximum": 136,
+                                "minimum": 0,
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "dimensions",
+                              "exact",
+                              "score"
+                            ],
+                            "type": "object"
+                          },
+                          "kind": {
+                            "enum": [
+                              "occurrence",
+                              "derivation",
+                              "collection"
+                            ],
+                            "type": "string"
+                          },
+                          "relation": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "rendering": {
+                            "~elyTyp": 7,
+                            "anyOf": [
+                              {
+                                "anyOf": [
+                                  {
+                                    "properties": {
+                                      "bindings": {
+                                        "items": {
+                                          "properties": {
+                                            "creditedName": {
+                                              "properties": {
+                                                "language": {
+                                                  "type": "string"
+                                                },
+                                                "lexical": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "lexical",
+                                                "language"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "participant": {},
+                                            "position": {
+                                              "type": "integer"
+                                            },
+                                            "role": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "role",
+                                            "participant"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "type": "array"
+                                      },
+                                      "meaning": {
+                                        "properties": {
+                                          "definition": {
+                                            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                            "type": "string"
+                                          },
+                                          "lifecycle": {
+                                            "type": "string"
+                                          },
+                                          "revision": {
+                                            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                            "type": "string"
+                                          },
+                                          "roles": {
+                                            "items": {
+                                              "properties": {
+                                                "key": {
+                                                  "type": "string"
+                                                },
+                                                "maxParticipants": {
+                                                  "type": "integer"
+                                                },
+                                                "members": {
+                                                  "items": {
+                                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                    "type": "string"
+                                                  },
+                                                  "type": "array"
+                                                },
+                                                "minParticipants": {
+                                                  "type": "integer"
+                                                },
+                                                "ordered": {
+                                                  "type": "boolean"
+                                                },
+                                                "role": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "role",
+                                                "key",
+                                                "minParticipants",
+                                                "maxParticipants",
+                                                "ordered"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "type": "array"
+                                          }
+                                        },
+                                        "required": [
+                                          "definition",
+                                          "revision",
+                                          "lifecycle",
+                                          "roles"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "occurrence": {
+                                        "~elyTyp": 7,
+                                        "nullable": true,
+                                        "properties": {
+                                          "component": {
+                                            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                            "type": "string"
+                                          },
+                                          "revision": {
+                                            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "component",
+                                          "revision"
+                                        ],
+                                        "type": [
+                                          "object",
+                                          "null"
+                                        ]
+                                      },
+                                      "profile": {
+                                        "const": "relation-rendering-v1",
+                                        "type": "string"
+                                      },
+                                      "projections": {
+                                        "items": {
+                                          "properties": {
+                                            "arguments": {
+                                              "items": {
+                                                "properties": {
+                                                  "creditedName": {
+                                                    "properties": {
+                                                      "language": {
+                                                        "type": "string"
+                                                      },
+                                                      "lexical": {
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "lexical",
+                                                      "language"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  "position": {
+                                                    "type": "integer"
+                                                  },
+                                                  "role": {
+                                                    "type": "string"
+                                                  },
+                                                  "type": {
+                                                    "type": "string"
+                                                  },
+                                                  "value": {}
+                                                },
+                                                "required": [
+                                                  "role",
+                                                  "type",
+                                                  "value"
+                                                ],
+                                                "type": "object"
+                                              },
+                                              "type": "array"
+                                            },
+                                            "direction": {
+                                              "~elyTyp": 7,
+                                              "enum": [
+                                                "ltr",
+                                                "rtl",
+                                                null
+                                              ],
+                                              "nullable": true,
+                                              "type": [
+                                                "string",
+                                                "null"
+                                              ]
+                                            },
+                                            "fallback": {
+                                              "~elyTyp": 7,
+                                              "nullable": true,
+                                              "properties": {
+                                                "conversion": {
+                                                  "type": "null"
+                                                },
+                                                "crossedScript": {
+                                                  "type": "boolean"
+                                                },
+                                                "reason": {
+                                                  "enum": [
+                                                    "language-fallback",
+                                                    "script-fallback",
+                                                    "missing-direction"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                "requestedLanguages": {
+                                                  "items": {
+                                                    "type": "string"
+                                                  },
+                                                  "type": "array"
+                                                },
+                                                "requestedScript": {
+                                                  "~elyTyp": 7,
+                                                  "nullable": true,
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
+                                                },
+                                                "usedLanguage": {
+                                                  "~elyTyp": 7,
+                                                  "nullable": true,
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
+                                                },
+                                                "usedScript": {
+                                                  "~elyTyp": 7,
+                                                  "nullable": true,
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
+                                                }
+                                              },
+                                              "required": [
+                                                "reason",
+                                                "requestedLanguages",
+                                                "usedLanguage",
+                                                "requestedScript",
+                                                "usedScript",
+                                                "crossedScript",
+                                                "conversion"
+                                              ],
+                                              "type": [
+                                                "object",
+                                                "null"
+                                              ]
+                                            },
+                                            "fromRole": {
+                                              "type": "string"
+                                            },
+                                            "labels": {
+                                              "~elyTyp": 7,
+                                              "nullable": true,
+                                              "properties": {
+                                                "grammaticalForms": {
+                                                  "items": {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "case": {
+                                                        "type": "string"
+                                                      },
+                                                      "gender": {
+                                                        "type": "string"
+                                                      },
+                                                      "number": {
+                                                        "type": "string"
+                                                      },
+                                                      "value": {
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "value"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  "type": "array"
+                                                },
+                                                "heading": {
+                                                  "type": "string"
+                                                },
+                                                "noun": {
+                                                  "type": "string"
+                                                },
+                                                "plurals": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "few": {
+                                                      "type": "string"
+                                                    },
+                                                    "many": {
+                                                      "type": "string"
+                                                    },
+                                                    "one": {
+                                                      "type": "string"
+                                                    },
+                                                    "other": {
+                                                      "type": "string"
+                                                    },
+                                                    "two": {
+                                                      "type": "string"
+                                                    },
+                                                    "zero": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "other"
+                                                  ],
+                                                  "type": "object"
+                                                }
+                                              },
+                                              "required": [
+                                                "noun",
+                                                "heading",
+                                                "plurals",
+                                                "grammaticalForms"
+                                              ],
+                                              "type": [
+                                                "object",
+                                                "null"
+                                              ]
+                                            },
+                                            "language": {
+                                              "~elyTyp": 7,
+                                              "nullable": true,
                                               "type": [
                                                 "string",
                                                 "null"
