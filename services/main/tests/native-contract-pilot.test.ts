@@ -22,15 +22,36 @@ import { workHeaderModels, workHeaderOperation } from '../src/routes/work-header
 import { operationPolicies } from '../src/routes/operation-policies.ts';
 import { typedRefusal } from '../src/routes/problems.ts';
 import { buildMainOpenApi } from '../../../scripts/api/generate.ts';
-import { invariantFingerprints } from '../../../scripts/api/native-contract-pilot.ts';
-import baseline from './fixtures/native-contract-invariants.json';
+import { type ApiDocument, invariantFingerprints, normalized, pilotOperations } from '../../../scripts/api/native-contract-pilot.ts';
+import baseline from './fixtures/native-contract-accepted-invariants.json';
 
+import accepted from './fixtures/native-contract-accepted-invariants.json';
 const id = '00000000-0000-4000-8000-000000000001';
 const resource = `https://rezics.com/id/${id}`;
 const preferenceBody = { profile: 'work-create-acting-context-preference-v1', task: 'work.create',
   actingSubject: null, expectedRevision: null, idempotencyKey: 'preference-proof' };
 const scalarBody = { profile: 'work-scalar-state-v1', actingSubject: resource, expectedHead: resource };
 const principal = { issuer: 'https://account.test', subject: 'reader', emailVerified: true };
+
+// Generate once, but give each assertion/mutation its own resolved copy of the actual pilot contracts.
+let generated: Promise<string> | undefined;
+async function generatedContract() {
+  generated ??= buildMainOpenApi().then(source => {
+    const document = JSON.parse(source);
+    return JSON.stringify({ paths: Object.fromEntries(pilotOperations.map(([method, path]) =>
+      [path, { [method]: normalized(document.paths[path][method], document) }])) });
+  });
+  return JSON.parse(await generated);
+}
+function assertAcceptedContract(document: ApiDocument) {
+  expect(JSON.stringify(invariantFingerprints(document))).toBe(JSON.stringify(accepted));
+}
+function headerResponse(document: Awaited<ReturnType<typeof generatedContract>>) {
+  return document.paths['/v1/works/{id}'].get.responses['200'];
+}
+function headerSchema(document: Awaited<ReturnType<typeof generatedContract>>) {
+  return headerResponse(document).content['application/json'].schema;
+}
 
 function fixture() {
   let fault: Error | undefined;

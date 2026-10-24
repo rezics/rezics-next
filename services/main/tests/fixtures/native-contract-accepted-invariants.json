@@ -1,0 +1,27 @@
+[
+  {
+    "method": "get",
+    "path": "/v1/works/{id}",
+    "identity": "ad5b20ac64f65fca75ceb6b95cc85a5c87b4f42a1c342e25744bbfce24df33a8",
+    "success": {
+      "200": "e3ebc7f69431f02850bc1d4f512574d22e62fb61a8e439f681bd53d45bb73391"
+    }
+  },
+  {
+    "method": "put",
+    "path": "/v1/me/acting-context-preferences/work.create",
+    "identity": "bf56fcfddd70fae7b8878de62bc76b31b34ae7e09c93be2993561689279517e4",
+    "success": {
+      "200": "2b60215f5ee772cee6738a15778cedd3d6f963ab72e2003245a48fea3255c22b"
+    }
+  },
+  {
+    "method": "post",
+    "path": "/v1/works/{id}/scalar-value",
+    "identity": "8b36c80d54e8cdebe302cd75439779f3880e77c95a84c54126e5c2167c08a3d5",
+    "success": {
+      "200": "7fe8fceadf12c27fbd552ab7ff67ab3724e75d90c8d76dc170e0b7034cb10465",
+      "202": "2f0d2538c2c7499fce35bbe4ae021ce5618f9accc0ddaade9cd9ad390db5c893"
+    }
+  }
+]
