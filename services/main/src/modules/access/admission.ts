@@ -14,7 +14,10 @@ import { createHash } from 'node:crypto';
 import { receiptFamilyFor } from './receipt-families.ts';
 import { Pool, type PoolClient } from 'pg';
 import { recordRatingAggregateHead, readRatingAggregateInventory,
-  checkRatingAggregateFence, readRatingContextPolicyWitness, type StandingRatingCut } from '../rating/aggregate-inventory.ts';
+  checkRatingAggregateFence, readRatingContextPolicyWitness, prepareStandingRatingHeadChange, lockRatingObservationTarget, withInventoryClient,
+  type StandingRatingCut } from '../rating/aggregate-inventory.ts';
+import { standingRatingDigest, standingRatingSlotIri } from '../rating/observation.ts';
+import { globalRatingDigest, GLOBAL_RATING_POPULATION_OWNER } from '../rating/global.ts';
 import { directWorkCreateProof, selectedDirectWorkProof } from './direct-principal.ts';
 import { groupWorkCreateProof, GroupUnavailable } from './groups.ts';
 import { representedWorkProof, selectedRepresentedWorkProof, saveInvitedWorkProof,
@@ -1192,6 +1195,48 @@ export class AccessAdmissionRegistry {
     return this.registerRequest(request,transaction);
   }
 
+  /** Called by the standing graph owner after checking its predecessor, before
+   * any effect. Commit bounded invalidation independently of the caller; a
+   * native predecessor lag cannot authorize dispatch or masquerade as stale. */
+  async prepareStandingRatingPublication(admission: RegisteredAdmission,
+    intent: { context: string; work: string; mainVersion: string; value: number | null; expectedRevisionHead: string | null },
+    requestSignal?: AbortSignal): Promise<void> {
+    if (accessClient(this.pool)) throw new AdmissionUnavailable('Standing publication preparation needs a committed admission');
+    const signal = requestSignal ? AbortSignal.any([requestSignal,AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000);
+    const prepared = await withInventoryClient(this.pool,signal,async client => { let committed = false; try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL lock_timeout = '2s'");
+      await client.query("SET LOCAL statement_timeout = '5s'");
+      await requireRecoveryOpen(client);
+      const gate = (await client.query('SELECT open,dispatch_open FROM access.scope_gate WHERE id=$1 FOR SHARE',[admission.scope])).rows[0];
+      if (!gate?.open || !gate.dispatch_open) throw new AdmissionUnavailable('Rating scope is unavailable');
+      const currentAdmission = (await client.query(`SELECT id FROM access.admission WHERE id=$1 AND state='claimed'
+        AND request_digest=$2 AND principal_id=$3::uuid AND authority_epoch=$4::bigint
+        AND expires_at>clock_timestamp() FOR SHARE`,[admission.id,admission.requestDigest,admission.principalId,admission.authorityEpoch])).rows[0];
+      if (!currentAdmission) throw new AdmissionUnavailable('Rating admission is unavailable');
+      const context = (await client.query('SELECT realm FROM access.rating_aggregate_context WHERE context=$1',[intent.context])).rows[0];
+      if (!context) throw new AdmissionUnavailable('Rating Context seal is unavailable');
+      const input = {context:intent.context,work:intent.work,mainVersion:intent.mainVersion,value:intent.value,
+        expectedRevisionHead:intent.expectedRevisionHead,actingSubject:admission.actingSubject};
+      const digest = context.realm === GLOBAL_RATING_POPULATION_OWNER ? globalRatingDigest(input) : standingRatingDigest(input);
+      if (admission.action !== 'rating.observation.set' || admission.scope !== `rating:observe:${intent.context}`
+        || digest !== admission.requestDigest) throw new AdmissionConflict('Standing publication differs from its admission');
+      const slot = standingRatingSlotIri(admission.principalId,intent.context,intent.mainVersion);
+      await lockRatingObservationTarget(client,intent.context,intent.mainVersion);
+      const current = (await client.query('SELECT revision FROM access.rating_aggregate_head WHERE context=$1 AND main_version=$2 AND slot=$3',
+        [intent.context,intent.mainVersion,slot])).rows[0];
+      if ((current?.revision ?? null) !== intent.expectedRevisionHead) throw new AdmissionUnavailable('Rating predecessor seal is unavailable');
+      const ready = await prepareStandingRatingHeadChange(client,{context:intent.context,mainVersion:intent.mainVersion,slot,
+        admissionId:admission.id,value:intent.value,valueKnown:true});
+      signal.throwIfAborted();
+      await client.query('COMMIT');
+      committed = true;
+      signal.throwIfAborted();
+      return ready;
+    } catch (error) { if (!committed) await rollback(client); throw admissionError(error); } });
+    if (!prepared) throw new AdmissionUnavailable('Standing rating publication preparation is incomplete');
+  }
+
   /** Probe the ordinary registration policy without retaining an admission,
    * outbox event or lazily created gate. The same policy runs again at dispatch.
    * Cost matches one registration's bounded authority reads, with no owner IO. */
@@ -2309,6 +2354,7 @@ export class AccessAdmissionRegistry {
    * acknowledgement. Authorization must be enforced before owner dispatch. */
   async recordGraphOutcome(admissionId: string, proof: GraphTerminalProof): Promise<void> {
     const client = await this.pool.connect();
+    let preparationCommitted = false;
     try {
       await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
@@ -2359,7 +2405,14 @@ export class AccessAdmissionRegistry {
       const ratingOutbox = proof.outcome === 'succeeded'
         && ['rating.context.create', 'rating.context.policy.set', 'rating.observation.set'].includes(row.action);
       if (ratingOutbox) await client.query("SELECT set_config('rezics.discovery_rating_outbox','on',true)");
-      await recordRatingAggregateHead(client, row, proof);
+      if (await recordRatingAggregateHead(client, row, proof) === 'pending') {
+        // Preserve bounded discovery, but neither seal nor acknowledge a head
+        // whose effective people have not all been fenced yet. Receipt replay
+        // retries this same admission after publication continuation.
+        await client.query('COMMIT');
+        preparationCommitted = true;
+        throw new AdmissionUnavailable('Standing rating publication preparation is incomplete');
+      }
       if (ratingOutbox) await client.query("SELECT set_config('rezics.discovery_rating_outbox','off',true)");
       await recordInitialMaintainer(client, row, proof);
       if (row.action === 'space.create') await settleBaselineSpace(client, admissionId, proof.outcome);
@@ -2374,7 +2427,7 @@ export class AccessAdmissionRegistry {
         [Bun.randomUUIDv7(), admissionId, scope, row.authority_epoch]);
       await client.query('COMMIT');
     } catch (error) {
-      await rollback(client);
+      if (!preparationCommitted) await rollback(client);
       throw error;
     } finally {
       client.release();

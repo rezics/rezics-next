@@ -1,6 +1,6 @@
 import { InvalidRatingObservationInput } from './observation.ts';
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
-import { AdmissionDenied, AdmissionExpired, AdmissionLockBusy, type AccessAdmissionRegistry,
+import { AdmissionDenied, AdmissionExpired, AdmissionLockBusy, AdmissionUnavailable, type AccessAdmissionRegistry,
   type RegisteredAdmission, type VerifiedPrincipal } from '../access/admission.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { CancelledActivation, IdempotencyConflict, type WorkActivationEnvironment } from '../work/activate.ts';
@@ -12,7 +12,7 @@ import { checkedGlobalContextReceipt, checkedGlobalRatingReceipt, createGlobalRa
 import { RatingCurrentVisibility, RatingObservationUnavailable, readStandingRatingReceipt, sealStandingRatingAdmission,
   StaleRatingObservation, type RatingObservationReceipt } from './observation.ts';
 
-type Access = Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>;
+type Access = Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome' | 'prepareStandingRatingPublication'>;
 
 /** Claim when eligible; an ineligible or failed claim seals a terminal cancellation. */
 async function dispatch(access: Access, registered: RegisteredAdmission, digest: string, principal: VerifiedPrincipal,
@@ -67,9 +67,11 @@ export async function setAdmittedGlobalRating(env: WorkActivationEnvironment,
     idempotencyKey: input.idempotencyKey, requestDigest: digest });
   try {
     await dispatch(access, registered, digest, principal, async admission => {
-      try { await setGlobalRating(env, admission, input); }
+      try { await setGlobalRating(env, admission, input,
+        () => access.prepareStandingRatingPublication(admission,input,request.signal)); }
       catch (error) {
-        if (error instanceof IdempotencyConflict || error instanceof InvalidRatingObservationInput || error instanceof RatingCurrentVisibility) throw error;
+        if (error instanceof IdempotencyConflict || error instanceof InvalidRatingObservationInput || error instanceof RatingCurrentVisibility
+          || error instanceof AdmissionUnavailable || error instanceof AdmissionLockBusy) throw error;
         if (error instanceof RatingObservationUnavailable) await sealStandingRatingAdmission(env, admission);
       }
     }, admission => sealStandingRatingAdmission(env, admission));
@@ -78,7 +80,7 @@ export async function setAdmittedGlobalRating(env: WorkActivationEnvironment,
     await access.recordGraphOutcome(registered.id, terminal);
     return { ...checkedGlobalRatingReceipt(terminal, registered, input, digest), replayed: registered.replayed };
   } catch (error) {
-    if (error instanceof InvalidRatingObservationInput || error instanceof AdmissionLockBusy || error instanceof IdempotencyConflict || error instanceof StaleRatingObservation
+    if (error instanceof InvalidRatingObservationInput || error instanceof AdmissionLockBusy || error instanceof AdmissionUnavailable || error instanceof IdempotencyConflict || error instanceof StaleRatingObservation
       || error instanceof RatingObservationUnavailable) throw error;
     throw new PendingAdmittedWork(registered.id, 'rating-observation');
   }

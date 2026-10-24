@@ -380,6 +380,7 @@ export async function sealStandingRatingAdmission(env: WorkActivationEnvironment
 /** Replace one Account-principal opinion by exact head; prior revisions remain immutable. */
 export async function setStandingRating(env: WorkActivationEnvironment,
   admission: RegisteredAdmission, input: SetStandingRatingInput, daily = false,
+  preparePublication?: () => Promise<void>,
 ): Promise<RatingObservationReceipt> {
   const digest = standingRatingDigest(input, daily);
   if (admission.action !== 'rating.observation.set'
@@ -413,6 +414,7 @@ export async function setStandingRating(env: WorkActivationEnvironment,
     if (stale) return checkedRatingReceipt(env, stale, admission, input, digest, daily);
     throw new PendingActivation('stale standing rating was not sealed');
   }
+  await preparePublication?.();
   const observation = deps.observation ?? ID + Bun.randomUUIDv7();
   const revision = ID + Bun.randomUUIDv7();
   const operation = ID + Bun.randomUUIDv7();

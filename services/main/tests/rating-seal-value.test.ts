@@ -114,11 +114,14 @@ test('standing additive values are bound to the admitted digest, scale-independe
   for (const owner of [realm, GLOBAL_RATING_POPULATION_OWNER]) {
     for (const value of [0, 0.5, 5, null]) {
       const statements: { sql: string; params: unknown[] }[] = [];
+      const expected = value === null ? predecessor : null;
       const client = { async query(sql: string, params: unknown[] = []) {
         statements.push({ sql, params });
-        return { rowCount: 1, rows: sql.startsWith('SELECT realm') ? [{ realm: owner }] : [] };
+        const rows = sql.startsWith('SELECT realm') ? [{ realm: owner }]
+          : sql.startsWith('SELECT revision') ? expected ? [{revision:expected}] : []
+          : sql.includes('access.prepare_rating_standing_head_change') ? [{prepared:true}] : [];
+        return { rowCount: 1, rows };
       } } as unknown as PoolClient;
-      const expected = value === null ? predecessor : null;
       const intent = { context, work: target, mainVersion: target, value, expectedRevisionHead: expected, actingSubject: actor };
       const digest = (owner === realm ? standingRatingDigest : globalRatingDigest)(intent);
       const admission = { ...admissionFor(8, null), request_digest: digest };

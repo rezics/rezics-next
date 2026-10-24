@@ -6,6 +6,7 @@ import { AccessAdmissionRegistry } from '../../../services/main/src/modules/acce
 import { GLOBAL_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/global.ts';
 import { readRatingAggregateInventory } from '../../../services/main/src/modules/rating/aggregate-inventory.ts';
 import { refreshStandingRatingProjections } from '../../../services/main/src/modules/rating/standing-publication.ts';
+import { readStandingRatingReceipt } from '../../../services/main/src/modules/rating/observation.ts';
 import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { startMediaStack } from './media-support.ts';
 
@@ -64,9 +65,22 @@ test('standing publication isolates interrupted identity and projection cuts at 
       const key = `${person.principalId}:${context}`;
       if (!granted.has(key)) { await person.grant(`rating:observe:${context}`, 'rating.observation.set'); granted.add(key); }
       const global = context !== realmContext;
-      return json<Opinion>(await call(person, global ? '/v1/global-rating-observations' : '/v1/rating-observations', {
+      const idempotencyKey = randomUUID(), path = global ? '/v1/global-rating-observations' : '/v1/rating-observations';
+      const body = {
         profile: global ? 'global-rating-standing-observation-v1' : 'realm-standing-rating-observation-v1',
-        context, work: work.work, mainVersion: work.mainVersion, value, expectedRevisionHead: head }), 201);
+        context, work: work.work, mainVersion: work.mainVersion, value, expectedRevisionHead: head };
+      for (let attempt = 0; attempt < 16; attempt++) {
+        const response = await call(person,path,body,idempotencyKey);
+        if (response.status !== 503) return json<Opinion>(response,attempt === 0 ? 201 : 200);
+        const admission = (await f.accessPool.query('SELECT id,state FROM access.admission WHERE idempotency_key=$1 AND scope_id=$2',
+          [idempotencyKey,`rating:observe:${context}`])).rows[0];
+        expect(admission?.state).toBe('registered');
+        // Preparation must precede graph withdrawal/replacement, as well as the
+        // native seal. A pending response cannot expose a partially fenced cut.
+        expect(await readStandingRatingReceipt(f.env,admission.id)).toBeNull();
+        expect((await refreshStandingRatingProjections(f.accessPool,{context,limit:1})).refreshed).toBe(0);
+      }
+      throw new Error('Standing admission preparation did not exhaust bounded pages');
     };
     const read = (context = globalContext, work: Target = target) => call(null,
       context === realmContext ? '/v1/rating-aggregates' : '/v1/global-rating-aggregates', {
