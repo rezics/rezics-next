@@ -458,6 +458,7 @@ export function RecipeContent({ page, units, messages: t, notes, controls, colum
   /** Only a successful structured Recipe read establishes absence; an empty editor draft does not. */
   nutritionKnown?: boolean;
 }) {
+  const nutritionHeading = useId();
   return <div className="grid gap-4">
     <RecipeFacts page={page} messages={t} />
     {controls}
