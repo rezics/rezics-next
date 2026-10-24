@@ -26,7 +26,7 @@ import { assertPublicDomainNativeCreation, publicDomainBaseline } from '../../..
 import { auditBaseline, auditConsumerForFile, auditConsumers, auditOwnerPrerequisites,
   auditPreparationBudgetMs, type AuditCommand, type AuditCommandReceipt, type AuditConsumer,
   type AuditFilePin, type AuditGrantReceipt, type AuditImport, type AuditManifests, type AuditOriginals, type AuditPreparationMetadata,
-  type AuditReadPredicate, type AuditRecipe, type AuditValue } from '../../../tests/qa/fixtures/audit-corpus-contract.ts';
+  type AuditReadPredicate, type AuditRecipe, type AuditRecipeAddition, type AuditStage, type AuditValue } from '../../../tests/qa/fixtures/audit-corpus-contract.ts';
 import type { PersonaName, RetainedPersonaRealm } from '../../../tests/qa/support/personas.ts';
 import { tryAcquireDirectoryLease } from '../process/lease.ts';
 
@@ -184,7 +184,7 @@ export function assertAuditRecipe(value: unknown): asserts value is AuditRecipe 
   requireFact(recipe.unknownControls === undefined || Array.isArray(recipe.unknownControls)
     && recipe.unknownControls.every(name => /^[a-z][a-z0-9-]*$/u.test(name))
     && new Set(recipe.unknownControls).size === recipe.unknownControls.length, 'invalid unknown control names');
-  const realms = new Set<string>(), evidence = new Set<string>(), stages = new Set<string>(), commands = new Set<string>(), keys = new Set<string>();
+  const realms = new Set<string>(), evidence = new Set<string>();
   for (const realm of recipe.realms) {
     requireFact(/^[a-z][a-z0-9-]*$/.test(realm.id) && !realms.has(realm.id) && ['public', 'private'].includes(realm.visibility), 'invalid or duplicate realm');
     realms.add(realm.id);
@@ -197,7 +197,27 @@ export function assertAuditRecipe(value: unknown): asserts value is AuditRecipe 
     requireFact(['record', 'text', 'media', 'original'].includes(item.kind), 'unrecognized source qualification');
     evidence.add(item.id);
   }
-  for (const stage of recipe.stages) {
+  assertAuditStages(recipe.stages, realms, evidence);
+  requireFact(recipe.readiness.length > 0 && recipe.readiness.some(item => item.persona === 'visitor' && item.status === 200)
+    && recipe.readiness.some(item => item.persona === 'visitor' && item.status === 404), 'public and concealed readiness controls are required');
+  const reads = new Set<string>();
+  for (const read of recipe.readiness) {
+    requireFact(typeof read.id === 'string' && !reads.has(read.id) && realms.has(read.realm)
+      && ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'].includes(read.persona)
+      && [200, 404].includes(read.status) && object(read.equals) && Object.keys(read.equals).length > 0, 'invalid read-ready predicate');
+    reads.add(read.id);
+  }
+  for (const grant of recipe.grants) requireFact(realms.has(grant.realm)
+    && ['stranger', 'member', 'owner', 'moderator', 'operator'].includes(grant.persona)
+    && typeof grant.scope === 'string' && typeof grant.action === 'string'
+    && ['8 hours', '7 days'].includes(grant.lifetime), 'invalid supported fixture authority input');
+  requireFact(recipe.grants.some(grant => grant.persona === 'operator' && grant.scope === 'work:create:catalogue-import' && grant.action === 'work.create'),
+    'platform catalogue import mandate is not established by an operator label');
+}
+
+function assertAuditStages(input: AuditStage[], realms: ReadonlySet<string>, evidence: ReadonlySet<string>): void {
+  const stages = new Set<string>(), commands = new Set<string>(), keys = new Set<string>();
+  for (const stage of input) {
     requireFact(/^[a-z][a-z0-9-]*$/.test(stage.id) && !stages.has(stage.id), 'invalid or duplicate stage');
     requireFact(Array.isArray(stage.requires) && stage.requires.every(id => stages.has(id)), 'stage dependency is missing or out of order');
     stages.add(stage.id);
@@ -215,21 +235,60 @@ export function assertAuditRecipe(value: unknown): asserts value is AuditRecipe 
       if (command.key) keys.add(command.key);
     }
   }
-  requireFact(recipe.readiness.length > 0 && recipe.readiness.some(item => item.persona === 'visitor' && item.status === 200)
-    && recipe.readiness.some(item => item.persona === 'visitor' && item.status === 404), 'public and concealed readiness controls are required');
-  const reads = new Set<string>();
-  for (const read of recipe.readiness) {
-    requireFact(typeof read.id === 'string' && !reads.has(read.id) && realms.has(read.realm)
-      && ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'].includes(read.persona)
-      && [200, 404].includes(read.status) && object(read.equals) && Object.keys(read.equals).length > 0, 'invalid read-ready predicate');
-    reads.add(read.id);
+}
+
+/** Inspect an additive source handoff only. This deliberately has no runtime,
+ * importer, topology backup, grant, publication or consumer-admission side effect. */
+export function inspectAuditRecipeAddition(checkout: string, path: string): {
+  recipe: AuditRecipeAddition; recipePin: AuditFilePin; sourcePins: AuditFilePin[];
+  ready: false; assertionsReached: false;
+} {
+  const file = auditLocalFile(checkout, path), bytes = readFileSync(file), value: unknown = JSON.parse(bytes.toString());
+  requireFact(object(value) && isRetainedJson(value) && value.format === 'audit-corpus-addition-v1', 'addition format differs');
+  requireFact(typeof value.productRevision === 'string' && /^[a-f0-9]{40}$/u.test(value.productRevision), 'invalid addition product pin');
+  requireFact(typeof value.realm === 'string' && /^[a-z][a-z0-9-]*$/u.test(value.realm)
+    && typeof value.persona === 'string' && ['stranger', 'member', 'owner', 'moderator', 'operator'].includes(value.persona),
+  'addition requires an existing retained realm/persona');
+  for (const key of ['inputs', 'evidence', 'stages', 'deferred']) requireFact(Array.isArray(value[key]), `addition ${key} is not an array`);
+  requireFact(value.expected !== undefined, 'addition source expectations are missing');
+  const recipe = value as unknown as AuditRecipeAddition, evidence = new Set<string>(), sourcePins: AuditFilePin[] = [];
+  requireFact(recipe.inputs.length > 0 && recipe.evidence.length > 0 && recipe.stages.length > 0, 'addition has no pinned inputs, evidence or commands');
+  for (const pin of recipe.inputs) { pinnedBytes(checkout, pin, false); sourcePins.push(pin); }
+  for (const item of recipe.evidence) {
+    requireFact(object(item) && item.kind === 'text' && typeof item.id === 'string' && !evidence.has(item.id), 'invalid or duplicate addition evidence');
+    const text = pinnedBytes(checkout, item, false).toString();
+    requireFact(typeof item.exact === 'string' && item.exact.trim() && text.includes(item.exact), `source quote is absent: ${item.id}`);
+    requireFact(typeof item.author === 'string' && item.author.trim() && /^https?:\/\//u.test(item.url)
+      && (item.rightsBasis === 'public-domain' || item.rightsBasis === 'licensed' && item.license), `text rights are unqualified: ${item.id}`);
+    evidence.add(item.id); sourcePins.push({ file: item.file, sha256: item.sha256 });
   }
-  for (const grant of recipe.grants) requireFact(realms.has(grant.realm)
-    && ['stranger', 'member', 'owner', 'moderator', 'operator'].includes(grant.persona)
-    && typeof grant.scope === 'string' && typeof grant.action === 'string'
-    && ['8 hours', '7 days'].includes(grant.lifetime), 'invalid supported fixture authority input');
-  requireFact(recipe.grants.some(grant => grant.persona === 'operator' && grant.scope === 'work:create:catalogue-import' && grant.action === 'work.create'),
-    'platform catalogue import mandate is not established by an operator label');
+  assertAuditStages(recipe.stages, new Set([recipe.realm]), evidence);
+  const bindings = new Set(['realms']);
+  const references = (input: AuditValue): void => {
+    if (Array.isArray(input)) { input.forEach(references); return; }
+    if (!object(input)) return;
+    if (input.$audit === 'ref') {
+      requireFact(Object.keys(input).sort().join(',') === '$audit,from,pointer'
+        && typeof input.from === 'string' && bindings.has(input.from)
+        && typeof input.pointer === 'string' && (input.pointer === '' || input.pointer.startsWith('/')),
+      'addition reference must bind an earlier observed result');
+      return;
+    }
+    requireFact(!('$audit' in input) || input.$audit === 'concat' || input.$audit === 'tail', 'unsupported addition template operation');
+    Object.values(input).forEach(item => references(item as AuditValue));
+  };
+  for (const stage of recipe.stages) for (const command of stage.commands) {
+    requireFact(command.persona === recipe.persona, 'addition command changes the retained actor');
+    references(command.path); references(command.body);
+    if (typeof command.path === 'string') supportedPath(command.path, command.method);
+    bindings.add(`command:${command.id}`); bindings.add(`receipt:${command.id}`);
+  }
+  references(recipe.expected);
+  // Literal replacement identities and receipt claims cannot become source facts.
+  assertAuditNativeProvenance(json([recipe.stages, recipe.expected]), new Set());
+  for (const pending of recipe.deferred) requireFact(object(pending)
+    && [pending.owner, pending.operation, pending.reason].every(item => typeof item === 'string' && item.trim()), 'invalid deferred owner operation');
+  return { recipe, recipePin: { file, sha256: sha256(bytes) }, sourcePins, ready: false, assertionsReached: false };
 }
 
 export interface AuditInspection {
@@ -382,7 +441,7 @@ export interface AuditRuntime {
   mappers: readonly DatasetNativeMapper[];
   open(inspection: AuditInspection, budget: FixtureWorkBudget, observe: (event: RetainedJson) => void): Promise<AuditSession>;
   cut(context: SourceContext, session: AuditSession): Promise<{ backup: string; rdfDigest: string; ownerState: RetainedOwnerState }>;
-  restore(backup: string, metadata: AuditPreparationMetadata, budget: FixtureWorkBudget, runId?: string): Promise<AuditSession>;
+  restore(backup: string, metadata: Pick<AuditPreparationMetadata, 'realms' | 'sourcePins'>, budget: FixtureWorkBudget, runId?: string): Promise<AuditSession>;
   verify(context: SourceContext, manifest: RetainedSourceManifest<RetainedJson>): Promise<string[]>;
   remove(key: string): Promise<void>;
 }

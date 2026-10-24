@@ -15,14 +15,14 @@ import type { DatasetIntakeCommand, DatasetIntakeJournal, DatasetRecord, Dataset
 import { retainedAdmissionCases, type RetainedRecordBinding, type RetainedRecordInput } from '../../../tests/qa/fixtures/catalogue/import-admission-contract.ts';
 import type { ImportCorpus } from '../../../tests/qa/support/import-outcomes.ts';
 import { auditBaseline, auditConsumers, auditProofFiles, type AuditCommand, type AuditOriginals,
-  type AuditRecipe } from '../../../tests/qa/fixtures/audit-corpus-contract.ts';
+  type AuditRecipe, type AuditRecipeAddition } from '../../../tests/qa/fixtures/audit-corpus-contract.ts';
 import type { RetainedPersonaRealm } from '../../../tests/qa/support/personas.ts';
 import { commandOnlyIntegrationFiles, isolatedIntegrationFileList } from '../isolated-integration-files.ts';
 import { retainedRequirementKinds, retainedRequirements } from '../retained-requirements.ts';
 import { sourceKey, type SourceContext } from '../retained-source.ts';
 import { assertAuditGenerationProvenance, assertAuditManifest, assertAuditNativeProvenance, assertAuditOriginals, assertAuditRecipe,
   assertAuditStorage, AuditCorpusBlocked, auditBaselineBlockers, auditProductBlockers, auditCorpusAdapter, auditLocalFile, auditPointer, AuditRecorder, auditRestorePlan,
-  auditSelectionBlockers, auditSelectionIsWholeSnapshot, projectAuditManifest, projectRetainedPublicDomainBook, resolveAuditValue,
+  auditSelectionBlockers, auditSelectionIsWholeSnapshot, inspectAuditRecipeAddition, projectAuditManifest, projectRetainedPublicDomainBook, resolveAuditValue,
   type AuditImportInputs, type AuditInspection, type AuditRuntime, type AuditSession } from './audit-corpus.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -52,6 +52,60 @@ function recipe(): AuditRecipe {
       { id: 'hidden', realm: 'catalogue', persona: 'visitor', path: '/v1/works/00000000-0000-4000-8000-000000000999', status: 404, equals: { '/code': 'not_found' } },
     ], manifests: { imports: {}, context: {}, releases: {}, information: {}, publicDomain: {}, identity: {}, author: {}, search: {} } };
 }
+
+function additionFixture() {
+  const directoryPath = directory(), source = join(directoryPath, 'source.txt'), file = join(directoryPath, 'addition.json');
+  writeFileSync(source, 'Frozen source text with two distinct lemon occurrences.');
+  const evidence = { id: 'recipe-source', kind: 'text' as const, file: source, sha256: sha256(readFileSync(source)),
+    exact: 'two distinct lemon occurrences', url: 'https://example.test/recipe', author: 'Institutional source',
+    rightsBasis: 'public-domain' as const, license: null };
+  const input: AuditRecipeAddition = { format: 'audit-corpus-addition-v1', productRevision: 'a'.repeat(40),
+    realm: 'catalogue', persona: 'operator', inputs: [{ file: source, sha256: evidence.sha256 }], evidence: [evidence],
+    stages: [{ id: 'native-authoring', requires: [], commands: [{ id: 'native-work', realm: 'catalogue', persona: 'operator',
+      method: 'POST', path: '/v1/works', key: 'additive:source:work', status: 201, evidence: ['recipe-source'], body: {
+        profile: 'metadata-only-v1', title: 'Frozen recipe', actingSubject: {
+          $audit: 'ref', from: 'realms', pointer: '/catalogue/identities/operator/actingSubject' },
+      } }] }],
+    expected: { work: { $audit: 'ref', from: 'command:native-work', pointer: '/answer/work' } },
+    deferred: [{ owner: 'recipe-measures', operation: 'POST /v1/recipes/{id}/measures', reason: 'Per-row evidence needs its existing owner bridge.' }] };
+  const save = () => { writeFileSync(file, JSON.stringify(input)); return file; };
+  return { input, source, file, save };
+}
+
+test('additive source inspection needs no topology backup or runtime and never admits a consumer', () => {
+  const fixture = additionFixture(), result = inspectAuditRecipeAddition(root, fixture.save());
+  expect(result.recipePin.sha256).toBe(sha256(readFileSync(fixture.file)));
+  expect(result.recipe).toEqual(fixture.input);
+  expect(result.ready).toBe(false); expect(result.assertionsReached).toBe(false);
+  expect(readdirSync(resolve(fixture.file, '..')).sort()).toEqual(['addition.json', 'source.txt']);
+});
+
+test('additive inspection refuses changed source bytes and source quotes absent from their pin', () => {
+  const fixture = additionFixture(); fixture.save(); writeFileSync(fixture.source, 'changed');
+  expect(() => inspectAuditRecipeAddition(root, fixture.file)).toThrow('file digest differs');
+  fixture.input.inputs[0]!.sha256 = sha256('changed'); fixture.input.evidence[0]!.sha256 = sha256('changed');
+  expect(() => inspectAuditRecipeAddition(root, fixture.save())).toThrow('source quote is absent');
+});
+
+test('additive inspection preserves command replay, evidence and retained actor boundaries', () => {
+  const fixture = additionFixture(), command = fixture.input.stages[0]!.commands[0]!;
+  fixture.input.stages[0]!.commands.push({ ...command, id: 'second-work' });
+  expect(() => inspectAuditRecipeAddition(root, fixture.save())).toThrow('replay key');
+  fixture.input.stages[0]!.commands.pop(); command.evidence = ['unknown-source'];
+  expect(() => inspectAuditRecipeAddition(root, fixture.save())).toThrow('source evidence');
+  command.evidence = ['recipe-source']; command.persona = 'owner';
+  expect(() => inspectAuditRecipeAddition(root, fixture.save())).toThrow('retained actor');
+});
+
+test('additive inspection refuses future responses, invented native identities and direct-owner paths', () => {
+  const fixture = additionFixture(), command = fixture.input.stages[0]!.commands[0]!;
+  command.body = { work: { $audit: 'ref', from: 'command:native-work', pointer: '/answer/work' } };
+  expect(() => inspectAuditRecipeAddition(root, fixture.save())).toThrow('earlier observed result');
+  command.body = { work: id(999) };
+  expect(() => inspectAuditRecipeAddition(root, fixture.save())).toThrow('observed');
+  command.body = {}; command.path = '/v1/admin/write';
+  expect(() => inspectAuditRecipeAddition(root, fixture.save())).toThrow('owner stores');
+});
 function session(overrides: Partial<AuditSession> = {}): AuditSession {
   return { runId: 'audit-unit', apps: {}, owners: { graph: 'isolated-graph' },
     realms: { catalogue: realm() }, preparation: { restoreMs: 10, startupMs: 20, readinessMs: 30, totalMs: 60 },

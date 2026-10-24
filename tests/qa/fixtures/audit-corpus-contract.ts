@@ -134,6 +134,22 @@ export interface AuditReadPredicate {
 export interface AuditStage {
   id: string; requires: string[]; commands: AuditCommand[];
 }
+
+/** A private additive command slice uses the existing recorder, without opening,
+ * restoring or replacing a corpus. Inspection never admits a consumer manifest. */
+export interface AuditRecipeAddition {
+  format: 'audit-corpus-addition-v1';
+  productRevision: string;
+  realm: string; persona: Exclude<PersonaName, 'visitor'>;
+  /** Existing immutable inputs, including original identity/source ledgers. */
+  inputs: AuditFilePin[];
+  evidence: Array<Extract<AuditEvidence, { kind: 'text' }>>;
+  stages: AuditStage[];
+  /** Independent source expectations, with native identities bound only later. */
+  expected: AuditValue;
+  /** Unexecuted owner operations; these are never successful command receipts. */
+  deferred: Array<{ owner: string; operation: string; reason: string }>;
+}
 export interface AuditImport {
   snapshot: string; selection: DatasetSelectionOptions;
   /** Intake-only tracing must not recreate the original catalogue Works. */
