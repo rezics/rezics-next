@@ -1,3 +1,7 @@
+import type { DatasetSelectionManifest } from './selection.ts';
+import type { ManualSourceIntake } from '../../services/main/src/modules/source/intake.ts';
+import type { RetainedConversionRequest } from '../../services/main/src/modules/source/field-support-contract.ts';
+import type { RetainedConversion } from '../../services/main/src/modules/source/retained-record.ts';
 import type { Capture } from './network.ts';
 import type { DatasetSelectionManifest } from './selection.ts';
 import type { ManualSourceIntake } from '../../services/main/src/modules/source/intake.ts';
