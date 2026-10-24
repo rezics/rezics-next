@@ -1,5 +1,0 @@
-id: modules-do-not-exit
-valid:
-  - 'throw new WorkSealConflict();'
-invalid:
-  - 'process.exit(1);'

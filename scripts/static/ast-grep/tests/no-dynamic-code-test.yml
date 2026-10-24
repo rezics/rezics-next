@@ -1,6 +1,0 @@
-id: no-dynamic-code
-valid:
-  - 'const value = JSON.parse(text);'
-invalid:
-  - 'eval(source);'
-  - 'const run = new Function("a", "return a");'

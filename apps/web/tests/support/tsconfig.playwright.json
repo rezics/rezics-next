@@ -1,9 +1,0 @@
-{
-  "extends": "../../tsconfig.json",
-  "compilerOptions": {
-    "paths": {
-      "@/*": ["../../*"],
-      "@playwright/test": ["./browser-test.ts"]
-    }
-  }
-}

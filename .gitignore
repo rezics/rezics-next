@@ -1,52 +1,6 @@
 .temp/
-.cache/
-
-# Language tooling and build outputs
-__pycache__/
-*.py[cod]
-.venv/
-venv/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
 node_modules/
-node_modules
-.yarn/*
-!.yarn/patches/
-target/
-!/services/main/src/modules/target/
-dist/
-.next/
-.wrangler/
-.vinext/
-apphost/.aspire/
-.aspire/
-.task/
-storybook-static/
-coverage/
-!/scripts/qa/coverage/
-.coverage
-.coverage.*
-
-# Local configuration and disposable research/runtime data
-.goalctl/*.user.json
+.DS_Store
 .env
 .env.*
 !.env.example
-!.env.*.example
-!.env.sample
-!.env.template
-.direnv/
-.fluree/
-/.artifacts/
-/tmp/
-/scripts/research/**/lab/
-*.log
-
-# Editor and operating-system temporary files
-.DS_Store
-*.swp
-*.swo
-*~
-
-# Keep authored/generated contracts, curated research evidence and lockfiles tracked.

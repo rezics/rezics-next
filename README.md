@@ -1,39 +1,27 @@
 # REZICS
 
-REZICS is a semantic knowledge and content platform. Apache Jena Fuseki/TDB2
-stores graph aggregates and runs graph/text queries with jena-text/Lucene.
-PostgreSQL owns Content and private state; Main exposes APIs consumed by the web and Accounts apps.
+REZICS is being rebuilt from scratch. This branch holds only what the rewrite has rebuilt; it starts empty on purpose.
 
-The [plan](docs/plan/README.md#current-state) names the recorded backend run
-and the current Goal's state.
+## Where things are
 
-## Start locally
+- **Design.** Until a topic is converted into this repository, the source of truth is
+  [rezics-next-discussion](https://github.com/rezics/rezics-next-discussion). Start with its README, then
+  [ADR-0022](https://github.com/rezics/rezics-next-discussion/blob/main/docs/adr/0022-partitioned-authority-from-day-one.md)
+  (partitioned authority),
+  [ADR-0023](https://github.com/rezics/rezics-next-discussion/blob/main/docs/adr/0023-content-and-semantic-layers.md)
+  (content and semantic layers), and engineering documents 18 and 19. That repository is written in Traditional
+  Chinese; everything moved here is rewritten in English.
+- **Previous implementation.** The `legacy` branch is frozen and kept for reference only. Two tags pin it:
+  - `legacy-final`: all consolidated work at the start of the rewrite.
+  - `legacy-main-final`: the last `main` that passed the merge gate.
 
-Install the [pinned toolchain](docs/development/toolchain.md) and a Docker-compatible daemon. From a fresh checkout:
-
-```sh
-task toolchain:install
-task dev
-task urls
-```
-
-The main checkout runs Account, Main, the Accounts app, web and Storybook under
-Aspire on ports 3002, 3001, 3004, 3000 and 6006. In a worktree, `task dev`
-runs the frontends on assigned ports against the shared backend; use
-`task dev -- --backend` for an isolated stack. `task urls` reports the actual
-addresses. `task env` shows masked configuration, and each workspace has an
-`.env.example`. List commands with `task --list`.
+## Reading legacy code
 
 ```sh
-task dev:stop
-task stack:down
+git worktree add ../rezics-legacy legacy-final   # browse or run the old tree
+git show legacy-final:path/to/file               # read one file
 ```
 
-`stack:down` retains the main checkout's storage volumes. For setup, isolated
-QA and cleanup details, see [installation](docs/operations/installation.md).
+## License
 
-## Find the owners
-
-- [Design](docs/README.md) and [current plan](docs/plan/README.md#current-state)
-- [Toolchain](docs/development/toolchain.md) and [test harness](docs/testing/test-harness.md)
-- [Development workflow](docs/development/README.md) and [active Goals](GOAL.md)
+[GNU Affero General Public License v3.0](LICENSE).

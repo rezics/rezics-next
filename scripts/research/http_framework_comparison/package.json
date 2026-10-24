@@ -1,8 +1,0 @@
-{
-  "name": "rezics-http-framework-comparison",
-  "private": true,
-  "packageManager": "yarn@4.18.0",
-  "workspaces": [
-    "probe"
-  ]
-}

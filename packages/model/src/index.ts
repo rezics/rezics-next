@@ -1,6 +1,0 @@
-export { profileRegistry, type ProfileId } from './generated/profiles.ts';
-export { namespaces, iri } from './generated/vocabulary.ts';
-export * from './generated/schemas.ts';
-export { checkNodeLocalCandidate } from './node-local.ts';
-export * from './locator.ts';
-export { publicVocabularyLabel, type VocabularyLabel } from './vocabulary-labels.ts';

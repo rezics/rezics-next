@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="bun test" tests="1" assertions="43" failures="0" skipped="0" time="8.98952539">
-  <testsuite name="tests/outbox.integration.test.ts" file="tests/outbox.integration.test.ts" tests="1" assertions="43" failures="0" skipped="0" time="8.986682496" hostname="ah-ipv6">
-    <testcase name="SYS04/SYS05/SYS12 partial: retained RDF outbox and durable handoff" classname="" time="8.965991" file="tests/outbox.integration.test.ts" line="31" assertions="43" />
-  </testsuite>
-</testsuites>
