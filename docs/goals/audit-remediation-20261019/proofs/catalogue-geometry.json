@@ -1715,6 +1715,27 @@
         "sameColumnGapRange": [],
         "pageOverflow": 0
       },
+      "integrationPrerequisite": {
+        "owner": "G-2747/manager integration, G-2825 fixture handoff; G-2791 remains sole corpus producer",
+        "readyFullWavePin": "196a6f4a98413857dbf3e178d05ef65415035f29",
+        "G2747ReadinessReceipt": ".temp/worktrees/g-2747/.temp/startup/isolated-196a6f4a9841/readiness.json",
+        "G2747RuntimeJob": "638c5edd-de01-4837-a033-aa0b78e5efd1",
+        "startupCandidate": "a27bcfc6bad849dd912cbd3f721de5defeba1c86; separately prepared landing candidatec227714d2603453d4e2480e576fb7e1dfc6ca122 has no runtime proof here",
+        "missingAtGeometryPin": "apps/web/vite.config.ts still uses top-level optimizeDeps.include. Ready startup source scopes browserDependencies to client and preoptimizes native-i18n/tailwind-variants in rsc/ssr. G-2747 also owns pure server-helper and pre-shell recovery fixes. Integrate complete authorized startup repairs with the geometry source under a new immutable pin and establish its actual readiness; do not transplant a receipt from196/a27 to f63.",
+        "nextFixtureNeed": "Compatible existing isolated Main/Auth/Web identities plus original genuine API content/session receipt. No obsolete-baseline rich corpus or new producer requested."
+      },
+      "unavailableJourneys": [
+        "Real Search and Discover All-versus-Works with genuine API responses",
+        "Real shelves and recommendations",
+        "Original one-Book profile",
+        "Real Zone browse including pagination and available result widths",
+        "Actual route server HTML and hydration for these journeys"
+      ],
+      "noSharedRefreshImportReset": true,
+      "ownedServerStopped": true,
+      "ownedPortClosed": true
+    },
+    "findings": [
       {
         "evidence": "rendered/works-collapsed-767.json",
         "viewport": {
