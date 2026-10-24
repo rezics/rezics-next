@@ -42,8 +42,7 @@ export async function status(): Promise<void> {
     + (usage.projected !== undefined ? `, projected ${usage.projected}% at reset in ${usage.resetInMinutes}m` : '')
     + (usage.ageSeconds !== undefined ? ` (${usage.ageSeconds}s old)` : ''));
   if (usage.weekUsed !== undefined) {
-    console.log(`Claude 7d ${usage.weekUsed}%, projected ${usage.weekProjected}–${usage.weekProjectedHigh}% at reset in ${usage.weekResetInHours}h: `
-      + `${usage.weekAdvice}`);
+    console.log(`Claude 7d ${usage.weekUsed}%`);
   }
   for (const account of codexAccounts()) console.log(describeAccount(account));
   console.log(`heavy QA: ${heavyQaStatus()}`);

@@ -29,6 +29,8 @@ import { fixtureSpawns } from './fixtures/spawn-deadline.ts';
 import { fixtureProcessScope } from './fixtures/process-scope.ts';
 import type { TypecheckBudget } from './typecheck-gate.ts';
 import { withTestAccounts, writeTestAccounts } from './fixtures/accounts.ts';
+import { briefDigest, capacityFingerprint, normalizeClaudeUsage, type CapacityPolicy, type CapacityTask } from './claude-capacity.ts';
+import { JobStore, JOB_WAIT_MS, jobDirectory } from './job.ts';
 
 isolateTestSettings();
 
@@ -4459,11 +4461,202 @@ process.exit(0);
   });
 
   function claudeUsage(week: number, fiveHour = 10) {
-    const now = Math.floor(Date.now() / 1000);
-    return JSON.stringify({ at: now, rate_limits: {
-      five_hour: { used_percentage: fiveHour, resets_at: now + 3600 },
-      seven_day: { used_percentage: week, resets_at: now + 160 * 3600 } } });
+    return capacityUsage(week, fiveHour);
   }
+
+  function capacityUsage(week: number, fiveHour = 10, at = Date.now(), resetsAt = at + 5 * 3600_000) {
+    return JSON.stringify({ current: normalizeClaudeUsage({
+      five_hour: { utilization: fiveHour, resets_at: new Date(resetsAt).toISOString() },
+      seven_day: { utilization: week, resets_at: new Date(at + 7 * 86400_000).toISOString() },
+      extra_usage: { is_enabled: false },
+    }, at) });
+  }
+
+  const capacityObservation = (r: ReturnType<typeof repo>) => join(r.dir, '.temp/goal-orchestration/claude-capacity.json');
+  const capacityPolicy = (r: ReturnType<typeof repo>) => join(r.env.GOAL_SETTINGS_DIRECTORY!, 'claude-capacity.user.json');
+
+  function approveClaude(r: ReturnType<typeof repo>, briefs: string[]) {
+    const ledger = r.ledger();
+    ledger.tasks['G-000'] = { id: 'G-000', title: 'Completed frontend research', kind: 'tooling', effort: 'max',
+      engine: 'codex-2', state: 'verified', paths: [], cases: [], shared: [], depends: [], migrations: [], goal: 'alpha',
+      brief: '', worktree: r.dir, branch: 'main', base: r.git('rev-parse', 'HEAD'),
+      attempts: [{ n: 1, engine: 'codex-2', effort: 'max', pid: 2147483647, session: 'research', output: '', startedAt: new Date().toISOString() }] };
+    r.save(ledger);
+    const policy: CapacityPolicy = { version: 1, repository: r.dir, enabled: true,
+      review: { by: 'codex-1/xhigh', sha: 'independently-reviewed-fixture', fingerprint: capacityFingerprint() },
+      tasks: Object.fromEntries(briefs.map(brief => [parseBrief(readFileSync(brief, 'utf8')).id,
+        { brief, digest: briefDigest(brief), purpose: 'frontend-implementation', researchTask: 'G-000' }])) };
+    writeFileSync(capacityPolicy(r), JSON.stringify(policy));
+    writeFileSync(capacityObservation(r), claudeUsage(70));
+    r.env.CLAUDE_CONFIG_DIR = join(r.dir, '.temp/claude');
+    // Native auth status and worker launches use the real launch path, with no network/model calls.
+    writeFileSync(join(r.dir, '.temp/bin/claude'), `#!/usr/bin/env bun
+if (process.argv.includes('auth') && process.argv.includes('status')) {
+  console.log(JSON.stringify({ loggedIn: true, authMethod: 'claude.ai', apiProvider: 'firstParty',
+    apiKeySource: 'none', configDirectory: process.env.CLAUDE_CONFIG_DIR }));
+  process.exit(0);
+}
+if (process.env.GOAL_CLAUDE_IGNORE_SIGNALS) {
+  process.on('SIGINT', () => {}); process.on('SIGTERM', () => {});
+}
+if (process.env.GOAL_CLAUDE_DONE_ON_INTERRUPT) process.on('SIGINT', () => {
+  console.log(JSON.stringify({ result: 'RESULT: done' })); process.exit(0);
+});
+await import(${JSON.stringify(join(import.meta.dir, 'fixtures/sleep-worker.ts'))});
+`);
+    return policy;
+  }
+
+  function capacityPass(r: ReturnType<typeof repo>, at = Date.now(), pump = false) {
+    return spawnSync(process.execPath, ['-e', `Date.now = () => ${at};
+      import { coordinateWorkerJobs } from ${JSON.stringify(join(import.meta.dir, 'coordinator.ts'))};
+      import { pumpQueue } from ${JSON.stringify(join(import.meta.dir, 'queue.ts'))};
+      await coordinateWorkerJobs(); ${pump ? 'await pumpQueue();' : ''}`],
+    { cwd: r.dir, env: r.env, encoding: 'utf8' });
+  }
+
+  test('fresh shared capacity starts the first Claude dispatch through its own reservation and a second concurrent worker', async () => {
+    const r = repo();
+    try {
+      const briefs = ['G-001', 'G-002', 'G-003'].map(id => r.brief(id, { engine: 'claude' }));
+      approveClaude(r, briefs);
+      for (const [index, id] of ['G-001', 'G-002'].entries()) {
+        const result = r.run(['dispatch', briefs[index]!]);
+        expect(result.status, result.stderr).toBe(0); expect(result.stdout).toContain(`${id} started`);
+        r.workers.set(id, await waitForWorkerReady(join(r.dir, '.temp/ready', id)));
+        const task = r.ledger().tasks[id] as CapacityTask;
+        expect(task.state).toBe('running'); expect(task.attempts).toHaveLength(1);
+        expect(task.claudeCapacity?.owner.pid).toBe(task.attempts[0]!.pid);
+      }
+      for (const pids of r.workers.values()) expect(r.alive(pids.worker)).toBe(true);
+      writeFileSync(capacityObservation(r), claudeUsage(70, 60));
+      const refused = r.run(['dispatch', briefs[2]!, '--force-usage']);
+      expect(refused.status).toBe(1); expect(refused.stderr).toContain('about-reserve');
+      expect(r.ledger().tasks['G-003']).toBeUndefined();
+      for (const pids of r.workers.values()) expect(r.alive(pids.worker)).toBe(true);
+    } finally { r.cleanup(); }
+  });
+
+  test('a stopped capacity ledger cannot hand over while its exact previous Claude process is still exiting', async () => {
+    const r = repo();
+    try {
+      const brief = r.brief('G-001', { engine: 'claude' }); approveClaude(r, [brief]);
+      r.env.GOAL_CLAUDE_IGNORE_SIGNALS = '1';
+      const started = r.run(['dispatch', brief]); expect(started.status, started.stderr).toBe(0);
+      const previous = await waitForWorkerReady(join(r.dir, '.temp/ready/G-001')); r.workers.set('G-001', previous);
+      writeFileSync(capacityObservation(r), claudeUsage(70, 60));
+      const paused = capacityPass(r); expect(paused.status, paused.stderr).toBe(0);
+      expect(r.ledger().tasks['G-001']!.state).toBe('stopped'); expect(r.alive(previous.worker)).toBe(true);
+      const refused = r.run(['resume', 'G-001', '-m', 'Hand over', '--engine', 'codex']);
+      expect(refused.status).toBe(1); expect(refused.stderr).toContain('previous Claude process');
+      expect(r.ledger().tasks['G-001']!.attempts).toHaveLength(1);
+      expect((r.ledger().tasks['G-001'] as CapacityTask).claudeCapacity?.pause).toBeDefined();
+      expect(r.alive(previous.worker)).toBe(true);
+      for (const pid of [previous.worker, previous.child]) process.kill(pid, 'SIGKILL');
+      await waitUntil(() => !r.alive(previous.worker) && !r.alive(previous.child));
+      const resumed = r.run(['resume', 'G-001', '-m', 'Hand over', '--engine', 'codex']);
+      expect(resumed.status, resumed.stderr).toBe(0);
+      r.workers.set('G-001', await waitForWorkerReady(join(r.dir, '.temp/ready/G-001'), previous.worker));
+      const task = r.ledger().tasks['G-001'] as CapacityTask;
+      expect(task.attempts).toHaveLength(2); expect(task.attempts[1]!.engine).toBe('codex');
+      expect(task.claudeCapacity).toBeDefined(); expect(task.claudeCapacity?.pause).toBeUndefined();
+    } finally { r.cleanup(); }
+  });
+
+  test('manual stop and engine handover preserve manager landing provenance even for an old land:auto task', async () => {
+    const r = repo();
+    try {
+      const brief = r.brief('G-001', { engine: 'claude' }); approveClaude(r, [brief]);
+      const started = r.run(['dispatch', brief]); expect(started.status, started.stderr).toBe(0);
+      r.workers.set('G-001', await waitForWorkerReady(join(r.dir, '.temp/ready/G-001')));
+      const before = r.git('rev-parse', 'main');
+      const ledger = r.ledger(); ledger.tasks['G-001']!.land = 'auto'; r.save(ledger);
+      expect(r.run(['stop', 'G-001']).status).toBe(0);
+      expect((r.ledger().tasks['G-001'] as CapacityTask).claudeCapacity).toBeDefined();
+      const resumed = r.run(['resume', 'G-001', '-m', 'Complete on Codex', '--engine', 'codex']);
+      expect(resumed.status, resumed.stderr).toBe(0);
+      r.workers.set('G-001', await waitForWorkerReady(join(r.dir, '.temp/ready/G-001'), r.workers.get('G-001')!.worker));
+      const task = r.ledger().tasks['G-001'] as CapacityTask; r.commit(task); await r.stopFixture(task.id);
+      writeFileSync(task.attempts[1]!.lastMessage!, 'RESULT: done\nNEXT: Manager landing\n');
+      const settled = r.run(['wait', task.id]); expect(settled.status, settled.stderr).toBe(0);
+      expect(settled.stdout).toContain('Claude capacity tasks need a manager landing decision');
+      expect(r.ledger().tasks[task.id]!.state).toBe('exited'); expect(r.git('rev-parse', 'main')).toBe(before);
+      expect((r.ledger().tasks[task.id] as CapacityTask).claudeCapacity).toBeDefined();
+    } finally { r.cleanup(); }
+  });
+
+  test('repairing policy resumes the interrupted native Claude session in the current window despite a done-shaped interrupted output', async () => {
+    const r = repo();
+    try {
+      const brief = r.brief('G-001', { engine: 'claude' }); const policy = approveClaude(r, [brief]);
+      const at = Date.now(), resetAt = at + 5 * 3600_000;
+      writeFileSync(capacityObservation(r), capacityUsage(70, 0, at, resetAt));
+      r.env.GOAL_CLAUDE_DONE_ON_INTERRUPT = '1';
+      const started = r.run(['dispatch', brief]); expect(started.status, started.stderr).toBe(0);
+      const previous = await waitForWorkerReady(join(r.dir, '.temp/ready/G-001')); r.workers.set('G-001', previous);
+      const original = r.ledger().tasks['G-001']!.attempts[0]!;
+      policy.enabled = false; writeFileSync(capacityPolicy(r), JSON.stringify(policy));
+      const paused = capacityPass(r, at + 1000); expect(paused.status, paused.stderr).toBe(0);
+      await waitUntil(() => !r.alive(previous.worker));
+      expect(JSON.parse(readFileSync(original.output, 'utf8')).result).toBe('RESULT: done');
+      policy.enabled = true; writeFileSync(capacityPolicy(r), JSON.stringify(policy));
+      writeFileSync(capacityObservation(r), capacityUsage(71, 12, at + 2000, resetAt));
+      const repaired = capacityPass(r, at + 2000); expect(repaired.status, repaired.stderr).toBe(0);
+      const retained = r.ledger().tasks['G-001'] as CapacityTask;
+      expect(retained.state).toBe('stopped'); expect(retained.attempts).toHaveLength(1);
+      expect(retained.waitingResume?.reason).toBe('Claude capacity pause resolved: policy-stopped');
+      expect(retained.claudeCapacity?.pause?.stage).toBe('waiting'); expect(retained.settlement).toBeUndefined();
+      const continued = capacityPass(r, at + 2001, true); expect(continued.status, continued.stderr).toBe(0);
+      r.workers.set('G-001', await waitForWorkerReady(join(r.dir, '.temp/ready/G-001'), previous.worker));
+      const resumed = r.ledger().tasks['G-001'] as CapacityTask;
+      expect(resumed.attempts).toHaveLength(2);
+      expect(resumed.attempts[1]).toMatchObject({ session: original.session, round: 'step', engine: 'claude' });
+      expect(resumed.claudeCapacity?.pause).toBeUndefined(); expect(resumed.state).toBe('running');
+    } finally { r.cleanup(); }
+  });
+
+  test.each([false, true])('a naturally parked Claude job survives quota past four hours and wakes once through the controller (sequence=%s)', async sequence => {
+    const r = repo(); let store: JobStore | undefined;
+    try {
+      const brief = r.brief('G-001', { engine: 'claude' }); approveClaude(r, [brief]);
+      const at = Date.now(), resetAt = at + 5 * 3600_000;
+      const script = join(r.dir, '.temp/worker-steps.json'), release = join(r.dir, '.temp/release-wake');
+      const calls = join(r.dir, '.temp/claude-calls.jsonl');
+      writeFileSync(script, JSON.stringify([{ stdout: JSON.stringify({ result: 'RESULT: parked' }) }, { release }]));
+      r.env.GOAL_WORKER_SCRIPT = script; r.env.GOAL_WORKER_LOG = calls;
+      const started = r.run(['dispatch', brief]); expect(started.status, started.stderr).toBe(0);
+      const task = r.ledger().tasks['G-001']!, previous = task.attempts[0]!;
+      await waitUntil(() => !r.alive(previous.pid));
+      store = new JobStore(jobDirectory(task.worktree));
+      store.put({ id: 'completed-job', task: task.id, attempt: 1, cwd: task.worktree, command: ['fixture'],
+        phase: 'parked', created: at, code: 0, ended: at,
+        ...(sequence ? { sequence: [{ command: ['fixture'], code: 0, ended: at }], current: 0 } : {}) });
+      writeFileSync(store.log('completed-job'), 'command passed\n');
+      for (const now of [at + 1000, at + JOB_WAIT_MS + 2000]) {
+        writeFileSync(capacityObservation(r), capacityUsage(70, 100, now, resetAt));
+        const pass = capacityPass(r, now); expect(pass.status, pass.stderr).toBe(0);
+        expect(store.get('completed-job')!.phase).toBe('parked');
+        expect((r.ledger().tasks[task.id] as CapacityTask).claudeCapacity?.pause).toBeUndefined();
+        expect(r.ledger().tasks[task.id]!.attempts).toHaveLength(1);
+      }
+      expect(store.get('completed-job')!.capacityPausedAt).toBe(at + 1000);
+      const resumedAt = resetAt + 1;
+      writeFileSync(capacityObservation(r), capacityUsage(72, 12, resumedAt));
+      const woke = capacityPass(r, resumedAt); expect(woke.status, woke.stderr).toBe(0);
+      await waitUntil(() => readFileSync(calls, 'utf8').trim().split('\n').length === 2);
+      const resumed = r.ledger().tasks[task.id]!;
+      expect(resumed.attempts).toHaveLength(2);
+      expect(resumed.attempts[1]).toMatchObject({ session: previous.session, continuedFor: 'job', round: 'continuation' });
+      expect(store.get('completed-job')).toMatchObject({ phase: 'woken', resumedAttempt: 2,
+        capacityDelayMs: resumedAt - at - 1000 });
+      const argv = JSON.parse(readFileSync(calls, 'utf8').trim().split('\n')[1]!).argv as string[];
+      expect(argv[argv.indexOf('--resume') + 1]).toBe(previous.session);
+      expect(argv.at(-1)).toContain('finished with exit status 0');
+      expect(capacityPass(r, resumedAt + 1).status).toBe(0);
+      expect(r.ledger().tasks[task.id]!.attempts).toHaveLength(2);
+      expect(readFileSync(calls, 'utf8').trim().split('\n')).toHaveLength(2);
+    } finally { store?.close(); r.cleanup(); }
+  });
 
   function admitWake(dir: string, env: NodeJS.ProcessEnv, engine: string) {
     return spawnSync(process.execPath, ['-e',
@@ -4477,8 +4670,8 @@ process.exit(0);
     try {
       await r.start('G-001');
       const env = { ...r.env, GOAL_MAX_WORKERS: '1' };
-      for (const [week, level] of [[12, 'restricted'], [96, 'critical']] as const) {
-        writeFileSync(r.env.GOAL_USAGE_FILE!, claudeUsage(week));
+      for (const [five, level] of [[57, 'restricted'], [100, 'critical']] as const) {
+        writeFileSync(capacityObservation(r), claudeUsage(70, five));
         const result = admitWake(r.dir, env, 'claude');
         expect(result.status, result.stderr).toBe(0);
         expect(JSON.parse(result.stdout)).toMatchObject({ live: 1, limit: 1, claude: level });
@@ -4486,14 +4679,15 @@ process.exit(0);
     } finally { r.cleanup(); }
   });
 
-  test('a Claude worker dispatch is still refused at restricted usage', () => {
+  test('a reviewed Claude worker dispatch is refused at the shared about reserve', () => {
     const r = repo();
     try {
-      writeFileSync(r.env.GOAL_USAGE_FILE!, claudeUsage(12));
-      const result = r.run(['dispatch', r.brief('G-001', { engine: 'claude' }), '--dry-run']);
+      const brief = r.brief('G-001', { engine: 'claude' }); approveClaude(r, [brief]);
+      writeFileSync(capacityObservation(r), claudeUsage(70, 57));
+      const result = r.run(['dispatch', brief, '--dry-run']);
       expect(result.status).toBe(1);
       expect(result.stderr).toContain('Claude usage is restricted');
-      expect(result.stderr).toContain('7d projected');
+      expect(result.stderr).toContain('about-reserve');
       expect(r.ledger().tasks['G-001']).toBeUndefined();
     } finally { r.cleanup(); }
   });
@@ -4501,7 +4695,7 @@ process.exit(0);
   test('a manager wake is refused below the memory floor and when its Codex account is reached', () => {
     const r = repo();
     try {
-      writeFileSync(r.env.GOAL_USAGE_FILE!, claudeUsage(12));
+      writeFileSync(capacityObservation(r), claudeUsage(70, 57));
       const memory = admitWake(r.dir, { ...r.env, GOAL_MEMORY_FLOOR_GIB: '1000000000' }, 'claude');
       expect(memory.status).toBe(1);
       expect(memory.stderr).toContain('Memory floor reached: host MemAvailable');
@@ -4529,29 +4723,33 @@ process.exit(0);
     } finally { r.cleanup(); }
   });
 
-  test('status shows the rounded weekly range while Claude dispatch uses its low end', () => {
+  test('status and Claude dispatch use fresh normalized shared usage, ignoring historical pacing projections', () => {
     const r = repo();
     try {
-      const now = Date.parse('2026-10-07T00:00:00.000Z') / 1000;
-      const resets = now + 3600;
-      const weekResets = now + 160 * 3600;
-      const snapshot = (week: number) => JSON.stringify({ at: now, rate_limits: {
-        five_hour: { used_percentage: 10, resets_at: resets },
-        seven_day: { used_percentage: week, resets_at: weekResets } } });
-      writeFileSync(r.env.GOAL_USAGE_FILE!, snapshot(7));
+      const brief = r.brief('G-001', { engine: 'claude' }); approveClaude(r, [brief]);
+      const now = Date.now();
+      // A historical display/pacing snapshot is not native capacity evidence.
+      writeFileSync(r.env.GOAL_USAGE_FILE!, JSON.stringify({ at: now / 1000, rate_limits: {
+        five_hour: { used_percentage: 100, resets_at: now / 1000 + 3600 } } }));
       writeFileSync(join(r.dir, '.temp/goal-orchestration/usage-history.json'), JSON.stringify([
-        { at: now - 3600, used: 5, resets, week: 6, weekResets },
+        { at: now / 1000 - 3600, used: 5, resets: now / 1000 + 3600, week: 6, weekResets: now / 1000 + 160 * 3600 },
       ]));
-      const status = r.run(['status'], {}, now * 1000);
+      writeFileSync(capacityObservation(r), capacityUsage(7, 10, now));
+      const status = r.run(['status'], {}, now);
       expect(status.status).toBe(0);
-      expect(status.stdout).toContain('projected 7–327%');
-      expect(status.stdout).toContain('warning');
-      const brief = r.brief('G-001', { engine: 'claude' });
-      expect(r.run(['dispatch', brief, '--dry-run'], {}, now * 1000).status).toBe(0);
-      writeFileSync(r.env.GOAL_USAGE_FILE!, snapshot(12));
-      const dispatch = r.run(['dispatch', brief, '--dry-run'], {}, now * 1000);
+      expect(status.stdout).toContain('Claude 5h 10% normal'); expect(status.stdout).toContain('Claude 7d 7%');
+      expect(status.stdout).not.toMatch(/projected|undefined|warning/);
+      expect(r.run(['dispatch', brief, '--dry-run'], {}, now).status).toBe(0);
+      writeFileSync(capacityObservation(r), capacityUsage(99, 10, now));
+      expect(r.run(['dispatch', brief, '--dry-run'], {}, now).status).toBe(0);
+      writeFileSync(capacityObservation(r), capacityUsage(99, 60, now));
+      const dispatch = r.run(['dispatch', brief, '--dry-run'], {}, now);
       expect(dispatch.status).toBe(1);
-      expect(dispatch.stderr).toContain('7d projected');
+      expect(dispatch.stderr).toContain('about-reserve');
+      writeFileSync(capacityObservation(r), capacityUsage(100, 10, now));
+      const exhausted = r.run(['dispatch', brief, '--dry-run'], {}, now);
+      expect(exhausted.status).toBe(1); expect(exhausted.stderr).toContain('allowance-exhausted');
+      expect(r.ledger().tasks['G-001']).toBeUndefined();
     } finally { r.cleanup(); }
   });
 
@@ -4706,13 +4904,13 @@ process.exit(0);
     } finally { r.cleanup(); }
   });
 
-  test('resume checks the chosen engine usage and --force-usage overrides it', async () => {
+  test('resume checks the selected account; --force-usage cannot bypass Claude capacity or subscription admission', async () => {
     const r = repo();
     try {
       await r.start('G-001');
       await r.stopFixture('G-001');
-      writeFileSync(r.env.GOAL_USAGE_FILE!, JSON.stringify({ at: Date.now() / 1000, rate_limits: {
-        five_hour: { used_percentage: 100, resets_at: Date.now() / 1000 + 3600 } } }));
+      approveClaude(r, [r.ledger().tasks['G-001']!.brief]);
+      writeFileSync(capacityObservation(r), claudeUsage(70, 100));
       for (const home of [r.env.GOAL_CODEX_HOME!, r.env.GOAL_TEST_SECOND_HOME!]) {
         const sessions = join(home, 'sessions/2026/10/07');
         mkdirSync(sessions, { recursive: true });
@@ -4722,21 +4920,31 @@ process.exit(0);
       }
       for (const engine of ['claude', 'sonnet', 'fable', 'codex', 'sample-b', 'luna']) {
         const result = r.run(['resume', 'G-001', '-m', 'continue', '--engine', engine]);
-        const queued = ['codex', 'sample-b', 'luna'].includes(engine);
-        expect(result.status).toBe(queued ? 0 : 1);
-        expect(queued ? result.stdout : result.stderr).toContain(queued ? 'EXHAUSTED' : 'Claude usage is critical');
-        if (queued) expect(r.ledger().tasks['G-001']!.waitingResume).toMatchObject({ engine,
-          message: 'continue', forceUsage: false, reason: expect.stringContaining('EXHAUSTED') });
+        const codex = ['codex', 'sample-b', 'luna'].includes(engine);
+        expect(result.status, result.stderr).toBe(0);
+        expect(result.stdout).toContain(codex ? 'EXHAUSTED' : 'allowance-exhausted');
+        expect(r.ledger().tasks['G-001']!.waitingResume).toMatchObject({ engine,
+          message: 'continue', forceUsage: false, reason: expect.stringContaining(codex ? 'EXHAUSTED' : 'allowance-exhausted') });
         expect(r.ledger().tasks['G-001']!.attempts).toHaveLength(1);
       }
-      // A fake Claude executable proves the escape reaches launch without calling a real engine.
-      copyFileSync(join(r.dir, '.temp/bin/grok'), join(r.dir, '.temp/bin/claude'));
-      const result = r.run(['resume', 'G-001', '-m', 'continue', '--engine', 'claude', '--force-usage']);
+      for (const engine of ['claude', 'sonnet', 'fable']) {
+        const refused = r.run(['resume', 'G-001', '-m', 'continue', '--engine', engine, '--force-usage']);
+        expect(refused.status, refused.stderr).toBe(0); expect(refused.stdout).toContain('allowance-exhausted');
+        expect(r.ledger().tasks['G-001']!.attempts).toHaveLength(1);
+      }
+      const result = r.run(['resume', 'G-001', '-m', 'continue', '--engine', 'codex', '--force-usage']);
       expect(result.stderr).toBe('');
       expect(result.status).toBe(0);
       const pids = await waitForWorkerReady(join(r.dir, '.temp/ready/G-001'), r.workers.get('G-001')!.worker);
       r.workers.set('G-001', pids);
       expect(r.ledger().tasks['G-001']!.attempts).toHaveLength(2);
+      await r.stopFixture('G-001');
+      writeFileSync(capacityObservation(r), claudeUsage(71, 12));
+      const resumed = r.run(['resume', 'G-001', '-m', 'continue with fresh capacity', '--engine', 'claude', '--force-usage']);
+      expect(resumed.status, resumed.stderr).toBe(0);
+      r.workers.set('G-001', await waitForWorkerReady(join(r.dir, '.temp/ready/G-001'), pids.worker));
+      expect(r.ledger().tasks['G-001']!.attempts).toHaveLength(3);
+      expect((r.ledger().tasks['G-001'] as CapacityTask).claudeCapacity).toBeDefined();
     } finally { r.cleanup(); }
   });
 

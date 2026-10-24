@@ -1,5 +1,5 @@
 import { type Brief, DEFAULT_ENGINE, BRIEF_KINDS, HOLDING, type Task, type Ledger, isClaudeCode, isCodex, modelOf, programOf, engineOf, MAX_CAPACITY_CONTINUATIONS, MAX_TRANSPORT_CONTINUATIONS, type Attempt, type Engine, effortsOf } from './types.ts';
-import { assertClaudeCapacity, type CapacityTask } from './claude-capacity.ts';
+import { assertClaudeCapacity, assertPreviousClaudeExited, type CapacityTask } from './claude-capacity.ts';
 import { root, withLedger, briefGoal, briefClaimConflicts, areasOf, activeGoals, stateDir, git, managerOf, readLedger, pidAlive, claimingTasks, assertOwner, acquireDir, briefPathOf, landScope, archiveClosedBriefs, preserveTaskOutputs, treeMentions, archiveDirOf, archiveFiles, removeFromTree, ARCHIVE_BRANCH, REGENERATION_COMMIT_SUBJECT } from './ledger.ts';
 import { pathToFileURL } from 'node:url';
 import { drainManagerCommits } from './manager-commit.ts';
@@ -508,6 +508,7 @@ export async function resumeTask(id: string, args: string[], waitingToken?: stri
     }
     assertOwner(task);
     assertPrepared(task);
+    assertPreviousClaudeExited(task);
     if (running(task)) throw new Error(`${task.id} is still running; stop it first or message it`);
     if (['verified', 'cancelled'].includes(task.state)) throw new Error(`${task.id} is closed`);
     const source = readClaimBrief(briefPathOf(task) ?? task.brief);
@@ -641,7 +642,8 @@ export async function stopTask(id: string): Promise<void> {
     assertOwner(task);
     assertPrepared(task);
     delete task.waitingResume;
-    delete (task as CapacityTask).claudeCapacity;
+    // Cancel capacity resumption, while preserving the provenance requiring a manager landing.
+    if ((task as CapacityTask).claudeCapacity) delete (task as CapacityTask).claudeCapacity!.pause;
     const attempt = lastAttempt(task);
     const program = programOf(engineOf(attempt));
     const signalGroup = (signal: NodeJS.Signals) => {
