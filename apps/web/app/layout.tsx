@@ -21,7 +21,7 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover' };
 
-export default async function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children, pageEnd }: { children: ReactNode; pageEnd?: ReactNode }) {
   const jar = await cookies();
   const locale = await requestLocale();
   const [messages, auth, session, platformAccess] = await Promise.all([getMessages('shell', locale),
@@ -30,7 +30,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   return <html lang={locale} className={themeClass(theme)}>
     <body className="min-h-dvh bg-background">
       <AppShell locale={locale} messages={messages} theme={theme} signedIn={Boolean(session)}
-        platformAccess={platformAccess}
+        platformAccess={platformAccess} pageEnd={pageEnd}
         navCollapsed={parseNavCollapsed(jar.get(NAV_COOKIE)?.value)}
         notifications={session ? <NotificationsLink /> : null} communities={<ShellCommunities locale={locale} />}
         account={session ? <AccountMenu session={session} messages={auth}
