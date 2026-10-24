@@ -1,0 +1,55 @@
+import { expect, test } from 'bun:test';
+import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { acquireDirectoryLease, processIdentity, sameProcess } from './lease.ts';
+import { temporaryDirectory } from './test-support.ts';
+
+test('identity rejects pid reuse, reboot and zombies', () => {
+  const t = temporaryDirectory();
+  try {
+    mkdirSync(join(t.path, '7')); mkdirSync(join(t.path, 'sys/kernel/random'), { recursive: true });
+    writeFileSync(join(t.path, 'sys/kernel/random/boot_id'), 'boot');
+    const fields = ['S', '1', '1', ...Array(16).fill('0'), '123'];
+    writeFileSync(join(t.path, '7/stat'), `7 (name with (parentheses)) ${fields.join(' ')}`);
+    expect(processIdentity(7, t.path)).toEqual({ pid: 7, start: '123', boot: 'boot' });
+    fields[0] = 'Z'; writeFileSync(join(t.path, '7/stat'), `7 (zombie) ${fields.join(' ')}`);
+    expect(processIdentity(7, t.path)).toBeUndefined();
+    expect(sameProcess({ ...processIdentity()!, start: 'other' })).toBe(false);
+    expect(sameProcess({ ...processIdentity()!, boot: 'other' })).toBe(false);
+  } finally { t.close(); }
+});
+
+test('lease excludes live owners, reclaims a dead incarnation and release cannot remove a successor', () => {
+  const t = temporaryDirectory();
+  try {
+    const path = join(t.path, 'train.lease');
+    const lease = acquireDirectoryLease(path);
+    expect(() => acquireDirectoryLease(path)).toThrow('Lease held');
+    const tokenFile = readdirSync(path)[0]!;
+    writeFileSync(join(path, tokenFile), JSON.stringify({ ...processIdentity()!, start: 'previous incarnation', token: tokenFile.slice(0, -5) }));
+    const successor = acquireDirectoryLease(path);
+    lease.release(); expect(() => acquireDirectoryLease(path)).toThrow('Lease held');
+    successor.release(); const final = acquireDirectoryLease(path); final.release();
+  } finally { t.close(); }
+});
+
+test('two separate processes cannot both acquire a train lease', async () => {
+  const t = temporaryDirectory();
+  const source = `import { acquireDirectoryLease } from ${JSON.stringify(join(import.meta.dir, 'lease.ts'))};
+    try {
+      const lease = acquireDirectoryLease(process.env.TEST_LEASE!); console.log('acquired');
+      await new Promise(resolve => process.stdin.once('data', resolve)); lease.release();
+    } catch { console.log('held'); }`;
+  const children = [0, 1].map(() => Bun.spawn([process.execPath, '-e', source], {
+    env: { ...process.env, TEST_LEASE: join(t.path, 'train.lease') }, stdin: 'pipe', stdout: 'pipe', stderr: 'pipe',
+  }));
+  try {
+    const messages = await Promise.all(children.map(async child => {
+      const reader = child.stdout.getReader(); const first = await reader.read(); reader.releaseLock();
+      return new TextDecoder().decode(first.value).trim();
+    }));
+    expect(messages.sort()).toEqual(['acquired', 'held']);
+    for (const child of children) { child.stdin.write('stop\n'); child.stdin.end(); }
+    await Promise.all(children.map(child => child.exited));
+  } finally { for (const child of children) child.kill(); t.close(); }
+});

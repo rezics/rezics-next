@@ -1,0 +1,125 @@
+import { randomUUID } from 'node:crypto';
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import type { AttemptFence, GateOutcome, GateOutcomeSink, GateStage } from './contracts.ts';
+import { SqliteLandingQueue, type LandingEntry } from './land.ts';
+import { acquireDirectoryLease } from './lease.ts';
+import { changedFiles, firstFailure, gateRunner, git, outsideScope, type GateRunner } from './merge.ts';
+
+export type TrainOptions = {
+  mainCheckout: string; stateDirectory: string; worktreeRoot: string;
+  queue: SqliteLandingQueue; fence: AttemptFence; sink: GateOutcomeSink;
+  runGate?: GateRunner;
+};
+
+export class MergeTrain {
+  constructor(private readonly options: TrainOptions) {}
+
+  async run(): Promise<void> {
+    const o = this.options;
+    mkdirSync(o.stateDirectory, { recursive: true });
+    const lease = acquireDirectoryLease(join(o.stateDirectory, 'train.lease'));
+    try {
+      for (let entry; (entry = o.queue.next());) {
+        if (!entry.outcome) o.queue.finish(entry.id, await this.integrate(entry));
+        // A crash between sink delivery and acknowledgement may redeliver the same immutable outcome.
+        o.sink.onGateOutcome(o.queue.next()!.outcome!);
+        o.queue.acknowledge(entry.id);
+      }
+    } finally { lease.release(); }
+  }
+
+  private async integrate(entry: LandingEntry): Promise<GateOutcome> {
+    const o = this.options;
+    const request = entry.request;
+    const started = Date.now();
+    const logPath = join(o.stateDirectory, `landing-${entry.id}.log`);
+    writeFileSync(logPath, '');
+    const result: GateOutcome = { taskId: request.taskId, attempt: request.attempt, passed: false,
+      stage: 'setup', logPath, hostMs: 0, changedFiles: [], diffLines: 0 };
+    let stage: GateStage = 'setup';
+    const trainTree = join(o.worktreeRoot, `train-${randomUUID()}`);
+    let added = false;
+    const runGate = o.runGate ?? gateRunner();
+    try {
+      o.fence.assertCurrent(request);
+      if (git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== 'refs/heads/main')
+        throw new Error('The main checkout must already have main checked out');
+      const main = () => git(o.mainCheckout, 'rev-parse', 'refs/heads/main');
+      // Recover an advance that committed before its outcome was saved.
+      let alreadyMerged = false;
+      if (entry.candidate) {
+        try { git(o.mainCheckout, 'merge-base', '--is-ancestor', entry.candidate, 'main'); alreadyMerged = true; } catch {}
+      }
+      if (alreadyMerged && entry.candidate) {
+        result.passed = true; result.stage = 'merge'; result.mergedCommit = entry.candidate;
+        return result;
+      }
+      const tip = git(o.mainCheckout, 'rev-parse', '--verify', `${request.branch}^{commit}`);
+      const originalBase = git(o.mainCheckout, 'merge-base', tip, main());
+      mkdirSync(o.worktreeRoot, { recursive: true });
+      git(o.mainCheckout, 'worktree', 'add', '--detach', trainTree, tip);
+      added = true;
+      for (;;) {
+        o.fence.assertCurrent(request);
+        delete result.firstFailure; delete result.failsOnMain; delete result.timedOut;
+        const base = main();
+        stage = 'rebase';
+        git(trainTree, 'reset', '--hard', tip);
+        git(trainTree, 'clean', '-fdx');
+        git(trainTree, '-c', 'rebase.updateRefs=false', 'rebase', '--onto', base, originalBase);
+        stage = 'scope';
+        result.changedFiles = changedFiles(trainTree, base);
+        result.diffLines = git(trainTree, 'diff', '--numstat', base, 'HEAD').split('\n').reduce((sum, line) => {
+          const [a, b] = line.split('\t'); return sum + (Number(a) || 0) + (Number(b) || 0);
+        }, 0);
+        const outside = outsideScope(result.changedFiles, request.declaredPaths);
+        if (outside.length) throw new Error(`Changes outside declared paths: ${outside.join(', ')}`);
+        stage = 'gate';
+        const candidate = git(trainTree, 'rev-parse', 'HEAD');
+        appendFileSync(logPath, `\nGate on ${candidate}, main ${base}\n`);
+        const gated = await runGate(request.gate, trainTree, logPath);
+        // A gate on an old main is never authoritative, including a red gate.
+        o.fence.assertCurrent(request);
+        if (main() !== base) continue;
+        if (!gated.passed) {
+          result.timedOut = gated.timedOut;
+          result.firstFailure = firstFailure(gated.output);
+          git(trainTree, 'reset', '--hard', base);
+          git(trainTree, 'clean', '-fdx');
+          const baseline = await runGate(request.gate, trainTree, logPath);
+          o.fence.assertCurrent(request);
+          if (main() !== base) continue;
+          result.failsOnMain = !baseline.passed && firstFailure(baseline.output).fingerprint === result.firstFailure.fingerprint;
+          result.stage = stage;
+          return result;
+        }
+        // Gates may write files but may not replace the commit that was validated.
+        if (git(trainTree, 'rev-parse', 'HEAD') !== candidate) throw new Error('Gate changed the candidate commit');
+        git(trainTree, 'diff', '--quiet', 'HEAD', '--');
+        stage = 'merge';
+        o.queue.candidate(entry.id, candidate);
+        if (main() !== base) continue;
+        if (git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== 'refs/heads/main')
+          throw new Error('Main checkout HEAD changed while the gate ran');
+        o.fence.assertCurrent(request);
+        // Keep this synchronous: no await between fencing and Git's locked ref update.
+        git(o.mainCheckout, 'merge', '--ff-only', '--no-edit', candidate);
+        result.passed = true; result.stage = 'merge'; result.mergedCommit = candidate;
+        return result;
+      }
+    } catch (error) {
+      const message = String(error);
+      appendFileSync(logPath, `${message}\n`);
+      result.stage = stage;
+      result.firstFailure = firstFailure(message);
+      return result;
+    } finally {
+      result.hostMs = Date.now() - started;
+      if (added) {
+        try { git(trainTree, 'rebase', '--abort'); } catch {}
+        git(o.mainCheckout, 'worktree', 'remove', '--force', trainTree);
+      }
+    }
+  }
+}
