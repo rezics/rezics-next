@@ -5,6 +5,7 @@ import type { Pool } from 'pg';
 import type { AccessAdmissionRegistry, VerifiedPrincipal } from '../access/admission.ts';
 import type { ExportBasis, VerifiedExportMember } from '../export/planner.ts';
 import type { RightsStore } from '../rights/store.ts';
+import type { SourceArchiveEvidenceOwner } from './archive-evidence.ts';
 
 export class SourceCoverEvidenceInvalid extends Error {}
 export class SourceCoverEvidenceUnavailable extends Error {}
@@ -168,6 +169,72 @@ export class SourceCoverEvidenceVerifier {
         throw new SourceCoverEvidenceUnavailable('current cover evidence changed');
       }
     }
+  }
+}
+
+/** Revisioned artwork evidence consumes original provider responses or the
+ * archive owner's binary/COPY witness. A URL descriptor is never archive custody. */
+export class SourceMediaEvidenceVerifier {
+  constructor(private readonly intake: Pick<SourceIntakeStore, 'read'>, private readonly pool: Pool,
+    private readonly access: Pick<AccessAdmissionRegistry, 'activePrincipalId'>,
+    private readonly archives: Pick<SourceArchiveEvidenceOwner, 'verify'>) {}
+
+  async verifyCurrent(principal: VerifiedPrincipal, provenance: ImportedCoverProvenance): Promise<void> {
+    const principalId = await this.access.activePrincipalId(principal);
+    if (!principalId) throw new SourceCoverEvidenceUnavailable('Source principal is unavailable');
+    if (provenance.format === 'media-imported-cover-v1') {
+      if (provenance.source.provider === 'vndb') throw new SourceCoverEvidenceInvalid('VNDB requires original archive custody');
+      return new SourceCoverEvidenceVerifier(this.intake, this.pool).verifyCurrent(principalId, provenance);
+    }
+    if (provenance.source.provider === 'vndb') {
+      if (!provenance.archive) throw new SourceCoverEvidenceInvalid('VNDB archive witness is required');
+      const witness = await this.archives.verify(principal, provenance.archive.admission, provenance.archive.coordinate);
+      const source = provenance.source;
+      if (witness.source.record !== source.record || witness.source.observation !== source.observation
+        || witness.source.observationDigest !== source.observationDigest || witness.source.provider !== source.provider
+        || witness.source.namespace !== source.namespace || witness.source.externalId !== source.externalId
+        || witness.source.sourceRevision !== source.sourceRevision || witness.row.role !== provenance.role
+        || witness.row.rowDigest !== source.recordDigest || witness.row.fieldLocator !== source.fieldLocator
+        || witness.row.imageUrl !== provenance.image.captureUrl) {
+        throw new SourceCoverEvidenceInvalid('archive/COPY artwork identity differs');
+      }
+    } else if (provenance.source.provider === 'bangumi' && provenance.archive === null) {
+      const observation = await readCurrentSourceObservation(this.pool, this.intake, principalId, provenance.source.observation);
+      if (!observation || observation.record !== provenance.source.record
+        || observation.provider !== provenance.source.provider || observation.namespace !== provenance.source.namespace
+        || observation.externalId !== provenance.source.externalId || observation.sourceRevision !== provenance.source.sourceRevision
+        || observation.byteDigest !== provenance.source.observationDigest || observation.retention !== 'retained'
+        || observation.mediaType !== 'application/json' || !observation.rawBytesBase64
+        || !observation.capture || observation.byteLength === null || observation.byteLength > 262_144) {
+        throw new SourceCoverEvidenceUnavailable('original provider response is unavailable');
+      }
+      const bytes = Buffer.from(observation.rawBytesBase64, 'base64');
+      if (bytes.length !== observation.byteLength || bytes.toString('base64') !== observation.rawBytesBase64
+        || createHash('sha256').update(bytes).digest('hex') !== provenance.source.observationDigest
+        || provenance.source.recordDigest !== provenance.source.observationDigest) {
+        throw new SourceCoverEvidenceInvalid('provider response digest differs');
+      }
+      let response: { id?: unknown; images?: { large?: unknown } };
+      try { response = JSON.parse(bytes.toString('utf8')) as typeof response; }
+      catch { throw new SourceCoverEvidenceInvalid('invalid provider response'); }
+      const kind = provenance.role === 'portrait' ? 'characters' : provenance.role === 'cover' ? 'subjects' : null;
+      const namespace = provenance.role === 'portrait' ? 'character' : 'subject';
+      const endpoint = /^https:\/\/api\.bgm\.tv\/v0\/(subjects|characters)\/([1-9][0-9]*)$/.exec(observation.capture.url);
+      // The returned ID may be canonical after a subject merge; the endpoint's
+      // requested ID remains retained rather than silently rewritten.
+      if (!kind || !endpoint || endpoint[1] !== kind || observation.namespace !== namespace
+        || endpoint[2] !== observation.externalId || !response || !Number.isSafeInteger(response.id)
+        || Number(response.id) < 1 || provenance.source.fieldLocator !== '/images/large'
+        || response.images?.large !== provenance.image.captureUrl) {
+        throw new SourceCoverEvidenceInvalid('provider entity, role or field differs');
+      }
+      const after = await readCurrentSourceObservation(this.pool, this.intake, principalId, provenance.source.observation);
+      if (!after || after.record !== observation.record || after.byteDigest !== observation.byteDigest)
+        throw new SourceCoverEvidenceUnavailable('provider evidence changed');
+    } else throw new SourceCoverEvidenceInvalid('unsupported imported artwork evidence');
+    if (provenance.originalDigest !== provenance.image.captureDigest
+      || await this.access.activePrincipalId(principal) !== principalId)
+      throw new SourceCoverEvidenceUnavailable('artwork evidence authority changed');
   }
 }
 

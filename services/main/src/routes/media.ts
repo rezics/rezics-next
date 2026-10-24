@@ -11,10 +11,10 @@ import type { AccessDownloadLeases, DownloadReadLease } from '../modules/access/
 import { ObjectIntegrityError, ObjectUnavailable } from '../infrastructure/immutable-objects.ts';
 import { activateUploadedBytes, changeAdmittedAssetState, MediaDenied, reserveAdmittedUpload,
   saveAdmittedMediaSet, changeAdmittedMediaField, recordAdmittedImageInference, createAdmittedDocumentImageUse,
-  createAdmittedCampaignArt,
+  createAdmittedCampaignArt, createAdmittedImportedArtUse,
   type MediaDependencies } from '../modules/media/commands.ts';
 import { concealCommand, documentUseCommand, imageLabelCommand, inferenceCommand,
-  importedCoverIntent, mediaDescriptor, metadataRead, metadataResult } from '../modules/media/presentation-contract.ts';
+  importedCoverIntent, importedArtUseCommand, mediaDescriptor, metadataRead, metadataResult } from '../modules/media/presentation-contract.ts';
 import type { MetadataBasis, MetadataRef } from '../modules/media/presentation.ts';
 import { ShowcaseRefused, campaignArtCommand } from '../modules/media/showcase-contract.ts';
 import { DEFAULT_MEDIA_CONTEXT, MAX_UPLOAD_BYTES, MediaConflict, MediaFenced, MediaInvalid, MediaMissing, MediaStale,
@@ -501,13 +501,16 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           return Response.json(result,{status:result.replayed?200:201,headers:{'cache-control':'no-store'}});
         } catch(error){return mediaError(error);}
       })
-    .post('/v1/media/uses',{body:documentUseCommand,response:transportResponses(openApiOperations["/v1/media/uses"].post, {200:t.Object({},{additionalProperties:true}),201:t.Object({},{additionalProperties:true}),...writeProblems,404:problemResult(404)}, 'POST')},
+    .post('/v1/media/uses',{body:t.Union([documentUseCommand, importedArtUseCommand]),response:transportResponses(openApiOperations["/v1/media/uses"].post, {200:t.Object({},{additionalProperties:true}),201:t.Object({},{additionalProperties:true}),...writeProblems,404:problemResult(404)}, 'POST')},
       async ({request,body})=>{
         if (!work.media) return problem(503,'media_unavailable','Media owner is unavailable');
         const key=idempotencyKey(request);if (!key) return problem(400,'invalid_idempotency_key','A valid Idempotency-Key header is required');
         try {
-          const result=await createAdmittedDocumentImageUse(work.environment,work.media,work.account,work.access,request,
-            {...body,context:body.context??DEFAULT_MEDIA_CONTEXT,conceal:body.conceal??false,idempotencyKey:key});
+          const result = 'profile' in body
+            ? await createAdmittedImportedArtUse(work.environment,work.media,work.account,work.access,request,
+              { ...body,context:body.context??DEFAULT_MEDIA_CONTEXT,idempotencyKey:key })
+            : await createAdmittedDocumentImageUse(work.environment,work.media,work.account,work.access,request,
+              {...body,context:body.context??DEFAULT_MEDIA_CONTEXT,conceal:body.conceal??false,idempotencyKey:key});
           return Response.json(result,{status:result.replayed?200:201,headers:{'cache-control':'no-store'}});
         } catch(error){return mediaError(error);}
       })

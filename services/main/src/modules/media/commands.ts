@@ -19,10 +19,14 @@ import { LocalImageTransformer } from '../media-rendition/transform.ts';
 import { requestUseRenditions } from '../media-rendition/request.ts';
 import { RENDITION_LIMITS } from '../media-rendition/policy.ts';
 import { SourceCoverEvidenceInvalid, SourceCoverEvidenceVerifier } from '../source/cover-evidence.ts';
+import type { SourceMediaEvidenceVerifier } from '../source/cover-evidence.ts';
+import type { RightsStore } from '../rights/store.ts';
+import { importedArtDeliveryEligible, importedArtMaterial } from './imported-art.ts';
 import { normalizeTrailer, showcaseSlot, type CampaignArtInput, type ShowcaseSelectionInput, type ShowcaseTrailerInput } from './showcase-contract.ts';
 import { assetIri, MediaConflict, MediaInvalid, MediaMissing,
   MediaStale, MediaFenced, type MediaStore, type AssetStateChangeInput, type AvatarSelectionInput,
   MediaUnavailable,
+  validateImportedCoverProvenance, type ImportedArtUseInput,
   type CommandOutcome, type MediaAdmission, type ReserveUploadInput } from './store.ts';
 
 export class MediaDenied extends Error {}
@@ -33,6 +37,8 @@ export interface MediaDependencies {
   content: ContentCore;
   /** Principal-scoped Source owner proof for imported-cover upload intent. */
   sourceCoverEvidence?: Pick<SourceCoverEvidenceVerifier, 'verify'>;
+  sourceArtEvidence?: Pick<SourceMediaEvidenceVerifier, 'verifyCurrent'>;
+  artRights?: Pick<RightsStore, 'currentMediaDelivery'>;
   /** Returns the conditional-create adapter for one retention/disclosure namespace. */
   objects: (namespace: string) => ImmutableObjects;
   matcher?: RequiredSafetyMatcher;
@@ -76,7 +82,7 @@ async function admitted<T extends { position: CommandOutcome['position']; replay
   args: { scope: string; action: string; actingSubject: string; idempotencyKey: string; digest: string;
     operation: (id: string) => string; accountScope: string; authorityFence?: boolean;
     baselineRelatedWork?: string; baselineSourceRevision?: string },
-  store: MediaStore, run: (admission: MediaAdmission) => Promise<T>,
+  store: MediaStore, run: (admission: MediaAdmission, principal: import('../access/admission.ts').VerifiedPrincipal) => Promise<T>,
 ): Promise<T & { admission: string }> {
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const principal = await account.verify(request, [args.accountScope]);
@@ -107,7 +113,7 @@ async function admitted<T extends { position: CommandOutcome['position']; replay
   let result:T;
   const execute = () => run({ admissionId: registered.id, principalId: registered.principalId,
     actingSubject: registered.actingSubject, authorityEpoch: registered.authorityEpoch,
-    requestDigest: args.digest });
+    requestDigest: args.digest }, principal);
   try {
     if (args.authorityFence && !await store.readOutcome(args.operation(registered.id))) {
       if (!access.withOwnerAuthority || !access.fenceClaim)
@@ -156,8 +162,20 @@ export function reserveAdmittedUpload(env: WorkActivationEnvironment, media: Med
   return admitted(env, account, access, request, { scope: mediaOwnerScope(actingSubject),
     action: 'media.upload', actingSubject, idempotencyKey, digest: uploadDigest(reservation),
     operation: id => `media-upload:${id}`, accountScope: 'work:edit' },
-  media.store, async admission => {
+  media.store, async (admission, principal) => {
     if (reservation.importedCover) {
+      const provenance = validateImportedCoverProvenance(reservation.importedCover, reservation);
+      if (provenance.format === 'media-imported-art-v2') {
+        if (!media.sourceArtEvidence) throw new MediaUnavailable('Source artwork evidence owner is unavailable');
+        try { await media.sourceArtEvidence.verifyCurrent(principal, provenance); }
+        catch (error) {
+          if (error instanceof SourceCoverEvidenceInvalid) throw new MediaInvalid('source artwork evidence is invalid');
+          throw new MediaUnavailable('Source artwork evidence is unavailable');
+        }
+        if (reservation.disclosure === 'public' && (!media.artRights
+          || !importedArtDeliveryEligible(provenance, await media.artRights.currentMediaDelivery(importedArtMaterial(provenance)))))
+          throw new MediaDenied('artwork public delivery is not supported');
+      } else {
       const target = await env.fuseki.query(`PREFIX schema: <https://schema.org/> ASK {
         GRAPH ${iri(GRAPHS.current)} { ${iri(reservation.importedCover.targetWork)} a schema:CreativeWork . } }`, 8192);
       if (target.boolean !== true) throw new MediaDenied('imported covers require an active Work target');
@@ -167,10 +185,32 @@ export function reserveAdmittedUpload(env: WorkActivationEnvironment, media: Med
         if (error instanceof SourceCoverEvidenceInvalid) throw new MediaInvalid('source cover evidence is invalid');
         throw new MediaUnavailable('Source cover evidence is unavailable');
       }
+      }
       if (await media.store.hasSuppressedImportedCover(reservation.importedCover))
         throw new MediaDenied('source cover is suppressed');
     }
     return media.store.reserveUpload(admission, reservation);
+  });
+}
+
+/** The existing target media authority admits an exact imported-art occurrence.
+ * Receipt sealing uses media.avatar, while the immutable owner command is
+ * media.use.create. This grants no Work publication or upload-derived rights. */
+export function createAdmittedImportedArtUse(env: WorkActivationEnvironment, media: MediaDependencies,
+  account: Account, access: Access, request: Request,
+  input: ImportedArtUseInput & { actingSubject: string; idempotencyKey: string }) {
+  const { actingSubject, idempotencyKey, ...use } = input;
+  return admitted(env, account, access, request, { scope: avatarScope(use.target), action: 'media.avatar',
+    actingSubject, idempotencyKey, digest: sha256(stable({ family: 'media-imported-art-use-v2', ...use })),
+    operation: id => `media-art:${id}`, accountScope: 'work:edit', authorityFence: true }, media.store,
+  async (admission, principal) => {
+    const evidence = await media.store.readImportedCoverRevision(use.revision);
+    if (!evidence || evidence.asset !== use.asset || evidence.originalRepresentation !== use.representation
+      || evidence.provenance.format !== 'media-imported-art-v2' || evidence.provenance.targetWork !== use.target
+      || evidence.provenance.role !== use.role) throw new MediaInvalid('imported artwork basis differs');
+    if (!media.sourceArtEvidence) throw new MediaUnavailable('Source artwork evidence owner is unavailable');
+    await media.sourceArtEvidence.verifyCurrent(principal, evidence.provenance);
+    return media.store.createImportedArtUse(admission, use);
   });
 }
 
