@@ -82,7 +82,7 @@ export async function refreshStandingRatingProjections(pool: Pool,
     const fence = (await client.query('SELECT open,generation FROM access.recovery_fence WHERE id FOR SHARE')).rows[0];
     if (fence?.open !== true) throw new RatingInventoryConflict('Recovery fence changed');
     const pending = async () => (await client.query(`SELECT context,origin_main_version,origin_slot
-      FROM access.rating_standing_refresh ${input.context === undefined ? '' : 'WHERE context=$1'}
+      FROM access.rating_standing_refresh WHERE phase<>'prepared' ${input.context === undefined ? '' : 'AND context=$1'}
       ORDER BY context,origin_main_version,origin_slot LIMIT 1`, input.context === undefined ? [] : [input.context])).rows[0];
     const job = await pending();
     let refreshed = 0;
@@ -91,9 +91,12 @@ export async function refreshStandingRatingProjections(pool: Pool,
       await client.query('SELECT 1 FROM access.scope_gate WHERE id=$1 FOR SHARE', [`rating:observe:${job.context}`]);
       await lockRatingObservationTarget(client, job.context, job.origin_main_version);
       const key = [job.context, job.origin_main_version, job.origin_slot];
-      const current = (await client.query(`SELECT after_main_version,after_principal_id
+      const current = (await client.query(`SELECT after_main_version,after_principal_id,phase
         FROM access.rating_standing_refresh WHERE context=$1 AND origin_main_version=$2 AND origin_slot=$3 FOR UPDATE`, key)).rows[0];
-      if (current) {
+      if (current?.phase === 'invalidate') {
+        signal.throwIfAborted();
+        await client.query('SELECT access.advance_rating_standing_invalidation($1,$2,$3,$4)', [...key,limit]);
+      } else if (current && current.phase !== 'prepared') {
         const rows = (await client.query(`SELECT main_version,principal_id FROM access.rating_merge_selection
           WHERE context=$1 AND origin_main_version=$2 AND origin_slot=$3
             AND (main_version,principal_id)>($4,$5::uuid)

@@ -6,6 +6,10 @@ import { reservedTransactionPool } from '../src/infrastructure/pool-reservation.
 import { withAccessClient } from '../src/modules/access/topology-control.ts';
 import { notificationReadPool } from '../src/modules/notification/request-budget.ts';
 import { fenceStandingRatingTransition, refreshStandingRatingProjections } from '../src/modules/rating/standing-publication.ts';
+import { AccessAdmissionRegistry, AdmissionUnavailable } from '../src/modules/access/admission.ts';
+import { recordStandingRatingValues } from '../src/modules/rating/aggregate-inventory.ts';
+import { standingRatingDigest, standingRatingSlotIri } from '../src/modules/rating/observation.ts';
+import { createHash } from 'node:crypto';
 import { ACCESS_RECOVERY_CLASSIFICATION, accessRecoveryRule, assertAccessRecoveryClassification } from '../src/modules/work/access-recovery-coverage.ts';
 import type { OwnerTable } from '../src/modules/work/pg-recovery-frontier.ts';
 
@@ -20,14 +24,16 @@ const cut = { sourceWork: id(5), sourceMainVersion: origin, survivorWork: id(6),
 function transport(population: number) {
   const selections = Array.from({ length: population }, (_, index) => ({ main_version: id(100 + index), principal_id: principal }));
   const state = { after: selections[0]?.main_version ?? '', job: population > 1, transition: false,
+    phase: 'deliver' as 'invalidate' | 'prepared' | 'deliver', discovery: 0,
     generation: 1, open: true, finished: false, preparation: 0, unsettled: false, loseCommit: false, checkouts: 0, refreshed: [] as string[], calls: [] as string[],
     candidateSizes: [] as number[], abortAfter: 0, cancellation: new AbortController(), releases: [] as boolean[] };
-  let before: { after: string; job: boolean; transition: boolean; generation: number; refreshed: string[] } | null = null;
+  let before: { after: string; job: boolean; transition: boolean; generation: number; refreshed: string[];
+    phase: typeof state.phase; discovery: number } | null = null;
   const client = { release(destroy = false) { state.releases.push(destroy); }, async query(sql: string, values: unknown[] = []) {
     state.calls.push(sql);
     let rows: unknown[] = [];
     if (sql === 'BEGIN') before = { after: state.after, job: state.job, transition: state.transition,
-      generation: state.generation, refreshed: [...state.refreshed] };
+      generation: state.generation, refreshed: [...state.refreshed], phase: state.phase, discovery: state.discovery };
     else if (sql === 'COMMIT') {
       before = null;
       if (state.loseCommit) { state.loseCommit = false; throw new Error('lost response after commit'); }
@@ -41,10 +47,15 @@ function transport(population: number) {
       state.preparation -= steps; rows = [{ steps, prepared: state.preparation === 0 }];
     }
     else if (sql.includes('FROM access.rating_standing_refresh') && sql.includes('ORDER BY context')) {
-      rows = state.job ? [{ context, origin_main_version: origin, origin_slot: 'urn:rezics:rating-slot:origin' }] : [];
+      rows = state.job && state.phase !== 'prepared' ? [{ context, origin_main_version: origin, origin_slot: 'urn:rezics:rating-slot:origin' }] : [];
     } else if (sql.includes('FROM access.scope_gate') || sql.includes('access.rating_observation_gate')) { /* gates */ }
     else if (sql.includes('FROM access.rating_standing_refresh') && sql.includes('FOR UPDATE')) {
-      rows = state.job ? [{ after_main_version: state.after, after_principal_id: principal }] : [];
+      rows = state.job ? [{ after_main_version: state.after, after_principal_id: principal, phase: state.phase }] : [];
+    } else if (sql.startsWith('SELECT access.advance_rating_standing_invalidation')) {
+      state.discovery = Math.max(0,state.discovery-Number(values[3]));
+      if (!state.discovery) state.phase = 'prepared';
+      rows = [{}];
+      if (state.abortAfter) state.cancellation.abort();
     } else if (sql.includes('FROM access.rating_merge_selection')) {
       rows = selections.filter(row => row.main_version > String(values[3])).slice(0, Number(values[5]));
       state.candidateSizes.push(rows.length);
@@ -75,6 +86,93 @@ test('retained projection publication exhausts bounded pages without a populatio
     expect(f.state.refreshed).toEqual(f.selections.slice(1).map(row => row.main_version));
     expect(f.state.releases.every(destroy => !destroy)).toBe(true);
   }
+});
+
+test('invalidation continuation commits bounded discovery without delivering or releasing a prepared effect', async () => {
+  const f = transport(2048);
+  f.state.phase = 'invalidate'; f.state.discovery = 102;
+  expect(await refreshStandingRatingProjections(f.pool,{context,limit:1})).toMatchObject({refreshed:0,complete:false});
+  expect(f.state.discovery).toBe(101);
+  expect(f.state.calls.at(-2)).toBe('COMMIT');
+  expect(f.state.refreshed).toEqual([]);
+  expect(await refreshStandingRatingProjections(f.pool,{context,limit:100})).toMatchObject({refreshed:0,complete:false});
+  expect(f.state.discovery).toBe(1);
+  expect(await refreshStandingRatingProjections(f.pool,{context,limit:1})).toMatchObject({refreshed:0,complete:false});
+  expect<string>(f.state.phase).toBe('prepared');
+  const start = f.state.calls.length;
+  expect(await refreshStandingRatingProjections(f.pool,{context,limit:100})).toMatchObject({refreshed:0,complete:false});
+  expect(f.state.calls.slice(start).some(sql => sql.includes('FOR UPDATE'))).toBe(false);
+  expect(f.state.job).toBe(true);
+  // Only the bound head effect moves prepared -> deliver; verification alone
+  // must neither advance delivery nor declare continuation exhausted.
+  f.state.phase = 'deliver';
+  expect(await refreshStandingRatingProjections(f.pool,{context,limit:1})).toMatchObject({refreshed:1,complete:false});
+});
+
+test('cancellation rolls back invalidation progress and never falls through to projection delivery', async () => {
+  const f = transport(102);
+  f.state.phase = 'invalidate'; f.state.discovery = 102; f.state.abortAfter = 1;
+  await expect(refreshStandingRatingProjections(f.pool,{limit:1},f.state.cancellation.signal)).rejects.toThrow();
+  expect(f.state.discovery).toBe(102);
+  expect(f.state.phase).toBe('invalidate');
+  expect(f.state.refreshed).toEqual([]);
+  expect(f.state.releases).toEqual([true]);
+});
+
+test('a delayed admission commits preparation before its authoritative seal, then retries the same receipt', async () => {
+  const admission = '019d0000-0000-7000-8000-000000000008', actor = id(9), work = id(10), revision = id(11);
+  const slot = standingRatingSlotIri(principal,context,origin), scope = `rating:observe:${context}`;
+  const digest = standingRatingDigest({context,work,mainVersion:origin,value:5,expectedRevisionHead:null,actingSubject:actor});
+  const receipt = `urn:rezics:receipt:${createHash('sha256').update(`${admission}\0standing-rating-observation`).digest('hex')}`;
+  const calls: string[] = [];
+  let prepared = false;
+  const client = { release() {}, async query(sql: string) {
+    calls.push(sql);
+    let rows: unknown[] = [];
+    if (sql.includes('FROM access.recovery_fence')) rows = [{open:true,generation:'7'}];
+    else if (sql.startsWith('SELECT scope_id, action')) rows = [{scope_id:scope,action:'rating.observation.set'}];
+    else if (sql.includes('FROM access.scope_gate')) rows = [{authority_epoch:'0',open:true,dispatch_open:true}];
+    else if (sql.includes('FROM access.admission')) rows = [{id:admission,principal_id:principal,acting_subject:actor,
+      scope_id:scope,action:'rating.observation.set',state:'claimed',request_digest:digest,authority_epoch:'0'}];
+    else if (sql.includes('SELECT realm FROM access.rating_aggregate_context')) rows = [{realm:id(12)}];
+    else if (sql.includes('access.prepare_rating_standing_head_change')) rows = [{prepared}];
+    return {rows,rowCount: sql.startsWith('INSERT INTO access.rating_aggregate_head') ? 1 : rows.length};
+  } } as unknown as PoolClient;
+  const pool = {async connect() { return client; }} as unknown as Pool;
+  const registry = new AccessAdmissionRegistry(pool);
+  const proof = {admissionId:admission,scope,requestDigest:digest,authorityEpoch:'0',receipt,outcome:'succeeded' as const,
+    dataEpoch:'epoch',sequence:'1',context,realm:id(12),work,mainVersion:origin,observation:id(13),revision,slot,
+    predecessor:null,availability:'available' as const,value:5};
+  await expect(registry.recordGraphOutcome(admission,proof)).rejects.toBeInstanceOf(AdmissionUnavailable);
+  expect(calls.at(-1)).toBe('COMMIT');
+  expect(calls.some(sql => sql.startsWith('INSERT INTO access.rating_aggregate_head') || sql.includes("SET state = 'sealed'") || sql.includes('INSERT INTO access.outbox'))).toBe(false);
+  expect(calls.filter(sql => sql.includes('access.prepare_rating_standing_head_change'))).toHaveLength(1);
+  prepared = true; calls.length = 0;
+  await registry.recordGraphOutcome(admission,proof);
+  expect(calls.some(sql => sql.startsWith('INSERT INTO access.rating_aggregate_head'))).toBe(true);
+  expect(calls.some(sql => sql.includes("SET state = 'sealed'"))).toBe(true);
+  expect(calls.at(-1)).toBe('COMMIT');
+});
+
+test('reconstruction commits bounded preparation and refuses a cursor that would skip an unapplied head', async () => {
+  const calls: string[] = [];
+  let prepared = false, committed = false;
+  const client = {release() {}, async query(sql: string) {
+    calls.push(sql);
+    if (sql === 'COMMIT') committed = true;
+    const rows = sql.includes('FROM access.recovery_fence') ? [{open:true,generation:'7'}]
+      : sql.includes('SELECT admission_id FROM access.rating_aggregate_head') ? [{admission_id:principal}]
+      : sql.includes('access.prepare_rating_standing_head_change') ? [{prepared}] : [];
+    return {rows,rowCount:sql.startsWith('UPDATE access.rating_aggregate_head') ? 1 : rows.length};
+  } } as unknown as PoolClient;
+  const pool = {async connect() { return client; }} as unknown as Pool;
+  const head = {mainVersion:origin,slot:standingRatingSlotIri(principal,context,origin),revision:id(14),value:5};
+  await expect(recordStandingRatingValues(pool,context,'7',[head])).rejects.toThrow('bounded continuation');
+  expect(committed).toBe(true);
+  expect(calls.some(sql => sql.startsWith('UPDATE access.rating_aggregate_head'))).toBe(false);
+  prepared = true; calls.length = 0;
+  expect(await recordStandingRatingValues(pool,context,'7',[head])).toBe(1);
+  expect(calls.some(sql => sql.startsWith('UPDATE access.rating_aggregate_head'))).toBe(true);
 });
 
 test('lost responses resume committed progress and a newer source seal can rewind the retained frontier', async () => {
@@ -224,7 +322,7 @@ test('invalid, held and cancelled pages cannot advance publication or dispatch l
 
 test('all standing relations declare custody and reconstruction while unknown relations remain conservative and fail the catalog guard', () => {
   const sources = ['2606_standing_rating_components.sql', '2607_standing_rating_publication.sql', '2608_standing_rating_affected_cuts.sql',
-    '2609_standing_rating_bounded_progress.sql']
+    '2609_standing_rating_bounded_progress.sql', '2610_standing_rating_person_cuts.sql']
     .map(name => readFileSync(new URL(`../migrations/access/${name}`, import.meta.url), 'utf8'));
   const names = sources.flatMap(sql => [...sql.matchAll(/CREATE TABLE (access\.rating_standing_\w+)/g)].map(match => match[1]!));
   expect(names).toHaveLength(15);

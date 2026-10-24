@@ -124,20 +124,31 @@ A source head seal, replacement, deletion or reconstruction CAS refreshes its
 native slot and at most one retained projection synchronously. An indexed second
 probe records any remaining projections in a durable keyset job; there is no
 trigger loop over all survivors. Thus a 100-head reconstruction has at most 200
-slot refreshes, including hidden trigger work. Run
+slot refreshes, including hidden trigger work. Before the effect, the same job
+prepares invalidation in bounded pages over the changed person's effective
+inherited subscriptions. Standing admission registration commits this preparation
+before graph dispatch. Seal and reconstruction retain the pre-effect guard;
+native deletion must likewise prepare its exact head mutation before executing
+the guarded delete. Each request spends one discovery unit per head, without
+moving fanout into a trigger. An incomplete preparation commits its cursor and
+refuses the effect. Run
 `task rating:reconstruct -- --env <apps.env> --refresh-standing-projections`
 to resume one page of at most 100 projections; `--context`, `--batch-size` and
 `--batches` narrow or bound the work as for reconstruction. Progress stays in
-Access, and a new source seal rewinds the cursor atomically. Page replay applies
+Access, and a new mutation rewinds discovery atomically. A prepared job waits for
+the exact admission or native CAS retry; continuation alone cannot apply that
+effect or clear its holds. Terminal admission cancellation resumes bounded no-op
+delivery against the unchanged head. Page replay applies
 the same native-precedence/delta function as admission, under the recovery,
 authority and source gates. Missing originals remain explicitly unknown. Native
-readiness skips origin jobs entirely. Retained readiness uses indexed delivery
-frontiers grouped by effective inherited origin; it never compares every native
-person's contribution with its head. Already delivered targets remain readable
-while later projections wait. An origin-wide frontier is conservative: another
-pending person's delivery from the same origin can still hold a mixed component.
-Its work is proportional to distinct inherited origins, so constant readiness
-work for arbitrarily many distinct origins is not established by this mechanism.
+and inherited readiness both seek the component's current indexed cut. Preparation
+increments that cut's pending counter for each affected person-slot; reads do
+not enumerate its distinct origins or compare its population with origin jobs.
+Delivery releases each local hold after refreshing that slot. A new subscription
+behind an invalidation cursor installs its own hold; removal and native override
+release an obsolete inherited hold. Another person's pending delivery from the
+same origin does not hold an absent or overridden subscription. Already delivered
+targets remain readable while later projections wait.
 Every page checks current revocation before refreshing a slot, so continuation
 cannot reconstruct an undone inherited contribution.
 

@@ -70,7 +70,10 @@ export async function lockRatingObservationTarget(
 /** First seal only, inside the admission transaction. Exact-head CAS orders
  * delayed seals: a child waits for its parent's seal. Retried seals never rewind. */
 export async function recordRatingAggregateHead(client: PoolClient,
-  admitted: SealingRatingAdmission, proof: RatingProof): Promise<void> {
+  admitted: SealingRatingAdmission, proof: RatingProof): Promise<void | 'pending'> {
+  if (proof.outcome === 'cancelled' && admitted.action === 'rating.observation.set') {
+    await client.query('SELECT access.cancel_rating_standing_head_change($1::uuid)', [admitted.id]);
+  }
   if (proof.outcome !== 'succeeded'
     || !['rating.context.create', 'rating.context.policy.set', 'rating.observation.set'].includes(admitted.action)) return;
   const revision = admitted.action === 'rating.context.policy.set' ? proof.policyRevision : proof.revision;
@@ -157,6 +160,13 @@ export async function recordRatingAggregateHead(client: PoolClient,
   }
   const value = standing ? sealedStandingValue(proof, admitted) : null;
   await lockRatingObservationTarget(client, proof.context!, proof.release ?? proof.mainVersion!);
+  if (standing) {
+    const current = (await client.query('SELECT revision FROM access.rating_aggregate_head WHERE context=$1 AND main_version=$2 AND slot=$3',
+      [proof.context,proof.mainVersion,proof.slot])).rows[0];
+    if ((current?.revision ?? null) !== proof.predecessor) throw new RatingInventoryConflict('Rating predecessor seal is unavailable');
+    if (!await prepareStandingRatingHeadChange(client, { context: proof.context!, mainVersion: proof.mainVersion!, slot: proof.slot!,
+      admissionId: admitted.id, value, valueKnown: true })) return 'pending';
+  }
   if (proof.predecessor === null) {
     await client.query(`INSERT INTO access.rating_aggregate_head
       (context, main_version, slot, work, observation, revision, principal_id, admission_id,
@@ -170,6 +180,19 @@ export async function recordRatingAggregateHead(client: PoolClient,
     [...values, proof.predecessor, value, standing]);
     if (changed.rowCount !== 1) throw new RatingInventoryConflict('Rating predecessor seal is unavailable');
   }
+}
+
+/** One discovery unit per head, including reconstruction batches. The caller
+ * commits a pending result without sealing or applying the mutation. The
+ * existing publication continuation prepares the remaining affected people. */
+export async function prepareStandingRatingHeadChange(client: PoolClient,
+  input: { context: string; mainVersion: string; slot: string; admissionId: string;
+    value: number | null; valueKnown: boolean; deleting?: boolean }): Promise<boolean> {
+  const result = await client.query(`SELECT access.prepare_rating_standing_head_change($1,$2,$3,
+    access.rating_standing_head_key($4::uuid,$5::numeric,$6,$7),1) AS prepared`,
+  [input.context,input.mainVersion,input.slot,input.admissionId,input.value,input.valueKnown,input.deleting ?? false]);
+  if (typeof result.rows[0]?.prepared !== 'boolean') throw new RatingInventoryConflict('Standing invalidation is unavailable');
+  return result.rows[0].prepared;
 }
 
 function sealedStandingValue(proof: RatingProof, admitted: SealingRatingAdmission): number | null {
@@ -638,7 +661,7 @@ export async function recordStandingRatingValues(pool: Pool, context: string, ge
     || !/^urn:rezics:rating-slot:[0-9a-f]{64}$/.test(head.slot) || head.value !== null && !isRatingValue(head.value))) {
     throw new RatingInventoryConflict('invalid standing reconstruction values');
   }
-  return withInventoryClient(pool, signal, async client => { try {
+  return withInventoryClient(pool, signal, async client => { let committed = false; try {
     await client.query('BEGIN');
     await client.query("SET LOCAL lock_timeout = '2s'");
     await client.query("SET LOCAL statement_timeout = '5s'");
@@ -649,16 +672,34 @@ export async function recordStandingRatingValues(pool: Pool, context: string, ge
       await lockRatingObservationTarget(client, context, target);
     }
     let recorded = 0;
+    let pending = false;
     for (const head of heads) {
+      signal.throwIfAborted();
+      const current = (await client.query(`SELECT admission_id FROM access.rating_aggregate_head
+        WHERE context=$1 AND main_version=$2 AND slot=$3 AND revision=$4 AND NOT value_known AND target_release IS NULL
+          AND slot=access.rating_standing_slot(principal_id,context,main_version)`,
+      [context,head.mainVersion,head.slot,head.revision])).rows[0];
+      if (!current) continue;
+      if (!await prepareStandingRatingHeadChange(client, { context,mainVersion: head.mainVersion,slot: head.slot,
+        admissionId: current.admission_id,value: head.value,valueKnown: true })) {
+        pending = true;
+        continue;
+      }
       recorded += (await client.query(`UPDATE access.rating_aggregate_head SET value=$5,value_known=true
         WHERE context=$1 AND main_version=$2 AND slot=$3 AND revision=$4 AND NOT value_known AND target_release IS NULL
           AND slot=access.rating_standing_slot(principal_id,context,main_version)`,
       [context, head.mainVersion, head.slot, head.revision, head.value])).rowCount ?? 0;
     }
+    signal.throwIfAborted();
     await client.query('COMMIT');
+    committed = true;
+    signal.throwIfAborted();
+    // Do not return a cursor that skips a prepared-but-unapplied head. Retrying
+    // the same reconstruction page also skips its already completed CAS rows.
+    if (pending) throw new RatingInventoryConflict('Standing head invalidation requires bounded continuation');
     return recorded;
   } catch (error) {
-    try { await client.query('ROLLBACK'); } catch { /* preserve failure */ }
+    if (!committed) try { await client.query('ROLLBACK'); } catch { /* preserve failure */ }
     throw error;
   } });
 }

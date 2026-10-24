@@ -59,6 +59,24 @@ test('standing components retain exact effective slots through 100/101/large, me
     SELECT x.admission::uuid,x.principal::uuid,$2,$3,'rating.observation.set',x.admission,$4,0,now()+interval '1 hour',
       'sealed','urn:g2786:'||x.admission,'succeeded','g2786','1',now()
     FROM jsonb_to_recordset($1::jsonb) x(principal text,admission text)`, [JSON.stringify(rows), actor, scope, '1'.repeat(64)]);
+  const prepareHeads = async (rows: readonly { slot: string; admission?: string }[], target: string,
+    value: number | null, known = true, deleting = false) => {
+    let pending = [...rows];
+    for (let page = 0; page < 64; page++) {
+      const result = (await pool.query(`SELECT x.slot,access.prepare_rating_standing_head_change($2,$3,x.slot,
+        access.rating_standing_head_key(COALESCE(x.admission::uuid,h.admission_id),$4::numeric,$5,$6),1) AS prepared
+        FROM jsonb_to_recordset($1::jsonb) x(slot text,admission text)
+        LEFT JOIN access.rating_aggregate_head h ON (h.context,h.main_version,h.slot)=($2,$3,x.slot)`,
+      [JSON.stringify(pending),context,target,value,known,deleting])).rows;
+      const waiting = new Set(result.filter(row => !row.prepared).map(row => row.slot));
+      pending = pending.filter(row => waiting.has(row.slot));
+      if (!pending.length) return;
+      // Each head still consumes only one discovery unit. The batch above is
+      // fixture setup; a large single head uses the real bounded continuation.
+      if (pending.length === 1) expect((await refreshStandingRatingProjections(pool,{context,limit:100})).refreshed).toBe(0);
+    }
+    throw new Error('Standing invalidation preparation did not exhaust');
+  };
   const heads = async (rows: typeof items, target: string, owner: string, known = true) => {
     await admissions(rows);
     await pool.query(`INSERT INTO access.rating_aggregate_head
@@ -164,6 +182,7 @@ test('standing components retain exact effective slots through 100/101/large, me
       [JSON.stringify(items.slice(0,population)),context,target.work,target.main,originMain,task]);
       const replacements = items.slice(0,population).map(item => ({ ...item, admission: randomUUID() }));
       await admissions(replacements);
+      await prepareHeads(replacements,originMain,5);
       await pool.query(`UPDATE access.rating_aggregate_head h SET admission_id=x.admission::uuid
         FROM jsonb_to_recordset($1::jsonb) x(principal text,admission text)
         WHERE h.context=$2 AND h.main_version=$3 AND h.principal_id=x.principal::uuid`,
@@ -263,6 +282,7 @@ test('standing components retain exact effective slots through 100/101/large, me
     const countValue = async (value: number) => Number((await pool.query(`SELECT count(*) AS n FROM access.rating_standing_contribution
       WHERE context=$1 AND main_version=ANY($2::text[]) AND value=$3`, [context, retained.map(target => target.main), value])).rows[0].n);
     const oldCut = await readRatingAggregateInventory(pool, context, retained.at(-1)!.main);
+    await prepareHeads([{slot:source.slot}],originMain,4);
     await pool.query('UPDATE access.rating_aggregate_head SET value=4 WHERE context=$1 AND main_version=$2 AND slot=$3',
       [context, originMain, source.slot]);
     expect(await countValue(4)).toBe(1);
@@ -280,6 +300,7 @@ test('standing components retain exact effective slots through 100/101/large, me
 
     // A newer source seal rewinds the persisted frontier. Lost local cursors
     // cannot skip the earlier targets now carrying that previous value.
+    await prepareHeads([{slot:source.slot}],originMain,3);
     await pool.query('UPDATE access.rating_aggregate_head SET value=3 WHERE context=$1 AND main_version=$2 AND slot=$3',
       [context, originMain, source.slot]);
     expect(await countValue(3)).toBe(1);
@@ -290,6 +311,7 @@ test('standing components retain exact effective slots through 100/101/large, me
 
     // Deletion uses the same bounded path, retaining missing origins as unknown
     // instead of dropping their selected slots or publishing truncated figures.
+    await prepareHeads([{slot:source.slot}],originMain,3,true,true);
     await pool.query('DELETE FROM access.rating_aggregate_head WHERE context=$1 AND main_version=$2 AND slot=$3',
       [context, originMain, source.slot]);
     expect(await refreshStandingRatingProjections(pool, { context, limit: 32 })).toMatchObject({ refreshed: 32, complete: false });
@@ -303,10 +325,14 @@ test('standing components retain exact effective slots through 100/101/large, me
     // Reconstruction also has bounded native fanout; it cannot hide 137
     // projection updates behind one verified head's CAS.
     const reconstructed = { ...source, admission: randomUUID(), observation: id(), revision: id() };
+    await prepareHeads([reconstructed],originMain,null,false);
     await heads([reconstructed], originMain, originWork, false);
     expect(await refreshStandingRatingProjections(pool, { context })).toMatchObject({ refreshed: 100, complete: false });
     expect(await refreshStandingRatingProjections(pool, { context })).toMatchObject({ refreshed: 36, complete: true });
     const recovery = (await pool.query('SELECT generation FROM access.recovery_fence WHERE id')).rows[0].generation;
+    await expect(recordStandingRatingValues(pool,context,recovery,
+      [{mainVersion:originMain,slot:reconstructed.slot,revision:reconstructed.revision,value:5}])).rejects.toThrow('bounded continuation');
+    await prepareHeads([reconstructed],originMain,5);
     expect(await recordStandingRatingValues(pool, context, recovery,
       [{ mainVersion: originMain, slot: reconstructed.slot, revision: reconstructed.revision, value: 5 }])).toBe(1);
     expect(await countValue(5)).toBe(1);
@@ -374,6 +400,109 @@ test('standing components retain exact effective slots through 100/101/large, me
     const cancellation = new AbortController(); cancellation.abort();
     await expect(readStandingRatingReconstructionBatch(pool, context, legacyMain, '', 100, cancellation.signal)).rejects.toThrow();
     await expect(readStandingRatingReconstructionBatch(pool, context, legacyMain, '', 101)).rejects.toThrow('invalid standing reconstruction page');
+
+    // Distinct origins are not a read-time population dimension. These are
+    // native Access fixtures, with real retained selection/lineage triggers;
+    // public graph/manifest composition remains in the separate HTTP case.
+    const inheritedMain = id(), inheritedWork = id();
+    const distinct = items.map(item => {
+      const mainVersion = id();
+      return {...item,mainVersion,work:id(),admission:randomUUID(),observation:id(),revision:id(),
+        slot:standingRatingSlotIri(item.principal,context,mainVersion)};
+    });
+    await admissions(distinct);
+    await pool.query(`INSERT INTO access.rating_aggregate_head
+      (context,main_version,slot,work,observation,revision,principal_id,admission_id,original_admission_id,value,value_known)
+      SELECT $2,x.main_version,x.slot,x.work,x.observation,x.revision,x.principal::uuid,x.admission::uuid,x.admission::uuid,5,true
+      FROM jsonb_to_recordset($1::jsonb) x(main_version text,slot text,work text,observation text,revision text,principal text,admission text)`,
+    [JSON.stringify(distinct.map(row => ({...row,main_version:row.mainVersion}))),context]);
+    const inheritedMeasurements: Record<string,unknown>[] = [];
+    previous = 0;
+    for (const population of [100,101,102,512,2048]) {
+      await pool.query(`INSERT INTO access.rating_merge_selection
+        (context,work,main_version,principal_id,origin_main_version,origin_slot,task_key)
+        SELECT $2,$3,$4,x.principal::uuid,x.main_version,x.slot,$5
+        FROM jsonb_to_recordset($1::jsonb) x(principal text,main_version text,slot text)`,
+      [JSON.stringify(distinct.slice(previous,population).map(row => ({...row,main_version:row.mainVersion}))),
+        context,inheritedWork,inheritedMain,task]);
+      previous = population;
+      const current = await readRatingAggregateInventory(pool,context,inheritedMain);
+      expect(current.standing).toMatchObject({slots:population,unvalued:0,histogram:{'5':population}});
+      const readiness = await measure('SELECT * FROM access.rating_standing_publication($1,$2)',[context,inheritedMain]);
+      const fence = await measure(STANDING_RATING_FENCE_SQL,[JSON.stringify([{context,main_version:inheritedMain,generation:current.standingGeneration}])]);
+      expect(readiness.examined).toBeLessThan(64);
+      expect(fence.examined).toBeLessThan(128);
+      inheritedMeasurements.push({population,readiness,fence});
+    }
+    await Bun.write(`${import.meta.dir}/../../../.temp/goal/standing-inherited-native-work.json`,JSON.stringify(inheritedMeasurements));
+
+    // The same origin contains two people. Only the changed person's effective
+    // subscriptions participate in invalidation; absent and native overrides
+    // remain readable even beyond an interrupted delivery frontier.
+    const cleanAbsent = 'https://rezics.com/id/ffffffff-ffff-4fff-bfff-fffffffffff1';
+    const cleanOverride = 'https://rezics.com/id/ffffffff-ffff-4fff-bfff-fffffffffff2';
+    const dirty = Array.from({length:3},() => ({main:id().replace(/id\/[0-9a-f]/,'id/a'),work:id()})).sort((a,b) => a.main.localeCompare(b.main));
+    const changed = reconstructed, other = items[6]!;
+    for (const target of [cleanAbsent,cleanOverride]) {
+      const natives = items.slice(100,200).map(item => ({...item,admission:randomUUID(),observation:id(),revision:id(),
+        slot:standingRatingSlotIri(item.principal,context,target)}));
+      await heads(natives,target,work);
+      await pool.query(`INSERT INTO access.rating_merge_selection
+        (context,work,main_version,principal_id,origin_main_version,origin_slot,task_key) VALUES($1,$2,$3,$4::uuid,$5,$6,$7)`,
+      [context,work,target,other.principal,originMain,other.slot,task]);
+    }
+    for (const target of [...dirty,{main:cleanOverride,work}]) await pool.query(`INSERT INTO access.rating_merge_selection
+      (context,work,main_version,principal_id,origin_main_version,origin_slot,task_key) VALUES($1,$2,$3,$4::uuid,$5,$6,$7)`,
+    [context,target.work,target.main,changed.principal,originMain,changed.slot,task]);
+    const override = {...changed,admission:randomUUID(),observation:id(),revision:id(),
+      slot:standingRatingSlotIri(changed.principal,context,cleanOverride)};
+    await heads([override],cleanOverride,work);
+    const unaffected = async () => {
+      expect((await readRatingAggregateInventory(pool,context,cleanAbsent)).standing).toMatchObject({slots:101,unvalued:0,histogram:{'5':101}});
+      expect((await readRatingAggregateInventory(pool,context,cleanOverride)).standing).toMatchObject({slots:102,unvalued:0,histogram:{'5':102}});
+      expect((await readRatingAggregateInventory(pool,context,inheritedMain)).standing).toMatchObject({slots:2048,unvalued:0,histogram:{'5':2048}});
+    };
+    await unaffected();
+    const oldClean = await readRatingAggregateInventory(pool,context,cleanAbsent);
+    const startInvalidation = () => pool.query(`SELECT access.prepare_rating_standing_head_change($1,$2,$3,
+      access.rating_standing_head_key($4::uuid,NULL,true,false),1) AS prepared`,[context,originMain,changed.slot,changed.admission]);
+    expect((await startInvalidation()).rows[0].prepared).toBe(false);
+    await expect(readRatingAggregateInventory(pool,context,dirty[0]!.main)).rejects.toThrow('publication is incomplete');
+    await unaffected();
+    // Refreshing the old value before the effect must not clear this hold.
+    await pool.query('SELECT access.refresh_rating_standing_slot($1,$2,$3::uuid)',[context,dirty[0]!.main,changed.principal]);
+    await expect(readRatingAggregateInventory(pool,context,dirty[0]!.main)).rejects.toThrow('publication is incomplete');
+    const behind = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
+    await pool.query(`INSERT INTO access.rating_merge_selection
+      (context,work,main_version,principal_id,origin_main_version,origin_slot,task_key) VALUES($1,$2,$3,$4::uuid,$5,$6,$7)`,
+    [context,work,behind,changed.principal,originMain,changed.slot,task]);
+    await expect(readRatingAggregateInventory(pool,context,behind)).rejects.toThrow('publication is incomplete');
+    // An override arriving during preparation removes that person's hold, while
+    // the other pending targets still wait for the bound mutation.
+    const during = {...changed,admission:randomUUID(),observation:id(),revision:id(),
+      slot:standingRatingSlotIri(changed.principal,context,dirty[0]!.main)};
+    await heads([during],dirty[0]!.main,dirty[0]!.work);
+    expect((await readRatingAggregateInventory(pool,context,dirty[0]!.main)).standing!.histogram).toEqual({'5':1});
+    await prepareHeads([{slot:changed.slot}],originMain,null);
+    await expect(readRatingAggregateInventory(pool,context,dirty.at(-1)!.main)).rejects.toThrow('publication is incomplete');
+    await unaffected();
+    await pool.query('UPDATE access.rating_aggregate_head SET value=NULL WHERE context=$1 AND main_version=$2 AND slot=$3',
+      [context,originMain,changed.slot]);
+    await expect(readRatingAggregateInventory(pool,context,dirty.at(-1)!.main)).rejects.toThrow('publication is incomplete');
+    await unaffected();
+    expect(await checkRatingAggregateFence(pool,oldClean.recoveryGeneration,undefined,
+      [{context,mainVersion:cleanAbsent,generation:oldClean.standingGeneration!}])).toBe(true);
+    for (let page = 0; page < 16; page++) {
+      const result = await refreshStandingRatingProjections(pool,{context,limit:1});
+      expect(result.refreshed).toBeLessThanOrEqual(1);
+      await unaffected();
+      if (result.complete) break;
+      expect(page).toBeLessThan(15);
+    }
+    for (const target of dirty.slice(1)) expect((await readRatingAggregateInventory(pool,context,target.main)).standing)
+      .toMatchObject({slots:1,unvalued:0,histogram:{}});
+    expect((await readRatingAggregateInventory(pool,context,dirty[0]!.main)).standing!.histogram).toEqual({'5':1});
+    expect(await refreshStandingRatingProjections(pool,{context,limit:1})).toMatchObject({refreshed:0,complete:true});
   } finally {
     await metricsPool.end();
     await pool.end();

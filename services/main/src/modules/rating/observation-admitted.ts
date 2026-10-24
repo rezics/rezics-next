@@ -1,6 +1,6 @@
 import { InvalidRatingObservationInput } from './observation.ts';
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
-import { AdmissionDenied, AdmissionExpired, AdmissionLockBusy, type AccessAdmissionRegistry } from '../access/admission.ts';
+import { AdmissionDenied, AdmissionExpired, AdmissionLockBusy, AdmissionUnavailable, type AccessAdmissionRegistry } from '../access/admission.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { IdempotencyConflict, type WorkActivationEnvironment } from '../work/activate.ts';
 import { PendingAdmittedWork } from '../work/create-admitted.ts';
@@ -12,7 +12,7 @@ import { checkedRatingReceipt, readStandingRatingReceipt,
 export async function setAdmittedStandingRating(
   env: WorkActivationEnvironment,
   account: Pick<AccountAssertionVerifier, 'verify'>,
-  access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>,
+  access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome' | 'prepareStandingRatingPublication'>,
   request: Request,
   input: SetStandingRatingInput & { idempotencyKey: string }, daily = false,
 ): Promise<RatingObservationReceipt & { replayed: boolean }> {
@@ -35,9 +35,11 @@ export async function setAdmittedStandingRating(
       if (!admission.dispatchEligible || admission.state === 'registered') {
         await sealStandingRatingAdmission(env, admission);
       } else {
-        try { await setStandingRating(env, admission, input, daily); }
+        try { await setStandingRating(env, admission, input, daily,
+          !daily && input.occasion === undefined ? () => access.prepareStandingRatingPublication(admission,input,request.signal) : undefined); }
         catch (error) {
-          if (error instanceof IdempotencyConflict || error instanceof InvalidRatingObservationInput || error instanceof RatingCurrentVisibility) throw error;
+          if (error instanceof IdempotencyConflict || error instanceof InvalidRatingObservationInput || error instanceof RatingCurrentVisibility
+            || error instanceof AdmissionUnavailable || error instanceof AdmissionLockBusy) throw error;
           if (error instanceof RatingObservationUnavailable) {
             await sealStandingRatingAdmission(env, admission);
           }
@@ -50,7 +52,7 @@ export async function setAdmittedStandingRating(
     return { ...await checkedRatingReceipt(env, terminal, registered, input, digest, daily),
       replayed: registered.replayed };
   } catch (error) {
-    if (error instanceof InvalidRatingObservationInput || error instanceof AdmissionLockBusy || error instanceof IdempotencyConflict || error instanceof StaleRatingObservation
+    if (error instanceof InvalidRatingObservationInput || error instanceof AdmissionLockBusy || error instanceof AdmissionUnavailable || error instanceof IdempotencyConflict || error instanceof StaleRatingObservation
       || error instanceof RatingObservationUnavailable) throw error;
     throw new PendingAdmittedWork(registered.id, 'rating-observation');
   }

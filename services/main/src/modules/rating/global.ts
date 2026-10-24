@@ -359,7 +359,7 @@ async function sealTerminal(env: WorkActivationEnvironment, admission: Registere
 
 /** Replace one Global Account-principal opinion by exact head; prior revisions stay immutable. */
 export async function setGlobalRating(env: WorkActivationEnvironment, admission: RegisteredAdmission,
-  input: SetGlobalRatingInput): Promise<RatingObservationReceipt> {
+  input: SetGlobalRatingInput, preparePublication?: () => Promise<void>): Promise<RatingObservationReceipt> {
   const digest = globalRatingDigest(input);
   if (admission.action !== 'rating.observation.set' || admission.scope !== `rating:observe:${input.context}`
     || admission.actingSubject !== input.actingSubject || admission.requestDigest !== digest) {
@@ -379,6 +379,7 @@ export async function setGlobalRating(env: WorkActivationEnvironment, admission:
     if (stale) return checkedGlobalRatingReceipt(stale, admission, input, digest);
     throw new PendingActivation('stale Global rating was not sealed');
   }
+  await preparePublication?.();
   const observation = deps.observation ?? ID + Bun.randomUUIDv7();
   const revision = ID + Bun.randomUUIDv7();
   const operation = ID + Bun.randomUUIDv7();
