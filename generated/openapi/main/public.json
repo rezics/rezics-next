@@ -777565,20 +777565,44 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "anyOf": [
-                    {
+                  "additionalProperties": false,
+                  "properties": {
+                    "basis": {
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "validation": {
                       "additionalProperties": false,
                       "properties": {
-                        "basis": {
-                          "maxLength": 128,
-                          "minLength": 1,
-                          "type": "string"
-                        },
-                        "code": {
-                          "type": "string"
-                        },
-                        "currentHead": {
+                        "constraint": {
                           "~elyTyp": 7,
+                          "maxLength": 180,
                           "nullable": true,
                           "type": [
                             "string",
@@ -777602,39 +777626,152 @@
                         "validation": {
                           "additionalProperties": false,
                           "properties": {
-                            "constraint": {
+                            "basis": {
+                              "maxLength": 128,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "type": "string"
+                            },
+                            "currentHead": {
                               "~elyTyp": 7,
-                              "maxLength": 180,
                               "nullable": true,
                               "type": [
                                 "string",
                                 "null"
                               ]
                             },
-                            "path": {
+                            "detail": {
+                              "maxLength": 512,
+                              "type": "string"
+                            },
+                            "status": {
+                              "const": 409,
+                              "type": "number"
+                            },
+                            "title": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string"
+                            },
+                            "validation": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "constraint": {
+                                  "~elyTyp": 7,
+                                  "maxLength": 180,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "path": {
+                                  "~elyTyp": 7,
+                                  "maxLength": 180,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "path",
+                                "constraint"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "title",
+                            "status",
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "basis": {
+                              "maxLength": 128,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "unsupported_model_revision",
+                              "type": "string"
+                            },
+                            "currentHead": {
                               "~elyTyp": 7,
-                              "maxLength": 180,
                               "nullable": true,
                               "type": [
                                 "string",
                                 "null"
                               ]
+                            },
+                            "detail": {
+                              "maxLength": 512,
+                              "type": "string"
+                            },
+                            "modelRevision": {
+                              "type": "string"
+                            },
+                            "schema": {
+                              "type": "string"
+                            },
+                            "status": {
+                              "const": 409,
+                              "type": "number"
+                            },
+                            "title": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string"
+                            },
+                            "validation": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "constraint": {
+                                  "~elyTyp": 7,
+                                  "maxLength": 180,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "path": {
+                                  "~elyTyp": 7,
+                                  "maxLength": 180,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "path",
+                                "constraint"
+                              ],
+                              "type": "object"
                             }
                           },
                           "required": [
-                            "path",
-                            "constraint"
+                            "type",
+                            "title",
+                            "status",
+                            "code",
+                            "modelRevision",
+                            "schema"
                           ],
                           "type": "object"
                         }
-                      },
-                      "required": [
-                        "type",
-                        "title",
-                        "status",
-                        "code"
-                      ],
-                      "type": "object"
+                      ]
                     },
                     {
                       "additionalProperties": false,
