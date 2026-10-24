@@ -849079,8 +849079,10 @@
                           ],
                           "type": "object"
                         },
-                        {
-                          "additionalProperties": false,
+                        "revision": {
+                          "type": "string"
+                        },
+                        "sourcePosition": {
                           "properties": {
                             "code": {
                               "const": "invalid_account_assertion",
