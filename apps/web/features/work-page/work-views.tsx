@@ -249,6 +249,7 @@ export async function WorkFrameView({ workRef, id, work, locale, messages, lead,
   const context = ratings?.ok ? ratings.data.context : null;
   const ratingTarget = context ? { work: work.id, context: context.context, mainVersion: work.mainVersion,
     max: context.scale.max } : null;
+  const facts = await readWorkFacts(id, locale, client);
   return <WorkFrame workRef={workRef} work={work} experience={experience} locale={locale} messages={messages} signedIn={signedIn}
     statementSources={facts.page} sourceLabels={facts.labels} factObligations={factObligations}
     showcase={workShowcaseHeader(art.item, showcaseMessages, art.images)}
