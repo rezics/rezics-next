@@ -67,6 +67,10 @@ const relationReadV2 = t.Object({ ...relationRead.properties, profile: t.Literal
 const retainedFields = { associationHead: native, compatibilityReceipt: t.String(), origin: retainedCreditOrigin, mappingRevision: native };
 const retainedRelationWrite = t.Object({ ...relationWriteV2.properties, ...retainedFields });
 const retainedRelationRead = t.Object({ ...relationReadV2.properties, ...retainedFields });
+const relationReadModels = {
+  RelationOccurrenceRead: t.Union([relationRead, relationReadV2, retainedRelationRead]),
+  RelationOccurrenceRevisionRead: t.Union([relationRead, relationReadV2, retainedRelationRead, associationEvidenceResult]),
+};
 const relationV1Input = t.Object({ profile: t.Literal('relation-change-v1'), occurrence: t.Optional(native),
   expectedHead: t.Nullable(native), definition: native,
   participations: t.Array(t.Object({ role: t.String({ maxLength: 32 }), participant: t.Record(t.String(), t.Unknown()),
@@ -251,6 +255,7 @@ export function relationRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     });
   };
   return new Elysia()
+    .model(relationReadModels)
     .post('/v1/relations/changes', {
       body: t.Union([relationV1Input, relationV2Input, retainedRelationInput]),
       response: transportResponses(openApiOperations["/v1/relations/changes"].post, { 200: t.Union([relationWrite, relationWriteV2, retainedRelationWrite]),
@@ -329,8 +334,8 @@ export function relationRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     .get('/v1/relations/:id', {
       params: t.Object({ id: groupUuid }),
       query: t.Object({ actingSubject: native, position: readingPositionQuery, profile: t.Optional(t.Literal('relation-change-v2')) }, { additionalProperties: false }),
-      response: transportResponses(openApiOperations["/v1/relations/{id}"].get, { 200: t.Union([relationRead, relationReadV2, retainedRelationRead]), ...authorizedReadProblems,
-        409: t.Union([problemResult(409), relationProfileProblem]) }, 'GET'),
+      response: { ...transportResponses(openApiOperations["/v1/relations/{id}"].get, { ...authorizedReadProblems,
+        409: t.Union([problemResult(409), relationProfileProblem]) }, 'GET'), 200: 'RelationOccurrenceRead' },
     }, async ({ request, params, query }) => {
       try {
         const read = await exact(request, query.actingSubject, `https://rezics.com/id/${params.id}`, undefined, query.profile);
@@ -342,9 +347,10 @@ export function relationRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       params: t.Object({ id: groupUuid, revision: groupUuid }),
       query: t.Union([t.Object({ actingSubject: native, position: readingPositionQuery,
         profile: t.Optional(t.Literal('relation-change-v2')) }, { additionalProperties: false }), associationEvidenceQuery]),
-      response: transportResponses(openApiOperations["/v1/relations/{id}/revisions/{revision}"].get, {
-        200: t.Union([relationRead, relationReadV2, retainedRelationRead, associationEvidenceResult]), ...authorizedReadProblems,
+      response: { ...transportResponses(openApiOperations["/v1/relations/{id}/revisions/{revision}"].get, {
+        ...authorizedReadProblems,
         400: problemResult(400), 409: t.Union([problemResult(409), relationProfileProblem, associationEvidenceStale]) }, 'GET'),
+        200: 'RelationOccurrenceRevisionRead' },
     }, async ({ request, params, query }) => {
       try {
         if (query.profile === 'association-evidence-v1') return await executeAssociationEvidence(work, request,
