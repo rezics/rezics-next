@@ -352,12 +352,11 @@ export const oneTextLanguage = cache(async (id: string, locale: UiLocale, select
 });
 
 /**
- * Where "Read" leads. A reader already in the Work continues at the next
- * chapter they have not read, as Main's Continue read gives it; anyone else
- * starts at chapter 1, found by descending the first parts of the contents
- * (at most three levels, one page each). A Work with no contents but a
- * selected text is read as that one text. Null when the Work has nothing to
- * read. A refused contents read remains unavailable, with its owner refusal.
+ * Where a Book's "Read" leads. Signed-in readers use Main's exact per-Work
+ * resume, including its chapter and language. Anonymous readers start from
+ * the first readable contents. A Work without a chapter resume may still
+ * have its own standalone text. Null when there is nothing to read;
+ * `contents` when Main could not say, so Contents explains.
  */
 export const readStart = cache(async (id: string, work: string, locale: UiLocale, selected: string | null,
   client?: SuppliedClient): Promise<ReadStart> => {
