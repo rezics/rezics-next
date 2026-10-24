@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "mainBranch": "main",
+  "branchPrefix": "worker/",
+  "terminationGraceMs": 1500,
+  "integration": {
+    "gateConcurrency": 1,
+    "gateTimeoutMs": 1800000,
+    "tmuxCommand": "tmux",
+    "tmuxSession": "goal",
+    "managerCompactTokens": 300000
+  },
+  "codex": {
+    "serviceTier": "fast",
+    "compactTokens": {
+      "sol": 160000,
+      "luna": 200000
+    },
+    "solContextWindow": 500000,
+    "toolOutputTokens": 4000
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "areas": {
+    "authorization": ["**/auth/**", "**/authorization/**", "**/permissions/**"],
+    "disclosure": ["**/disclosure/**", "**/visibility/**"],
+    "rights": ["**/rights/**", "**/licensing/**"],
+    "deletion": ["**/deletion/**", "**/delete/**"],
+    "account": ["**/account/**", "**/accounts/**"]
+  }
+}

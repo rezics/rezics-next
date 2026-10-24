@@ -1,0 +1,17 @@
+{
+  "version": "1",
+  "classes": {
+    "implementation": { "first": { "cli": "codex", "model": "gpt-6-luna", "effort": "high", "poolClass": "codex" }, "maxSteps": 300, "maxMs": 7200000 },
+    "interface": { "first": { "cli": "grok", "model": "grok-4.7", "effort": "high", "poolClass": "grok" }, "maxSteps": 300, "maxMs": 7200000 },
+    "bulk-text": { "first": { "cli": "codex", "model": "gpt-6-luna", "effort": "max", "poolClass": "codex" }, "maxSteps": 500, "maxMs": 7200000 },
+    "claim": { "first": { "cli": "codex", "model": "gpt-6.1-sol", "effort": "high", "poolClass": "codex" }, "maxSteps": 300, "maxMs": 7200000 },
+    "specification": { "first": { "cli": "codex", "model": "gpt-6.1-sol", "effort": "medium", "poolClass": "codex" }, "maxSteps": 200, "maxMs": 3600000 },
+    "critical-path": { "first": { "cli": "codex", "model": "gpt-6-luna", "effort": "high", "poolClass": "codex" }, "maxSteps": 300, "maxMs": 7200000 },
+    "research": { "first": { "cli": "codex", "model": "gpt-6.1-sol", "effort": "high", "poolClass": "codex" }, "maxSteps": 200, "maxMs": 3600000 }
+  },
+  "experiments": [{ "name": "implementation-effort", "class": "implementation", "open": true, "profiles": [
+    { "cli": "codex", "model": "gpt-6-luna", "effort": "high", "poolClass": "codex" },
+    { "cli": "codex", "model": "gpt-6-luna", "effort": "max", "poolClass": "codex" }
+  ] }],
+  "consultation": { "cli": "codex", "model": "gpt-6.1-sol", "effort": "medium", "poolClass": "codex" }
+}
