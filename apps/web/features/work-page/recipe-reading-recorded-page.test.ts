@@ -225,7 +225,19 @@ test('a continuation sends the cursor without a new serving count', async () => 
   }
 });
 
-function heldRecipeVisit(part: 'credits' | 'notes' | 'author', persona: AnswerPersona = 'visitor') {
+type HeldPart = 'credits' | 'notes' | 'author' | 'reader-state' | 'showcase' | 'facts' | 'ratings' | 'stats';
+function holds(part: HeldPart, path: string) {
+  return part === 'credits' && path.endsWith('/agent-credits')
+    || part === 'notes' && path.endsWith('/selection')
+    || part === 'author' && /\/agents\/[^/]+\/works$/.test(path)
+    || part === 'reader-state' && path.endsWith('/reader-state')
+    || part === 'showcase' && path.endsWith('/resources/showcase')
+    || part === 'facts' && path.endsWith('/statements')
+    || part === 'ratings' && path.endsWith('/rating-contexts')
+    || part === 'stats' && path.endsWith('/reader-stats');
+}
+
+function heldRecipeVisit(part: HeldPart, persona: AnswerPersona = 'visitor') {
   const gate = Promise.withResolvers<void>();
   const started = Promise.withResolvers<void>();
   const misses: unknown[] = [];
@@ -235,9 +247,7 @@ function heldRecipeVisit(part: 'credits' | 'notes' | 'author', persona: AnswerPe
   const fetcher = Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     requests.push(url);
-    if (part === 'credits' && url.pathname.endsWith('/agent-credits')
-      || part === 'notes' && url.pathname.endsWith('/selection')
-      || part === 'author' && /\/agents\/[^/]+\/works$/.test(url.pathname)) {
+    if (holds(part, url.pathname)) {
       started.resolve();
       await gate.promise;
     }
@@ -309,14 +319,19 @@ test('recovering the method retains the signed-in Work and its captured shelf se
   try {
     const failed = await read();
     expect((await failed.props.readAction.props.children).props.canCook).toBe(false);
-    expect(failed.props.readerSeed).toBeDefined();
+    const failedShelf = await failed.props.shelfAction.props.children;
+    const failedRating = await failed.props.ratingAction.props.children;
+    expect(failedShelf.props.seed).toBeDefined();
     expect(failed.props.actingSubject).toBe(visit.actingSubject);
     failing = false;
     const recovered = await read();
     expect(recovered.props.work).toBe(visit.header);
     expect(recovered.props.actingSubject).toBe(failed.props.actingSubject);
-    expect(recovered.props.readerSeed).toEqual(failed.props.readerSeed);
-    expect(recovered.props.ratingTarget).toEqual(failed.props.ratingTarget);
+    const recoveredShelf = await recovered.props.shelfAction.props.children;
+    const recoveredRating = await recovered.props.ratingAction.props.children;
+    expect(recoveredShelf.props.seed).toEqual(failedShelf.props.seed);
+    expect(recoveredShelf.props.actingSubject).toBe(visit.actingSubject);
+    expect(recoveredRating.props.ratingTarget).toEqual(failedRating.props.ratingTarget);
     expect((await recovered.props.readAction.props.children).props.kind).toBe('recipe');
   } finally {
     visit.gate.resolve();
@@ -454,4 +469,134 @@ test.each(['AbortError', 'TimeoutError'])('a Recipe %s stays failed without rest
   expect(answer.error?.status).toBe(503);
   expect(answer.data).toBeNull();
   expect(attempts).toBe(1);
+});
+
+test.each(['reader-state', 'showcase', 'facts', 'ratings', 'stats'] as const)(
+  'the production frame recovers its exact method and Cook while %s is still pending', async part => {
+    const visit = heldRecipeVisit(part, 'owner');
+    let failing = true;
+    let failedNativeReads = 0;
+    const methodRequests: URL[] = [];
+    const fetcher = Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      if (url.pathname.endsWith(`/recipes/works/${visit.id}`)) {
+        methodRequests.push(url);
+        if (failing) {
+          failedNativeReads++;
+          return Response.json({ code: 'specific_unavailable' }, { status: 503 });
+        }
+      }
+      return visit.host.publicFetch(input, init);
+    }, { preconnect: fetch.preconnect });
+    const main = browserMainApi('https://recorded.invalid', { fetcher });
+    const host = { ...visit.host, main, publicFetch: fetcher,
+      recipeReadPage: (href: string) => recipePageReader({ main, actingSubject: visit.actingSubject }, href) };
+    const read = () => recipeWorkFrame({ host, id: visit.id, workRef: visit.id, work: visit.header,
+      locale: 'en', messages: englishMessages, children: recipeRegion({ host, id: visit.id,
+        work: visit.header, href: `/v1/recipes/works/${visit.id}`, locale: 'en', messages: englishMessages }) });
+    let returned = false;
+    const frameRead = read().then(frame => { returned = true; return frame; });
+    let recoveredRead: ReturnType<typeof read> | undefined;
+    try {
+      await visit.started.promise;
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(returned).toBe(true);
+      const failedFrame = await frameRead;
+      const failedMethod = await failedFrame.props.children;
+      expect(failedMethod.props).toMatchObject({ resource: visit.header.id, failure: 'unavailable', initial: null });
+      expect((await failedFrame.props.readAction.props.children).props.canCook).toBe(false);
+      failing = false;
+      let recoveredReturned = false;
+      recoveredRead = read().then(frame => { recoveredReturned = true; return frame; });
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(recoveredReturned).toBe(true);
+      const frame = await recoveredRead;
+      expect(frame.props.work).toBe(visit.header);
+      const method = await frame.props.children;
+      expect(method.props.resource).toBe(visit.header.id);
+      expect(method.props.actingSubject).toBe(visit.actingSubject);
+      expect(method.props.href).toBe(failedMethod.props.href);
+      expect(method.props.initial.revision).toBe(visit.page.revision);
+      expect(method.props.initial.structure).toBe(visit.page.structure);
+      expect(method.props.initial.instructions.map((item: { occurrence: string }) => item.occurrence))
+        .toEqual(visit.page.instructions?.map(item => item.occurrence));
+      expect(recipeMethodReady(method.props.initial)).toBe(true);
+      const action = await frame.props.readAction.props.children;
+      expect(action.props).toMatchObject({ workId: visit.header.id, recipeHref: method.props.href, canCook: true });
+      expect(failedNativeReads).toBe(2); // No RSC request cache in this owner test: region and frame each read once.
+      expect(new Set(methodRequests.map(url => url.href)).size).toBe(1);
+      expect(methodRequests.every(url => url.searchParams.get('actingSubject') === visit.actingSubject)).toBe(true);
+      // A private pending answer cannot initialize the catalogue store as known unsaved.
+      let shelfSettled = false;
+      void frame.props.shelfAction.props.children.then(() => { shelfSettled = true; });
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(shelfSettled).toBe(part !== 'reader-state');
+      if (part !== 'reader-state') {
+        const shelf = await frame.props.shelfAction.props.children;
+        const initialShelf = await failedFrame.props.shelfAction.props.children;
+        expect(shelf.props.seed).toEqual(initialShelf.props.seed);
+        expect(shelf.props.seed[visit.header.id]).toMatchObject({ status: null, version: 0 });
+      }
+    } finally {
+      visit.gate.resolve();
+      for (const pending of [frameRead, recoveredRead]) {
+        if (!pending) continue;
+        const frame = await pending;
+        await Promise.all([frame.props.shelfAction.props.children, frame.props.ratingAction.props.children,
+          frame.props.evidence.props.children, frame.props.identity.props.children.props.children]);
+      }
+      visit.dispose();
+    }
+    expect(visit.misses).toEqual([]);
+  },
+);
+
+test('method recovery preserves refused frame auxiliaries and never invents saved status', async () => {
+  const visit = heldRecipeVisit('credits', 'owner');
+  let failing = true;
+  const fetcher = Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (failing && url.pathname.endsWith(`/recipes/works/${visit.id}`)) {
+      return Response.json({ code: 'specific_unavailable' }, { status: 503 });
+    }
+    if ((['reader-state', 'showcase', 'facts', 'ratings'] as const).some(part => holds(part, url.pathname))) {
+      return Response.json({ code: 'specific_unavailable' }, { status: 503 });
+    }
+    return visit.host.publicFetch(input, init);
+  }, { preconnect: fetch.preconnect });
+  const main = browserMainApi('https://recorded.invalid', { fetcher });
+  const host = { ...visit.host, main, publicFetch: fetcher };
+  const read = () => recipeWorkFrame({ host, id: visit.id, workRef: visit.id, work: visit.header,
+    locale: 'en', messages: englishMessages, children: recipeRegion({ host, id: visit.id,
+      work: visit.header, href: `/v1/recipes/works/${visit.id}`, locale: 'en', messages: englishMessages }) });
+  try {
+    const failed = await read();
+    expect((await failed.props.children).props.failure).toBe('unavailable');
+    expect((await failed.props.readAction.props.children).props.canCook).toBe(false);
+    const failedShelf = await failed.props.shelfAction.props.children;
+    expect(failedShelf.props).toMatchObject({ title: englishMessages.savedStatus, failure: 'unavailable' });
+    failing = false;
+    const frame = await read();
+    const method = await frame.props.children;
+    expect(method.props.resource).toBe(visit.header.id);
+    expect(method.props.initial.revision).toBe(visit.page.revision);
+    expect(recipeMethodReady(method.props.initial)).toBe(true);
+    expect((await frame.props.readAction.props.children).props.canCook).toBe(true);
+    const shelf = await frame.props.shelfAction.props.children;
+    expect(shelf.props).toMatchObject({ title: englishMessages.savedStatus, failure: 'unavailable' });
+    expect(shelf.props.seed).toBeUndefined();
+    expect((await frame.props.ratingAction.props.children).props)
+      .toMatchObject({ title: englishMessages.ratings, failure: 'unavailable' });
+    const identity = await frame.props.identity.props.children.props.children;
+    expect(identity.props.children[1].props).toMatchObject({ title: englishMessages.artwork, failure: 'unavailable' });
+    const evidence = await frame.props.evidence.props.children;
+    expect(evidence.props.statements).toMatchObject({ ok: false, failure: 'unavailable', status: 503 });
+    const header = identity.props.children[0];
+    const ratingLine = await header.props.ratingLine.props.children;
+    expect(ratingLine.props.ratings).toMatchObject({ ok: false, failure: 'unavailable' });
+  } finally {
+    visit.gate.resolve();
+    visit.dispose();
+  }
+  expect(visit.misses).toEqual([]);
 });

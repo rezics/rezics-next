@@ -17,16 +17,23 @@ const recordingAsset = new URL('../../../../tests/fixtures/recipes/original-toma
 
 /** The existing captured visit, with three supplemental reads held across a refresh.
  * Refresh composes the next owner snapshot; this does not simulate the RSC transport. */
-function RecipeRecovery() {
-  const [snapshot, setSnapshot] = useState<{ node: ReactNode; refresh: () => void } | null>(null);
+function RecipeRecovery({ auxiliaries }: { auxiliaries?: 'pending' | 'unavailable' }) {
+  const [snapshot, setSnapshot] = useState<{
+    node: ReactNode; refresh: () => void; failedMethodReads: number; methodRequests: string[];
+    supplementalRequests: { path: string; state: 'pending' | 'unavailable' }[];
+    auxiliaries?: 'pending' | 'unavailable';
+  } | null>(null);
   const [fault, setFault] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
     let recovered = false;
+    let failedMethodReads = 0;
+    const methodRequests: string[] = [];
+    const supplementalRequests: { path: string; state: 'pending' | 'unavailable' }[] = [];
     const gate = Promise.withResolvers<void>();
     const pending = new Set<Promise<Response>>();
     const note = (error: unknown) => { if (live) setFault(String(error)); };
-    const visit = instructionVisitTransport('visitor', window.location.origin, async source => {
+    const visit = instructionVisitTransport(auxiliaries ? 'owner' : 'visitor', window.location.origin, async source => {
       if (source !== 'tests/fixtures/recipes/original-tomato-method.wav') throw new Error(`Unregistered asset ${source}`);
       const response = await fetch(recordingAsset);
       if (!response.ok) throw new Error('Recording fixture unavailable');
@@ -35,14 +42,24 @@ function RecipeRecovery() {
     const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const read = (async () => {
         const url = new URL(input instanceof Request ? input.url : String(input), window.location.origin);
+        if (auxiliaries && (url.pathname.endsWith('/reader-state') || url.pathname.endsWith('/resources/showcase')
+          || url.pathname.endsWith('/statements') || url.pathname.endsWith('/rating-contexts'))) {
+          supplementalRequests.push({ path: url.pathname, state: auxiliaries });
+          if (auxiliaries === 'pending') await gate.promise;
+          else return Response.json({ code: 'specific_unavailable' }, { status: 503 });
+        }
         if (url.pathname.endsWith('/agent-credits') || url.pathname.endsWith('/selection')
           || /\/agents\/[^/]+\/works$/.test(url.pathname)) {
           await gate.promise;
         }
         // A definitive section refusal exercises the existing RetryButton. The
         // healthy snapshot uses the unchanged captured method and exact identity.
-        if (!recovered && url.pathname.endsWith(`/recipes/works/${visit.id}`)) {
-          return Response.json({ code: 'unavailable' }, { status: 503 });
+        if (url.pathname.endsWith(`/recipes/works/${visit.id}`)) {
+          methodRequests.push(`${url.pathname}${url.search}`);
+          if (!recovered) {
+            failedMethodReads++;
+            return Response.json({ code: 'unavailable' }, { status: 503 });
+          }
         }
         return visit.fetcher(input, init);
       })();
@@ -61,11 +78,30 @@ function RecipeRecovery() {
     })();
     const compose = async () => {
       await ready;
-      const overview = await recipeWorkOverview({ host, id: visit.id, workRef: visit.id, work: visit.header,
-        scope: EVERYONE, locale: 'en', messages: englishMessages });
-      const node = await recipeWorkFrame({ host, id: visit.id, workRef: visit.id, work: visit.header,
+      // The signed-in cases isolate the actual frame and method; overview's
+      // separate progress workflow is outside this captured frame interaction.
+      const overview = auxiliaries
+        ? await recipeRegion({ host, id: visit.id, work: visit.header, href: `/v1/recipes/works/${visit.id}`,
+          locale: 'en', messages: englishMessages })
+        : await recipeWorkOverview({ host, id: visit.id, workRef: visit.id, work: visit.header,
+          scope: EVERYONE, locale: 'en', messages: englishMessages });
+      let node = await recipeWorkFrame({ host, id: visit.id, workRef: visit.id, work: visit.header,
         locale: 'en', messages: englishMessages, children: overview });
-      if (live) setSnapshot({ node, refresh: () => { recovered = true; void compose().catch(note); } });
+      // Finish counting the frame's own method read before publishing a snapshot.
+      if (auxiliaries) await node.props.readAction.props.children;
+      if (auxiliaries === 'unavailable') {
+        // Storybook mounts a client tree, so completed server slots enter the
+        // snapshot as their actual produced nodes. Credits, notes and author
+        // reads stay held; the pending variant keeps its unresolved slots.
+        const [shelfAction, ratingAction, evidence, identity] = await Promise.all([
+          node.props.shelfAction.props.children, node.props.ratingAction.props.children,
+          node.props.evidence.props.children, node.props.identity.props.children.props.children]);
+        node = <WorkFrame {...node.props} shelfAction={shelfAction} ratingAction={ratingAction}
+          evidence={evidence} identity={identity} />;
+      }
+      if (live) setSnapshot({ node, failedMethodReads, methodRequests: [...methodRequests],
+        supplementalRequests: [...supplementalRequests], auxiliaries,
+        refresh: () => { recovered = true; void compose().catch(note); } });
     };
     setSnapshot(null); setFault(null);
     void compose().catch(note);
@@ -78,13 +114,16 @@ function RecipeRecovery() {
         visit.dispose();
       })();
     };
-  }, []);
-  const identity = instructionVisitIdentity('visitor');
+  }, [auxiliaries]);
+  const identity = instructionVisitIdentity(auxiliaries ? 'owner' : 'visitor');
   if (fault) return <p role="alert" data-replay-miss>{fault}</p>;
   if (!snapshot) return <p role="status" aria-busy="true">{englishMessages.loading}</p>;
-  return <StoryRouteContext value={{ pathname: workHref(identity.id), search: 'language=en', onRefresh: snapshot.refresh }}>
+  const frame = <StoryRouteContext value={{ pathname: workHref(identity.id), search: 'language=en', onRefresh: snapshot.refresh }}>
     {snapshot.node}
   </StoryRouteContext>;
+  return auxiliaries ? <div data-frame-method-failures={snapshot.failedMethodReads}
+    data-frame-method-requests={JSON.stringify(snapshot.methodRequests)} data-frame-auxiliaries={snapshot.auxiliaries}
+    data-frame-supplemental-requests={JSON.stringify(snapshot.supplementalRequests)}>{frame}</div> : frame;
 }
 
 const meta = {
@@ -139,6 +178,75 @@ export const RecoveredMethodPhone: Story = { globals: { viewport: { value: 'phon
   await recover(canvasElement);
   canvasElement.querySelector('#recipe-experience')?.scrollIntoView();
 } };
+
+async function recoverFrameMethod(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement);
+  const identity = instructionVisitIdentity('owner');
+  await canvas.findByRole('heading', { name: identity.header.title.value, level: 1 });
+  const subject = canvasElement.querySelector('[data-subject-header]')!;
+  expect(subject).toHaveAttribute('data-resource', identity.header.id);
+  expect(subject).toHaveAttribute('data-semantic-type', 'https://schema.org/Recipe');
+  const failureTitle = await canvas.findByText(englishMessages.recipeMethod, { selector: '[data-slot="alert-title"]' });
+  const failure = failureTitle.closest<HTMLElement>('[role="alert"]')!;
+  const retry = within(failure).getByRole('button', { name: englishMessages.retry });
+  await expect(retry).toBeEnabled();
+  const primary = within(canvas.getByRole('group', { name: englishMessages.primaryActions }));
+  await expect(primary.getByRole('button', { name: englishMessages.cookThis })).toBeDisabled();
+  expect(canvas.queryByText(englishMessages.recipeUnstructured)).toBeNull();
+  expect(canvas.queryByRole('button', { name: 'Want to read' })).toBeNull();
+  await userEvent.click(retry);
+  await canvas.findAllByText('Stir', { exact: false });
+  await waitFor(() => expect(canvas.queryByText(englishMessages.recipeMethod, { selector: '[data-slot="alert-title"]' })).toBeNull());
+  expect(canvasElement.querySelector('[data-subject-header]')).toBe(subject);
+  expect(subject).toHaveAttribute('data-resource', identity.header.id);
+  expect(subject).toHaveAttribute('data-semantic-type', 'https://schema.org/Recipe');
+  expect(canvas.getByRole('heading', { level: 1 })).toHaveTextContent(identity.header.title.value);
+  const reads = canvasElement.querySelector('[data-frame-method-failures]')!;
+  // The browser replay has no RSC request cache: region and frame each read once.
+  // Both refused reads remain bounded; all snapshots retain the same native selection.
+  expect(Number(reads.getAttribute('data-frame-method-failures'))).toBe(2);
+  const requests = JSON.parse(reads.getAttribute('data-frame-method-requests')!) as string[];
+  expect(requests).toHaveLength(4);
+  expect(new Set(requests).size).toBe(1);
+  expect(new URL(requests[0]!, window.location.origin).searchParams.get('actingSubject')).toBe(identity.actingSubject);
+  const cook = primary.getByRole('button', { name: englishMessages.cookThis });
+  await expect(cook).toBeEnabled();
+  await userEvent.click(cook);
+  const dialog = await canvas.findByRole('dialog', { name: englishMessages.cookMode });
+  expect(within(dialog).getAllByText('Stir', { exact: false }).length).toBeGreaterThan(0);
+  await userEvent.keyboard('{Escape}');
+  await waitFor(() => expect(canvas.queryByRole('dialog')).toBeNull());
+  await expect(cook).toHaveFocus();
+  expect(canvasElement.querySelector('[data-replay-miss]')).toBeNull();
+  expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth + 1);
+}
+
+export const PendingFrameAuxiliaries: Story = { args: { auxiliaries: 'pending' },
+  render: args => <RecipeRecovery key={args.auxiliaries} {...args} />,
+  play: async ({ canvasElement }) => {
+  await waitFor(() => expect(canvasElement.querySelector('[data-frame-auxiliaries]')).toHaveAttribute('data-frame-auxiliaries', 'pending'));
+  await recoverFrameMethod(canvasElement);
+  const canvas = within(canvasElement);
+  expect(canvas.getByRole('status', { name: englishMessages.savedStatus })).toHaveAttribute('aria-busy', 'true');
+  expect(canvas.getByRole('status', { name: englishMessages.artwork })).toHaveAttribute('aria-busy', 'true');
+  expect(canvas.getByRole('status', { name: englishMessages.sourcesAndEvidence })).toHaveAttribute('aria-busy', 'true');
+  expect(canvas.queryByRole('button', { name: englishMessages.wantToCook })).toBeNull();
+} };
+
+export const UnavailableFrameAuxiliariesPhone: Story = { args: { auxiliaries: 'unavailable' },
+  render: args => <RecipeRecovery key={args.auxiliaries} {...args} />,
+  globals: { viewport: { value: 'phone' } }, play: async ({ canvasElement }) => {
+    await waitFor(() => expect(canvasElement.querySelector('[data-frame-auxiliaries]')).toHaveAttribute('data-frame-auxiliaries', 'unavailable'));
+    await recoverFrameMethod(canvasElement);
+    const canvas = within(canvasElement);
+    await canvas.findByText(englishMessages.savedStatus, { selector: '[data-slot="alert-title"]' });
+    expect(canvas.getByText(englishMessages.artwork, { selector: '[data-slot="alert-title"]' })).toBeVisible();
+    expect(canvas.getByText(englishMessages.ratings, { selector: '[data-slot="alert-title"]' })).toBeVisible();
+    await userEvent.click(canvas.getByText(englishMessages.fullFacts, { selector: '[data-full-facts] > summary' }));
+    expect(canvas.getAllByText(englishMessages.regionUnavailable).length).toBeGreaterThanOrEqual(3);
+    expect(canvas.queryByRole('button', { name: englishMessages.wantToCook })).toBeNull();
+    canvasElement.querySelector('#recipe-experience')?.scrollIntoView();
+  } };
 
 /** Contract-shaped fault injection around the captured production reader/region.
  * This focused parent has one method read per snapshot, like the RSC request cache.

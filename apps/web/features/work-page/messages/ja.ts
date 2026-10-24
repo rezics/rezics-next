@@ -2,6 +2,7 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkPageMessages } from '../messages.ts';
 
 export default {
+  savedStatus: '保存したステータス', artwork: 'アートワーク',
   primaryActions: '主な操作', reactions: 'リアクション',
   moreActions: insert('「{{title}}」のその他の操作', { title: String }),
   editionsView: '版',
