@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { bodyText, hasBodyContent } from '../document-editor/body.ts';
 import { BodyEditor } from '../document-editor/body-editor.tsx';
+import { ReportMenu, ReportMenuItems, type ReportMenuTarget } from '../safety/report-action.tsx';
 import { browserStorage } from '../studio/local-draft.ts';
 import {
   type AuthorApi, type AuthorFailure, type AuthorReplyBasis, type AuthorReplyTarget,
@@ -55,16 +56,21 @@ export interface AuthorActionsProps {
   signInHref: string;
   api?: AuthorApi;
   onChanged?: () => void;
+  report?: ReportMenuTarget;
+  menuLabel?: string;
 }
 
-/** Own-object discovery only. All commands are authorized by the existing API owners. */
+/** Author commands stay on own objects; public reporting shares their object menu. */
 export function AuthorActions(props: AuthorActionsProps) {
-  if (!props.signedIn || !props.actingSubject || props.target.author !== props.actingSubject) return null;
+  if (!props.signedIn || !props.actingSubject || props.target.author !== props.actingSubject) {
+    return props.report ? <ReportMenu targets={[props.report]} name="" locale={props.locale}
+      moreAccessibleLabel={props.menuLabel} /> : null;
+  }
   return <OwnedAuthorActions key={`${props.actingSubject}:${props.target.realm}:${props.target.reply}`} {...props}
     actingSubject={props.actingSubject} />;
 }
 
-function OwnedAuthorActions({ target, actingSubject, locale, signInHref, api, onChanged }:
+function OwnedAuthorActions({ target, actingSubject, locale, signInHref, api, onChanged, report, menuLabel }:
   AuthorActionsProps & { actingSubject: string }) {
   const t = authorMessages[locale];
   const router = useRouter();
@@ -196,13 +202,14 @@ function OwnedAuthorActions({ target, actingSubject, locale, signInHref, api, on
       // Let the menu finish restoring focus before the dialog takes it.
       if (value === 'edit' || value === 'withdraw') requestAnimationFrame(() => open(value));
     }}>
-      <MenuTrigger ref={trigger} aria-label={t.menu}
+      <MenuTrigger ref={trigger} aria-label={menuLabel ?? t.menu}
         className="relative z-10 inline-flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
         <EllipsisIcon aria-hidden="true" className="size-4" />
       </MenuTrigger>
       <MenuContent className="max-w-[calc(100vw-2rem)]">
         <MenuItem value="edit"><PencilIcon aria-hidden="true" />{t.edit}</MenuItem>
         <MenuItem value="withdraw"><Undo2Icon aria-hidden="true" />{t.placement}</MenuItem>
+        {report ? <ReportMenuItems targets={[report]} locale={locale} /> : null}
       </MenuContent>
     </Menu>
     <Dialog open={mode !== null} pending={busy} onOpenChange={({ open: next }) => { if (!next) close(); }}
@@ -243,8 +250,12 @@ function OwnedAuthorActions({ target, actingSubject, locale, signInHref, api, on
   </>;
 }
 
-export function ReplyAuthorActions({ target }: { target: AuthorReplyTarget }) {
-  const { signedIn, actingSubject, locale, signInHref } = useFeed();
+export function ReplyAuthorActions({ target, report, menuLabel }: {
+  target: AuthorReplyTarget | null; report?: ReportMenuTarget; menuLabel?: string;
+}) {
+  const { signedIn, actingSubject, locale, signInHref, t } = useFeed();
+  if (!target) return report ? <ReportMenu targets={[report]} name="" locale={locale}
+    moreAccessibleLabel={menuLabel ?? t.moreOptions} /> : null;
   return <AuthorActions target={target} signedIn={signedIn} actingSubject={actingSubject}
-    locale={locale} signInHref={signInHref} />;
+    locale={locale} signInHref={signInHref} report={report} menuLabel={menuLabel ?? (report ? t.moreOptions : undefined)} />;
 }

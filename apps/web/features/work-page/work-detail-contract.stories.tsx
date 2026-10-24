@@ -1,4 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { use, useState } from 'react';
+import { StoryRouteContext } from '../../.storybook/next-navigation.ts';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
@@ -12,6 +14,7 @@ import * as levels from '../work-levels/fixtures.ts';
 import { copyOf as levelsCopy } from '../work-levels/messages.ts';
 import { PartsPreviewView } from '../work-levels/previews.tsx';
 import { BooksEditionPage } from './books-edition-page.tsx';
+import { ContentsRegion } from './contents.tsx';
 import * as fixture from './fixtures.ts';
 import { hubLabels, hubSections } from './hub.ts';
 import { messages } from './messages.ts';
@@ -128,6 +131,11 @@ async function readableGuide({ canvasElement, args }: { canvasElement: HTMLEleme
     const r = reactions.getBoundingClientRect(), m = more.getBoundingClientRect();
     await expect(m.x).toBeGreaterThanOrEqual(r.right);
     await expect(Math.abs(m.y - r.y)).toBeLessThan(16);
+    // A lone wrapped cluster must still meet the identity's right edge.
+    const identity = subject.getBoundingClientRect();
+    await expect(Math.abs(m.right - identity.right)).toBeLessThanOrEqual(1);
+    await expect(m.bottom).toBeLessThanOrEqual(top.getByRole('heading', { level: 1 }).getBoundingClientRect().top);
+    await expect(within(primary).getAllByRole('link', { name: 'View guide' })).toHaveLength(1);
   }
 }
 
@@ -209,26 +217,55 @@ export const DesktopEditions: Story = {
   },
 };
 
-function SparseBook({ failed = false }: { failed?: boolean }) {
+function SparseBook({ failed = false, recovered = 0, populated = false }: {
+  failed?: boolean; recovered?: number; populated?: boolean;
+}) {
   const t = messages.en;
   const work = { ...fixture.work, descriptionObligations: attributed, factObligations: attributed };
-  const releases = levels.releases.ok ? { ok: true as const, data: { ...levels.releases.data, items: [] } } : levels.releases;
+  const releases = levels.releases.ok ? { ok: true as const, data: { ...levels.releases.data,
+    items: populated ? levels.releases.data.items : [] } } : levels.releases;
   const parts = levels.parts.ok ? { ok: true as const, data: { ...levels.parts.data, parts: [] } } : levels.parts;
   const wholes = levels.wholes.ok ? { ok: true as const, data: { ...levels.wholes.data, wholes: [] } } : levels.wholes;
   return <WorkFrame workRef={fixture.workRef} work={work} experience={workExperience(null, work.types)} credits={null}
     locale="en" messages={t}>
     <OverviewLayout plan={hubSections} messages={t} scopeBar={null} record={null} about={<WorkAbout work={work} messages={t} />}
-      availability={<BooksEditionPage work={work.id} releases={failed ? { ok: false, failure: 'unavailable' } : releases}
+      availability={<BooksEditionPage work={work.id} releases={failed && recovered < 1 ? { ok: false, failure: 'unavailable' } : releases}
         locale="en" messages={t} signInHref="/auth/start" editionsHref={workHref(fixture.workRef, 'editions')} />}
-      parts={<PartsPreviewView parts={failed ? { ok: false, failure: 'missing' } : parts} wholes={wholes}
-        names={levels.names} workRef={fixture.workRef} t={levelsCopy('en')} pageMessages={t} />}
-      wiki={<WikiSectionView wiki={{ zone: failed ? { ok: false, failure: 'unavailable' } : { ok: true, data: null }, characters: null }}
+      parts={populated ? <ContentsRegion workRef={fixture.workRef} contents={fixture.contents} query={{}} locale="en" messages={t} />
+        : <PartsPreviewView parts={failed && recovered < 2 ? { ok: false, failure: 'missing' } : parts} wholes={wholes}
+          names={levels.names} workRef={fixture.workRef} t={levelsCopy('en')} pageMessages={t} />}
+      wiki={<WikiSectionView wiki={{ zone: failed && recovered < 3 ? { ok: false, failure: 'unavailable' } : { ok: true, data: null }, characters: null }}
         locale="en" messages={t} />}
       ratings={<RatingSummaryRegion ratings={fixture.globalRatings} view={fixture.scopeView(fixture.globalScope)}
         locale="en" messages={t} />}
       discussion={<a href={workHref(fixture.workRef, 'discussion')}>Join the discussion</a>} />
   </WorkFrame>;
 }
+
+/** Successive server snapshots after the production RetryButton calls router.refresh(). */
+function RecoveringBook() {
+  const route = use(StoryRouteContext);
+  const [recovered, setRecovered] = useState(0);
+  return <StoryRouteContext value={{ ...route, onRefresh: () => setRecovered(value => value + 1) }}>
+    <SparseBook failed recovered={recovered} />
+  </StoryRouteContext>;
+}
+
+export const PopulatedBookOverview: Story = {
+  render: () => <SparseBook populated />, globals: { viewport: { value: 'desktop1440' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const section = (name: string) => canvasElement.querySelector<HTMLElement>(`[data-hub-section="${name}"]`)!;
+    await expect(within(section('availability')).getByRole('link', { name: 'A Certain Magical Index, Vol. 1' })).toBeVisible();
+    await expect(within(section('parts')).getByRole('link', { name: /Low Water/ })).toBeVisible();
+    for (const [before, after] of [['about', 'availability'], ['availability', 'parts'], ['parts', 'ratings'], ['ratings', 'discussion']]) {
+      await expect(section(before!).compareDocumentPosition(section(after!)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+    await expect(canvas.getByRole('link', { name: 'Join the discussion' })).toBeVisible();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(innerWidth);
+  },
+};
+export const PopulatedBookOverviewPhone: Story = { ...PopulatedBookOverview, globals: { viewport: { value: 'phone' } } };
 export const SparseBookWithRatings: Story = {
   render: () => <SparseBook />, globals: { viewport: { value: 'phone' } },
   async play({ canvasElement }) {
@@ -245,7 +282,7 @@ export const SparseBookWithRatings: Story = {
   },
 };
 export const MixedReadFailures: Story = {
-  render: () => <SparseBook failed />, globals: { viewport: { value: 'phone' } },
+  render: () => <RecoveringBook />, globals: { viewport: { value: 'phone' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getAllByRole('alert')).toHaveLength(2);
@@ -255,6 +292,23 @@ export const MixedReadFailures: Story = {
     }
     await expect(canvas.getByRole('link', { name: 'Join the discussion' })).toBeVisible();
     await expect(canvas.getByRole('heading', { level: 1 })).toBeVisible();
+    const successful = ['about', 'ratings', 'discussion'].map(name =>
+      canvasElement.querySelector<HTMLElement>(`[data-hub-section="${name}"]`)!);
+    const body = successful.map(node => node.innerHTML);
+    for (const [index, name] of ['availability', 'parts', 'wiki'].entries()) {
+      const region = canvasElement.querySelector<HTMLElement>(`[data-hub-section="${name}"]`)!;
+      await userEvent.click(within(region).getByRole('button', { name: messages.en.retry }));
+      await waitFor(() => expect(within(region).queryByRole('button', { name: messages.en.retry })).toBeNull());
+      await expect(canvas.queryAllByRole('button', { name: messages.en.retry })).toHaveLength(2 - index);
+      successful.forEach((node, i) => {
+        expect(node.isConnected).toBe(true);
+        expect(node.innerHTML).toBe(body[i]);
+      });
+      await expect(canvas.getByRole('heading', { level: 1 })).toBeVisible();
+      await expect(canvas.getByRole('link', { name: 'Join the discussion' })).toBeVisible();
+    }
+    await expect(canvas.queryAllByRole('alert')).toHaveLength(0);
+    await expect(canvas.getByText(messages.en.wikiNone)).toBeVisible();
   },
 };
 

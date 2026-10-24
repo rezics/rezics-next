@@ -516,9 +516,15 @@ export const AnonymousReadingLanguages: Story = {
 };
 
 
+// The existing opener with a long body keeps the same reply, revision and controls.
+// This is a presentation stress input, not a recorded thread response.
+const longOpeningThread: ThreadRead = { ...storyThread, items: storyThread.items.map(item =>
+  item.reply === storyThread.focus ? { ...item, body: Array.from({ length: 12 }, () => item.body).join('\n\n') } : item) };
+
 export const NativeHeader: Story = {
-  async play({ canvasElement }) {
-    const opening = storyThread.items.find(item => item.reply === storyThread.focus)!;
+  args: { read: longOpeningThread },
+  async play({ canvasElement, args }) {
+    const opening = args.read.items.find(item => item.reply === args.read.focus)!;
     const header = canvasElement.querySelector<HTMLElement>('[data-subject-header]')!;
     const top = within(header);
     await expect(header).toHaveAttribute('data-resource', opening.reply);
@@ -531,16 +537,25 @@ export const NativeHeader: Story = {
     await expect(more.getBoundingClientRect().left).toBeGreaterThanOrEqual(reactions.getBoundingClientRect().right - 1);
     await expect(Math.abs(more.getBoundingClientRect().top - reactions.getBoundingClientRect().top)).toBeLessThan(16);
     const useful = within(canvasElement.querySelector<HTMLElement>('[data-primary-content]')!);
-    for (const paragraph of opening.body!.split('\n\n'))
-      await expect(useful.getByText(paragraph)).toBeVisible();
+    const paragraphs = opening.body!.split('\n\n');
+    for (const paragraph of new Set(paragraphs)) {
+      const rendered = useful.getAllByText(paragraph);
+      await expect(rendered).toHaveLength(paragraphs.filter(value => value === paragraph).length);
+      for (const node of rendered) await expect(node).toBeVisible();
+    }
+    const firstParagraph = useful.getAllByText(paragraphs[0]!)[0]!;
+    await expect(primary.compareDocumentPosition(firstParagraph) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await expect(canvasElement.querySelector<HTMLElement>('[data-primary-content]')!.getBoundingClientRect().height)
+      .toBeGreaterThan(window.innerHeight);
     more.focus();
     await userEvent.keyboard('{Enter}');
     const report = await within(document.body).findByRole('menuitem', { name: 'Report this post' });
     const query = new URL(report.getAttribute('href')!, window.location.origin).searchParams;
-    await expect(Object.fromEntries(query)).toEqual({ target: opening.reply, realm: storyThread.realm,
+    await expect(Object.fromEntries(query)).toEqual({ target: opening.reply, realm: args.read.realm,
       component: 'body', revision: `urn:rezics:content:revision:${opening.revisionId}` });
+    await waitFor(() => expect(report.closest('[role="menu"]')).toHaveFocus());
     await userEvent.keyboard('{Escape}');
-    await expect(more).toHaveFocus();
+    await waitFor(() => expect(more).toHaveFocus());
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
 };
