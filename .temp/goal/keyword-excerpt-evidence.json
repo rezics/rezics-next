@@ -1,0 +1,905 @@
+{
+  "reviewedHead": "4b5432375b46bd517f2840b80030f29da6cd0b9d",
+  "base": "dc584befa2f7cd1b7322584cacc36dd938af8b70",
+  "candidate": "55a8f27c6439e86c29ba6c07a7fefa7da3842c26",
+  "candidateCommitObjectPresent": false,
+  "candidateReconstruction": "Every exact retained patch hunk applied in memory to the base blob, with removed/context bytes checked and all 18 reconstructed SHA256s matched to the manifest. No historical ancestry or generated file was imported.",
+  "patchSha256": "188a0329ed69bd8bb987746f621fd55c1bd511e98121aef234dd5d7429a34853",
+  "sourceLanding": "178894a34ab5bb6b2dca9ef9c0d96d49ea0746c0",
+  "files": [
+    {
+      "path": "generated/openapi/main/public.json",
+      "baseBlob": "27bf5e7a8988cb7c4685aebc742508e73aef9d24",
+      "candidateBlobFromExactPatch": "0dac6193ef1c58c1c341e465078faabc2be23a36",
+      "candidateSha256": "2e7af55a1aa331b7258df122bd7c9918623e4b8b7ad588479891503114905b7c",
+      "checkoutBlob": "a4febdc6cf094503342eaf2ea80212dbe8fc12db",
+      "checkoutSha256": "eba0179312eec9b607eacd8be80556f877ba88e734992ed28feb69ea36fd837d",
+      "landingSha256": "d4096c4344cdc0a6c2f598eeebcc65e07a4a966dd444fce37448b0676af28c7c",
+      "authoredEqual": null,
+      "matchesCurrentReceipt": true
+    },
+    {
+      "path": "services/main/src/api-contract.ts",
+      "baseBlob": "33eb6219f38815d2400a1ecc920c9ecdd730b8cc",
+      "candidateBlobFromExactPatch": "b27c6ce3cc4cb122f84f08052bdb864d665f3432",
+      "candidateSha256": "6047a466c6c8b75ded1c255d337e532c02a61fe17b9381115d502c761fef09d5",
+      "checkoutBlob": "b27c6ce3cc4cb122f84f08052bdb864d665f3432",
+      "checkoutSha256": "6047a466c6c8b75ded1c255d337e532c02a61fe17b9381115d502c761fef09d5",
+      "landingSha256": "6047a466c6c8b75ded1c255d337e532c02a61fe17b9381115d502c761fef09d5",
+      "authoredEqual": true,
+      "matchesCurrentReceipt": true
+    },
+    {
+      "path": "services/main/src/modules/content-publication/search-continuation.ts",
+      "baseBlob": "3210351b496e26a1c6eff3cc417ff12f8788cd42",
+      "candidateBlobFromExactPatch": "4bca98f0b96753ee3dc70ecaf6485cc10c5d2705",
+      "candidateSha256": "46c80c4d884945ed346d73f0884a392d822a6fbbc54e53da58f1a9ac97128fea",
+      "checkoutBlob": "4bca98f0b96753ee3dc70ecaf6485cc10c5d2705",
+      "checkoutSha256": "46c80c4d884945ed346d73f0884a392d822a6fbbc54e53da58f1a9ac97128fea",
+      "landingSha256": "46c80c4d884945ed346d73f0884a392d822a6fbbc54e53da58f1a9ac97128fea",
+      "authoredEqual": true,
+      "matchesCurrentReceipt": true
+    },
+    {
+      "path": "services/main/src/modules/content-publication/search.ts",
+      "baseBlob": "bd7694526861700306c644fb199200a65c9393a2",
+      "candidateBlobFromExactPatch": "64c7de721099d4a467ff60d6e42322be52c55836",
+      "candidateSha256": "c86ebc57fe54e797018edf3336bd828989382d54a62402bd2a329ed5d5429cc0",
+      "checkoutBlob": "64c7de721099d4a467ff60d6e42322be52c55836",
+      "checkoutSha256": "c86ebc57fe54e797018edf3336bd828989382d54a62402bd2a329ed5d5429cc0",
+      "landingSha256": "c86ebc57fe54e797018edf3336bd828989382d54a62402bd2a329ed5d5429cc0",
+      "authoredEqual": true,
+      "matchesCurrentReceipt": true
+    },
+    {
+      "path": "services/main/src/modules/release/read.ts",
+      "baseBlob": "cdb55b8638174173c00d40a28c089fe24868d7ef",
+      "candidateBlobFromExactPatch": "c6b6d4117af8c64a9ec319f7460097a8c772aa10",
+      "candidateSha256": "8153929d86fd532b33ba91bce969d9572d8a4b5566750c191ecc1b91a3a60540",
+      "checkoutBlob": "c6b6d4117af8c64a9ec319f7460097a8c772aa10",
+      "checkoutSha256": "8153929d86fd532b33ba91bce969d9572d8a4b5566750c191ecc1b91a3a60540",
+      "landingSha256": "8153929d86fd532b33ba91bce969d9572d8a4b5566750c191ecc1b91a3a60540",
+      "authoredEqual": true,
+      "matchesCurrentReceipt": true
+    },
+    {
+      "path": "services/main/src/modules/search-disclosure/public-fields.ts",
+      "baseBlob": "9d9a37f1d679e6a7ec885dc2092a1edec7173ab1",
+      "candidateBlobFromExactPatch": "9cd05e06ac6ecda7d8845e2b14d0caba0400af8e",
+      "candidateSha256": "b73b32c33948ccd50e8787b65d5e7f90f9389b9069b731c1c53e29d25c318b26",
+      "checkoutBlob": "9cd05e06ac6ecda7d8845e2b14d0caba0400af8e",
+      "checkoutSha256": "b73b32c33948ccd50e8787b65d5e7f90f9389b9069b731c1c53e29d25c318b26",
+      "landingSha256": "b73b32c33948ccd50e8787b65d5e7f90f9389b9069b731c1c53e29d25c318b26",
+      "authoredEqual": true,
+      "matchesCurrentReceipt": true
+    },
+    {
+      "path": "services/main/src/modules/search/excerpts.ts",
+      "baseBlob": null,
+      "candidateBlobFromExactPatch": "d7d665865b729de47e22ab444680b8b1833c543e",
+      "candidateSha256": "822ff4622c197a5ad0d63adf02ee0db856cdb4791800a880e84444100c4a94d6",
+      "checkoutBlob": "d7d665865b729de47e22ab444680b8b1833c543e",
+      "checkoutSha256": "822ff4622c197a5ad0d63adf02ee0db856cdb4791800a880e84444100c4a94d6",
+      "landingSha256": "822ff4622c197a5ad0d63adf02ee0db856cdb4791800a880e84444100c4a94d6",
+      "authoredEqual": true,
+      "matchesCurrentReceipt": true
+    },
+    {
+      "path": "services/main/src/modules/search/fields.ts",
+      "baseBlob": "3cf8080cea9e4c48ccea6b2822c90ce173ad40b6",
+      "candidateBlobFromExactPatch": "becef92558243747b8410ab29b89be5cac1e69ae",
+      "candidateSha256": "71239b0a6c59f337e616103e296e8d97bafd1b6cd1e91799685720a7c57a9183",
+      "checkoutBlob": "becef92558243747b8410ab29b89be5cac1e69ae",
+      "checkoutSha256": "71239b0a6c59f337e616103e296e8d97bafd1b6cd1e91799685720a7c57a9183",
+      "landingSha256": "71239b0a6c59f337e616103e296e8d97bafd1b6cd1e91799685720a7c57a9183",
+      "authoredEqual": true,
+      "matchesCurrentReceipt": true
+    },
+    {
+      "path": "services/main/src/modules/search/result-cards.ts",
+      "baseBlob": "a7276656b71410d303fd54655509b97473d7c4a8",
+      "candidateBlobFromExactPatch": "02a92110a715b295d2f9520ac31da6f4eea99ca3",
+      "candidateSha256": "9a07d9fc228e5200babaf9a0e704e40a19606689a36b1aad03ab0848e09544ce",
+      "checkoutBlob": "02a92110a715b295d2f9520ac31da6f4eea99ca3",
+      "checkoutSha256": "9a07d9fc228e5200babaf9a0e704e40a19606689a36b1aad03ab0848e09544ce",
+      "landingSha256": "9a07d9fc228e5200babaf9a0e704e40a19606689a36b1aad03ab0848e09544ce",
+      "authoredEqual": true,
+      "matchesCurrentReceipt": true
+    },
+    {
+      "path": "services/main/src/modules/search/text.ts",
+      "baseBlob": null,
+      "candidateBlobFromExactPatch": "44cc4bc5959b7cc33f82c69d77343b0b1e21ca80",
+      "candidateSha256": "8170dd204d8f961f43752bb10bf8cf6c6cb0132a0f5ccbb054327543b1638b15",
+      "checkoutBlob": "44cc4bc5959b7cc33f82c69d77343b0b1e21ca80",
+      "checkoutSha256": "8170dd204d8f961f43752bb10bf8cf6c6cb0132a0f5ccbb054327543b1638b15",
+      "landingSha256": "8170dd204d8f961f43752bb10bf8cf6c6cb0132a0f5ccbb054327543b1638b15",
+      "authoredEqual": true,
+      "matchesCurrentReceipt": true
+    },
+    {
+      "path": "services/main/src/modules/work/search-continuation.ts",
+      "baseBlob": "0df4c1cfb5207427452fc672386320a494665283",
+      "candidateBlobFromExactPatch": "ef48d6bb1443f95b0ee828d406d5c648785eaf81",
+      "candidateSha256": "e5d61b2338aded479fb294dfb24999a8d5befd0b13dcb44cc4ccda223ee473f8",
+      "checkoutBlob": "ef48d6bb1443f95b0ee828d406d5c648785eaf81",
+      "checkoutSha256": "e5d61b2338aded479fb294dfb24999a8d5befd0b13dcb44cc4ccda223ee473f8",
+      "landingSha256": "e5d61b2338aded479fb294dfb24999a8d5befd0b13dcb44cc4ccda223ee473f8",
+      "authoredEqual": true,
+      "matchesCurrentReceipt": true
+    },
+    {
+      "path": "services/main/src/modules/work/search-disclosed-fields.ts",
+      "baseBlob": "05cc54812c8bf0b26059231c003f1dec1f35c001",
+      "candidateBlobFromExactPatch": "24f73960b6a050d455ee5d078756d4f15e91b5c8",
+      "candidateSha256": "d585edc28e2579035165a26266945e3487d22169358b61bdbddfaecbccf9545e",
+      "checkoutBlob": "24f73960b6a050d455ee5d078756d4f15e91b5c8",
+      "checkoutSha256": "d585edc28e2579035165a26266945e3487d22169358b61bdbddfaecbccf9545e",
+      "landingSha256": "d585edc28e2579035165a26266945e3487d22169358b61bdbddfaecbccf9545e",
+      "authoredEqual": true,
+      "matchesCurrentReceipt": true
+    },
+    {
+      "path": "services/main/src/modules/work/search-grouped-rated.ts",
+      "baseBlob": "ba4666e67500ab3d1d9d4862ca3099345207c518",
+      "candidateBlobFromExactPatch": "701ee996cdb91c011046a0d87b53e4d34521cd5c",
+      "candidateSha256": "6cc7e20ae6870e049702a12314f173233ef863c40829ea0a0e0c4022886961e7",
+      "checkoutBlob": "701ee996cdb91c011046a0d87b53e4d34521cd5c",
+      "checkoutSha256": "6cc7e20ae6870e049702a12314f173233ef863c40829ea0a0e0c4022886961e7",
+      "landingSha256": "6cc7e20ae6870e049702a12314f173233ef863c40829ea0a0e0c4022886961e7",
+      "authoredEqual": true,
+      "matchesCurrentReceipt": true
+    },
+    {
+      "path": "services/main/src/modules/work/search-grouped.ts",
+      "baseBlob": "4ef17f2eada0ec80a2345d305e7bdff825184992",
+      "candidateBlobFromExactPatch": "ce4749e0be4453470b25c706cdf46739b90d0b6d",
+      "candidateSha256": "cd2441a532ce549461a69136afc53496b03d0b8ca123417c809c671d01d13c61",
+      "checkoutBlob": "ce4749e0be4453470b25c706cdf46739b90d0b6d",
+      "checkoutSha256": "cd2441a532ce549461a69136afc53496b03d0b8ca123417c809c671d01d13c61",
+      "landingSha256": "cd2441a532ce549461a69136afc53496b03d0b8ca123417c809c671d01d13c61",
+      "authoredEqual": true,
+      "matchesCurrentReceipt": true
+    },
+    {
+      "path": "services/main/src/modules/work/search-joined.ts",
+      "baseBlob": "7351ea8984577864cd6e83df70fed65f2e36fda4",
+      "candidateBlobFromExactPatch": "642230fb48e73310c2bd2b44f6d308a127047ef1",
+      "candidateSha256": "0152aa5e1c68e675a774fc0f520548feac760075f87e220d8e4db54e2fb1dd95",
+      "checkoutBlob": "642230fb48e73310c2bd2b44f6d308a127047ef1",
+      "checkoutSha256": "0152aa5e1c68e675a774fc0f520548feac760075f87e220d8e4db54e2fb1dd95",
+      "landingSha256": "0152aa5e1c68e675a774fc0f520548feac760075f87e220d8e4db54e2fb1dd95",
+      "authoredEqual": true,
+      "matchesCurrentReceipt": true
+    },
+    {
+      "path": "services/main/src/modules/work/search-public.ts",
+      "baseBlob": "b307026dc0fdf1387f461f6fdba9ed6ed9dd155f",
+      "candidateBlobFromExactPatch": "2dfe11bf44e0670fff806ce5f223ee18986eb4bf",
+      "candidateSha256": "dd4405008cb062674aa633bc05c32b04d3c6d2b9a3238eeaac5a2955bf8e5cee",
+      "checkoutBlob": "2dfe11bf44e0670fff806ce5f223ee18986eb4bf",
+      "checkoutSha256": "dd4405008cb062674aa633bc05c32b04d3c6d2b9a3238eeaac5a2955bf8e5cee",
+      "landingSha256": "dd4405008cb062674aa633bc05c32b04d3c6d2b9a3238eeaac5a2955bf8e5cee",
+      "authoredEqual": true,
+      "matchesCurrentReceipt": true
+    },
+    {
+      "path": "services/main/src/routes/search.ts",
+      "baseBlob": "dc9a701b2e1ec4c957404176fe7377500f875ba1",
+      "candidateBlobFromExactPatch": "43760052abf6d1debe4d2f4dcad623dfb52e482e",
+      "candidateSha256": "590cab417bfcd5be8c8401a377a596b44f22b52b5258df6f01af5ae147d486f2",
+      "checkoutBlob": "43760052abf6d1debe4d2f4dcad623dfb52e482e",
+      "checkoutSha256": "590cab417bfcd5be8c8401a377a596b44f22b52b5258df6f01af5ae147d486f2",
+      "landingSha256": "590cab417bfcd5be8c8401a377a596b44f22b52b5258df6f01af5ae147d486f2",
+      "authoredEqual": true,
+      "matchesCurrentReceipt": true
+    },
+    {
+      "path": "services/main/tests/search-keywords-excerpts.test.ts",
+      "baseBlob": null,
+      "candidateBlobFromExactPatch": "84473841b813d74f469cefb9f2035561647757bf",
+      "candidateSha256": "81d890013f211cd7df8fd974915ef5f05c2ef51b82240909e1646b860c3d7811",
+      "checkoutBlob": "84473841b813d74f469cefb9f2035561647757bf",
+      "checkoutSha256": "81d890013f211cd7df8fd974915ef5f05c2ef51b82240909e1646b860c3d7811",
+      "landingSha256": "81d890013f211cd7df8fd974915ef5f05c2ef51b82240909e1646b860c3d7811",
+      "authoredEqual": true,
+      "matchesCurrentReceipt": true
+    }
+  ],
+  "retainedJobs": [
+    {
+      "path": "recorded-jobs/e5a08208-6a36-413e-8fd9-540541d7b5e7.log",
+      "sha256": "80023b1b9a30e5dfe07c21de7ab6736e8cec481d3236b2e4a89ceacd4dd42862",
+      "verified": true
+    },
+    {
+      "path": "recorded-jobs/6f8d1e5e-d2e1-4277-93a3-5c449728b563.log",
+      "sha256": "f015ee07d0e8e26df5654f43175c0e08cd03f0fc4ad9ff9d57bcfdbf97b1f6e9",
+      "verified": true
+    },
+    {
+      "path": "recorded-jobs/2637c438-d9a7-476a-b98c-a5b698462336.log",
+      "sha256": "bc7c7e7f322eefc123080e5f95303bf6cd15291f0aba1dbb261aaef1a477fa53",
+      "verified": true
+    },
+    {
+      "path": "recorded-jobs/f244b92e-df34-450c-8315-eb6dd1960b42.log",
+      "sha256": "8cccbda6402af3f06b3de706d0fa99d8efa5037f1514cd4dd1255a17c7edfea2",
+      "verified": true
+    },
+    {
+      "path": "recorded-jobs/0565375f-7821-4c55-9458-24eeddd554a7.1.log",
+      "sha256": "abc862c143a87ef53e58a89cc8587da425efb1af2c918bac4f9176dbe1490eb0",
+      "verified": true
+    },
+    {
+      "path": "recorded-jobs/0565375f-7821-4c55-9458-24eeddd554a7.log",
+      "sha256": "65c7ad7249711edc167f20d2b4fcec766056554e77bab882c3acd626e02efd25",
+      "verified": true
+    },
+    {
+      "path": "recorded-jobs/3aa41cdc-ac6e-4c23-ba79-8b5f26a25f34.1.log",
+      "sha256": "c868ecb5ed6c492746c30fbc72d1c890dd2d074a479a5b7c7f0a08cd25f2fe4c",
+      "verified": true
+    },
+    {
+      "path": "recorded-jobs/3aa41cdc-ac6e-4c23-ba79-8b5f26a25f34.2.log",
+      "sha256": "8476ccdbf1fa7b6c5296b036a3b431ed1353ff953f9de60075987a8a282ffb4e",
+      "verified": true
+    },
+    {
+      "path": "recorded-jobs/3aa41cdc-ac6e-4c23-ba79-8b5f26a25f34.log",
+      "sha256": "701f6983b191464d4b5464039022ae724e5d476b9df93d2d60745de9eb74b6c6",
+      "verified": true
+    },
+    {
+      "path": "recorded-jobs/7dc2cb3a-4fe6-470d-858c-797b6d06ba4e.1.log",
+      "sha256": "439832e11d8b4c2690f834348f630fcb721e670b4190a7c856414aab8bfac3d9",
+      "verified": true
+    },
+    {
+      "path": "recorded-jobs/7dc2cb3a-4fe6-470d-858c-797b6d06ba4e.2.log",
+      "sha256": "4ea636b24c4052486fe9a49accee9cbd7dff119f50cd67ae660a0cff6b609174",
+      "verified": true
+    },
+    {
+      "path": "recorded-jobs/7dc2cb3a-4fe6-470d-858c-797b6d06ba4e.log",
+      "sha256": "1884644a9f6bd1165ee7855713e7c8fa2dbcff058f60a339d5319aaa58aa736d",
+      "verified": true
+    },
+    {
+      "path": "recorded-jobs/6b9c3ec7-cb2c-4b6a-bbf6-a22e5f3c8512.log",
+      "sha256": "c41cab8cb38965f20fc2d60636e028acd4db44059645ba3b0f4cd8af97c4eaa7",
+      "verified": true
+    },
+    {
+      "path": "recorded-jobs/50d7b750-6b5a-454e-af17-9814a9c0c10a.1.log",
+      "sha256": "1106f88f8d4028c8a98e84385e4c8d6a463395b464f77612b80d2d0af7e9138f",
+      "verified": true
+    },
+    {
+      "path": "recorded-jobs/50d7b750-6b5a-454e-af17-9814a9c0c10a.2.log",
+      "sha256": "11162a9f6f10735a2172556fa2ab973e676feb3ddc53a740c573003ddd726d90",
+      "verified": true
+    },
+    {
+      "path": "recorded-jobs/50d7b750-6b5a-454e-af17-9814a9c0c10a.log",
+      "sha256": "ff41e5f0aad399aeb4240abc6a07230bad95fdb5a9f50a3af83be89b497777c7",
+      "verified": true
+    },
+    {
+      "path": "recorded-jobs/3641ac8d-bd89-44d6-b2fb-62a4101c4b3a.1.log",
+      "sha256": "dc502060bfe27ae44b95658ebc94578c8a11608e7a11668f29815f8d5492e34a",
+      "verified": true
+    },
+    {
+      "path": "recorded-jobs/3641ac8d-bd89-44d6-b2fb-62a4101c4b3a.2.log",
+      "sha256": "46f2e7924cc3b42cc0753403ed04ea00bcae14bd17c6dd4df28800fd52eaa810",
+      "verified": true
+    },
+    {
+      "path": "recorded-jobs/3641ac8d-bd89-44d6-b2fb-62a4101c4b3a.log",
+      "sha256": "b0f6d2ecbbc8b03a1120eac467410e703ab31962cd0e2db67b283fb05934c42f",
+      "verified": true
+    },
+    {
+      "path": "recorded-jobs/5a40e1ba-f12b-4578-b7bd-d0dc4b4311ef.log",
+      "sha256": "651c00c2cdcf457c61899f9364283fd98f222f2c14bdaf7b0d3808fce3999aa8",
+      "verified": true
+    },
+    {
+      "path": "recorded-jobs/28de287c-4fd5-4768-8b8c-810a1f3f6479.1.log",
+      "sha256": "1106f88f8d4028c8a98e84385e4c8d6a463395b464f77612b80d2d0af7e9138f",
+      "verified": true
+    },
+    {
+      "path": "recorded-jobs/28de287c-4fd5-4768-8b8c-810a1f3f6479.2.log",
+      "sha256": "45dc712c58642c3b9d808457a5c112ea4c5b551dc9ed67761aca6a685decae12",
+      "verified": true
+    },
+    {
+      "path": "recorded-jobs/28de287c-4fd5-4768-8b8c-810a1f3f6479.3.log",
+      "sha256": "2ed76b9168202c2336beb2af9f0887b9033ee3de7752bd0fde6244c241e316e5",
+      "verified": true
+    },
+    {
+      "path": "recorded-jobs/28de287c-4fd5-4768-8b8c-810a1f3f6479.4.log",
+      "sha256": "bbc256031ff4ab82eb9517faa0628bd8f189c45ec6eaa0e3ceca18d231a5fedd",
+      "verified": true
+    },
+    {
+      "path": "recorded-jobs/28de287c-4fd5-4768-8b8c-810a1f3f6479.5.log",
+      "sha256": "0c1b29e13aa1508c7e085ff60b224bb2496ba2431c5655538de9461a0ca9b50d",
+      "verified": true
+    },
+    {
+      "path": "recorded-jobs/28de287c-4fd5-4768-8b8c-810a1f3f6479.log",
+      "sha256": "e02562fb233da91b5ffe97a8f78f45de9d188d16d774ce7c7ea687b16dafda7a",
+      "verified": true
+    }
+  ],
+  "retainedQa": [
+    {
+      "id": "20261021t100607-820ac0",
+      "xmlSha256": "d4a57f51b1bdf28772b6eea922e6dd923e3f067cc0d40ba602e7d4ac2f254840",
+      "header": {
+        "name": "bun test",
+        "tests": "5",
+        "assertions": "5",
+        "failures": "5",
+        "skipped": "0",
+        "time": "1.641785874"
+      },
+      "actualCases": 5,
+      "failureElements": 5,
+      "skippedElements": 0,
+      "failures": [
+        {
+          "case": {
+            "name": "keywords require every literal token independently of order, adjacency and whitespace",
+            "classname": "",
+            "time": "0.009366",
+            "file": "services/main/tests/search-keywords-excerpts.test.ts",
+            "line": "8",
+            "assertions": "1"
+          },
+          "failure": "AssertionError: expect(received).toBe(expected)\n\nExpected: true\nReceived: false\n\n      at services/main/tests/search-keywords-excerpts.test.ts:9:96\n"
+        },
+        {
+          "case": {
+            "name": "keywords keep CJK, a single code point and NFC without changing legacy phrases",
+            "classname": "",
+            "time": "0.00104",
+            "file": "services/main/tests/search-keywords-excerpts.test.ts",
+            "line": "16",
+            "assertions": "1"
+          },
+          "failure": "AssertionError: expect(received).toBe(expected)\n\nExpected: true\nReceived: false\n\n      at services/main/tests/search-keywords-excerpts.test.ts:17:62\n"
+        },
+        {
+          "case": {
+            "name": "page schemas admit explicit keyword and phrase modes with single-character text",
+            "classname": "",
+            "time": "0.001093",
+            "file": "services/main/tests/search-keywords-excerpts.test.ts",
+            "line": "32",
+            "assertions": "1"
+          },
+          "failure": "AssertionError: expect(received).toBe(expected)\n\nExpected: true\nReceived: false\n\n      at services/main/tests/search-keywords-excerpts.test.ts:35:101\n"
+        },
+        {
+          "case": {
+            "name": "Work continuations bind match mode as well as normalized text, filters and source",
+            "classname": "",
+            "time": "0.00317",
+            "file": "services/main/tests/search-keywords-excerpts.test.ts",
+            "line": "41",
+            "assertions": "1"
+          },
+          "failure": "AssertionError: expect(received).toThrow(expected)\n\nExpected constructor: SearchContinuationRestart\n\nReceived function did not throw\nReceived value: {\n  profile: \"public-main-phrase-page-v1\",\n  resultGrain: \"mainVersion\",\n  context: \"main-version-default\",\n  relationComplete: true,\n  population: 2,\n  total: 2,\n  sourcePosition: {\n    datasetId: \"product\",\n    dataEpoch: \"epoch\",\n    sequence: \"9\",\n  },\n  indexGeneration: \"index\",\n  results: [\n    {\n      work: \"b\",\n    }\n  ],\n  next: null,\n}\n\n      at services/main/tests/search-keywords-excerpts.test.ts:44:6\n"
+        },
+        {
+          "case": {
+            "name": "Content continuations also refuse a changed match mode",
+            "classname": "",
+            "time": "0.00066",
+            "file": "services/main/tests/search-keywords-excerpts.test.ts",
+            "line": "53",
+            "assertions": "1"
+          },
+          "failure": "AssertionError: expect(received).toThrow(expected)\n\nExpected constructor: SearchContinuationRestart\n\nReceived function did not throw\nReceived value: {\n  profile: \"public-content-phrase-page-v1\",\n  resultGrain: \"content-variant\",\n  relationComplete: true,\n  population: 2,\n  total: 2,\n  graphPosition: {\n    dataEpoch: \"epoch\",\n    sequence: \"9\",\n  },\n  contentPosition: {\n    owner: \"content\",\n    dataEpoch: \"epoch\",\n    sequence: \"9\",\n  },\n  indexGeneration: \"index\",\n  results: [\n    {\n      matchUnit: \"b\",\n      resource: \"b\",\n      variant: \"b\",\n      revision: \"b\",\n      publicationDecision: \"b\",\n      language: \"en\",\n      score: 1,\n    }\n  ],\n  next: null,\n}\n\n      at services/main/tests/search-keywords-excerpts.test.ts:62:6\n"
+        }
+      ]
+    },
+    {
+      "id": "20261021t101237-f50f2c",
+      "xmlSha256": "a907a97039ff71495a203a9cfdc80d1c09b3fb4a1dc32af8a490e6a74416df81",
+      "header": {
+        "name": "bun test",
+        "tests": "9",
+        "assertions": "26",
+        "failures": "4",
+        "skipped": "0",
+        "time": "0.770808756"
+      },
+      "actualCases": 9,
+      "failureElements": 4,
+      "skippedElements": 0,
+      "failures": [
+        {
+          "case": {
+            "name": "Content cards return bounded matching exact body text with its actual revision and language",
+            "classname": "",
+            "time": "0.000901",
+            "file": "services/main/tests/search-keywords-excerpts.test.ts",
+            "line": "120",
+            "assertions": "1"
+          },
+          "failure": "AssertionError: expect(received).toBe(expected)\n\nExpected: 1\nReceived: 0\n\n      at services/main/tests/search-keywords-excerpts.test.ts:122:27\n"
+        },
+        {
+          "case": {
+            "name": "hidden or withdrawn Content is never read for an excerpt and unavailability is explicit",
+            "classname": "",
+            "time": "0.000323",
+            "file": "services/main/tests/search-keywords-excerpts.test.ts",
+            "line": "132",
+            "assertions": "2"
+          },
+          "failure": "AssertionError: expect(received).toBe(expected)\n\nExpected: \"unavailable\"\nReceived: undefined\n\n      at services/main/tests/search-keywords-excerpts.test.ts:136:36\n"
+        },
+        {
+          "case": {
+            "name": "mismatched revision, language and erased delivery never yield excerpt bytes",
+            "classname": "",
+            "time": "0.000318",
+            "file": "services/main/tests/search-keywords-excerpts.test.ts",
+            "line": "141",
+            "assertions": "1"
+          },
+          "failure": "AssertionError: expect(received).toBe(expected)\n\nExpected: \"unavailable\"\nReceived: undefined\n\n      at services/main/tests/search-keywords-excerpts.test.ts:144:36\n"
+        },
+        {
+          "case": {
+            "name": "Content owner movement after the body read restarts the search instead of returning stale excerpts",
+            "classname": "",
+            "time": "0.000238",
+            "file": "services/main/tests/search-keywords-excerpts.test.ts",
+            "line": "149",
+            "assertions": "1"
+          },
+          "failure": "AssertionError: expect(received).rejects.toBeInstanceOf(expected)\n\nExpected promise that rejects\nReceived promise that resolved: Promise { <resolved> }\n\n      at services/main/tests/search-keywords-excerpts.test.ts:150:64\n"
+        }
+      ]
+    },
+    {
+      "id": "20261021t101544-4203b1",
+      "xmlSha256": "fd959b98f2fc60aaa6bb8827fcb484228a69e34b25c446bc2867e6f1754196bd",
+      "header": {
+        "name": "bun test",
+        "tests": "22",
+        "assertions": "123",
+        "failures": "4",
+        "skipped": "0",
+        "time": "0.835801905"
+      },
+      "actualCases": 22,
+      "failureElements": 4,
+      "skippedElements": 0,
+      "failures": [
+        {
+          "case": {
+            "name": "Content cards return bounded matching exact body text with its actual revision and language",
+            "classname": "",
+            "time": "0.001622",
+            "file": "services/main/tests/search-keywords-excerpts.test.ts",
+            "line": "120",
+            "assertions": "0"
+          },
+          "failure": "Error: invalid native IRI\n      at iri (services/main/src/modules/work/activate.ts:207:15)\n      at services/main/src/modules/search/excerpts.ts:82:75\n      at map (:1:11)\n      at services/main/src/modules/search/excerpts.ts:82:52\n      at enrichSearchExcerptPage (services/main/src/modules/search/excerpts.ts:114:24)\n"
+        },
+        {
+          "case": {
+            "name": "hidden or withdrawn Content is never read for an excerpt and unavailability is explicit",
+            "classname": "",
+            "time": "0.000365",
+            "file": "services/main/tests/search-keywords-excerpts.test.ts",
+            "line": "132",
+            "assertions": "0"
+          },
+          "failure": "Error: invalid native IRI\n      at iri (services/main/src/modules/work/activate.ts:207:15)\n      at services/main/src/modules/search/excerpts.ts:82:75\n      at map (:1:11)\n      at services/main/src/modules/search/excerpts.ts:82:52\n      at enrichSearchExcerptPage (services/main/src/modules/search/excerpts.ts:114:24)\n"
+        },
+        {
+          "case": {
+            "name": "mismatched revision, language and erased delivery never yield excerpt bytes",
+            "classname": "",
+            "time": "0.000338",
+            "file": "services/main/tests/search-keywords-excerpts.test.ts",
+            "line": "141",
+            "assertions": "0"
+          },
+          "failure": "Error: invalid native IRI\n      at iri (services/main/src/modules/work/activate.ts:207:15)\n      at services/main/src/modules/search/excerpts.ts:82:75\n      at map (:1:11)\n      at services/main/src/modules/search/excerpts.ts:82:52\n      at enrichSearchExcerptPage (services/main/src/modules/search/excerpts.ts:114:24)\n"
+        },
+        {
+          "case": {
+            "name": "Content owner movement after the body read restarts the search instead of returning stale excerpts",
+            "classname": "",
+            "time": "0.003553",
+            "file": "services/main/tests/search-keywords-excerpts.test.ts",
+            "line": "149",
+            "assertions": "1"
+          },
+          "failure": "AssertionError: expect(received).toBeInstanceOf(expected)\n\nExpected constructor: [class SearchSnapshotMoved extends SearchIndexUnavailable]\nReceived value: 202 |     ...(types.length ? { semanticTypes: types } : {}) }));\n203 | }\n204 | \n205 | export function iri(value: string): string {\n206 |   if (!/^(?:https:\\/\\/rezics\\.com\\/(?:id|definition)\\/[A-Za-z0-9._~/-]+|urn:rezics:[A-Za-z0-9:._-]+)$/.test(value)) {\n207 |     throw new Error('invalid native IRI');\n                    ^\nerror: invalid native IRI\n      at iri (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/src/modules/work/activate.ts:207:15)\n      at <anonymous> (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/src/modules/search/excerpts.ts:82:75)\n      at map (1:11)\n      at <anonymous> (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/src/modules/search/excerpts.ts:82:52)\n      at enrichSearchExcerptPage (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/src/modules/search/excerpts.ts:114:24)\n      at <anonymous> (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/tests/search-keywords-excerpts.test.ts:150:64)\n\n\n      at services/main/tests/search-keywords-excerpts.test.ts:150:64\n"
+        }
+      ]
+    },
+    {
+      "id": "20261021t102355-baac5d",
+      "xmlSha256": "189f492f8df2e77e169bbe82b6bc8383012fc3d9b172f9d78cf12e14c1a5f77c",
+      "header": {
+        "name": "bun test",
+        "tests": "28",
+        "assertions": "161",
+        "failures": "8",
+        "skipped": "0",
+        "time": "0.85336489"
+      },
+      "actualCases": 28,
+      "failureElements": 8,
+      "skippedElements": 0,
+      "failures": [
+        {
+          "case": {
+            "name": "Content cards return bounded matching exact body text with its actual revision and language",
+            "classname": "",
+            "time": "0.004132",
+            "file": "services/main/tests/search-keywords-excerpts.test.ts",
+            "line": "138",
+            "assertions": "3"
+          },
+          "failure": "Error: Disclosure ancestry is incomplete\n      at validateEvidence (services/main/src/modules/disclosure/read.ts:695:11)\n      at services/main/src/modules/disclosure/read.ts:799:45\n      at forEach (:1:11)\n      at resolveDisclosureSelectionChunk (services/main/src/modules/disclosure/read.ts:794:15)\n      at services/main/src/modules/disclosure/read.ts:1119:30\n      at async measureStatements (services/main/src/infrastructure/statement-cost.ts:62:37)\n      at async measuredSubmission (services/main/src/modules/disclosure/read.ts:123:40)\n"
+        },
+        {
+          "case": {
+            "name": "hidden or withdrawn Content is never read for an excerpt and unavailability is explicit",
+            "classname": "",
+            "time": "0.000702",
+            "file": "services/main/tests/search-keywords-excerpts.test.ts",
+            "line": "150",
+            "assertions": "3"
+          },
+          "failure": "Error: Disclosure ancestry is incomplete\n      at validateEvidence (services/main/src/modules/disclosure/read.ts:695:11)\n      at services/main/src/modules/disclosure/read.ts:799:45\n      at forEach (:1:11)\n      at resolveDisclosureSelectionChunk (services/main/src/modules/disclosure/read.ts:794:15)\n      at services/main/src/modules/disclosure/read.ts:1119:30\n      at async measureStatements (services/main/src/infrastructure/statement-cost.ts:62:37)\n      at async measuredSubmission (services/main/src/modules/disclosure/read.ts:123:40)\n"
+        },
+        {
+          "case": {
+            "name": "mismatched revision, language and erased delivery never yield excerpt bytes",
+            "classname": "",
+            "time": "0.000585",
+            "file": "services/main/tests/search-keywords-excerpts.test.ts",
+            "line": "159",
+            "assertions": "3"
+          },
+          "failure": "Error: Disclosure ancestry is incomplete\n      at validateEvidence (services/main/src/modules/disclosure/read.ts:695:11)\n      at services/main/src/modules/disclosure/read.ts:799:45\n      at forEach (:1:11)\n      at resolveDisclosureSelectionChunk (services/main/src/modules/disclosure/read.ts:794:15)\n      at services/main/src/modules/disclosure/read.ts:1119:30\n      at async measureStatements (services/main/src/infrastructure/statement-cost.ts:62:37)\n      at async measuredSubmission (services/main/src/modules/disclosure/read.ts:123:40)\n"
+        },
+        {
+          "case": {
+            "name": "Content owner movement after the body read restarts the search instead of returning stale excerpts",
+            "classname": "",
+            "time": "0.024599",
+            "file": "services/main/tests/search-keywords-excerpts.test.ts",
+            "line": "167",
+            "assertions": "4"
+          },
+          "failure": "AssertionError: expect(received).toBeInstanceOf(expected)\n\nExpected constructor: [class SearchSnapshotMoved extends SearchIndexUnavailable]\nReceived value: 690 |       && (target.workRevision === undefined || parent.protectedRevision === target.workRevision))\n691 |     || target.workRevision !== undefined && (target.work != null\n692 |       || evidence.parents.some(parent => parent.kind === 'work'))\n693 |       && !evidence.parents.some(parent => parent.kind === 'work'\n694 |       && parent.protectedRevision === target.workRevision)) {\n695 |     throw new DisclosureUnavailable('Disclosure ancestry is incomplete');\n                ^\nerror: Disclosure ancestry is incomplete\n      at validateEvidence (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/src/modules/disclosure/read.ts:695:11)\n      at <anonymous> (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/src/modules/disclosure/read.ts:799:45)\n      at forEach (1:11)\n      at resolveDisclosureSelectionChunk (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/src/modules/disclosure/read.ts:794:15)\n      at async <anonymous> (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/src/modules/disclosure/read.ts:1119:30)\n      at async measureStatements (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/src/infrastructure/statement-cost.ts:62:37)\n      at async measuredSubmission (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/src/modules/disclosure/read.ts:123:40)\n      at <anonymous> (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/tests/search-keywords-excerpts.test.ts:168:64)\n\n\n      at services/main/tests/search-keywords-excerpts.test.ts:168:64\n"
+        },
+        {
+          "case": {
+            "name": "continuations refuse reader, context and source changes",
+            "classname": "",
+            "time": "0.000695",
+            "file": "services/main/tests/search-keywords-excerpts.test.ts",
+            "line": "183",
+            "assertions": "2"
+          },
+          "failure": "AssertionError: expect(received).toThrow(expected)\n\nExpected constructor: SearchSnapshotMoved\nReceived constructor: SearchContinuationRestart\n\nReceived message: \"public search changed; restart at page one\"\n\n      at services/main/tests/search-keywords-excerpts.test.ts:190:93\n"
+        },
+        {
+          "case": {
+            "name": "current disclosure and public-domain rights gate exact reads and delivery",
+            "classname": "",
+            "time": "0.000716",
+            "file": "services/main/tests/search-keywords-excerpts.test.ts",
+            "line": "203",
+            "assertions": "3"
+          },
+          "failure": "Error: Disclosure ancestry is incomplete\n      at validateEvidence (services/main/src/modules/disclosure/read.ts:695:11)\n      at services/main/src/modules/disclosure/read.ts:799:45\n      at forEach (:1:11)\n      at resolveDisclosureSelectionChunk (services/main/src/modules/disclosure/read.ts:794:15)\n      at services/main/src/modules/disclosure/read.ts:1119:30\n      at async measureStatements (services/main/src/infrastructure/statement-cost.ts:62:37)\n      at async measuredSubmission (services/main/src/modules/disclosure/read.ts:123:40)\n"
+        },
+        {
+          "case": {
+            "name": "a changed publication after exact reading restarts instead of delivering bytes",
+            "classname": "",
+            "time": "0.000543",
+            "file": "services/main/tests/search-keywords-excerpts.test.ts",
+            "line": "213",
+            "assertions": "4"
+          },
+          "failure": "AssertionError: expect(received).toBeInstanceOf(expected)\n\nExpected constructor: [class SearchSnapshotMoved extends SearchIndexUnavailable]\nReceived value: 690 |       && (target.workRevision === undefined || parent.protectedRevision === target.workRevision))\n691 |     || target.workRevision !== undefined && (target.work != null\n692 |       || evidence.parents.some(parent => parent.kind === 'work'))\n693 |       && !evidence.parents.some(parent => parent.kind === 'work'\n694 |       && parent.protectedRevision === target.workRevision)) {\n695 |     throw new DisclosureUnavailable('Disclosure ancestry is incomplete');\n                ^\nerror: Disclosure ancestry is incomplete\n      at validateEvidence (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/src/modules/disclosure/read.ts:695:11)\n      at <anonymous> (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/src/modules/disclosure/read.ts:799:45)\n      at forEach (1:11)\n      at resolveDisclosureSelectionChunk (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/src/modules/disclosure/read.ts:794:15)\n      at async <anonymous> (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/src/modules/disclosure/read.ts:1119:30)\n      at async measureStatements (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/src/infrastructure/statement-cost.ts:62:37)\n      at async measuredSubmission (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/src/modules/disclosure/read.ts:123:40)\n      at <anonymous> (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/tests/search-keywords-excerpts.test.ts:214:67)\n\n\n      at services/main/tests/search-keywords-excerpts.test.ts:214:67\n"
+        },
+        {
+          "case": {
+            "name": "a body without every keyword has an explicit unavailable excerpt",
+            "classname": "",
+            "time": "0.000458",
+            "file": "services/main/tests/search-keywords-excerpts.test.ts",
+            "line": "217",
+            "assertions": "3"
+          },
+          "failure": "Error: Disclosure ancestry is incomplete\n      at validateEvidence (services/main/src/modules/disclosure/read.ts:695:11)\n      at services/main/src/modules/disclosure/read.ts:799:45\n      at forEach (:1:11)\n      at resolveDisclosureSelectionChunk (services/main/src/modules/disclosure/read.ts:794:15)\n      at services/main/src/modules/disclosure/read.ts:1119:30\n      at async measureStatements (services/main/src/infrastructure/statement-cost.ts:62:37)\n      at async measuredSubmission (services/main/src/modules/disclosure/read.ts:123:40)\n"
+        }
+      ]
+    },
+    {
+      "id": "20261021t102442-49864f",
+      "xmlSha256": "e4a34c72f3ac71e75d7f114321c49799a69074021948b320ace4f248d47b812d",
+      "header": {
+        "name": "bun test",
+        "tests": "28",
+        "assertions": "169",
+        "failures": "8",
+        "skipped": "0",
+        "time": "0.934336254"
+      },
+      "actualCases": 28,
+      "failureElements": 8,
+      "skippedElements": 0,
+      "failures": [
+        {
+          "case": {
+            "name": "Content cards return bounded matching exact body text with its actual revision and language",
+            "classname": "",
+            "time": "0.004027",
+            "file": "services/main/tests/search-keywords-excerpts.test.ts",
+            "line": "139",
+            "assertions": "4"
+          },
+          "failure": "Error: Disclosure parent heads are unavailable\n      at currentHeads (services/main/src/modules/disclosure/read.ts:928:11)\n      at services/main/src/modules/disclosure/read.ts:1120:38\n      at async measureStatements (services/main/src/infrastructure/statement-cost.ts:62:37)\n      at async measuredSubmission (services/main/src/modules/disclosure/read.ts:123:40)\n\nAssertionError: expect(received).toContain(expected)\n\nExpected to contain: \"rv:contentPublicationHead ?publicationDecision\"\nReceived: \"PREFIX rv: <https://rezics.com/vocab/>\\n        SELECT ?resource ?head WHERE { VALUES ?resource { <https://rezics.com/id/11111111-1111-4111-8111-111111111111> }\\n          GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:dataEpoch \\\"epoch\\\" ;\\n            rv:routingEpoch \\\"routing\\\" . }\\n          FILTER NOT EXISTS { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:restoreHold true } }\\n          GRAPH <urn:rezics:graph:current> {\\n            { ?resource rv:head ?head }\\n            UNION { ?resource a rv:ZoneHomeDocument ; rv:homeDocumentHead ?head }\\n          }\\n        } LIMIT 2\"\n\n      at query (services/main/tests/search-keywords-excerpts.test.ts:111:23)\n      at currentHeads (services/main/src/modules/disclosure/read.ts:904:38)\n      at services/main/src/modules/disclosure/read.ts:1120:38\n      at async measureStatements (services/main/src/infrastructure/statement-cost.ts:62:37)\n      at async measuredSubmission (services/main/src/modules/disclosure/read.ts:123:40)\n"
+        },
+        {
+          "case": {
+            "name": "hidden or withdrawn Content is never read for an excerpt and unavailability is explicit",
+            "classname": "",
+            "time": "0.000594",
+            "file": "services/main/tests/search-keywords-excerpts.test.ts",
+            "line": "151",
+            "assertions": "4"
+          },
+          "failure": "Error: Disclosure parent heads are unavailable\n      at currentHeads (services/main/src/modules/disclosure/read.ts:928:11)\n      at services/main/src/modules/disclosure/read.ts:1120:38\n      at async measureStatements (services/main/src/infrastructure/statement-cost.ts:62:37)\n      at async measuredSubmission (services/main/src/modules/disclosure/read.ts:123:40)\n\nAssertionError: expect(received).toContain(expected)\n\nExpected to contain: \"rv:contentPublicationHead ?publicationDecision\"\nReceived: \"PREFIX rv: <https://rezics.com/vocab/>\\n        SELECT ?resource ?head WHERE { VALUES ?resource { <https://rezics.com/id/11111111-1111-4111-8111-111111111111> }\\n          GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:dataEpoch \\\"epoch\\\" ;\\n            rv:routingEpoch \\\"routing\\\" . }\\n          FILTER NOT EXISTS { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:restoreHold true } }\\n          GRAPH <urn:rezics:graph:current> {\\n            { ?resource rv:head ?head }\\n            UNION { ?resource a rv:ZoneHomeDocument ; rv:homeDocumentHead ?head }\\n          }\\n        } LIMIT 2\"\n\n      at query (services/main/tests/search-keywords-excerpts.test.ts:111:23)\n      at currentHeads (services/main/src/modules/disclosure/read.ts:904:38)\n      at services/main/src/modules/disclosure/read.ts:1120:38\n      at async measureStatements (services/main/src/infrastructure/statement-cost.ts:62:37)\n      at async measuredSubmission (services/main/src/modules/disclosure/read.ts:123:40)\n"
+        },
+        {
+          "case": {
+            "name": "mismatched revision, language and erased delivery never yield excerpt bytes",
+            "classname": "",
+            "time": "0.000608",
+            "file": "services/main/tests/search-keywords-excerpts.test.ts",
+            "line": "160",
+            "assertions": "4"
+          },
+          "failure": "Error: Disclosure parent heads are unavailable\n      at currentHeads (services/main/src/modules/disclosure/read.ts:928:11)\n      at services/main/src/modules/disclosure/read.ts:1120:38\n      at async measureStatements (services/main/src/infrastructure/statement-cost.ts:62:37)\n      at async measuredSubmission (services/main/src/modules/disclosure/read.ts:123:40)\n\nAssertionError: expect(received).toContain(expected)\n\nExpected to contain: \"rv:contentPublicationHead ?publicationDecision\"\nReceived: \"PREFIX rv: <https://rezics.com/vocab/>\\n        SELECT ?resource ?head WHERE { VALUES ?resource { <https://rezics.com/id/11111111-1111-4111-8111-111111111111> }\\n          GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:dataEpoch \\\"epoch\\\" ;\\n            rv:routingEpoch \\\"routing\\\" . }\\n          FILTER NOT EXISTS { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:restoreHold true } }\\n          GRAPH <urn:rezics:graph:current> {\\n            { ?resource rv:head ?head }\\n            UNION { ?resource a rv:ZoneHomeDocument ; rv:homeDocumentHead ?head }\\n          }\\n        } LIMIT 2\"\n\n      at query (services/main/tests/search-keywords-excerpts.test.ts:111:23)\n      at currentHeads (services/main/src/modules/disclosure/read.ts:904:38)\n      at services/main/src/modules/disclosure/read.ts:1120:38\n      at async measureStatements (services/main/src/infrastructure/statement-cost.ts:62:37)\n      at async measuredSubmission (services/main/src/modules/disclosure/read.ts:123:40)\n"
+        },
+        {
+          "case": {
+            "name": "Content owner movement after the body read restarts the search instead of returning stale excerpts",
+            "classname": "",
+            "time": "0.000589",
+            "file": "services/main/tests/search-keywords-excerpts.test.ts",
+            "line": "168",
+            "assertions": "5"
+          },
+          "failure": "AssertionError: expect(received).toBeInstanceOf(expected)\n\nExpected constructor: [class SearchSnapshotMoved extends SearchIndexUnavailable]\nReceived value: 923 |       throw new DisclosureUnavailable('Disclosure parent head moved');\n924 |     }\n925 |     return { heads, graphQueries };\n926 |   } catch (cause) {\n927 |     if (cause instanceof DisclosureUnavailable) throw cause;\n928 |     throw new DisclosureUnavailable('Disclosure parent heads are unavailable', { cause });\n                ^\nerror: Disclosure parent heads are unavailable\n      at currentHeads (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/src/modules/disclosure/read.ts:928:11)\n      at async <anonymous> (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/src/modules/disclosure/read.ts:1120:38)\n      at async measureStatements (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/src/infrastructure/statement-cost.ts:62:37)\n      at async measuredSubmission (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/src/modules/disclosure/read.ts:123:40)\n      at <anonymous> (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/tests/search-keywords-excerpts.test.ts:169:64)\n\n106 |   const deps = { content, contentProjection: { content, consumer: 'public-search',\n107 |     cursor: { read: async () => position } },\n108 |     environment: { lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' },\n109 |       fuseki: { query: async (query: string) => {\n110 |         if (query.includes('SELECT ?work ?head')) return { results: { bindings: [{ work: value(resource), head: value('urn:rezics:head:one') }] } };\n111 |         expect(query).toContain('rv:contentPublicationHead ?publicationDecision');\n                            ^\nerror: expect(received).toContain(expected)\n\nExpected to contain: \"rv:contentPublicationHead ?publicationDecision\"\nReceived: \"PREFIX rv: <https://rezics.com/vocab/>\\n        SELECT ?resource ?head WHERE { VALUES ?resource { <https://rezics.com/id/11111111-1111-4111-8111-111111111111> }\\n          GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:dataEpoch \\\"epoch\\\" ;\\n            rv:routingEpoch \\\"routing\\\" . }\\n          FILTER NOT EXISTS { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:restoreHold true } }\\n          GRAPH <urn:rezics:graph:current> {\\n            { ?resource rv:head ?head }\\n            UNION { ?resource a rv:ZoneHomeDocument ; rv:homeDocumentHead ?head }\\n          }\\n        } LIMIT 2\"\n\n      at query (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/tests/search-keywords-excerpts.test.ts:111:23)\n      at currentHeads (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/src/modules/disclosure/read.ts:904:38)\n      at <anonymous> (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/src/modules/disclosure/read.ts:1120:38)\n      at async measureStatements (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/src/infrastructure/statement-cost.ts:62:37)\n      at async measuredSubmission (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/src/modules/disclosure/read.ts:123:40)\n      at <anonymous> (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/tests/search-keywords-excerpts.test.ts:169:64)\n\n\n      at services/main/tests/search-keywords-excerpts.test.ts:169:64\n"
+        },
+        {
+          "case": {
+            "name": "continuations refuse reader, context and source changes",
+            "classname": "",
+            "time": "0.000621",
+            "file": "services/main/tests/search-keywords-excerpts.test.ts",
+            "line": "184",
+            "assertions": "3"
+          },
+          "failure": "AssertionError: expect(received).toThrow(expected)\n\nExpected constructor: SearchContinuationRestart\nReceived constructor: InvalidSearchContinuation\n\nReceived message: \"public page request or complete relation is invalid\"\n\n      at services/main/tests/search-keywords-excerpts.test.ts:193:92\n"
+        },
+        {
+          "case": {
+            "name": "current disclosure and public-domain rights gate exact reads and delivery",
+            "classname": "",
+            "time": "0.000656",
+            "file": "services/main/tests/search-keywords-excerpts.test.ts",
+            "line": "204",
+            "assertions": "4"
+          },
+          "failure": "Error: Disclosure parent heads are unavailable\n      at currentHeads (services/main/src/modules/disclosure/read.ts:928:11)\n      at services/main/src/modules/disclosure/read.ts:1120:38\n      at async measureStatements (services/main/src/infrastructure/statement-cost.ts:62:37)\n      at async measuredSubmission (services/main/src/modules/disclosure/read.ts:123:40)\n\nAssertionError: expect(received).toContain(expected)\n\nExpected to contain: \"rv:contentPublicationHead ?publicationDecision\"\nReceived: \"PREFIX rv: <https://rezics.com/vocab/>\\n        SELECT ?resource ?head WHERE { VALUES ?resource { <https://rezics.com/id/11111111-1111-4111-8111-111111111111> }\\n          GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:dataEpoch \\\"epoch\\\" ;\\n            rv:routingEpoch \\\"routing\\\" . }\\n          FILTER NOT EXISTS { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:restoreHold true } }\\n          GRAPH <urn:rezics:graph:current> {\\n            { ?resource rv:head ?head }\\n            UNION { ?resource a rv:ZoneHomeDocument ; rv:homeDocumentHead ?head }\\n          }\\n        } LIMIT 2\"\n\n      at query (services/main/tests/search-keywords-excerpts.test.ts:111:23)\n      at currentHeads (services/main/src/modules/disclosure/read.ts:904:38)\n      at services/main/src/modules/disclosure/read.ts:1120:38\n      at async measureStatements (services/main/src/infrastructure/statement-cost.ts:62:37)\n      at async measuredSubmission (services/main/src/modules/disclosure/read.ts:123:40)\n"
+        },
+        {
+          "case": {
+            "name": "a changed publication after exact reading restarts instead of delivering bytes",
+            "classname": "",
+            "time": "0.000552",
+            "file": "services/main/tests/search-keywords-excerpts.test.ts",
+            "line": "214",
+            "assertions": "5"
+          },
+          "failure": "AssertionError: expect(received).toBeInstanceOf(expected)\n\nExpected constructor: [class SearchSnapshotMoved extends SearchIndexUnavailable]\nReceived value: 923 |       throw new DisclosureUnavailable('Disclosure parent head moved');\n924 |     }\n925 |     return { heads, graphQueries };\n926 |   } catch (cause) {\n927 |     if (cause instanceof DisclosureUnavailable) throw cause;\n928 |     throw new DisclosureUnavailable('Disclosure parent heads are unavailable', { cause });\n                ^\nerror: Disclosure parent heads are unavailable\n      at currentHeads (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/src/modules/disclosure/read.ts:928:11)\n      at async <anonymous> (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/src/modules/disclosure/read.ts:1120:38)\n      at async measureStatements (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/src/infrastructure/statement-cost.ts:62:37)\n      at async measuredSubmission (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/src/modules/disclosure/read.ts:123:40)\n      at <anonymous> (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/tests/search-keywords-excerpts.test.ts:215:67)\n\n106 |   const deps = { content, contentProjection: { content, consumer: 'public-search',\n107 |     cursor: { read: async () => position } },\n108 |     environment: { lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' },\n109 |       fuseki: { query: async (query: string) => {\n110 |         if (query.includes('SELECT ?work ?head')) return { results: { bindings: [{ work: value(resource), head: value('urn:rezics:head:one') }] } };\n111 |         expect(query).toContain('rv:contentPublicationHead ?publicationDecision');\n                            ^\nerror: expect(received).toContain(expected)\n\nExpected to contain: \"rv:contentPublicationHead ?publicationDecision\"\nReceived: \"PREFIX rv: <https://rezics.com/vocab/>\\n        SELECT ?resource ?head WHERE { VALUES ?resource { <https://rezics.com/id/11111111-1111-4111-8111-111111111111> }\\n          GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:dataEpoch \\\"epoch\\\" ;\\n            rv:routingEpoch \\\"routing\\\" . }\\n          FILTER NOT EXISTS { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:restoreHold true } }\\n          GRAPH <urn:rezics:graph:current> {\\n            { ?resource rv:head ?head }\\n            UNION { ?resource a rv:ZoneHomeDocument ; rv:homeDocumentHead ?head }\\n          }\\n        } LIMIT 2\"\n\n      at query (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/tests/search-keywords-excerpts.test.ts:111:23)\n      at currentHeads (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/src/modules/disclosure/read.ts:904:38)\n      at <anonymous> (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/src/modules/disclosure/read.ts:1120:38)\n      at async measureStatements (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/src/infrastructure/statement-cost.ts:62:37)\n      at async measuredSubmission (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/src/modules/disclosure/read.ts:123:40)\n      at <anonymous> (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/search-producer-candidate/services/main/tests/search-keywords-excerpts.test.ts:215:67)\n\n\n      at services/main/tests/search-keywords-excerpts.test.ts:215:67\n"
+        },
+        {
+          "case": {
+            "name": "a body without every keyword has an explicit unavailable excerpt",
+            "classname": "",
+            "time": "0.000578",
+            "file": "services/main/tests/search-keywords-excerpts.test.ts",
+            "line": "218",
+            "assertions": "4"
+          },
+          "failure": "Error: Disclosure parent heads are unavailable\n      at currentHeads (services/main/src/modules/disclosure/read.ts:928:11)\n      at services/main/src/modules/disclosure/read.ts:1120:38\n      at async measureStatements (services/main/src/infrastructure/statement-cost.ts:62:37)\n      at async measuredSubmission (services/main/src/modules/disclosure/read.ts:123:40)\n\nAssertionError: expect(received).toContain(expected)\n\nExpected to contain: \"rv:contentPublicationHead ?publicationDecision\"\nReceived: \"PREFIX rv: <https://rezics.com/vocab/>\\n        SELECT ?resource ?head WHERE { VALUES ?resource { <https://rezics.com/id/11111111-1111-4111-8111-111111111111> }\\n          GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:dataEpoch \\\"epoch\\\" ;\\n            rv:routingEpoch \\\"routing\\\" . }\\n          FILTER NOT EXISTS { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:restoreHold true } }\\n          GRAPH <urn:rezics:graph:current> {\\n            { ?resource rv:head ?head }\\n            UNION { ?resource a rv:ZoneHomeDocument ; rv:homeDocumentHead ?head }\\n          }\\n        } LIMIT 2\"\n\n      at query (services/main/tests/search-keywords-excerpts.test.ts:111:23)\n      at currentHeads (services/main/src/modules/disclosure/read.ts:904:38)\n      at services/main/src/modules/disclosure/read.ts:1120:38\n      at async measureStatements (services/main/src/infrastructure/statement-cost.ts:62:37)\n      at async measuredSubmission (services/main/src/modules/disclosure/read.ts:123:40)\n"
+        }
+      ]
+    },
+    {
+      "id": "20261021t102521-3fc944",
+      "xmlSha256": "6520978086d8df9386480d7818112bfab93e212718426773843753ed64f3a8d4",
+      "header": {
+        "name": "bun test",
+        "tests": "28",
+        "assertions": "232",
+        "failures": "0",
+        "skipped": "0",
+        "time": "0.794385557"
+      },
+      "actualCases": 28,
+      "failureElements": 0,
+      "skippedElements": 0,
+      "failures": []
+    },
+    {
+      "id": "20261021t102734-804701",
+      "xmlSha256": "94e572d5f231e6e9b4ec9ad20c35d6a9b49ae33db914873d91b204b59b55458a",
+      "header": {
+        "name": "bun test",
+        "tests": "43",
+        "assertions": "324",
+        "failures": "0",
+        "skipped": "0",
+        "time": "1.048909632"
+      },
+      "actualCases": 43,
+      "failureElements": 0,
+      "skippedElements": 0,
+      "failures": []
+    },
+    {
+      "id": "20261021t104402-e93047",
+      "xmlSha256": "ecbb186dc348af8a13aa797616dd5f2d3206cef912afe950d577f76154ce00cc",
+      "header": {
+        "name": "bun test",
+        "tests": "20",
+        "assertions": "145",
+        "failures": "1",
+        "skipped": "0",
+        "time": "0.767599702"
+      },
+      "actualCases": 20,
+      "failureElements": 1,
+      "skippedElements": 0,
+      "failures": [
+        {
+          "case": {
+            "name": "omitted mode preserves legacy two-point admission while explicit intent admits one point",
+            "classname": "",
+            "time": "0.000529",
+            "file": "services/main/tests/search-keywords-excerpts.test.ts",
+            "line": "189",
+            "assertions": "1"
+          },
+          "failure": "AssertionError: expect(received).toThrow()\n\nReceived function did not throw\nReceived value: {\n  text: \"x\",\n  matchMode: \"phrase\",\n  tokens: [ \"x\" ],\n  lucene: \"\\\"x\\\"\",\n}\n\n      at services/main/tests/search-keywords-excerpts.test.ts:191:36\n"
+        }
+      ]
+    },
+    {
+      "id": "20261021t104546-706814",
+      "xmlSha256": "8e5283d966baf29fb6a276120ec899f32a0041670e1b503b704393234adb8e53",
+      "header": {
+        "name": "bun test",
+        "tests": "45",
+        "assertions": "341",
+        "failures": "0",
+        "skipped": "0",
+        "time": "1.114907135"
+      },
+      "actualCases": 45,
+      "failureElements": 0,
+      "skippedElements": 0,
+      "failures": []
+    }
+  ],
+  "currentLint": {
+    "receiptSha256": "cf41aad37b251c51d902dd5471dc57e55fb436dd1d5fc8ae6e8edb9d4fc026a1",
+    "receipt": {
+      "problem": "continuity-G-2765-attempt-41",
+      "command": "GOAL_ID=audit-remediation-20261019 task goal -- slot -- bun scripts/qa/host-admission.ts --cpu --gib 3 -- node_modules/.bin/oxlint --type-aware --format=unix services packages/model packages/document packages/observability scripts/api scripts/dev scripts/datasets scripts/fixtures scripts/goal scripts/load scripts/operations scripts/observability scripts/package scripts/qa scripts/static tests/qa",
+      "observedHeadAfter": "ba97dc77a2058d3277a45165edaa580821c4530f",
+      "execution": "current live main checkout, unchanged command scope; no suppressions or exclusions added",
+      "exitCode": 0,
+      "diagnostics": [],
+      "toolSession": 17482,
+      "originalFailure": "19 baseline type-aware lint diagnostics, first notification/request-budget.ts:130:81 no-misused-promises",
+      "reusedRepair": "a70bb84b9af6480edb9bd5b649991467803b9663 plus subsequent main changes",
+      "baselinePaths": {
+        "services/main/src/modules/notification/request-budget.ts": {
+          "historicalSha256": "0df5e7c1a290bfeecef6cec8b2a6493a53ab6d610bd98e5d9cfc4cbc0c1a2f8f",
+          "currentSha256": "e991748d02510159ee1cd7695bf9414ba909ac41b609e738dae97c1388e36fe5"
+        },
+        "services/main/tests/credit-retained-reads.test.ts": {
+          "historicalSha256": "2bb1962ca79e85eeb81860f5d3ff0923dc2b0bfa466f9934609119488a09796f",
+          "currentSha256": "a3018c129cc42e6b21f0043ee5b683c9f87c1fc51f1a4912ddcc07250f6d1653"
+        },
+        "services/main/tests/notification-request-budget.test.ts": {
+          "historicalSha256": "8e02afebbb2f8bc521bf69a5717b072850fccbbd5d8ee167369ec3a6ffa37a3f",
+          "currentSha256": "31a2c800169b35d18816af3358c86e3e9265ae432197abede42fb650187af3b7"
+        },
+        "tests/qa/fault-recovery/structured-work-publication-recovery.test.ts": {
+          "historicalSha256": "07bcee58fe7a381840f30acbd377acbcb7980c38c4156ad404e92c9c28f38b92",
+          "currentSha256": "c46d122d528de128cc2dc3b78fe8aa32f3447bd1d5e27fcbb6d2f8633e07d851"
+        },
+        "tests/qa/integration/cancelled-safety-answer-bounds.test.ts": {
+          "historicalSha256": "c217d7daf4a68dd353b49a8c46474ab41c8ce3c1289528d25cc3f4cad578eda4",
+          "currentSha256": "b8421a5f75bb0a1d16403e14c81ba1e8711b3580e8350620298196153088f1b4"
+        },
+        "tests/qa/integration/g-836-sao-public-api.test.ts": {
+          "historicalSha256": "36be68d6b0bb0b7d37a9624ab3f4f86919c136e94103d5dcfb5a9a872e213077",
+          "currentSha256": "fb7d3ab87c722a8589fbf0ae1a05e038d1fef3079fe62af28c0620320993fff3"
+        },
+        "tests/qa/integration/realm-placement-growth.test.ts": {
+          "historicalSha256": "1d9004def5edfb933c94eee4abbfc11fa399d3049dc71159922539942a759e46",
+          "currentSha256": "766867969f30011f16dceddbe6e5487bd98e63e5bd46ff19ba061c9eaad6bf10"
+        }
+      },
+      "limits": "This verifies the original full lint failure on the current checkout. It proves no original D5/D6/native/persona/runtime outcome."
+    },
+    "checkoutBaselinePins": {
+      "services/main/src/modules/notification/request-budget.ts": {
+        "checkoutSha256": "e991748d02510159ee1cd7695bf9414ba909ac41b609e738dae97c1388e36fe5",
+        "historicalSha256": "0df5e7c1a290bfeecef6cec8b2a6493a53ab6d610bd98e5d9cfc4cbc0c1a2f8f",
+        "currentSha256": "e991748d02510159ee1cd7695bf9414ba909ac41b609e738dae97c1388e36fe5"
+      },
+      "services/main/tests/credit-retained-reads.test.ts": {
+        "checkoutSha256": "a3018c129cc42e6b21f0043ee5b683c9f87c1fc51f1a4912ddcc07250f6d1653",
+        "historicalSha256": "2bb1962ca79e85eeb81860f5d3ff0923dc2b0bfa466f9934609119488a09796f",
+        "currentSha256": "a3018c129cc42e6b21f0043ee5b683c9f87c1fc51f1a4912ddcc07250f6d1653"
+      },
+      "services/main/tests/notification-request-budget.test.ts": {
+        "checkoutSha256": "31a2c800169b35d18816af3358c86e3e9265ae432197abede42fb650187af3b7",
+        "historicalSha256": "8e02afebbb2f8bc521bf69a5717b072850fccbbd5d8ee167369ec3a6ffa37a3f",
+        "currentSha256": "31a2c800169b35d18816af3358c86e3e9265ae432197abede42fb650187af3b7"
+      },
+      "tests/qa/fault-recovery/structured-work-publication-recovery.test.ts": {
+        "checkoutSha256": "c46d122d528de128cc2dc3b78fe8aa32f3447bd1d5e27fcbb6d2f8633e07d851",
+        "historicalSha256": "07bcee58fe7a381840f30acbd377acbcb7980c38c4156ad404e92c9c28f38b92",
+        "currentSha256": "c46d122d528de128cc2dc3b78fe8aa32f3447bd1d5e27fcbb6d2f8633e07d851"
+      },
+      "tests/qa/integration/cancelled-safety-answer-bounds.test.ts": {
+        "checkoutSha256": "b8421a5f75bb0a1d16403e14c81ba1e8711b3580e8350620298196153088f1b4",
+        "historicalSha256": "c217d7daf4a68dd353b49a8c46474ab41c8ce3c1289528d25cc3f4cad578eda4",
+        "currentSha256": "b8421a5f75bb0a1d16403e14c81ba1e8711b3580e8350620298196153088f1b4"
+      },
+      "tests/qa/integration/g-836-sao-public-api.test.ts": {
+        "checkoutSha256": "fb7d3ab87c722a8589fbf0ae1a05e038d1fef3079fe62af28c0620320993fff3",
+        "historicalSha256": "36be68d6b0bb0b7d37a9624ab3f4f86919c136e94103d5dcfb5a9a872e213077",
+        "currentSha256": "fb7d3ab87c722a8589fbf0ae1a05e038d1fef3079fe62af28c0620320993fff3"
+      },
+      "tests/qa/integration/realm-placement-growth.test.ts": {
+        "checkoutSha256": "766867969f30011f16dceddbe6e5487bd98e63e5bd46ff19ba061c9eaad6bf10",
+        "historicalSha256": "1d9004def5edfb933c94eee4abbfc11fa399d3049dc71159922539942a759e46",
+        "currentSha256": "766867969f30011f16dceddbe6e5487bd98e63e5bd46ff19ba061c9eaad6bf10"
+      }
+    }
+  }
+}
