@@ -72,6 +72,12 @@ export const registeredHiddenExchangeReads = [
   'GET /v1/compositions/{id}/export',
   'GET /v1/recipes/file-imports/{id}',
 ] as const;
+/** Source's archive route owner test compares another principal's archive with
+ * an absent archive. It proves response equality, not equal owner query counts,
+ * and needs ordered retained bytes outside the read-only integration fixture. */
+export const registeredHiddenArchiveReads = [
+  'POST /v1/sources/archives/{archive}/image-witness',
+] as const;
 /** Work contribution/submission pages compare stranger responses for hidden and
  * absent Work/Realm inputs in work-contribution-pages.test.ts. This is response
  * equality coverage, without a claim of equal owner query counts. */
@@ -84,6 +90,7 @@ export const registeredHiddenIdOperations = [...registeredHiddenIdReads, ...regi
   ...registeredHiddenContentRevisionReads,
   ...registeredHiddenRecipeExportReads,
   ...registeredHiddenExchangeReads,
+  ...registeredHiddenArchiveReads,
   ...registeredHiddenWorkContributionReads,
   ...registeredHiddenIdWrites].sort((left, right) => left.localeCompare(right));
 

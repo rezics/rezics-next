@@ -1,0 +1,1405 @@
+{
+  "format": "rezics-search-intent-outcomes-v1",
+  "rowId": "catalogue/search-intent",
+  "status": "pending",
+  "proof": "No persona is proved by declaration, schema compilation or an expected-failure test exit.",
+  "decisionsSource": ".temp/ref/decisions.md#search-intent",
+  "baseline": {
+    "productRevision": "69eac3ceeaf885be70205a70248bc951e9d81cc9",
+    "pinPolicy": "The original audit tree retained in state is the product baseline; the later nomination cannot replace it. Identify authored specification/test/support overlays, the fixed-wave revision, restored corpus generation and source snapshot independently. A fixture unable to run this original product revision blocks proof rather than advancing the pin.",
+    "status": "not-run",
+    "qaRunId": null,
+    "failingTestBodies": [],
+    "assertionReached": null,
+    "preparationBudgetMs": 600000,
+    "elapsedPreparationMs": null,
+    "blocker": "No command-created search-intent retained source or consistent stopped all-owner backup is staged at .temp/search-intent/corpus-source.json. Without it, beforeAll cannot prove public Character/Concept/discussion/extra-type admission, actual private controls, original rights/publication and frozen revisions. No baseline API run or outcome assertion was attempted.",
+    "pinStatus": "Original audit revision object resolved locally; this corrected future pin has not been executed. No baseline execution checkout or product run is claimed."
+  },
+  "proposal": {
+    "status": "pending-manager-review-before-implementation",
+    "operation": {
+      "method": "POST",
+      "path": "/v1/query",
+      "profile": "resource-search-v1",
+      "exposure": "public",
+      "rateLimitFamily": "search",
+      "bearer": "optional; ordinary public selection, never private-search authority",
+      "idempotencyKey": "not required for this read"
+    },
+    "rationale": "Use a versioned profile on the shared query operation because the existing resource-list-v1 response has a closed kind enum and no field selection, summary or recovery result. Keep existing explicit phrase profiles literal; this proposal adds no new endpoint, private search owner, index or type/provider registry.",
+    "alternatives": [
+      {
+        "choice": "Silently change the resource-list-v1 response",
+        "disposition": "Not selected: clients currently consume its closed card schema and name-only search; the additional result fields and input selectors need explicit review."
+      },
+      {
+        "choice": "Expose engine query syntax or implicit fuzzy search",
+        "disposition": "Not selected: unnecessary syntax and silent broadening would obscure the ordinary task and disclosure boundary."
+      }
+    ],
+    "requestSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "q",
+        "context",
+        "scope"
+      ],
+      "properties": {
+        "profile": {
+          "const": "resource-search-v1"
+        },
+        "q": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "context": {
+          "anyOf": [
+            {
+              "const": "global"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "realm"
+              ],
+              "properties": {
+                "realm": {
+                  "type": "string",
+                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$"
+                }
+              }
+            }
+          ]
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind"
+              ],
+              "properties": {
+                "kind": {
+                  "const": "all"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "realm"
+              ],
+              "properties": {
+                "kind": {
+                  "const": "realm"
+                },
+                "realm": {
+                  "type": "string",
+                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$"
+                }
+              }
+            }
+          ]
+        },
+        "fields": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "title",
+              "body",
+              "credit",
+              "label",
+              "summary"
+            ]
+          }
+        },
+        "language": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 35,
+              "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "filter": {
+          "type": "object",
+          "description": "The existing filter-document-v1 FilterDocument, validated by its owner; no new filter language."
+        },
+        "sort": {
+          "enum": [
+            "relevance",
+            "newest",
+            "updated"
+          ]
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "recovery": {
+          "enum": [
+            "none",
+            "suggest"
+          ]
+        },
+        "cursor": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      }
+    },
+    "responseSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "selection",
+        "items",
+        "nextCursor",
+        "complete",
+        "count",
+        "suggestions",
+        "sourcePosition",
+        "indexGeneration",
+        "stale"
+      ],
+      "properties": {
+        "profile": {
+          "const": "resource-search-v1"
+        },
+        "selection": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "profile",
+            "q",
+            "context",
+            "scope",
+            "fields",
+            "language",
+            "filter",
+            "sort",
+            "limit",
+            "recovery"
+          ],
+          "properties": {
+            "profile": {
+              "const": "resource-search-v1"
+            },
+            "q": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "context": {
+              "anyOf": [
+                {
+                  "const": "global"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "realm"
+                  ],
+                  "properties": {
+                    "realm": {
+                      "type": "string",
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$"
+                    }
+                  }
+                }
+              ]
+            },
+            "scope": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "kind"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "all"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "kind",
+                    "realm"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "realm"
+                    },
+                    "realm": {
+                      "type": "string",
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$"
+                    }
+                  }
+                }
+              ]
+            },
+            "fields": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 5,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "title",
+                  "body",
+                  "credit",
+                  "label",
+                  "summary"
+                ]
+              }
+            },
+            "language": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 35,
+                  "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "filter": {
+              "type": "object",
+              "description": "The existing filter-document-v1 FilterDocument, validated by its owner; no new filter language."
+            },
+            "sort": {
+              "enum": [
+                "relevance",
+                "newest",
+                "updated"
+              ]
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64
+            },
+            "recovery": {
+              "enum": [
+                "none",
+                "suggest"
+              ]
+            }
+          }
+        },
+        "items": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "types",
+              "name",
+              "summary",
+              "summaryStatus",
+              "matchedFields"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$"
+              },
+              "types": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 64,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "name": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "value",
+                  "language",
+                  "direction",
+                  "basis"
+                ],
+                "properties": {
+                  "value": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "language": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 2,
+                        "maxLength": 35,
+                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "direction": {
+                    "enum": [
+                      "ltr",
+                      "rtl"
+                    ]
+                  },
+                  "basis": {
+                    "enum": [
+                      "requested",
+                      "same-script",
+                      "other-script",
+                      "fallback"
+                    ]
+                  }
+                }
+              },
+              "summary": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "value",
+                      "language"
+                    ],
+                    "properties": {
+                      "value": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                      },
+                      "language": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 2,
+                            "maxLength": 35,
+                            "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "summaryStatus": {
+                "enum": [
+                  "available",
+                  "missing",
+                  "unavailable"
+                ]
+              },
+              "matchedFields": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 5,
+                "uniqueItems": true,
+                "items": {
+                  "enum": [
+                    "title",
+                    "body",
+                    "credit",
+                    "label",
+                    "summary"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "nextCursor": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "complete": {
+          "type": "boolean"
+        },
+        "count": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "kind"
+          ],
+          "properties": {
+            "value": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "kind": {
+              "enum": [
+                "exact",
+                "at-least"
+              ]
+            }
+          }
+        },
+        "suggestions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "items"
+          ],
+          "properties": {
+            "status": {
+              "enum": [
+                "not-requested",
+                "complete",
+                "unavailable"
+              ]
+            },
+            "items": {
+              "type": "array",
+              "maxItems": 3,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "q",
+                  "kind",
+                  "request"
+                ],
+                "properties": {
+                  "q": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "kind": {
+                    "const": "spelling"
+                  },
+                  "request": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "profile",
+                      "q",
+                      "context",
+                      "scope",
+                      "fields",
+                      "language",
+                      "filter",
+                      "sort",
+                      "limit",
+                      "recovery"
+                    ],
+                    "properties": {
+                      "profile": {
+                        "const": "resource-search-v1"
+                      },
+                      "q": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "context": {
+                        "anyOf": [
+                          {
+                            "const": "global"
+                          },
+                          {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "realm"
+                            ],
+                            "properties": {
+                              "realm": {
+                                "type": "string",
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "scope": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "kind"
+                            ],
+                            "properties": {
+                              "kind": {
+                                "const": "all"
+                              }
+                            }
+                          },
+                          {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "kind",
+                              "realm"
+                            ],
+                            "properties": {
+                              "kind": {
+                                "const": "realm"
+                              },
+                              "realm": {
+                                "type": "string",
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "fields": {
+                        "type": "array",
+                        "minItems": 1,
+                        "maxItems": 5,
+                        "uniqueItems": true,
+                        "items": {
+                          "enum": [
+                            "title",
+                            "body",
+                            "credit",
+                            "label",
+                            "summary"
+                          ]
+                        }
+                      },
+                      "language": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 2,
+                            "maxLength": 35,
+                            "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "filter": {
+                        "type": "object",
+                        "description": "The existing filter-document-v1 FilterDocument, validated by its owner; no new filter language."
+                      },
+                      "sort": {
+                        "enum": [
+                          "relevance",
+                          "newest",
+                          "updated"
+                        ]
+                      },
+                      "limit": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 64
+                      },
+                      "recovery": {
+                        "const": "none"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "sourcePosition": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "dataEpoch",
+            "sequence"
+          ],
+          "properties": {
+            "dataEpoch": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sequence": {
+              "type": "string",
+              "minLength": 1
+            },
+            "dependencyToken": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "indexGeneration": {
+          "type": "string",
+          "minLength": 1
+        },
+        "stale": {
+          "const": false
+        }
+      }
+    },
+    "defaults": {
+      "fields": [
+        "title",
+        "body",
+        "credit",
+        "label",
+        "summary"
+      ],
+      "language": null,
+      "filter": {
+        "all": []
+      },
+      "sort": "relevance",
+      "limit": 20,
+      "recovery": "none"
+    },
+    "semantics": [
+      "All unquoted keywords must match one admitted public resource across the selected fields; order and adjacency are irrelevant. Match existence, rather than relative ranking or engine tokenization, is the assertion.",
+      "ASCII double quotes group a contiguous ordered phrase inside one field. Multiple unquoted terms and quoted spans are conjunctive. Backslash escapes a literal quote or backslash. An unmatched quote is 400 invalid_query; no regex, wildcard, boolean or field-operator language is introduced.",
+      "Preserve the caller's q verbatim in selection, including quote syntax and Unicode. Canonically equivalent composed/decomposed text finds the same records. CJK and one-character text remain searchable. No transliteration, accent stripping or compatibility folding is required.",
+      "title, body and credit retain their existing meanings; label is the admitted public name of any resource and summary is its admitted description. Unquoted terms may span selected fields; a quoted phrase never spans fields. language selects matching text language, independently of UI locale or display preferences.",
+      "Scope is all/global or realm with the same Context realm. Reuse filter-document-v1 type, Concept and language constraints with their existing interpretation and revision semantics. No server default clears filters when q changes.",
+      "Eligibility, names, descriptions, types and discussion labels come from shared admitted capabilities and live disclosure. A new type/provider must not require a search branch. rdf:type, membership, ownership, moderation and platform roles supply no public search authority.",
+      "Each item is one logical resource identity, without duplicate aliases or support rows. Same-named Character records retain their distinct identities and useful admitted summaries. Known identity/name/types survive absent optional description with summary null and summaryStatus missing. unavailable means a known description dependency failed; it cannot fabricate a summary or change identity.",
+      "complete describes traversal, not descriptive metadata completeness. A final page has nextCursor null, complete true and exact count. A continuing page has complete false and an honest exact or at-least count over admitted results. There is no fixed result-window product cap.",
+      "Opaque cursors bind q including quotes, selected fields, language, filter/semantic revisions, sort, Context, scope, page limit and public presentation/read basis. Reusing one after changing a selector refuses explicitly. Private changes alone must not reveal a hidden identity or create a new invalidation signal.",
+      "recovery none returns suggestions status not-requested with no items and never corrects q. recovery suggest returns at most three explicit spelling requests; original results still answer the original q. A suggestion's request preserves every effective selector, substitutes q, drops cursor and uses recovery none.",
+      "Every suggestion is supported by a record and matching text that the caller may publicly search under the exact fields/language/filter/scope. Applying it is a separate client request. No hidden label, prefix, fragment, source ID, count or private metadata may appear in results, counts, summaries or recovery.",
+      "Suggestion-only unavailability is suggestions status unavailable with no items while independent exact results survive. Search/read-basis unavailability remains 503; it is never a successful empty catalogue. This spec does not select a ranking, correction algorithm or index."
+    ],
+    "errors": [
+      {
+        "status": 400,
+        "code": "invalid_query",
+        "when": "Empty/over-80-character/control-character q or unmatched quote; parser rejection, not successful empty."
+      },
+      {
+        "status": 400,
+        "code": "invalid_request",
+        "when": "Unknown/duplicate fields, malformed envelope, invalid page bounds; keep standard transport validation."
+      },
+      {
+        "status": 400,
+        "code": "invalid_work_read",
+        "when": "Malformed cursor or an issued cursor with changed selectors; reuse the existing cursor binding refusal."
+      },
+      {
+        "status": 409,
+        "code": "read_basis_changed",
+        "when": "Issued cursor's public result/read basis expires or moves; explicit first-page restart and no hidden metadata."
+      },
+      {
+        "status": 404,
+        "code": "work_unavailable",
+        "when": "Realm unavailable to the public selection; same standard problem for absent or private Realm."
+      },
+      {
+        "status": 422,
+        "code": "work_read_budget_exceeded",
+        "when": "Search exceeds its owning fixed work/read budget."
+      },
+      {
+        "status": 503,
+        "code": "work_read_unavailable",
+        "when": "Required search/name/disclosure owner unavailable; no successful empty substitution."
+      }
+    ],
+    "catalogueAdapter": {
+      "method": "GET",
+      "path": "/v1/search/catalogue",
+      "request": "Keep q, language, author, realm, limit and cursor. q admits one character and uses the same keyword/quote meaning. Existing author/language/Realm selectors remain bound. This Work result adapter need not return Character or Concept resources.",
+      "response": "Retain public-catalogue-ranked-v1, resultGrain mainVersion, ranked retrieval, current result cards, count precision, population, next, context, indexGeneration and sourcePosition. No new response member is required for this adapter; explicit recovery and generic named results use resource-search-v1.",
+      "legacyPhraseProfiles": "/v1/queries and /v1/queries/page explicitly named phrase continue to mean phrase; they are not silently reinterpreted as ordinary q."
+    },
+    "example": {
+      "request": {
+        "profile": "resource-search-v1",
+        "q": "amber lantern",
+        "context": {
+          "realm": "https://rezics.com/id/00000000-0000-4000-8000-000000000001"
+        },
+        "scope": {
+          "kind": "realm",
+          "realm": "https://rezics.com/id/00000000-0000-4000-8000-000000000001"
+        },
+        "fields": [
+          "title"
+        ],
+        "language": "en",
+        "filter": {
+          "all": []
+        },
+        "sort": "relevance",
+        "limit": 1,
+        "recovery": "none"
+      },
+      "response": "Validate against responseSchema. IDs and cursor bytes are supplied only by the real command-created corpus; no fabricated successful response is retained."
+    },
+    "typeaheadAdapter": {
+      "method": "GET",
+      "path": "/v1/search/typeahead",
+      "request": "Keep prefix and optional language with the existing ten-item bound.",
+      "response": "Current public-work-typeahead-v1 items/hasMore/sourcePosition. Hidden Work/Concept/discussion labels cannot be returned through a public prefix; this contract does not require expanding the current Work-only adapter into generic resources."
+    }
+  },
+  "fixturePlan": {
+    "descriptor": ".temp/search-intent/corpus-source.json",
+    "environment": "REZICS_SEARCH_INTENT_CORPUS",
+    "format": "rezics-retained-source-v1 with metadata.format search-intent-corpus-v1",
+    "namespace": "si followed by 8 lowercase hex digits; replace {ns} only. Keep the source manifest private (0600) because retained personas contain sign-in material.",
+    "lifecycle": "Prepare once through public commands on an isolated persistent QA stack at the pinned product revision. Keep one consistent stopped all-owner backup through the existing retained-source/corpus-backup lifecycle. The test consumes that retained source and restores its own isolated copy with createCorpusBackupDriver, migrates it and signs in through restorePersonaRealms. The existing driver measures restore/startup/migrations/API smoke. Never use a shared dev stack, raw graph/SQL fixture records or invented successful source data.",
+    "budget": "600000 ms per complete preparation/restore including startup, migrations, readiness, API smoke and the stopped backup; exceedance is a setup blocker.",
+    "records": [
+      {
+        "key": "adjacent",
+        "name": "{ns} amber lantern",
+        "language": "en",
+        "types": [
+          "https://schema.org/Book"
+        ],
+        "summary": null,
+        "body": "Original public text about a quiet garden.",
+        "visibility": "public",
+        "placement": "public-realm",
+        "capabilities": [
+          "named",
+          "searchable"
+        ],
+        "creditText": null
+      },
+      {
+        "key": "separated",
+        "name": "{ns} amber quiet lantern",
+        "language": "en",
+        "types": [
+          "https://schema.org/Book"
+        ],
+        "summary": null,
+        "body": "Original public text about a quiet garden.",
+        "visibility": "public",
+        "placement": "public-realm",
+        "capabilities": [
+          "named",
+          "searchable"
+        ],
+        "creditText": null
+      },
+      {
+        "key": "reversed",
+        "name": "{ns} lantern amber",
+        "language": "en",
+        "types": [
+          "https://schema.org/Book"
+        ],
+        "summary": null,
+        "body": "Original public text about a quiet garden.",
+        "visibility": "public",
+        "placement": "public-realm",
+        "capabilities": [
+          "named",
+          "searchable"
+        ],
+        "creditText": null
+      },
+      {
+        "key": "missingTerm",
+        "name": "{ns} amber",
+        "language": "en",
+        "types": [
+          "https://schema.org/Book"
+        ],
+        "summary": null,
+        "body": "Original public text about a quiet garden.",
+        "visibility": "public",
+        "placement": "public-realm",
+        "capabilities": [
+          "named",
+          "searchable"
+        ],
+        "creditText": null
+      },
+      {
+        "key": "foreign",
+        "name": "{ns} amber lantern",
+        "language": "ja",
+        "types": [
+          "https://schema.org/Book"
+        ],
+        "summary": null,
+        "body": "Original public text about a quiet garden.",
+        "visibility": "public",
+        "placement": "public-realm",
+        "capabilities": [
+          "named",
+          "searchable"
+        ],
+        "creditText": null
+      },
+      {
+        "key": "outsideRealm",
+        "name": "{ns} amber lantern",
+        "language": "en",
+        "types": [
+          "https://schema.org/Book"
+        ],
+        "summary": null,
+        "body": "Original public text about a quiet garden.",
+        "visibility": "public",
+        "placement": "global-only",
+        "capabilities": [
+          "named",
+          "searchable"
+        ],
+        "creditText": null
+      },
+      {
+        "key": "privateDraft",
+        "name": "{ns} amber lantern secretcatalogue",
+        "language": "en",
+        "types": [
+          "https://schema.org/Book"
+        ],
+        "summary": null,
+        "body": "{ns} shadowlight private original draft.",
+        "visibility": "private",
+        "placement": "none",
+        "capabilities": [
+          "named",
+          "searchable"
+        ],
+        "creditText": null
+      },
+      {
+        "key": "bodyOnly",
+        "name": "{ns} field control",
+        "language": "en",
+        "types": [
+          "https://schema.org/Book"
+        ],
+        "summary": null,
+        "body": "{ns} cobalt otter",
+        "visibility": "public",
+        "placement": "public-realm",
+        "capabilities": [
+          "named",
+          "searchable"
+        ],
+        "creditText": null
+      },
+      {
+        "key": "titleOnly",
+        "name": "{ns} cobalt otter",
+        "language": "en",
+        "types": [
+          "https://schema.org/Book"
+        ],
+        "summary": null,
+        "body": "Original public text about a quiet garden.",
+        "visibility": "public",
+        "placement": "public-realm",
+        "capabilities": [
+          "named",
+          "searchable"
+        ],
+        "creditText": null
+      },
+      {
+        "key": "crossField",
+        "name": "{ns} cobalt",
+        "language": "en",
+        "types": [
+          "https://schema.org/Book"
+        ],
+        "summary": null,
+        "body": "otter",
+        "visibility": "public",
+        "placement": "public-realm",
+        "capabilities": [
+          "named",
+          "searchable"
+        ],
+        "creditText": null
+      },
+      {
+        "key": "unicode",
+        "name": "{ns} café résumé",
+        "language": "fr",
+        "types": [
+          "https://schema.org/Book"
+        ],
+        "summary": null,
+        "body": "Original public text about a quiet garden.",
+        "visibility": "public",
+        "placement": "public-realm",
+        "capabilities": [
+          "named",
+          "searchable"
+        ],
+        "creditText": null
+      },
+      {
+        "key": "japanese",
+        "name": "{ns} 星の旅",
+        "language": "ja",
+        "types": [
+          "https://schema.org/Book"
+        ],
+        "summary": null,
+        "body": "Original public text about a quiet garden.",
+        "visibility": "public",
+        "placement": "public-realm",
+        "capabilities": [
+          "named",
+          "searchable"
+        ],
+        "creditText": null
+      },
+      {
+        "key": "chinese",
+        "name": "{ns} 山海",
+        "language": "zh-Hant",
+        "types": [
+          "https://schema.org/Book"
+        ],
+        "summary": null,
+        "body": "Original public text about a quiet garden.",
+        "visibility": "public",
+        "placement": "public-realm",
+        "capabilities": [
+          "named",
+          "searchable"
+        ],
+        "creditText": null
+      },
+      {
+        "key": "oneCharacter",
+        "name": "{ns} x",
+        "language": "en",
+        "types": [
+          "https://schema.org/Book"
+        ],
+        "summary": null,
+        "body": "Original public text about a quiet garden.",
+        "visibility": "public",
+        "placement": "public-realm",
+        "capabilities": [
+          "named",
+          "searchable"
+        ],
+        "creditText": null
+      },
+      {
+        "key": "nonUiLanguage",
+        "name": "{ns} safari njema",
+        "language": "sw",
+        "types": [
+          "https://schema.org/Book"
+        ],
+        "summary": null,
+        "body": "Original public text about a quiet garden.",
+        "visibility": "public",
+        "placement": "public-realm",
+        "capabilities": [
+          "named",
+          "searchable"
+        ],
+        "creditText": null
+      },
+      {
+        "key": "characterKeeper",
+        "name": "{ns} Mira",
+        "language": "en",
+        "types": [
+          "https://rezics.com/vocab/Character"
+        ],
+        "summary": "An original bridge keeper in the amber valley.",
+        "body": null,
+        "visibility": "public",
+        "placement": "public-realm",
+        "capabilities": [
+          "named",
+          "described",
+          "searchable"
+        ],
+        "creditText": null
+      },
+      {
+        "key": "characterArchivist",
+        "name": "{ns} Mira",
+        "language": "en",
+        "types": [
+          "https://rezics.com/vocab/Character"
+        ],
+        "summary": "An original archivist in the northern library.",
+        "body": null,
+        "visibility": "public",
+        "placement": "public-realm",
+        "capabilities": [
+          "named",
+          "described",
+          "searchable"
+        ],
+        "creditText": null
+      },
+      {
+        "key": "concept",
+        "name": "{ns} astronomy",
+        "language": "en",
+        "types": [
+          "http://www.w3.org/2004/02/skos/core#Concept"
+        ],
+        "summary": "The study of stars in this original fixture vocabulary.",
+        "body": null,
+        "visibility": "public",
+        "placement": "public-realm",
+        "capabilities": [
+          "named",
+          "described",
+          "searchable"
+        ],
+        "creditText": null
+      },
+      {
+        "key": "discussion",
+        "name": "{ns} astronomy club",
+        "language": "en",
+        "types": [
+          "https://rezics.com/vocab/MemberReply"
+        ],
+        "summary": "An original discussion about choosing a telescope.",
+        "body": "An original discussion about choosing a telescope.",
+        "visibility": "public",
+        "placement": "public-realm",
+        "capabilities": [
+          "named",
+          "described",
+          "searchable",
+          "discussion"
+        ],
+        "creditText": null
+      },
+      {
+        "key": "additionalType",
+        "name": "{ns} beacon",
+        "language": "en",
+        "types": [
+          "https://example.test/search-intent/Beacon"
+        ],
+        "summary": "An original coastal signal with an admitted named capability.",
+        "body": null,
+        "visibility": "public",
+        "placement": "public-realm",
+        "capabilities": [
+          "named",
+          "described",
+          "searchable"
+        ],
+        "creditText": null
+      },
+      {
+        "key": "incomplete",
+        "name": "{ns} fogwatch",
+        "language": "en",
+        "types": [
+          "https://rezics.com/vocab/Character"
+        ],
+        "summary": null,
+        "body": null,
+        "visibility": "public",
+        "placement": "public-realm",
+        "capabilities": [
+          "named",
+          "searchable"
+        ],
+        "creditText": null
+      },
+      {
+        "key": "hiddenConcept",
+        "name": "{ns} shadowlight",
+        "language": "en",
+        "types": [
+          "http://www.w3.org/2004/02/skos/core#Concept"
+        ],
+        "summary": "Private vocabulary label.",
+        "body": null,
+        "visibility": "private",
+        "placement": "private-realm",
+        "capabilities": [
+          "named",
+          "searchable"
+        ],
+        "creditText": null
+      },
+      {
+        "key": "hiddenDiscussion",
+        "name": "{ns} shadowlight meeting",
+        "language": "en",
+        "types": [
+          "https://rezics.com/vocab/MemberReply"
+        ],
+        "summary": "Private discussion label.",
+        "body": "Private discussion text.",
+        "visibility": "private",
+        "placement": "private-realm",
+        "capabilities": [
+          "named",
+          "described",
+          "searchable",
+          "discussion"
+        ],
+        "creditText": null
+      },
+      {
+        "key": "creditOnly",
+        "name": "{ns} credit control",
+        "language": "en",
+        "types": [
+          "https://schema.org/Book"
+        ],
+        "summary": null,
+        "body": "Original public text about a quiet garden.",
+        "visibility": "public",
+        "placement": "public-realm",
+        "capabilities": [
+          "named",
+          "searchable"
+        ],
+        "creditText": "{ns} creditkeeper"
+      }
+    ],
+    "requiredCommands": [
+      {
+        "capability": "Public and private Works",
+        "operations": [
+          "POST /v1/works metadata-only-v1",
+          "POST /v1/contributions text-contribution-v1",
+          "POST /v1/contribution-publications text-publication-v1 with original-contribution/public",
+          "POST /v1/publication-selections main-default-selection-v1",
+          "POST /v1/publication-selections realm-local-selection-v1"
+        ],
+        "control": "Do not publish/select privateDraft. Verify an owner-only non-null draft read and anonymous 404 before proof. Keep outsideRealm globally public without public-Realm adoption."
+      },
+      {
+        "capability": "Public native credit",
+        "operations": [
+          "POST /v1/agents agent-provision-v1",
+          "POST /v1/works/{id}/agent-credits native-agent-credit-v1"
+        ],
+        "control": "Publish the retained creditkeeper display name through the existing Agent owner, attach the exact credit and verify it through GET /v1/works/{id}/credits before proof. Do not put the credit name in the Work title or body."
+      },
+      {
+        "capability": "Character and additional admitted named resource",
+        "operations": [
+          "POST /v1/semantic/changes semantic-change-v1"
+        ],
+        "control": "Admit named/description/search capabilities through their existing owners and relate to a genuinely public fixture Work under current semantic disclosure. The additionalType must first be accepted by the existing type admission owner; this test neither adds a whitelist nor registers a new mechanism. Missing admission is a setup blocker."
+      },
+      {
+        "capability": "Concept",
+        "operations": [
+          "POST /v1/classification/propositions",
+          "Existing shared Context/adoption and public Concept disclosure commands"
+        ],
+        "control": "Keep the hidden Concept under the private Realm's actual authorization. A label-only semantic triple is not proof of public admission."
+      },
+      {
+        "capability": "Discussion",
+        "operations": [
+          "POST /v1/member-reply-drafts",
+          "POST /v1/realm-replies",
+          "POST /v1/realm-reply-placements"
+        ],
+        "control": "Create a real public root, original body and public placement; obtain the label/summary from the admitted discussion capability. Mirror with a real private Realm placement. Missing label admission is a fixture blocker, not permission to fabricate one."
+      },
+      {
+        "capability": "Incomplete description",
+        "operations": [
+          "POST /v1/semantic/changes semantic-change-v1 with admitted name and no description"
+        ],
+        "control": "Prove a public non-null name/type read, no description, and a separate missing-resource 404. Name/body fallbacks are not summaries."
+      },
+      {
+        "capability": "Fixture authority",
+        "operations": [
+          "grantFixtureAuthority"
+        ],
+        "control": "Only scoped authority for preparation where the existing harness requires it. Never direct-write Access grants; never widen ordinary public search for any persona."
+      }
+    ],
+    "prerequisites": [
+      "A fixture owner supplies the real stopped-backup/source manifest and all 24 record identities/revisions/read paths, retained public/private Persona Realms, source key and build timings in the private source descriptor.",
+      "Each record binding includes real successful command evidence files and SHA-256 digests under .temp; beforeAll checks command identities and live public/private name/type/revision reads after restoring. Public success must be a non-null read of the frozen revision.",
+      "The producer supplies exact scoped admission for the extra named type and discussion label. If current APIs cannot admit one, record the actual refused operation/status as fixture premise evidence and return it to the manager.",
+      "The baseline runner must execute a pristine product checkout at baseline.productRevision while overlaying only this declaration/test/matrix; the ordinary goalctl test command has no --at flag. Pin and record the product paths before running the one named SEARCH01 selection."
+    ],
+    "sourceMetadata": {
+      "format": "search-intent-corpus-v1",
+      "namespace": "si followed by 8 lowercase hex digits",
+      "realms": "Two RetainedPersonaRealm records in public/private order, with the original Account issuer and OAuth clients. These are private source data, never checked into the matrix.",
+      "records": "An object keyed by fixturePlan.records[*].key, exactly one binding per distinct resource identity.",
+      "binding": {
+        "id": "Native resource IRI",
+        "revision": "Exact frozen revision coordinate as returned by its owning API: native IRI or revision UUID",
+        "readPath": "Existing /v1/ public read path for this capability; no search proposal request used as setup evidence",
+        "namePointer": "JSON pointer to the actual admitted name string",
+        "typesPointer": "JSON pointer to the actual admitted types array",
+        "summaryPointer": "JSON pointer to admitted description text, or an absent/null description for the incomplete control",
+        "revisionPointer": "JSON pointer to the actual frozen revision",
+        "owner": "public or private: selects the retained owner for the explicit private control",
+        "evidence": [
+          {
+            "path": ".temp/... command receipt JSON",
+            "sha256": "SHA-256 of the real bytes"
+          }
+        ]
+      },
+      "commandEvidence": "Each retained evidence JSON has method, path, 2xx status and answer containing the real bound identity. Publication/placement evidence also remains with the source; never invent a successful command receipt.",
+      "sourceEnvelope": "Existing rezics-retained-source-v1. specification.inputs.corpusOrigin is public-api-command-created; provenance.producerRevision is the real 40-character producer head; provenance.elapsedMs is measured complete preparation <=600000; provenance.backupPath is the stopped all-owner backup manifest under this worktree .temp. Its existing lifecycle retains integrity/custody evidence."
+    }
+  },
+  "personas": {
+    "visitor": {
+      "state": "pending",
+      "apiFile": "tests/qa/integration/outcomes/catalogue/search-intent.test.ts",
+      "selection": "SEARCH01",
+      "assertionReached": false,
+      "proof": null,
+      "authority": "Signed out; only public catalogue resources.",
+      "controls": "Public query, exact/typo hidden-name suppression, real private Work/Concept/discussion absence and incomplete description."
+    },
+    "stranger": {
+      "state": "pending",
+      "apiFile": "tests/qa/integration/outcomes/catalogue/search-intent.test.ts",
+      "selection": "SEARCH01",
+      "assertionReached": false,
+      "proof": null,
+      "authority": "Signed in, outside the public fixture Realm.",
+      "controls": "Same public population as visitor; credentials cannot widen labels, summaries or suggestions."
+    },
+    "member": {
+      "state": "pending",
+      "apiFile": "tests/qa/integration/outcomes/catalogue/search-intent.test.ts",
+      "selection": "SEARCH01",
+      "assertionReached": false,
+      "proof": null,
+      "authority": "Public Realm member.",
+      "controls": "Membership preserves scope but does not admit a private draft, Concept or discussion into ordinary public search."
+    },
+    "owner": {
+      "state": "pending",
+      "apiFile": "tests/qa/integration/outcomes/catalogue/search-intent.test.ts",
+      "selection": "SEARCH01",
+      "assertionReached": false,
+      "proof": null,
+      "authority": "Fixture owner Person.",
+      "controls": "Separate explicit actingSubject reads prove the private Work exists; ordinary public search still excludes all private fixtures."
+    },
+    "moderator": {
+      "state": "pending",
+      "apiFile": "tests/qa/integration/outcomes/catalogue/search-intent.test.ts",
+      "selection": "SEARCH01",
+      "assertionReached": false,
+      "proof": null,
+      "authority": "Public Realm moderator.",
+      "controls": "Real moderation assignment; no private labels/counts/suggestions or additional catalogue scope."
+    },
+    "operator": {
+      "state": "pending",
+      "apiFile": "tests/qa/integration/outcomes/catalogue/search-intent.test.ts",
+      "selection": "SEARCH01",
+      "assertionReached": false,
+      "proof": null,
+      "authority": "Platform administrator.",
+      "controls": "Real platform assignment; ordinary public search follows the same disclosure boundary."
+    }
+  },
+  "prove": {
+    "file": "tests/qa/integration/outcomes/catalogue/search-intent.test.ts",
+    "selection": "SEARCH01",
+    "command": "bun scripts/goal/goalctl.ts test tests/qa/integration/outcomes/catalogue/search-intent.test.ts -t SEARCH01",
+    "groups": [
+      "catalogue adapter keywords/quotes/one-character + language/author/Realm-bound continuation",
+      "ordinary keywords and quoted/mixed spans",
+      "Unicode NFC/NFD, Japanese, Chinese, one-character and non-UI language",
+      "title/body/credit/label/summary selection and preserved filters",
+      "Character/Concept/discussion/additional admitted type and disambiguating summaries",
+      "real private and incomplete controls + leak-free bounded opt-in recovery",
+      "full traversal beyond one page and selector-bound refusal"
+    ],
+    "interpretation": "All six declarations remain pending. outcomeTest uses test.failing for pending cells; a zero process exit is not a fixed pass. Baseline evidence must name each reached assertion; setup/validation/refusal in beforeAll is not a product failure. Do not record answers or edit another author's assertions.",
+    "browserFollowup": "Consumer must preserve all advanced selectors when editing q and render explicit correction confirmation. This API spec asserts the returned replacement request; it does not prove rendered UI behavior or authorize a browser run."
+  },
+  "research": [
+    {
+      "url": "https://www.elastic.co/docs/reference/query-languages/query-dsl/query-dsl-query-string-query",
+      "reviewed": "2026-10-19",
+      "finding": "Primary engine documentation distinguishes unquoted terms from ordered quoted phrases and warns that full query syntax is strict for search boxes.",
+      "decision": "Only quoted spans and literal keywords are proposed. All-keyword conjunction is the local manager decision, not an inferred engine default; no engine grammar or implementation is mandated."
+    },
+    {
+      "url": "https://www.elastic.co/docs/reference/elasticsearch/rest-apis/search-suggesters",
+      "reviewed": "2026-10-19",
+      "finding": "Primary documentation describes bounded suggestions and checking a suggested query for matching documents.",
+      "decision": "Inference for this product: suggestions must be validated against the same public selection and applied only by an explicit second request. Vendor documentation does not establish REZICS disclosure safety or latency."
+    },
+    {
+      "url": "https://www.unicode.org/reports/tr15/",
+      "reviewed": "2026-10-19",
+      "finding": "Unicode distinguishes canonical equivalence from weaker compatibility equivalence.",
+      "decision": "Require canonically equivalent q to find the same fixture; do not prescribe a normalizer, transliteration or compatibility folding."
+    },
+    {
+      "url": "https://google.aip.dev/158",
+      "reviewed": "2026-10-19",
+      "finding": "Primary API pagination guidance binds continuation to the original request parameters.",
+      "decision": "Retain the existing opaque-cursor owner; changing q or selectors requires restart. This source does not choose REZICS error codes or authorize disclosure."
+    }
+  ],
+  "nonGoals": [
+    "No native index or search algorithm changes.",
+    "No product/UI modifications, new capture, browser server, shared dev writes, full suite or automatic landing.",
+    "No registry enrollment by this author; the registry owner enrolls the pending row separately."
+  ]
+}

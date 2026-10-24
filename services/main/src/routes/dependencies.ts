@@ -227,6 +227,7 @@ export interface MainWorkDependencies {
   eligibleOrgMemberSet?: AccessEligibleOrgMemberSet;
   roles?: AccessRoles;
   sourceIntake?: SourceIntakeStore;
+  sourceArchives?: Pick<import('../modules/source/archive-evidence.ts').SourceArchiveEvidenceOwner, 'admit' | 'verify'>;
   sourceAuthorNames?: SourceAuthorNameStore;
   recipeSourceConversions?: RecipeSourceConversionStore;
   sourceAcquisitions?: SourceAcquisitionServices;

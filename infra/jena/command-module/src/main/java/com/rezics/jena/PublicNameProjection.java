@@ -115,12 +115,70 @@ final class PublicNameProjection {
         if (!listedPublic(data, resource, true)) return null;
         if (type(data, resource, RV + "Zone")) {
             Node space = one(data, resource, "space"), realm = space == null ? null : one(data, space, "realmCapability");
-            return has(data, resource, "zoneState", p("Active")) && realm != null && listedPublic(data, space, true) && publicRealm(data, realm) ? "site" : null;
+            return listedPublic(data, resource, true) && has(data, resource, "zoneState", p("Active"))
+                && realm != null && listedPublic(data, space, true) && publicRealm(data, realm) ? "site" : null;
         }
-        if (type(data, resource, RV + "Collection")) return has(data, resource, "collectionState", p("Active")) ? "collection" : null;
-        if (type(data, resource, RV + "Space")) return one(data, resource, "realmCapability") == null
+        if (type(data, resource, RV + "Collection")) return listedPublic(data, resource, true)
+            && has(data, resource, "collectionState", p("Active")) ? "collection" : null;
+        if (type(data, resource, RV + "Space")) return listedPublic(data, resource, true) && one(data, resource, "realmCapability") == null
             && one(data, resource, "zoneCapability") == null ? "space" : null;
-        return null;
+        // Semantic and Content components bind one generic source. Descriptive
+        // classes, including extensions, never select a collector or authority.
+        return publicSemanticResource(data, resource) || publicPost(data, resource) ? "resource" : null;
+    }
+    private static boolean publicSemanticResource(DatasetGraph data, Node resource) {
+        Node head = exactlyOne(data, CURRENT, resource, "semanticHead");
+        if (head == null || !data.contains(REVISIONS, head, RDF.type.asNode(), p("SemanticRevision"))
+            || !data.contains(REVISIONS, head, RDF.type.asNode(), p("RevisionAnchor"))
+            || !resource.equals(exactlyOne(data, REVISIONS, head, "component"))
+            || !p("Active").equals(exactlyOne(data, REVISIONS, head, "lifecycle"))
+            || !listedPublic(data, resource, false)) return false;
+        var works = data.find(CURRENT, resource, p("semanticWork"), Node.ANY);
+        try { for (int count = 0; works.hasNext(); count++) {
+            if (count == 256) throw new IllegalArgumentException("semantic assertions exceed their admitted bound");
+            Node work = works.next().getObject(), main = exactlyOne(data, CURRENT, work, "mainVersion");
+            if (productResource(work) && !withdrawn(data, work) && type(data, work, "https://schema.org/CreativeWork")
+                && main != null && type(data, main, RV + "MainVersion") && has(data, main, "work", work)
+                && unerasedContent(data, work)
+                && (has(data, work, "catalogueVisible", NodeFactory.createLiteralByValue(true,
+                    org.apache.jena.datatypes.xsd.XSDDatatype.XSDboolean)) || publishedWork(data, work))) return true;
+        } } finally { org.apache.jena.atlas.iterator.Iter.close(works); }
+        return false;
+    }
+    private static boolean publicPost(DatasetGraph data, Node resource) {
+        if (!type(data, resource, RV + "Post") || one(data, resource, "head") == null
+            || !listedPublic(data, resource, false) || !unerasedContent(data, resource)) return false;
+        var variants = data.find(CURRENT, Node.ANY, p("resource"), resource);
+        try { while (variants.hasNext()) {
+            Node variant = variants.next().getSubject();
+            if (!type(data, variant, RV + "ContentVariant")) continue;
+            Node publication = exactlyOne(data, CURRENT, variant, "contentPublicationHead"),
+                eligibility = exactlyOne(data, CURRENT, variant, "publicSearchEligibilityHead");
+            Node revision = publication == null ? null : exactlyOne(data, REVISIONS, publication, "contentRevision");
+            if (publication != null && eligibility != null
+                && CommandService.contentPublicationPublishable(data, publication)
+                && variant.equals(exactlyOne(data, REVISIONS, publication, "component"))
+                && resource.equals(exactlyOne(data, REVISIONS, publication, "resource"))
+                && revision != null && !data.contains(REVISIONS, revision, RDF.type.asNode(), p("ErasedRevision"))
+                && data.contains(REVISIONS, eligibility, RDF.type.asNode(), p("ContentSearchEligibilityDecision"))
+                && variant.equals(exactlyOne(data, REVISIONS, eligibility, "component"))
+                && variant.equals(exactlyOne(data, REVISIONS, eligibility, "variant"))
+                && resource.equals(exactlyOne(data, REVISIONS, eligibility, "resource"))
+                && publication.equals(exactlyOne(data, REVISIONS, eligibility, "publicationDecision"))
+                && p("Public").equals(exactlyOne(data, REVISIONS, eligibility, "disclosure"))) return true;
+        } } finally { org.apache.jena.atlas.iterator.Iter.close(variants); }
+        return false;
+    }
+    /** Mirror publicWork/publicPost's erasure fence for every current Content
+     * publication, including a retained erased sibling of a live variant. */
+    private static boolean unerasedContent(DatasetGraph data, Node resource) {
+        var variants = data.find(CURRENT, Node.ANY, p("resource"), resource);
+        try { while (variants.hasNext()) {
+            Node publication = one(data, variants.next().getSubject(), "contentPublicationHead");
+            Node revision = publication == null ? null : exactlyOne(data, REVISIONS, publication, "contentRevision");
+            if (revision != null && data.contains(REVISIONS, revision, RDF.type.asNode(), p("ErasedRevision"))) return false;
+        } } finally { org.apache.jena.atlas.iterator.Iter.close(variants); }
+        return true;
     }
     /** Native candidate half of Access's public semantic read. Descriptive
      * types never establish publication; the active component and its public
@@ -920,6 +978,11 @@ final class PublicNameProjection {
             Node realm = space == null ? null : one(data, space, "realmCapability");
             if (realm != null) parents.add(realm);
         }
+        var works = data.find(CURRENT, resource, p("semanticWork"), Node.ANY);
+        try { for (int count = 0; works.hasNext(); count++) {
+            if (count == 256) throw new IllegalArgumentException("semantic assertions exceed their admitted bound");
+            parents.add(works.next().getObject());
+        } } finally { org.apache.jena.atlas.iterator.Iter.close(works); }
         for (Node parent : parents) {
             if (!parent.isURI()) continue;
             Node member = uri(PREFIX + "dependent:" + java.util.UUID.nameUUIDFromBytes(

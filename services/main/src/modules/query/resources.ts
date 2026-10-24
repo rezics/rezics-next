@@ -4,8 +4,6 @@ import { readRealmBasis } from '../realm-reads/read-realm.ts';
 import { GRAPHS, iri, lit } from '../work/activate.ts';
 import {
   publicWork,
-  decodeReadCursor,
-  encodeReadCursor,
   WorkReadInvalid,
   WorkReadMoved,
   WorkReadUnavailable,
@@ -28,7 +26,6 @@ import {
   labelIndexReady,
   fenceLabelIndex,
   publicNamePage,
-  type LabelAfter,
   type DirectoryAfter,
 } from '../search/labels.ts';
 import {
@@ -562,8 +559,7 @@ async function readResourceListAtPosition(
   }
   const state = { ...prior, seeks: { ...prior.seeks }, done: [...(prior.done ?? [])] };
   let directoryBasis: { position: string; sourcePosition: ReadPosition } | undefined;
-  const items: ResourceCard[] = [];
-  const descriptors = new Map<string, Candidate>();
+  const selected: Candidate[] = [];
   let scanned = 0,
     more = false,
     windows = 0;
@@ -571,10 +567,18 @@ async function readResourceListAtPosition(
     ${
       realm
         ? `FILTER(?r=${iri(realm)} || EXISTS { GRAPH ${iri(GRAPHS.current)} { ?r rv:conceptRealm ${iri(realm)} } }
-      || EXISTS { GRAPH ${iri(GRAPHS.current)} { ?slot a rv:RealmPublicationSlot ; rv:realm ${iri(realm)} ; rv:work ?r ; rv:selectionHead ?h } })`
+      || EXISTS { GRAPH ${iri(GRAPHS.current)} {
+        ?slot a rv:RealmPublicationSlot ; rv:realm ${iri(realm)} ; rv:selectionHead ?h .
+        { ?slot rv:work ?r } UNION { ?slot rv:work ?scopeWork . ?r rv:semanticWork ?scopeWork }
+      } }
+      || EXISTS { GRAPH ${iri(GRAPHS.current)} {
+        ?resourceSlot a rv:RealmResourceSlot ; rv:realm ${iri(realm)} ; rv:selectionHead ?resourceSelection .
+        { ?resourceSlot rv:work ?r }
+        UNION { ?resourceSlot rv:work ?scopeResourceWork . ?r rv:semanticWork ?scopeResourceWork } }
+        GRAPH ${iri(GRAPHS.revisions)} { ?resourceSelection a rv:RealmSubmissionSelection ; rv:component ?resourceSlot }
+      })`
         : ''
     }`;
-  const kinds = resourceTypeKinds(conditions, admittedTypes);
   const { basis, active } = await conceptCountBasis(session, realm);
   // Meaning is pinned by this read's graph position. Resolve chips once, rather
   // than repeating the same definition read for every rejected candidate window.
@@ -622,6 +626,7 @@ async function readResourceListAtPosition(
   const rankedResources = typed && typed.length <= 64 ? typed.map((row) => row.work) : undefined;
   let cache: (Candidate & { source: string; key: string })[] = [];
   const tails = new Map<string, Candidate>();
+  const endings = new Map<string, string>();
   let fetched = 0;
   const hydrationWindows = kinds.every(kind => kind === 'work')
     ? RESOURCE_LIST_COST.windows : RESOURCE_LIST_COST.mixedWindows;
@@ -629,7 +634,7 @@ async function readResourceListAtPosition(
     ? RESOURCE_LIST_COST.window : RESOURCE_LIST_COST.mixedWindow;
   while (
     kinds.length &&
-    items.length < limit &&
+    selected.length < limit &&
     scanned < RESOURCE_LIST_COST.candidates &&
     windows++ < hydrationWindows
   ) {
@@ -809,6 +814,7 @@ async function readResourceListAtPosition(
           if (!page.rows.length) state.done.push(kind);
         }
         const last = candidates.length > start ? candidates.at(-1)! : undefined;
+        if (last && complete) endings.set(kind, last.id);
         if (last && !complete) tails.set(kind, last);
         else tails.delete(kind);
         fetched += sourceLimit;
@@ -908,48 +914,28 @@ async function readResourceListAtPosition(
       resolvedConcepts,
     );
     const eligible = projected.filter((row) => matched.has(row.id));
-    for (const candidate of eligible) descriptors.set(candidate.id, candidate);
-    const cards = new Map(
-      (await resourceCards(session, eligible, limit - items.length, 'window')).map((card) => [
-        card.id,
-        card,
-      ]),
-    );
+    const eligibleIds = new Set(eligible.map(candidate => candidate.id));
     let examined = 0;
     for (const candidate of window) {
-      if (items.length === limit) break;
+      if (selected.length === limit) break;
       scanned++;
       examined++;
       if (candidate.source === 'rank') state.after = JSON.parse(candidate.key);
-      else state.seeks[candidate.source] = { id: candidate.id, key: candidate.key };
-      const card = cards.get(candidate.id);
-      if (card && candidate.summary) items.push(card);
+      else if (endings.get(candidate.source) === candidate.id) {
+        state.done.push(candidate.source);
+        delete state.seeks[candidate.source];
+      } else state.seeks[candidate.source] = { id: candidate.id, key: candidate.key };
+      if (eligibleIds.has(candidate.id)) selected.push(eligible.find(row => row.id === candidate.id)!);
     }
-    more ||= examined < window.length || window.length < candidates.length;
+    more = q && input.sort === 'relevance'
+      ? more || examined < window.length
+      : state.done.length < kinds.length;
     if (!more || (!cache.length && fetched >= QUERY_COST.candidateRows)) break;
   }
-  const previews = await resourceWorkCards(
-    session,
-    items.filter((item) => item.kind === 'work').map((item) => item.id),
-  );
-  const enriched = items.map((item) =>
-    item.kind === 'work' ? { ...item, work: previews.get(item.id)! } : item,
-  );
-  const deliveredAgents = await publicAgents(
-    session,
-    items.filter((item) => item.kind === 'agent').map((item) => item.id),
-  );
-  // SQL-only removal/Work fences can move while a later window or an optional
-  // preview is read. Recheck the delivered page, without reopening per-Work
-  // head queries: the session's final graph fence pins the admitted heads.
-  const delivery = await session.disclosure(
-    items.map((item) => resourceDisclosureTarget(descriptors.get(item.id)!)),
-    'search',
-  );
-  const visible = enriched.filter(
-    (item, index) =>
-      delivery[index] === 'visible' && (item.kind !== 'agent' || deliveredAgents.has(item.id)),
-  );
+  // Selection consumes bounded owner candidates. Hydrate its delivered prefix
+  // once, including current public policy, previews and the final disclosure
+  // fence. Hidden/missing summaries may shorten a page; its seek still advances.
+  const visible = await resourceCards(session, selected);
   const final = await session.deps.discovery!.active(basis, session.position, active.generation_id);
   if (directoryBasis) await session.deps.access.realmDirectory!.fence(
     directoryBasis.position, false, directoryBasis.sourcePosition);

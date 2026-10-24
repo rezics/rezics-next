@@ -1,4 +1,5 @@
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
+import type { RelationAttributionVerifier } from '../relation/attribution.ts';
 import { requireSelectedPlatformCapability, type AccessExposure, type Exposure } from '../access/exposure.ts';
 import { resolvedSemanticCapabilities } from './selected-capability.ts';
 import { AdmissionDenied, AdmissionExpired, AdmissionLockBusy, type AccessAdmissionRegistry,
@@ -12,7 +13,8 @@ import { ModelGenerationChanged, modelGenerationRefusalGuard } from './generatio
 import { ProjectionParticipantRefused, relationReferences, canonicalRelation, changeRelationOccurrence, readExactDefinition, readExactOccurrence, readRelationChangeTerminal, RELATION_CHANGE_FAMILY,
   relationChangeDigest, type ExactDefinition, type CanonicalRelation, type RelationChangeResult, type RelationInput, type RelationPublication } from '../relation/change.ts';
 import { changeSemanticComponent, checkedComponentState, type ComponentInput, readSemanticChangeTerminal, referencedResources,
-  semanticChangeDigest, semanticPredecessor, type SemanticChangeResult } from './change.ts';
+  semanticChangeDigest, semanticPredecessor, semanticRevisionMetadata, type SemanticChangeResult } from './change.ts';
+import type { SemanticChangeProfile } from './association.ts';
 import { ACTIVE_GENERATION, cancelSemanticAdmission, checkedSemanticTerminal, familyReceiptIri, sealSemanticRejection, SemanticChangeRejected,
   SemanticTargetUnavailable, StaleSemanticHead, submittedSemanticReferences, UnavailableSemanticReference,
   type SubmittedSemanticReference, type SemanticAdmission, type SemanticTerminal } from './command.ts';
@@ -153,6 +155,7 @@ export function semanticWriteReferences(target: string | undefined, state: Compo
 }
 
 export interface AdmittedSemanticChangeInput {
+  profile?: SemanticChangeProfile;
   target?: string;
   expectedHead: string | null;
   state: unknown;
@@ -164,8 +167,8 @@ export async function admittedSemanticChange(env: WorkActivationEnvironment,
   account: Pick<AccountAssertionVerifier, 'verify'>, access: SemanticAccess, request: Request,
   input: AdmittedSemanticChangeInput,
   platformAccess?: Pick<AccessExposure, 'require'>): Promise<SemanticChangeResult> {
-  const state = checkedComponentState(input.state);
-  const digest = semanticChangeDigest(input.target, input.expectedHead, state);
+  const state = checkedComponentState(input.state, input.profile);
+  const digest = semanticChangeDigest(input.target, input.expectedHead, state, input.profile);
   return admitted({ env, account, access, request, actingSubject: input.actingSubject,
     platformAccess, selectedCapabilities: () => resolvedSemanticCapabilities(env,
       input.target ? [input.target] : [], state.component === 'resource' ? state.types : []),
@@ -182,11 +185,14 @@ export async function admittedSemanticChange(env: WorkActivationEnvironment,
         ...submittedSemanticReferences(input.state as ComponentInput, 0).filter(ref => required.has(ref.reference))];
     },
     dispatch: admission => changeSemanticComponent(env, { admission, ...(input.target ? { target: input.target } : {}),
-      expectedHead: input.expectedHead, state }),
+      expectedHead: input.expectedHead, state, profile: input.profile }),
     readTerminal: id => readSemanticChangeTerminal(env, id),
     result: async (terminal, dispatched) => ({ component: terminal.component!, revision: terminal.revision!,
       predecessor: dispatched ? dispatched.predecessor : await semanticPredecessor(env, terminal), receipt: terminal.receipt, dataEpoch: terminal.dataEpoch,
-      sequence: terminal.sequence, replayed: dispatched?.replayed ?? true }) });
+      sequence: terminal.sequence, replayed: dispatched?.replayed ?? true,
+      ...(input.profile === 'semantic-change-v2' ? dispatched?.manifest
+        ? { modelGeneration: dispatched.modelGeneration!, manifest: dispatched.manifest }
+        : await semanticRevisionMetadata(env, terminal.component!, terminal.revision!) : {}) }) });
 }
 
 export interface AdmittedRelationChangeInput {
@@ -196,6 +202,7 @@ export interface AdmittedRelationChangeInput {
   /** Server-only: validates the position and publishes it after graph acceptance. */
   beforeCommit?: RelationPublication;
   canReadConflict?: (resource: string) => Promise<boolean>;
+  attribution?: RelationAttributionVerifier;
   actingSubject: string;
   idempotencyKey: string;
 }
@@ -233,6 +240,7 @@ export async function admittedRelationChange(env: WorkActivationEnvironment,
       return relationReferences(env, definition, state, { access, principal, actingSubject: input.actingSubject });
     },
     dispatch: (admission, canRead) => changeRelationOccurrence(env, { admission, canRead: input.canReadConflict ?? canRead,
+      ...(input.attribution ? { attribution: input.attribution } : {}),
       ...(input.occurrence ? { occurrence: input.occurrence } : {}), expectedHead: input.expectedHead, input: input.input,
       ...(input.beforeCommit ? { beforeCommit: input.beforeCommit } : {}) }),
     readTerminal: id => readRelationChangeTerminal(env, id),

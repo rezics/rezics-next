@@ -98,6 +98,24 @@ test('proved outcomes run normally; pending outcomes go red when they start pass
   }
 }, 30_000);
 
+test('pending assertion mode reports real process failure and preserves the pending declaration', async () => {
+  for (const passing of [false, true]) {
+    const data = fixture('pending', passing);
+    const declarationFile = join(data.directory, 'scripts/qa/cases/outcomes/books/read-a-book.ts');
+    writeFileSync(data.file, `import { expect } from 'bun:test';
+import declaration from ${JSON.stringify(declarationFile)};
+import { outcomeTest } from ${JSON.stringify(helperModule)};
+outcomeTest(declaration, 'visitor', async () => { expect(${passing}).toBe(true); }, undefined, { pending: 'assert' });`);
+    const loaded = await loadOutcomes({ root: data.directory,
+      registry: [{ kind: 'books', capability: 'Read a book' }] });
+    expect(loaded.get('books/read-a-book')?.cells.visitor?.state).toBe('pending');
+    const result = spawnSync(process.execPath, ['test', data.file], {
+      cwd: root, encoding: 'utf8', timeout: 10_000, env: { ...process.env, CLAUDECODE: '1' },
+    });
+    expect(result.status, result.stdout + result.stderr).toBe(passing ? 0 : 1);
+  }
+});
+
 const contract: AnswerContract = { paths: { '/v1/example': { get: {
   operationId: 'example', parameters: [{ name: 'requiredQuery', in: 'query', required: true, schema: { type: 'string' } }],
   responses: {

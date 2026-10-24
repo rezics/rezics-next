@@ -960,7 +960,13 @@ export function continuationInventory(sources: readonly WebSource[]): Continuati
             && property.value.type === 'MemberExpression' && continuations.has(name(property.value.property))
             && syntax(property.value.object) === envelope;
           const link = name(property.key) === 'next' && forwardsBrowseLink(property.value, envelope, linkBuilders);
-          return (direct || link) && container.properties.slice(index + 1).every(later =>
+          const native = name(property.key) === 'next' && property.value.type === 'MemberExpression'
+            && !property.value.computed && !property.value.optional && name(property.value.property) === 'next'
+            && syntax(property.value.object) === envelope && stableNativeEnvelope(node, objectParents)
+            && container.properties.every(item => item.type === 'Property' && !item.computed && item.kind === 'init' && !item.method)
+            && !container.properties.some(item => item.type === 'Property' && name(item.key) === '__proto__')
+            && new Set(container.properties.map(item => item.type === 'Property' ? name(item.key) : '')).size === container.properties.length;
+          return (direct || link || native) && container.properties.slice(index + 1).every(later =>
             later.type === 'Property' && !later.computed && name(later.key) !== name(property.key));
         });
         if (!forwarded && !completeIteration(node, parent, objectParents) && !completeBatch(node, objectParents)

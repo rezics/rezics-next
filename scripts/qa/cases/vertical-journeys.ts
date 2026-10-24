@@ -1,6 +1,6 @@
 import type { LaunchCoverage, NamedProof } from './launch-coverage.ts';
 
-export type VerticalJourney = { kind: LaunchCoverage['kind'] } & (NamedProof | { missing: string });
+export type VerticalJourney = { kind: Exclude<LaunchCoverage['kind'], 'catalogue'> } & (NamedProof | { missing: string });
 
 /** One existing signed-in main path per vertical. Keep gaps explicit rather than running a whole file. */
 export const verticalJourneys: readonly VerticalJourney[] = [

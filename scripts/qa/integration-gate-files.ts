@@ -101,4 +101,5 @@ export const integrationGateFiles = [
   'services/account/tests/authentication-subject.integration.test.ts',
   'services/main/tests/rate-limit.integration.test.ts',
   'services/main/tests/release-concurrency.integration.test.ts',
+  'services/main/tests/resource-query-catalogue.integration.test.ts',
 ] as const;

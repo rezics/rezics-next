@@ -1,9 +1,11 @@
-import { basename, dirname, join, resolve } from 'node:path';
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { readLedger, pidAlive } from './ledger.ts';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { git, readLedger, pidAlive } from './ledger.ts';
 import { running } from './launch.ts';
 import { directoryLeaseHeld, readDirectoryLease, tryAcquireDirectoryLease, type AcquiredDirectoryLease } from '../qa/process/lease.ts';
 import type { SlotRunOptions } from './qa-slots.ts';
+import type { Ledger } from './types.ts';
+import { selectTestGroups } from '../qa/test.ts';
 
 const namedFile = /\.(?:test|spec|e2e|stories)\.[cm]?[jt]sx?$/;
 
@@ -124,8 +126,44 @@ export function admissionCommand(input: readonly string[]): string[] {
   return input[0] === '--' ? input.slice(1) : [...input];
 }
 
+/** Validate before reserved admission flags can turn a mixed request into the narrow selection. */
+export function borrowedBookSelection(command: readonly string[], heavy = false): boolean {
+  if (!command.some(arg => arg.startsWith('--borrowed-public-domain-book'))) return false;
+  if (basename(command[0] ?? '') !== 'bun' || resolve(command[1] ?? '') !== resolve(import.meta.dir, '../qa/test.ts'))
+    throw new Error('Borrowed Book requires the goalctl test selector');
+  if (heavy) throw new Error('Borrowed Book does not accept heavy admission');
+  return selectTestGroups(command.slice(2))[0]?.borrowedPublicDomainBook === true;
+}
+
+/** The registered worker, including a child in an isolated proof checkout, keeps its real Goal's admission. */
+export function borrowedBookAdmission(env: NodeJS.ProcessEnv): { directory: string; workerGoals: () => string[] } {
+  const refusal = 'Borrowed Book requires a live registered Goal worker and its shared admission binding';
+  if (!env.GOAL_TASK_ID || !env.GOAL_ID || !env.GOAL_WORKTREE || !isAbsolute(env.GOAL_WORKTREE)) throw new Error(refusal);
+  if (env.GOAL_IN_SLOT === '1' || env.GOAL_QA_HEAVY_RUN === '1' || env.GOAL_QA_DEFERRED_HEAVY === '1'
+    || env.GOAL_QA_HEAVY_LOCK || env.GOAL_QA_HEAVY_LEASE)
+    throw new Error('Borrowed Book requires its own ordinary Goal admission, not an inherited slot or heavy run');
+  const worktree = realpathSync(env.GOAL_WORKTREE);
+  if (realpathSync(git(worktree, ['rev-parse', '--show-toplevel'])) !== worktree) throw new Error(refusal);
+  const common = git(worktree, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
+  if (resolve(common) === join(worktree, '.git')) throw new Error(refusal); // A proof clone cannot register its own admission.
+  const directory = join(dirname(common), '.temp', 'goal-orchestration', 'qa-slots');
+  if (!existsSync(directory) || (env.GOAL_QA_SLOT_DIRECTORY && realpathSync(env.GOAL_QA_SLOT_DIRECTORY) !== realpathSync(directory)))
+    throw new Error(refusal);
+  const workerGoals = () => {
+    const ledger = JSON.parse(readFileSync(join(dirname(directory), 'ledger.json'), 'utf8')) as Ledger;
+    const task = ledger.tasks[env.GOAL_TASK_ID!];
+    const goal = ledger.goals?.[env.GOAL_ID!];
+    if (!task || task.id !== env.GOAL_TASK_ID || task.goal !== env.GOAL_ID || !goal || goal.closedAt
+      || realpathSync(task.worktree) !== worktree || !task.attempts?.length || !running(task)) throw new Error(refusal);
+    return Object.values(ledger.tasks).filter(task => task.state === 'running' && running(task)).map(task => task.goal ?? '?');
+  };
+  workerGoals();
+  return { directory, workerGoals };
+}
+
 /** Admit a test selector before it expands the requested plan into commands. */
 export async function withTestAdmission(command: string[], heavy = false, resultFile?: string, options: SlotRunOptions = {}): Promise<number> {
+  borrowedBookSelection(command, heavy);
   const selector = basename(command[0] ?? '') === 'bun'
     && resolve(command[1] ?? '') === resolve(import.meta.dir, '../qa/test.ts');
   const args = command.slice(2).filter(arg => arg !== '--beside-workers');

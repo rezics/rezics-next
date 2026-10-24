@@ -10,7 +10,7 @@ import { terminateProcessGroup } from '../qa/process/terminate.ts';
 import { sweepOrphanContainers, reapSettleMs } from '../qa/container-reaper.ts';
 import { parseAffectedArgs, testCommands } from '../qa/test.ts';
 import { qaArtifactDirectory } from '../qa/core.ts';
-import { assertWideRunAllowed, isWideRun, liveWorkerGoals, qaGoal, slotHolderLines, slotHolders, tryAcquireQaSlot, type SlotShareOptions } from './admission.ts';
+import { assertWideRunAllowed, borrowedBookAdmission, borrowedBookSelection, isWideRun, liveWorkerGoals, qaGoal, slotHolderLines, slotHolders, tryAcquireQaSlot, type SlotShareOptions } from './admission.ts';
 import { loadSettings } from './config.ts';
 
 /** QA stacks are named `rezics-qa-<UTC yyyymmddThhmmss>-<id>-<n>`. A run killed with SIGKILL never tears
@@ -541,7 +541,7 @@ export interface SlotRunOptions {
 }
 
 async function runQaCommand(command: readonly string[], env: NodeJS.ProcessEnv, onStart: () => void,
-  lifecycleLockDirectory?: string): Promise<number> {
+  lifecycleLockDirectory?: string, borrowedPublicDomainBook = false): Promise<number> {
   const owner = lifecycleLockDirectory ? commandLease(lifecycleLockDirectory) : undefined;
   const child = spawn(command[0]!, command.slice(1), { cwd: process.cwd(), stdio: 'inherit', env, detached: true });
   let restoreOwner: (() => void) | undefined;
@@ -570,10 +570,12 @@ async function runQaCommand(command: readonly string[], env: NodeJS.ProcessEnv, 
     process.off('SIGINT', forward);
     process.off('SIGTERM', forward);
     restoreOwner?.();
-    // The child's exit hook can run before dockerd finishes creating its container.
-    try { sweepOrphanContainers(); } catch { /* the command's exit status still stands */ }
-    await Bun.sleep(reapSettleMs);
-    try { sweepOrphanContainers(); } catch { /* the command's exit status still stands */ }
+    if (!borrowedPublicDomainBook) {
+      // The child's exit hook can run before dockerd finishes creating its container.
+      try { sweepOrphanContainers(); } catch { /* the command's exit status still stands */ }
+      await Bun.sleep(reapSettleMs);
+      try { sweepOrphanContainers(); } catch { /* the command's exit status still stands */ }
+    }
   }
 }
 
@@ -671,6 +673,9 @@ function harnessOwnsSlot(command: readonly string[]): boolean {
 
 export async function withSlot(command: string[], heavy = false, resultFile?: string, options: SlotRunOptions = {}): Promise<number> {
   const callerEnv = options.env ?? process.env;
+  const borrowed = borrowedBookSelection(command, heavy) ? borrowedBookAdmission(callerEnv) : undefined;
+  if (borrowed && options.slotDirectory && resolve(options.slotDirectory) !== resolve(borrowed.directory))
+    throw new Error('Borrowed Book cannot replace its registered shared Goal admission directory');
   if (command.length === 1 && command[0] === '--holders') {
     const directory = options.slotDirectory ?? join(stateDir, 'qa-slots');
     for (const line of slotHolderLines(directory, options.slots ?? qaSlotCount(directory, callerEnv))) (options.announce ?? console.log)(line);
@@ -692,8 +697,8 @@ export async function withSlot(command: string[], heavy = false, resultFile?: st
   const listed = (dir: string) => existsSync(dir) ? readdirSync(dir).map(name => join(dir, name)) : [];
   const prior = new Set(artifactDirs.flatMap(listed));
   const deferred = harnessOwnsSlot(command);
-  const dir = options.slotDirectory ?? (deferred ? callerEnv.GOAL_QA_SLOT_DIRECTORY : undefined) ?? join(stateDir, 'qa-slots');
-  const slots = options.slots ?? qaSlotCount(dir);
+  const dir = borrowed?.directory ?? options.slotDirectory ?? (deferred ? callerEnv.GOAL_QA_SLOT_DIRECTORY : undefined) ?? join(stateDir, 'qa-slots');
+  const slots = options.slots ?? (borrowed ? qaSlotCount(dir, callerEnv) : qaSlotCount(dir));
   if (!heavy && (!Number.isSafeInteger(slots) || slots! < 1)) throw new Error('GOAL_QA_SLOTS must be a positive integer');
   const heavyLockDirectory = options.heavyLockDirectory ?? (options.slotDirectory ? join(dir, 'heavy') : callerEnv.GOAL_QA_HEAVY_LOCK ?? heavyLock);
   const waiterDirectory = join(dir, 'waiters');
@@ -715,7 +720,7 @@ export async function withSlot(command: string[], heavy = false, resultFile?: st
       deadline: options.timeoutMs === undefined ? undefined : now() + options.timeoutMs }) : undefined;
     if (!heavy && !deferred && !inheritedHeavy) {
       const deadline = now() + (options.timeoutMs ?? 3_600_000);
-      slotAdmission = qaSlotAdmission(dir, slots!, { env: callerEnv, now, workerGoals: options.workerGoals });
+      slotAdmission = qaSlotAdmission(dir, slots!, { env: callerEnv, now, workerGoals: borrowed?.workerGoals ?? options.workerGoals });
       let announced = false;
       while (!heldSlot) {
         for (let k = 0; k < slots! && !heldSlot; k++) {
@@ -737,9 +742,10 @@ export async function withSlot(command: string[], heavy = false, resultFile?: st
       }
       if (waitPath) rmSync(waitPath, { force: true });
     }
-    if (!inheritedHeavy) (options.reap ?? reapStaleQaStacks)();
+    if (borrowed) borrowed.workerGoals(); // Refuse a changed owner after waiting, before starting the child.
+    else if (!inheritedHeavy) (options.reap ?? reapStaleQaStacks)();
     const env: NodeJS.ProcessEnv = { ...callerEnv, GOAL_IN_SLOT: deferred ? '0' : '1',
-      ...(deferred ? { GOAL_QA_SLOT_DIRECTORY: dir, GOAL_QA_SLOTS: String(slots) } : {}),
+      ...(deferred || borrowed ? { GOAL_QA_SLOT_DIRECTORY: dir, GOAL_QA_SLOTS: String(slots) } : {}),
       GOAL_QA_WAIT_DIR: waiterDirectory, GOAL_QA_COMMAND: command.join(' '),
       GOAL_QA_ARRIVED_AT: callerEnv.GOAL_QA_ARRIVED_AT ?? new Date(queuedAt).toISOString(),
       GOAL_QA_ARRIVED_AT_MS: callerEnv.GOAL_QA_ARRIVED_AT_MS ?? String(queuedAt),
@@ -757,10 +763,12 @@ export async function withSlot(command: string[], heavy = false, resultFile?: st
       }
     }
     if (goal) env.GOAL_ID = goal;
-    code = await (options.runCommand ?? runQaCommand)(command, env, () => {
+    const onStart = () => {
       startedAt = now();
       if (heavy && !inheritedHeavy) markHeavyCommandStarted(heavyLockDirectory);
-    });
+    };
+    code = await (options.runCommand ? options.runCommand(command, env, onStart)
+      : runQaCommand(command, env, onStart, undefined, !!borrowed));
     return code;
   } finally {
     if (waitPath) rmSync(waitPath, { force: true });

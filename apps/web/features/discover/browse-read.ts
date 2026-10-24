@@ -12,6 +12,7 @@ export async function readBrowse<T>(call: () => Promise<T>): Promise<BrowseResul
   } catch (error) {
     return { ok: false, moved: error instanceof BrowseReadError && error.status === 409,
       ...(error instanceof BrowseReadError ? { status: error.status, problem: error.problem,
+        failure: failureOf(error.status, error.code ?? undefined),
         ...(error.status === 202 ? { pending: true } : {}) } : {}) };
   }
 }

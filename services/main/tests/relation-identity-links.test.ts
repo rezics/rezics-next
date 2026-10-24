@@ -78,11 +78,14 @@ test('lexicon seed: identity definitions carry the star, no Work authority and e
   expect(variantKindConcepts.every(kind => kind.labels.length === 8)).toBe(true);
 });
 
-test('canonical routing: named and unnamed participations use one current occurrence shape', () => {
+test('canonical routing: V2 is explicit and named or unnamed V1 participations keep their default shape', () => {
   const manifest = JSON.parse(readFileSync(join(import.meta.dir, '../../../generated/model/manifest.json'), 'utf8')) as {
     canonical: { type: string; routes: { profile: string; shape: string; when: { path: string; value: string }[] }[] }[] };
   const routes = manifest.canonical.find(entry => entry.type === 'https://rezics.com/vocab/RelationParticipation')!.routes;
-  expect(routes).toEqual([{ profile: 'relation-occurrence-v1',
+  expect(routes).toEqual([{ profile: 'relation-occurrence-v2',
+    shape: 'https://rezics.com/definition/relation-occurrence-v2/participation-shape',
+    when: [{ path: 'https://rezics.com/vocab/modelRevision', value: 'https://rezics.com/definition/relation-occurrence-v2' }] },
+  { profile: 'relation-occurrence-v1',
     shape: 'https://rezics.com/definition/relation-occurrence-v1/participation-shape', when: [] }]);
 });
 

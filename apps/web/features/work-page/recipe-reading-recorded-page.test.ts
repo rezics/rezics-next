@@ -15,6 +15,7 @@ import {
   loadRecipeBody,
   loadRecipeIdentity,
   recipePageReader,
+  recipeMethodAvailable,
   recipeReadingReads,
   type RecipeIdentity,
 } from './recipe-reading-recorded-page.ts';

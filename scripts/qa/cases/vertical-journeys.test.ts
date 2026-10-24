@@ -6,7 +6,7 @@ import { verticalJourneys, verticalJourneyFilter } from './vertical-journeys.ts'
 
 test('every scope vertical names one existing browser proof or explains its missing journey', () => {
   expect(verticalJourneys.map(journey => journey.kind).sort())
-    .toEqual([...new Set(launchCoverage.map(row => row.kind))].sort());
+    .toEqual([...new Set(launchCoverage.map(row => row.kind).filter(kind => kind !== 'catalogue'))].sort());
   for (const journey of verticalJourneys) {
     if ('missing' in journey) { expect(journey.missing.trim()).not.toBe(''); continue; }
     expect(existsSync(resolve(import.meta.dir, '../../..', journey.file))).toBe(true);

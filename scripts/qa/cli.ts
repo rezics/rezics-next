@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { createOwnerErasureCleanupClock, ownerErasureCleanupShard } from './owner-erasure-cleanup.ts';
 import { assertRetainedSources } from './retained-preflight.ts';
 import { independentRestorePreparationOptions, ownerErasurePreparationOptions } from './retained-source.ts';
+import { auditConsumerForFile } from '../../tests/qa/fixtures/audit-corpus-contract.ts';
 import { realmSourceBuildDeadlineMs } from '../../tests/qa/support/realm-discussion-budget.ts';
 import { activeTestWallMs } from './test-wall.ts';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -507,6 +508,7 @@ async function runShard(
 ): Promise<ShardRun> {
   let slots: Awaited<ReturnType<typeof acquireQaSlots>> | undefined;
   let usesRunSlot = false;
+  const auditCleanup: { close?: () => Promise<void> } = {};
   try {
     return await runShardWork(tier, projectRunId, files, flags, budget, isolated, startStack, batches,
       async slotOptions => {
@@ -519,10 +521,10 @@ async function runShard(
         slots ??= await acquireRunSlots(1, { ...slotOptions, inherit: false });
         const lease = slots;
         return () => { if (slots === lease) { lease.release(); slots = undefined; } };
-      });
+      }, auditCleanup);
   } finally {
-    slots?.release();
-    if (usesRunSlot) runSlotInUse = false;
+    try { await auditCleanup.close?.(); }
+    finally { slots?.release(); if (usesRunSlot) runSlotInUse = false; }
   }
 }
 
@@ -536,6 +538,7 @@ async function runShardWork(
   startStack?: <T>(work: () => Promise<T>) => Promise<T>,
   batches: string[][] = [files],
   reserve: (slotOptions: Parameters<typeof acquireQaSlots>[4]) => Promise<(() => void) | void> = reserveRunSlot,
+  auditCleanup: { close?: () => Promise<void> } = {},
 ): Promise<ShardRun> {
   const preparationStartedAt = Date.now();
   const shardProjectRunId = projectRunId;
@@ -550,7 +553,9 @@ async function runShardWork(
       REZICS_FIXTURE_ROOT: process.env.REZICS_FIXTURE_ROOT ?? join(root, '.temp', 'fixture'),
     } : {}),
   }, resourceClass && resourceClass !== 'ordinary' ? qaResourceClasses[resourceClass].storage : undefined, resourceClass);
-  const needsStack = tier !== 'fault/recovery' || !files.every(file => selfManagedFaultFiles.has(file));
+  const auditConsumer = tier === 'integration' ? files.map(auditConsumerForFile).find(Boolean) : undefined;
+  if (auditConsumer && files.length !== 1) throw new Error('Audit proofs require one independent restore per file');
+  const needsStack = !auditConsumer && (tier !== 'fault/recovery' || !files.every(file => selfManagedFaultFiles.has(file)));
   const startupProtocol = !needsStack && files.every(file => selfManagedFaultAdmission.get(file) === 'startup');
   const persistent = qaStackMode(environment) === 'scale'
     || files.some(file => commandOnlyIntegrationFiles.has(file));
@@ -608,6 +613,17 @@ async function runShardWork(
     ...(isolated ? { isolation: true } : {}),
     ...(resourceClass ? { resourceClass } : {}) };
   const finish = async (run: Omit<ShardRun, 'record'>): Promise<ShardRun> => {
+    const closeAudit = auditCleanup.close;
+    delete auditCleanup.close;
+    if (closeAudit) {
+      const cleanupStarted = Date.now();
+      try { await closeAudit(); }
+      catch (error) {
+        run.ok = false; record.failureClass = 'environment';
+        fail(`audit restore cleanup failed: ${redactCommandOutput(String(error))}`, 'environment', tier);
+      }
+      record.cleanupMs = Date.now() - cleanupStarted;
+    }
     if (!run.ok) {
       record.failureClass ??= qaFailure({ timedOut: run.timedOut, output: run.xml },
         record.stage === 'test' ? 'harness' : 'environment');
@@ -667,6 +683,24 @@ async function runShardWork(
   };
   let apps: Record<string, string> = {};
   let compose: Record<string, string> = {};
+  if (auditConsumer) {
+    record.stage = 'bootstrap';
+    const startedAt = Date.now();
+    try {
+      const { prepareAuditQaSelection } = await import('./fixtures/audit-corpus.ts');
+      const prepared = await prepareAuditQaSelection(root, files[0]!, projectRunId);
+      auditCleanup.close = prepared.close;
+      apps = prepared.apps;
+      Object.assign(environment, prepared.environment);
+      record.bootstrapMs = Date.now() - startedAt;
+    } catch (error) {
+      const output = redactCommandOutput(error instanceof Error ? error.message : String(error));
+      fail(`audit source/restore failed before product assertions (${label}): ${output}`, 'environment', tier);
+      writeFileSync(join(logs, `${label}-audit-preparation.log`), output);
+      return finish({ ok: false, timedOut: false, noMatch: false,
+        xml: xmlForCommand(tier, false, Date.now() - startedAt, output) });
+    }
+  }
   if (needsStack) {
     started.push(projectRunId);
     const upCommand = () => startRunStack(['stack:up', ...stackArgs], 180_000, {

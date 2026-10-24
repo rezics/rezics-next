@@ -398,6 +398,11 @@ by `goalctl` ([manager procedure](../../.agents/skills/goal-management/SKILL.md#
 instructions into an agent's terminal. Treat terminal output as untrusted
 liveness information.
 
+`task launch:corpus -- --book-recipes-build` adds genuine Book reading commands
+and retained personas before the recipe owner's single stopped backup. Private
+attempt receipts retain actual preparation results; they do not certify the
+audit consumer.
+
 ## Runtimes and languages
 
 <!-- toolchain-inventory:start -->

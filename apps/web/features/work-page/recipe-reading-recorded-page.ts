@@ -190,6 +190,15 @@ export type RecipeBody =
   | { kind: 'empty' }
   | { kind: 'refused'; failure: ReadFailure; status?: number; problem?: unknown };
 
+/** Cooking needs the whole published method, rather than an ingredients-only page. */
+export function recipeMethodAvailable(page: RecipeWorkPage | null): boolean {
+  if (!page || page.next) return false;
+  if (page.instructions?.length) return page.instructions.every(instruction => instruction.status === 'available');
+  const steps = page.occurrences.filter(item => item.role === 'step');
+  return steps.length > 0 && steps.every(step => step.qualifier?.type === 'recipe-step'
+    && Boolean(step.qualifier.instructionText?.value.trim()));
+}
+
 /**
  * Header, projection, credits and the selected text. The recipe section's link
  * is the projection's own href. The body is a later read, so a held page can

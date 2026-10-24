@@ -5,6 +5,8 @@ import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import type { VerifiedPrincipal } from '../modules/access/admission.ts';
 import { AccountAssertionDenied } from '../modules/account/verify-assertion.ts';
+import { discloseInventory } from '../modules/disclosure/read.ts';
+import { disclosureViewer } from '../modules/disclosure/viewer.ts';
 import { ContextCommandUnavailable, InvalidContextCommand, PendingContextCommand, StaleContextCommand,
   runAdmittedCommand, type ContextCommandReceipt } from '../modules/context/command.ts';
 import { DEFINITION_STATE_FAMILY, activeDefinitionDependenciesGuard, definitionStateRequest, readDefinitionState,
@@ -31,10 +33,19 @@ import { recordStatement, recordStatementRequest, setStatementDecision, statemen
   withdrawStatement, withdrawStatementRequest,
   statementInterpretation, STATEMENT_FAMILIES, type RecordStatementInput } from '../modules/statement/graph.ts';
 import { resolveVisibleTargets, targetRead, targetSummaries } from '../modules/target/resolve.ts';
+import { referenceDisclosure } from '../modules/target/disclosed-references.ts';
 import { StatementNotFound, readStatement, resolveStatementAcceptance,
 } from '../modules/statement/read.ts';
 import { InvalidStatementSchemaInput } from '../modules/statement/schema.ts';
-import { statementQualificationSchema } from '../modules/statement/contract.ts';
+import { statementCoverageSchema, statementQualificationSchema } from '../modules/statement/contract.ts';
+import { semanticParticipantSchema, semanticValueSchema } from '../modules/semantic/value-contract.ts';
+import { InvalidSemanticValue, UnsupportedSemanticValue } from '../modules/semantic/value.ts';
+import { checkedRecordStatementV2, recordStatementV2, recordStatementV2Request, type RecordStatementV2Input } from '../modules/statement/v2-write.ts';
+import { readAdoptedStatementV2, readStatementV2Revision } from '../modules/statement/v2-read.ts';
+import { retainedStatementCoverageReader } from '../modules/statement/retained-coverage.ts';
+import { STATEMENT_V2_PROFILE, StatementV2Rejected } from '../modules/statement/v2-schema.ts';
+import { relationAttributionVerifier } from '../modules/relation/attribution.ts';
+import { frameQuery } from '../modules/projection/frame-read.ts';
 import { statementResourcePredicate } from '../modules/statement/qualification.ts';
 import { GRAPHS, RV, iri } from '../modules/work/activate.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
@@ -241,6 +252,12 @@ const statementReadResponse = t.Object({ profile: t.Literal('statement-v1'), sta
   qualification: t.Optional(statementQualificationSchema),
   export: t.Record(t.String(), t.Unknown()), sourcePosition: source,
 });
+const statementV2WriteResponse = t.Object({ profile: t.Literal('statement-v2'), statement: ref, revision: ref,
+  meaningKey: ref, subject: semanticParticipantSchema, coverage: statementCoverageSchema, operation: ref, receipt: ref,
+  sourcePosition: source, modelGeneration: ref, manifest: ref, replayed: t.Boolean() });
+const statementV2ReadResponse = t.Object({ ...statementReadResponse.properties, profile: t.Literal('statement-v2'),
+  subject: semanticParticipantSchema, value: semanticValueSchema, coverage: statementCoverageSchema,
+  interpretationDefinitions: t.Array(ref), evidence: t.Array(ref), modelGeneration: ref, manifest: ref });
 const decisionWriteResponse = t.Object({ profile: t.Literal('statement-decision-v1'),
   slot: ref, decision: ref, outcome: t.Union([t.Literal('accepted'), t.Literal('rejected'),
     t.Literal('withdrawn')]), ...writtenFields,
@@ -260,6 +277,9 @@ const statementResolutionResponse = t.Object({ profile: t.Literal('statement-res
   result: acceptanceResult, sourcePosition: source });
 const graphWriteResponses = { 202: pendingOperation, ...writeProblems };
 const graphReadResponses = { ...authorizedReadProblems, 409: problemResult(409) };
+const statementModelProblem = t.Object({ ...problemResult(409).properties,
+  code: t.Literal('unsupported_model_revision'), modelRevision: t.Literal(STATEMENT_V2_PROFILE),
+  schema: t.Literal(STATEMENT_V2_PROFILE) }, { additionalProperties: false });
 const interpretationProblem = t.Object({ type: ref, status: t.Literal(409),
   code: t.Literal('interpretation_unresolved'), title: ref,
   interpretation: t.Union([t.Object({ state: t.Literal('unavailable') }, { additionalProperties: false }),
@@ -273,7 +293,41 @@ const interpretationProblem = t.Object({ type: ref, status: t.Literal(409),
       context: ref, semanticRevision: ref, entryRevision: ref, selectionRevision: nullableRef },
     { additionalProperties: false })]) }, { additionalProperties: false });
 
+const statementV1Input = t.Object({ profile: t.Literal('statement-v1'),
+        speaker: t.Union([t.Object({ kind: t.Literal('personal') }, { additionalProperties: false }),
+          t.Object({ kind: t.Literal('realm'), realm: native }, { additionalProperties: false },
+              ),
+            ]),
+        subject: native, predicate: reference, relationDefinition: reference, value,
+        applicability: t.Array(reference, { maxItems: 8 }),
+        interpretation: t.Union([t.Object({ kind: t.Literal('selected') }, { additionalProperties: false }),
+          t.Object({ kind: t.Literal('explicit'), context: contextId, semanticRevision: native },
+            { additionalProperties: false },
+              ),
+              t.Object(
+                { kind: t.Literal('definition'), definition: native },
+                { additionalProperties: false },
+              ),
+            ]),
+            qualification: t.Optional(statementQualificationSchema),
+        expectedInterpretation: t.Optional(t.Object({ semanticRevision: t.Nullable(native),
+          definition: t.Nullable(reference) }, { additionalProperties: false },
+              ),
+            ),
+        evidence: t.Array(reference, { maxItems: 16 }), actingSubject: native,
+          }, { additionalProperties: false },
+        );
+const statementV2Input = t.Object({ ...statementV1Input.properties, profile: t.Literal('statement-v2'),
+  subject: semanticParticipantSchema, value: semanticValueSchema, coverage: statementCoverageSchema }, { additionalProperties: false });
+
 function contextError(error: unknown): Response {
+  if (error instanceof StatementV2Rejected && error.code === 'unsupported_model_revision') {
+    return Response.json({ type: 'https://rezics.com/problems/unsupported_model_revision', status: 409,
+      code: error.code, title: error.message, modelRevision: STATEMENT_V2_PROFILE, schema: STATEMENT_V2_PROFILE },
+    { status: 409, headers: { ...noStore, 'content-type': 'application/problem+json' } });
+  }
+  if (error instanceof StatementV2Rejected) return problem(error.code === 'invalid_statement_coverage' ? 422 : 409,
+    error.code, error.message, noStore);
   if (error instanceof StatementApplicabilityRefused) return problem(422, error.code, error.message);
   if (error instanceof FiniteRuleRejected || error instanceof ReasoningInputRejected
     || error instanceof ReasoningProfileRejected) {
@@ -337,13 +391,55 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
     if (!request.headers.get('authorization') || !actingSubject) return privateReader(null, null);
     return privateReader(await work.account.verify(request, ['context:read']), actingSubject);
   };
-  const speakerFor = (input: RecordStatementInput, principal: VerifiedPrincipal): InterpretationSpeaker =>
+  const speakerFor = (input: Pick<RecordStatementInput, 'speaker' | 'actingSubject'>, principal: VerifiedPrincipal): InterpretationSpeaker =>
     input.speaker.kind === 'realm' ? { kind: 'realm', realm: input.speaker.realm }
       : { kind: 'personal', canReadPrivate: privateReader(principal, input.actingSubject),
         ...(selections ? { privateCandidates: (scopes: ContextSelectionScope[]) =>
           selections.candidates(principal, scopes) } : {}) };
   const interpretationBody = (interpretation: Interpretation): Interpretation => interpretation.state === 'unavailable'
     ? { state: 'unavailable' } : interpretation;
+
+  const recordAuthoredStatement = async (request: Request, raw: RecordStatementV2Input, key: string) => {
+    try {
+      const input = checkedRecordStatementV2(raw), plan = recordStatementV2Request(input);
+      const receipt = await runAdmittedCommand(env, work.account, work.access, request, {
+        family: STATEMENT_FAMILIES.record, oauthScope: 'statement:write', scope: plan.scope, action: plan.action,
+        actingSubject: input.actingSubject, digest: plan.digest, input, idempotencyKey: key,
+        execute: async (admission, principal) => {
+          const authority = { access: work.access, principal, actingSubject: input.actingSubject,
+            readers: { mediaAccess: work.mediaAccess, contextSelections: work.contextSelections, governance: work.governance } };
+          const canReadDefinition = async (definition: string) => !!work.access.canReadSemanticResource
+            && work.access.canReadSemanticResource(principal, input.actingSubject, definition);
+          const canRead = async (reference: string) =>
+            await canReadDefinition(reference) || await work.access.canReadWork(principal, input.actingSubject, reference)
+            || await targetRead(env, authority, async session =>
+              (await targetSummaries(session, [reference])).summaries[0]?.status === 'available');
+          return recordStatementV2(env, admission, input, speakerFor(input, principal), canRead,
+            references => targetRead(env, authority, session => resolveVisibleTargets(session, references, 'report')), canReadDefinition,
+            undefined, async references => {
+              const decisions = await discloseInventory(env, references.map(resource => ({ owner: 'graph', resource, component: 'record' })),
+                disclosureViewer(principal, input.actingSubject), 'read');
+              return new Set(references.filter((_, index) => decisions[index] === 'visible'));
+            }, referenceDisclosure(env, authority, canReadDefinition),
+            relationAttributionVerifier(work.relationAttribution, principal, input.actingSubject),
+            retainedStatementCoverageReader(work, principal, input.actingSubject));
+        },
+      });
+      const snapshot = await readStatementV2Revision(env, receipt.component!, receipt.revision!);
+      if (snapshot.receipt.receipt !== receipt.receipt || snapshot.operation !== receipt.operation) {
+        throw new ContextCommandUnavailable('Statement receipt differs from its exact native command');
+      }
+      return Response.json({ profile: 'statement-v2', statement: snapshot.statement, revision: snapshot.revision,
+        meaningKey: snapshot.meaningKey, subject: snapshot.meaning.subject, coverage: snapshot.meaning.coverage,
+        operation: snapshot.operation, receipt: snapshot.receipt.receipt, sourcePosition: snapshot.sourcePosition,
+        modelGeneration: snapshot.modelGeneration, manifest: snapshot.manifest, replayed: receipt.replayed },
+      { status: receipt.replayed ? 200 : 201, headers: noStore });
+    } catch (error) {
+      if (error instanceof ContextCommandUnavailable) return problem(503, 'association_admission_unavailable', 'Statement admission evidence is unavailable');
+      if (error instanceof InvalidSemanticValue || error instanceof UnsupportedSemanticValue) return problem(422, 'invalid_statement_coverage', 'Exact Statement value is invalid');
+      return contextError(error);
+    }
+  };
 
   return new Elysia()
     .post('/v1/context-rules', {
@@ -735,36 +831,14 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
     },
     )
     .post('/v1/statements', {
-      body: t.Object({ profile: t.Literal('statement-v1'),
-        speaker: t.Union([t.Object({ kind: t.Literal('personal') }, { additionalProperties: false }),
-          t.Object({ kind: t.Literal('realm'), realm: native }, { additionalProperties: false },
-              ),
-            ]),
-        subject: native, predicate: reference, relationDefinition: reference, value,
-        applicability: t.Array(reference, { maxItems: 8 }),
-        interpretation: t.Union([t.Object({ kind: t.Literal('selected') }, { additionalProperties: false }),
-          t.Object({ kind: t.Literal('explicit'), context: contextId, semanticRevision: native },
-            { additionalProperties: false },
-              ),
-              t.Object(
-                { kind: t.Literal('definition'), definition: native },
-                { additionalProperties: false },
-              ),
-            ]),
-            qualification: t.Optional(statementQualificationSchema),
-        expectedInterpretation: t.Optional(t.Object({ semanticRevision: t.Nullable(native),
-          definition: t.Nullable(reference) }, { additionalProperties: false },
-              ),
-            ),
-        evidence: t.Array(reference, { maxItems: 16 }), actingSubject: native,
-          }, { additionalProperties: false },
-        ),
-      response: transportResponses(openApiOperations["/v1/statements"].post, { 200: statementWriteResponse, 201: statementWriteResponse, ...graphWriteResponses,
-        409: t.Union([problemResult(409), interpretationProblem]),
+      body: t.Union([statementV1Input, statementV2Input]),
+      response: transportResponses(openApiOperations["/v1/statements"].post, { 200: t.Union([statementWriteResponse, statementV2WriteResponse]), 201: t.Union([statementWriteResponse, statementV2WriteResponse]), ...graphWriteResponses,
+        409: t.Union([problemResult(409), interpretationProblem, statementModelProblem]),
         }, 'POST'),
     }, async ({ request, body }) => {
       const key = idempotencyKey(request);
       if (key instanceof Response) return key;
+      if (body.profile === 'statement-v2') return recordAuthoredStatement(request, body as RecordStatementV2Input, key);
       const seen: { interpretation?: Interpretation } = {};
       try {
         const input = { ...body } as unknown as RecordStatementInput;
@@ -820,13 +894,35 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
       params: t.Object({ id: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
       query: t.Object({ actingSubject: t.Optional(native),
           revision: t.Optional(native),
+          profile: t.Optional(t.Union([t.Literal('statement-v1'), t.Literal('statement-v2')])),
+          context: t.Optional(t.Union([t.Literal('global'), native])), frame: frameQuery,
           position: readingPositionQuery,
-        }),
-      response: transportResponses(openApiOperations["/v1/statements/{id}"].get, { 200: statementReadResponse, ...graphReadResponses }, 'GET'),
+        }, { additionalProperties: false }),
+      response: transportResponses(openApiOperations["/v1/statements/{id}"].get, { 200: t.Union([statementReadResponse, statementV2ReadResponse]), ...graphReadResponses,
+        409: t.Union([problemResult(409), statementModelProblem]), 422: problemResult(422) }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
+        if (query.profile === 'statement-v2' && (!query.revision || query.position === undefined)) {
+          return problem(422, 'invalid_statement_coverage', 'An exact V2 Statement read requires revision and position selectors');
+        }
+        if (query.profile !== 'statement-v2' && (query.context !== undefined || query.frame !== undefined)) {
+          return problem(422, 'invalid_statement_coverage', 'Context and frame selection require statement-v2');
+        }
+        if (query.profile === 'statement-v2' && query.context && query.context !== 'global'
+          && (!request.headers.get('authorization') || !query.actingSubject)) {
+          return problem(401, 'authentication_required', 'Realm Statement reads require an authenticated acting subject');
+        }
         const principal = request.headers.get('authorization') && query.actingSubject
           ? await work.account.verify(request, ['context:read']) : null;
+        if (query.profile === 'statement-v2') {
+          const read = await readingPositionRead(work, request, principal, query.actingSubject, async (_boundary, session) => {
+            const { coverageReferences: _coverageReferences, ...statement } = await readAdoptedStatementV2(session,
+              `https://rezics.com/id/${params.id}`, query.revision!, query.context ?? 'global', query.frame ?? [],
+              privateReader(principal, query.actingSubject ?? null));
+            return statement;
+          });
+          return Response.json(read, { headers: noStore });
+        }
         const read = await readingPositionRead(work, request, principal, query.actingSubject, async (boundary) => {
           const statement = await readStatement(env, `https://rezics.com/id/${params.id}`,
             privateReader(principal, query.actingSubject ?? null),
@@ -880,7 +976,12 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         return Response.json(predicate === read.predicate ? read : {
           ...read, predicate, export: { ...read.export, [rdfPredicate]: [{ '@id': predicate }] },
         }, { headers: noStore });
-      } catch (error) { return readError(error); }
+      } catch (error) {
+        if (query.profile === 'statement-v2' && error instanceof ContextCommandUnavailable) {
+          return problem(503, 'association_admission_unavailable', 'Statement admission evidence is unavailable');
+        }
+        return readError(error);
+      }
     },
     )
     .post('/v1/statements/:id/withdrawals', {

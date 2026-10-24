@@ -1,0 +1,249 @@
+{
+  "format": "author-management-outcomes-v1",
+  "status": "pending",
+  "purpose": "TEST specification for accepted Studio and published-author lifecycle decisions; no production implementation or proof enrollment.",
+  "decisionSource": ".temp/ref/decisions.md#studio-inventory and #published-author-lifecycle (staged manager decisions)",
+  "specificationSource": ".temp/ref/author-management-outcomes-spec.json",
+  "baselineProduct": "69eac3ceeaf885be70205a70248bc951e9d81cc9",
+  "registryOwner": "G-2768 enrolls both declaration paths; all twelve cells remain pending until combined proof and manager disposition.",
+  "scope": {
+    "productionChanges": false,
+    "mechanisms": { "access-authority": "consume", "rights-evaluation": "consume" },
+    "separateEffects": {
+      "Structure removal": "Remove one occurrence from a new Structure revision. Retain its previous revision and target Work/content; do not withdraw publication, qualification or Realm placement.",
+      "qualification withdrawal": "End the exact resource/variant qualification head. Keep the Content publication decision and immutable revision. Other live publication support still authorizes its exact bytes.",
+      "Work publication withdrawal": "Use the existing work-structure-publication-v1 operation=withdraw; end that Work decision's instruction adoption support. Do not remove occurrences or change other qualifications.",
+      "Realm placement withdrawal": "End one author-owned Realm/reply placement head. Keep reply identity, author, root coordinates, exact revisions and independently authorized placements in other Realms. This is separate from moderation and erasure."
+    }
+  },
+  "contracts": {
+    "studioInventory": {
+      "operation": "GET /v1/me/agents/{agent}/works",
+      "reuse": "Extend existing Studio read, item, private source-position fence and authority checks; no separate search endpoint or client filtering.",
+      "parameters": {
+        "agent": "Path UUID of the controlled acting Agent. This is the acting identity; no second actingSubject query parameter.",
+        "q": "Optional title substring, maximum 200 Unicode scalar values. Normalize NFKC, trim surrounding whitespace, lowercase without a locale; empty or omitted means all titles. Apply to the authorized inventory before ordering and pagination. Search no body, author name or description. Content language and UI locale do not change matching.",
+        "sort": "Optional enum recent|created|title, default recent. recent orders updatedAt descending; created orders createdAt descending; title orders NFKC lowercase title ascending by Unicode scalar values. Full native Work IRI ascending breaks every tie. Stable across pages and repeated reads of an unchanged basis.",
+        "state": "Reuse optional empty|draft|published; omitted includes all states.",
+        "type": "Reuse optional full https://schema.org/Book, DigitalDocument or Recipe IRI; omitted includes supported types.",
+        "view": "Reuse authored|curated, default authored. This decision does not redefine curated or grant author actions through curation.",
+        "limit": "Reuse integer 1..20, default 20; page size is part of the bound continuation.",
+        "cursor": "Reuse opaque nonempty continuation up to 2048 characters. Bind normalized q, sort including defaults, state, type, view, limit, acting Agent, source basis and live authority basis. A changed query/filter/Agent/page size is 400 invalid_read. A moved valid source basis is 409 read_basis_changed. A caller without Agent control receives 403 before private cursor or inventory disclosure."
+      },
+      "response": "Reuse items/nextCursor/sourcePosition/count. count={value:items.length,kind:exact-page,total:null}; nextCursor=null terminates, including empty results. No fabricated whole-inventory total or new page-complete field.",
+      "chapterCount": "Add required item.chapterCount to list and GET /v1/me/agents/{agent}/works/{id}. Book: {value:nonnegative integer,complete:boolean}; non-Book: null. Count active chapter occurrences across every nested group and continuation, not distinct targets or groups. Repeated placement of one chapter counts repeatedly. complete=false means an explicit lower bound, never an exact-looking zero. The small 23-occurrence corpus must be complete=true. Preserve the existing bounded chapters endpoint and exact-page counts; do not flatten its hierarchy.",
+      "authorization": "Authenticated control of the path Agent. Realm membership, moderation and platform status confer no other author's Studio access. Another Agent controlled by the same Account has its own inventory and cursor binding."
+    },
+    "correction": {
+      "reuse": [
+        "POST /v1/content-drafts profile=content-text-v1 for existing chapter Work and Post resourceId/variantId, expectedHead=exact draft revision UUID",
+        "POST /v1/content-edits profile=metadata-only-v1 for existing native Work, expectedHead=full Work revision IRI",
+        "POST /v1/member-reply-drafts profile=member-reply-draft-v1 for existing reply/variantId/rootTarget/rootRevision, expectedHead=exact revision UUID",
+        "POST /v1/content-publications profile=content-publication-v1 with exact digest, Content epoch and expectedPublicationHead",
+        "POST /v1/content-search-eligibility profile=content-search-eligibility-v1 with the new publicationDecision and expectedEligibilityHead",
+        "POST /v1/realm-reply-placements profile=realm-reply-placement-v1 to advance the author's own direct placement to the exact corrected reply revision"
+      ],
+      "receipt": "Content draft: same resourceId/variantId, new revisionId, predecessor=expectedHead, exact byteDigest, sourcePosition.owner=content and replayed=false. Reply draft: same reply/variantId, new revisionId/revisionDigest, predecessor=expectedHead, replayed=false. Exact-reader reference.byteDigest is SHA-256 of serializedJson UTF-8 bytes and equals the acknowledged byteDigest (revisionDigest for a reply); exact reference retains author and predecessor. Metadata: same work, new revision, predecessor=expectedHead. Successful identical-key retry is 200 with the identical receipt and replayed=true; fresh-key stale head or changed intent under the same key is 409. No replacement Work, Post or reply identity is created.",
+      "publicTransition": "Saving a draft does not publish it or replace current public bytes. Republish and qualify the exact new Content revision, or place the exact corrected reply revision. Historical exact author reads retain bytes and attribution. A superseded Post revision with no independent support is unavailable to an anonymous reader; the original chapter revision remains public through a separately published Recipe instruction adoption.",
+      "exactHistoryRead": "Reuse GET /v1/content-revisions/{revisionUUID}?actingSubject={nativeAgentIRI} and GET /v1/revisions/{workRevisionUUID}?actingSubject={nativeAgentIRI}. Explicitly extend the Content exact reader's existing resource resolution to retained member-reply revisions. Public reply exact bytes require an active placement for that exact revision; author private history uses existing Account/Access authority and retained author provenance even after placement withdrawal. Unknown or unauthorized private exact revisions are 404. This extension adds no independent history store, publication authority or erase bypass.",
+      "identityAndRights": "Original contribution provenance retains the creating Person. Reply rootTarget/rootRevision, parent and origin Realm coordinates are immutable. A correction does not borrow membership, moderator or operator powers. All normal rights, disclosure, restrictions and erasure checks continue."
+    },
+    "qualificationWithdrawal": {
+      "operation": "POST /v1/content-search-eligibility",
+      "newUnionMember": "content-search-eligibility-withdrawal-v1",
+      "request": {
+        "profile": "literal content-search-eligibility-withdrawal-v1",
+        "resourceId": "full native Work/Post IRI",
+        "variantId": "urn:rezics:variant:{UUID}",
+        "publicationDecision": "full IRI of the exact publication supported by this qualification",
+        "expectedEligibilityHead": "non-null full IRI of the active qualification being withdrawn",
+        "actingSubject": "full native Agent IRI; controls and owns the selected qualification, under existing live authority"
+      },
+      "receipt201": {
+        "profile": "literal content-search-eligibility-withdrawal-v1",
+        "outcome": "literal succeeded",
+        "resourceId": "exact request target",
+        "variantId": "exact request target",
+        "publicationDecision": "exact request target",
+        "withdrawnEligibilityHead": "exact expectedEligibilityHead",
+        "decision": "new immutable withdrawal decision native IRI, now the eligibility head",
+        "receipt": "existing durable qualification receipt reference",
+        "graphDataEpoch": "existing graph data epoch string",
+        "graphSequence": "existing decimal graph sequence string",
+        "replayed": false
+      },
+      "recovery": "Bearer and Idempotency-Key required. Identical intent/key returns 200 and the original acknowledged target even after withdrawal, replayed=true. Fresh key with the obsolete expectedEligibilityHead returns 409 stale_eligibility_head. Reusing a key for a changed publication/resource/variant/expected head returns 409 idempotency_conflict without another effect. Missing authentication=401; authenticated non-owner=403. No grant, re-qualification, unrelated publication or target deletion substitutes for withdrawal.",
+      "refresh": "Existing content-variants read retains publicationHead unchanged and exposes eligibilityHead equal to receipt.decision. Exact retained author read remains available. Public read depends on independent live support for that exact revision."
+    },
+    "placementWithdrawal": {
+      "operation": "POST /v1/realm-reply-placements",
+      "newUnionMember": "realm-reply-placement-withdrawal-v1",
+      "request": {
+        "profile": "literal realm-reply-placement-withdrawal-v1",
+        "realm": "full native Realm IRI",
+        "reply": "full native reply IRI",
+        "expectedHead": "non-null full IRI of this Realm/reply's active placement",
+        "expectedRevisionId": "UUID of that exact placed revision",
+        "actingSubject": "full native Agent IRI owning this direct author placement"
+      },
+      "receipt201": {
+        "profile": "literal realm-reply-placement-withdrawal-v1",
+        "realm": "exact request target",
+        "reply": "exact request target",
+        "revisionId": "exact expectedRevisionId",
+        "withdrawnPlacement": "exact expectedHead",
+        "withdrawal": "new immutable native IRI, now the placement head",
+        "replayed": false
+      },
+      "recovery": "Bearer and Idempotency-Key required. Identical key/intent returns 200 with the same acknowledgement and replayed=true. Obsolete placement head or a revision mismatch is 409 realm_reply_stale; changed intent/key reuse is 409 idempotency_conflict. Missing authentication=401; authenticated non-owner=403. Owning a reply alone does not confer withdrawal authority over another publisher's placement, even in another Realm. Owning the Realm alone does not turn another author's direct placement into this operation; use existing moderation separately.",
+      "refresh": "GET /v1/realms/{realm}/replies/{reply} no longer exposes the withdrawn placement (404). Independently authorized other-Realm placement, another author's reply, canonical identity, exact author history and author attribution remain unchanged."
+    }
+  },
+  "fixture": {
+    "producer": "tests/qa/support/author-management-fixture.ts",
+    "manifest": ".temp/author-management-corpus/retained.json (private mode 0600; contains retained fixture credentials, never publish)",
+    "background": "One command-created all-owner corpus; no fabricated successful source data, imported public claim, raw authority SQL, manual graph seeding or shared development stack.",
+    "inventory": "23 matching original empty Books, duplicate normalized title keys, CJK titles, descending titles versus creation order, one older Work edited later; excluded draft, Recipe, another member's private Book and another controlled Agent's Book. A public Book has 23 active chapter occurrences: 21 at root and two nested under a root Part, plus an empty root Volume. This respects the existing Book maxDepth=2; group-under-group creation is invalid. Repeated placements of one chapter target count separately; groups do not count. Both the 20-item chapters page and five-item inventory page require continuations.",
+    "lifecycle": "Owner's public chapter, independent Post and direct reply; another member's independent reply. A separate owner-published Recipe instruction pins the old chapter Content revision under its own Work publication decision. A second public Realm's moderator has only scoped fixture review.decide/reply.place authority, approves and places the old owner reply there independently. Original reply originRealm=null permits that existing cross-Realm placement. Recipe adoption uses the same original author, as current rights admission requires; it does not impersonate another author.",
+    "preparation": "Pin pristine product baseline, start one named isolated scale producer, enforce 600 seconds including startup/migrations/readiness/smoke/backup excluding admission wait. Retain one stopped consistent all-owner backup and its compatibility/producer digest. Each proof restores an isolated writable copy, applies existing restore migrations, logs in retained actors and smokes exact anonymous Content reads within 600 seconds; lifecycle bodies restore separately so a red predecessor cannot corrupt a later premise.",
+    "prerequisites": [
+      "Pinned baseline with this test-only specification cherry-picked; git diff baseline -- apps packages services model infra must be empty.",
+      "Enroll both prove-file paths in scripts/qa/isolated-integration-files.ts commandOnlyIntegrationFiles so the persistent producer uses the closed product assembler. Scale alone selects raw-update mode for unenrolled files; that mode is incompatible with this command-only stopped-backup lifecycle. The producer now rejects that premise before creating data.",
+      "Existing scale stack and backup engine images available, isolated admission granted, normal Main and Account readiness.",
+      "Existing stopCorpusSourcePostgres must certify the stopped source with a successful bounded read-only pg_controldata container, followed by successful stopped all-owner backup publication. A timeout, incomplete backup or failed restart is a fixture blocker, never outcome evidence.",
+      "Successful original-contribution publication and qualification receipts plus anonymous non-null exact bytes for chapter and Post.",
+      "Successful separately published Recipe instruction adoption and independently reviewed second-Realm reply placement.",
+      "No user content or unknown public rights claim is used. Fixture-only scoped authority uses grantPersonaFixtureAuthority, not production policy changes."
+    ]
+  },
+  "rows": [
+    {
+      "id": "realm/studio-inventory",
+      "state": "pending",
+      "declaration": "scripts/qa/cases/outcomes/realm/studio-inventory.ts",
+      "proveFile": "tests/qa/integration/outcomes/realm/studio-inventory.test.ts",
+      "personas": {
+        "visitor": "pending: authentication refusal and no private inventory/chapter disclosure",
+        "stranger": "pending: own empty filtered inventory; no owner control or borrowed cursor",
+        "member": "pending: own single matching private Book; membership grants no other inventory",
+        "owner": "pending: title/CJK/normalized search; all 23 results; stable paginated title/recent/created order; all filter/cursor/acting identity and nested count scenarios",
+        "moderator": "pending: own empty inventory; moderator role gives no author inventory control",
+        "operator": "pending: own empty inventory; platform role gives no author inventory control"
+      },
+      "additionalBodies": [
+        "AMGT01 Studio recent created and title sorts are stable across every page",
+        "AMGT01 Studio continuations bind query sort filters page size and controlled acting Agent",
+        "AMGT01 Studio counts nested and paginated chapter occurrences without counting groups",
+        "AMGT01 Studio rejects a continuation whose valid inventory source basis moved"
+      ]
+    },
+    {
+      "id": "realm/published-author-lifecycle",
+      "state": "pending",
+      "declaration": "scripts/qa/cases/outcomes/realm/published-author-lifecycle.ts",
+      "proveFile": "tests/qa/integration/outcomes/realm/published-author-lifecycle.test.ts",
+      "personas": {
+        "visitor": "pending: exact public bytes/attribution; 401 for correction and withdrawal",
+        "stranger": "pending: exact public bytes; 403 for another author's correction/qualification/placement",
+        "member": "pending: same public rights; membership confers no author mutation authority",
+        "owner": "pending: same chapter Work/Post/reply identities; new exact revision/predecessor/digest, retry and stale receipts, same Work metadata identity, refreshed state, immutable Content/Work/reply history",
+        "moderator": "pending: public reads; moderation role alone cannot correct or withdraw another author's publication",
+        "operator": "pending: public reads; platform role alone cannot correct or withdraw another author's publication"
+      },
+      "additionalBodies": [
+        "AMGT01 corrected content republishes the same identity with exact publication and qualification heads",
+        "AMGT01 qualification withdrawal removes only the selected Post publication support and retains author history",
+        "AMGT01 Structure removal qualification withdrawal and independent Work publication withdrawal have distinct effects",
+        "AMGT01 owner placement withdrawal preserves another publisher placement and another author reply"
+      ]
+    }
+  ],
+  "execution": {
+    "namedSelection": "AMGT01 over exactly the two row prove files; AMGT01: describe prefixes include all six persona titles in the runner's acceptance-ID filter",
+    "producerSelection": "AMGT00 over only studio-inventory.test.ts with AUTHOR_MANAGEMENT_PREPARE=1, AUTHOR_MANAGEMENT_BASELINE=69eac3ceeaf885be70205a70248bc951e9d81cc9 and REZICS_QA_STACK_MODE=scale",
+    "producerSelectionStatus": "Corrected future command, not an executed selection at this pin; earlier run evidence is retained under historicalPreparation.",
+    "qaCommand": "REZICS_QA_STACK_MODE=scale bun scripts/goal/goalctl.ts test tests/qa/integration/outcomes/realm/studio-inventory.test.ts tests/qa/integration/outcomes/realm/published-author-lifecycle.test.ts -t AMGT01",
+    "jobOwner": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- <command> from the worker worktree",
+    "wrapperSemantics": "Every declaration and additional body uses pending/test.failing. A reached assertion failure is expected red product evidence, not proof; an unexpectedly passing pending body is reported honestly. Setup, readiness, corpus, admission, missing registry or storage failures never count as product assertion failures. No answer captures are generated.",
+    "baseline": {
+      "status": "not-run",
+      "product": "69eac3ceeaf885be70205a70248bc951e9d81cc9",
+      "pinPolicy": "The original audit tree retained in state is the product baseline; the later nomination cannot replace it. Identify authored specification/test/support overlays, the fixed-wave revision, restored corpus generation and source snapshot independently. A fixture unable to run this original product revision blocks proof rather than advancing the pin.",
+      "pinStatus": "Corrected future pin; no preparation or outcome assertion has been executed at this revision. historicalPreparation retains the later-revision attempts unchanged and is not original-baseline evidence.",
+      "preparationBudgetMs": 600000,
+      "preparationMs": null,
+      "retainedCorpus": null,
+      "assertionReached": false,
+      "failingBodies": [],
+      "blocker": "No compatible command-created stopped all-owner corpus and isolated restore have been established for the original audit product revision. Retain the historical preparation failures below as prerequisites, not evidence for the corrected pin."
+    },
+    "historicalPreparation": {
+      "status": "blocked-before-outcome-assertions",
+      "product": "79be80d4d0e1cad1639b6a65e8f0795d6a95929a",
+      "specificationCommit": "fa61f143828e78e6e66497d6a059931349495181",
+      "waveSpecificationCommit": "044189e41b1f6fc26976d24885ea30c2fb6b2e6b",
+      "pinVerification": "The named producer ran from a clean baseline checkout with only the six specification/declaration/prove/support files added or changed. All other tracked files, including product and QA harness, matched the pinned baseline. Later specification hardening and this evidence update were not executed as baseline assertions.",
+      "preparationBudgetMs": 600000,
+      "preparationMs": null,
+      "retainedCorpus": null,
+      "assertionReached": false,
+      "failingBodies": [],
+      "unexecutedSelection": "AMGT01 over both prove files: no persona or additional outcome body reached an assertion; the ordered job stopped at AMGT00 preparation failure.",
+      "attempts": [
+        {
+          "job": "job:438a4b6b-ffeb-4346-8231-048a2689a5a0",
+          "producerRun": "20261018t194924-fd010c",
+          "proofRun": "20261018t195142-ccbfb7",
+          "stage": "selection / pool reset",
+          "result": "The producer's original AMGT00 title lacked the colon required by the acceptance-ID matcher: zero bodies ran despite exit 0. No corpus was created. The subsequent AMGT01 shard stopped during a Fuseki docker restart timeout before any test. The explicit AMGT00: title and AMGT01: describe prefixes now fix selection; persistent scale avoids this disposable pool reset.",
+          "assertionReached": false,
+          "backupPublished": false
+        },
+        {
+          "job": "job:1cf6c970-e48a-42b8-86e0-d840499a1dde",
+          "qaRun": "20261018t195727-b5748c",
+          "failedPreparationBody": "AMGT00: retains one command-created author-management corpus",
+          "producerBodyMs": 101075,
+          "stage": "composition fixture topology",
+          "result": "POST /v1/compositions/{id}/changes returned 409 composition_conflict when inserting a Part under a Volume. Existing Book maxDepth=2 forbids group-under-group. Corrected the fixture to root Volume and Part, with chapters nested under the Part; all 23 occurrence and pagination assertions remain.",
+          "assertionReached": false,
+          "backupPublished": false
+        },
+        {
+          "job": "job:07c130ea-16df-41ff-8cbb-cb29c0d9770b",
+          "qaRun": "20261018t200648-4ee118",
+          "source": "fa61f143828e78e6e66497d6a059931349495181",
+          "failedPreparationBody": "AMGT00: retains one command-created author-management corpus",
+          "producerBodyMs": 197811,
+          "runActiveMs": 271424,
+          "runAdmissionWaitMs": 13172,
+          "stage": "stopped all-owner backup certification",
+          "result": "Public command setup completed through original publications, Recipe adoption, two-Realm reply placements and anonymous exact chapter/Post smoke reads. stopCorpusSourcePostgres then failed: its read-only docker run --entrypoint pg_controldata exceeded 30000ms (exited null). The backup was not published. Recovery and QA cleanup also failed with Saved stack raw-update mode differs; use a new QA run-id. The full run active time is recorded, not a claimed successful preparation duration.",
+          "log": ".artifacts/qa/20261018t200648-4ee118/logs/integration-1.log",
+          "assertionReached": false,
+          "backupPublished": false
+        }
+      ],
+      "blocker": "Command-only QA enrollment for these two prove files is missing, and the baseline PostgreSQL shutdown certifier's read-only pg_controldata container timed out before a reusable stopped all-owner corpus could be retained. No successful 600-second preparation or product assertion failure is claimed. Enroll the existing command-only set and resolve bounded shutdown certification before rerunning AMGT00 then AMGT01 on the pristine product pin."
+    },
+    "staticChecks": [
+      {
+        "job": "job:786934e9-d384-4f0a-9e39-cc8416c1eb72",
+        "command": "task goal -- check --only types,lint,guards",
+        "result": "Types/lint/AST passed. Guards failed before declarations could load: unknown outcome row realm/published-author-lifecycle pending G-2768 registry enrollment; retained-preflight repair guard also hit the worker wide-QA restriction. No other author's assertions or registry files were changed."
+      },
+      {
+        "job": "job:7258ab90-4bca-493a-a69a-da9ed0e3a071",
+        "commands": ["task goal -- check --only types,lint", "task docs:check"],
+        "result": "Passed on wave specification 044189e41b1f6fc26976d24885ea30c2fb6b2e6b before the final assertion/evidence hardening. Final checks are reported in the worker handoff."
+      }
+    ]
+  },
+  "implementationHandoff": [
+    "Review the explicit q/sort/chapterCount and two withdrawal union contracts before a separate API author starts. These are proposed interface details, not claims that baseline implements them.",
+    "Implement under existing owner authority, rights evaluation, source fences, receipt and disclosure/erasure paths. Do not add a parallel rights, history, placement or review mechanism.",
+    "Extend the existing exact Content revision reader for member-reply targets with retained author/private and exact active-placement/public authority; missing support is explicit test debt.",
+    "Complete and record every named body after implementation on combined wave; enroll declaration registry through G-2768. Baseline red, static checks and this matrix prove no persona cell.",
+    "UI adaptation belongs to its existing authors; no UI file is changed here. Keep all twelve declarations pending and this specification on the wave until combined proof and manager disposition."
+  ]
+}

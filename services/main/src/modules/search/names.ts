@@ -112,6 +112,8 @@ export async function backfillPublicNameBatch(env: WorkActivationEnvironment, af
         { ?resource a ?type . VALUES ?type { schema:CreativeWork skos:Concept rv:Space rv:Realm rv:Zone rv:Agent rv:Collection rv:Post } }
         UNION { ?resource rv:semanticHead ?head }
         UNION { ?resource rv:observationHead ?head }
+        UNION { ?resource rv:semanticHead ?head }
+        UNION { ?resource a rv:Post }
       } FILTER(STR(?resource)>${lit(after)}) } ORDER BY STR(?resource) LIMIT 65`,
           65_536,
         )

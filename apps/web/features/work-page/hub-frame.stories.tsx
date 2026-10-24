@@ -18,6 +18,7 @@ import { WorkAbout } from './work-header.tsx';
 import { YourEdition } from './your-edition.tsx';
 import { chooseOption } from '../stories/choose-option.ts';
 import { showsEditionStatus, workExperience } from '../entity-page/experience.ts';
+import { messages as relationshipMessages } from '../relationships/messages.ts';
 
 const noOverflow = () => expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
 

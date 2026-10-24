@@ -34,7 +34,7 @@ import { publicationSource } from './publication-source.tsx';
 import { readAnimeAgentCredits, readAnimeReaderState, readAnimeWorkCredits, readSelectedWorkCredits } from './anime-hub-recorded-page.ts';
 import { oneTextLanguage, readAdoptions, readAgentWorks, readAlsoEnjoyed, readClassifications,
   readContents, readDiscussion, readHistory, readingAgent, readRatings, readRealm,
-  readReviewer, readReviews, readVersions, readWorkStats,
+  readReviewer, readReviews, readVersions, readWorkStats, readReleases,
   readHubWorkPage, readText, readRatingPopulations, reader, type SuppliedClient } from './read.ts';
 import { Region, RegionFailure, RegionSkeleton } from './region.tsx';
 import { WorkRecord } from './record.tsx';
@@ -63,6 +63,7 @@ import type { RecipeWorkHost } from './recipe-reading-recorded-page.ts';
 import { recipeRegion, recipeWorkFrame, recipeWorkOverview } from './recipe-reading-recorded-page.tsx';
 import { HubExperience } from './types/hub.tsx';
 import { GuideExperience } from './types/guide.tsx';
+import { NextActionView } from './primary-action.tsx';
 
 // Server compositions for the `/w/[ref]` routes: each region reads Main on its
 // own under Suspense, so the page streams as answers arrive and one failure
@@ -273,7 +274,8 @@ export async function WorkFrameView({ workRef, id, work, locale, messages, lead,
       {(client ? ReadSlot({ workRef, id, work, experience, locale, messages, client }) : <ReadSlot workRef={workRef} id={id} work={work} experience={experience} locale={locale} messages={messages} />)}
     </Suspense>}
     status={showsEditionStatus(experience) ? <Suspense fallback={null}>
-      {(client ? Status({ id, locale, messages, client }) : <Status id={id} locale={locale} messages={messages} />)}</Suspense> : undefined}
+      {(client ? Status({ id, work: experience.kind === 'book' ? work : undefined, locale, messages, client })
+        : <Status id={id} work={experience.kind === 'book' ? work : undefined} locale={locale} messages={messages} />)}</Suspense> : undefined}
     shortcuts={<>
       <ProvisionalNotice verification={work.verification} provenance={work.fieldProvenance} locale={locale} />
       {plan.includes('wiki') ? <Suspense fallback={null}>

@@ -45,7 +45,7 @@ import { AdoptionRegion } from './adoption.tsx';
 import type { WorkPageMessages } from './messages.ts';
 import { RatingLine, RatingSummaryRegion } from './ratings.tsx';
 import {
-  loadRecipeIdentity, recipeReadingReads, type RecipeWorkHost,
+  loadRecipeIdentity, recipeMethodAvailable, recipeReadingReads, type RecipeWorkHost,
 } from './recipe-reading-recorded-page.ts';
 import { RegionFailure, RegionSkeleton } from './region.tsx';
 import { RecipeExperience, RecipeFacts, RecipeNutritionSources, RecipeReadFailure, type RecipePageRead } from './types/recipe.tsx';

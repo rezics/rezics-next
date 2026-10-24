@@ -1,5 +1,4 @@
 import { projectRecipeFacts, hydrateRecipeFacts, recipeFactValidations, projectRecipeMeasures, canonicalRecipeQualifier } from './fact-projection.ts';
-import { verifyRecipeSource } from './source-correspondence.ts';
 import { RV, iri } from '../work/activate.ts';
 import type { StructureProfileRegistration } from '../structure/profiles.ts';
 import { InvalidStructureObject } from '../structure/format.ts';
@@ -12,7 +11,12 @@ import { ingredientReferences } from './references.ts';
 export const structureProfiles: readonly StructureProfileRegistration[] = [{
   id: 'recipe-composition',
   workPublication: true,
-  verifySourceCorrespondence: verifyRecipeSource,
+  // The verifier reads the completed Structure registry. Loading it during
+  // discovery would make registration wait for its own pending module.
+  async verifySourceCorrespondence(input) {
+    const { verifyRecipeSource } = await import('./source-correspondence.ts');
+    return verifyRecipeSource(input);
+  },
   projectPublicationDependency: (source, dependency) =>
     `${iri(source)} <https://schema.org/recipeInstructions> ${iri(dependency)} .`,
   graphProfile: `${RV}RecipeComposition`,

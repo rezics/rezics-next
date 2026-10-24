@@ -117,8 +117,8 @@ export interface ResourceListPlan {
  * A single-owner type selection enters the native collector before retrieval.
  * Each ranked window needs one live population join and zero per-hit text
  * collectors. Concept meaning needs one graph read per request, independent of
- * refill count. Names/types/disclosure admit the full 64-candidate window once;
- * credit/rating previews hydrate the delivered page once. An undecided
+ * refill count. Types admit each candidate window; names/disclosure and
+ * credit/rating previews hydrate the selected page once. An undecided
  * hit stays after the cursor. Application matching is O(C*T*I + M), with C
  * examined candidates, T selected Concepts, I interpretations and M membership
  * rows, rather than rescanning the whole membership relation for every chip.

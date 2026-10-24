@@ -67,14 +67,14 @@ export async function PrimaryAction({ workRef, id, work, locale, messages, clien
  * The edition the reader chose and their progress, named in Main's words, under the primary action. A chosen
  * release is named by its own title; a chosen realization, which has none, by its language.
  */
-export async function Status({ id, locale, messages, client }: Common & { id: string }) {
-  const status = await readBooksEditionStatus({
+export async function Status({ id, work, locale, messages, client }: Common & { id: string; work?: Header }) {
+  const [status, start] = await Promise.all([readBooksEditionStatus({
     readEditionPreference: key => readEditionPreference(key, client),
     readProgressSummary: (key, language) => readProgressSummary(key, language, client),
     readEditionRelease: (key, release) => readEditionRelease(key, release, client),
     readEditionRealization: (key, realization, revision) => readEditionRealization(key, realization, revision, client),
-  }, id, locale);
-  return <IdentityStatus {...status} locale={locale} messages={messages} />;
+  }, id, locale), work ? readStart(id, work.id, locale, work.selectedLanguage, client) : undefined]);
+  return <IdentityStatus {...status} start={start} locale={locale} messages={messages} />;
 }
 
 /** Facts and their source records share the same read on every Work view. */

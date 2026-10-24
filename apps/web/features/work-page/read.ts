@@ -11,7 +11,7 @@ import { recipeReadingReads } from './recipe-reading-recorded-page.ts';
 import { failureOf } from './failure.ts';
 import type { MainClient } from '../discover/types.ts';
 import { booksEditionReads, settle, refusedRead, settleNullable } from './books-edition-page.read.ts';
-import { readSuppliedContents, readSuppliedStart } from './games-hub-recorded-page.ts';
+import { readSuppliedBookStart, readSuppliedContents } from './games-hub-recorded-page.ts';
 import { booksLanguageReads } from './books-language-recorded-page.ts';
 import { WORK_MISSING_HEADER } from './admission.ts';
 import { mainApiWithToken, readPlatformAccess } from '../api/main.ts';
@@ -361,7 +361,7 @@ export const oneTextLanguage = cache(async (id: string, locale: UiLocale, select
  */
 export const readStart = cache(async (id: string, work: string, locale: UiLocale, selected: string | null,
   client?: SuppliedClient): Promise<ReadStart> => {
-  return readSuppliedStart(client ?? await reader(), id, work, () => oneTextLanguage(id, locale, selected, client));
+  return readSuppliedBookStart(client ?? await reader(), id, work, () => oneTextLanguage(id, locale, selected, client));
 });
 
 /**

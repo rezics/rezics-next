@@ -5,7 +5,8 @@ export type Proof = NamedProof | JourneyProof | MissingProof;
 type ApiProof = NamedProof | MissingProof;
 
 export interface LaunchCoverage {
-  kind: 'books' | 'recipes' | 'visual-novels' | 'anime' | 'manga' | 'games' | 'realm' | 'zone';
+  // Catalogue groups shared acceptance contracts, not a backend vertical.
+  kind: 'books' | 'recipes' | 'visual-novels' | 'anime' | 'manga' | 'games' | 'realm' | 'zone' | 'catalogue';
   capability: string;
   hardCase?:
     | 'ambiguous-editions'
@@ -21,6 +22,10 @@ export interface LaunchCoverage {
 }
 
 const api = (file: string, test: string, evidence?: string): ApiProof => ({ file, test, evidence });
+const pendingApi = (file: string): ApiProof => ({
+  missing: 'gap',
+  reason: `Pending six-persona contract in ${file}; passing API proof has not been recorded.`,
+});
 const browser = api;
 const journeyBrowser = (file: string, journey: string, test: string, evidence?: string): JourneyProof => ({ file, journey, test, evidence });
 
@@ -731,5 +736,77 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     browser: browser('apps/web/tests/tracking-media.e2e.ts',
       'thousand-episodes: an Anime reader reaches the inventory end by keyboard and returns after reload in English and Japanese',
       'An identified Anime reader reaches episodes 1, 21, 1000, 1001 and 1002 by keyboard, sees that 1003 is outside the inventory, marks 1002 watched and reloads its persisted progress in English and Japanese.'),
+  },
+  {
+    kind: 'catalogue',
+    capability: 'Import fidelity',
+    api: pendingApi('tests/qa/integration/outcomes/catalogue/import-fidelity.test.ts'),
+    browser: { missing: 'gap', reason: 'No approved browser journey proves retained import identities, frozen snapshots and rights.' },
+  },
+  {
+    kind: 'catalogue',
+    capability: 'Source coverage',
+    api: pendingApi('tests/qa/integration/outcomes/catalogue/source-coverage.test.ts'),
+    browser: { missing: 'gap', reason: 'No approved browser journey proves truthful retained source coverage and recovery.' },
+  },
+  {
+    kind: 'catalogue',
+    capability: 'Contextual associations',
+    api: pendingApi('tests/qa/integration/outcomes/catalogue/contextual-associations.test.ts'),
+    browser: { missing: 'gap', reason: 'No approved browser journey proves context, spoiler qualification and correlated associations.' },
+  },
+  {
+    kind: 'catalogue',
+    capability: 'Credits and inverse',
+    api: pendingApi('tests/qa/integration/outcomes/catalogue/credits-and-inverse.test.ts'),
+    browser: { missing: 'gap', reason: 'No approved browser journey proves qualified credits, inverse reads and independent supports.' },
+  },
+  {
+    kind: 'catalogue',
+    capability: 'Releases and media',
+    api: pendingApi('tests/qa/integration/outcomes/catalogue/releases-and-media.test.ts'),
+    browser: { missing: 'gap', reason: 'No approved browser journey proves release identity and authorized media delivery.' },
+  },
+  {
+    kind: 'catalogue',
+    capability: 'Supporting information',
+    api: pendingApi('tests/qa/integration/outcomes/catalogue/supporting-information.test.ts'),
+    browser: { missing: 'gap', reason: 'No approved browser journey proves supporting information with truthful disclosure and recovery.' },
+  },
+  {
+    kind: 'catalogue',
+    capability: 'Ordered domain read',
+    api: pendingApi('tests/qa/integration/outcomes/catalogue/ordered-domain-read.test.ts'),
+    browser: { missing: 'gap', reason: 'No approved browser journey proves complete ordered domain reads and bounded continuation.' },
+  },
+  {
+    kind: 'recipes',
+    capability: 'Nutrition and substitutions',
+    api: pendingApi('tests/qa/integration/outcomes/recipes/nutrition-and-substitutions.test.ts'),
+    browser: { missing: 'gap', reason: 'No approved browser journey proves qualified recipe nutrition and substitutions.' },
+  },
+  {
+    kind: 'realm',
+    capability: 'Identity discovery',
+    api: pendingApi('tests/qa/integration/outcomes/realm/identity-discovery.test.ts'),
+    browser: { missing: 'gap', reason: 'No approved browser journey proves complete authorized identity discovery.' },
+  },
+  {
+    kind: 'realm',
+    capability: 'Studio inventory',
+    api: pendingApi('tests/qa/integration/outcomes/realm/studio-inventory.test.ts'),
+    browser: { missing: 'gap', reason: 'No approved browser journey proves inventory-wide title search, stable ordering and complete chapter counts.' },
+  },
+  {
+    kind: 'realm',
+    capability: 'Published author lifecycle',
+    api: pendingApi('tests/qa/integration/outcomes/realm/published-author-lifecycle.test.ts'),
+    browser: { missing: 'gap', reason: 'No approved browser journey proves published revision correction and distinct authorized withdrawals with recovery.' },
+  },
+  {
+    kind: 'catalogue',
+    capability: 'Search intent',
+    api: pendingApi('tests/qa/integration/outcomes/catalogue/search-intent.test.ts'),
+    browser: { missing: 'gap', reason: 'No approved browser journey proves keyword and phrase intent, bounded typo recovery and filter-preserving continuation.' },
   },
 ];

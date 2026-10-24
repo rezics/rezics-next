@@ -21,7 +21,6 @@ import type { LibraryApi, saveYearlyGoal } from './api.ts';
 import type { ImportApi } from './import-api.ts';
 import type { ImportShelf } from './import-store.ts';
 import type { CopiesApi } from './loans/api.ts';
-import { BringIntoRow } from './loans/bring-into-row.tsx';
 import { CopiesApiProvider } from './loans/provider.tsx';
 import { NewShelf, SortControl, VisibilityControl } from './controls.tsx';
 import { LibraryProvider } from './library-context.tsx';
@@ -74,11 +73,11 @@ function ShelfNav({ state, overview, locale, messages, loansCurrent = false }: {
             <span className="tabular-nums opacity-70">{count(entry.count, locale)}</span>
           </Link>
         </li>)}
-        <BringIntoRow active={current === 'loans'}>
+        <li>
           <Link documentNavigation href="/library/loans" aria-current={current === 'loans' ? 'page' : undefined} className={navItem}>
             <span className="lg:flex-1">{t.loans}</span>
           </Link>
-        </BringIntoRow>
+        </li>
       </ul>
       <div className="flex items-center gap-2 lg:grid lg:gap-1">
         <h2 className="hidden px-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide lg:block">

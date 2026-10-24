@@ -27,6 +27,8 @@ Design documents do not claim that a capability or deployment is complete.
 - [How work is defined, proved and landed](goals/method.md) — Outcome rows and landing criteria; read when defining or proving work.
 - [Waves: build, then prove](goals/wave.md) — Build and prove phase boundaries; read only for wave work.
 - [Goal worker protocol](goals/worker.md) — Worker authority and handoff; read when assigned a Goal task.
+- [Frozen import outcome specification](goals/audit-remediation-20261019/import-outcomes.md) — Pending two-source import fidelity, conservative coverage and fixture prerequisites; read before reviewing or proving the import outcome rows.
+- [Information outcome specification handoff](goals/audit-remediation-20261019/information-outcomes.md) — Pending supporting information and ordered reads, proposed shared contracts and deferred baseline prerequisites; read before reviewing or proving these rows.
 
 ## Architecture
 
@@ -161,9 +163,13 @@ Design documents do not claim that a capability or deployment is complete.
 ## Testing
 
 - [Acceptance design](testing/README.md) — Acceptance design; read when selecting or implementing its verification.
+- [Pending catalogue release and media outcomes](goals/audit-remediation-20261019/releases-and-media.md) — Exact release selection, source media, navigation contracts and their retained fixture prerequisites.
+- [Pending public Recipe and Book outcomes](goals/audit-remediation-20261019/public-domain-outcomes.md) — Source-qualified fixture prerequisites and six-persona contracts; read before implementing or proving these audit outcomes.
+- [Identity and reader preparation handoff](goals/audit-remediation-20261019/identity-reader-handoff.md) — Supported Book publication commands, reader corrections and remaining genuine-corpus proof.
 - [Complexity verification](testing/complexity.md) — Complexity verification; read when selecting or implementing its verification.
 - [seed-build-command-cost](testing/seed-build-command-cost.md) — seed-build-command-cost; read when selecting or implementing its verification.
 - [Live source conversion and conformance](testing/source-conformance.md) — Live source conversion and conformance; read when selecting or implementing its verification.
+- [Shared audit corpus preparation](testing/audit-corpus.md) — Source pins, command stages, stopped backup and isolated manifest restore ownership for pending audit proofs.
 - [Executable test harness](testing/test-harness.md) — Executable test harness; read when selecting or implementing its verification.
 
 ## Operations

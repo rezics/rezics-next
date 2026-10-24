@@ -1,4 +1,6 @@
-import { expect, test } from 'bun:test';
+import { afterAll, expect, test } from 'bun:test';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { Parser } from 'n3';
 import { systemDisclosure } from '../src/modules/target/disclosed-references.ts';
 import type { Pool } from 'pg';
 import {
@@ -25,7 +27,11 @@ import { withDisclosureViewer } from '../src/modules/disclosure/viewer.ts';
 import { WorkReadSession, type ReadRow } from '../src/modules/work/read-session.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
-import { RV } from '../src/modules/work/activate.ts';
+import { prepareComponent, RV } from '../src/modules/work/activate.ts';
+import { ownedTriples, type DefinitionState } from '../src/modules/semantic/change.ts';
+import { PROFILES, definitionKindIri } from '../src/modules/semantic/schema.ts';
+import { COLLECTION_PURPOSE_NOTATION } from '../src/modules/statement/qualification.ts';
+import { CLASSIFICATION_INHERIT_POLICY } from '../src/modules/classification/context.ts';
 import { fallbackAvatar, type ResourceSummary } from '../src/modules/media/summary.ts';
 import type { Labels } from '../src/modules/suitability/policy.ts';
 import { configureFixtureDisclosureAncestry, fixtureDisclosureCut } from './support/disclosure-ancestry.ts';
@@ -40,6 +46,8 @@ const refs = (query: string) =>
     hit[0].slice(1, -1),
   );
 const position = { dataEpoch: 'epoch', sequence: '1' };
+const directory = mkdtempSync('.temp/derived-relation-owners-');
+afterAll(() => rmSync(directory, { recursive: true, force: true }));
 
 function fixture(signed = false) {
   const labels = new Map<string, Labels>(),
@@ -496,9 +504,25 @@ test('G-904: sitemap fills after hidden identities and ends without a hidden con
 test('G-904: a restricted relation occurrence is gated before retained payload resolution even with readable subject Works', async () => {
   const f = fixture();
   f.restricted.add(id(11));
+  const collection = id(12), definition = id(20), revision = id(21);
+  const state: DefinitionState = { component: 'definition', kind: 'property', lifecycle: 'active',
+    successor: null, roles: [], notation: COLLECTION_PURPOSE_NOTATION };
+  f.environment.objectDirectory = directory;
+  const manifest = `urn:rezics:sha256:${prepareComponent(directory, definition, state, PROFILES.definition)}`;
+  // The visible ordinary Collection has a current canonical Structure and a
+  // complete, empty purpose inventory. Restricted occurrences still have no
+  // payload response, so accidentally resolving one keeps failing this test.
+  f.session.deps.access.canReadSemanticResource = async (_principal, _actor, resource) =>
+    resource === collection || resource === definition;
+  f.session.deps.statementSeek = {
+    coverage: async () => ({ complete: true, through_sequence: '0' }),
+  } as MainWorkDependencies['statementSeek'];
+  const uri = (value: string) => ({ type: 'uri', value });
   const headQuery = f.graph.query.bind(f.graph);
   f.graph.query = async (query) => {
-    if (query.includes('SELECT ?work ?head ?owningWork')) return headQuery(query);
+    if (query.includes('SELECT ?work ?head ?owningWork') || query.includes('SELECT ?work ?head ?nameOwner')
+      || query.includes('SELECT ?resource ?head'))
+      return headQuery(query);
     if (query.includes('SELECT DISTINCT ?relation ?kind ?key'))
       return {
         results: {
@@ -508,6 +532,28 @@ test('G-904: a restricted relation occurrence is gated before retained payload r
           ],
         },
       };
+    if (query.includes('SELECT ?epoch ?sequence ?hold ?r')) return { results: { bindings: [{
+      ...row({ epoch: 'epoch', sequence: '1', type: 'collection', public: 'true' }), r: uri(collection),
+      label: { ...term('Ordinary collection'), 'xml:lang': 'en' },
+    }] } };
+    if (query.includes('SELECT ?structure WHERE')) return { results: { bindings: [{ structure: uri(id(22)) }] } };
+    if (query.includes('SELECT ?component ?profile ?head ?generation ?count ?manifest')) return { results: { bindings: [{
+      component: uri(collection), profile: uri(`${RV}CollectionMembership`), head: uri(id(23)),
+      generation: uri(id(24)), count: term('1'), manifest: uri(`urn:rezics:sha256:${'a'.repeat(64)}`),
+    }] } };
+    if (query.includes('SELECT ?owner WHERE')) return { results: { bindings: [{ owner: uri(collection) }] } };
+    if (query.includes('SELECT ?definition ?head')) return { results: { bindings: [{ definition: uri(definition), head: uri(revision) }] } };
+    if (query.includes('SELECT ?definition ?manifest ?kind')) return { results: { bindings: [{
+      definition: uri(definition), manifest: uri(manifest), kind: uri(definitionKindIri('property')),
+    }] } };
+    if (query.includes('SELECT ?head ?manifest')) return { results: { bindings: [{ head: uri(revision), manifest: uri(manifest) }] } };
+    if (query.includes('SELECT ?p ?o')) return { results: { bindings: new Parser()
+      .parse(ownedTriples(definition, state, revision).map(triple => `<${definition}> ${triple} .`).join('\n'))
+      .map(quad => ({ p: uri(quad.predicate.value), o: uri(quad.object.value) })) } };
+    if (query.includes('ASK')) return { boolean: true };
+    if (query.includes('SELECT ?policy ?realm')) return { results: { bindings: [{ policy: uri(CLASSIFICATION_INHERIT_POLICY) }] } };
+    if (query.includes('?neighbourScore') && query.includes(`rdf:subject <${collection}>`)
+      && query.includes(`FILTER(?predicate = <${definition}>)`)) return { results: { bindings: [] } };
     if (query.includes('SELECT ?epoch ?sequence'))
       return { results: { bindings: [row({ epoch: 'epoch', sequence: '1' })] } };
     throw new Error('Hidden relation payload was loaded');
@@ -520,7 +566,7 @@ test('G-904: a restricted relation occurrence is gated before retained payload r
     disclose: systemDisclosure,
     canReadOccurrence: async () => true,
     summarize: (resources) => f.session.summaries(resources),
-  });
+  }, f.session);
   expect(page.items.map((item) => item.relation)).toEqual([id(12)]);
   expect(page.next).toBeNull();
 });

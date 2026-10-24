@@ -29,6 +29,8 @@ export function workExperience(page: EntityProjection | null, types: readonly st
   const primaryAction = entry?.primaryAction ?? 'read';
   const section = page?.sections.find(candidate => (typeSectionIds as readonly string[]).includes(candidate.id));
   const typeSection = section ? { id: section.id as TypeSectionId, href: section.href } : null;
+  // A missing section cannot erase the domain Main already named in its registry.
+  // Its href still comes only from the projection; recovery must not invent one.
   const kind: ExperienceKind = typeSection ? typeSection.id
     : presentation === 'book' || presentation === 'guide' || presentation === 'recipe'
       || presentation === 'prompt' || presentation === 'skill' ? presentation : 'plain';

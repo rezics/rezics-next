@@ -2419,6 +2419,7 @@
     "ids": [
       "path:id",
       "query:actingSubject",
+      "query:context",
       "query:position",
       "query:revision"
     ],
@@ -3602,6 +3603,13 @@
       "path:decisionId"
     ],
     "status": "unregistered"
+  },
+  {
+    "operation": "POST /v1/sources/archives/{archive}/image-witness",
+    "ids": [
+      "path:archive"
+    ],
+    "status": "registered"
   },
   {
     "operation": "POST /v1/sources/author-credit-supports/{support}/withdrawals",

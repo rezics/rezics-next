@@ -2,6 +2,7 @@ import { repositoryFiles } from '../lib/repository-files.ts';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, extname, join, relative, resolve, sep } from 'node:path';
 import { integrationGateFiles } from './integration-gate-files.ts';
+import { auditProofFiles } from '../../tests/qa/fixtures/audit-corpus-contract.ts';
 
 // Integration files that need their own bootstrapped QA project (they replace
 // dataset heads, replay outboxes from zero or need a fresh graph). Parallel Goal
@@ -223,6 +224,10 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/review/source-publication-authority.test.ts',
   // Restores a bootstrapped Access baseline between destructive designation controls.
   'tests/qa/integration/review/governance-designation-revocation.test.ts',
+  // Mixed-owner traversal and Realm scope need this file's complete Discovery generations.
+  'services/main/tests/resource-query-catalogue.integration.test.ts',
+  // Each audit proof consumes its own restore of one stopped source cut.
+  ...auditProofFiles,
 ] as const;
 
 /** Delta proofs require the product assembler, whose raw update endpoint is closed. */
@@ -258,6 +263,8 @@ export const commandOnlyIntegrationFiles: ReadonlySet<string> = new Set([
   'tests/qa/integration/launch-real-recipes.test.ts',
   // Original title custody needs the exclusive product writer so startup can finish the Work-name directory.
   'tests/qa/integration/title-candidate-original-custody.test.ts',
+  // Audit preparation and proof restores use public commands with raw updates closed.
+  ...auditProofFiles,
 ]);
 
 export interface RawSparqlIntegrationScan {

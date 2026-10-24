@@ -1,24 +1,33 @@
 import { ensureDependencies } from '../goal/dependencies.ts';
-import { appendFileSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
-import { isQaE2ePath, isQaFaultPath, isQaIntegrationPath, isQaLoadPath, isQaModelPath, isQaOwnerPath, unitHarnessFiles, unitOwnerFiles } from './acceptance.ts';
+import { caseInventory, isQaE2ePath, isQaFaultPath, isQaIntegrationPath, isQaLoadPath, isQaModelPath, isQaOwnerPath, junitResults, unitHarnessFiles, unitOwnerFiles } from './acceptance.ts';
 import { affectedPlan, affectedTiers, affectedUnitTierFiles, formatPlan, type AffectedPlan } from './affected.ts';
 import { forgetChildScope, noteChildScope, reapChildEnvironment, reapSettleMs, removeScopedContainers } from './container-reaper.ts';
-import { formatTierRunLine, goalSlotDirectory, implementedTiers, newRunId, parseArgs, qaArtifactDirectory, splitCallerTimeout, tierBunTestArgs, trackCommandProcess, untrackCommandProcess, type Tier } from './core.ts';
+import { formatTierRunLine, goalSlotDirectory, implementedTiers, newRunId, parseArgs, qaArtifactDirectory, qaRunDeadline, sourceIdentity, splitCallerTimeout, testLogEnvironment, tierBunTestArgs, trackCommandProcess, untrackCommandProcess, writeSummary, type QaRunDeadline, type Tier } from './core.ts';
 import { isLocalQaRun, qaMemoryDeadline, qaMemoryNeed, waitForMemory } from './memory-admission.ts';
 import { STORY_SCREENSHOTS_ENV } from './story-screenshots.ts';
 import { assertWideRunAllowed } from '../goal/admission.ts';
 import { assertRetainedSources } from './retained-preflight.ts';
+import { runHostAdmission } from './host-admission.ts';
+import { terminateProcessGroup } from './process/terminate.ts';
+import { createCommandOutputRedactor, redactCommandOutput } from '../fixture/command-output.ts';
+import { completeFileResults } from './file-results.ts';
+import { recordQaFailure, testFailureClass, type FailureClass } from './failure.ts';
+import { declaredCaseCoverage } from './coverage.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const testFile = /\.(?:test|spec|e2e|stories)\.[cm]?[jt]sx?$/;
 const tierOrder = implementedTiers.filter(tier => tier !== 'static');
+const borrowedBookFlag = '--borrowed-public-domain-book';
+const borrowedBookFile = 'tests/qa/integration/catalogue-real-book-reading.test.ts';
 
 export interface TestGroup {
   /** Registered QA tier. Absent for a Bun file that belongs to none. */
   tier?: Tier;
   files: string[];
   command: [string, string[]];
+  borrowedPublicDomainBook?: true;
 }
 
 function registeredTier(file: string, unitGates: readonly string[]): Tier | undefined {
@@ -51,6 +60,13 @@ export function selectTestGroups(input: string[]): TestGroup[] {
 }
 
 function selectParsedTestGroups(args: string[], timeout: readonly string[] = []): TestGroup[] {
+  if (args.some(arg => arg.startsWith(borrowedBookFlag))) {
+    if (args.length !== 2 || args.filter(arg => arg === borrowedBookFlag).length !== 1
+      || args.filter(arg => arg === borrowedBookFile).length !== 1)
+      throw new Error(`${borrowedBookFlag} accepts only ${borrowedBookFile} and one optional --timeout; --result-file belongs to goalctl test`);
+    return [{ tier: 'integration', files: [borrowedBookFile], borrowedPublicDomainBook: true,
+      command: ['bun', tierBunTestArgs('integration', [borrowedBookFile, ...timeout])] }];
+  }
   // Explicit tier runs still pass through goalctl's QA slot.
   if (args[0] === '--tier') {
     parseArgs([...args, ...timeout]);
@@ -207,22 +223,47 @@ function withoutForcedColor(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 // Direct Bun runs print only failures and the summary (AGENT=1); JUnit output is
 // unchanged and AGENT=0 restores the listing. QA tiers keep full logs, because a
 // killed tier otherwise leaves no record of the tests that had finished.
-async function run([program, args]: [string, string[]], envOverride?: NodeJS.ProcessEnv): Promise<number> {
+interface BorrowedBookOutput {
+  log: string;
+  deadline: QaRunDeadline;
+  timedOut: boolean;
+}
+
+async function run([program, args]: [string, string[]], envOverride?: NodeJS.ProcessEnv,
+  borrowed?: BorrowedBookOutput): Promise<number> {
   const spawningTest = program === 'bun' && (args[0] === 'test' || args[0] === 'scripts/qa/cli.ts');
   const inherited = { ...process.env, ...envOverride };
   const base = withoutForcedColor(program === 'bun'
     ? { ...inherited, AGENT: inherited.AGENT ?? '1' }
     : inherited);
-  const env = spawningTest ? reapChildEnvironment(base) : base;
-  const scope = spawningTest ? env.REZICS_REAP_SCOPE : undefined;
+  // A borrowed delivery has no container lifecycle owned by this dispatcher.
+  const env = borrowed ? withoutForcedColor(testLogEnvironment(inherited)) : spawningTest ? reapChildEnvironment(base) : base;
+  const scope = spawningTest && !borrowed ? env.REZICS_REAP_SCOPE : undefined;
+  if (borrowed && borrowed.deadline.remainingMs() <= 0) throw new Error('Borrowed Book run deadline reached; no child started');
   noteChildScope(scope);
   // Its own process group, so cancellation can signal the child without signalling this dispatcher.
   const child = Bun.spawn([program, ...args], {
-    cwd: root, env, detached: true, stdout: 'inherit', stderr: 'inherit',
+    cwd: root, env, detached: true, stdout: borrowed ? 'pipe' : 'inherit', stderr: borrowed ? 'pipe' : 'inherit',
   });
   if (child.pid) trackCommandProcess(child.pid);
+  const capture = async (stream: ReadableStream<Uint8Array> | undefined) => {
+    if (!borrowed || !stream) return;
+    const redactor = createCommandOutputRedactor();
+    const append = (value: string) => { appendFileSync(borrowed.log, value); process.stderr.write(value); };
+    const decoder = new TextDecoder();
+    for await (const chunk of stream) append(redactor.push(decoder.decode(chunk, { stream: true })));
+    append(redactor.push(decoder.decode()) + redactor.finish());
+  };
+  const output = borrowed ? Promise.all([capture(child.stdout), capture(child.stderr)]) : undefined;
+  let stopping: Promise<void> | undefined;
+  const timer = borrowed ? setTimeout(() => {
+    borrowed.timedOut = true;
+    stopping = terminateProcessGroup(child.pid);
+  }, Math.min(borrowed.deadline.remainingMs(), 2_147_483_647)) : undefined;
   try {
     const code = await child.exited;
+    await output;
+    if (stopping) await stopping;
     if (scope) {
       // A scope with no marker never started a container: skip the settle and the second list.
       let again = false;
@@ -236,6 +277,7 @@ async function run([program, args]: [string, string[]], envOverride?: NodeJS.Pro
     }
     return code;
   } finally {
+    clearTimeout(timer);
     if (child.pid) untrackCommandProcess(child.pid);
     forgetChildScope(scope);
   }
@@ -247,6 +289,93 @@ export interface TestDispatchOptions {
   admission?: typeof waitForMemory;
   deadline?: number;
   env?: NodeJS.ProcessEnv;
+  borrowedBookPreflight?: () => Promise<void>;
+  hostAdmission?: typeof runHostAdmission;
+}
+
+async function preflightBorrowedBook(): Promise<void> {
+  const { loadPublicDomainCorpus, loadPublicDomainBorrowedBook } = await import('../../tests/qa/support/catalogue-public-domain.ts');
+  const corpus = loadPublicDomainCorpus('book');
+  loadPublicDomainBorrowedBook(corpus, 'book');
+}
+
+/** One explicitly selected original integration file against an already qualified custodian's copy. */
+async function dispatchBorrowedBook(group: TestGroup, options: TestDispatchOptions): Promise<number> {
+  const env = options.env ?? process.env;
+  const artifactRunId = newRunId();
+  const directory = resolve(root, env.REZICS_QA_ARTIFACT_ROOT ?? qaArtifactDirectory(root), artifactRunId);
+  const logs = join(directory, 'logs'), xml = join(directory, 'integration.xml');
+  mkdirSync(logs, { recursive: true });
+  const sourceBefore = sourceIdentity(root), started = Date.now();
+  const deadline = qaMemoryDeadline(env, options.deadline), clock = qaRunDeadline(deadline, env);
+  const output: BorrowedBookOutput = { log: join(logs, 'integration.log'), deadline: clock, timedOut: false };
+  writeFileSync(output.log, '');
+  let childCode: number | undefined, failureClass: FailureClass | undefined;
+  const state: { phase: 'preflight' | 'admission' | 'test' } = { phase: 'preflight' };
+  let code = 1;
+  const errors: string[] = [];
+  try {
+    await (options.retainedPreflight ?? assertRetainedSources)(root, group.files);
+    await (options.borrowedBookPreflight ?? preflightBorrowedBook)();
+    state.phase = 'admission';
+    const resume = clock.wait();
+    try {
+      code = await (options.hostAdmission ?? runHostAdmission)(qaMemoryNeed(root, 'other', undefined, env).host / 2 ** 30,
+        group.command.flat(), { root, env, cpu: true, deadline, run: async () => {
+          resume();
+          // Recheck custody after a possibly long admission wait, before any OAuth or outcome request.
+          await (options.borrowedBookPreflight ?? preflightBorrowedBook)();
+          state.phase = 'test';
+          const command: [string, string[]] = [group.command[0], [...group.command[1],
+            '--reporter=junit', `--reporter-outfile=${xml}`]];
+          childCode = await (options.runner ?? run)(command, { ...env,
+            REZICS_QA_MEMORY_DEADLINE: String(deadline),
+            REZICS_QA_RUN_REMAINING_MS: String(Math.ceil(clock.activeRemainingMs())) }, output);
+          return childCode;
+        } });
+    } finally { resume(); }
+    if (output.timedOut) { failureClass = 'timeout'; code ||= 1; }
+  } catch (error) {
+    failureClass = state.phase === 'test' ? 'harness' : 'environment';
+    const detail = redactCommandOutput(error instanceof Error ? error.message : String(error));
+    errors.push(detail);
+    appendFileSync(output.log, `${detail}\n`);
+  }
+  const completed = completeFileResults(existsSync(xml) ? readFileSync(xml, 'utf8') : '', group.files, 'integration', {
+    interrupted: output.timedOut || state.phase !== 'test', elapsedMs: Date.now() - started,
+    reason: errors[0] ?? 'Selected borrowed Book file produced no complete results',
+  });
+  writeFileSync(xml, completed.xml);
+  const tests = junitResults(directory, ['integration']);
+  const log = readFileSync(output.log, 'utf8');
+  if (completed.missing.length || tests.some(test => test.failed)) code ||= 1;
+  if (code !== 0) {
+    failureClass ??= /TEST PREMISE:/.test(log) ? 'environment' : testFailureClass({ timedOut: output.timedOut, output: log }, tests);
+    errors.push(recordQaFailure(failureClass, `borrowed Book integration failed; see logs/integration.log`));
+  }
+  const sourceAfter = sourceIdentity(root);
+  if (sourceBefore.fingerprint !== sourceAfter.fingerprint) {
+    code ||= 1;
+    failureClass ??= 'harness';
+    errors.push(recordQaFailure('harness', 'Source changed during borrowed Book run'));
+  }
+  const cases = caseInventory(root);
+  writeSummary(directory, { runId: artifactRunId, sourceBefore, sourceAfter, partial: true, cases, tests,
+    caseCoverage: declaredCaseCoverage(cases), errors, failureClass,
+    tiers: [{ name: 'integration', status: code === 0 ? 'passed' : 'failed', elapsedMs: clock.sample().activeElapsedMs,
+      ...(failureClass ? { failureClass } : {}) }] });
+  writeFileSync(join(directory, 'run-deadline.json'), JSON.stringify(clock.sample(), null, 2) + '\n');
+  writeFileSync(join(directory, 'execution.json'), JSON.stringify({ mode: borrowedBookFlag, artifactRunId,
+    retainedRunId: env.REZICS_QA_RUN_ID, file: borrowedBookFile, childCode, code, phase: state.phase, failureClass,
+    // JUnit and the unmodified log retain body/hook failures; a dispatcher cannot infer an expect site's reach.
+    originalOutcomeAssertionReach: state.phase === 'test' ? 'unknown; see JUnit and log' : 'not reached',
+    productRevision: env.REZICS_AUDIT_PRODUCT_REVISION, testRevision: env.REZICS_AUDIT_TEST_REVISION,
+    frontendRevision: env.REZICS_AUDIT_FRONTEND_REVISION, fixtureGeneration: env.REZICS_AUDIT_FIXTURE_GENERATION,
+  }, null, 2) + '\n');
+  appendFileSync(join(directory, 'summary.md'), `\nBorrowed delivery: ${env.REZICS_QA_RUN_ID}; artifact run: ${artifactRunId}\nChild exit: ${childCode ?? 'not started'}; phase: ${state.phase}; assertion reach: ${state.phase === 'test' ? 'see JUnit and log' : 'not reached'}\n`);
+  console.log(`QA artifacts: ${directory}`);
+  console.log(formatTierRunLine('integration', artifactRunId, code === 0 ? 'passed' : 'failed'));
+  return code;
 }
 
 async function runTierGroups(groups: TestGroup[], options: TestDispatchOptions): Promise<number> {
@@ -269,6 +398,7 @@ async function runTierGroups(groups: TestGroup[], options: TestDispatchOptions):
 export async function dispatchTest(args: string[], options: TestDispatchOptions = {}): Promise<number> {
   assertWideRunAllowed(['bun', 'scripts/qa/test.ts', ...args], options.env ?? process.env);
   const groups = selectTestGroups(args);
+  if (groups[0]?.borrowedPublicDomainBook) return dispatchBorrowedBook(groups[0], options);
   await (options.retainedPreflight ?? assertRetainedSources)(root, groups.flatMap(group => group.files));
   const commands = commandsFor(groups, splitCallerTimeout(args).timeout ?? []);
   if (commands.length !== 1) return runTierGroups(groups, options);

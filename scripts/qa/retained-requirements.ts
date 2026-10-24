@@ -3,6 +3,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { independentRestorePreparationOptions, ownerErasurePreparationOptions, RetainedSources } from './retained-source.ts';
 import type { RetainedRequirement } from './retained-preflight.ts';
 import { needsRealmDiscussionSource, smallRecoveryFixtureConsumers } from './preparation-selection.ts';
+import { auditConsumerForFile } from '../../tests/qa/fixtures/audit-corpus-contract.ts';
 
 /** Walk authored relative imports without evaluating tests (which may bootstrap
  * personas at module scope). Stop at source APIs; their implementations import
@@ -35,6 +36,7 @@ export function retainedRequirementKinds(root: string, files: readonly string[])
     if (independent) kinds.add(independent.withRecipe ? 'independent-recipe' : 'independent-authority');
     const owner = ownerErasurePreparationOptions(file);
     if (owner) kinds.add(owner.laterApiAdmission ? 'owner-later' : 'owner');
+    if (auditConsumerForFile(file)) kinds.add('audit');
     visit(file);
   }
   return [...kinds].sort();
@@ -47,11 +49,16 @@ export function retainedRequirements(root: string, files: readonly string[], cus
     ...(kind === 'fixture-small' ? { preparedByRun: 'small fixture before fault/recovery shards' } : {}),
     ...(kind === 'realm' && needsRealmDiscussionSource(files)
       ? { preparedByRun: 'Realm discussion source before integration shards' } : {}),
-    build: kind === 'realm' ? 'task goal -- test tests/qa/integration/realm-discussion-source.test.ts'
+    build: kind === 'audit' ? 'task goal -- prepare-audit prepare'
+      : kind === 'realm' ? 'task goal -- test tests/qa/integration/realm-discussion-source.test.ts'
       : kind === 'seed' ? 'task goal -- test tests/qa/fault-recovery/work-profile-seed-build.test.ts'
       : kind === 'content' ? 'task goal -- test tests/qa/fault-recovery/retained-content-source-preparation.test.ts'
       : `task goal -- prepare-source ${kind}`,
     async check() {
+      if (kind === 'audit') {
+        const { preflightAuditCorpus } = await import('./fixtures/audit-corpus.ts');
+        return preflightAuditCorpus(custodyRoot);
+      }
       if (kind === 'fixture-small') {
         const { compatibleFixture } = await import('../fixture/restore.ts');
         const { verifyFixtureCustody } = await import('../fixture/custody.ts');

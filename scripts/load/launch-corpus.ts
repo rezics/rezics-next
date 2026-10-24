@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { Pool } from 'pg';
 import type { FixtureLock } from '../fixtures/pull.ts';
@@ -17,7 +18,7 @@ import { compatibleLoadStorage, loadCompatibility, type LoadCompatibility } from
 import { createCorpusBackupDriver, type CorpusRestoreSmokeInput } from './corpus-backup-driver.ts';
 import { restoreCatalogueBackup } from './catalogue-backup.ts';
 import { pollUntilDeadline } from '../qa/readiness.ts';
-import { workProfileCorpusApi, type CorpusApi, type CorpusBackupDriver } from './work-profile-corpus.ts';
+import { CorpusCommandError, workProfileCorpusApi, type CorpusApi, type CorpusBackupDriver } from './work-profile-corpus.ts';
 import type { MediaStack } from '../../tests/qa/integration/media-support.ts';
 import { importedRightsAssessments } from '../../services/main/src/modules/rights/import-policy.ts';
 import type { LaunchBookEdition, LaunchBooksCorpus, LaunchRecipeRecord, LaunchRecipesCorpus } from './launch-corpus-types.ts';
@@ -66,7 +67,8 @@ export function launchBookSources() {
 /** Writes only public Main commands. Authority setup belongs to the caller's
  * existing seed helper; no catalogue data bypasses the APIs. */
 async function buildBooks(api: CorpusApi, actor: string, key: string,
-  authorize: (work: string) => Promise<void>, authorizeRights: () => Promise<void>, signal: AbortSignal) {
+  authorize: (work: string) => Promise<void>, authorizeRights: () => Promise<void>, signal: AbortSignal,
+  nativeCatalogue = false) {
   const sources = launchBookSources();
   const observations = new Map<string, string>();
   for (const { entry, record, bytes, externalId } of sources) {
@@ -83,15 +85,29 @@ async function buildBooks(api: CorpusApi, actor: string, key: string,
     observations.set(externalId, result.observation.observation);
   }
   const source = sources[0]!;
-  const [created] = await seedCatalogueProfileWorks(api, actor, [{ key: `${key}:OL66554W`, input: {
+  const catalogueInput: Parameters<typeof seedCatalogueProfileWorks>[2][number]['input'] = {
     profile: 'work-catalogue-import-v1', expectedWorkHead: null,
     title: source.record.title, language: 'en', aliases: [], semanticTypes: ['https://schema.org/Book'],
     credits: [], classifications: [],
     evidence: `${source.entry.requestUrl} sha256:${source.entry.sha256} observation:${observations.get('OL66554W')}`,
-  } }], signal);
+  };
+  const created = nativeCatalogue ? await (async () => {
+    const candidate = await api.command<{ candidateReceipt: string }>(`${key}:candidate`, { method: 'POST',
+      path: '/v1/catalogue/candidates', body: { profile: 'catalogue-candidates-v1',
+        originalTitle: { value: source.record.title, language: 'en' }, aliases: [], romanizations: [],
+        creators: ['Jane Austen'], dates: [], identifiers: [] } }, signal);
+    return api.command<{ work: string; mainVersion: string; workRevision: string; mainRevision: string }>(`${key}:work`, {
+      method: 'POST', path: '/v1/works', body: { profile: 'metadata-only-v1', authoring: 'catalogue', grain: 'new-creative-scope',
+        candidateReceipt: candidate.candidateReceipt, title: source.record.title, language: 'en',
+        semanticTypes: ['https://schema.org/Book'], actingSubject: actor } }, signal);
+  })() : (await seedCatalogueProfileWorks(api, actor, [{ key: `${key}:OL66554W`, input: catalogueInput }], signal))[0];
   if (!created) throw new Error('Books catalogue import returned no Work');
   await authorize(created.work);
   await authorizeRights();
+  if (nativeCatalogue) await api.command(`${key}:verification`, { method: 'POST',
+    path: `/v1/works/${short(created.work)}/catalogue-verifications`, body: {
+      expectedHead: created.workRevision, actingSubject: actor, evidence: catalogueInput.evidence,
+    } }, signal);
   for (const [index, assessment] of importedRightsAssessments({ provider: 'open-library',
     url: 'https://openlibrary.org/works/OL66554W' }, created.work).entries()) {
     const assessmentKey = `${key}:rights:${index}`;
@@ -149,7 +165,7 @@ async function buildBooks(api: CorpusApi, actor: string, key: string,
       title: record.title, sourceFormat, platform, format: platform, language, contentLanguages, publisher, publicationYear,
       realization: language === 'en' ? realization : null, realizationRevision: language === 'en' ? original.revision : null });
   }
-  return { work: created.work, editions };
+  return { ...created, editions };
 }
 
 /** Retain one completed API build, then restore each reader's isolated copy
@@ -290,7 +306,7 @@ async function buildRecipes(api: CorpusApi, actor: string, key: string,
   authorize: (scope: string, action: string) => Promise<void>,
   importFile: (key: string, actor: string, composition: RecipeCompositionReceipt,
     file: Record<string, unknown>, signal: AbortSignal) => Promise<RecipeFileImportReceipt>,
-  signal: AbortSignal) {
+  signal: AbortSignal, sources = launchRecipeSources()) {
   await authorize(`agent:control:${actor}`, 'agent.control');
   await authorize('space:create:root', 'space.create');
   const space = await api.command<{ space: string; realm: string }>(`${key}:space`, {
@@ -315,7 +331,6 @@ async function buildRecipes(api: CorpusApi, actor: string, key: string,
   await authorize(`publication:adopt:${space.realm}`, 'publication.adopt');
   await authorize(`review:decide:${space.realm}`, 'review.decide');
 
-  const sources = launchRecipeSources();
   const records: LaunchRecipeRecord[] = [];
   for (const source of sources) {
     signal.throwIfAborted();
@@ -455,6 +470,8 @@ export async function prepareLaunchRecipesCorpus(input: {
   authorize(scope: string, action: string): Promise<void>;
   importFile(key: string, actor: string, composition: RecipeCompositionReceipt,
     file: Record<string, unknown>, signal: AbortSignal): Promise<RecipeFileImportReceipt>;
+  /** Startup and additional native preparation consume the same preparation budget. */
+  preparationStartedAt?: number;
 }): Promise<LaunchRecipesCorpus> {
   const sources = launchRecipeSourcesManifest();
   const compatibility = loadCompatibility(root);
@@ -470,9 +487,11 @@ export async function prepareLaunchRecipesCorpus(input: {
   }
   const lock = `${path}.lock`;
   mkdirSync(lock);
-  const started = performance.now();
-  const signal = AbortSignal.timeout(budgetMs);
+  const started = input.preparationStartedAt ?? performance.now();
+  const remaining = Math.floor(budgetMs - (performance.now() - started));
+  const signal = AbortSignal.timeout(Math.max(1, remaining));
   try {
+    if (remaining <= 0) throw new Error('Launch recipes exhausted the preparation budget before native creation');
     const built = await buildRecipes(input.api, input.actor, id, input.authorize, input.importFile, signal);
     const backup = await input.backups.backup(id, signal);
     signal.throwIfAborted();
@@ -522,13 +541,16 @@ export async function prepareRestoredRecipeBrowse(stack: MediaStack, signal: Abo
   throw new Error('Restored recipes Main relay exceeded its preparation budget');
 }
 
-async function buildRecipesApiBackup() {
-  const directory = join(root, '.temp/launch-corpus/recipes/manifests');
+async function buildRecipesApiBackup(withBook = false) {
+  const preparationStartedAt = performance.now();
+  const corpusDirectory = join(root, '.temp/launch-corpus', withBook ? 'book-recipes' : 'recipes');
+  const directory = join(corpusDirectory, 'manifests');
   const sources = launchRecipeSourcesManifest();
   const compatibility = loadCompatibility(root);
   const id = launchRecipesIdentity(sources, compatibility);
   const manifestPath = launchRecipesManifestPath(directory, id);
   if (existsSync(manifestPath)) {
+    if (withBook) throw new Error('Book/Recipe preparation already retained; inspect its actual preparation.json and restore that cut instead of replaying native creation');
     const corpus = loadLaunchRecipesCorpus(directory);
     console.log(JSON.stringify({ launchCorpus: corpus.id, reused: true, sources: corpus.sources,
       counts: corpus.counts, buildMs: Math.round(corpus.buildMs) }));
@@ -536,8 +558,16 @@ async function buildRecipesApiBackup() {
   }
 
   const sourceRunId = `recipes-build-${Date.now().toString(36)}-${randomBytes(3).toString('hex')}`;
+  const evidence = join(corpusDirectory, 'attempts', sourceRunId);
+  mkdirSync(evidence, { recursive: true, mode: 0o700 });
+  const record = (value: unknown) => appendFileSync(join(evidence, 'commands.jsonl'), JSON.stringify(value) + '\n', { mode: 0o600 });
+  const revision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+  writeFileSync(join(evidence, 'execution.json'), JSON.stringify({ format: 'audit-execution-v1',
+    productBaseline: '69eac3ceeaf885be70205a70248bc951e9d81cc9', productRevision: revision,
+    testRevision: revision, fixtureGeneration: sourceRunId, frontendRevision: revision,
+    preparationStartedAt: new Date().toISOString(), assertionsReached: false }, null, 2) + '\n', { mode: 0o600 });
   const environment = qaStackEnvironment({ ...process.env, REZICS_QA_STACK_MODE: 'scale',
-    REZICS_QA_STACK_TIER: 'integration', REZICS_STACK_PROFILE: 'qa' }, 'scale', 'catalogue-disk');
+    REZICS_QA_STACK_TIER: 'integration', REZICS_STACK_PROFILE: 'qa', REZICS_STACK_RAW_UPDATE: '0' }, 'scale', 'catalogue-disk');
   const resetSourceStack = async () => {
     const reset = await runQaStartupChildAsync(root,
       ['stack:reset', '--profile', 'qa', '--run-id', sourceRunId, '--persistent'], 180_000, environment);
@@ -555,7 +585,7 @@ async function buildRecipesApiBackup() {
   try {
     const stackDirectory = join(root, '.temp/stack', `rezics-qa-${sourceRunId}`);
     const compose = readEnv(join(stackDirectory, 'compose.env'));
-    if (compose.REZICS_STACK_STORAGE !== 'persistent' || compose.REZICS_STACK_RAW_UPDATE === '1')
+    if (compose.REZICS_STACK_STORAGE !== 'persistent' || compose.REZICS_STACK_RAW_UPDATE !== '0')
       throw new Error('Launch recipes build requires a persistent command-only QA stack');
     const staged = stageQaBootstrap(stackDirectory);
     await stream('bun', staged.args, { ...environment, ...staged.apps }, undefined, 180_000);
@@ -573,9 +603,11 @@ async function buildRecipesApiBackup() {
   let relay: Pool | undefined;
   let sourceClosed = false;
   let relayClosed = false;
-  let corpus: LaunchRecipesCorpus | undefined;
+  let corpus: (Pick<LaunchRecipesCorpus, 'id' | 'realm' | 'backup' | 'buildMs' | 'records' | 'sources'>
+    & { counts: Record<string, number> }) | undefined;
   let driver: ReturnType<typeof createCorpusBackupDriver> | undefined;
   let failure: unknown;
+  let closePersonas: (() => Promise<void>) | undefined;
   try {
     const { startMediaStack } = await import('../../tests/qa/integration/media-support.ts');
     source = await startMediaStack('launch-recipes-api-source', { library: true, profileCredits: true });
@@ -608,7 +640,8 @@ async function buildRecipesApiBackup() {
         });
         const page = await api.read<{ items: { id: string }[]; nextCursor: string | null }>(
           `/v1/realms/${short(corpus!.realm)}/modules/browse?limit=20`);
-        if (page.items.length !== 20 || !page.nextCursor)
+        const expected = withBook ? corpus!.records.length : 20;
+        if (page.items.length !== expected || (withBook ? page.nextCursor !== null : !page.nextCursor))
           throw new Error('Restored recipes backup did not expose its first complete browse page');
         return { stack: opened, stop: async () => opened.stop() };
       } catch (error) {
@@ -626,11 +659,17 @@ async function buildRecipesApiBackup() {
     const { grantRecordedPlatformUse } = await import('../../tests/qa/fixtures/platform-grant.ts');
     await grantRecordedPlatformUse(source.accessPool, importer.principalId, ['catalogue-import']);
     await initializeRelayCheckpoint(relay, sourceEnvironment.MAIN_RELAY_CONSUMER!, source.env.lineage.dataEpoch);
-    const api = workProfileCorpusApi('http://main.local', importer.token, {
+    let api = workProfileCorpusApi('http://main.local', importer.token, {
       fetch: (async (request, init) => {
         for (let attempt = 0; ; attempt++) {
           init?.signal?.throwIfAborted();
+          const requestedAt = new Date().toISOString();
           const response = await source!.main.handle(new Request(request, init));
+          record({ requestedAt, answeredAt: new Date().toISOString(), method: init?.method ?? 'GET',
+            path: new URL(String(request)).pathname + new URL(String(request)).search,
+            key: new Headers(init?.headers).get('idempotency-key'),
+            request: typeof init?.body === 'string' ? JSON.parse(init.body) : null,
+            response: { status: response.status, body: await response.clone().text() } });
           if (response.status !== 202 || attempt === 2) return response;
           const pending = await response.json() as { retry?: { allowed?: boolean; afterMs?: number } };
           if (!pending.retry?.allowed) throw new Error('Recipe corpus command cannot be retried');
@@ -639,9 +678,11 @@ async function buildRecipesApiBackup() {
       }) as typeof fetch,
     });
     driver = createCorpusBackupDriver({ sourceRunId,
-      directory: join(root, '.temp/launch-corpus/recipes/backups'), resumeSource: false,
+      directory: join(corpusDirectory, 'backups'), resumeSource: false,
       async quiesce(signal) {
         signal.throwIfAborted();
+        await closePersonas?.();
+        closePersonas = undefined;
         await relay!.end();
         relayClosed = true;
         await source!.stop();
@@ -652,10 +693,99 @@ async function buildRecipesApiBackup() {
         return async () => copy.stop();
       },
     });
-    corpus = await prepareLaunchRecipesCorpus({ api, actor: importer.actor, backups: driver,
-      directory, authorize: (scope, action) => grantLaunchRecipeAuthority(source!.accessPool,
-        importer.principalId, importer.actor, scope, action),
-      importFile: async (key, actor, composition, file, signal) => {
+    let actor = importer.actor;
+    let authorize = (scope: string, action: string) => grantLaunchRecipeAuthority(source!.accessPool,
+      importer.principalId, actor, scope, action);
+    if (withBook) {
+      const { personaSessions, retainPersonaRealm } = await import('../../tests/qa/support/personas.ts');
+      let people: Awaited<ReturnType<typeof personaSessions>> | undefined;
+      people = await personaSessions('public', { observeMain: async answer => {
+        record({ persona: answer.caller.actingSubject, request: answer.request, response: answer.response,
+          requestStartedAt: answer.requestStartedAt, answeredAt: answer.answeredAt });
+        if (people && answer.request.method === 'POST' && answer.request.key) {
+          const id = createHash('sha256').update(answer.request.key).digest('hex');
+          const receipts = join(evidence, 'receipts');
+          mkdirSync(receipts, { recursive: true, mode: 0o700 });
+          const persona = (['owner', 'stranger', 'member', 'moderator', 'operator'] as const)
+            .find(name => people![name].actingSubject === answer.caller.actingSubject);
+          let observed: unknown;
+          try { observed = JSON.parse(answer.response.body); } catch { observed = answer.response.body; }
+          writeFileSync(join(receipts, `${id}.json`), JSON.stringify({ id, phase: 'prepare',
+            method: answer.request.method, path: answer.request.path, key: answer.request.key,
+            body: answer.request.body, status: answer.response.status, answer: observed,
+            startedAt: answer.requestStartedAt, finishedAt: answer.answeredAt,
+            caller: { realm: people.realm, persona, accountId: answer.caller.accountId,
+              actingSubject: answer.caller.actingSubject } }, null, 2) + '\n', { mode: 0o600 });
+        }
+      } });
+      const owner = people.owner;
+      actor = owner.actingSubject!;
+      closePersonas = people.close;
+      writeFileSync(join(evidence, 'personas.json'), JSON.stringify(retainPersonaRealm(people), null, 2) + '\n', { mode: 0o600 });
+      const principal = await source.accessPool.query<{ id: string }>('SELECT id FROM access.principal WHERE account_subject=$1', [owner.accountId]);
+      if (principal.rows.length !== 1) throw new Error('Book/Recipe owner needs its actual provisioned principal');
+      await grantRecordedPlatformUse(source.accessPool, principal.rows[0]!.id, ['catalogue-import']);
+      const platform = await source.accessPool.query(`SELECT g.id, g.issuer_subject, g.principal_id, g.scope_id,
+        g.action, g.generation, g.active, g.valid_until, e.receipt FROM access.principal_permission_grant g
+        JOIN access.platform_grant_episode e ON e.principal_grant_id=g.id
+        WHERE g.principal_id=$1 AND g.scope_id='platform:access' AND g.action='platform:use:catalogue-import'`,
+      [principal.rows[0]!.id]);
+      record({ fixturePlatformUse: platform.rows, accountId: owner.accountId, actingSubject: actor });
+      authorize = async (scope, action) => {
+        const client = await source!.accessPool.connect();
+        try {
+          await client.query('BEGIN');
+          const result = await grantFixtureAuthority(client, { scope, requireDispatch: true,
+            representations: [{ principalId: principal.rows[0]!.id, actor, action, lifetime: '8 hours' }],
+            grant: { actor, action, lifetime: '8 hours', requireSelfIssuer: true } });
+          await client.query('COMMIT');
+          record({ fixtureAuthority: { realm: people!.realm, persona: 'owner', accountId: owner.accountId,
+            actingSubject: actor, scope, action, lifetime: '8 hours', result } });
+        } catch (error) { await client.query('ROLLBACK'); throw error; }
+        finally { client.release(); }
+      };
+      api = {
+        async command<T>(commandKey: string, command: Parameters<CorpusApi['command']>[1], signal?: AbortSignal) {
+          signal?.throwIfAborted();
+          const response = await owner.main(command.method, command.path, command.body, commandKey);
+          const raw = await response.text();
+          if (![200, 201, 204].includes(response.status))
+            throw new CorpusCommandError(commandKey, `${command.method} ${command.path}`, command.stage, response.status, raw);
+          signal?.throwIfAborted();
+          return response.status === 204 ? undefined as T : JSON.parse(raw) as T;
+        },
+        async read<T>(path: `/v1/${string}`, signal?: AbortSignal) {
+          signal?.throwIfAborted();
+          const response = await owner.main('GET', path), raw = await response.text();
+          if (!response.ok) throw new Error(`Book/Recipe read ${path} returned HTTP ${response.status}: ${raw}`);
+          signal?.throwIfAborted();
+          return JSON.parse(raw) as T;
+        },
+      };
+      for (const scope of ['work:create:root', 'work:create:catalogue-import']) await authorize(scope, 'work.create');
+      await authorize('catalogue:verify:root', 'catalogue.verify');
+      const remaining = Math.floor(budgetMs - (performance.now() - preparationStartedAt));
+      if (remaining <= 0) throw new Error('Book/Recipe preparation exhausted its budget during startup');
+      const signal = AbortSignal.timeout(remaining);
+      const book = await buildBooks(api, actor, `book-recipes:${sourceRunId}`, async work => {
+        await authorize(`work:edit:${work}`, 'work.edit');
+        await authorize(`work:read:${work}`, 'work.read');
+      }, () => authorize('rights:assess', 'rights.assess'), signal, true);
+      const { prepareLaunchBookReading } = await import('./launch-book-reading.ts');
+      const reading = await prepareLaunchBookReading({ api, actor, token: '', book, authorize, signal });
+      const anonymous: Record<string, unknown> = {};
+      for (const [name, path] of Object.entries({ header: `/v1/works/${short(book.work)}?language=en`,
+        contents: `/v1/works/${short(book.work)}/contents?language=en&limit=20`,
+        releases: `/v1/works/${short(book.work)}/releases?limit=20` })) {
+        signal.throwIfAborted();
+        const response = await people.visitor.main('GET', path), raw = await response.text();
+        if (response.status !== 200) throw new Error(`Prepared public Book ${name} returned HTTP ${response.status}: ${raw}`);
+        anonymous[name] = JSON.parse(raw);
+      }
+      writeFileSync(join(evidence, 'book.json'), JSON.stringify({ ...book, ...reading, anonymous }, null, 2) + '\n', { mode: 0o600 });
+    }
+    const importFile = async (key: string, actor: string, composition: RecipeCompositionReceipt,
+      file: Record<string, unknown>, signal: AbortSignal): Promise<RecipeFileImportReceipt> => {
         const sourceUrl = String(file.url);
         const retained = await api.command<{ observation: { observation: string } }>(`${key}:source`, {
           method: 'POST', path: '/v1/sources/intakes', body: { profile: 'source-manual-intake-v1',
@@ -674,14 +804,40 @@ async function buildRecipesApiBackup() {
         }, signal);
         return { structure: composition.structure, revision: imported.revision,
           sourceObservation: retained.observation.observation, replayed: false };
-      },
-    });
-    if (JSON.stringify(corpus.counts) !== JSON.stringify(launchRecipeCounts) || corpus.records.length !== 30)
-      throw new Error('Launch recipes API build returned an incomplete corpus');
+      };
+    if (withBook) {
+      // The observed thirty-recipe attempt exhausted 600 seconds before backup.
+      // Keep a genuine small cut through the same native owner without claiming
+      // the full launch manifest or changing its thirty-recipe contract.
+      const selected = launchRecipeSources().filter(row => row.pinId === 'artusi' && row.recipeId === 'passatelli-di-carne');
+      if (selected.length !== 1) throw new Error('Missing exact pinned Artusi delivery source');
+      const remaining = Math.floor(budgetMs - (performance.now() - preparationStartedAt));
+      if (remaining <= 0) throw new Error('Book/Recipe preparation exhausted its budget before Recipe creation');
+      const signal = AbortSignal.timeout(remaining);
+      const sliceId = `launch-book-recipe-${createHash('sha256').update(JSON.stringify({
+        recipes: id, book: '6f7ec2a018dd7b7ddaed1e6117e299c25945faa082880fe63fb0b51a722b7ccb',
+        selected: selected.map(row => [row.pinId, row.recipeId, row.sourceSha256]),
+      })).digest('hex').slice(0, 20)}`;
+      const built = await buildRecipes(api, actor, sliceId, authorize, importFile, signal, selected);
+      const backup = await driver.backup(sliceId, signal);
+      signal.throwIfAborted();
+      corpus = { ...built, id: sliceId, backup, sources, buildMs: performance.now() - preparationStartedAt,
+        counts: { works: 2, books: 1, recipes: 1, chapters: 5, releases: 6,
+          ingredientLines: selected[0]!.ingredients.length, methodLines: selected[0]!.methods.length } };
+    } else {
+      const complete = await prepareLaunchRecipesCorpus({ api, actor, backups: driver,
+        directory, preparationStartedAt, authorize, importFile });
+      if (JSON.stringify(complete.counts) !== JSON.stringify(launchRecipeCounts) || complete.records.length !== 30)
+        throw new Error('Launch recipes API build returned an incomplete corpus');
+      corpus = complete;
+    }
   } catch (error) {
     failure = error;
+    record({ stage: 'preparation-failed', assertionsReached: false,
+      elapsedMs: performance.now() - preparationStartedAt, error: error instanceof Error ? error.stack : String(error) });
   } finally {
     const cleanup: unknown[] = [];
+    if (closePersonas) { try { await closePersonas(); } catch (error) { cleanup.push(error); } }
     if (!relayClosed && relay) { try { await relay.end(); } catch (error) { cleanup.push(error); } }
     if (!sourceClosed && source) { try { await source.stop(); } catch (error) { cleanup.push(error); } }
     for (const [key, value] of previous) {
@@ -695,6 +851,20 @@ async function buildRecipesApiBackup() {
   }
   if (failure !== undefined) throw failure;
   if (!corpus || !driver) throw new Error('Launch recipes API build did not retain its corpus');
+  writeFileSync(join(evidence, 'preparation.json'), JSON.stringify({ sourceRunId, manifest: withBook ? null : manifestPath,
+    backup: corpus.backup, preparationMs: corpus.buildMs, recipeWorks: corpus.records.map(row => row.work),
+    book: withBook ? join(evidence, 'book.json') : null, personas: withBook ? join(evidence, 'personas.json') : null,
+    execution: join(evidence, 'execution.json'), commands: join(evidence, 'commands.jsonl'),
+    readyPublicDomainManifest: false, assertionsReached: false,
+    pending: withBook ? ['reviewed rich-recipe occurrence/measure correspondence', 'qualified per-recipe nutrition matrix',
+      'publicDomain consumer projection and independent admission review', 'original113 compatible topology copy'] : [],
+  }, null, 2) + '\n', { mode: 0o600 });
+  const target = `launch-recipes-smoke-${sourceRunId}`;
+  try {
+    await driver.restore(corpus.backup, target, AbortSignal.timeout(budgetMs));
+    writeFileSync(join(evidence, 'restore.json'), JSON.stringify({ backup: corpus.backup, target,
+      preparation: driver.preparation(target) }, null, 2) + '\n', { mode: 0o600 });
+  } finally { await driver.stop(target); }
   console.log(JSON.stringify({ launchCorpus: corpus.id, sources: corpus.sources, counts: corpus.counts,
     buildMs: Math.round(corpus.buildMs), backup: corpus.backup }));
   return corpus;
@@ -921,6 +1091,7 @@ if (import.meta.main) {
   if (command === '--browser-prepare') await prepareBrowserBooks();
   else if (command === '--browser-recipes-prepare') await prepareBrowserRecipes();
   else if (command === '--recipes-build') await buildRecipesApiBackup();
+  else if (command === '--book-recipes-build') await buildRecipesApiBackup(true);
   else if (command === '--recipes-recover') await recoverRecipesApiBackup();
-  else throw new Error('Use --recipes-build, --recipes-recover, --browser-prepare or --browser-recipes-prepare');
+  else throw new Error('Use --recipes-build, --book-recipes-build, --recipes-recover, --browser-prepare or --browser-recipes-prepare');
 }

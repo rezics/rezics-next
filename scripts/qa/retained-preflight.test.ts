@@ -201,6 +201,7 @@ const repairProducers: Record<string, { file: string; args: string[] }> = {
   realm: { file: 'scripts/qa/test.ts', args: ['tests/qa/integration/realm-discussion-source.test.ts'] },
   seed: { file: 'scripts/qa/test.ts', args: ['tests/qa/fault-recovery/work-profile-seed-build.test.ts'] },
   content: { file: 'scripts/qa/test.ts', args: ['tests/qa/fault-recovery/retained-content-source-preparation.test.ts'] },
+  audit: { file: 'scripts/qa/fixtures/audit-corpus.ts', args: ['prepare', '.temp/audit-corpus/recipe.json'] },
 };
 const repairRequirements = new Map(selectedFiles.flatMap(file => retainedRequirements(root, [file]))
   .map(requirement => [requirement.source, requirement]));

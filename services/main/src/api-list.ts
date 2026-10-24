@@ -19,7 +19,7 @@ export interface ListRequest {
 export function listResponse<Item extends TSchema>(item: Item) {
   return t.Object({
     items: t.Array(item, { maxItems: LIST_COST.limit }),
-    nextCursor: t.Nullable(t.String()),
+    nextCursor: t.Nullable(t.String({ minLength: 1, maxLength: LIST_COST.cursorCharacters })),
     complete: t.Boolean(),
     count: t.Object({
       value: t.Integer({ minimum: 0 }),

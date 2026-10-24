@@ -2,13 +2,14 @@ import { configureDisclosure } from '../src/modules/disclosure/read.ts';
 import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 import { afterAll, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
+import { Parser } from 'n3';
 import { FusekiClient, fusekiReadBudget, type SparqlResult } from '../src/infrastructure/fuseki.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { WorkReadMoved, WorkReadSession, WorkReadUnavailable, workRead, type ReadRow }
   from '../src/modules/work/read-session.ts';
 import { readFollowTarget } from '../src/modules/follows/read.ts';
 import { resolveClassifications } from '../src/modules/classification/resolve.ts';
-import { GLOBAL_CLASSIFICATION_CONTEXT } from '../src/modules/classification/context.ts';
+import { CLASSIFICATION_INHERIT_POLICY, GLOBAL_CLASSIFICATION_CONTEXT } from '../src/modules/classification/context.ts';
 import { readSearchDecisionSupports } from '../src/modules/work/search-supports.ts';
 import { readWorkClassificationBatch } from '../src/modules/work/read-classifications.ts';
 import { CLASSIFIED_AS, statementMeaningKey } from '../src/modules/statement/schema.ts';
@@ -20,6 +21,9 @@ import { ReadingBoundary } from '../src/modules/reading-position/boundary.ts';
 import { readWikiHistory } from '../src/modules/wiki/history-read.ts';
 import { readMergedIdentity } from '../src/modules/identity-merge/resolution.ts';
 import { prepareComponent, RV } from '../src/modules/work/activate.ts';
+import { ownedTriples, type DefinitionState } from '../src/modules/semantic/change.ts';
+import { PROFILES, definitionKindIri } from '../src/modules/semantic/schema.ts';
+import { COLLECTION_PURPOSE_NOTATION } from '../src/modules/statement/qualification.ts';
 import { readResourceRelations } from '../src/modules/relation/traversal.ts';
 import type { ResourceSummary } from '../src/modules/media/summary.ts';
 import { readPageRelationSummaries } from '../src/modules/entity-page/relations.ts';
@@ -300,8 +304,43 @@ for (const exhausted of ['calls', 'bytes'] as const) {
 
 test('land review 8: selected relation pages ignore dataset drift and fence delivered counterparts', async () => {
   const collection = id(40); let name = 'Selected collection';
-  const f = ownerFixture(query => query.includes('SELECT DISTINCT ?relation ?kind ?key')
-    ? result([{ relation: term(collection, 'uri'), kind: term('collection'), key: term(`collection:${collection}`) }]) : undefined);
+  const definition = id(70), revision = id(71);
+  const state: DefinitionState = { component: 'definition', kind: 'property', lifecycle: 'active',
+    successor: null, roles: [], notation: COLLECTION_PURPOSE_NOTATION };
+  const manifest = `urn:rezics:sha256:${prepareComponent(directory, definition, state, PROFILES.definition)}`;
+  // Supply the actual purpose owner's read prerequisites, without replacing
+  // its current authority, canonical Structure or bounded absence checks.
+  const f = ownerFixture(query => {
+    if (query.includes('SELECT DISTINCT ?relation ?kind ?key')) return result([{ relation: term(collection, 'uri'),
+      kind: term('collection'), key: term(`collection:${collection}`) }]);
+    if (query.includes('SELECT ?epoch ?sequence ?hold ?r')) return result([{
+      epoch: term('epoch'), sequence: term(String(f.state.sequence)), r: term(collection, 'uri'),
+      type: term('collection'), public: term('true'), label: { ...term(name), 'xml:lang': 'en' },
+    }]);
+    if (query.includes('SELECT ?structure WHERE')) return result([{ structure: term(id(72), 'uri') }]);
+    if (query.includes('SELECT ?component ?profile ?head ?generation ?count ?manifest')) return result([{
+      component: term(collection, 'uri'), profile: term(`${RV}CollectionMembership`, 'uri'), head: term(id(73), 'uri'),
+      generation: term(id(74), 'uri'), count: term('1'), manifest: term(`urn:rezics:sha256:${'a'.repeat(64)}`, 'uri'),
+    }]);
+    if (query.includes('SELECT ?owner WHERE')) return result([{ owner: term(collection, 'uri') }]);
+    if (query.includes('SELECT ?definition ?head')) return result([{ definition: term(definition, 'uri'), head: term(revision, 'uri') }]);
+    if (query.includes('SELECT ?definition ?manifest ?kind')) return result([{
+      definition: term(definition, 'uri'), manifest: term(manifest, 'uri'), kind: term(definitionKindIri('property'), 'uri'),
+    }]);
+    if (query.includes('SELECT ?head ?manifest')) return result([{ head: term(revision, 'uri'), manifest: term(manifest, 'uri') }]);
+    if (query.includes('SELECT ?p ?o')) return result(new Parser()
+      .parse(ownedTriples(definition, state, revision).map(triple => `<${definition}> ${triple} .`).join('\n'))
+      .map(quad => ({ p: term(quad.predicate.value, 'uri'), o: term(quad.object.value, 'uri') })));
+    if (query.includes('SELECT ?policy ?realm')) return result([{ policy: term(CLASSIFICATION_INHERIT_POLICY, 'uri') }]);
+    if (query.includes('?neighbourScore') && query.includes(`rdf:subject <${collection}>`)
+      && query.includes(`FILTER(?predicate = <${definition}>)`)) return result([]);
+  });
+  f.deps.environment.objectDirectory = directory;
+  f.deps.access.canReadSemanticResource = async (_principal, _actor, resource) =>
+    resource === collection || resource === definition;
+  f.deps.statementSeek = {
+    coverage: async () => ({ complete: true, through_sequence: '0' }),
+  } as MainWorkDependencies['statementSeek'];
   const summarize = async (): Promise<ResourceSummary[]> => [{ reference: collection, status: 'available',
     type: 'collection', base: null, work: null, disclosure: 'public', name: { value: name, language: 'en', direction: 'ltr', basis: 'fallback' },
     avatar: { kind: 'fallback', policy: 'avatar-fallback-v1', key: collection, resourceType: 'collection' },

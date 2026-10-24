@@ -672,6 +672,8 @@ export const operationExposures = {
   "postV1Source-reliability-assessments": "platform:wiki-agents",
   "postV1SourcesAcquisitions": "platform:catalogue-import",
   "postV1SourcesAcquisitionsOpen-libraryWorks": "platform:catalogue-import",
+  "postV1SourcesArchives": "platform:catalogue-import",
+  "postV1SourcesArchivesByArchiveImage-witness": "platform:catalogue-import",
   "postV1SourcesAuthor-credit-supportsBySupportWithdrawals": "platform:catalogue-import",
   "postV1SourcesConversionsByConversionProposalsNative-work": "platform:catalogue-import",
   "postV1SourcesConversionsByConversionSource-graph": "platform:catalogue-import",

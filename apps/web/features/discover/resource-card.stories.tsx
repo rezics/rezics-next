@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { direction } from '@rezics/main/language';
 import { expect, within } from 'storybook/test';
 import { browseResources } from './browse-fixtures.ts';
 import { browseResourceHref, DiscoverResourceCard } from './resource-card.tsx';

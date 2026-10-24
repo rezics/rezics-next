@@ -11,6 +11,7 @@ import { activeDirectDefinitionsGuard } from '../context/definition-state.ts';
 import { GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   type WorkActivationEnvironment } from '../work/activate.ts';
 import { STATEMENT_FAMILIES } from './receipt-family.ts';
+import type { SemanticValue } from '../semantic/value.ts';
 import { normalizeRetainedClaimStatementSubject, normalizeStatementSubject, type StatementTargetReader } from './projection.ts';
 import {
   normalizeStatementQualification,
@@ -164,7 +165,8 @@ export function prepareRetainedClaimStatementMeaning(input: {
 }
 
 /** Resolve the Statement's interpretation slot; a write never proceeds on an incomplete result. */
-export async function statementInterpretation(env: WorkActivationEnvironment, input: RecordStatementInput,
+export async function statementInterpretation(env: WorkActivationEnvironment,
+  input: { interpretation: StatementInterpretationRequest; predicate: string; value: StatementValue | SemanticValue },
   speaker: InterpretationSpeaker,
   canReadDefinition?: (definition: string) => Promise<boolean>,
 ): Promise<Interpretation> {
@@ -190,7 +192,7 @@ export async function statementInterpretation(env: WorkActivationEnvironment, in
       entryRevision: null, selectionRevision: null,
     };
   }
-  return resolveInterpretation(env, { object: input.value.iri, relation: input.predicate,
+  return resolveInterpretation(env, { object: 'ref' in input.value ? input.value.ref : input.value.iri, relation: input.predicate,
     explicit: input.interpretation.kind === 'explicit'
       ? { context: input.interpretation.context, semanticRevision: input.interpretation.semanticRevision } : null,
     speaker });
