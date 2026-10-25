@@ -96,6 +96,78 @@ CREATE TABLE content.board (
 
 
 --
+-- Name: media; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.media (
+    route integer NOT NULL,
+    media_id uuid NOT NULL,
+    container_id uuid NOT NULL,
+    uploader_id uuid NOT NULL,
+    reservation_request_id text NOT NULL,
+    purpose text NOT NULL,
+    media_type text NOT NULL,
+    byte_count bigint NOT NULL,
+    declared_sha256 text,
+    actual_byte_count bigint,
+    sha256 text,
+    state text NOT NULL,
+    decision text,
+    key text NOT NULL,
+    claimed_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
+    transaction_id uuid NOT NULL,
+    erased boolean DEFAULT false NOT NULL,
+    collection_pending boolean DEFAULT false NOT NULL,
+    CONSTRAINT media_actual_byte_count_check CHECK (((actual_byte_count IS NULL) OR (actual_byte_count > 0))),
+    CONSTRAINT media_byte_count_check CHECK ((byte_count > 0)),
+    CONSTRAINT media_check CHECK ((route = ((get_byte(uuid_send(media_id), 10) * 256) + get_byte(uuid_send(media_id), 11)))),
+    CONSTRAINT media_check1 CHECK ((route = ((get_byte(uuid_send(container_id), 10) * 256) + get_byte(uuid_send(container_id), 11)))),
+    CONSTRAINT media_check2 CHECK ((key = (('m/'::text || (media_id)::text) || '/original'::text))),
+    CONSTRAINT media_check3 CHECK (((sha256 IS NULL) OR (declared_sha256 IS NULL) OR (sha256 = declared_sha256))),
+    CONSTRAINT media_check4 CHECK ((((state = 'reserved'::text) AND (actual_byte_count IS NULL) AND (sha256 IS NULL) AND (decision IS NULL) AND (claimed_at IS NULL)) OR ((state = 'uploaded'::text) AND (actual_byte_count = byte_count) AND (sha256 IS NOT NULL) AND (decision IS NULL) AND (claimed_at IS NULL)) OR ((state = 'available'::text) AND (actual_byte_count = byte_count) AND (sha256 IS NOT NULL) AND (decision IS NULL)) OR ((state = 'rejected'::text) AND (actual_byte_count = byte_count) AND (sha256 IS NOT NULL) AND (decision IS NOT NULL) AND (claimed_at IS NULL)))),
+    CONSTRAINT media_check5 CHECK (((claimed_at IS NULL) OR (state = 'available'::text))),
+    CONSTRAINT media_check6 CHECK (((NOT collection_pending) OR (claimed_at IS NULL))),
+    CONSTRAINT media_check7 CHECK ((NOT (collection_pending AND erased))),
+    CONSTRAINT media_decision_check CHECK (((decision IS NULL) OR (char_length(decision) > 0))),
+    CONSTRAINT media_declared_sha256_check CHECK ((declared_sha256 ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT media_media_type_check CHECK ((media_type = ANY (ARRAY['image/avif'::text, 'image/gif'::text, 'image/jpeg'::text, 'image/png'::text, 'image/webp'::text]))),
+    CONSTRAINT media_purpose_check CHECK ((purpose = 'post-image'::text)),
+    CONSTRAINT media_reservation_request_id_check CHECK (((char_length(reservation_request_id) >= 1) AND (char_length(reservation_request_id) <= 255))),
+    CONSTRAINT media_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT media_sha256_check CHECK ((sha256 ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT media_state_check CHECK ((state = ANY (ARRAY['reserved'::text, 'uploaded'::text, 'available'::text, 'rejected'::text])))
+);
+
+
+--
+-- Name: media_variant; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.media_variant (
+    route integer NOT NULL,
+    media_id uuid NOT NULL,
+    format text NOT NULL,
+    width integer NOT NULL,
+    height integer NOT NULL,
+    media_type text NOT NULL,
+    byte_count bigint NOT NULL,
+    sha256 text NOT NULL,
+    key text NOT NULL,
+    transaction_id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
+    CONSTRAINT media_variant_byte_count_check CHECK ((byte_count > 0)),
+    CONSTRAINT media_variant_check CHECK ((((format = 'avif'::text) AND (media_type = 'image/avif'::text)) OR ((format = 'webp'::text) AND (media_type = 'image/webp'::text)))),
+    CONSTRAINT media_variant_check1 CHECK ((key = ((((('m/'::text || (media_id)::text) || '/'::text) || format) || '-'::text) || (width)::text))),
+    CONSTRAINT media_variant_format_check CHECK ((format = ANY (ARRAY['avif'::text, 'webp'::text]))),
+    CONSTRAINT media_variant_height_check CHECK ((height > 0)),
+    CONSTRAINT media_variant_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT media_variant_sha256_check CHECK ((sha256 ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT media_variant_width_check CHECK (((width >= 1) AND (width <= 2560)))
+);
+
+
+--
 -- Name: post; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -180,6 +252,46 @@ ALTER TABLE ONLY content.board
 
 
 --
+-- Name: media media_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.media
+    ADD CONSTRAINT media_pkey PRIMARY KEY (route, media_id);
+
+
+--
+-- Name: media media_route_key_key; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.media
+    ADD CONSTRAINT media_route_key_key UNIQUE (route, key);
+
+
+--
+-- Name: media media_route_uploader_id_reservation_request_id_key; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.media
+    ADD CONSTRAINT media_route_uploader_id_reservation_request_id_key UNIQUE (route, uploader_id, reservation_request_id);
+
+
+--
+-- Name: media_variant media_variant_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.media_variant
+    ADD CONSTRAINT media_variant_pkey PRIMARY KEY (route, media_id, format, width);
+
+
+--
+-- Name: media_variant media_variant_route_key_key; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.media_variant
+    ADD CONSTRAINT media_variant_route_key_key UNIQUE (route, key);
+
+
+--
 -- Name: post post_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -220,6 +332,13 @@ ALTER TABLE ONLY content.thread
 
 
 --
+-- Name: media_collection_pending_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX media_collection_pending_idx ON content.media USING btree (route, created_at, media_id) WHERE collection_pending;
+
+
+--
 -- Name: board board_identity; Type: TRIGGER; Schema: content; Owner: -
 --
 
@@ -245,6 +364,14 @@ CREATE TRIGGER revision_immutable BEFORE DELETE OR UPDATE ON content.revision FO
 --
 
 CREATE TRIGGER thread_identity BEFORE UPDATE ON content.thread FOR EACH ROW EXECUTE FUNCTION content.guard_identity('route', 'thread_id', 'author_account_id');
+
+
+--
+-- Name: media_variant media_variant_route_media_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.media_variant
+    ADD CONSTRAINT media_variant_route_media_id_fkey FOREIGN KEY (route, media_id) REFERENCES content.media(route, media_id) ON DELETE CASCADE;
 
 
 --
