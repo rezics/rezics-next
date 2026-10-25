@@ -1,5 +1,6 @@
 import { afterAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
+import { get } from 'node:http';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 
@@ -82,12 +83,16 @@ test('a forwarded path always reaches AUTH_ORIGIN, even when it starts with two 
   const paths = [`//127.0.0.1:${other.port}/x?y=1`, `/%2F%2F127.0.0.1:${other.port}/x?y=1`];
   const cookie = 'auth_session=opaque-session';
   for (const path of paths) {
-    const response = await fetch(`${origin}${path}`, {
-      headers: { cookie },
-      redirect: 'manual',
-      signal: AbortSignal.timeout(60_000),
+    // Use absolute-form HTTP so Bun's fetch and Vite's URL resolution cannot rewrite the leading slashes.
+    await new Promise<void>((resolve, reject) => {
+      const request = get(origin, { path: `${origin}${path}`, headers: { cookie } }, (response) => {
+        response.resume();
+        response.once('end', resolve);
+        response.once('error', reject);
+      });
+      request.once('error', reject);
+      request.setTimeout(60_000, () => request.destroy(new Error('forwarded request timed out')));
     });
-    await response.text();
   }
   expect(escaped, 'the second fake must never receive a forwarded request').toEqual([]);
   expect(received).toEqual(paths.map((path) => ({ path, cookie })));
