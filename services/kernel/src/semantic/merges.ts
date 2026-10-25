@@ -78,11 +78,19 @@ export async function mergeSubjects(
       if (kept instanceof Error) throw kept;
       const gone = await mergeSubject(tx, redirected);
       if (gone.type !== kept.type) throw new EditorialConflictError();
-      const latest = await tx.query<{ revision: number }>(
-        'SELECT revision FROM semantic.revision WHERE route = $1 AND subject_id = $2 ORDER BY revision DESC LIMIT 1',
+      const latest = await tx.query<{ revision: number; security_revision: string }>(
+        `SELECT latest.revision, s.security_revision::text AS security_revision
+         FROM semantic.subject s
+         JOIN LATERAL (
+           SELECT revision FROM semantic.revision
+           WHERE route = s.route AND subject_id = s.subject_id
+           ORDER BY revision DESC LIMIT 1
+         ) latest ON true
+         WHERE s.route = $1 AND s.subject_id = $2`,
         [route, redirected],
       );
       const revision = latest.rows[0]!.revision + 1;
+      const securityRevision = Number(latest.rows[0]!.security_revision);
       await tx.query(
         `INSERT INTO semantic.revision (route, subject_id, revision, kind, release, recorded_transaction_id)
       VALUES ($1, $2, $3, 'merge', $4, $5)`,
@@ -102,7 +110,11 @@ export async function mergeSubjects(
         { type: SUBJECT_MERGED, subject: redirected, data: { id: redirected, survivor } },
       ];
       if (changes.length)
-        events.push({ type: LINKS_CHANGED, subject: redirected, data: { subject: redirected, revision, changes } });
+        events.push({
+          type: LINKS_CHANGED,
+          subject: redirected,
+          data: { subject: redirected, revision, security_revision: securityRevision, changes },
+        });
       return { value: { survivor, redirected, revision }, events };
     },
   );

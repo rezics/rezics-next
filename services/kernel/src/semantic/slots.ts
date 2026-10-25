@@ -160,7 +160,22 @@ async function globalSlotView(tx: CommandTransaction, subject: string, property:
   return [...selected, ...result.rows.map((row) => candidateFact(property, row, 'deprecated'))];
 }
 
-export async function slotView(
+async function omitHidden(tx: CommandTransaction, subject: string, facts: FactRow[]): Promise<FactRow[]> {
+  const ids = facts.flatMap((fact) =>
+    fact.kind === 'statement' && fact.statement_id !== null ? [fact.statement_id] : [],
+  );
+  if (ids.length === 0) return facts;
+  const hidden = await tx.query<{ candidate_id: string }>(
+    `SELECT candidate_id::text FROM semantic.hidden_candidate
+     WHERE route = $1 AND subject_id = $2 AND candidate_id = ANY($3::uuid[])`,
+    [routeOf(subject), subject, ids],
+  );
+  if (hidden.rows.length === 0) return facts;
+  const gone = new Set(hidden.rows.map((row) => row.candidate_id));
+  return facts.filter((fact) => fact.statement_id === null || !gone.has(fact.statement_id));
+}
+
+async function readSlotView(
   tx: CommandTransaction,
   subject: string,
   property: string,
@@ -187,6 +202,17 @@ export async function slotView(
     if (decision?.verdict !== 'reject') inherited.push(fact);
   }
   return inherited.length ? { facts: inherited } : { facts: inherited, resolution: 'unresolved' };
+}
+
+export async function slotView(
+  tx: CommandTransaction,
+  subject: string,
+  property: string,
+  context = GLOBAL_CONTEXT,
+  defaults: Readonly<Record<string, 'inherit' | 'suppress'>> = {},
+): Promise<{ facts: FactRow[]; resolution?: 'unresolved' | 'suppressed' }> {
+  const view = await readSlotView(tx, subject, property, context, defaults);
+  return { ...view, facts: await omitHidden(tx, subject, view.facts) };
 }
 
 /** Insert-CAS: collision with an already written head never overwrites history. */

@@ -244,6 +244,24 @@ CREATE TABLE semantic.fact (
 
 
 --
+-- Name: hidden_candidate; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.hidden_candidate (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    candidate_id uuid NOT NULL,
+    visibility text NOT NULL,
+    security_revision bigint NOT NULL,
+    CONSTRAINT hidden_candidate_candidate_route_check CHECK ((route = ((get_byte(uuid_send(candidate_id), 10) * 256) + get_byte(uuid_send(candidate_id), 11)))),
+    CONSTRAINT hidden_candidate_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT hidden_candidate_security_revision_check CHECK ((security_revision > 0)),
+    CONSTRAINT hidden_candidate_subject_route_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
+    CONSTRAINT hidden_candidate_visibility_check CHECK ((visibility = ANY (ARRAY['hidden'::text, 'taken_down'::text])))
+);
+
+
+--
 -- Name: inbound_link; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -256,10 +274,12 @@ CREATE TABLE semantic.inbound_link (
     source_revision integer NOT NULL,
     present boolean NOT NULL,
     recorded_transaction_id uuid NOT NULL,
+    source_security_revision bigint DEFAULT 0 NOT NULL,
     CONSTRAINT inbound_link_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
     CONSTRAINT inbound_link_property_check CHECK ((char_length(property) >= 1)),
     CONSTRAINT inbound_link_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT inbound_link_source_revision_check CHECK ((source_revision >= 1))
+    CONSTRAINT inbound_link_source_revision_check CHECK ((source_revision >= 1)),
+    CONSTRAINT inbound_link_source_security_revision_check CHECK ((source_security_revision >= 0))
 );
 
 
@@ -291,6 +311,7 @@ CREATE TABLE semantic.moderation (
     actor uuid NOT NULL,
     body jsonb NOT NULL,
     recorded_transaction_id uuid NOT NULL,
+    candidate_id uuid,
     CONSTRAINT moderation_action_check CHECK ((action = ANY (ARRAY['hide'::text, 'take_down'::text, 'restore'::text]))),
     CONSTRAINT moderation_body_check CHECK ((jsonb_typeof(body) = 'object'::text)),
     CONSTRAINT moderation_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
@@ -453,6 +474,14 @@ ALTER TABLE ONLY semantic.external_claim
 
 ALTER TABLE ONLY semantic.fact
     ADD CONSTRAINT fact_pkey PRIMARY KEY (route, subject_id, slot_id, log_seq);
+
+
+--
+-- Name: hidden_candidate hidden_candidate_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.hidden_candidate
+    ADD CONSTRAINT hidden_candidate_pkey PRIMARY KEY (route, subject_id, candidate_id);
 
 
 --
@@ -806,11 +835,27 @@ ALTER TABLE ONLY semantic.fact
 
 
 --
+-- Name: hidden_candidate hidden_candidate_route_subject_id_candidate_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.hidden_candidate
+    ADD CONSTRAINT hidden_candidate_route_subject_id_candidate_id_fkey FOREIGN KEY (route, subject_id, candidate_id) REFERENCES semantic.candidate(route, subject_id, candidate_id);
+
+
+--
 -- Name: merge_member merge_member_route_subject_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
 --
 
 ALTER TABLE ONLY semantic.merge_member
     ADD CONSTRAINT merge_member_route_subject_id_fkey FOREIGN KEY (route, subject_id) REFERENCES semantic.subject(route, subject_id);
+
+
+--
+-- Name: moderation moderation_route_subject_id_candidate_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.moderation
+    ADD CONSTRAINT moderation_route_subject_id_candidate_id_fkey FOREIGN KEY (route, subject_id, candidate_id) REFERENCES semantic.candidate(route, subject_id, candidate_id);
 
 
 --

@@ -16,7 +16,7 @@ import listInboundLinksByProperty from './list-inbound-links-by-property.sql';
 import listInboundLinks from './list-inbound-links.sql';
 import { PageCursorError } from './page.ts';
 import readLinkCheckpoint from './read-link-checkpoint.sql';
-import subjectExists from './subject-exists.sql';
+import readVisibility from './read-visibility.sql';
 import upsertInboundLinks from './upsert-inbound-links.sql';
 
 export const LINKS_CONSUMER = 'semantic_links';
@@ -27,7 +27,7 @@ const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 type LinkChangeRow = { property: string; statement: string; target: string; present: boolean };
-type LinksChanged = { subject: string; revision: number; changes: LinkChangeRow[] };
+type LinksChanged = { subject: string; revision: number; security_revision: number; changes: LinkChangeRow[] };
 type StoredChange = {
   route: number;
   subjectId: string;
@@ -35,9 +35,23 @@ type StoredChange = {
   sourceSubjectId: string;
   statementId: string;
   sourceRevision: number;
+  sourceSecurityRevision: number;
   present: boolean;
   position: bigint;
 };
+
+function olderChange(revision: number, security: number, position: bigint, current: StoredChange): boolean {
+  if (revision !== current.sourceRevision) return revision < current.sourceRevision;
+  if (security !== current.sourceSecurityRevision) return security < current.sourceSecurityRevision;
+  return position < current.position;
+}
+
+function preferredChange(change: StoredChange, current: StoredChange): boolean {
+  if (change.sourceRevision !== current.sourceRevision) return change.sourceRevision > current.sourceRevision;
+  if (change.sourceSecurityRevision !== current.sourceSecurityRevision)
+    return change.sourceSecurityRevision > current.sourceSecurityRevision;
+  return change.position >= current.position;
+}
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -80,18 +94,13 @@ function newestChanges(envelopes: readonly Envelope[]): Map<number, StoredChange
     for (const event of envelope.events) {
       if (event.type !== LINKS_CHANGED) continue;
       const data = event.data as LinksChanged;
+      const security = Number(data.security_revision);
       for (const change of data.changes) {
         const route = routeOf(change.target);
         if (route === null) continue;
         const key = `${route}\0${change.target}\0${change.property}\0${data.subject}\0${change.statement}`;
         const current = newest.get(key);
-        if (
-          current &&
-          (data.revision < current.sourceRevision ||
-            (data.revision === current.sourceRevision && envelope.position < current.position))
-        ) {
-          continue;
-        }
+        if (current && olderChange(data.revision, security, envelope.position, current)) continue;
         newest.set(key, {
           route,
           subjectId: change.target,
@@ -99,6 +108,7 @@ function newestChanges(envelopes: readonly Envelope[]): Map<number, StoredChange
           sourceSubjectId: data.subject,
           statementId: change.statement,
           sourceRevision: data.revision,
+          sourceSecurityRevision: security,
           present: change.present,
           position: envelope.position,
         });
@@ -120,12 +130,7 @@ async function applyChanges(pool: Pool, changes: StoredChange[]): Promise<void> 
   for (const change of changes) {
     const key = JSON.stringify([change.subjectId, change.property, change.sourceSubjectId, change.statementId]);
     const current = newest.get(key);
-    if (
-      !current ||
-      change.sourceRevision > current.sourceRevision ||
-      (change.sourceRevision === current.sourceRevision && change.position >= current.position)
-    )
-      newest.set(key, change);
+    if (!current || preferredChange(change, current)) newest.set(key, change);
   }
   changes = [...newest.values()];
   // A command checks each target under the same partition fence as its upserts.
@@ -150,6 +155,7 @@ async function applyChanges(pool: Pool, changes: StoredChange[]): Promise<void> 
             source_subject_id: change.sourceSubjectId,
             statement_id: change.statementId,
             source_revision: change.sourceRevision,
+            source_security_revision: change.sourceSecurityRevision,
             present: change.present,
           })),
         });
@@ -257,8 +263,11 @@ export async function listSubjectLinks(
     try {
       await client.query("SET LOCAL statement_timeout = '300ms'");
       const partition = await readPartition(client, partitionOf(route));
-      const exists = await subjectExists.run(client, { route, subject_id: options.subject });
-      if (!partition || exists === null || !(await options.authorize(client))) throw new SubjectNotFoundError();
+      const state = (await readVisibility.run(client, { route, subject_id: options.subject })) as {
+        visibility: string;
+      } | null;
+      if (!partition || state?.visibility !== 'visible' || !(await options.authorize(client)))
+        throw new SubjectNotFoundError();
       const redirect = await redirectOf(client, options.subject);
       if (redirect) throw new SubjectRedirectError(options.subject, redirect);
       if (cursor && cursor.epoch !== partition.epoch) throw new PageCursorError('stale');

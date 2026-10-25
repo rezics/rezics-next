@@ -163,7 +163,7 @@ export async function writeSubject(
     events.push({
       type: LINKS_CHANGED,
       subject: subjectId,
-      data: { subject: subjectId, revision: 1, changes },
+      data: { subject: subjectId, revision: 1, security_revision: 0, changes },
     });
   }
   return {

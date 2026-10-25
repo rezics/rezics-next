@@ -42,6 +42,15 @@ export const EVENT_TYPES = {
     },
     { additionalProperties: false },
   ),
+  'com.rezics.subject.statement_visibility_changed.v1': Type.Object(
+    {
+      id: Type.String({ pattern: UUID }),
+      candidate: Type.String({ pattern: UUID }),
+      visibility: Type.Union([Type.Literal('visible'), Type.Literal('hidden'), Type.Literal('taken_down')]),
+      security_revision: Type.Integer({ minimum: 1 }),
+    },
+    { additionalProperties: false },
+  ),
   'com.rezics.semantic.context.created.v1': Type.Object(
     { id: Type.String({ pattern: UUID }) },
     { additionalProperties: false },

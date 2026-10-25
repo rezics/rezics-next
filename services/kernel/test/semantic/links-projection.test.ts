@@ -71,7 +71,7 @@ test("a batch's link changes apply out of order and twice and keep the newest st
   ) => ({
     type: 'com.rezics.semantic.links.changed.v1',
     subject: sourceId,
-    data: { subject: sourceId, revision, changes },
+    data: { subject: sourceId, revision, security_revision: 0, changes },
   });
   const property = 'schema:exampleOfWork';
   await append(sourcePartition, [

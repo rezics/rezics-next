@@ -31,9 +31,11 @@ import { subjectReadEligibility } from '../eligibility.ts';
 import { listSubjectLinks } from '../links.ts';
 import { customMethod } from '../../http/custom-method.ts';
 import {
+  moderateStatement,
   moderateSubject,
   ModerationConflictError,
   ModerationSubjectNotFoundError,
+  readStatementCandidate,
   readSubjectVisibility,
 } from '../moderation.ts';
 
@@ -220,6 +222,16 @@ const visibilityResponse = t.Object(
   },
   { additionalProperties: false },
 );
+const statementVisibilityResponse = t.Object(
+  {
+    subject: t.String({ format: 'uuid' }),
+    candidate: t.String({ format: 'uuid' }),
+    visibility: t.Union([t.Literal('visible'), t.Literal('hidden'), t.Literal('taken_down')]),
+    security_revision: t.Integer({ minimum: 1 }),
+  },
+  { additionalProperties: false },
+);
+const cacheControl = { 'cache-control': t.Literal('no-cache') };
 type SubjectRouteDependencies = { pool: Pool; routeKey: Uint8Array; tokens: KeyRing };
 function invalidSubjectInput(error: SubjectInputError): ProblemError {
   return new ProblemError('invalid_request', { errors: error.violations });
@@ -404,7 +416,7 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
         params: t.Object({ id: t.String() }),
         query: t.Object({ context: t.Optional(EditorialBodyContext) }),
         response: {
-          200: withHeaders(readResponse, { [SESSION_HEADER]: t.String(), etag: t.String() }),
+          200: withHeaders(readResponse, { [SESSION_HEADER]: t.String(), etag: t.String(), ...cacheControl }),
           308: withHeaders(redirectResponse, { location: t.String() }),
           401: unauthorized,
           404: problemSchema('not_found'),
@@ -468,6 +480,7 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
 
         session.record(result.component);
         set.headers.etag = `"${result.subject.revision}"`;
+        set.headers['cache-control'] = 'no-cache';
         return { subject: result.subject, related };
       },
     )
@@ -838,6 +851,204 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
       },
     )
     .post(
+      customMethod('/v1/subjects/:id/candidates/:candidate', 'hide'),
+      {
+        params: t.Object({ id: t.String(), candidate: t.String() }),
+        headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
+        body: ReasonModerationBody,
+        response: {
+          200: withHeaders(statementVisibilityResponse, { [SESSION_HEADER]: t.String() }),
+          400: problemSchema('invalid_request'),
+          401: unauthorized,
+          403: problemSchema('forbidden'),
+          404: problemSchema('not_found'),
+          409: problemSchema('conflict'),
+          422: problemSchema('idempotency_conflict'),
+          503: problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
+        },
+        detail: {
+          operationId: 'statement.hide',
+          'x-exposure': 'public',
+          'x-action': 'moderation:hide',
+          'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params, body, headers, actor, authorizeCommand, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        if (routeOf(params.id) === null || routeOf(params.candidate) !== routeOf(params.id))
+          throw new ProblemError('not_found');
+        const target = await admission.run('normal', job, () =>
+          readStatementCandidate(pool, params.id, params.candidate),
+        );
+        if (!target) throw new ProblemError('not_found');
+        const authorization = await authorizeCommand(
+          { route: 0, id: GLOBAL_CONTEXT },
+          () => new SubjectAccessDeniedError(),
+        );
+        try {
+          const result = await admission.run('normal', job, () =>
+            moderateStatement(pool, {
+              actor,
+              subject: params.id,
+              candidate: params.candidate,
+              action: 'hide',
+              body,
+              idempotencyKey: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+              digest: requestDigest('statement.hide', actor, {
+                subject: params.id,
+                candidate: params.candidate,
+                body,
+              }),
+              authorization,
+              deadline: job.deadline,
+            }),
+          );
+          session.record(result.component);
+          return {
+            subject: result.subject,
+            candidate: result.candidate,
+            visibility: result.visibility,
+            security_revision: result.security_revision,
+          };
+        } catch (error) {
+          return moderationError(error);
+        }
+      },
+    )
+    .post(
+      customMethod('/v1/subjects/:id/candidates/:candidate', 'takedown'),
+      {
+        params: t.Object({ id: t.String(), candidate: t.String() }),
+        headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
+        body: TakedownModerationBody,
+        response: {
+          200: withHeaders(statementVisibilityResponse, { [SESSION_HEADER]: t.String() }),
+          400: problemSchema('invalid_request'),
+          401: unauthorized,
+          403: problemSchema('forbidden'),
+          404: problemSchema('not_found'),
+          409: problemSchema('conflict'),
+          422: problemSchema('idempotency_conflict'),
+          503: problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
+        },
+        detail: {
+          operationId: 'statement.take_down',
+          'x-exposure': 'public',
+          'x-action': 'moderation:takedown',
+          'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params, body, headers, actor, authorizeCommand, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        if (routeOf(params.id) === null || routeOf(params.candidate) !== routeOf(params.id))
+          throw new ProblemError('not_found');
+        const target = await admission.run('normal', job, () =>
+          readStatementCandidate(pool, params.id, params.candidate),
+        );
+        if (!target) throw new ProblemError('not_found');
+        const authorization = await authorizeCommand(
+          { route: 0, id: GLOBAL_CONTEXT },
+          () => new SubjectAccessDeniedError(),
+        );
+        try {
+          const result = await admission.run('normal', job, () =>
+            moderateStatement(pool, {
+              actor,
+              subject: params.id,
+              candidate: params.candidate,
+              action: 'take_down',
+              body,
+              idempotencyKey: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+              digest: requestDigest('statement.take_down', actor, {
+                subject: params.id,
+                candidate: params.candidate,
+                body,
+              }),
+              authorization,
+              deadline: job.deadline,
+            }),
+          );
+          session.record(result.component);
+          return {
+            subject: result.subject,
+            candidate: result.candidate,
+            visibility: result.visibility,
+            security_revision: result.security_revision,
+          };
+        } catch (error) {
+          return moderationError(error);
+        }
+      },
+    )
+    .post(
+      customMethod('/v1/subjects/:id/candidates/:candidate', 'restore'),
+      {
+        params: t.Object({ id: t.String(), candidate: t.String() }),
+        headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
+        body: ReasonModerationBody,
+        response: {
+          200: withHeaders(statementVisibilityResponse, { [SESSION_HEADER]: t.String() }),
+          400: problemSchema('invalid_request'),
+          401: unauthorized,
+          403: problemSchema('forbidden'),
+          404: problemSchema('not_found'),
+          409: problemSchema('conflict'),
+          422: problemSchema('idempotency_conflict'),
+          503: problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
+        },
+        detail: {
+          operationId: 'statement.restore',
+          'x-exposure': 'public',
+          'x-action': 'moderation:takedown',
+          'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params, body, headers, actor, authorizeCommand, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        if (routeOf(params.id) === null || routeOf(params.candidate) !== routeOf(params.id))
+          throw new ProblemError('not_found');
+        const target = await admission.run('normal', job, () =>
+          readStatementCandidate(pool, params.id, params.candidate),
+        );
+        if (!target) throw new ProblemError('not_found');
+        const authorization = await authorizeCommand(
+          { route: 0, id: GLOBAL_CONTEXT },
+          () => new SubjectAccessDeniedError(),
+        );
+        try {
+          const result = await admission.run('normal', job, () =>
+            moderateStatement(pool, {
+              actor,
+              subject: params.id,
+              candidate: params.candidate,
+              action: 'restore',
+              body,
+              idempotencyKey: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+              digest: requestDigest('statement.restore', actor, {
+                subject: params.id,
+                candidate: params.candidate,
+                body,
+              }),
+              authorization,
+              deadline: job.deadline,
+            }),
+          );
+          session.record(result.component);
+          return {
+            subject: result.subject,
+            candidate: result.candidate,
+            visibility: result.visibility,
+            security_revision: result.security_revision,
+          };
+        } catch (error) {
+          return moderationError(error);
+        }
+      },
+    )
+    .post(
       customMethod('/v1/subjects/:id', 'adopt'),
       {
         params: t.Object({ id: t.String() }),
@@ -912,33 +1123,36 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
           context: t.Optional(EditorialBodyContext),
         }),
         response: {
-          200: t.Object({
-            candidates: t.Array(
-              t.Object({
-                id: t.String({ format: 'uuid' }),
-                source: t.Union([SourceSchema, t.Null()]),
-                retracted: t.Union([t.Integer(), t.Null()]),
-                retraction: t.Union([
-                  t.Object({ source: SourceSchema, references: t.Array(BatchReferenceSchema) }),
-                  t.Null(),
-                ]),
-                statement: StatementSchema,
-                release: t.String(),
-                revision: t.Integer(),
-                decision: t.Union([t.Literal('accepted'), t.Literal('rejected'), t.Null()]),
-                head: t.Union([t.Integer(), t.Null()]),
-                rank: t.Union([t.Literal('normal'), t.Literal('preferred'), t.Literal('deprecated'), t.Null()]),
-              }),
-            ),
-            adoption: t.Union([
-              t.Object({
-                mode: t.Union([t.Literal('inherit'), t.Literal('replace'), t.Literal('suppress')]),
-                head: t.Integer(),
-              }),
-              t.Null(),
-            ]),
-            next: t.Union([t.String(), t.Null()]),
-          }),
+          200: withHeaders(
+            t.Object({
+              candidates: t.Array(
+                t.Object({
+                  id: t.String({ format: 'uuid' }),
+                  source: t.Union([SourceSchema, t.Null()]),
+                  retracted: t.Union([t.Integer(), t.Null()]),
+                  retraction: t.Union([
+                    t.Object({ source: SourceSchema, references: t.Array(BatchReferenceSchema) }),
+                    t.Null(),
+                  ]),
+                  statement: StatementSchema,
+                  release: t.String(),
+                  revision: t.Integer(),
+                  decision: t.Union([t.Literal('accepted'), t.Literal('rejected'), t.Null()]),
+                  head: t.Union([t.Integer(), t.Null()]),
+                  rank: t.Union([t.Literal('normal'), t.Literal('preferred'), t.Literal('deprecated'), t.Null()]),
+                }),
+              ),
+              adoption: t.Union([
+                t.Object({
+                  mode: t.Union([t.Literal('inherit'), t.Literal('replace'), t.Literal('suppress')]),
+                  head: t.Integer(),
+                }),
+                t.Null(),
+              ]),
+              next: t.Union([t.String(), t.Null()]),
+            }),
+            cacheControl,
+          ),
           ...listingErrors,
         },
         detail: {
@@ -948,7 +1162,7 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
           security: [{ bearerAuth: [] }, {}],
         },
       },
-      async ({ params, query, authorize, admission, job, session }) => {
+      async ({ params, query, authorize, admission, job, session, set }) => {
         const route = routeOf(params.id);
         if (route === null) throw new ProblemError('not_found');
         const resource = { route, id: params.id };
@@ -965,6 +1179,7 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
             }),
           );
           session.record(component);
+          set.headers['cache-control'] = 'no-cache';
           return result;
         } catch (error) {
           return candidateError(error);
@@ -977,17 +1192,20 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
         params: t.Object({ id: t.String() }),
         query: t.Object(pageQuery),
         response: {
-          200: t.Object({
-            revisions: t.Array(
-              t.Object({
-                revision: t.Integer(),
-                kind: t.String(),
-                release: t.String(),
-                source: t.Union([SourceSchema, t.Null()]),
-              }),
-            ),
-            next: t.Union([t.String(), t.Null()]),
-          }),
+          200: withHeaders(
+            t.Object({
+              revisions: t.Array(
+                t.Object({
+                  revision: t.Integer(),
+                  kind: t.String(),
+                  release: t.String(),
+                  source: t.Union([SourceSchema, t.Null()]),
+                }),
+              ),
+              next: t.Union([t.String(), t.Null()]),
+            }),
+            cacheControl,
+          ),
           ...listingErrors,
         },
         detail: {
@@ -997,7 +1215,7 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
           security: [{ bearerAuth: [] }, {}],
         },
       },
-      async ({ params, query, authorize, admission, job, session }) => {
+      async ({ params, query, authorize, admission, job, session, set }) => {
         const route = routeOf(params.id);
         if (route === null) throw new ProblemError('not_found');
         const resource = { route, id: params.id };
@@ -1012,6 +1230,7 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
             }),
           );
           session.record(component);
+          set.headers['cache-control'] = 'no-cache';
           return result;
         } catch (error) {
           return candidateError(error);
@@ -1024,25 +1243,28 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
         params: t.Object({ id: t.String() }),
         query: t.Object({ ...pageQuery, property: t.Optional(t.String({ minLength: 1 })) }),
         response: {
-          200: t.Object(
-            {
-              links: t.Array(
-                t.Object(
-                  { subject: t.String(), property: t.String(), statement: t.String() },
+          200: withHeaders(
+            t.Object(
+              {
+                links: t.Array(
+                  t.Object(
+                    { subject: t.String(), property: t.String(), statement: t.String() },
+                    { additionalProperties: false },
+                  ),
+                ),
+                freshness: t.Object(
+                  {
+                    consistency: t.Literal('eventual'),
+                    target_seconds: t.Literal(10),
+                    caught_up: t.Boolean(),
+                  },
                   { additionalProperties: false },
                 ),
-              ),
-              freshness: t.Object(
-                {
-                  consistency: t.Literal('eventual'),
-                  target_seconds: t.Literal(10),
-                  caught_up: t.Boolean(),
-                },
-                { additionalProperties: false },
-              ),
-              next: t.Union([t.String(), t.Null()]),
-            },
-            { additionalProperties: false },
+                next: t.Union([t.String(), t.Null()]),
+              },
+              { additionalProperties: false },
+            ),
+            cacheControl,
           ),
           308: withHeaders(redirectResponse, { location: t.String() }),
           ...listingErrors,
@@ -1075,6 +1297,7 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
             }),
           );
           session.record(component);
+          set.headers['cache-control'] = 'no-cache';
           return result;
         } catch (error) {
           if (error instanceof SubjectRedirectError) {

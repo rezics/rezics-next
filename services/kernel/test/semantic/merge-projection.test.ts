@@ -141,6 +141,7 @@ test('link changes reaching a redirected target are forwarded and a newer remova
         data: {
           subject: source,
           revision: 2,
+          security_revision: 0,
           changes: [{ target: id, property: 'schema:author', statement, present: true }],
         },
       },
@@ -150,6 +151,7 @@ test('link changes reaching a redirected target are forwarded and a newer remova
         data: {
           subject: seeded!.source,
           revision: 2,
+          security_revision: 0,
           changes: [{ target: id, property: 'schema:author', statement: seeded!.statement, present: false }],
         },
       },

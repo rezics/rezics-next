@@ -11,6 +11,7 @@ type Link = {
   source_subject_id: string;
   statement_id: string;
   source_revision: number;
+  source_security_revision: number;
   present: boolean;
 };
 const projected = (id: string) => ({ type: LINKS_PROJECTED, data: { subjects: [id] } });
@@ -112,13 +113,14 @@ export async function moveMergePage(
     if (state.phase === 'links') {
       links = (
         await tx.query<Link>(
-          `SELECT property, source_subject_id::text, statement_id::text, source_revision, present
+          `SELECT property, source_subject_id::text, statement_id::text, source_revision,
+                  source_security_revision::text, present
          FROM semantic.inbound_link WHERE route = $1 AND subject_id = $2 AND present
          AND (property, source_subject_id, statement_id) > ($3, $4::uuid, $5::uuid)
          ORDER BY property, source_subject_id, statement_id LIMIT 100`,
           [sourceRoute, id, state.cursor[0] ?? '', state.cursor[1] ?? NIL, state.cursor[2] ?? NIL],
         )
-      ).rows;
+      ).rows.map((link) => ({ ...link, source_security_revision: Number(link.source_security_revision) }));
       const last = links.at(-1);
       if (links.length === 100 && last)
         next = { phase: 'links', cursor: [last.property, last.source_subject_id, last.statement_id] };

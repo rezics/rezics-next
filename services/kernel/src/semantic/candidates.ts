@@ -294,6 +294,12 @@ export async function decideCandidate(
         candidate = compact.rows[0];
       }
       if (!candidate) throw new SubjectNotFoundError();
+      const concealed = await tx.query(
+        `SELECT 1 FROM semantic.hidden_candidate
+         WHERE route = $1 AND subject_id = $2 AND candidate_id = $3`,
+        [route, options.subject, options.candidate],
+      );
+      if ((concealed.rowCount ?? 0) > 0) throw new SubjectNotFoundError();
       if (await redirectOf(tx, options.subject)) throw new EditorialConflictError();
 
       await expandSlot(tx, options.subject, candidate.property, transactionId);
@@ -386,8 +392,8 @@ export async function adoptCandidates(
       authorization: options.authorization,
     },
     async (tx, { transactionId }) => {
-      const subject = await tx.query<{ type: string; revision: number }>(
-        `SELECT s.type, latest.revision
+      const subject = await tx.query<{ type: string; revision: number; security_revision: string }>(
+        `SELECT s.type, latest.revision, s.security_revision::text AS security_revision
          FROM semantic.subject s
          JOIN LATERAL (
            SELECT revision FROM semantic.revision
@@ -409,6 +415,18 @@ export async function adoptCandidates(
         throw new SubjectInputError([{ pointer: '/property', code: 'unsupported' }]);
 
       if (options.selection.length > 32) throw new SubjectInputError([{ pointer: '/selection', code: 'out_of_range' }]);
+      const hiddenCandidates = new Set<string>();
+      const hiddenIds = [
+        ...new Set(options.selection.map((entry) => entry.candidate).filter((id) => routeOf(id) === route)),
+      ];
+      if (hiddenIds.length) {
+        const concealed = await tx.query<{ candidate_id: string }>(
+          `SELECT candidate_id::text FROM semantic.hidden_candidate
+           WHERE route = $1 AND subject_id = $2 AND candidate_id = ANY($3::uuid[])`,
+          [route, options.subject, hiddenIds],
+        );
+        for (const row of concealed.rows) hiddenCandidates.add(row.candidate_id);
+      }
       const state = await resolveSlot(tx, options.subject, options.property, options.context);
       const compact = new Set(state.compact.map((candidate) => candidate.candidate_id));
       for (const [index, entry] of options.selection.entries()) {
@@ -421,7 +439,7 @@ export async function adoptCandidates(
           );
           supported = result.rows.length > 0;
         }
-        if (routeOf(entry.candidate) !== route || !supported)
+        if (routeOf(entry.candidate) !== route || !supported || hiddenCandidates.has(entry.candidate))
           throw new SubjectInputError([{ pointer: `/selection/${index}/candidate`, code: 'unsupported' }]);
       }
       const seen = new Set<string>();
@@ -487,7 +505,12 @@ export async function adoptCandidates(
             events.push({
               type: LINKS_CHANGED,
               subject: options.subject,
-              data: { subject: options.subject, revision, changes },
+              data: {
+                subject: options.subject,
+                revision,
+                security_revision: Number(subject.rows[0].security_revision),
+                changes,
+              },
             });
           }
         }
@@ -659,7 +682,18 @@ export async function listCandidates(
             head: options.context === GLOBAL_CONTEXT ? 1 : null,
           }));
       }
-      const shown = rows.slice(0, options.limit);
+      const window = rows.slice(0, options.limit);
+      const hidden = new Set<string>();
+      if (window.length) {
+        const concealed = await client.query<{ candidate_id: string }>(
+          `SELECT candidate_id::text FROM semantic.hidden_candidate
+           WHERE route = $1 AND subject_id = $2 AND candidate_id = ANY($3::uuid[])`,
+          [routeOf(options.subject), options.subject, window.map((row) => row.candidate_id)],
+        );
+        for (const row of concealed.rows) hidden.add(row.candidate_id);
+      }
+      // Hidden rows leave this page short. next stays set until the candidate sequence ends.
+      const shown = window.filter((row) => !hidden.has(row.candidate_id));
       const releases = new Map<string, Release>();
       for (const row of shown) {
         if (releases.has(row.release)) continue;
@@ -712,7 +746,7 @@ export async function listCandidates(
           rank: ranks.get(row.candidate_id) ?? null,
         });
       }
-      const last = shown.at(-1);
+      const last = window.at(-1);
       return {
         value: {
           candidates,

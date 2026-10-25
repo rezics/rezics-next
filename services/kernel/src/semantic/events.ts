@@ -49,6 +49,7 @@ export const SEMANTIC_EVENTS = {
     {
       subject: UUID,
       revision,
+      security_revision: Type.Integer({ minimum: 0 }),
       changes: Type.Array(linkChange, { minItems: 1, maxItems: 1024 }),
     },
     { additionalProperties: false },
