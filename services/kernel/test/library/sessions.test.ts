@@ -427,10 +427,10 @@ test('statement counts stay equal at three scales of unrelated sessions and unit
   for (const scale of [1, 8, 64]) {
     await database.admin.query(
       `INSERT INTO library.progress_session
-      (route, session_id, account_id, subject_id, mode, unit, state, revision, started_at, transaction_id)
-      SELECT $1, gen_random_uuid(), $2, $3, 'completed_units', 'page', 'active', 1, now(), $2
-      FROM generate_series($4::int, $5::int)`,
-      [route, other.accountId, subjectId, previous + 1, scale],
+      (route, session_id, account_id, subject_id, mode, unit, state, revision, started_at, transaction_id, completed_unit_count)
+      SELECT $1, session_id, $2, $3, 'completed_units', 'page', 'active', 1, now(), $2, 0
+      FROM unnest($4::uuid[]) AS session_id`,
+      [route, other.accountId, subjectId, Array.from({ length: scale - previous }, () => newId(route))],
     );
     await database.admin.query(
       `INSERT INTO library.progress_unit(route, session_id, unit_id, added_at)
@@ -438,7 +438,7 @@ test('statement counts stay equal at three scales of unrelated sessions and unit
       WHERE account_id = $1 ON CONFLICT DO NOTHING`,
       [other.accountId],
     );
-    const operations = [
+    const operations: (() => Promise<unknown>)[] = [
       () => commands.recordProgress(owner, scalar.id, { revision, amount: '2' }, key()),
       () => commands.recordProgress(owner, cursor.id, { revision, locator: 'x', position: '2' }, key()),
       () => commands.recordProgress(owner, units.id, { revision: revision + 1, add: ['1'] }, key()),
