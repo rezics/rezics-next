@@ -31,5 +31,12 @@
   "search_results": "Matching subjects",
   "search_no_results": "No results found.",
   "search_no_suggestions": "No suggestions found.",
-  "search_more": "More results"
+  "search_more": "More results",
+  "board_threads_heading": "Discussions",
+  "board_threads_empty": "There are no discussions in this board yet.",
+  "threads_next_page": "Next page",
+  "thread_posts_heading": "Posts",
+  "thread_posts_empty": "There are no posts in this thread yet.",
+  "thread_post_erased": "This post was erased.",
+  "threads_untitled": "Untitled"
 }

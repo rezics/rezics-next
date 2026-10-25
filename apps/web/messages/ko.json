@@ -31,5 +31,12 @@
   "search_results": "일치하는 주제",
   "search_no_results": "검색 결과가 없습니다.",
   "search_no_suggestions": "추천 항목이 없습니다.",
-  "search_more": "결과 더 보기"
+  "search_more": "결과 더 보기",
+  "board_threads_heading": "토론",
+  "board_threads_empty": "이 게시판에는 아직 토론이 없습니다.",
+  "threads_next_page": "다음 페이지",
+  "thread_posts_heading": "게시물",
+  "thread_posts_empty": "이 스레드에는 아직 게시물이 없습니다.",
+  "thread_post_erased": "이 게시물은 삭제되었습니다.",
+  "threads_untitled": "제목 없음"
 }

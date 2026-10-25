@@ -31,5 +31,12 @@
   "search_results": "匹配的主题",
   "search_no_results": "没有找到结果。",
   "search_no_suggestions": "没有找到建议。",
-  "search_more": "更多结果"
+  "search_more": "更多结果",
+  "board_threads_heading": "讨论串",
+  "board_threads_empty": "此版面目前没有讨论串。",
+  "threads_next_page": "下一页",
+  "thread_posts_heading": "帖子",
+  "thread_posts_empty": "此讨论串目前没有帖子。",
+  "thread_post_erased": "此帖已删除。",
+  "threads_untitled": "无标题"
 }

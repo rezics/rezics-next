@@ -31,5 +31,12 @@
   "search_results": "Temas coincidentes",
   "search_no_results": "No se encontraron resultados.",
   "search_no_suggestions": "No se encontraron sugerencias.",
-  "search_more": "Más resultados"
+  "search_more": "Más resultados",
+  "board_threads_heading": "Debates",
+  "board_threads_empty": "Todavía no hay debates en este tablón.",
+  "threads_next_page": "Página siguiente",
+  "thread_posts_heading": "Publicaciones",
+  "thread_posts_empty": "Todavía no hay publicaciones en este debate.",
+  "thread_post_erased": "Esta publicación fue eliminada.",
+  "threads_untitled": "Sin título"
 }

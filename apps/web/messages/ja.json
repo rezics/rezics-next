@@ -31,5 +31,12 @@
   "search_results": "一致する項目",
   "search_no_results": "検索結果がありません。",
   "search_no_suggestions": "候補がありません。",
-  "search_more": "さらに表示"
+  "search_more": "さらに表示",
+  "board_threads_heading": "スレッド",
+  "board_threads_empty": "このボードにはまだスレッドがありません。",
+  "threads_next_page": "次のページ",
+  "thread_posts_heading": "投稿",
+  "thread_posts_empty": "このスレッドにはまだ投稿がありません。",
+  "thread_post_erased": "この投稿は削除されました。",
+  "threads_untitled": "無題"
 }

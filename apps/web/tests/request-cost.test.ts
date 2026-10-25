@@ -19,6 +19,46 @@ const kernelCalls: string[] = [];
 const authCalls: string[] = [];
 let subjectSize = 1;
 let searchSize = 1;
+const contentId = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
+const boardId = contentId(800);
+const threadId = contentId(801);
+let boardSize = 1;
+let postSize = 1;
+const pageMetadata = {
+  route: 0,
+  visibility: 'published',
+  securityRevision: '1',
+  createdAt: '2026-01-01T00:00:00.000Z',
+};
+const documentBody = (n: number) => ({
+  version: 'rezics-document-v1',
+  profile: 'blocks',
+  doc: {
+    type: 'doc',
+    content: [
+      {
+        type: 'paragraph',
+        attrs: { id: `post-${n}` },
+        content: [{ type: 'text', text: `Post ${n}` }],
+      },
+    ],
+  },
+});
+const post = (n: number) => ({
+  ...pageMetadata,
+  id: contentId(900 + n),
+  threadId,
+  boardId,
+  authorId: contentId(999),
+  parentId: null,
+  revisionId: contentId(1200 + n),
+  sha256: 'a'.repeat(64),
+  licence: 'CC-BY-4.0',
+  subjectIds: [],
+  mediaIds: [],
+  availability: 'available',
+  body: documentBody(n),
+});
 const kernel = Bun.serve({
   port: 0,
   hostname: '127.0.0.1',
@@ -47,6 +87,49 @@ const kernel = Bun.serve({
     if (url.pathname.startsWith('/auth/')) {
       authCalls.push(url.pathname);
       return new Response(null, { status: 200 });
+    }
+    if (url.pathname === `/v1/boards/${boardId}`) {
+      kernelCalls.push(`${request.method} ${url.pathname}${url.search}`);
+      return Response.json({
+        board: { ...pageMetadata, id: boardId, title: 'Cost board', availability: 'available' },
+      });
+    }
+    if (url.pathname === `/v1/boards/${boardId}/threads`) {
+      kernelCalls.push(`${request.method} ${url.pathname}${url.search}`);
+      return Response.json({
+        threads: Array.from({ length: boardSize }, (_, n) => ({
+          ...pageMetadata,
+          id: contentId(1000 + n),
+          boardId,
+          authorId: contentId(999),
+          licence: 'CC-BY-4.0',
+          subjectIds: [],
+          title: `Thread ${n}`,
+          availability: 'available',
+          firstPost: post(n),
+        })),
+        next: null,
+      });
+    }
+    if (url.pathname === `/v1/threads/${threadId}`) {
+      kernelCalls.push(`${request.method} ${url.pathname}${url.search}`);
+      return Response.json({
+        thread: {
+          ...pageMetadata,
+          id: threadId,
+          boardId,
+          authorId: contentId(999),
+          licence: 'CC-BY-4.0',
+          subjectIds: [],
+          title: 'Cost thread',
+          availability: 'available',
+          firstPost: post(0),
+        },
+      });
+    }
+    if (url.pathname === `/v1/threads/${threadId}/posts`) {
+      kernelCalls.push(`${request.method} ${url.pathname}${url.search}`);
+      return Response.json({ posts: Array.from({ length: postSize }, (_, n) => post(n)), next: null });
     }
     if (url.pathname === '/v1/subjects:search' && request.method === 'POST') {
       const body = (await request.json()) as { limit: number };
@@ -197,6 +280,30 @@ test('subject page stays within its bound as s grows', async () => {
     const response = await fetch(`${origin}/en/subjects/${subjectId}`);
     expect(response.status).toBe(200);
     expect(kernelCalls).toEqual([`GET /v1/subjects/${subjectId}`]);
+  }
+}, 300_000);
+test('board page stays within its bound as s grows', async () => {
+  const origin = await site();
+  for (const s of [1, 8, 64]) {
+    boardSize = s;
+    kernelCalls.length = 0;
+    authCalls.length = 0;
+    const response = await fetch(`${origin}/en/boards/${boardId}`);
+    expect(response.status).toBe(200);
+    expect(kernelCalls).toEqual([`GET /v1/boards/${boardId}`, `GET /v1/boards/${boardId}/threads`]);
+    expect(authCalls).toEqual([]);
+  }
+}, 300_000);
+test('thread page stays within its bound as s grows', async () => {
+  const origin = await site();
+  for (const s of [1, 8, 64]) {
+    postSize = s;
+    kernelCalls.length = 0;
+    authCalls.length = 0;
+    const response = await fetch(`${origin}/en/threads/${threadId}`);
+    expect(response.status).toBe(200);
+    expect(kernelCalls).toEqual([`GET /v1/threads/${threadId}`, `GET /v1/threads/${threadId}/posts`]);
+    expect(authCalls).toEqual([]);
   }
 }, 300_000);
 test('search page stays within its bound as s grows', async () => {

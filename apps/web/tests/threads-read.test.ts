@@ -254,8 +254,8 @@ afterAll(async () => {
 const read = (path: string, next: string | null = null) => ({ method: 'GET', path, cursor: next });
 const moreLink = (page: Page) => page.locator('main a[href*="cursor="]');
 
-// Add the board loader and ordered thread links with cursor paging to turn this into test(...).
-test.failing(
+// Keep the board's kernel order and use the list envelope cursor for the next page.
+test(
   "a board page lists its threads in the kernel's order and pages with the cursor",
   async () => {
     calls.length = 0;
@@ -287,8 +287,8 @@ test.failing(
   timeout,
 );
 
-// Add the thread loader and DocumentBody post rendering with cursor paging to turn this into test(...).
-test.failing(
+// Keep post order, render each body, and page with the list envelope cursor.
+test(
   'a thread page shows its posts in order with their rendered bodies',
   async () => {
     calls.length = 0;
@@ -329,8 +329,8 @@ test.failing(
   timeout,
 );
 
-// Render erased tombstones with a localized note and no DocumentBody to turn this into test(...).
-test.failing(
+// Erased posts show a localized note in place of the document body.
+test(
   'an erased post says it was erased and shows no body',
   async () => {
     for (const [locale, note] of [
@@ -352,8 +352,8 @@ test.failing(
   timeout,
 );
 
-// Map kernel 404s from board and thread reads to NotFoundPage to turn this into test(...).
-test.failing(
+// Kernel 404s use the site's not-found page and status.
+test(
   "a missing board or thread answers the site's not-found page with 404",
   async () => {
     const origin = await site();
@@ -375,8 +375,8 @@ test.failing(
   timeout,
 );
 
-// Start thread and posts reads together and avoid per-post reads to turn this into test(...).
-test.failing(
+// Start thread and post-page reads together without per-post reads.
+test(
   'a thread page makes at most two kernel reads, issued together',
   async () => {
     const origin = await site();

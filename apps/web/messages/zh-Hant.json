@@ -31,5 +31,12 @@
   "search_results": "符合的主題",
   "search_no_results": "找不到搜尋結果。",
   "search_no_suggestions": "找不到建議項目。",
-  "search_more": "更多結果"
+  "search_more": "更多結果",
+  "board_threads_heading": "討論串",
+  "board_threads_empty": "此看板目前沒有討論串。",
+  "threads_next_page": "下一頁",
+  "thread_posts_heading": "文章",
+  "thread_posts_empty": "此討論串目前沒有文章。",
+  "thread_post_erased": "此篇文章已刪除。",
+  "threads_untitled": "未命名"
 }

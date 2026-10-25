@@ -31,5 +31,12 @@
   "search_results": "Sujets correspondants",
   "search_no_results": "Aucun résultat trouvé.",
   "search_no_suggestions": "Aucune suggestion trouvée.",
-  "search_more": "Plus de résultats"
+  "search_more": "Plus de résultats",
+  "board_threads_heading": "Discussions",
+  "board_threads_empty": "Il n’y a pas encore de discussion dans ce tableau.",
+  "threads_next_page": "Page suivante",
+  "thread_posts_heading": "Publications",
+  "thread_posts_empty": "Il n’y a pas encore de publication dans ce fil.",
+  "thread_post_erased": "Cette publication a été supprimée.",
+  "threads_untitled": "Sans titre"
 }

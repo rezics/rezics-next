@@ -31,5 +31,12 @@
   "search_results": "Passende Themen",
   "search_no_results": "Keine Ergebnisse gefunden.",
   "search_no_suggestions": "Keine Vorschläge gefunden.",
-  "search_more": "Weitere Ergebnisse"
+  "search_more": "Weitere Ergebnisse",
+  "board_threads_heading": "Diskussionen",
+  "board_threads_empty": "In diesem Board gibt es noch keine Diskussionen.",
+  "threads_next_page": "Nächste Seite",
+  "thread_posts_heading": "Beiträge",
+  "thread_posts_empty": "In diesem Thread gibt es noch keine Beiträge.",
+  "thread_post_erased": "Dieser Beitrag wurde gelöscht.",
+  "threads_untitled": "Ohne Titel"
 }
