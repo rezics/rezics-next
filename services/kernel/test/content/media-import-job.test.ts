@@ -45,6 +45,7 @@ test('native cover import uploads measured original bytes and preserves reservat
   const requests: Request[] = [];
   const puts: { path: string; bytes: Uint8Array; mediaType: string | null }[] = [];
   const server = Bun.serve({
+    idleTimeout: 0,
     hostname: '127.0.0.1',
     port: 0,
     async fetch(request) {
@@ -190,7 +191,7 @@ async function reserve(db = pool, overrides: Record<string, unknown> = {}) {
   await db.query(
     `INSERT INTO content.media
     (route,media_id,container_id,uploader_id,reservation_request_id,purpose,state,key,transaction_id,source_url,credit,provenance)
-    VALUES ($1,$2,$3,$4,$2::text,'cover','reserved',$5,$2,'https://images.example.test/image',$6,$7)`,
+    VALUES ($1,$2::uuid,$3,$4,$2::text,'cover','reserved',$5,$2::uuid,'https://images.example.test/image',$6,$7)`,
     [route, mediaId, newId(route), newId(12), `m/${mediaId}/original`, credit, provenance],
   );
   return { route, mediaId, provenance };
@@ -203,11 +204,12 @@ async function fixture(source: (request: Request) => Response | Promise<Response
   let failPurge = false;
   let puts = 0;
   const server = Bun.serve({
+    idleTimeout: 0,
     hostname: '127.0.0.1',
     port: 0,
     async fetch(request) {
       const url = new URL(request.url);
-      if (!url.pathname.startsWith('/bucket/')) return source(request);
+      if (url.pathname !== '/bucket' && !url.pathname.startsWith('/bucket/')) return source(request);
       const key = decodeURIComponent(url.pathname.slice('/bucket/'.length));
       if (request.method === 'PUT') {
         puts++;
@@ -510,11 +512,12 @@ test('different-partition source preparation releases both anchors before locked
   const { tupleRoute } = await import('../../src/content/imported-contract.ts');
   const { readFences } = await import('../../src/content/source-fences.ts');
   const { readPartition } = await import('../../src/partition/partition.ts');
-  const row = await reserve();
+  const row = await reserve(pool, { external_id: 'separate-source' });
   const sourceRoute = tupleRoute(routeKey, row.provenance.source, row.provenance.external_id);
   expect(partitionOf(sourceRoute)).not.toBe(partitionOf(row.route));
   const traced = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
   const connect = traced.connect.bind(traced);
+  const instrumented = new WeakSet<pg.PoolClient>();
   const anchors: number[] = [];
   const releases: number[] = [];
   let active = 0;
@@ -522,14 +525,18 @@ test('different-partition source preparation releases both anchors before locked
     expect(active).toBe(0);
     const client = await connect();
     active++;
-    const query = client.query.bind(client);
-    const capture = spyOn(client, 'query').mockImplementation(((sql: string, values?: unknown[]) => {
-      if (typeof sql === 'string' && sql.includes('FROM core.partition')) anchors.push(Number(values![0]));
-      return query(sql, values);
-    }) as typeof client.query);
+    if (!instrumented.has(client)) {
+      instrumented.add(client);
+      const query = client.query.bind(client);
+      spyOn(client, 'query').mockImplementation(((sql: string | pg.QueryConfig, values?: unknown[]) => {
+        const text = typeof sql === 'string' ? sql : sql.text;
+        const parameters = typeof sql === 'string' ? values : sql.values;
+        if (text.includes('FROM core.partition')) anchors.push(Number(parameters![0]));
+        return query(sql, values);
+      }) as typeof client.query);
+    }
     const release = client.release.bind(client);
     client.release = () => {
-      capture.mockRestore();
       releases.push(anchors.length);
       active--;
       release();
@@ -658,6 +665,8 @@ test('actual Sharp pipeline strips metadata after imported original, with measur
 
 test('checkGrowth bounds native import rows, statements and buffers independently of catalogue size', async () => {
   const { checkGrowth, openGrowthDatabase, seed } = await import('../support/growth.ts');
+  const { tupleRoute } = await import('../../src/content/imported-contract.ts');
+  const sourceRoute = tupleRoute(routeKey, 'catalogue', 'growth-source');
   const db = await openGrowthDatabase(process.env.DATABASE_URL!);
   const bytes = await png();
   const http = await fixture(() => new Response(bytes));
@@ -673,7 +682,7 @@ test('checkGrowth bounds native import rows, statements and buffers independentl
           {
             name: 'unrelated and same partition import media',
             hotPartition: partitionOf(42112),
-            rows: ({ route }) => {
+            rows: ({ route, ordinal }) => {
               const id = newId(route);
               return {
                 'content.media': [
@@ -691,12 +700,30 @@ test('checkGrowth bounds native import rows, statements and buffers independentl
                     media_type: 'image/png',
                   },
                 ],
+                'content.source_fences': [
+                  {
+                    route,
+                    source: 'catalogue',
+                    external_id: `unrelated-${ordinal}`,
+                    field_group: 'cover',
+                    taken_down: false,
+                    security_revision: 1,
+                  },
+                  {
+                    route: sourceRoute,
+                    source: 'catalogue',
+                    external_id: `neighbour-${ordinal}`,
+                    field_group: 'cover',
+                    taken_down: false,
+                    security_revision: 1,
+                  },
+                ],
               };
             },
           },
           { from: previous, to: scale },
         );
-        for (let i = 0; i < 6; i++) targets.push(await reserve(db.admin));
+        for (let i = 0; i < 6; i++) targets.push(await reserve(db.admin, { external_id: 'growth-source' }));
       },
       operation: async () => {
         const target = targets.shift()!;
@@ -717,3 +744,121 @@ test('checkGrowth bounds native import rows, statements and buffers independentl
     await db.close();
   }
 }, 90_000);
+
+test('real HTTP streams and compressed false length are capped using delivered bytes, with linear successful input', async () => {
+  const { gzipSync } = await import('node:zlib');
+  const limit = 20 * 1024 * 1024;
+  const compressed = gzipSync(new Uint8Array(limit + 1));
+  let delivered = 0;
+  let requests = 0;
+  let signal: AbortSignal | undefined;
+  const server = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    idleTimeout: 0,
+    fetch(request) {
+      const path = new URL(request.url).pathname;
+      if (path === '/compressed')
+        return new Response(compressed, {
+          headers: {
+            'content-encoding': 'gzip',
+            'content-length': String(compressed.byteLength),
+          },
+        });
+      if (path.startsWith('/size/')) return new Response(new Uint8Array(Number(path.slice(6))));
+      let remaining = limit + 1;
+      return new Response(
+        new ReadableStream({
+          pull(controller) {
+            if (!remaining) {
+              controller.close();
+              return;
+            }
+            const chunk = new Uint8Array(Math.min(64 * 1024, remaining));
+            remaining -= chunk.byteLength;
+            controller.enqueue(chunk);
+          },
+        }),
+      );
+    },
+  });
+  const transport = globalThis.fetch;
+  const boundary = spyOn(
+    globalThis as { fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> },
+    'fetch',
+  ).mockImplementation(async (input, init) => {
+    const request = new Request(input, init);
+    requests++;
+    signal = request.signal;
+    const response = await transport(new URL(new URL(request.url).pathname, server.url), {
+      signal,
+      redirect: 'manual',
+    });
+    return new Response(
+      response.body!.pipeThrough(
+        new TransformStream<Uint8Array, Uint8Array>({
+          transform(chunk, controller) {
+            delivered += chunk.byteLength;
+            controller.enqueue(chunk);
+          },
+        }),
+      ),
+      { status: response.status, headers: response.headers },
+    );
+  });
+  try {
+    for (const path of ['/stream', '/compressed']) {
+      delivered = 0;
+      await expect(fetched(`https://images.example.test${path}`)).rejects.toMatchObject({ code: 'source-bytes' });
+      expect(delivered).toBeGreaterThan(limit);
+      expect(signal!.aborted).toBe(true);
+    }
+    for (const size of [32, 256, 2048]) {
+      delivered = 0;
+      const result = await fetched(`https://images.example.test/size/${size}`);
+      expect(delivered).toBe(size);
+      expect(result.bytes.byteLength).toBe(size);
+      expect(result.sha256).toBe(createHash('sha256').update(new Uint8Array(size)).digest('hex'));
+    }
+    expect(requests).toBe(5);
+  } finally {
+    boundary.mockRestore();
+    await server.stop(true);
+  }
+});
+
+test('HTTP transport rejection commits native rejected state and a single durable governance event', async () => {
+  for (const mode of ['redirect', 'bytes', 'network']) {
+    const row = await reserve();
+    const http = await fixture(() =>
+      mode === 'redirect'
+        ? new Response(null, { status: 302, headers: { location: 'https://denied.example.test/' } })
+        : mode === 'bytes'
+          ? new Response('x', { headers: { 'content-length': String(21 * 1024 * 1024) } })
+          : new Response(null, { status: 404 }),
+    );
+    try {
+      expect(await processImportedMedia(deps(http.storage), row.mediaId)).toMatchObject({ state: 'rejected' });
+      expect(http.puts).toBe(0);
+      expect(http.requests).toHaveLength(1);
+      expect(
+        (
+          await pool.query('SELECT state,collection_pending FROM content.media WHERE route=$1 AND media_id=$2', [
+            row.route,
+            row.mediaId,
+          ])
+        ).rows,
+      ).toEqual([{ state: 'rejected', collection_pending: true }]);
+      expect(
+        (
+          await pool.query('SELECT count(*) FROM core.outbox WHERE partition_no=$1 AND subject=$2', [
+            partitionOf(row.route),
+            row.mediaId,
+          ])
+        ).rows,
+      ).toEqual([{ count: '1' }]);
+    } finally {
+      await http.close();
+    }
+  }
+});
