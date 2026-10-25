@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { join } from 'node:path';
-import { openDb } from './db.ts';
+import { migrate, openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { temporaryDirectory } from './test-support.ts';
 
@@ -41,5 +41,18 @@ test('inbox send refuses recorded-only kinds and multi-line summaries', async ()
     expect(await goal(env, 'inbox', 'send', 'supermanager', 'merged', 'Task merged')).not.toBe(0);
     expect(await goal(env, 'inbox', 'send', 'supermanager', 'instruction', 'two\nlines')).not.toBe(0);
     expect(inbox.read('supermanager')).toEqual([]);
+  } finally { db.close(); t.close(); }
+});
+
+test('inbox send refuses a manager whose Goal is complete and names the supermanager', async () => {
+  const t = temporaryDirectory(); const db = openDb(join(t.path, 'state.sqlite'));
+  const inbox = new SqliteManagerInbox(db, t.path);
+  migrate(db, [{ module: 'managers', version: 1, sql: 'CREATE TABLE manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL);' }]);
+  db.run('INSERT INTO manager_sessions VALUES (?, ?)', ['kernel', JSON.stringify({ id: 'kernel', status: 'complete' })]);
+  const env = { ...process.env, FAKE_GOAL_STATE: t.path, FAKE_GOAL_MAIN: t.path, GOAL_MANAGER: 'accounts' };
+  try {
+    expect(await goal(env, 'inbox', 'send', 'kernel', 'instruction', 'Own the schema dump timeout')).not.toBe(0);
+    expect(inbox.read('kernel')).toEqual([]);
+    expect(await goal(env, 'inbox', 'send', 'supermanager', 'instruction', 'Own the schema dump timeout')).toBe(0);
   } finally { db.close(); t.close(); }
 });

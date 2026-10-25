@@ -269,6 +269,11 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
       const allowed = ['spec-conflict', 'scope-growth', 'environment', 'round-limit', 'stalled', 'failed-after-consult', 'goal-unmet', 'goal-met', 'instruction'];
       if (!allowed.includes(kind)) throw new Error(`unknown inbox event kind: ${kind}. Valid kinds: ${allowed.join(', ')}`);
       if (/[\r\n]/.test(summary)) throw new Error('inbox event summary must be one line');
+      // A completed Goal has no lead reading its inbox; what it owned returns to the supermanager.
+      const recipient = runtime.db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'manager_sessions'").get()
+        ? runtime.db.query('SELECT state FROM manager_sessions WHERE id = ?').get(id) as { state: string } | null : null;
+      if (recipient && JSON.parse(recipient.state).status === 'complete')
+        throw new Error(`manager ${id} has completed its Goal and reads no inbox; send to ${runtime.supermanager || 'supermanager'}`);
       await recordManagerCommand(runtime);
       inbox.deliver({ managerId: id, kind: kind as ManagerEventKind, summary,
         from: process.env.GOAL_MANAGER || runtime.supermanager || 'supermanager',
