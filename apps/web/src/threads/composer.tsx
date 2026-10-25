@@ -13,16 +13,19 @@ export function csrfHeaders(): HeadersInit {
 }
 
 export function draftFetch(body: DocumentSnapshot): typeof fetch {
-  return (input, init) => {
-    if (typeof init?.body !== 'string') return globalThis.fetch(input, init);
-    try {
-      const payload = JSON.parse(init.body);
-      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return globalThis.fetch(input, init);
-      return globalThis.fetch(input, { ...init, body: JSON.stringify({ ...payload, body }) });
-    } catch {
-      return globalThis.fetch(input, init);
-    }
-  };
+  return Object.assign(
+    (input, init) => {
+      if (typeof init?.body !== 'string') return globalThis.fetch(input, init);
+      try {
+        const payload = JSON.parse(init.body);
+        if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return globalThis.fetch(input, init);
+        return globalThis.fetch(input, { ...init, body: JSON.stringify({ ...payload, body }) });
+      } catch {
+        return globalThis.fetch(input, init);
+      }
+    },
+    { preconnect: globalThis.fetch.preconnect },
+  );
 }
 
 export function refusalText(failure: WriteFailure): string {
