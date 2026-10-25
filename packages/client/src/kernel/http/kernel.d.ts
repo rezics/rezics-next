@@ -1,5 +1,6 @@
 import { type CommerceDependencies } from '../commerce/routes.ts';
 import type { ContentBoardDependencies } from '../content/boards.ts';
+import type { TurnstileVerifier } from '../content/turnstile.ts';
 import type { ContentRuntime } from '../content/runtime.ts';
 import { type SearchService } from '../search/http/routes.ts';
 import { createApp } from './app.ts';
@@ -10,6 +11,10 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
     commerce?: CommerceDependencies;
     content?: ContentRuntime & Pick<ContentBoardDependencies, 'cursorNow'>;
     search?: SearchService;
+    /** Trusted verifier binding; runtime secret/env composition belongs to the service. */
+    reports?: {
+        anonymousVerifier?: TurnstileVerifier;
+    };
 };
 /** The route key must stay the same across restarts, or retries lose their receipts. */
 export declare function createKernel(dependencies: KernelDependencies): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
@@ -37112,17 +37117,8 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                     };
                     revisionId?: string;
                     botToken?: string;
-                    reason: "inappropriate" | "off_topic" | "spam";
+                    reason: "illegal" | "inappropriate" | "off_topic" | "other" | "spam";
                     evidence?: string;
-                } | {
-                    target: {
-                        kind: "board" | "post" | "thread";
-                        id: string;
-                    };
-                    revisionId?: string;
-                    botToken?: string;
-                    reason: "illegal" | "other";
-                    evidence: string;
                 };
                 params: {};
                 query: unknown;
@@ -37130,9 +37126,6 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                     "idempotency-key": string;
                 };
                 response: {
-                    200: Readonly<{
-                        reportId: import("../content/model.ts").ReportId;
-                    }>;
                     201: {
                         reportId: string;
                     };
@@ -37179,6 +37172,20 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                         }[];
                     };
                     404: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    409: {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -37270,11 +37277,11 @@ export declare function createKernel(dependencies: KernelDependencies): import("
 } & {
     v1: {
         reports: {
-            ":reportId": {
+            ":id": {
                 get: {
                     body: unknown;
                     params: {
-                        reportId: string;
+                        id: string;
                     };
                     query: unknown;
                     headers: unknown;
@@ -37334,6 +37341,20 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                 code: never;
                             }[];
                         };
+                        409: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
                         500: {
                             type: unknown;
                             title: unknown;
@@ -37364,6 +37385,402 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                         };
                     };
                     error: never;
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        boards: {
+            ":id": {
+                reports: {
+                    get: {
+                        body: unknown;
+                        params: {
+                            id: string;
+                        };
+                        query: {
+                            cursor?: string;
+                            limit?: string | number;
+                        };
+                        headers: unknown;
+                        response: {
+                            200: {
+                                reports: Readonly<{
+                                    id: import("../content/model.ts").ReportId;
+                                    partition: number;
+                                    target: import("../content/reports.ts").ReportTarget;
+                                    revisionId: import("../content/model.ts").RevisionId | null;
+                                    reason: string;
+                                    evidence: string | null;
+                                    createdAt: string;
+                                    transactionId: string;
+                                    reporterId: string | null;
+                                }>[];
+                                next: string | null;
+                            };
+                            400: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            401: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            409: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: string;
+                            };
+                            500: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            503: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        threads: {
+            ":id": {
+                reports: {
+                    get: {
+                        body: unknown;
+                        params: {
+                            id: string;
+                        };
+                        query: {
+                            cursor?: string;
+                            limit?: string | number;
+                        };
+                        headers: unknown;
+                        response: {
+                            200: {
+                                reports: Readonly<{
+                                    id: import("../content/model.ts").ReportId;
+                                    partition: number;
+                                    target: import("../content/reports.ts").ReportTarget;
+                                    revisionId: import("../content/model.ts").RevisionId | null;
+                                    reason: string;
+                                    evidence: string | null;
+                                    createdAt: string;
+                                    transactionId: string;
+                                    reporterId: string | null;
+                                }>[];
+                                next: string | null;
+                            };
+                            400: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            401: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            409: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: string;
+                            };
+                            500: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            503: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        posts: {
+            ":id": {
+                reports: {
+                    get: {
+                        body: unknown;
+                        params: {
+                            id: string;
+                        };
+                        query: {
+                            cursor?: string;
+                            limit?: string | number;
+                        };
+                        headers: unknown;
+                        response: {
+                            200: {
+                                reports: Readonly<{
+                                    id: import("../content/model.ts").ReportId;
+                                    partition: number;
+                                    target: import("../content/reports.ts").ReportTarget;
+                                    revisionId: import("../content/model.ts").RevisionId | null;
+                                    reason: string;
+                                    evidence: string | null;
+                                    createdAt: string;
+                                    transactionId: string;
+                                    reporterId: string | null;
+                                }>[];
+                                next: string | null;
+                            };
+                            400: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            401: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            409: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: string;
+                            };
+                            500: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            503: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                        };
+                        error: never;
+                    };
                 };
             };
         };
@@ -39478,14 +39895,14 @@ export declare function createKernel(dependencies: KernelDependencies): import("
 } & {
     v1: {
         threads: {
-            ":threadId": {
+            ":id": {
                 reaction: {
                     put: {
                         body: {
                             kind: "downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote";
                         };
                         params: {
-                            threadId: string;
+                            id: string;
                         };
                         query: unknown;
                         headers: {
@@ -39631,12 +40048,12 @@ export declare function createKernel(dependencies: KernelDependencies): import("
 } & {
     v1: {
         threads: {
-            ":threadId": {
+            ":id": {
                 reaction: {
                     delete: {
                         body: unknown;
                         params: {
-                            threadId: string;
+                            id: string;
                         };
                         query: unknown;
                         headers: {
@@ -39780,14 +40197,14 @@ export declare function createKernel(dependencies: KernelDependencies): import("
 } & {
     v1: {
         posts: {
-            ":postId": {
+            ":id": {
                 reaction: {
                     put: {
                         body: {
                             kind: "downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote";
                         };
                         params: {
-                            postId: string;
+                            id: string;
                         };
                         query: unknown;
                         headers: {
@@ -39949,9 +40366,9 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     schemas: {};
     response: {};
     error: [];
-}, "delete", "/v1/posts/:postId/reaction", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
+}, "delete", "/v1/posts/:id/reaction", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
     params: import("typebox").TObject<{
-        postId: import("typebox").TString;
+        id: import("typebox").TString;
     }>;
     headers: import("typebox").TObject<{
         "idempotency-key": import("typebox").TString;
@@ -40094,7 +40511,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
             bearerAuth: never[];
         }[];
     };
-}, {}, "/v1/posts/:postId/reaction">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params: { postId }, actor, request, admission, job, session, set }: {
+}, {}, "/v1/posts/:id/reaction">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params: { id }, actor, request, admission, job, session, set }: {
     server: import("elysia").Server | null;
     redirect: import("elysia").redirect;
     set: {
@@ -40363,7 +40780,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     }>;
     defer: (fn: import("elysia/types").AfterResponseHandler<NoInfer<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
         params: import("typebox").TObject<{
-            postId: import("typebox").TString;
+            id: import("typebox").TString;
         }>;
         headers: import("typebox").TObject<{
             "idempotency-key": import("typebox").TString;
@@ -40506,7 +40923,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 bearerAuth: never[];
             }[];
         };
-    }, {}, "/v1/posts/:postId/reaction">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
+    }, {}, "/v1/posts/:id/reaction">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
         derive: {
             readonly admission: import("./admission.ts").Admission;
             readonly job: {
@@ -40530,7 +40947,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     body: unknown;
     query: Record<string, string | undefined>;
     params: {
-        postId: string;
+        id: string;
     };
     headers: {
         "idempotency-key": string;
@@ -40550,7 +40967,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<void>, {
     params: import("typebox").TObject<{
-        postId: import("typebox").TString;
+        id: import("typebox").TString;
     }>;
     headers: import("typebox").TObject<{
         "idempotency-key": import("typebox").TString;

@@ -101,6 +101,12 @@ export declare const CONTENT_EVENTS: {
         revisionId: Type.TString;
         actorId: Type.TString;
     }>;
+    readonly 'com.rezics.content.board.created.v1': Type.TObject<{
+        boardId: Type.TString;
+        realmId: Type.TString;
+        conceptId: Type.TString;
+        actorId: Type.TString;
+    }>;
     readonly 'com.rezics.content.reaction.changed.v1': Type.TObject<{
         actorId: Type.TString;
         targetKind: Type.TUnion<[Type.TLiteral<"thread">, Type.TLiteral<"post">]>;

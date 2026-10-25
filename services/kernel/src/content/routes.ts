@@ -689,9 +689,9 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       },
     )
     .put(
-      '/v1/threads/:threadId/reaction',
+      '/v1/threads/:id/reaction',
       {
-        params: t.Object({ threadId: t.String() }, { additionalProperties: false }),
+        params: t.Object({ id: t.String() }, { additionalProperties: false }),
         headers: commandHeaders,
         body: reactionInput,
         response: { 200: reactionResponse, ...writeFailures },
@@ -703,15 +703,15 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
           security: writeSecurity,
         },
       },
-      async ({ params: { threadId }, actor, body, request, admission, job, session }) => {
-        await writeReaction(dependencies, actor, 'thread', threadId, body.kind, request, admission, job, session);
+      async ({ params: { id }, actor, body, request, admission, job, session }) => {
+        await writeReaction(dependencies, actor, 'thread', id, body.kind, request, admission, job, session);
         return { kind: body.kind };
       },
     )
     .delete(
-      '/v1/threads/:threadId/reaction',
+      '/v1/threads/:id/reaction',
       {
-        params: t.Object({ threadId: t.String() }, { additionalProperties: false }),
+        params: t.Object({ id: t.String() }, { additionalProperties: false }),
         headers: commandHeaders,
         response: { 204: t.Void(), ...writeFailures },
         detail: {
@@ -722,15 +722,15 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
           security: writeSecurity,
         },
       },
-      async ({ params: { threadId }, actor, request, admission, job, session, set }) => {
-        await writeReaction(dependencies, actor, 'thread', threadId, null, request, admission, job, session);
+      async ({ params: { id }, actor, request, admission, job, session, set }) => {
+        await writeReaction(dependencies, actor, 'thread', id, null, request, admission, job, session);
         set.status = 204;
       },
     )
     .put(
-      '/v1/posts/:postId/reaction',
+      '/v1/posts/:id/reaction',
       {
-        params: t.Object({ postId: t.String() }, { additionalProperties: false }),
+        params: t.Object({ id: t.String() }, { additionalProperties: false }),
         headers: commandHeaders,
         body: reactionInput,
         response: { 200: reactionResponse, ...writeFailures },
@@ -742,15 +742,15 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
           security: writeSecurity,
         },
       },
-      async ({ params: { postId }, actor, body, request, admission, job, session }) => {
-        await writeReaction(dependencies, actor, 'post', postId, body.kind, request, admission, job, session);
+      async ({ params: { id }, actor, body, request, admission, job, session }) => {
+        await writeReaction(dependencies, actor, 'post', id, body.kind, request, admission, job, session);
         return { kind: body.kind };
       },
     )
     .delete(
-      '/v1/posts/:postId/reaction',
+      '/v1/posts/:id/reaction',
       {
-        params: t.Object({ postId: t.String() }, { additionalProperties: false }),
+        params: t.Object({ id: t.String() }, { additionalProperties: false }),
         headers: commandHeaders,
         response: { 204: t.Void(), ...writeFailures },
         detail: {
@@ -761,8 +761,8 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
           security: writeSecurity,
         },
       },
-      async ({ params: { postId }, actor, request, admission, job, session, set }) => {
-        await writeReaction(dependencies, actor, 'post', postId, null, request, admission, job, session);
+      async ({ params: { id }, actor, request, admission, job, session, set }) => {
+        await writeReaction(dependencies, actor, 'post', id, null, request, admission, job, session);
         set.status = 204;
       },
     );
