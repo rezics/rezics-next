@@ -14,15 +14,19 @@ export type AuthorErasureInput = Readonly<{
   authorId: string;
 }>;
 
-/** Counts are bounded to non-negative integers no greater than Number.MAX_SAFE_INTEGER. */
+/** Native DBOS counters must be finite nonnegative safe integers (0..Number.MAX_SAFE_INTEGER).
+ * Producers enforce these bounds; the wire representation remains a number.
+ */
 export type OperationCount = number;
 
+/** Native progress only: no upfront total or count pre-scan. */
 export type OperationMetadata = Readonly<{
   type: 'content.author_erasure';
   threadId: string;
   authorId: string;
   processedPosts: OperationCount;
   erasedRevisions: OperationCount;
+  steps: OperationCount;
 }>;
 
 export type OperationResponse = Readonly<{
@@ -33,14 +37,27 @@ export type OperationResponse = Readonly<{
 export type OperationProgress = Readonly<{
   processedPosts: OperationCount;
   erasedRevisions: OperationCount;
+  steps: OperationCount;
 }>;
 
+/** RFC 9457 Problem for ordinary HTTP errors. */
 export type Problem = Readonly<{
   type: string;
   title: string;
   status: number;
   detail?: string;
   instance?: string;
+}>;
+
+/** google.rpc.Status for terminal operation failures.
+ * Permission denied uses code 7; unknown internal failures use code 13 with a
+ * sanitized message. Never expose HTTP status codes, stacks, or raw SQL here,
+ * including in details.
+ */
+export type Status = Readonly<{
+  code: number;
+  message: string;
+  details?: unknown[];
 }>;
 
 type OperationBase = Readonly<{
@@ -52,14 +69,14 @@ type OperationBase = Readonly<{
 export type Operation =
   | (OperationBase & Readonly<{ done: false; response?: never; error?: never }>)
   | (OperationBase & Readonly<{ done: true; response: OperationResponse; error?: never }>)
-  | (OperationBase & Readonly<{ done: true; error: Problem; response?: never }>);
+  | (OperationBase & Readonly<{ done: true; error: Status; response?: never }>);
 
 export type NativeWorkflowStatus = Readonly<{
   done: boolean;
   /** Bounded progress from native workflow events or its durable checkpoint. */
   progress: OperationProgress;
   response?: OperationResponse;
-  error?: Problem;
+  error?: Status;
 }>;
 
 /** Adapter around native DBOS enqueue/status APIs; it owns no workflow state.
