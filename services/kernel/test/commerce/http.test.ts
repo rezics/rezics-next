@@ -319,12 +319,12 @@ test('entitlement pages stay in the buyer partition and reject tampering and oth
   const selling = await offer();
   const first = await paid(selling.id),
     second = await paid(selling.id);
-  const page = await request('/v1/entitlements?pageSize=1');
+  const page = await request('/v1/entitlements?limit=1');
   expect(page.status).toBe(200);
   const body = await page.json();
   expect(body.entitlements.map((e: Entitlement) => e.id)).toEqual([second.id]);
   expect(typeof body.next).toBe('string');
-  const next = await request(`/v1/entitlements?pageSize=1&cursor=${body.next}`);
+  const next = await request(`/v1/entitlements?limit=1&cursor=${body.next}`);
   expect(await next.json()).toMatchObject({ entitlements: [{ id: first.id }], next: null });
   expect(await (await request('/v1/entitlements', other)).json()).toEqual({ entitlements: [], next: null });
   for (const [cursor, account] of [
@@ -335,7 +335,7 @@ test('entitlement pages stay in the buyer partition and reject tampering and oth
     expect(invalid.status).toBe(400);
     expect((await invalid.json()).code).toBe('invalid_cursor');
   }
-  for (const query of ['pageSize=0', 'pageSize=101', 'pageSize=1.5'])
+  for (const query of ['limit=0', 'limit=101', 'limit=1.5'])
     expect((await request(`/v1/entitlements?${query}`)).status).toBe(400);
   expect((await request('/v1/entitlements', null)).status).toBe(401);
   expect((await request('/v1/orders', null, { offerId: selling.id })).status).toBe(401);

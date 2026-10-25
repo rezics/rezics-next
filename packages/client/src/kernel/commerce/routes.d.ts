@@ -54,6 +54,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
         subjects: {
             post: {
                 body: {
+                    type: string;
                     labels: Record<string, any>;
                     descriptions?: Record<string, any>;
                     aliases?: Record<string, any>;
@@ -71,7 +72,11 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                     201: {
                         subject: {
                             id: string;
-                            type: "schema:Book";
+                            type: string;
+                            revision: number;
+                            release: string;
+                            context: string;
+                            resolution: Record<string, any>;
                             labels: Record<string, string>;
                             descriptions: Record<string, string>;
                             aliases: Record<string, string[]>;
@@ -80,7 +85,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 rank: "deprecated" | "normal" | "preferred";
                                 property: {
                                     id: string;
-                                    data_type: import("../semantic/profile.ts").DataType;
+                                    data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
                                 };
                                 value: {
                                     type: "value";
@@ -93,7 +98,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 qualifiers: {
                                     property: {
                                         id: string;
-                                        data_type: import("../semantic/profile.ts").DataType;
+                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
                                     };
                                     value: {
                                         type: "value";
@@ -108,7 +113,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                     parts: {
                                         property: {
                                             id: string;
-                                            data_type: import("../semantic/profile.ts").DataType;
+                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
                                         };
                                         value: {
                                             type: "value";
@@ -121,6 +126,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                     }[];
                                     hash: string;
                                 }[];
+                                rezics: {
+                                    release: string;
+                                    revision: number;
+                                };
                             }[]>;
                         };
                     };
@@ -214,7 +223,11 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                         200: {
                             subject: {
                                 id: string;
-                                type: "schema:Book";
+                                type: string;
+                                revision: number;
+                                release: string;
+                                context: string;
+                                resolution: Record<string, any>;
                                 labels: Record<string, string>;
                                 descriptions: Record<string, string>;
                                 aliases: Record<string, string[]>;
@@ -223,7 +236,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                     rank: "deprecated" | "normal" | "preferred";
                                     property: {
                                         id: string;
-                                        data_type: import("../semantic/profile.ts").DataType;
+                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
                                     };
                                     value: {
                                         type: "value";
@@ -236,7 +249,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                     qualifiers: {
                                         property: {
                                             id: string;
-                                            data_type: import("../semantic/profile.ts").DataType;
+                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
                                         };
                                         value: {
                                             type: "value";
@@ -251,7 +264,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         parts: {
                                             property: {
                                                 id: string;
-                                                data_type: import("../semantic/profile.ts").DataType;
+                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
                                             };
                                             value: {
                                                 type: "value";
@@ -264,6 +277,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         }[];
                                         hash: string;
                                     }[];
+                                    rezics: {
+                                        release: string;
+                                        revision: number;
+                                    };
                                 }[]>;
                             };
                             related: Record<string, {
@@ -1156,7 +1173,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                 body: unknown;
                 params: {};
                 query: {
-                    pageSize?: number;
+                    limit?: number;
                     cursor?: string;
                 };
                 headers: unknown;

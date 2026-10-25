@@ -1,9 +1,11 @@
+import { randomBytes } from 'node:crypto';
 import { t } from 'elysia';
 import type { Pool } from 'pg';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import { customMethod } from '../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf } from '../http/request.ts';
+import type { KeyRing } from '../tokens/seal.ts';
 import type { Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
@@ -72,8 +74,8 @@ const line = t.Object(
   { additionalProperties: false },
 );
 const pageQuery = t.Object({
-  cursor: t.Optional(t.String({ maxLength: 256 })),
-  limit: t.Optional(t.Integer({ minimum: 1, maximum: 100 })),
+  cursor: t.Optional(t.String({ maxLength: 4096 })),
+  limit: t.Optional(t.Integer({ minimum: 1, maximum: 100, default: 20 })),
 });
 const params = t.Object({ statementId: t.String() });
 const unavailable = problemSchema(
@@ -94,7 +96,13 @@ function accountAnchor(actor: Actor) {
   return { route: routeOf(actor.accountId)!, id: actor.accountId };
 }
 
-export function payoutRoutes(app: ReturnType<typeof definitionRoutes>, { pool }: { pool: Pool }) {
+export function payoutRoutes(
+  app: ReturnType<typeof definitionRoutes>,
+  {
+    pool,
+    tokens = { current: 1, keys: new Map([[1, new Uint8Array(randomBytes(32))]]) },
+  }: { pool: Pool; tokens?: KeyRing },
+) {
   const payouts = createPayouts({ pool });
   return app
     .get(
@@ -102,15 +110,17 @@ export function payoutRoutes(app: ReturnType<typeof definitionRoutes>, { pool }:
       {
         query: pageQuery,
         response: {
-          200: t.Object({ items: t.Array(statement), nextCursor: t.Union([t.String(), t.Null()]) }),
+          200: t.Object({ payoutStatements: t.Array(statement), next: t.Union([t.String(), t.Null()]) }),
           ...errors,
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+          409: problemSchema('stale_cursor'),
         },
         detail: { operationId: 'payout_statement.list', 'x-action': 'payout_statement:list', security },
       },
       async ({ actor, authorize, query, admission, job }) => {
         const check = await authorize(accountAnchor(actor));
         return admission.run('normal', job, () =>
-          listPayoutStatements(pool, actor, check, { after: query.cursor ?? null, limit: query.limit ?? 20 }),
+          listPayoutStatements(pool, tokens, actor, check, { cursor: query.cursor ?? null, limit: query.limit ?? 20 }),
         );
       },
     )
@@ -135,14 +145,19 @@ export function payoutRoutes(app: ReturnType<typeof definitionRoutes>, { pool }:
       {
         params,
         query: pageQuery,
-        response: { 200: t.Object({ items: t.Array(line), nextCursor: t.Union([t.String(), t.Null()]) }), ...errors },
+        response: {
+          200: t.Object({ lines: t.Array(line), next: t.Union([t.String(), t.Null()]) }),
+          ...errors,
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+          409: problemSchema('stale_cursor'),
+        },
         detail: { operationId: 'payout_statement.lines', 'x-action': 'payout_statement:read', security },
       },
       async ({ actor, authorize, params, query, admission, job }) => {
         const check = await authorize(accountAnchor(actor));
         return admission.run('normal', job, () =>
-          listPayoutLines(pool, actor, params.statementId, check, {
-            after: query.cursor ?? null,
+          listPayoutLines(pool, tokens, actor, params.statementId, check, {
+            cursor: query.cursor ?? null,
             limit: query.limit ?? 20,
           }),
         );

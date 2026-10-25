@@ -1160,7 +1160,7 @@ export declare function createKernel(dependencies: KernelDependencies): (import(
                 body: unknown;
                 params: {};
                 query: {
-                    pageSize?: number;
+                    limit?: number;
                     cursor?: string;
                 };
                 headers: unknown;
@@ -2611,7 +2611,7 @@ export declare function createKernel(dependencies: KernelDependencies): (import(
                 headers: unknown;
                 response: {
                     200: {
-                        items: {
+                        payoutStatements: {
                             id: string;
                             creatorAccountId: string;
                             period: string;
@@ -2631,7 +2631,7 @@ export declare function createKernel(dependencies: KernelDependencies): (import(
                             paidReference: string | null;
                             revision: number;
                         }[];
-                        nextCursor: string | null;
+                        next: string | null;
                     };
                     400: {
                         type: unknown;
@@ -2662,6 +2662,20 @@ export declare function createKernel(dependencies: KernelDependencies): (import(
                         }[];
                     };
                     404: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    409: {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -2818,7 +2832,7 @@ export declare function createKernel(dependencies: KernelDependencies): (import(
                         headers: unknown;
                         response: {
                             200: {
-                                items: {
+                                lines: {
                                     balanceTransactionId: string;
                                     orderId: string;
                                     offerId: string;
@@ -2836,7 +2850,7 @@ export declare function createKernel(dependencies: KernelDependencies): (import(
                                     statementId: string;
                                     recordedAt: string;
                                 }[];
-                                nextCursor: string | null;
+                                next: string | null;
                             };
                             400: {
                                 type: unknown;
@@ -2867,6 +2881,20 @@ export declare function createKernel(dependencies: KernelDependencies): (import(
                                 }[];
                             };
                             404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            409: {
                                 type: unknown;
                                 title: unknown;
                                 status: number;

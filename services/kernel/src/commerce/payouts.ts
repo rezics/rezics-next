@@ -9,9 +9,12 @@ import {
 } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
+import { readPartition } from '../partition/partition.ts';
 import type { AccessCheck, Actor } from '../request/access.ts';
 import { derivedId, partitionOf, routeOf } from '../route/route.ts';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
+import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
+import type { KeyRing } from '../tokens/seal.ts';
 import type { TransactionKind } from './model.ts';
 import { statementPeriod, royaltyLines, type RoyaltyLine, type StatementTotal } from './royalty.ts';
 import { readOrder, readOrderTransactions } from './store.ts';
@@ -42,7 +45,7 @@ export type PayoutLine = RoyaltyLine & {
 };
 type StatementRow = NonNullable<Awaited<ReturnType<typeof statementRead.run>>>;
 type Client = Pick<PoolClient, 'query'>;
-export type PayoutPage = { after: string | null; limit: number };
+export type PayoutPage = { cursor: string | null; limit: number };
 class Unchanged extends Error {}
 const queryClient = (client: Client): Client => ({ query: client.query.bind(client) });
 const notFound = () => new ProblemError('not_found');
@@ -91,32 +94,105 @@ export async function readPayoutStatement(pool: Pool, actor: Actor, id: string, 
   if (!row || row.creatorAccountId !== owner.id) throw notFound();
   return statement(row);
 }
-export async function listPayoutStatements(pool: Pool, actor: Actor, check: AccessCheck, page: PayoutPage) {
+async function readPage<T>(
+  pool: Pool,
+  tokens: KeyRing,
+  actor: Actor,
+  check: AccessCheck,
+  page: PayoutPage,
+  statementId: string | null,
+  read: (
+    client: Client,
+    owner: { route: number; id: string },
+    after: string | null,
+    count: number,
+  ) => Promise<{ rows: T[]; last: string | undefined }>,
+) {
   const count = limit(page);
-  const owner = await ownAccount(pool, actor, check);
-  if (page.after !== null && routeOf(page.after) !== owner.route) throw new ProblemError('invalid_request');
-  const rows = await statementList.run(queryClient(pool), {
-    route: owner.route,
-    creator: owner.id,
-    after: page.after ?? 'ffffffff-ffff-ffff-ffff-ffffffffffff',
-    limit: count + 1,
-  });
-  return {
-    items: rows.slice(0, count).map(statement),
-    nextCursor: rows.length > count ? rows[count - 1]!.id : null,
+  if (actor.kind !== 'account') throw notFound();
+  const route = routeOf(actor.accountId);
+  if (route === null) throw notFound();
+  const owner = { route, id: actor.accountId };
+  const binding: CursorBinding = {
+    operation: statementId === null ? 'payout_statement.list' : 'payout_statement.lines',
+    parameters: statementId === null ? { accountId: owner.id } : { accountId: owner.id, statementId },
   };
-}
-export async function listPayoutLines(pool: Pool, actor: Actor, id: string, check: AccessCheck, page: PayoutPage) {
-  const count = limit(page);
-  await readPayoutStatement(pool, actor, id, check);
-  if (page.after !== null && !/^txn_[A-Za-z0-9]{1,250}$/.test(page.after)) throw new ProblemError('invalid_request');
-  const rows = await linesRead.run(queryClient(pool), {
-    route: routeOf(id)!,
-    id,
-    after: page.after ?? '',
-    limit: count + 1,
+  let after: string | null = null,
+    epoch: number | null = null;
+  if (page.cursor !== null) {
+    const cursor = decodeCursor(tokens, binding, page.cursor);
+    if (
+      !cursor.ok ||
+      cursor.after.length !== 1 ||
+      typeof cursor.after[0] !== 'string' ||
+      (statementId === null ? routeOf(cursor.after[0]) !== route : !/^txn_[A-Za-z0-9]{1,250}$/.test(cursor.after[0]))
+    )
+      throw new ProblemError('invalid_cursor');
+    after = cursor.after[0];
+    epoch = cursor.epoch;
+  }
+  return withConnection(pool, async (client) => {
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    try {
+      if (!(await check(client))) throw notFound();
+      const partition = await readPartition(client, partitionOf(route));
+      if (epoch !== null && epoch !== partition?.epoch) throw new ProblemError('stale_cursor');
+      if (statementId !== null) {
+        if (routeOf(statementId) !== route) throw notFound();
+        const row = await statementRead.run(queryClient(client), { route, id: statementId });
+        if (!row || row.creatorAccountId !== owner.id) throw notFound();
+      }
+      const { rows, last } = await read(client, owner, after, count);
+      await client.query('COMMIT');
+      return {
+        rows: rows.slice(0, count),
+        next:
+          rows.length > count && last && partition
+            ? encodeCursor(tokens, binding, { epoch: partition.epoch, after: [last] })
+            : null,
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    }
   });
-  const items: PayoutLine[] = rows.slice(0, count).map((row) => ({
+}
+export async function listPayoutStatements(
+  pool: Pool,
+  tokens: KeyRing,
+  actor: Actor,
+  check: AccessCheck,
+  page: PayoutPage,
+) {
+  const result = await readPage(pool, tokens, actor, check, page, null, async (client, owner, after, count) => {
+    const rows = await statementList.run(queryClient(client), {
+      route: owner.route,
+      creator: owner.id,
+      after: after ?? 'ffffffff-ffff-ffff-ffff-ffffffffffff',
+      limit: count + 1,
+    });
+    return { rows, last: rows[count - 1]?.id };
+  });
+  return { payoutStatements: result.rows.map(statement), next: result.next };
+}
+export async function listPayoutLines(
+  pool: Pool,
+  tokens: KeyRing,
+  actor: Actor,
+  id: string,
+  check: AccessCheck,
+  page: PayoutPage,
+) {
+  const result = await readPage(pool, tokens, actor, check, page, id, async (client, owner, after, count) => {
+    const rows = await linesRead.run(queryClient(client), {
+      route: owner.route,
+      id,
+      after: after ?? '',
+      limit: count + 1,
+    });
+    return { rows, last: rows[count - 1]?.balanceTransactionId };
+  });
+  const lines: PayoutLine[] = result.rows.map((row) => ({
     ...row,
     kind: row.kind as TransactionKind,
     created: new Date(row.created).toISOString(),
@@ -127,7 +203,7 @@ export async function listPayoutLines(pool: Pool, actor: Actor, id: string, chec
     disputeFeeMinor: money(row.disputeFeeMinor),
     netReceiptsMinor: money(row.netReceiptsMinor),
   }));
-  return { items, nextCursor: rows.length > count ? items[count - 1]!.balanceTransactionId : null };
+  return { lines, next: result.next };
 }
 
 /** Trusted command ports. No Stripe payout is initiated: paidReference identifies an external payment. */

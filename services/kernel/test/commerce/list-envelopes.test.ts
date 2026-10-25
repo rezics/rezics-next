@@ -76,6 +76,11 @@ beforeAll(async () => {
       "INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES ($1,$2,'actor','active',$2)",
       [route, account],
     );
+    await db.admin.query(
+      `INSERT INTO access.resource_role_grant(route,resource_id,subject_id,grant_role,valid,transaction_id)
+       VALUES ($1,$2,$2,'commerce.payout.owner','(,)',$2)`,
+      [route, account],
+    );
     credentials.set(
       account,
       await new SignJWT({

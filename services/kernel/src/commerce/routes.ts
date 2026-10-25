@@ -303,7 +303,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
       {
         query: t.Object(
           {
-            pageSize: t.Optional(t.Integer({ minimum: 1, maximum: 100 })),
+            limit: t.Optional(t.Integer({ minimum: 1, maximum: 100, default: 20 })),
             cursor: t.Optional(t.String({ maxLength: 4096 })),
           },
           object,
@@ -337,7 +337,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
           after = cursor.after[0];
           epoch = cursor.epoch;
         }
-        const size = query.pageSize ?? 25;
+        const size = query.limit ?? 20;
         return admission.run('normal', job, () =>
           withConnection(pool, async (client) => {
             await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');

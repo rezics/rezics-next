@@ -236,7 +236,7 @@ async function effect(orderId: string) {
 async function statements() {
   const response = await request('');
   expect(response.status).toBe(200);
-  return (await response.json()).items as {
+  return (await response.json()).payoutStatements as {
     id: string;
     period: string;
     currency: string;
@@ -278,7 +278,7 @@ test('legacy worked example runs through fulfilment, real royalty worker, exact 
   expect(routeOf(statement!.id)).toBe(routeOf(creator));
   const response = await request(`/${statement!.id}/lines`);
   expect(response.status).toBe(200);
-  const lines = (await response.json()).items;
+  const lines = (await response.json()).lines;
   expect(lines).toHaveLength(2);
   expect(new Set(lines.map((line: { balanceTransactionId: string }) => line.balanceTransactionId))).toEqual(
     new Set([charge.id, refund.id]),
@@ -544,16 +544,16 @@ test('statement and line pages use stable keyset cursors without duplicates', as
     const response = await request(`?limit=1${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`);
     expect(response.status).toBe(200);
     const page = await response.json();
-    expect(page.items).toHaveLength(1);
-    expect(seen.has(page.items[0].id)).toBe(false);
-    seen.add(page.items[0].id);
-    cursor = page.nextCursor;
+    expect(page.payoutStatements).toHaveLength(1);
+    expect(seen.has(page.payoutStatements[0].id)).toBe(false);
+    seen.add(page.payoutStatements[0].id);
+    cursor = page.next;
   } while (cursor);
   expect(seen.size).toBe(3);
   const id = [...seen][0]!;
   const first = await (await request(`/${id}/lines?limit=1`)).json();
-  expect(first.nextCursor).toBeString();
-  const second = await (await request(`/${id}/lines?limit=1&cursor=${encodeURIComponent(first.nextCursor)}`)).json();
-  expect(second.nextCursor).toBeNull();
-  expect(second.items[0].balanceTransactionId).not.toBe(first.items[0].balanceTransactionId);
+  expect(first.next).toBeString();
+  const second = await (await request(`/${id}/lines?limit=1&cursor=${encodeURIComponent(first.next)}`)).json();
+  expect(second.next).toBeNull();
+  expect(second.lines[0].balanceTransactionId).not.toBe(first.lines[0].balanceTransactionId);
 });
