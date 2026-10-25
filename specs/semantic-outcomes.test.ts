@@ -88,12 +88,13 @@ async function propose(id: string, property: string, content: Json) {
   });
   return { candidate: response.body.candidate as string, revision: response.body.revision as number, input };
 }
-const acceptancePath = (id: string, candidate: string, context = driver.globalContext) =>
-  `${subjectPath(id)}/candidates/${candidate}/acceptances/${context}`;
-const adoptionPath = (id: string, property: string, context = driver.globalContext) =>
-  `${subjectPath(id)}/adoptions/${context}/${encodeURIComponent(property)}`;
+const activationPath = (digest: string) => `/v1/definitions/releases/${digest}:activate`;
+const acceptancePath = (id: string, candidate: string, decision: 'accept' | 'reject' = 'accept') =>
+  `${subjectPath(id)}/candidates/${candidate}:${decision}`;
+const adoptionPath = (id: string) => `${subjectPath(id)}:adopt`;
+const mergePath = '/v1/subjects:merge';
 async function accept(id: string, candidate: string, decision: 'accept' | 'reject' = 'accept', context = driver.globalContext) {
-  const response = await write('acceptor', 'PUT', acceptancePath(id, candidate, context), { decision, expected_head: null });
+  const response = await write('acceptor', 'POST', acceptancePath(id, candidate, decision), { context, expected_head: null });
   expect(response.status).toBe(200);
   expect(response.body.acceptance).toMatchObject({ context, decision, head: expect.any(Number) });
   return response;
@@ -230,15 +231,15 @@ test('Steward publishes and activates a compiled music catalogue and editor uses
   expect(again.body).toEqual(published.body);
   expect((await get(`/v1/definitions/releases/${compiled.digest}`)).body).toEqual(compiled);
   const activateKey = key();
-  const activation = { digest: compiled.digest, expected_head: before.head };
-  const activated = await write('steward', 'PUT', '/v1/definitions/active', activation, activateKey);
+  const activation = { expected_head: before.head };
+  const activated = await write('steward', 'POST', activationPath(compiled.digest), activation, activateKey);
   expect(activated.status).toBe(200);
   expect(activated.body).toEqual({ digest: compiled.digest, head: before.head + 1 });
-  const activateReplay = await write('steward', 'PUT', '/v1/definitions/active', activation, activateKey);
+  const activateReplay = await write('steward', 'POST', activationPath(compiled.digest), activation, activateKey);
   expect(activateReplay.status).toBe(200);
   expect(activateReplay.body).toEqual(activated.body);
-  problem(await write('steward', 'PUT', '/v1/definitions/active', { ...activation, digest: before.digest }, activateKey), 422, 'idempotency_conflict');
-  problem(await write('steward', 'PUT', '/v1/definitions/active', { digest: before.digest, expected_head: before.head }), 409, 'stale_editorial_head');
+  problem(await write('steward', 'POST', activationPath(before.digest), activation, activateKey), 422, 'idempotency_conflict');
+  problem(await write('steward', 'POST', activationPath(before.digest), { expected_head: before.head }), 409, 'stale_editorial_head');
   expect(await active()).toEqual({ digest: compiled.digest, head: before.head + 1 });
   const composer = await create('schema:Person', 'Ludwig van Beethoven');
   const composition = await create('schema:MusicComposition', 'Symphony No. 5', {
@@ -263,7 +264,7 @@ test('Editor anonymous and suspended cannot publish or activate definitions and 
   for (const [persona, status, code] of [ ['editor', 403, 'forbidden'], ['anonymous', 401, 'authentication_required'],
     ['suspended', 401, 'invalid_credentials'] ] as const) {
     problem(await write(persona, 'POST', '/v1/definitions/releases', { release: compiled.release }), status, code);
-    problem(await write(persona, 'PUT', '/v1/definitions/active', { digest: pointer.digest, expected_head: pointer.head }), status, code);
+    problem(await write(persona, 'POST', activationPath(pointer.digest), { expected_head: pointer.head }), status, code);
     expect(await active()).toEqual(pointer);
   }
   problem(await get(`/v1/definitions/releases/${compiled.digest}`), 404, 'not_found', false);
@@ -274,9 +275,8 @@ test('Editor anonymous and suspended cannot publish or activate definitions and 
   expect((empty.body.errors as { pointer: string }[]).every(e => e.pointer === '/release' || e.pointer.startsWith('/release/'))).toBe(true);
   expect((empty.body.errors as unknown[]).length).toBeGreaterThan(0);
   problem(await get(`/v1/definitions/releases/${compiled.digest}`), 404, 'not_found', false);
-  const unpublished = await write('steward', 'PUT', '/v1/definitions/active', { digest: compiled.digest, expected_head: pointer.head });
-  problem(unpublished, 400, 'invalid_request');
-  expect(unpublished.body.errors).toEqual(expect.arrayContaining([expect.objectContaining({ pointer: '/digest' })]));
+  const unpublished = await write('steward', 'POST', activationPath(compiled.digest), { expected_head: pointer.head });
+  problem(unpublished, 404, 'not_found');
   expect(await active()).toEqual(pointer);
 });
 
@@ -361,17 +361,17 @@ test('Editor proposes a pending author then acceptor accepts and adopts with one
   shape(pending.statement, 'schema:author', 'wikibase-item', second.id, digest, 2);
   const token = key();
   const path = acceptancePath(book.id, proposed.candidate);
-  const body = { decision: 'accept', expected_head: null };
-  const accepted = await write('acceptor', 'PUT', path, body, token);
+  const body = { context: driver.globalContext, expected_head: null };
+  const accepted = await write('acceptor', 'POST', path, body, token);
   expect(accepted.status).toBe(200);
   expect(accepted.body.revision).toBe(3);
   expect((await read(book.id)).subject.statements).toEqual(book.statements);
   await unchanged(book.id, async () => {
-    expect((await write('acceptor', 'PUT', path, body, token)).body).toEqual(accepted.body);
-    problem(await write('acceptor', 'PUT', path, { ...body, decision: 'reject' }, token), 422, 'idempotency_conflict');
-    problem(await write('acceptor', 'PUT', path, body), 409, 'stale_editorial_head');
+    expect((await write('acceptor', 'POST', path, body, token)).body).toEqual(accepted.body);
+    problem(await write('acceptor', 'POST', acceptancePath(book.id, proposed.candidate, 'reject'), body, token), 422, 'idempotency_conflict');
+    problem(await write('acceptor', 'POST', path, body), 409, 'stale_editorial_head');
   });
-  const adoption = await write('acceptor', 'PUT', adoptionPath(book.id, 'schema:author'), {
+  const adoption = await write('acceptor', 'POST', adoptionPath(book.id), { context: driver.globalContext, property: 'schema:author',
     mode: 'replace', selection: [selection(original.id, 'preferred'), selection(proposed.candidate)], expected_head: original.head,
   });
   expect(adoption.status).toBe(200);
@@ -418,16 +418,16 @@ test('Rejected date candidates remain deprecated with references while rejected 
   const original = (await candidates(edition.id, 'schema:exampleOfWork'))[0]!;
   const alternative = await propose(edition.id, 'schema:exampleOfWork', otherWork.id);
   await unchanged(edition.id, async () => {
-    problem(await write('acceptor', 'PUT', adoptionPath(edition.id, 'schema:datePublished'), {
+    problem(await write('acceptor', 'POST', adoptionPath(edition.id), { context: driver.globalContext, property: 'schema:datePublished',
       mode: 'replace', selection: [selection(proposed.candidate)], expected_head: dateHead,
     }), 409, 'conflict');
-    problem(await write('acceptor', 'PUT', adoptionPath(edition.id, 'schema:exampleOfWork'), {
+    problem(await write('acceptor', 'POST', adoptionPath(edition.id), { context: driver.globalContext, property: 'schema:exampleOfWork',
       mode: 'replace', selection: [selection(alternative.candidate)], expected_head: original.head,
     }), 409, 'conflict');
   });
   await accept(edition.id, alternative.candidate);
   await unchanged(edition.id, async () => {
-    field(await write('acceptor', 'PUT', adoptionPath(edition.id, 'schema:exampleOfWork'), {
+    field(await write('acceptor', 'POST', adoptionPath(edition.id), { context: driver.globalContext, property: 'schema:exampleOfWork',
       mode: 'replace', selection: [selection(original.id), selection(alternative.candidate)], expected_head: original.head,
     }), '/selection', 'out_of_range');
   });
@@ -436,12 +436,12 @@ test('Rejected date candidates remain deprecated with references while rejected 
 test('Concurrent adoptions with one expected head commit exactly once and replay the winning receipt', async () => {
   const { book, original } = await authoredBook();
   const before = await driver.inspect.revisions(book.id);
-  const path = adoptionPath(book.id, 'schema:author');
-  const first = { mode: 'replace', selection: [selection(original.id, 'preferred')], expected_head: original.head };
+  const path = adoptionPath(book.id);
+  const first = { context: driver.globalContext, property: 'schema:author', mode: 'replace', selection: [selection(original.id, 'preferred')], expected_head: original.head };
   const second = { ...first, selection: [selection(original.id)] };
   const keys = [key(), key()];
   const results = await Promise.all([
-    write('acceptor', 'PUT', path, first, keys[0]), write('acceptor', 'PUT', path, second, keys[1]),
+    write('acceptor', 'POST', path, first, keys[0]), write('acceptor', 'POST', path, second, keys[1]),
   ]);
   expect(results.map(r => r.status).sort()).toEqual([200, 409]);
   problem(results.find(r => r.status === 409)!, 409, 'stale_editorial_head');
@@ -450,10 +450,10 @@ test('Concurrent adoptions with one expected head commit exactly once and replay
   expect(rows.at(-1)!.revision).toBe(2);
   const winner = results.findIndex(r => r.status === 200);
   await unchanged(book.id, async () => {
-    const replay = await write('acceptor', 'PUT', path, winner === 0 ? first : second, keys[winner]);
+    const replay = await write('acceptor', 'POST', path, winner === 0 ? first : second, keys[winner]);
     expect(replay.status).toBe(200);
     expect(replay.body).toEqual(results[winner]!.body);
-    problem(await write('acceptor', 'PUT', path, winner === 0 ? second : first, keys[winner]), 422, 'idempotency_conflict');
+    problem(await write('acceptor', 'POST', path, winner === 0 ? second : first, keys[winner]), 422, 'idempotency_conflict');
   });
 });
 
@@ -469,7 +469,7 @@ test('Community decisions override Global and suppression inheritance replacemen
   expect((await candidates(book.id, 'schema:author', context))[0]).toMatchObject({ decision: 'rejected', head: expect.any(Number) });
   expect((await read(book.id, context)).subject.statements['schema:author'] ?? []).toEqual([]);
   expect((await read(book.id)).subject.statements).toEqual(book.statements);
-  const suppress = await write('acceptor', 'PUT', adoptionPath(book.id, 'schema:author', context), {
+  const suppress = await write('acceptor', 'POST', adoptionPath(book.id), { context, property: 'schema:author',
     mode: 'suppress', selection: [], expected_head: null,
   });
   expect(suppress.status).toBe(200);
@@ -478,18 +478,18 @@ test('Community decisions override Global and suppression inheritance replacemen
   expect(suppressed.resolution).toEqual({ 'schema:author': 'suppressed' });
   // Inheritance still honors this Context's rejection. Accept locally before
   // restoring the full Global result, so the two rules do not contradict.
-  const local = await write('acceptor', 'PUT', acceptancePath(book.id, original.id, context), {
-    decision: 'accept', expected_head: (rejected.body.acceptance as { head: number }).head,
+  const local = await write('acceptor', 'POST', acceptancePath(book.id, original.id), {
+    context, expected_head: (rejected.body.acceptance as { head: number }).head,
   });
   expect(local.status).toBe(200);
-  const inherited = await write('acceptor', 'PUT', adoptionPath(book.id, 'schema:author', context), {
+  const inherited = await write('acceptor', 'POST', adoptionPath(book.id), { context, property: 'schema:author',
     mode: 'inherit', selection: [], expected_head: (suppress.body.adoption as { head: number }).head,
   });
   expect(inherited.status).toBe(200);
   const restored = (await read(book.id, context)).subject;
   expect(restored.statements).toEqual(book.statements);
   expect(restored.resolution).toEqual({});
-  const replace = await write('acceptor', 'PUT', adoptionPath(book.id, 'schema:author', context), {
+  const replace = await write('acceptor', 'POST', adoptionPath(book.id), { context, property: 'schema:author',
     mode: 'replace', selection: [selection(original.id)], expected_head: (inherited.body.adoption as { head: number }).head,
   });
   expect(replace.status).toBe(200);
@@ -497,9 +497,9 @@ test('Community decisions override Global and suppression inheritance replacemen
   expect((await read(book.id)).subject.statements).toEqual(book.statements);
   const other = await community('Another community');
   await unchanged(book.id, async () => {
-    problem(await write('acceptor', 'PUT', acceptancePath(book.id, original.id, other), { decision: 'accept', expected_head: null }), 403, 'forbidden');
-    problem(await write('acceptor', 'PUT', adoptionPath(book.id, 'schema:author', other), { mode: 'suppress', selection: [], expected_head: null }), 403, 'forbidden');
-    field(await write('acceptor', 'PUT', adoptionPath(book.id, 'schema:author'), { mode: 'inherit', selection: [], expected_head: original.head }), '/mode', 'unsupported');
+    problem(await write('acceptor', 'POST', acceptancePath(book.id, original.id), { context: other, expected_head: null }), 403, 'forbidden');
+    problem(await write('acceptor', 'POST', adoptionPath(book.id), { context: other, property: 'schema:author', mode: 'suppress', selection: [], expected_head: null }), 403, 'forbidden');
+    field(await write('acceptor', 'POST', adoptionPath(book.id), { context: driver.globalContext, property: 'schema:author', mode: 'inherit', selection: [], expected_head: original.head }), '/mode', 'unsupported');
   });
 });
 
@@ -513,9 +513,9 @@ test('Persona denials and invalid proposals append no revisions and leave public
     field(await write('editor', 'POST', proposePath, { statement: { ...proposal.statement, references: [] } }), '/statement/references', 'required');
     for (const [persona, status, code] of [ ['editor', 403, 'forbidden'], ['anonymous', 401, 'authentication_required'],
       ['suspended', 401, 'invalid_credentials'] ] as const) {
-      problem(await write(persona, 'PUT', acceptancePath(book.id, original.id), { decision: 'accept', expected_head: original.head }), status, code);
-      problem(await write(persona, 'PUT', adoptionPath(book.id, 'schema:author'), { mode: 'replace', selection: [], expected_head: original.head }), status, code);
-      problem(await write(persona, 'POST', '/v1/subjects/merges', { subjects: [book.id, other.id] }), status, code);
+      problem(await write(persona, 'POST', acceptancePath(book.id, original.id), { context: driver.globalContext, expected_head: original.head }), status, code);
+      problem(await write(persona, 'POST', adoptionPath(book.id), { context: driver.globalContext, property: 'schema:author', mode: 'replace', selection: [], expected_head: original.head }), status, code);
+      problem(await write(persona, 'POST', mergePath, { subjects: [book.id, other.id] }), status, code);
       if (persona !== 'editor') {
         problem(await write(persona, 'POST', '/v1/subjects', { type: 'schema:Book', labels: { en: 'Denied' } }), status, code);
         problem(await write(persona, 'POST', proposePath, proposal), status, code);
@@ -523,6 +523,16 @@ test('Persona denials and invalid proposals append no revisions and leave public
       }
     }
   });
+  for (const persona of ['steward', 'acceptor'] as const) {
+    const created = await write(persona, 'POST', '/v1/subjects', { type: 'schema:Book', labels: { en: 'Standing grant' } });
+    expect(created.status).toBe(201);
+    const subject = created.body.subject as Subject;
+    const path = `${subjectPath(subject.id)}/candidates`;
+    const proposal = { statement: { ...statement('schema:author', author.id), references: [reference()] } };
+    expect((await write(persona, 'POST', path, proposal)).status).toBe(201);
+    problem(await write('suspended', 'POST', '/v1/subjects', { type: 'schema:Book', labels: { en: 'Denied' } }), 401, 'invalid_credentials');
+    problem(await write('suspended', 'POST', path, proposal), 401, 'invalid_credentials');
+  }
   expect(await driver.inspect.revisions(other.id)).toHaveLength(1);
   for (const path of ['/v1/definitions/active', `/v1/definitions/releases/${(await active()).digest}`,
     subjectPath(book.id), `${subjectPath(book.id)}/revisions`, `${subjectPath(book.id)}/candidates`,
@@ -599,7 +609,7 @@ test('Acceptor merges persons by smallest UUID with redirects related labels and
   const redirectedBefore = await driver.inspect.revisions(redirected!.id);
   const token = key();
   const body = { subjects: [second.id, first.id] };
-  const merged = await write('acceptor', 'POST', '/v1/subjects/merges', body, token);
+  const merged = await write('acceptor', 'POST', mergePath, body, token);
   expect(merged.status).toBe(200);
   expect(merged.body).toEqual({ survivor: survivor!.id, redirected: redirected!.id, revision: 2 });
   const redirect = await get(subjectPath(redirected!.id));
@@ -618,17 +628,17 @@ test('Acceptor merges persons by smallest UUID with redirects related labels and
   const history = await get(`${subjectPath(redirected!.id)}/revisions`);
   expect(history.status).toBe(200);
   expect(history.body).toEqual({ revisions: [{ revision: 2, kind: 'merge', release: digest }, { revision: 1, kind: 'create', release: digest }], next: null });
-  const replay = await write('acceptor', 'POST', '/v1/subjects/merges', body, token);
+  const replay = await write('acceptor', 'POST', mergePath, body, token);
   expect(replay.status).toBe(200);
   expect(replay.body).toEqual(merged.body);
   problem(await write('editor', 'POST', `${subjectPath(redirected!.id)}/candidates`, {
     statement: { ...statement('schema:url', 'https://www.aozora.gr.jp/'), references: [reference()] },
   }), 409, 'conflict');
-  problem(await write('acceptor', 'POST', '/v1/subjects/merges', body), 409, 'conflict');
-  problem(await write('acceptor', 'POST', '/v1/subjects/merges', { subjects: [survivor!.id, survivor!.id] }), 409, 'conflict');
+  problem(await write('acceptor', 'POST', mergePath, body), 409, 'conflict');
+  problem(await write('acceptor', 'POST', mergePath, { subjects: [survivor!.id, survivor!.id] }), 409, 'conflict');
   const third = await create('schema:Person', 'Natsume Kinnosuke');
-  problem(await write('acceptor', 'POST', '/v1/subjects/merges', { subjects: [redirected!.id, third.id] }), 409, 'conflict');
-  problem(await write('acceptor', 'POST', '/v1/subjects/merges', { subjects: [survivor!.id, bookA.id] }), 409, 'conflict');
+  problem(await write('acceptor', 'POST', mergePath, { subjects: [redirected!.id, third.id] }), 409, 'conflict');
+  problem(await write('acceptor', 'POST', mergePath, { subjects: [survivor!.id, bookA.id] }), 409, 'conflict');
   expect(await driver.inspect.revisions(redirected!.id)).toEqual(rows);
   expect(await driver.inspect.revisions(survivor!.id)).toEqual(survivorBefore);
   for (const untouched of [bookA, bookB, third]) expect(await driver.inspect.revisions(untouched.id)).toHaveLength(1);
