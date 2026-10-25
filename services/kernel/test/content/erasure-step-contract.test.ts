@@ -46,7 +46,7 @@ test('uncalled erasure entry points retain exact native kernel signatures', () =
     enqueue: async () => {},
     status: async () => ({
       done: false,
-      progress: { processedPosts: 2, erasedRevisions: 3, steps: 0 },
+      progress: { processedPosts: 2, erasedRevisions: 3, steps: 1 },
     }),
   };
   const actor: Actor = { kind: 'anonymous' };

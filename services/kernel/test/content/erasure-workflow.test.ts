@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { Pool } from 'pg';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
-import { runCommand, type AuthoritativeTime, type CommandTransaction } from '../../src/command/command.ts';
+import { commandTime, runCommand, type AuthoritativeTime, type CommandTransaction } from '../../src/command/command.ts';
 import { erasePostLogical } from '../../src/content/erase-post.ts';
 import { runAuthorErasure } from '../../src/content/erasure-workflow.ts';
 import { bindAuthorErasureWorkflow } from '../../src/content/erasure-workflow-identity.ts';
@@ -11,7 +11,7 @@ import type { OperationProgress } from '../../src/content/operation-contract.ts'
 import { contentWorkWorkflowId } from '../../src/content/work-contract.ts';
 import { readBatch, type Envelope } from '../../src/events/log.ts';
 import { readPartition } from '../../src/partition/partition.ts';
-import { newId, partitionOf } from '../../src/route/route.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { composeWork } from '../../src/work/registry.ts';
 import { standingFixture } from '../access/standing-fixture.ts';
@@ -20,6 +20,9 @@ let fixture: Awaited<ReturnType<typeof standingFixture>>;
 let client: Awaited<ReturnType<typeof createWorkClient>>;
 let work: Awaited<ReturnType<typeof composeWork>>;
 let systemPool: Pool;
+let measuredPool: Pool | undefined;
+const checks: { id: string; time: AuthoritativeTime; inCommand: boolean }[] = [];
+const crashes = new Map<string, string[]>();
 const route = 0x6798;
 const partition = partitionOf(route);
 const routeKey = new Uint8Array(32).fill(7);
@@ -31,6 +34,19 @@ const context = () => ({
 
 beforeAll(async () => {
   fixture = await standingFixture();
+  const authorize = fixture.access.authorize.bind(fixture.access);
+  fixture.access.authorize = async (tx, actor, action, resource, evidence, time) => {
+    if (action === 'post:erase' && time) {
+      let inCommand = false;
+      try {
+        inCommand = commandTime(tx) === time;
+      } catch {
+        /* Restoration has its own read boundary. */
+      }
+      checks.push({ id: resource.id, time, inCommand });
+    }
+    return authorize(tx, actor, action, resource, evidence, time);
+  };
   systemPool = new Pool({ connectionString: process.env.DATABASE_URL!, max: 10 });
   client = await createWorkClient(process.env.DATABASE_URL!);
   work = await composeWork(
@@ -42,13 +58,32 @@ beforeAll(async () => {
             async (operationId: string, pauseAfter?: string) =>
               runAuthorErasure(
                 {
-                  pool: fixture.pool,
+                  pool: measuredPool ?? fixture.pool,
                   access: fixture.access,
                   readConsent: fixture.readConsent,
                   currentTime: () => new Date(),
                   durableStep: async (name, action) => {
-                    const value = await DBOS.runStep(action, { name });
-                    if (name === pauseAfter) {
+                    if (name === pauseAfter && name.includes(':revisions:')) {
+                      await DBOS.setEvent('barrier', name);
+                      expect(await DBOS.recv('continue', 30)).toBe(true);
+                    }
+                    const value = await DBOS.runStep(
+                      async () => {
+                        const result = await action();
+                        const revoke = crashes.get(name);
+                        if (revoke) {
+                          crashes.delete(name);
+                          await fixture.reader.query(
+                            "DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=ANY($2::uuid[]) AND action='post:erase'",
+                            [route, revoke],
+                          );
+                          throw new Error('Commit completed before the native step checkpoint');
+                        }
+                        return result;
+                      },
+                      { name, retriesAllowed: true, maxAttempts: 2, intervalSeconds: 0.001 },
+                    );
+                    if (name === pauseAfter && !name.includes(':revisions:')) {
                       await DBOS.setEvent('barrier', name);
                       expect(await DBOS.recv('continue', 30)).toBe(true);
                     }
@@ -319,6 +354,7 @@ test('native workflow resolves persisted initiating identity and physically comp
   expect(await client.getEvent<OperationProgress>(workflowId, 'progress', 0)).toMatchObject({
     processedPosts: 201,
     erasedRevisions: 603,
+    steps: 3,
   });
   const result = await fixture.reader.query(
     `SELECT p.availability, r.body, r.search_text, r.availability AS revision_availability, r.licence
@@ -337,7 +373,13 @@ test('native workflow resolves persisted initiating identity and physically comp
     });
 });
 
-async function launchSelection(selected: Awaited<ReturnType<typeof scope>>, pause = false) {
+async function launchSelection(
+  selected: Awaited<ReturnType<typeof scope>>,
+  pause: false | 'logical' | 'cleanup' = false,
+  crash = false,
+) {
+  // Each launch is a new authenticated request, including growth runs after seeding.
+  const actor = (await fixture.context(selected.actor.accountId)).actor;
   const source = await beginAuthorErasure(
     {
       pool: fixture.pool,
@@ -352,7 +394,7 @@ async function launchSelection(selected: Awaited<ReturnType<typeof scope>>, paus
         },
       },
     },
-    selected.actor,
+    actor,
     { threadId: selected.threadId, authorId: selected.actor.accountId },
     context(),
   );
@@ -379,7 +421,14 @@ async function launchSelection(selected: Awaited<ReturnType<typeof scope>>, paus
     tx.release();
   }
   const workflowId = contentWorkWorkflowId(source, 0, 'authorErase', source.value.operationId);
-  const barrier = `wf:${source.value.operationId}:erase:${selected.ids[0]}`;
+  const logical = `wf:${source.value.operationId}:erase:-infinity:${source.value.operationId}`;
+  const barrier =
+    pause === 'cleanup'
+      ? `wf:${source.value.operationId}:revisions:${selected.ids[0]}:-infinity:${selected.ids[0]}`
+      : logical;
+  if (crash) crashes.set(logical, selected.ids.slice(0, 100));
+  // Initiation has its own T; observe only the workflow's logical commands.
+  checks.length = 0;
   const handle = await client.enqueue(
     { workflowName: 'content.authorErase', queueName: 'governance', workflowID: workflowId },
     source.value.operationId,
@@ -391,8 +440,8 @@ async function launchSelection(selected: Awaited<ReturnType<typeof scope>>, paus
 
 for (const revocation of ['grant', 'consent'] as const) {
   test(`native ${revocation} revocation at the logical step barrier preserves cleanup and stops later posts`, async () => {
-    const selected = await scope(3, 101);
-    const started = await launchSelection(selected, true);
+    const selected = await scope(102, 3);
+    const started = await launchSelection(selected, 'logical');
     expect(
       (
         await fixture.reader.query('SELECT availability FROM content.post WHERE route=$1 AND post_id=$2', [
@@ -441,8 +490,9 @@ for (const revocation of ['grant', 'consent'] as const) {
     await expect(started.handle.getResult()).rejects.toMatchObject({ code: 7 });
     expect((await started.handle.getStatus())?.status).toBe('ERROR');
     expect(await client.getEvent(started.workflowId, 'progress', 0)).toMatchObject({
-      processedPosts: 1,
-      erasedRevisions: 101,
+      processedPosts: 100,
+      erasedRevisions: 300,
+      steps: 2,
     });
     expect(
       (
@@ -456,12 +506,102 @@ for (const revocation of ['grant', 'consent'] as const) {
       (
         await fixture.reader.query('SELECT availability FROM content.post WHERE route=$1 AND post_id=ANY($2::uuid[])', [
           route,
-          selected.ids.slice(1),
+          selected.ids.slice(100),
         ])
       ).rows,
     ).toEqual([{ availability: 'available' }, { availability: 'available' }]);
   });
 }
+
+test('all logical pages commit before cleanup, with one command and T per page and final counters already published', async () => {
+  const selected = await scope(205, 3);
+  const started = await launchSelection(selected, 'cleanup');
+  try {
+    expect(await client.getEvent(started.workflowId, 'progress', 0)).toEqual({
+      processedPosts: 205,
+      erasedRevisions: 615,
+      steps: 3,
+    });
+    const posts = await fixture.reader.query(
+      'SELECT availability, security_revision FROM content.post WHERE route=$1 AND post_id=ANY($2::uuid[])',
+      [route, selected.ids],
+    );
+    expect(posts.rows).toHaveLength(205);
+    expect(posts.rows.every((row) => row.availability === 'erased' && row.security_revision === '2')).toBe(true);
+    const retained = await fixture.reader.query(
+      'SELECT count(*)::int AS n FROM content.revision WHERE route=$1 AND post_id=ANY($2::uuid[]) AND body IS NOT NULL',
+      [route, selected.ids],
+    );
+    expect(retained.rows[0].n).toBe(615);
+    for (let start = 0; start < selected.ids.length; start += 100) {
+      const page = selected.ids.slice(start, start + 100);
+      const observed = checks.filter((check) => check.inCommand && page.includes(check.id));
+      expect(new Set(observed.map((check) => check.id)).size).toBe(page.length);
+      expect(new Set(observed.map((check) => check.time)).size).toBe(1);
+      const events = await fixture.reader.query(
+        `SELECT count(*)::int AS n, count(DISTINCT position)::int AS commands
+         FROM core.outbox WHERE partition_no=$1 AND type='com.rezics.content.post.erased.v1'
+           AND data->>'postId'=ANY($2::text[])`,
+        [partition, page],
+      );
+      expect(events.rows).toEqual([{ n: page.length, commands: 1 }]);
+    }
+    const receipts = await fixture.reader.query(
+      "SELECT response FROM core.receipt WHERE partition_no=$1 AND command_kind='content.author-erasure.page' AND idempotency_key LIKE $2",
+      [partition, `wf:${started.operationId}:erase:%`],
+    );
+    expect(receipts.rows.map((row) => row.response.processedPosts).sort((a, b) => a - b)).toEqual([5, 100, 100]);
+  } finally {
+    await client.send(started.workflowId, true, 'continue');
+  }
+  expect(await started.handle.getResult()).toEqual({ processedPosts: 205, erasedRevisions: 615 });
+  expect(await client.getEvent(started.workflowId, 'progress', 0)).toEqual({
+    processedPosts: 205,
+    erasedRevisions: 615,
+    steps: 3,
+  });
+});
+
+test('a denial on the last post rolls back the whole logical page', async () => {
+  const selected = await scope(100, 3);
+  await fixture.reader.query(
+    "DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND action='post:erase'",
+    [route, selected.ids.at(-1)],
+  );
+  const started = await launchSelection(selected);
+  await expect(started.handle.getResult()).rejects.toMatchObject({ code: 7 });
+  expect(await client.getEvent(started.workflowId, 'progress', 0)).toEqual({
+    processedPosts: 0,
+    erasedRevisions: 0,
+    steps: 1,
+  });
+  const posts = await fixture.reader.query(
+    'SELECT availability FROM content.post WHERE route=$1 AND post_id=ANY($2::uuid[])',
+    [route, selected.ids],
+  );
+  expect(posts.rows.every((row) => row.availability === 'available')).toBe(true);
+  const revisions = await fixture.reader.query(
+    'SELECT body FROM content.revision WHERE route=$1 AND post_id=ANY($2::uuid[])',
+    [route, selected.ids],
+  );
+  expect(revisions.rows.every((row) => row.body !== null)).toBe(true);
+});
+
+test('a committed logical page survives denied replay before its DBOS checkpoint and continues later pages', async () => {
+  const selected = await scope(102, 3);
+  const started = await launchSelection(selected, false, true);
+  expect(await started.handle.getResult()).toEqual({ processedPosts: 102, erasedRevisions: 306 });
+  expect(await client.getEvent(started.workflowId, 'progress', 0)).toEqual({
+    processedPosts: 102,
+    erasedRevisions: 306,
+    steps: 2,
+  });
+  const revisions = await fixture.reader.query(
+    'SELECT body FROM content.revision WHERE route=$1 AND post_id=ANY($2::uuid[])',
+    [route, selected.ids],
+  );
+  expect(revisions.rows.every((row) => row.body === null)).toBe(true);
+});
 
 test('checkGrowth proves fixed native erasure pages against unrelated and same-partition history', async () => {
   const { checkGrowth, openGrowthDatabase, seed } = await import('../support/growth.ts');
@@ -633,3 +773,156 @@ test('checkGrowth proves fixed native erasure pages against unrelated and same-p
     await db.close();
   }
 });
+
+test('checkGrowth fixes a 205-post author while other authors grow in the same partition', async () => {
+  const { checkGrowth, openGrowthDatabase, seed } = await import('../support/growth.ts');
+  const db = await openGrowthDatabase();
+  let selected: Awaited<ReturnType<typeof scope>>;
+  let paused: Awaited<ReturnType<typeof launchSelection>> | undefined;
+  try {
+    measuredPool = db.pool;
+    const report = await checkGrowth(db, {
+      name: 'native logical author page',
+      scales: [2048, 8192, 32768],
+      repetitions: 1,
+      warmups: 0,
+      bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+      async grow(target, scale, previous) {
+        if (paused) {
+          await client.send(paused.workflowId, true, 'continue');
+          await paused.handle.getResult();
+        }
+        // Logical erasure is irreversible. Each sample gets a fresh author with
+        // the same 205-post, three-revision shape outside the measured boundary.
+        selected = await scope(205, 3);
+        await seed(
+          target,
+          {
+            name: 'other authors in logical page partition',
+            hotPartition: partition,
+            hotShare: 1,
+            rows() {
+              const postId = newId(route);
+              const head = newId(route);
+              const noiseAccount = newId(routeOf(selected.actor.accountId)!);
+              const body = Buffer.from('other author revision');
+              return {
+                'access.account': [
+                  {
+                    route: routeOf(noiseAccount),
+                    account_id: noiseAccount,
+                    kind: 'actor',
+                    state: 'active',
+                    transaction_id: noiseAccount,
+                  },
+                ],
+                'access.membership_inverse': [
+                  {
+                    route: routeOf(noiseAccount),
+                    account_id: noiseAccount,
+                    kind: 'organization',
+                    group_id: newId(route),
+                    reservation_id: noiseAccount,
+                    transaction_id: noiseAccount,
+                  },
+                ],
+                'access.resource_grant': [
+                  {
+                    route,
+                    resource_id: postId,
+                    subject_id: noiseAccount,
+                    action: 'post:erase',
+                    valid: '(,)',
+                    transaction_id: postId,
+                  },
+                ],
+                'access.resource_denial': [
+                  {
+                    route,
+                    resource_id: postId,
+                    subject_id: noiseAccount,
+                    action: 'post:erase',
+                    reason: 'resource',
+                    valid: '(,)',
+                    transaction_id: postId,
+                  },
+                ],
+                'access.resource_role_grant': [
+                  {
+                    route,
+                    resource_id: postId,
+                    subject_id: noiseAccount,
+                    grant_role: 'fixture.owner',
+                    valid: '(,)',
+                    transaction_id: postId,
+                  },
+                ],
+                'content.operation': [
+                  {
+                    route,
+                    operation_id: newId(route),
+                    initiator_account_id: selected.actor.accountId,
+                    author_account_id: noiseAccount,
+                    thread_id: selected.threadId,
+                    actor_kind: 'account',
+                    actor_account_id: selected.actor.accountId,
+                    actor_client_id: selected.actor.clientId,
+                    actor_scopes: selected.actor.scopes,
+                    actor_requested_by: null,
+                    actor_authn_epoch: selected.actor.authnEpoch,
+                    empty_scope: true,
+                    requested_at: new Date(),
+                    recorded_transaction_id: postId,
+                  },
+                ],
+                'content.post': [
+                  {
+                    route,
+                    thread_id: selected.threadId,
+                    post_id: postId,
+                    author_account_id: noiseAccount,
+                    head_revision_id: head,
+                    visibility: 'published',
+                    security_revision: 1,
+                    recorded_transaction_id: postId,
+                  },
+                ],
+                'content.revision': Array.from({ length: 3 }, (_, index) => ({
+                  route,
+                  thread_id: selected.threadId,
+                  post_id: postId,
+                  revision_id: index === 0 ? head : newId(route),
+                  body,
+                  body_sha256: new Bun.CryptoHasher('sha256').update(body).digest(),
+                  search_text: 'Other author',
+                  licence: 'MIT',
+                  subject_ids: [],
+                  board_id: newId(route),
+                  availability: 'available',
+                  recorded_transaction_id: postId,
+                })),
+              };
+            },
+          },
+          { from: previous, to: scale },
+        );
+      },
+      async operation() {
+        paused = await launchSelection(selected, 'logical');
+      },
+    });
+    expect(report.samples.map((sample) => sample.scale)).toEqual([2048, 8192, 32768]);
+    for (const sample of report.samples) {
+      expect(sample.cost.rows).toBeGreaterThan(0);
+      expect(Object.values(sample.cost.relations ?? {}).every((relation) => relation.sequentialScans === 0)).toBe(true);
+    }
+    console.info('Native logical page growth', JSON.stringify(report.samples));
+  } finally {
+    measuredPool = undefined;
+    if (paused) {
+      await client.send(paused.workflowId, true, 'continue');
+      await paused.handle.getResult();
+    }
+    await db.close();
+  }
+}, 120_000);

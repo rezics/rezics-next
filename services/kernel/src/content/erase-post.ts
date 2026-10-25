@@ -7,13 +7,16 @@ import {
   principalCommandIdentity,
   runCommand,
   type CommandAuthorization,
+  type CommandAttempt,
   type CommandOutcome,
+  type CommandTransaction,
 } from '../command/command.ts';
 import { accessCommandAuthorization, type Access, type Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import readScope from './read-erasure-scope.sql';
 import erase from './erase-content.sql';
 import takedown from './takedown.sql';
+import countRevisions from './erase-post-revisions.sql';
 
 export type ErasePostDependencies = Readonly<{
   pool: Pool;
@@ -55,12 +58,12 @@ type Scope = {
  * request bodies cannot supply authority, author selection or storage keys.
  * All account, scope, delegation and grant checks belong to shared Access.
  */
-async function mutateAuthorizedPoint(
+async function prepareAuthorizedPoint(
   deps: Omit<ErasePostDependencies, 'routeKey'>,
   actor: Actor | ErasureInitiator,
   requested: Point,
   context: ErasePostContext,
-): Promise<CommandOutcome<{ targetId: string; securityRevision: string }>> {
+) {
   if (actor.kind !== 'account' && actor.kind !== 'durable-initiator') throw new GrantDeniedError();
   if (actor.kind === 'durable-initiator' && requested.action !== 'post:erase') throw new GrantDeniedError();
   const point = Object.freeze({ ...requested });
@@ -94,6 +97,28 @@ async function mutateAuthorizedPoint(
       { pool: deps.pool, deadline: context.deadline },
       () => new GrantDeniedError(),
     );
+  const restore = (attempt: CommandAttempt) =>
+    actor.kind === 'account'
+      ? Promise.resolve(actor)
+      : actor.restorer.restoreInitiator(
+          {
+            operation: actor.operation,
+            action: point.action,
+            anchor: {
+              resource: target,
+              async validate(client) {
+                const rows = await client.query<Scope>(readScope.sql, args(readScope));
+                return rows.rows.length === 1;
+              },
+            },
+            context: { pool: deps.pool, deadline: context.deadline },
+          },
+          attempt.time,
+        );
+  const prepareRestored = async (attempt: CommandAttempt, verified: Extract<Actor, { kind: 'account' }>) => {
+    const current = await ordinaryAdmission(verified);
+    return { current, proof: await current.prepare!(attempt) };
+  };
   const admission: CommandAuthorization =
     actor.kind === 'account'
       ? await ordinaryAdmission(actor)
@@ -102,23 +127,7 @@ async function mutateAuthorizedPoint(
           resource: target,
           denied: () => new GrantDeniedError(),
           async prepare(attempt) {
-            const verified = await actor.restorer.restoreInitiator(
-              {
-                operation: actor.operation,
-                action: point.action,
-                anchor: {
-                  resource: target,
-                  async validate(client) {
-                    const rows = await client.query<Scope>(readScope.sql, args(readScope));
-                    return rows.rows.length === 1;
-                  },
-                },
-                context: { pool: deps.pool, deadline: context.deadline },
-              },
-              attempt.time,
-            );
-            const current = await ordinaryAdmission(verified);
-            return { current, proof: await current.prepare!(attempt) };
+            return prepareRestored(attempt, await restore(attempt));
           },
           async authorize(tx, attempt, evidence) {
             const { current, proof } = evidence as {
@@ -140,23 +149,14 @@ async function mutateAuthorizedPoint(
       return 'execute';
     },
   };
-  return runCommand(
-    deps.pool,
-    {
-      ...identity,
-      partition: partitionOf(route),
-      deadline: context.deadline,
-      clock: deps.clock,
-      authorization,
-      receipt: {
-        kind: `content.${point.action}`,
-        key: context.idempotencyKey,
-        digest: createHash('sha256')
-          .update(canonicalize([identity, point])!)
-          .digest(),
-      },
-    },
-    async (tx) => {
+  return {
+    point,
+    route,
+    identity,
+    authorization,
+    restore,
+    prepareRestored,
+    async mutate(tx: CommandTransaction) {
       if (!scope) throw new GrantDeniedError();
       const statement = point.action === 'moderation:takedown' ? takedown : erase;
       const result = await tx.query<{ security_revision: string }>(statement.sql, args(statement));
@@ -200,6 +200,33 @@ async function mutateAuthorizedPoint(
         ],
       };
     },
+  };
+}
+
+async function mutateAuthorizedPoint(
+  deps: Omit<ErasePostDependencies, 'routeKey'>,
+  actor: Actor | ErasureInitiator,
+  requested: Point,
+  context: ErasePostContext,
+): Promise<CommandOutcome<{ targetId: string; securityRevision: string }>> {
+  const prepared = await prepareAuthorizedPoint(deps, actor, requested, context);
+  return runCommand(
+    deps.pool,
+    {
+      ...prepared.identity,
+      partition: partitionOf(prepared.route),
+      deadline: context.deadline,
+      clock: deps.clock,
+      authorization: prepared.authorization,
+      receipt: {
+        kind: `content.${prepared.point.action}`,
+        key: context.idempotencyKey,
+        digest: createHash('sha256')
+          .update(canonicalize([prepared.identity, prepared.point])!)
+          .digest(),
+      },
+    },
+    (tx) => prepared.mutate(tx),
   );
 }
 
@@ -255,4 +282,89 @@ export function erasePostLogicalAsInitiator(
   context: ErasePostContext,
 ): Promise<CommandOutcome<{ postId: string; securityRevision: string }>> {
   return logicalErasure(deps, initiator, input, context);
+}
+
+/** One bounded logical page, authorized completely at the command's T before
+ * receipt lookup or mutations. Each post uses the ordinary point seam; one
+ * denied point rolls back the entire page, including its events and receipt.
+ */
+export async function erasePostLogicalPageAsInitiator(
+  deps: Omit<ErasePostDependencies, 'routeKey'>,
+  initiator: ErasureInitiator,
+  input: Readonly<{ postIds: readonly string[]; reason: string }>,
+  context: ErasePostContext,
+): Promise<CommandOutcome<{ postIds: string[]; processedPosts: number; erasedRevisions: number }>> {
+  const postIds = [...input.postIds];
+  if (postIds.length < 1 || postIds.length > 100 || new Set(postIds).size !== postIds.length)
+    throw new RangeError('Invalid erasure page');
+  const points = await Promise.all(
+    postIds.map((id) =>
+      prepareAuthorizedPoint(
+        deps,
+        initiator,
+        { action: 'post:erase', kind: 'post', id, reason: input.reason },
+        context,
+      ),
+    ),
+  );
+  const first = points[0]!;
+  if (points.some((point) => point.route !== first.route)) throw new GrantDeniedError();
+  const authorization: CommandAuthorization = {
+    action: 'post:erase',
+    resource: first.authorization.resource,
+    denied: () => new GrantDeniedError(),
+    async prepare(attempt) {
+      // Restore one native person/action identity for this live attempt. Account,
+      // source, consent and delegation evidence is shared at T; every actual post
+      // still gets its own ordinary Access admission/check and scope validation.
+      const verified = await first.restore(attempt);
+      const prepared = await Promise.allSettled(points.map((point) => point.prepareRestored(attempt, verified)));
+      const proofs: unknown[] = [];
+      for (const result of prepared) {
+        if (result.status === 'rejected') throw result.reason;
+        proofs.push(result.value);
+      }
+      return proofs;
+    },
+    async authorize(tx, attempt, evidence) {
+      const proofs = evidence as unknown[];
+      for (const [index, point] of points.entries())
+        if ((await point.authorization.authorize(tx, attempt, proofs[index])) !== 'execute')
+          throw new GrantDeniedError();
+      return 'execute';
+    },
+  };
+  return runCommand(
+    deps.pool,
+    {
+      ...first.identity,
+      partition: partitionOf(first.route),
+      deadline: context.deadline,
+      clock: deps.clock,
+      authorization,
+      receipt: {
+        kind: 'content.author-erasure.page',
+        key: context.idempotencyKey,
+        digest: createHash('sha256')
+          .update(canonicalize([first.identity, points.map((point) => point.point)])!)
+          .digest(),
+      },
+    },
+    async (tx) => {
+      let erasedRevisions = 0;
+      const events = [];
+      for (const point of points) {
+        const parameters = { route: point.route, id: point.point.id };
+        const result = await tx.query<{ revisions: string }>(
+          countRevisions.sql,
+          countRevisions.params.map((name) => parameters[name as keyof typeof parameters]),
+        );
+        erasedRevisions += Number(result.rows[0]!.revisions);
+        if (!Number.isSafeInteger(erasedRevisions) || erasedRevisions < 0)
+          throw new RangeError('Operation counter overflow');
+        events.push(...(await point.mutate(tx)).events);
+      }
+      return { value: { postIds, processedPosts: postIds.length, erasedRevisions }, events };
+    },
+  );
 }
