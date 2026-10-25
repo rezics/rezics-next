@@ -17,7 +17,7 @@ import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 const owner = newId(0x6c32);
 const routeKey = new Uint8Array(32).fill(73);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(74)]]) };
-const scopes = ['collection:create', 'collection:read', 'subject:read', 'exposure:open'];
+const scopes = ['collection:create', 'collection:read', 'collection:update', 'subject:read', 'exposure:open'];
 const LIBRARY_EXPOSURES = new Set(['gate:collections', 'gate:personal_library', 'gate:reading_progress']);
 const HTTP_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'trace']);
 

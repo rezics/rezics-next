@@ -3922,9 +3922,9 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     schemas: {};
     response: {};
     error: [];
-}, "get", "/v1/subjects/:subjectId/collections", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
+}, "get", "/v1/subjects/:id/collections", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
     params: import("typebox").TObject<{
-        subjectId: import("typebox").TString;
+        id: import("typebox").TString;
     }>;
     query: import("typebox").TObject<{
         view: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"BASIC">, import("typebox").TLiteral<"FULL">]>>;
@@ -4057,7 +4057,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
         })[];
         'x-rate-limit'?: Readonly<import("./rate-limit.ts").RateLimitDeclaration>;
     };
-}, {}, "/v1/subjects/:subjectId/collections">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params, query, actor, admission, job }: {
+}, {}, "/v1/subjects/:id/collections">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params, query, actor, admission, job }: {
     server: import("elysia").Server | null;
     redirect: import("elysia").redirect;
     set: {
@@ -4296,7 +4296,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     }>;
     defer: (fn: import("elysia/types").AfterResponseHandler<NoInfer<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
         params: import("typebox").TObject<{
-            subjectId: import("typebox").TString;
+            id: import("typebox").TString;
         }>;
         query: import("typebox").TObject<{
             view: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"BASIC">, import("typebox").TLiteral<"FULL">]>>;
@@ -4429,7 +4429,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
             })[];
             'x-rate-limit'?: Readonly<import("./rate-limit.ts").RateLimitDeclaration>;
         };
-    }, {}, "/v1/subjects/:subjectId/collections">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
+    }, {}, "/v1/subjects/:id/collections">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
         derive: {
             readonly admission: import("./admission.ts").Admission;
             readonly job: {
@@ -4457,7 +4457,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
         limit?: number;
     };
     params: {
-        subjectId: string;
+        id: string;
     };
     headers: Record<string, string | undefined>;
     cookie: Record<string, import("elysia").Cookie<unknown>>;
@@ -4489,7 +4489,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     next: string | null;
 } & object>, {
     params: import("typebox").TObject<{
-        subjectId: import("typebox").TString;
+        id: import("typebox").TString;
     }>;
     query: import("typebox").TObject<{
         view: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"BASIC">, import("typebox").TLiteral<"FULL">]>>;

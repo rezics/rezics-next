@@ -345,9 +345,9 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       },
     )
     .get(
-      '/v1/subjects/:subjectId/collections',
+      '/v1/subjects/:id/collections',
       {
-        params: t.Object({ subjectId: id }, closed),
+        params: t.Object({ id }, closed),
         query: t.Object(pageQuery, closed),
         response: { 200: fullSubjectPage, ...failures },
         detail: detail('subject_collection.list', 'collection:read', true),
@@ -358,7 +358,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
             viewDependencies(),
             actor,
             query.view,
-            await read().listSubjectCollections(actor, params.subjectId, basicQuery(query)),
+            await read().listSubjectCollections(actor, params.id, basicQuery(query)),
           ),
         ),
     );
