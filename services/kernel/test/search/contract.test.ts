@@ -55,6 +55,7 @@ test('documents are built only from the anchor partition snapshot and versioned 
         descriptions: ['Light novel series'],
         name_sort: 'とある魔術の禁書目録',
         statements: [`schema:author=${author}`],
+        facts: [],
       },
     },
     {
@@ -70,6 +71,7 @@ test('documents are built only from the anchor partition snapshot and versioned 
         descriptions: [],
         name_sort: MISSING_NAME,
         statements: [],
+        facts: [],
       },
     },
   ]);
