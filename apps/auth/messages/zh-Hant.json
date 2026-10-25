@@ -1,0 +1,8 @@
+{
+  "auth_login_heading": "登入",
+  "auth_signup_heading": "建立帳戶",
+  "auth_consent_heading": "檢視權限",
+  "auth_recovery_heading": "重設密碼",
+  "auth_security_heading": "帳戶安全",
+  "auth_step_up_heading": "驗證身分"
+}

@@ -114,7 +114,7 @@ afterAll(async () => {
 });
 
 // Implement apps/auth's dev command and unprefixed pages with locale negotiation to turn this into test(...).
-test.failing(
+test(
   "the documented dev command serves the sign-in page in the visitor's language",
   async () => {
     let startError: unknown;
@@ -164,7 +164,7 @@ test.failing(
 );
 
 // Implement transparent AUTH_ORIGIN forwarding for every non-page path to turn this into test(...).
-test.failing(
+test(
   'every path that is not a page reaches Auth unchanged',
   async () => {
     let startError: unknown;
@@ -221,7 +221,7 @@ test.failing(
 );
 
 // Serve all six Auth pages with private, no-store and framing protection to turn this into test(...).
-test.failing(
+test(
   'pages are private, no-store and cannot be framed',
   async () => {
     let startError: unknown;

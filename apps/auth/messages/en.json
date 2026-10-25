@@ -1,0 +1,8 @@
+{
+  "auth_login_heading": "Sign in",
+  "auth_signup_heading": "Create an account",
+  "auth_consent_heading": "Review permissions",
+  "auth_recovery_heading": "Reset your password",
+  "auth_security_heading": "Account security",
+  "auth_step_up_heading": "Verify your identity"
+}

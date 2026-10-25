@@ -1,0 +1,8 @@
+{
+  "auth_login_heading": "登录",
+  "auth_signup_heading": "创建账户",
+  "auth_consent_heading": "查看权限",
+  "auth_recovery_heading": "重置密码",
+  "auth_security_heading": "账户安全",
+  "auth_step_up_heading": "验证身份"
+}

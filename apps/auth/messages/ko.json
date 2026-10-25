@@ -1,0 +1,8 @@
+{
+  "auth_login_heading": "로그인",
+  "auth_signup_heading": "계정 만들기",
+  "auth_consent_heading": "권한 확인",
+  "auth_recovery_heading": "비밀번호 재설정",
+  "auth_security_heading": "계정 보안",
+  "auth_step_up_heading": "본인 확인"
+}

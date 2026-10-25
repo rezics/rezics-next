@@ -1,0 +1,8 @@
+{
+  "auth_login_heading": "Se connecter",
+  "auth_signup_heading": "Créer un compte",
+  "auth_consent_heading": "Examiner les autorisations",
+  "auth_recovery_heading": "Réinitialiser le mot de passe",
+  "auth_security_heading": "Sécurité du compte",
+  "auth_step_up_heading": "Vérifier votre identité"
+}

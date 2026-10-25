@@ -1,0 +1,8 @@
+{
+  "auth_login_heading": "ログイン",
+  "auth_signup_heading": "アカウントを作成",
+  "auth_consent_heading": "権限を確認",
+  "auth_recovery_heading": "パスワードをリセット",
+  "auth_security_heading": "アカウントのセキュリティ",
+  "auth_step_up_heading": "本人確認"
+}

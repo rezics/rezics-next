@@ -1,0 +1,37 @@
+{
+  "name": "@rezics/auth-pages",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --config vite.config.ts",
+    "build": "vite build --config vite.config.ts",
+    "check": "oxfmt --check . && bun run generate && bun run generate:routes && tsc --noEmit -p tsconfig.json && bun run test && bun run build",
+    "generate": "bun scripts/generate.ts",
+    "generate:routes": "vite build --config vite.config.ts --mode development --emptyOutDir false",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@cloudflare/vite-plugin": "2.0.0-beta.v.4",
+    "@cloudflare/workers-types": "5.20261024.1",
+    "@fontsource-variable/geist-mono": "5.3.0",
+    "@fontsource-variable/manrope": "5.3.0",
+    "@fontsource-variable/source-serif-4": "5.3.1",
+    "@inlang/paraglide-js": "2.29.1",
+    "@inlang/plugin-json": "5.1.63",
+    "@rezics/ui": "workspace:*",
+    "@tailwindcss/vite": "4.3.3",
+    "@tanstack/react-router": "1.170.46",
+    "@tanstack/react-start": "1.169.4",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "tailwindcss": "4.3.3"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "playwright": "1.64.1",
+    "vite": "8.3.5"
+  }
+}
