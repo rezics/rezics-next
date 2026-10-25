@@ -330,6 +330,7 @@ async function clearFixtureRows(): Promise<void> {
     CASCADE
   `);
   await db.admin.query('UPDATE core.partition SET position = 0');
+  await db.admin.query('CHECKPOINT');
   accountEvidence.clear();
 }
 
@@ -491,18 +492,24 @@ function commandHistory(
   };
 }
 
-function commandHistoryFinish(hotPartition: number): NonNullable<Population['finish']> {
+function commandHistoryFinish(): NonNullable<Population['finish']> {
   return async (admin) => {
     await admin.query(
-      `UPDATE core.partition AS p
-       SET position = GREATEST(
-         p.position,
-         COALESCE((SELECT max(r.position) FROM core.receipt AS r WHERE r.partition_no = p.partition_no), 0),
-         COALESCE((SELECT max(o.position) FROM core.outbox AS o WHERE o.partition_no = p.partition_no), 0),
-         COALESCE((SELECT max(w.position) FROM editorial.write_basis AS w WHERE w.partition_no = p.partition_no), 0)
+      `WITH positions AS (
+         SELECT partition_no, max(position) AS position
+         FROM (
+           SELECT partition_no, position FROM core.receipt
+           UNION ALL
+           SELECT partition_no, position FROM core.outbox
+           UNION ALL
+           SELECT partition_no, position FROM editorial.write_basis
+         ) AS history
+         GROUP BY partition_no
        )
-       WHERE p.partition_no = $1`,
-      [hotPartition],
+       UPDATE core.partition AS p
+       SET position = GREATEST(p.position, positions.position)
+       FROM positions
+       WHERE p.partition_no = positions.partition_no`,
     );
   };
 }
@@ -620,7 +627,7 @@ function grantPopulation(
     name,
     hotPartition,
     hotShare: 1,
-    finish: commandHistoryFinish(hotPartition),
+    finish: commandHistoryFinish(),
     rows: ({ route, ordinal }) => {
       const authorizationRows = permissionRows(route);
       const resourceId = newId(route);
@@ -666,13 +673,13 @@ function accountDefaultGrantPopulation(name: string, hotPartition: number): Popu
   return {
     name,
     hotPartition,
-    hotShare: 1,
-    finish: commandHistoryFinish(hotPartition),
-    rows: ({ route, ordinal }) => {
+    hotShare: 0.25,
+    finish: commandHistoryFinish(),
+    rows: ({ route, ordinal, hot }) => {
       const accountId = newId(route);
       const organizationId = newId(route);
       const reservationId = newId(route);
-      const handle = handleInPartition(hotPartition, 200_000 + ordinal);
+      const handle = hot ? handleInPartition(hotPartition, 200_000 + ordinal) : `growth-account-handle-${ordinal}`;
       const handleRouteValue = hashRoute(handle);
       const accountTransactionId = newId(route);
       const organizationTransactionId = newId(route);
@@ -680,11 +687,19 @@ function accountDefaultGrantPopulation(name: string, hotPartition: number): Popu
       return {
         ...permissionRowsForRoute,
         'access.account': [
-          { route, account_id: accountId, kind: 'actor', state: 'active', transaction_id: accountTransactionId },
+          {
+            route,
+            account_id: accountId,
+            kind: 'actor',
+            handle,
+            state: 'active',
+            transaction_id: accountTransactionId,
+          },
           {
             route,
             account_id: organizationId,
             kind: 'organization',
+            handle: null,
             state: 'active',
             transaction_id: organizationTransactionId,
           },
@@ -766,7 +781,7 @@ function assignmentPopulation(name: string, hotPartition: number): Population {
     name,
     hotPartition,
     hotShare: 1,
-    finish: commandHistoryFinish(hotPartition),
+    finish: commandHistoryFinish(),
     rows: ({ route, ordinal }) => {
       const authorizationRows = permissionRows(route);
       const principalId = newId(route);
@@ -810,7 +825,7 @@ function resourceRolePopulation(name: string, hotPartition: number): Population 
     name,
     hotPartition,
     hotShare: 1,
-    finish: commandHistoryFinish(hotPartition),
+    finish: commandHistoryFinish(),
     rows: ({ route, ordinal }) => {
       const authorizationRows = permissionRows(route);
       const resourceId = newId(route);
@@ -875,7 +890,7 @@ function coordinationAndFencePopulation(name: string, hotPartition: number): Pop
     name,
     hotPartition,
     hotShare: 1,
-    finish: commandHistoryFinish(hotPartition),
+    finish: commandHistoryFinish(),
     rows: ({ route, ordinal }) => {
       const authorizationRows = permissionRows(route);
       const accountId = newId(route);
@@ -926,7 +941,7 @@ function membershipPopulation(name: string, hotPartition: number): Population {
     name,
     hotPartition,
     hotShare: 1,
-    finish: commandHistoryFinish(hotPartition),
+    finish: commandHistoryFinish(),
     rows: ({ route, ordinal }) => {
       const authorizationRows = permissionRows(route);
       const organizationId = newId(route);
@@ -991,34 +1006,34 @@ function handlePopulation(name: string, hotPartition: number): Population {
   return {
     name,
     hotPartition,
-    hotShare: 1,
-    finish: commandHistoryFinish(hotPartition),
-    rows: ({ ordinal, route: populationRoute }) => {
-      const handle = handleInPartition(hotPartition, ordinal);
-      const route = hashRoute(handle);
-      const accountId = newId(route);
-      const transactionId = newId(route);
+    hotShare: 0.25,
+    finish: commandHistoryFinish(),
+    rows: ({ ordinal, route: populationRoute, hot }) => {
+      const handle = hot ? handleInPartition(hotPartition, ordinal) : `growth-handle-${ordinal}`;
+      const handleRouteValue = hashRoute(handle);
+      const accountId = newId(populationRoute);
+      const transactionId = newId(handleRouteValue);
       return {
         'access.account': [
           {
-            route,
+            route: populationRoute,
             account_id: accountId,
             kind: 'actor',
             handle,
             state: 'active',
-            transaction_id: newId(route),
+            transaction_id: newId(populationRoute),
           },
         ],
         'access.handle_claim': [
           {
-            route,
+            route: handleRouteValue,
             normalized_handle: handle,
             account_id: accountId,
             state: 'pending',
             expires_at: new Date(Date.now() + REGISTRATION_TTL_MS).toISOString(),
             reserved_until: null,
             transaction_id: transactionId,
-            reservation_id: newId(route),
+            reservation_id: newId(handleRouteValue),
           },
         ],
         ...commandHistory(populationRoute, ordinal, [
@@ -1038,7 +1053,7 @@ function tombstonePopulation(name: string, hotPartition: number): Population {
     name,
     hotPartition,
     hotShare: 1,
-    finish: commandHistoryFinish(hotPartition),
+    finish: commandHistoryFinish(),
     rows: ({ route, ordinal }) => {
       const authorizationRows = permissionRows(route);
       const accountId = newId(route);
