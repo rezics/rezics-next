@@ -16,7 +16,9 @@ import { pathToFileURL } from 'node:url';
  * revision is the source revision rendered as a string, or null when absent.
  * No fabricated revision from dump date, hash, row position or converter version.
  *
- * Each call is an independent dump: duplicate detection is scoped to that call.
+ * Each call is an independent framing/native-record parse. Every duplicate key
+ * remains visible unchanged; only durable RunStore.stage UNIQUE(source,run_id,
+ * record_key) rejects duplicate entire input before any API effects.
  * maxRecordBytes bounds encoded record bytes before decoding/JSON parsing;
  * framing, COPY headers and newline delimiters are not part of a record.
  * A rejection invalidates the whole dump even if earlier records were yielded;

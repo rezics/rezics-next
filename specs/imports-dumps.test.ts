@@ -183,11 +183,13 @@ test('COPY terminators and Wikidata array closing brackets are required when fra
   });
 });
 
-test('identical and conflicting duplicate native keys fail closed for every source', async () => {
-  await scenario(async driver => {
+test('identical and conflicting duplicate native keys remain visible unchanged for durable staging', async () => {
+  await scenario(async (driver) => {
     for (const source of sources) {
       for (const second of [row(source), row(source, '41', 'Conflicting title')]) {
-        await aborts(driver, source, dump(source, [row(source), row(source, '42'), second]));
+        const rows = [row(source), row(source, '42'), second];
+        const expected = (await Promise.all(rows.map((text) => collect(driver, source, dump(source, [text]))))).flat();
+        expect(await collect(driver, source, dump(source, rows))).toEqual(expected);
       }
     }
   });
@@ -323,7 +325,7 @@ test('async iterable readers yield before requesting the complete dump and cance
   });
 });
 
-test('upstream failures propagate and a new dump does not inherit duplicate key state', async () => {
+test('upstream failures propagate and fresh iterators independently yield the same native key', async () => {
   await scenario(async driver => {
     for (const source of sources) {
       const failure = new Error('Synthetic source transport failure');
