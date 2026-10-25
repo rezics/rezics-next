@@ -140,7 +140,7 @@ async function violations(sources: Sources): Promise<string[]> {
 }
 const replace = (text: string, from: string, to: string) => {
   expect(text).toContain(from);
-  return text.replace(from, to);
+  return text.replace(from, () => to);
 };
 
 test("a catalogue compiles to a release through LinkML's derived schema", async () => {
