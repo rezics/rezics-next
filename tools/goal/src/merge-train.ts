@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import defaults from '../defaults.json';
 import { StaleAttemptError } from './contracts.ts';
@@ -55,6 +55,7 @@ export function rebaseOnto(cwd: string, base: string, originalBase: string, logP
 
 export type TrainOptions = {
   mainCheckout: string; stateDirectory: string; worktreeRoot: string;
+  formatCommand?: string[];
   queue: SqliteLandingQueue; fence: AttemptFence; sink: GateOutcomeSink;
   runGate?: GateRunner; gateIdentity?: string; mainBranch?: string; integrationBranch?: string;
   codeIsCurrent?: () => boolean; handOff?: () => void | Promise<void>;
@@ -184,6 +185,30 @@ export class MergeTrain {
         result.nonGeneratedDiffLines = diffLineCount(trainTree, base, result.nonGeneratedChangedFiles);
         const outside = outsideScope(result.changedFiles, request.declaredPaths);
         if (outside.length) throw new Error(`Changes outside declared paths: ${outside.join(', ')}`);
+        if (integratesIntoDev) {
+          const formatCommand = o.formatCommand ?? [resolve(o.mainCheckout, 'node_modules/.bin/oxfmt')];
+          const formatFiles = result.changedFiles.filter(path => existsSync(join(trainTree, path)));
+          // Small isolated Git fixtures do not carry the repository's installed formatter.
+          const formatterAvailable = !formatCommand[0]!.endsWith('/node_modules/.bin/oxfmt') || existsSync(formatCommand[0]!);
+          if (formatFiles.length && formatterAvailable) {
+            stage = 'setup';
+            const formatted = spawnSync(formatCommand[0]!, [...formatCommand.slice(1), ...formatFiles], { cwd: trainTree, encoding: 'utf8' });
+            const output = `${formatted.stdout ?? ''}${formatted.stderr ?? ''}`;
+            appendFileSync(logPath, `$ ${[...formatCommand, ...formatFiles].join(' ')} (cwd: ${trainTree})\n${output}`);
+            if (formatted.status !== 0) throw new Error(`Formatter failed: ${output || formatted.error?.message || 'command failed'}`);
+            if (spawnSync('git', ['diff', '--quiet', 'HEAD', '--'], { cwd: trainTree }).status !== 0) {
+              git(trainTree, 'add', '--', ...formatFiles);
+              git(trainTree, 'commit', '-m', `style: format ${request.taskId}`);
+            }
+            stage = 'scope';
+            result.changedFiles = changedFiles(trainTree, base);
+            result.diffLines = diffLineCount(trainTree, base);
+            result.nonGeneratedChangedFiles = nonGeneratedFiles(trainTree, result.changedFiles);
+            result.nonGeneratedDiffLines = diffLineCount(trainTree, base, result.nonGeneratedChangedFiles);
+            const formattedOutside = outsideScope(result.changedFiles, request.declaredPaths);
+            if (formattedOutside.length) throw new Error(`Changes outside declared paths: ${formattedOutside.join(', ')}`);
+          }
+        }
         const candidate = git(trainTree, 'rev-parse', 'HEAD');
         if (!integratesIntoDev) {
           stage = 'gate';

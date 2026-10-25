@@ -75,7 +75,7 @@ purchase or reset-card redemption path.
 
 `mainCheckout`, `stateDirectory`, `worktreeRoot`, `mainBranch`, `integrationBranch`, `promotionParallelism`,
 `branchPrefix`, `terminationGraceMs`,
-`gate`, `routingFile` and `riskAreasFile` can be set locally. Git's common directory identifies the main checkout even
+`gate`, `formatCommand` (an argv array, defaulting to `node_modules/.bin/oxfmt`), `routingFile` and `riskAreasFile` can be set locally. Git's common directory identifies the main checkout even
 when invoked from a linked worktree. Repository paths resolve against that main checkout. Pool configuration paths,
 usage files and executable paths containing a slash resolve against the local file's directory.
 `integrationBranch` defaults to `dev`; `promotionParallelism` defaults to `4` and caps concurrent promotion checks.

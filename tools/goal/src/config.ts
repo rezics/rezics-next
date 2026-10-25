@@ -52,7 +52,7 @@ export function loadSettings(options: SettingsOptions = {}): Settings {
   const localFile = resolve(cwd, options.localFile ?? env.GOAL_LOCAL_CONFIG ?? join(initialMain, '.temp/goal/local.json'));
   const local = existsSync(localFile) ? object(JSON.parse(readFileSync(localFile, 'utf8')), 'local settings') : {};
   keys(local, ['version', 'mainCheckout', 'stateDirectory', 'worktreeRoot', 'mainBranch', 'integrationBranch', 'promotionParallelism', 'branchPrefix',
-    'terminationGraceMs', 'gate', 'codex', 'routingFile', 'riskAreasFile', 'integration', 'pools'], 'settings');
+    'terminationGraceMs', 'gate', 'formatCommand', 'codex', 'routingFile', 'riskAreasFile', 'integration', 'pools'], 'settings');
   if (local.version !== undefined && local.version !== 1) throw new Error('unsupported local settings version');
   const main = resolve(dirname(localFile), env.GOAL_MAIN_CHECKOUT ?? String(local.mainCheckout ?? initialMain));
   // Keeping credentials and account policy untracked is checked even for an explicitly selected file.
@@ -66,6 +66,9 @@ export function loadSettings(options: SettingsOptions = {}): Settings {
   keys(managerLimits, Object.keys(defaults.integration.managerLimits), 'managerLimits');
   const gate = local.gate ?? defaults.gate;
   if (!Array.isArray(gate) || !gate.length || gate.some(item => typeof item !== 'string' || !item)) throw new Error('gate must be a command array');
+  const formatCommand = local.formatCommand ?? [resolve(main, 'node_modules/.bin/oxfmt')];
+  if (!Array.isArray(formatCommand) || !formatCommand.length || formatCommand.some(item => typeof item !== 'string' || !item))
+    throw new Error('formatCommand must be a command array');
   const codex: Record<string, unknown> = { ...defaults.codex, ...object(local.codex ?? {}, 'codex') };
   keys(codex, Object.keys(defaults.codex), 'codex');
   const compact = { ...defaults.codex.compactTokens, ...object(codex.compactTokens, 'compactTokens') };
@@ -101,7 +104,7 @@ export function loadSettings(options: SettingsOptions = {}): Settings {
     integrationBranch: text(local.integrationBranch ?? 'dev', 'integrationBranch'),
     promotionParallelism: positive(local.promotionParallelism ?? 4, 'promotionParallelism'),
     routingFile: path(local.routingFile, join(import.meta.dir, '../routing.json')),
-    gate: gate as string[], riskAreasFile: path(local.riskAreasFile, join(import.meta.dir, '../risk-areas.json')), pools,
+    gate: gate as string[], formatCommand: formatCommand as string[], riskAreasFile: path(local.riskAreasFile, join(import.meta.dir, '../risk-areas.json')), pools,
     terminationGraceMs: positive(local.terminationGraceMs ?? defaults.terminationGraceMs, 'terminationGraceMs', true),
     codex: { serviceTier: text(env.GOAL_CODEX_SERVICE_TIER ?? codex.serviceTier, 'serviceTier'),
       compactTokens: { sol: positive(compact.sol, 'compactTokens.sol'), luna: positive(compact.luna, 'compactTokens.luna') },
@@ -166,6 +169,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   });
   train = new MergeTrain({ mainCheckout: settings.mainCheckout, stateDirectory: settings.stateDirectory,
     worktreeRoot: settings.worktreeRoot, mainBranch: settings.mainBranch, integrationBranch: settings.integrationBranch,
+    formatCommand: settings.formatCommand,
     queue, fence: store, sink: job,
     promote: () => promote({ settings, job, runGate, ...(options.train?.beforePromotionAdvance ? { beforeAdvance: options.train.beforePromotionAdvance } : {}) }),
     runGate, gateIdentity: JSON.stringify(settings.gate), codeIsCurrent, handOff, ...options.train });

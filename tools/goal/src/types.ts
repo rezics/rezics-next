@@ -17,7 +17,7 @@ export type Pool = {
 export type Settings = {
   version: 1; mainCheckout: string; stateDirectory: string; worktreeRoot: string;
   mainBranch: string; integrationBranch: string; promotionParallelism: number; branchPrefix: string; localFile: string; pools: Pool[];
-  routingFile: string; riskAreasFile: string; gate: string[];
+  routingFile: string; riskAreasFile: string; gate: string[]; formatCommand: string[];
   terminationGraceMs: number;
   codex: { serviceTier: string; compactTokens: { sol: number; luna: number }; solContextWindow: number; toolOutputTokens: number };
   integration: {
