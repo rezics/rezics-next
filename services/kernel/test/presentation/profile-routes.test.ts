@@ -46,7 +46,17 @@ const access: Access = {
     return actor.kind === 'account' && actor.accountId === actors.curator!.accountId && resource.id === GLOBAL_CONTEXT;
   },
 };
-const kernel = createKernel({ pool, access, tokens, routeKey: new Uint8Array(32).fill(6) });
+const kernel = createKernel({
+  pool,
+  access,
+  tokens,
+  routeKey: new Uint8Array(32).fill(6),
+  writeRate: {
+    async spend() {
+      return { allowed: true };
+    },
+  },
+});
 
 async function call(method: string, path: string, options: { token?: string; key?: string; body?: unknown } = {}) {
   const headers: Record<string, string> = {};
