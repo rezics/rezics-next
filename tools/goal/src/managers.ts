@@ -7,6 +7,7 @@ import type { AppServer, CodexPool, Notification } from './app-server.ts';
 import { connectPool, textInput } from './app-server.ts';
 import { migrate } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
+import type { ProcessIdentity } from './process.ts';
 import type { ManagerWindows } from './windows.ts';
 
 export type ManagerLimits = { turns: number; turnsWithoutDecision: number; wallMs: number };
@@ -24,12 +25,13 @@ export type ManagerState = ManagerSpec & {
 };
 export type CompletionEvidence = { passed: boolean; evidencePath: string; summary: string };
 export type ManagerServices = {
-  connect?: (pool: CodexPool) => Promise<AppServer>;
+  connect?: (pool: CodexPool, onStart?: (identity: ProcessIdentity) => void) => Promise<AppServer>;
   windows: ManagerWindows;
   checkCompletion(goal: string): Promise<CompletionEvidence>;
   /** The CLI prefix includes its runtime composition module, if any. */
   command: string[];
   now?: () => number;
+  onAppServerStart?(identity: ProcessIdentity): void;
   onError?: (error: unknown) => void;
 };
 
@@ -76,14 +78,29 @@ export class ManagerSessions {
   }
   private client(pool: CodexPool): Promise<AppServer> {
     const key = pool.codexHome;
-    let client = this.pools.get(key);
-    if (!client) {
-      client = (this.services.connect ?? connectPool)(pool).then(server => {
-        this.unsubscribers.push(server.onNotification(notification => this.notification(notification))); return server;
-      });
-      this.pools.set(key, client);
-      void client.catch(() => this.pools.delete(key));
-    }
+    const existing = this.pools.get(key);
+    if (existing) return existing;
+    const tracked = new Set<string>();
+    const onStart = (identity: ProcessIdentity) => {
+      const key = `${identity.pid}:${identity.start}:${identity.boot}`;
+      if (tracked.has(key)) return;
+      tracked.add(key);
+      this.services.onAppServerStart?.(identity);
+    };
+    const connecting = this.services.connect
+      ? this.services.connect(pool, onStart)
+      : connectPool(pool, onStart);
+    const client = connecting.then(async server => {
+      try {
+        if (server.identity) onStart(server.identity);
+      } catch (error) {
+        await server.close();
+        throw error;
+      }
+      this.unsubscribers.push(server.onNotification(notification => this.notification(notification))); return server;
+    });
+    this.pools.set(key, client);
+    void client.catch(() => this.pools.delete(key));
     return client;
   }
   private notification(notification: Notification): void {
@@ -119,6 +136,12 @@ export class ManagerSessions {
         : `When no decision is pending, run ${this.services.command.join(' ')} inbox wait ${spec.id} as a background command and end the turn. `) +
       'Read and acknowledge inbox events. Do not perform mechanical gates, retries or merges yourself.';
   }
+  private registerCodexViewer(state: ManagerState, client: AppServer): void {
+    const viewer = [state.pool.executable ?? 'codex', 'resume', state.threadId!];
+    if (client.endpoint) viewer.push('--remote', client.endpoint);
+    this.services.windows.register(state.id, ['env', `CODEX_HOME=${state.pool.codexHome}`, `GOAL_MANAGER=${state.id}`,
+      ...viewer], state.cwd);
+  }
   async start(spec: ManagerSpec): Promise<ManagerState> {
     return this.serial(spec.id, async () => {
       if (!Number.isSafeInteger(spec.budget) || spec.budget <= 0 || Object.values(spec.limits).some(n => !Number.isFinite(n) || n <= 0))
@@ -139,10 +162,7 @@ export class ManagerSessions {
           const goal = await client.request('thread/goal/set', { threadId: state.threadId, objective: spec.objective,
             status: 'active', tokenBudget: spec.budget, origin: 'user' });
           state.goalState = goal.goal; state.status = 'running'; this.save(state);
-          const viewer = [spec.pool.executable ?? 'codex', 'resume', state.threadId!];
-          if (client.endpoint) viewer.push('--remote', client.endpoint);
-          this.services.windows.register(spec.id, ['env', `CODEX_HOME=${spec.pool.codexHome}`, `GOAL_MANAGER=${spec.id}`,
-            ...viewer], spec.cwd);
+          this.registerCodexViewer(state, client);
           const turn = await client.request('turn/start', { threadId: state.threadId, effort: spec.effort, input: textInput(this.opening(spec)) });
           this.turnStarted(state, turn.turn.id);
         } else {
@@ -309,6 +329,11 @@ export class ManagerSessions {
         }
         if (state.status === 'starting') { state.status = 'paused'; this.save(state); await this.pauseRemote(state); return; }
         this.save(state);
+        if (state.engine === 'codex' && state.threadId) {
+          const client = await this.client(state.pool);
+          this.services.windows.unregister(state.id);
+          this.registerCodexViewer(state, client);
+        }
         if (!await this.checkLimits(state)) {
           if (state.goalState?.status === 'complete') await this.completeInternal(state.id);
           else await this.dispatch(state.id);
@@ -322,6 +347,6 @@ export class ManagerSessions {
     for (const unsubscribe of this.unsubscribers) unsubscribe();
     for (const timer of this.timers.values()) clearTimeout(timer);
     await this.flush();
-    for (const client of this.pools.values()) { try { (await client).close(); } catch {} }
+    for (const client of this.pools.values()) { try { await (await client).close(); } catch {} }
   }
 }

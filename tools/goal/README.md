@@ -196,14 +196,15 @@ bun tools/goal/src/cli.ts inbox send <manager> <kind> <summary> [--task <task>] 
 
 `inbox send` delivers a one-line decision event to another manager and records the sending manager as its source.
 
-`land` and `train` use the same queue and sink as dispatch. The manager host starts automatically and persists until
-stopped. An untracked `<managerDirectory>/<goal>.json` can select a local `pool`, `objective`, `brief`, `effort`,
-`supermanager` and `limits`; otherwise scoped task briefs and a matching local manager pool supply the defaults.
-Termspaces owns the tmux windows. Each manager host starts a loopback WebSocket app-server for its Codex pool, and
-the interactive viewer attaches to that same server with `codex resume <thread> --remote <endpoint>`. The host owns
-the server process and stops it when the host closes; a restarted host starts a new server and resumes persisted
-threads with `thread/resume`. Codex managers use a goal budget. Claude uses its configured executable and
-configuration directory, interactive window and turn-accounting hooks.
+`land` and `train` use the same queue and sink as dispatch. Every `manager` command starts the manager host when needed;
+the host persists until stopped and exits when its 60-second sweep finds its state directory missing. An untracked
+`<managerDirectory>/<goal>.json` can select a local `pool`, `objective`, `brief`, `effort`, `supermanager` and `limits`;
+otherwise scoped task briefs and a matching local manager pool supply the defaults. Termspaces owns the tmux windows.
+Each manager host starts a loopback WebSocket app-server for its Codex pool and records the process identity. The host
+stops those app-servers on shutdown, and a replacement host stops any surviving app-server before resuming persisted
+threads. Recovery reopens each Codex viewer on the current endpoint with `codex resume <thread> --remote <endpoint>`.
+Codex managers use a goal budget. Claude uses its configured executable and configuration directory, interactive
+window and turn-accounting hooks.
 
 Manager events are committed to SQLite and signaled through filesystem notifications. Inbox waiting has no sleep loop.
 Managers receive only decisions requiring judgment; gates, merges and mechanical reruns do not wake them. Completion is

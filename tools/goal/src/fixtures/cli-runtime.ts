@@ -10,6 +10,7 @@ export function createIntegrationRuntime(): IntegrationRuntime {
   return {
     db: openDb(join(stateDirectory, 'state.sqlite')), mainCheckout, stateDirectory,
     worktreeRoot: join(stateDirectory, 'trees'), managerSocket: join(stateDirectory, 'manager.sock'),
+    hostSweepIntervalMs: Number(process.env.FAKE_GOAL_HOST_SWEEP_MS ?? 60_000),
     supermanager: 'supermanager',
     hostCommand: [process.execPath, import.meta.filename],
     fence: { assertCurrent() {}, commitMerge(_ref, merge) { return merge(); } }, sink: { onGateOutcome() {} },

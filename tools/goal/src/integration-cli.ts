@@ -2,7 +2,8 @@ import type { Database } from 'bun:sqlite';
 import { spawn } from 'node:child_process';
 import { createServer, createConnection } from 'node:net';
 import { createInterface } from 'node:readline';
-import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync } from 'node:fs';
+import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import type { AttemptFence, GateOutcomeSink, LandingRequest, ManagerEventKind } from './contracts.ts';
 import { SqliteLandingQueue } from './land.ts';
@@ -10,10 +11,12 @@ import { MergeTrain } from './merge-train.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { ManagerSessions, type ManagerServices, type ManagerSpec } from './managers.ts';
 import { acquireDirectoryLease } from './lease.ts';
+import { processIdentity, sameProcess, type ProcessIdentity } from './process.ts';
 
 /** Composition belongs to the caller; this module never reads worker configuration or tables. */
 export type IntegrationRuntime = {
   queue?: SqliteLandingQueue; inbox?: SqliteManagerInbox; pump?(): Promise<void>; drain?(): Promise<void>; hostCommand?: string[];
+  hostSweepIntervalMs?: number;
   codeIsCurrent?(): boolean; recoverOrphans?(): Promise<void>;
   db: Database; mainCheckout: string; stateDirectory: string; worktreeRoot: string; managerSocket: string;
   supermanager?: string;
@@ -24,6 +27,58 @@ export type IntegrationRuntime = {
 };
 export type HostRequest = { command: 'start' | 'stop' | 'complete' | 'decision' | 'turn-start' | 'turn-end';
   manager?: string; spec?: ManagerSpec };
+
+const appServerRegistryName = 'manager-app-servers.json';
+
+function isProcessIdentity(value: unknown): value is ProcessIdentity {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const identity = value as Partial<ProcessIdentity>;
+  return Number.isSafeInteger(identity.pid) && identity.pid! > 0 && typeof identity.start === 'string'
+    && typeof identity.boot === 'string' && Number.isSafeInteger(identity.group) && identity.group! > 0;
+}
+
+function readAppServerRegistry(path: string): ProcessIdentity[] {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(path, 'utf8'));
+    if (!Array.isArray(parsed) || !parsed.every(isProcessIdentity)) throw new Error(`Invalid app-server process registry: ${path}`);
+    return parsed;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw error;
+  }
+}
+
+function writeAppServerRegistry(path: string, identities: ProcessIdentity[]): void {
+  const temporary = `${path}.${randomUUID()}.tmp`;
+  try {
+    writeFileSync(temporary, JSON.stringify(identities), { mode: 0o600 });
+    renameSync(temporary, path);
+  } finally { rmSync(temporary, { force: true }); }
+}
+
+async function waitForProcessExit(identity: ProcessIdentity, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (sameProcess(identity) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
+  return !sameProcess(identity);
+}
+
+async function stopRecordedAppServer(identity: ProcessIdentity): Promise<void> {
+  if (!sameProcess(identity)) return;
+  try { process.kill(identity.pid, 'SIGTERM'); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
+  if (await waitForProcessExit(identity, 500)) return;
+  if (sameProcess(identity)) {
+    try { process.kill(identity.pid, 'SIGKILL'); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
+  }
+  if (!await waitForProcessExit(identity, 5000)) throw new Error(`App-server process did not exit: ${identity.pid}`);
+}
+
+async function stopRecordedAppServers(path: string): Promise<void> {
+  const identities = readAppServerRegistry(path);
+  for (const identity of identities) await stopRecordedAppServer(identity);
+  rmSync(path, { force: true });
+}
 
 export function hostRequest(socketPath: string, request: HostRequest): Promise<any> {
   return new Promise((resolve, reject) => {
@@ -70,18 +125,15 @@ async function ensureHost(runtime: IntegrationRuntime): Promise<void> {
 }
 
 export async function serveManagers(runtime: IntegrationRuntime): Promise<void> {
+  const stateSweepIntervalMs = runtime.hostSweepIntervalMs ?? 60_000;
+  if (!Number.isSafeInteger(stateSweepIntervalMs) || stateSweepIntervalMs <= 0)
+    throw new Error('Manager host state sweep interval must be a positive integer');
   const lease = acquireDirectoryLease(`${runtime.managerSocket}.lease`);
-  const inbox = runtime.inbox ?? new SqliteManagerInbox(runtime.db, runtime.stateDirectory);
-  const managers = new ManagerSessions(runtime.db, inbox, runtime.managerServices);
-  rmSync(runtime.managerSocket, { force: true });
   let activeRequests = 0, restart = false, stopServer: (() => void) | undefined;
   let stopRequested = false;
-  const stopWhenIdle = () => { if (stopRequested && activeRequests === 0) stopServer?.(); };
-  const requestRestart = () => {
-    restart = true; stopRequested = true;
-    server.close();
-    stopWhenIdle();
-  };
+  let registrySafe = false;
+  let managers!: ManagerSessions;
+  const registryPath = join(runtime.stateDirectory, appServerRegistryName);
   const server = createServer(socket => {
     const lines = createInterface({ input: socket });
     lines.once('line', async line => {
@@ -110,7 +162,17 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
     });
     socket.on('error', () => {});
   });
-  let checkTimer: ReturnType<typeof setInterval> | undefined;
+  const stopWhenIdle = () => { if (stopRequested && activeRequests === 0) stopServer?.(); };
+  const closeServer = () => { if (server.listening) server.close(); };
+  const requestRestart = () => {
+    restart = true; stopRequested = true;
+    closeServer();
+    stopWhenIdle();
+  };
+  const stop = () => { stopRequested = true; closeServer(); stopWhenIdle(); };
+  process.once('SIGTERM', stop); process.once('SIGINT', stop);
+  let codeTimer: ReturnType<typeof setInterval> | undefined;
+  let stateTimer: ReturnType<typeof setInterval> | undefined;
   let recoveryTimer: ReturnType<typeof setInterval> | undefined;
   let recovery: Promise<void> | undefined;
   const recoverOrphans = () => {
@@ -122,8 +184,22 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
     return recovery;
   };
   try {
+    await stopRecordedAppServers(registryPath);
+    registrySafe = true;
+    const inbox = runtime.inbox ?? new SqliteManagerInbox(runtime.db, runtime.stateDirectory);
+    const onAppServerStart = runtime.managerServices.onAppServerStart;
+    managers = new ManagerSessions(runtime.db, inbox, { ...runtime.managerServices,
+      onAppServerStart(identity) {
+        const records = readAppServerRegistry(registryPath).filter(record => record.pid !== identity.pid);
+        records.push(identity);
+        writeAppServerRegistry(registryPath, records);
+        onAppServerStart?.(identity);
+      },
+    });
+    rmSync(runtime.managerSocket, { force: true });
     await recoverOrphans();
     await managers.recover();
+    if (stopRequested) return;
     await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(runtime.managerSocket, resolve); });
     chmodSync(runtime.managerSocket, 0o600);
     console.log('ready');
@@ -131,20 +207,31 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
     recoveryTimer.unref();
     await new Promise<void>(resolve => {
       stopServer = resolve;
-      const stop = () => { stopRequested = true; stopWhenIdle(); };
-      process.once('SIGTERM', stop); process.once('SIGINT', stop);
+      if (stopRequested) stopWhenIdle();
       if (runtime.codeIsCurrent) {
-        checkTimer = setInterval(() => {
+        codeTimer = setInterval(() => {
           try { if (!runtime.codeIsCurrent!()) requestRestart(); } catch {}
         }, 1000);
-        checkTimer.unref();
+        codeTimer.unref();
         try { if (!runtime.codeIsCurrent()) requestRestart(); } catch {}
       }
+      stateTimer = setInterval(() => {
+        if (!existsSync(runtime.stateDirectory)) { stop(); return; }
+        if (runtime.codeIsCurrent) {
+          try { if (!runtime.codeIsCurrent()) requestRestart(); } catch {}
+        }
+      }, stateSweepIntervalMs);
+      stateTimer.unref();
     });
   } finally {
     if (recoveryTimer) clearInterval(recoveryTimer);
-    if (checkTimer) clearInterval(checkTimer);
-    server.close(); await managers.close(); rmSync(runtime.managerSocket, { force: true }); lease.release();
+    if (codeTimer) clearInterval(codeTimer);
+    if (stateTimer) clearInterval(stateTimer);
+    closeServer();
+    if (managers) await managers.close();
+    rmSync(runtime.managerSocket, { force: true });
+    if (registrySafe) rmSync(registryPath, { force: true });
+    lease.release();
   }
   if (restart) {
     const argv = [...(runtime.hostCommand ?? [process.execPath, join(runtime.mainCheckout, 'tools/goal/src/cli.ts')]), '_manager-host'];
@@ -206,6 +293,7 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
       await recordManagerCommand(runtime);
       console.log(JSON.stringify(await hostRequest(runtime.managerSocket, { command: 'start', spec: runtime.manager(id, engine, budget) })));
     } else if (subcommand && ['stop', 'complete', 'decision', 'turn-start', 'turn-end'].includes(subcommand)) {
+      await ensureHost(runtime);
       if (subcommand === 'complete' || subcommand === 'stop') await recordManagerCommand(runtime);
       const result = await hostRequest(runtime.managerSocket, { command: subcommand as HostRequest['command'], manager: id });
       if (subcommand === 'complete' && result === false) return 1;

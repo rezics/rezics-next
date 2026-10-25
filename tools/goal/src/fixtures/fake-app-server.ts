@@ -1,13 +1,23 @@
 import { appendFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
+import { processIdentity } from '../process.ts';
 const log = process.env.FAKE_RPC_LOG!;
 let nextThread = 0; let nextTurn = 0;
 const goals = new Map<string, any>();
 const turns = new Map<string, any>();
 const send = (message: unknown) => process.stdout.write(`${JSON.stringify(message)}\n`);
+if (process.env.FAKE_APP_SERVER_PERSIST === '1') {
+  process.on('SIGTERM', () => {});
+  setInterval(() => {}, 60_000);
+}
 createInterface({ input: process.stdin }).on('line', line => {
   const message = JSON.parse(line);
-  appendFileSync(log, `${JSON.stringify(message)}\n`);
+  const requiredStoppedPid = Number(process.env.FAKE_APP_SERVER_MUST_STOP_PID);
+  const oldProcessAlive = Number.isSafeInteger(requiredStoppedPid) && requiredStoppedPid > 0
+    ? processIdentity(requiredStoppedPid) !== null : undefined;
+  appendFileSync(log, `${JSON.stringify({ ...message,
+    ...(message.method === 'thread/resume' && oldProcessAlive !== undefined ? { oldProcessAlive } : {}),
+  })}\n`);
   if (message.id === undefined) return;
   const p = message.params;
   let result: any = {};

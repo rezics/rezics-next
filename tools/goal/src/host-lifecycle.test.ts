@@ -3,6 +3,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { createInterface } from 'node:readline';
+import type { AppServer } from './app-server.ts';
 import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { ManagerSessions, type ManagerSpec } from './managers.ts';
@@ -63,18 +64,23 @@ function signal(identity: ProcessIdentity | undefined, value: NodeJS.Signals): v
 }
 
 async function cleanHosted(stateDirectory: string, host?: Hosted, knownChildren: ProcessIdentity[] = []): Promise<void> {
-  const serverIdentity = hostIdentity(stateDirectory);
-  const childrenBeforeExit = [...knownChildren, ...(host ? children(host.pid) : []), ...(serverIdentity ? [serverIdentity] : [])];
+  const owner = hostIdentity(stateDirectory);
+  const appServers = join(stateDirectory, 'manager-app-servers.json');
+  let recorded: ProcessIdentity[] = [];
+  try { recorded = JSON.parse(readFileSync(appServers, 'utf8')) as ProcessIdentity[]; } catch {}
+  const childrenBeforeExit = [...knownChildren, ...recorded, ...(host ? children(host.pid) : owner ? children(owner.pid) : [])];
   if (host && host.child.exitCode === null && host.child.signalCode === null) {
     host.child.kill('SIGTERM');
     await Promise.race([host.exited, new Promise(resolve => setTimeout(resolve, 5000))]);
     if (host.child.exitCode === null && host.child.signalCode === null) host.child.kill('SIGKILL');
     await host.exited;
+  } else if (!host && owner && sameProcess(owner)) {
+    signal(owner, 'SIGTERM');
+    const deadline = Date.now() + 5000;
+    while (sameProcess(owner) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
+    signal(owner, 'SIGKILL');
   }
-  signal(serverIdentity, 'SIGTERM');
   for (const child of childrenBeforeExit) signal(child, 'SIGKILL');
-  const identity = hostIdentity(stateDirectory);
-  signal(identity, 'SIGKILL');
 }
 
 test('the app-server a host owns exits with the host', async () => {
@@ -138,12 +144,12 @@ test('recovery reopens each codex viewer window on the current endpoint', async 
     command: ['goal'],
     windows: { register(_id: string, argv: string[], cwd: string) { registrations.push({ argv, cwd }); return '@1'; }, unregister() {} },
     checkCompletion: async () => ({ passed: false, evidencePath: 'completion.log', summary: 'not complete' }),
-    connect: async () => ({ endpoint, async request(method: string, params: any) {
-      if (method === 'thread/start') return { thread: { id: 'thread-1' } };
-      if (method === 'thread/goal/set') return { goal: { status: params.status, tokensUsed: 0, timeUsedSeconds: 0 } };
-      if (method === 'turn/start') return { turn: { id: 'turn-1' } };
-      if (method === 'thread/resume') return { thread: { id: params.threadId, turns: [] } };
-      if (method === 'thread/goal/get') return { goal: { status: 'active', tokensUsed: 0, timeUsedSeconds: 0 } };
+    connect: async (): Promise<AppServer> => ({ endpoint, async request<T>(method: string, params: any): Promise<T> {
+      if (method === 'thread/start') return { thread: { id: 'thread-1' } } as T;
+      if (method === 'thread/goal/set') return { goal: { status: params.status, tokensUsed: 0, timeUsedSeconds: 0 } } as T;
+      if (method === 'turn/start') return { turn: { id: 'turn-1' } } as T;
+      if (method === 'thread/resume') return { thread: { id: params.threadId, turns: [] } } as T;
+      if (method === 'thread/goal/get') return { goal: { status: 'active', tokensUsed: 0, timeUsedSeconds: 0 } } as T;
       throw new Error(`unexpected RPC ${method}`);
     }, onNotification() { return () => {}; }, close() {} }),
   };
