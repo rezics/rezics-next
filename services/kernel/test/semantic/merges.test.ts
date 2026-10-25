@@ -133,7 +133,7 @@ const edition = (title: string, workId: string) =>
     labels: { en: title },
     statements: { 'schema:exampleOfWork': [statement('schema:exampleOfWork', workId)] },
   });
-const byId = <T extends { id: string }>(a: T, b: T) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+const byId = (a: Record<string, any>, b: Record<string, any>) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 const linkOf = (source: Record<string, any>, property: string) => ({
   subject: source.id as string,
   property,

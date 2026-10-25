@@ -436,7 +436,9 @@ test('a community Context inherits, rejects, suppresses and replaces without cha
   expect((await view(book.id, context)).subject).toEqual({ ...global.subject, context });
   const rejected = await decide(book.id, original.id, 'reject', context, null);
   expect(rejected.body.acceptance).toEqual({ context, candidate: original.id, decision: 'reject', head: 1 });
-  expect(checks.at(-1)).toEqual({ action: 'context:accept', route: routeOf(context), id: context });
+  const contextRoute = routeOf(context);
+  if (contextRoute === null) throw new Error('Community Context id must carry its route');
+  expect(checks.at(-1)).toEqual({ action: 'context:accept', route: contextRoute, id: context });
   expect((await listed(book.id, 'schema:author', `&context=${context}`)).candidates).toMatchObject([
     { id: original.id, decision: 'rejected', head: 1, rank: null },
   ]);

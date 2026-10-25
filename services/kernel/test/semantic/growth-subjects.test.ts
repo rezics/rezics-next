@@ -1,10 +1,12 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { openGrowthDatabase, checkGrowth, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import { createSubject, readLabels, readSubject, subjectTarget } from '../../src/semantic/subject.ts';
 import { runCommand } from '../../src/command/command.ts';
-import { itemFacts, resolveItem } from '../../src/semantic/item.ts';
+import { factDataTypes, itemFacts, resolveItem } from '../../src/semantic/item.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { pageSubjects } from '../../src/semantic/page.ts';
 import { accessCheck, type AccountActor } from '../../src/request/access.ts';
 import { createAccess } from '../../src/access/permission.ts';
@@ -26,6 +28,14 @@ const actor: AccountActor = {
   authnEpoch: 1,
 };
 const keyring: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(19)]]) };
+const itemType = 'schema:Book';
+function projectSubject(id: string, facts: ReturnType<typeof itemFacts>) {
+  return resolveItem(id, facts, itemType, factDataTypes(bundledRelease, facts), {
+    revision: 1,
+    release: bundledDigest,
+    context: GLOBAL_CONTEXT,
+  });
+}
 function subjectPopulation(hotPartition: number, name = 'semantic-subject-growth'): Population {
   return {
     name,
@@ -50,14 +60,15 @@ function subjectPopulation(hotPartition: number, name = 'semantic-subject-growth
         1_000_000_000 + createHash('sha256').update(name).digest().readUIntBE(0, 3) * 2_100_000 + ordinal * 128;
       const receiptRows = Array.from({ length: 4 }, (_, index) => ({
         partition_no: route >>> 4,
-        actor_account_id: index === 0 ? actor.accountId : newId(route),
+        principal_kind: 'account',
+        principal_id: index === 0 ? actor.accountId : newId(route),
         command_kind: 'subject.create',
         idempotency_key: `${ordinal}-${index}-${randomUUID()}`,
         request_digest: createHash('sha256').update(`${ordinal}-${index}`).digest(),
         epoch: 1,
         position: position + index,
         transaction_id: randomUUID(),
-        response: resolveItem(id, facts),
+        response: projectSubject(id, facts),
       }));
       const outboxRows = Array.from({ length: 4 }, (_, index) => ({
         partition_no: route >>> 4,
@@ -75,7 +86,8 @@ function subjectPopulation(hotPartition: number, name = 'semantic-subject-growth
         transaction_id: randomUUID(),
         epoch: 1,
         position: position + index,
-        actor_account_id: actor.accountId,
+        principal_kind: 'account',
+        principal_id: actor.accountId,
         client_id: actor.clientId,
         requested_by: null,
       }));
@@ -94,10 +106,11 @@ let partition = 0;
 let anchorRoute = 0;
 let account: Awaited<ReturnType<typeof readAccount>>;
 const cursors = new Map<number, string>();
-const subject = { labels: { en: 'Growth anchor' } };
+const subject = { type: itemType, labels: { en: 'Growth anchor' } };
 
 beforeAll(async () => {
   db = await openGrowthDatabase(databaseUrl);
+  await bootstrapRelease(db.pool, bundledRelease);
   const target = subjectTarget(routeKey, actor.accountId, `growth-anchor-${randomUUID()}`);
   anchor = target.id;
   partition = partitionOf(target.route);
@@ -108,6 +121,7 @@ beforeAll(async () => {
     idempotencyKey: randomUUID(),
     digest: createHash('sha256').update(anchor).digest(),
     item: subject,
+    release: { digest: bundledDigest, release: bundledRelease },
     authorize: async () => true,
   });
   await db.admin.query(
@@ -133,6 +147,7 @@ async function grow(database: GrowthDatabase, scale: number, previous: number, n
     from: previous * ordinalsPerScale,
     to: scale * ordinalsPerScale,
   });
+  await database.admin.query('CHECKPOINT');
 }
 
 test('Subject creation stays within its bound as N grows', async () => {
@@ -149,6 +164,7 @@ test('Subject creation stays within its bound as N grows', async () => {
         idempotencyKey: key,
         digest: createHash('sha256').update(key).digest(),
         item: subject,
+        release: { digest: bundledDigest, release: bundledRelease },
         authorize: async () => true,
       });
     },
@@ -179,6 +195,7 @@ test('Command and receipt stays within its bound as N grows', async () => {
           async () => ({ value: null, events: [{ type: 'com.rezics.growth.v1', data: { ordinal } }] }),
         );
       }
+      await database.admin.query('CHECKPOINT');
     },
     operation: async (database, scale, repetition) => {
       const key = `growth-command-${scale}-${repetition}-${randomUUID()}`;
@@ -248,12 +265,12 @@ test('Item projection and related labels stays within its bound as P grows', asy
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     grow: (database, scale, previous) => grow(database, scale, previous, 'semantic-related-growth'),
     operation: async (database) => {
-      resolveItem(anchor, itemFacts(anchor, subject));
+      projectSubject(anchor, itemFacts(anchor, subject));
       return readLabels(database.pool, [anchor]);
     },
   });
   expect(report.samples).toHaveLength(3);
-  expect(resolveItem(anchor, itemFacts(anchor, subject)).labels).toEqual(subject.labels);
+  expect(projectSubject(anchor, itemFacts(anchor, subject)).labels).toEqual(subject.labels);
 }, 90_000);
 
 test('Batch label fill stays within its bound as P grows', async () => {

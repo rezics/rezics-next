@@ -4,7 +4,14 @@ import { createPool } from '../../src/database/pool.ts';
 import { newId } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT, StaleEditorialHeadError } from '../../src/semantic/definitions.ts';
 import { itemFacts } from '../../src/semantic/item.ts';
-import { expandSlot, insertAcceptance, insertAdoption, resolveSlot, slotView } from '../../src/semantic/slots.ts';
+import {
+  expandSlot,
+  insertAcceptance,
+  insertAdoption,
+  resolveSlot,
+  slotId,
+  slotView,
+} from '../../src/semantic/slots.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -84,10 +91,11 @@ test('expansion preserves multiple compact revisions, view order, provenance and
     expect(expansions.rows).toEqual([{ log_seq: 33 }]);
 
     const candidate = statements[0]!.statement_id!;
+    const slot = slotId(subject, property);
     await expect(
-      insertAcceptance(client, subject, candidate, GLOBAL_CONTEXT, null, 'reject', 3),
+      insertAcceptance(client, subject, candidate, GLOBAL_CONTEXT, null, 'reject', 3, slot),
     ).rejects.toBeInstanceOf(StaleEditorialHeadError);
-    expect(await insertAcceptance(client, subject, candidate, GLOBAL_CONTEXT, 1, 'abstain', 3)).toBe(2);
+    expect(await insertAcceptance(client, subject, candidate, GLOBAL_CONTEXT, 1, 'abstain', 3, slot)).toBe(2);
     await expect(
       insertAdoption(client, subject, property, GLOBAL_CONTEXT, 1, 'suppress', [], 3),
     ).rejects.toBeInstanceOf(StaleEditorialHeadError);

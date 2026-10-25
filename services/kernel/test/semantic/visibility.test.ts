@@ -99,11 +99,13 @@ const comparable = (body: Record<string, any>) => {
   return rest;
 };
 async function events(id: string): Promise<{ type: string; data: Record<string, unknown> }[]> {
+  const route = routeOf(id);
+  if (route === null) throw new Error('Subject id must carry its route');
   const { rows } = await admin.query<{ type: string; data: Record<string, unknown> }>(
     `SELECT type, data FROM core.outbox
      WHERE partition_no = $1 AND subject = $2 AND type = 'com.rezics.subject.visibility_changed.v1'
      ORDER BY position, event_seq`,
-    [routeOf(id) >> 4, id],
+    [route >> 4, id],
   );
   return rows;
 }

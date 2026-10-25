@@ -88,19 +88,20 @@ test('candidate and revision listings default to twenty rows and resume without 
 test('editorial insert-CAS refuses nonexistent expected heads and selections contain objects', async () => {
   const { subject } = await call('/v1/subjects', { type: 'schema:Book', labels: { en: 'Editorial heads' } });
   const { candidate, revision } = await call(`/v1/subjects/${subject.id}/candidates`, { statement });
+  const slot = slotId(subject.id, property);
   const tx = await pool.connect();
   await tx.query('BEGIN');
   try {
     await expect(
-      insertAcceptance(tx, subject.id, candidate, GLOBAL_CONTEXT, 5, 'accept', revision),
+      insertAcceptance(tx, subject.id, candidate, GLOBAL_CONTEXT, 5, 'accept', revision, slot),
     ).rejects.toBeInstanceOf(StaleEditorialHeadError);
-    expect(await insertAcceptance(tx, subject.id, candidate, GLOBAL_CONTEXT, null, 'accept', revision)).toBe(1);
+    expect(await insertAcceptance(tx, subject.id, candidate, GLOBAL_CONTEXT, null, 'accept', revision, slot)).toBe(1);
     for (const expected of [5, null]) {
       await expect(
-        insertAcceptance(tx, subject.id, candidate, GLOBAL_CONTEXT, expected, 'accept', revision),
+        insertAcceptance(tx, subject.id, candidate, GLOBAL_CONTEXT, expected, 'accept', revision, slot),
       ).rejects.toBeInstanceOf(StaleEditorialHeadError);
     }
-    expect(await insertAcceptance(tx, subject.id, candidate, GLOBAL_CONTEXT, 1, 'abstain', revision)).toBe(2);
+    expect(await insertAcceptance(tx, subject.id, candidate, GLOBAL_CONTEXT, 1, 'abstain', revision, slot)).toBe(2);
     await expect(
       insertAdoption(tx, subject.id, property, GLOBAL_CONTEXT, 5, 'suppress', [], revision),
     ).rejects.toBeInstanceOf(StaleEditorialHeadError);
