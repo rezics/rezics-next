@@ -8,6 +8,7 @@ import { anchorRoute, newId, partitionOf, routeOf } from '../route/route.ts';
 import { itemFacts } from './item.ts';
 import insertContext from './create-context.sql';
 import contextPublicExists from './context-public-exists.sql';
+import contextPublicEvidence from './context-public-evidence.sql';
 import readContextStatement from './read-context.sql';
 
 export const CREATE_CONTEXT = 'context.create';
@@ -143,8 +144,9 @@ export function publicContextEligibility(resource: Resource) {
   return createResourcePublicEligibility({
     resource,
     action: 'context:read',
-    async prepare() {
-      return null;
+    async prepare({ pool, resource: identity }) {
+      const row = await contextPublicEvidence.run(pool, { route: identity.route, context_id: identity.id });
+      return row ?? null;
     },
     async verify({ client, resource: identity }) {
       const row = await contextPublicExists.run(client, { route: identity.route, context_id: identity.id });

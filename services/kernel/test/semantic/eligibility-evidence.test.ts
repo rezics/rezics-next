@@ -34,7 +34,17 @@ const stubAccess: Access = {
 };
 
 const realKernel = createKernel({ pool, routeKey });
-const stubKernel = createKernel({ pool, routeKey, access: stubAccess, tokens });
+const stubKernel = createKernel({
+  pool,
+  routeKey,
+  access: stubAccess,
+  tokens,
+  writeRate: {
+    async spend() {
+      return { allowed: true };
+    },
+  },
+});
 
 afterAll(() => pool.end());
 beforeAll(() => bootstrapRelease(pool, bundledRelease));
@@ -46,7 +56,11 @@ async function call(kernel: typeof realKernel, method: string, path: string, bod
       ...(body === undefined
         ? {}
         : {
-            headers: { authorization: 'Bearer writer', 'content-type': 'application/json', 'idempotency-key': `"${randomUUID()}"` },
+            headers: {
+              authorization: 'Bearer writer',
+              'content-type': 'application/json',
+              'idempotency-key': `"${randomUUID()}"`,
+            },
             body: JSON.stringify(body),
           }),
     }),
