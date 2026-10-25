@@ -261,7 +261,7 @@ test('native authorized media takedown changes only target taken_down and securi
     ...f.access,
     async authorize(client, actor, verb, resource, evidence, time) {
       const allowed = await f.access.authorize(client, actor, verb, resource, evidence, time);
-      checks.push({ verb, resource, allowed, at: authoritativeTimeValue(time!) });
+      checks.push({ verb, resource, allowed, at: new Date(authoritativeTimeValue(time!)).toISOString() });
       return allowed;
     },
   };
@@ -451,7 +451,60 @@ test('checkGrowth with actual formula across three informative scales and no con
       name: 'media-moderation',
       hotPartition: partition,
       hotShare: 0.5,
-      rows: ({ route: selected }) => ({ 'content.media': [mediaRow(newId(selected)), mediaRow(newId(selected))] }),
+      // Two rows per ordinal put every read relation above 500 rows at the
+      // first scale, without growing this actor's bounded membership evidence.
+      // Coverage is stored on access.account; core.partition already has 4096
+      // seeded anchors in the migrated database.
+      rows: ({ route: selected, partition: selectedPartition }) => {
+        const media = [mediaRow(newId(selected)), mediaRow(newId(selected))];
+        const subjects = media.map((row) => ({
+          route: selected,
+          account_id: row.media_id,
+          kind: 'actor',
+          state: 'active',
+          transaction_id: transactionId,
+        }));
+        const grants = media.map((row) => ({
+          route: selected,
+          resource_id: row.media_id,
+          subject_id: row.media_id,
+          valid: '(,)',
+          transaction_id: transactionId,
+        }));
+        return {
+          'content.media': media,
+          'access.account': subjects,
+          'access.resource_grant': grants.map((row) => ({ ...row, action })),
+          'access.resource_role_grant': grants.map((row) => ({
+            ...row,
+            grant_role: 'content.moderator',
+          })),
+          'access.resource_denial': grants.map((row) => ({
+            ...row,
+            action,
+            reason: 'resource',
+          })),
+          'access.membership_inverse': subjects.map((row) => ({
+            route: selected,
+            account_id: row.account_id,
+            kind: 'organization',
+            group_id: row.account_id,
+            reservation_id: row.account_id,
+            transaction_id: transactionId,
+          })),
+          'core.receipt': subjects.map((row) => ({
+            partition_no: selectedPartition,
+            actor_account_id: moderatorId,
+            command_kind: 'content.media.takedown',
+            idempotency_key: row.account_id,
+            request_digest: Buffer.alloc(32),
+            epoch: 1,
+            position: 1,
+            transaction_id: transactionId,
+            response: {},
+          })),
+        };
+      },
     };
     const report = await checkGrowth(db, {
       name: 'native exact media moderation',
@@ -471,6 +524,8 @@ test('checkGrowth with actual formula across three informative scales and no con
     for (const { cost } of report.samples) {
       expect(cost.rows).toBeGreaterThan(0);
       expect(cost.blocks).toBeGreaterThan(0);
+      expect(cost.relations).toBeDefined();
+      if (!cost.relations) throw new Error('Missing measured relation costs');
       expect(cost.relations['content.media']).toBeDefined();
       expect(cost.relations['access.resource_grant']).toBeDefined();
       for (const [name, relation] of Object.entries(cost.relations))
