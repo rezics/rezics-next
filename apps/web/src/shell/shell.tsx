@@ -22,11 +22,13 @@ import {
   useSidebar,
 } from '@rezics/ui/sidebar';
 import { Link, useLocation, useRouter } from '@tanstack/react-router';
+import { createServerFn } from '@tanstack/react-start';
 import { getLocale, locales, setLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
-import { useEffect, useRef, useState } from 'react';
+import { use, useEffect, useRef, useState } from 'react';
 import { ShellSearch } from '../search/search.tsx';
-import { House, LogIn, LogOut, Menu as MenuIcon, Monitor, Moon, Sun, X } from 'lucide-react';
+import { House, LogIn, LogOut, Menu as MenuIcon, Monitor, Moon, ShieldCheck, Sun, UserRound, X } from 'lucide-react';
+import type { SessionEnv } from '../session/client.ts';
 import type { SessionState } from '../session/state.ts';
 
 const names = {
@@ -59,6 +61,13 @@ const messages = {
   error_message: m.error_message,
 };
 const destinations = [{ to: '/', message: messages.nav_home, icon: House, phone: true }] as const;
+const headerControlClass =
+  'h-9 rounded-full border border-border/60 focus-visible:border-primary focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background';
+const readAuthIssuer = createServerFn({ method: 'GET' }).handler(async () => {
+  const { env } = await import('cloudflare:workers');
+  return (env as Partial<SessionEnv>).AUTH_ISSUER ?? '';
+});
+let authIssuerPromise: Promise<string> | undefined;
 
 function Mark() {
   return (
@@ -145,18 +154,20 @@ function NavigationToggle({ collapsed, onToggle }: { collapsed: boolean; onToggl
     <>
       <Button
         ref={trigger}
-        className="md:hidden"
+        className={`md:hidden ${headerControlClass}`}
         variant="ghost"
         size="icon-md"
+        pill
         aria-label={m.shell_open_navigation()}
         onClick={() => setOpenMobile(true)}
       >
         <MenuIcon aria-hidden="true" />
       </Button>
       <Button
-        className="hidden md:inline-flex"
+        className={`hidden md:inline-flex ${headerControlClass}`}
         variant="ghost"
         size="icon-md"
+        pill
         aria-label={collapsed ? m.shell_expand_navigation() : m.shell_collapse_navigation()}
         onClick={onToggle}
       >
@@ -185,7 +196,14 @@ function ThemeControl() {
   return (
     <Menu>
       <MenuTrigger asChild>
-        <Button variant="ghost" size="icon-md" aria-label={m.shell_theme()} title={m.shell_theme()}>
+        <Button
+          className={headerControlClass}
+          variant="ghost"
+          size="icon-md"
+          pill
+          aria-label={m.shell_theme()}
+          title={m.shell_theme()}
+        >
           <Icon aria-hidden="true" className="size-5" />
         </Button>
       </MenuTrigger>
@@ -215,7 +233,7 @@ function LanguageControl() {
           label={m.shell_language()}
           value={locale}
           options={options}
-          className="h-9 max-w-32"
+          className={`${headerControlClass} max-w-32 bg-transparent px-3 shadow-none hover:border-border/60 hover:bg-accent/60`}
           onValueChange={change}
         />
       </div>
@@ -237,23 +255,69 @@ function LanguageControl() {
 }
 function SessionControl({ session, csrfToken }: { session: SessionState; csrfToken: string | null }) {
   const location = useLocation();
-  const className = 'size-9 p-0 sm:w-auto sm:px-3.5';
   if (session === 'unavailable') return null;
-  if (session === 'signed-in')
+  if (session === 'signed-in') {
+    const existingHref =
+      typeof document === 'undefined'
+        ? null
+        : document.querySelector<HTMLAnchorElement>('[data-account-security-settings]')?.getAttribute('href');
+    let securitySettingsHref = existingHref ?? '/security';
+    if (typeof document === 'undefined') {
+      authIssuerPromise ??= readAuthIssuer();
+      const issuer = use(authIssuerPromise);
+      if (issuer) securitySettingsHref = new URL('/security', issuer).href;
+    }
     return (
-      <form method="post" action="/auth/sign-out">
-        <input type="hidden" name="csrf_token" value={csrfToken ?? ''} />
-        <Button type="submit" variant="outline" className={className}>
-          <LogOut aria-hidden="true" className="size-5" />
-          <span className="sr-only sm:not-sr-only">{m.account_sign_out()}</span>
+      <>
+        <Button
+          id="account-menu-button"
+          className={headerControlClass}
+          variant="ghost"
+          size="md"
+          pill
+          aria-label={m.account_menu()}
+          aria-controls="account-menu"
+          popoverTarget="account-menu"
+        >
+          <UserRound aria-hidden="true" className="size-4" />
+          <span>{m.account_menu()}</span>
         </Button>
-      </form>
+        <div
+          id="account-menu"
+          popover="auto"
+          role="group"
+          aria-labelledby="account-menu-button"
+          className="fixed inset-auto end-3 top-[4.5rem] m-0 grid w-64 max-w-[calc(100vw-1.5rem)] gap-1 rounded-2xl border border-border/60 bg-popover p-1.5 text-popover-foreground shadow-(--aura-shadow-float) outline-none"
+        >
+          <a
+            href={securitySettingsHref}
+            data-account-security-settings
+            autoFocus
+            className="flex min-h-9 items-center gap-2.5 rounded-xl px-3 py-2 text-sm outline-none hover:bg-accent hover:text-accent-foreground focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          >
+            <ShieldCheck aria-hidden="true" className="size-4" />
+            {m.account_security_settings()}
+          </a>
+          <form method="post" action="/auth/sign-out" className="m-0">
+            <input type="hidden" name="csrf_token" value={csrfToken ?? ''} />
+            <Button
+              type="submit"
+              variant="ghost"
+              className="h-9 w-full justify-start rounded-xl px-3 focus-visible:ring-primary focus-visible:ring-offset-0"
+            >
+              <LogOut aria-hidden="true" className="size-4" />
+              {m.account_sign_out()}
+            </Button>
+          </form>
+        </div>
+      </>
     );
+  }
   const returnTo = location.publicHref.split('#')[0]!;
   return (
-    <Button asChild variant="outline" className={className}>
+    <Button asChild variant="default" className={`${headerControlClass} px-3 sm:px-4`}>
       <a href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`}>
-        <LogIn aria-hidden="true" className="size-5" />
+        <LogIn aria-hidden="true" className="size-4" />
         <span className="sr-only sm:not-sr-only">{m.account_sign_in()}</span>
       </a>
     </Button>

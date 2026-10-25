@@ -34,8 +34,10 @@ Unsafe requests carrying that cookie require an exact allowed `Origin` and the s
 contains the token in a `csrf-token` meta element; it is never placed in a cookie.
 
 Sign-in uses `GET /auth/sign-in?return_to=/ja`, followed by `GET /auth/callback`. Sign-out uses `POST /auth/sign-out`.
-The header offers a sign-in document link returning to the current path and query, or a sign-out form that revokes
-the session and ends it at Auth. Both work without JavaScript. When session configuration is missing, neither appears.
+The header offers a sign-in document link returning to the current path and query, or an account menu with a security
+settings link at `<AUTH_ISSUER origin>/security` and a sign-out form that revokes the session and ends it at Auth. The
+menu and form work without JavaScript. When session configuration is missing, neither sign-in nor account controls
+appear.
 Login transactions expire after 10 minutes; sessions expire 30 days after sign-in. The `SESSIONS` Durable Object binding
 stores both in SQLite, with one instance per login transaction or session. Development simulates the objects locally.
 Reads use two Worker rate-limit bindings: `READS_10S` has namespace `1001`, limit `100`, and period `10` seconds;

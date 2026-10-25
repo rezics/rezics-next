@@ -1,6 +1,8 @@
 {
   "account_sign_in": "로그인",
   "account_sign_out": "로그아웃",
+  "account_menu": "계정",
+  "account_security_settings": "보안 설정",
   "board_start_thread": "새 스레드 시작",
   "board_threads_empty": "이 게시판에는 아직 토론이 없습니다.",
   "board_threads_heading": "토론",

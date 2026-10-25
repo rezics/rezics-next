@@ -1,6 +1,8 @@
 {
   "account_sign_in": "Anmelden",
   "account_sign_out": "Abmelden",
+  "account_menu": "Konto",
+  "account_security_settings": "Sicherheitseinstellungen",
   "board_start_thread": "Neuen Thread starten",
   "board_threads_empty": "In diesem Board gibt es noch keine Diskussionen.",
   "board_threads_heading": "Diskussionen",

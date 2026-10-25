@@ -1,6 +1,8 @@
 {
   "account_sign_in": "Sign in",
   "account_sign_out": "Sign out",
+  "account_menu": "Account",
+  "account_security_settings": "Security settings",
   "board_start_thread": "Start a new thread",
   "board_threads_empty": "There are no discussions in this board yet.",
   "board_threads_heading": "Discussions",

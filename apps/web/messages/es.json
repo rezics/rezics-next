@@ -1,6 +1,8 @@
 {
   "account_sign_in": "Iniciar sesión",
   "account_sign_out": "Cerrar sesión",
+  "account_menu": "Cuenta",
+  "account_security_settings": "Configuración de seguridad",
   "board_start_thread": "Crear un hilo",
   "board_threads_empty": "Todavía no hay debates en este tablón.",
   "board_threads_heading": "Debates",

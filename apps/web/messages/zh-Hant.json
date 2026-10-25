@@ -1,6 +1,8 @@
 {
   "account_sign_in": "登入",
   "account_sign_out": "登出",
+  "account_menu": "帳戶",
+  "account_security_settings": "安全性設定",
   "board_start_thread": "建立新討論串",
   "board_threads_empty": "此看板目前沒有討論串。",
   "board_threads_heading": "討論串",

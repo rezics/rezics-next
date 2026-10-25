@@ -1,6 +1,8 @@
 {
   "account_sign_in": "Se connecter",
   "account_sign_out": "Se déconnecter",
+  "account_menu": "Compte",
+  "account_security_settings": "Paramètres de sécurité",
   "board_start_thread": "Créer une discussion",
   "board_threads_empty": "Il n’y a pas encore de discussion dans ce tableau.",
   "board_threads_heading": "Discussions",

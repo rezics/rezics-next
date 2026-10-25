@@ -3,3 +3,88 @@
 @import '@fontsource-variable/geist-mono';
 @import '@rezics/ui/styles.css';
 @source "../../../packages/ui/src/**/*.{ts,tsx}";
+
+header [data-slot='combobox-control'] > [data-slot='input-group'] {
+  height: 36px;
+  border-color: var(--border);
+  border-radius: 9999px;
+  background-color: color-mix(in oklab, var(--primary) 4%, var(--background));
+  box-shadow: none;
+}
+
+header [data-slot='combobox-control'] > [data-slot='input-group']:hover {
+  border-color: var(--border);
+}
+
+header [data-slot='combobox-control'] > [data-slot='input-group']::before {
+  position: absolute;
+  z-index: 1;
+  inset-inline-start: 0.75rem;
+  width: 1rem;
+  height: 1rem;
+  background-color: var(--muted-foreground);
+  content: '';
+  pointer-events: none;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E")
+    no-repeat center / contain;
+}
+
+header [data-slot='combobox-control'] > [data-slot='input-group']:has([data-slot='input-group-control']:focus-visible) {
+  border-color: var(--primary);
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--primary) 20%, transparent);
+}
+
+header [data-slot='input-group-control'] {
+  padding-inline-start: 2.5rem;
+  border-radius: 9999px;
+}
+
+header [data-slot='select-trigger'] {
+  height: 36px;
+  border-color: var(--border);
+  border-radius: 9999px;
+  background: transparent;
+  box-shadow: none;
+  outline: none;
+}
+
+header [data-slot='select-trigger']:hover {
+  border-color: var(--border);
+}
+
+header [data-slot='select-trigger']:focus-visible,
+header [data-slot='select-trigger'][data-state='open'] {
+  border-color: var(--primary);
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--primary) 20%, transparent);
+}
+
+header [data-slot='select-trigger']::before {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+  background-color: currentColor;
+  content: '';
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M2 12h20'/%3E%3Cpath d='M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10Z'/%3E%3C/svg%3E")
+    no-repeat center / contain;
+}
+
+header [data-slot='select-indicator'] {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  header [data-slot='select-trigger'] {
+    width: 36px;
+    max-width: 36px;
+    justify-content: center;
+    padding-inline: 0;
+  }
+
+  header [data-slot='select-trigger'] [data-scope='select'][data-part='value-text'] {
+    display: none;
+  }
+}

@@ -1,6 +1,8 @@
 {
   "account_sign_in": "ログイン",
   "account_sign_out": "ログアウト",
+  "account_menu": "アカウント",
+  "account_security_settings": "セキュリティ設定",
   "board_start_thread": "新しいスレッドを作成",
   "board_threads_empty": "このボードにはまだスレッドがありません。",
   "board_threads_heading": "スレッド",

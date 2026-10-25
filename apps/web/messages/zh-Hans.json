@@ -1,6 +1,8 @@
 {
   "account_sign_in": "登录",
   "account_sign_out": "退出登录",
+  "account_menu": "账户",
+  "account_security_settings": "安全设置",
   "board_start_thread": "创建新讨论串",
   "board_threads_empty": "此版面目前没有讨论串。",
   "board_threads_heading": "讨论串",

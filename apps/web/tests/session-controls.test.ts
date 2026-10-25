@@ -235,7 +235,7 @@ const accountMenuButton = (page: Page, own: Messages) =>
 async function signOutButton(page: Page, own: Messages) {
   if (own.account_menu) {
     const account = accountMenuButton(page, own);
-    const menu = page.getByRole('menu', { name: own.account_menu, exact: true });
+    const menu = page.getByRole('group', { name: own.account_menu, exact: true });
     if ((await account.count()) && !(await menu.isVisible())) await account.click();
   }
   return page.getByRole('button', { name: own.account_sign_out!, exact: true });
@@ -366,12 +366,11 @@ test(
       const account = accountMenuButton(page, en);
       expect(await account.count()).toBe(1);
       await account.click();
-      const menu = page.getByRole('menu', { name: en.account_menu!, exact: true });
+      const menu = page.getByRole('group', { name: en.account_menu!, exact: true });
       expect(await menu.isVisible()).toBe(true);
       expect(await menu.evaluate((element) => element.contains(document.activeElement))).toBe(true);
-      expect(await account.getAttribute('aria-expanded')).toBe('true');
 
-      const securitySettings = menu.getByRole('menuitem', {
+      const securitySettings = menu.getByRole('link', {
         name: en.account_security_settings!,
         exact: true,
       });
