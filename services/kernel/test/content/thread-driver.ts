@@ -113,6 +113,15 @@ function requestFields(fields: Record<string, unknown>): Record<string, unknown>
   return Object.fromEntries(Object.entries(fields).filter((entry) => entry[1] !== undefined));
 }
 
+function writeCall(
+  options: WriteOptions,
+  body: Record<string, unknown>,
+): { key: string; session?: string; body: Record<string, unknown> } {
+  const call: { key: string; session?: string; body: Record<string, unknown> } = { key: options.key, body };
+  if (options.session !== undefined) call.session = options.session;
+  return call;
+}
+
 function postgresFailure(error: unknown): { code: string; constraint: string } | undefined {
   if (!error || typeof error !== 'object' || !('code' in error) || typeof error.code !== 'string') return undefined;
   const constraint = 'constraint' in error && typeof error.constraint === 'string' ? error.constraint : '';
@@ -573,12 +582,12 @@ function bindDriver(system: NativeContentSystem): ContentThreadDriver {
     if (actor) headers.set('authorization', `Bearer ${actor.bearer}`);
     if (init.key !== undefined) headers.set(IDEMPOTENCY_HEADER, init.key);
     if (init.session !== undefined) headers.set(SESSION_HEADER, init.session);
-    let body: string | undefined;
+    const request: RequestInit = { method, headers };
     if (init.body !== undefined) {
       headers.set('content-type', 'application/json');
-      body = JSON.stringify(init.body);
+      request.body = JSON.stringify(init.body);
     }
-    return system.kernel.handle(new Request(`${AUDIENCE}${path}`, { method, headers, body }));
+    return system.kernel.handle(new Request(`${AUDIENCE}${path}`, request));
   }
 
   async function parsed<T>(response: Response, read: (body: unknown) => T): Promise<ApiResult<T>> {
@@ -713,62 +722,78 @@ function bindDriver(system: NativeContentSystem): ContentThreadDriver {
       return fixture;
     },
     async create(input: ThreadInput, options: WriteOptions) {
-      const response = await send('POST', '/v1/threads', options.actor, {
-        key: options.key,
-        session: options.session,
-        body: requestFields({
-          title: input.title,
-          body: input.body,
-          licence: input.licence,
-          subjectIds: input.subjectIds,
-          boardId: input.boardId,
-          visibility: input.visibility,
-          authorId: input.authorId,
-        }),
-      });
+      const response = await send(
+        'POST',
+        '/v1/threads',
+        options.actor,
+        writeCall(
+          options,
+          requestFields({
+            title: input.title,
+            body: input.body,
+            licence: input.licence,
+            subjectIds: input.subjectIds,
+            boardId: input.boardId,
+            visibility: input.visibility,
+            authorId: input.authorId,
+          }),
+        ),
+      );
       return parsed(response, (body) => threadView((body as { thread: ProductThread }).thread));
     },
     async createPost(input: ItemInput, options: WriteOptions) {
-      const response = await send('POST', `/v1/threads/${routedId(input.threadId)}/posts`, options.actor, {
-        key: options.key,
-        session: options.session,
-        body: requestFields({
-          body: input.body,
-          licence: input.licence,
-          subjectIds: input.subjectIds,
-          boardId: input.boardId,
-          authorId: input.authorId,
-        }),
-      });
+      const response = await send(
+        'POST',
+        `/v1/threads/${routedId(input.threadId)}/posts`,
+        options.actor,
+        writeCall(
+          options,
+          requestFields({
+            body: input.body,
+            licence: input.licence,
+            subjectIds: input.subjectIds,
+            boardId: input.boardId,
+            authorId: input.authorId,
+          }),
+        ),
+      );
       return parsed(response, (body) => itemView((body as { post: ProductItem }).post));
     },
     async reply(input, options) {
-      const response = await send('POST', `/v1/threads/${routedId(input.threadId)}/posts`, options.actor, {
-        key: options.key,
-        session: options.session,
-        body: requestFields({
-          body: input.body,
-          licence: input.licence,
-          parentId: input.parentId,
-          subjectIds: input.subjectIds,
-          boardId: input.boardId,
-          authorId: input.authorId,
-        }),
-      });
+      const response = await send(
+        'POST',
+        `/v1/threads/${routedId(input.threadId)}/posts`,
+        options.actor,
+        writeCall(
+          options,
+          requestFields({
+            body: input.body,
+            licence: input.licence,
+            parentId: input.parentId,
+            subjectIds: input.subjectIds,
+            boardId: input.boardId,
+            authorId: input.authorId,
+          }),
+        ),
+      );
       return parsed(response, (body) => itemView((body as { post: ProductItem }).post));
     },
     async revise(input, options) {
-      const response = await send('POST', `/v1/posts/${routedId(input.itemId)}/revisions`, options.actor, {
-        key: options.key,
-        session: options.session,
-        body: requestFields({
-          body: input.body,
-          licence: input.licence,
-          subjectIds: input.subjectIds,
-          boardId: input.boardId,
-          authorId: input.authorId,
-        }),
-      });
+      const response = await send(
+        'POST',
+        `/v1/posts/${routedId(input.itemId)}/revisions`,
+        options.actor,
+        writeCall(
+          options,
+          requestFields({
+            body: input.body,
+            licence: input.licence,
+            subjectIds: input.subjectIds,
+            boardId: input.boardId,
+            authorId: input.authorId,
+          }),
+        ),
+      );
       return parsed(response, (body) => itemView((body as { post: ProductItem }).post));
     },
     async readThread(id, actor) {
@@ -1032,7 +1057,7 @@ function bindDriver(system: NativeContentSystem): ContentThreadDriver {
     async commandTrace() {
       const records = observer.records.slice(mark);
       const receiptAt = records.findIndex((record) => record.statement === readReceipt.sql);
-      const bodyStatements = new Set([insertThread.sql, insertPost.sql, insertRevision.sql]);
+      const bodyStatements = new Set<string>([insertThread.sql, insertPost.sql, insertRevision.sql]);
       const bodyAt = records.findIndex((record) => bodyStatements.has(record.statement));
       // Board projection and read hydration run after the content command commits.
       // Their fences are separate transactions and are not this command's writes.
