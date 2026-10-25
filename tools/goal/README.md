@@ -137,7 +137,7 @@ Declared paths support literals, `*`, `?` and whole-segment `**`. Absolute paths
 are refused. Risk ownership is checked by intersecting the path patterns, including broad claims such as `src/**`.
 Every intersected risk area must be declared. Extend the ownership data when adding product modules.
 
-Routing records the table version on each attempt. The open implementation experiment alternates Luna `high` and `max`
+Routing records the table version on each attempt. The open implementation experiment alternates Luna `high` and `max`; the open claim experiment alternates Luna `max` and Sol `high`
 by durable task sequence, starting with `high`; retries retain the original profile and version. Research is read-only.
 Bulk text prompts prohibit translation services, scripts and character mappings. Workers return a structured result
 using `worker-result.schema.json`, including any concrete blocker and the approaches tried.
