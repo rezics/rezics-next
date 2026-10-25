@@ -14,7 +14,7 @@ import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 const routeKey = new Uint8Array(32).fill(37);
 const root = { route: 0, id: GLOBAL_CONTEXT };
 const input = { title: 'First community', summary: 'A shared place' };
-const context = (idempotencyKey = randomUUID()) => ({ idempotencyKey, deadline: Date.now() + 90_000 });
+const context = (idempotencyKey: string = randomUUID()) => ({ idempotencyKey, deadline: Date.now() + 90_000 });
 
 // Privileged setup only; commands use genuine Auth tokens and production Access.
 async function fixture(pool: Pool, admin: Pool) {
@@ -122,7 +122,7 @@ async function fixture(pool: Pool, admin: Pool) {
 let db: GrowthDatabase;
 let f: Awaited<ReturnType<typeof fixture>>;
 let space: typeof import('../../src/community/space.ts');
-const scales = [256, 2048, 16384] as const;
+const scales: [number, number, number] = [256, 2048, 16384];
 const bounds = { rows: 'constant', blocks: 'logarithmic', statements: 'constant' } as const;
 beforeAll(async () => {
   db = await openGrowthDatabase();
@@ -146,14 +146,21 @@ for (const operation of ['create', 'read', 'update'] as const)
     const route = routeOf(probe.value.spaceId)!;
     const hotPartition = partitionOf(route);
     let head = probe.value.revisionId;
+    const positionBase = Number(
+      (await db.admin.query('SELECT position FROM core.partition WHERE partition_no=$1', [hotPartition])).rows[0]
+        .position,
+    );
     const population: Population = {
       name: `community-${operation}-${randomUUID()}`,
       hotPartition,
       hotShare: 1,
-      rows: ({ route }) => {
+      rows: ({ route, ordinal }) => {
         const spaceId = newId(route),
           revisionId = newId(route);
         const at = '2026-10-25T00:00:00.000Z';
+        const transactionId = randomUUID();
+        const position = positionBase + ordinal * 100 + 1;
+        const value = { spaceId, revisionId };
         return {
           'community.space': [
             {
@@ -186,6 +193,48 @@ for (const operation of ['create', 'read', 'update'] as const)
               initialized_at: at,
             },
           ],
+          // Mirror the command records as well as domain rows so new probe commands
+          // do not grow a tiny, sequentially scanned receipt table between samples.
+          'core.receipt': [
+            {
+              partition_no: hotPartition,
+              principal_kind: 'account',
+              principal_id: f.actor.accountId,
+              command_kind: 'community.space.create',
+              idempotency_key: `seed-${operation}-${ordinal}`,
+              request_digest: Buffer.alloc(32),
+              epoch: 1,
+              position,
+              transaction_id: transactionId,
+              response: value,
+            },
+          ],
+          'core.outbox': [
+            {
+              partition_no: hotPartition,
+              position,
+              event_seq: 0,
+              event_count: 1,
+              epoch: 1,
+              id: randomUUID(),
+              type: 'com.rezics.community.space.created.v1',
+              subject: spaceId,
+              data: value,
+            },
+          ],
+          'editorial.write_basis': [
+            {
+              partition_no: hotPartition,
+              transaction_id: transactionId,
+              epoch: 1,
+              position,
+              principal_kind: 'account',
+              principal_id: f.actor.accountId,
+              client_id: f.actor.clientId,
+              requested_by: null,
+              recorded_at: at,
+            },
+          ],
           'access.resource_role_grant': [
             {
               route,
@@ -194,10 +243,25 @@ for (const operation of ['create', 'read', 'update'] as const)
               subject_id: f.actor.accountId,
               grant_role: 'community.space.owner',
               valid: '(,)',
-              transaction_id: randomUUID(),
+              transaction_id: transactionId,
+            },
+            {
+              route,
+              resource_id: spaceId,
+              subject_kind: 'active_accounts',
+              subject_id: '00000000-0000-0000-0000-000000000000',
+              grant_role: 'community.space.standing',
+              valid: '(,)',
+              transaction_id: transactionId,
             },
           ],
         };
+      },
+      async finish(admin) {
+        await admin.query(
+          'UPDATE core.partition SET position=(SELECT max(position) FROM core.outbox WHERE partition_no=$1) WHERE partition_no=$1',
+          [hotPartition],
+        );
       },
     };
     let createdKeys = 0;
@@ -233,7 +297,7 @@ for (const operation of ['create', 'read', 'update'] as const)
     });
     expect(report.samples.map((sample) => sample.scale)).toEqual(scales);
     for (const sample of report.samples) {
-      const relations = Object.entries(sample.cost.relations).filter(([name]) => name.startsWith('community.'));
+      const relations = Object.entries(sample.cost.relations!).filter(([name]) => name.startsWith('community.'));
       expect(relations.length).toBeGreaterThan(0);
       for (const [, cost] of relations) expect(cost.sequentialScans).toBe(0);
     }
