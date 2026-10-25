@@ -14,7 +14,7 @@ test('fixed public bulk grant changes and reduced-scope native Auth/Access remai
     // Stay beyond the planner's small-table crossover at the first scale. All
     // baseline accounts, keys, openings, sessions and receipts are native effects.
     await native.seedBaseline(256);
-    const authSamples: GrowthSample[] = [];
+    const authSamplesByScale = new Map<number, GrowthSample>();
     const bounds = { statements: 'constant', rows: 'constant', blocks: 'logarithmic' } as const;
     // Registration, credential installation, growing histories and issuance
     // seeding are outside measurement. Measured issuance is captured separately
@@ -22,7 +22,6 @@ test('fixed public bulk grant changes and reduced-scope native Auth/Access remai
     const report = await checkGrowth(f.database, {
       name: 'identity public grant revoke/restore and reduced Auth scope',
       bounds,
-      warmups: 0,
       repetitions: 1,
       grow: async (_db, scale, previous) => {
         for (let i = previous; i < scale; i++) await native.grow(256 + i);
@@ -62,10 +61,14 @@ test('fixed public bulk grant changes and reduced-scope native Auth/Access remai
         });
         expect(observed.capture.statements.length).toBeGreaterThan(0);
         expect(observed.capture.plans.length).toBeGreaterThan(0);
-        authSamples.push({ scale, cost: costOf(observed.capture) });
+        // Warm-ups use this same operation; retain only the last run at each scale,
+        // which is the measured run because repetitions is one.
+        authSamplesByScale.set(scale, { scale, cost: costOf(observed.capture) });
       },
     });
+    const authSamples = [...authSamplesByScale.values()];
     expect(report.samples.map((s) => s.scale)).toEqual([1, 8, 64]);
+    expect(authSamples.map((s) => s.scale)).toEqual([1, 8, 64]);
     for (const sample of report.samples) {
       expect(sample.cost.statements).toBeGreaterThan(0);
       expect(sample.cost.relations?.['access.resource_grant']).toBeDefined();
