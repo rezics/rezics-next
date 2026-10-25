@@ -10,7 +10,7 @@ import { subjectSource } from '../../src/semantic/search-source.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { bulkLines, documentActions } from '../../src/search/document.ts';
 import { createSubjectIndex, subjectAlias, subjectGenerations, subjectIndexName } from '../../src/search/indices.ts';
-import { createOpenSearch, type OpenSearch } from '../../src/search/opensearch.ts';
+import { createOpenSearch, type OpenSearch, type SearchQuery } from '../../src/search/opensearch.ts';
 import { FACET_TEMPLATE, SEARCH_TEMPLATE, SUGGEST_TEMPLATE } from '../../src/search/query.ts';
 import { createSearchService } from '../../src/search/service.ts';
 import { subjectPartition, type SubjectSource } from '../../src/search/source.ts';
@@ -263,8 +263,8 @@ async function growPopulation(database: GrowthDatabase, scale: number, previous:
 }
 
 beforeAll(async () => {
-  db = await openGrowthDatabase(databaseUrl);
-  engine = createOpenSearch(searchUrl);
+  db = await openGrowthDatabase(databaseUrl!);
+  engine = createOpenSearch(searchUrl!);
   const productionSource = subjectSource(db.pool);
   source = {
     async read(partition, ids) {
@@ -274,7 +274,12 @@ beforeAll(async () => {
     count: (partition) => productionSource.count(partition),
   };
   observedEngine = {
-    request<T>(method, path, body, options) {
+    request<T = unknown>(
+      method: 'GET' | 'PUT' | 'POST' | 'DELETE' | 'HEAD',
+      path: string,
+      body?: unknown,
+      options?: { query?: SearchQuery; timeoutMs?: number },
+    ) {
       if (
         probe &&
         method === 'POST' &&
@@ -298,30 +303,30 @@ beforeAll(async () => {
   await appendExpandedAuthor(authorA, authorB);
   await appendExpandedAuthor(authorB, authorA);
 
-  const books = await Promise.all([
-    addSubject(route + 3, {
+  const books = [
+    await addSubject(route + 3, {
       type: 'schema:Book',
       labels: { en: 'Book one' },
       statements: { 'schema:author': [statement('schema:author', authorA)] },
     }),
-    addSubject(route + 4, {
+    await addSubject(route + 4, {
       type: 'schema:Book',
       labels: { en: 'Book two' },
       statements: {
         'schema:author': [statement('schema:author', authorA), statement('schema:author', authorB)],
       },
     }),
-    addSubject(route + 5, {
+    await addSubject(route + 5, {
       type: 'schema:Book',
       labels: { en: 'Book three' },
       statements: { 'schema:author': [statement('schema:author', authorA)] },
     }),
-    addSubject(route + 6, {
+    await addSubject(route + 6, {
       type: 'schema:Book',
       labels: { en: 'Book four' },
       statements: { 'schema:author': [statement('schema:author', authorB)] },
     }),
-  ]);
+  ];
 
   await createSubjectIndex(engine, prefix, 1);
   const byPartition = new Map<number, string[]>();
@@ -364,7 +369,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (engine) {
-    const { generations } = await subjectGenerations(engine, prefix);
+    const { generations } = await subjectGenerations(engine, prefix).catch(() => ({ generations: [] }));
     for (const generation of generations) await engine.request('DELETE', `/${subjectIndexName(prefix, generation)}`);
     for (const name of [SEARCH_TEMPLATE, SUGGEST_TEMPLATE, FACET_TEMPLATE])
       await engine.request('DELETE', `/_scripts/${prefix}${name}`).catch(() => undefined);
@@ -406,8 +411,8 @@ test('Facet counts stays within its bound as N grows', async () => {
             property: 'schema:author',
             relation: 'exact',
             values: [
-              { value: authorIds[0], count: 3, labels: { en: 'Author A' } },
-              { value: authorIds[1], count: 2, labels: { en: 'Author B' } },
+              { value: authorIds[0]!, count: 3, labels: { en: 'Author A' } },
+              { value: authorIds[1]!, count: 2, labels: { en: 'Author B' } },
             ],
           },
         ]);
@@ -425,8 +430,8 @@ test('Facet counts stays within its bound as N grows', async () => {
   });
   expect(report.samples).toHaveLength(3);
   for (const sample of report.samples) {
-    const scans = Object.entries(sample.cost.relations).filter(
-      ([relation, cost]) => relation.startsWith('semantic.') && cost.sequentialScans > 0,
+    const scans = Object.entries(sample.cost.relations ?? {}).filter(
+      ([relation, cost]) => relation.startsWith('semantic.') && (cost.sequentialScans ?? 0) > 0,
     );
     expect(scans).toEqual([]);
   }
