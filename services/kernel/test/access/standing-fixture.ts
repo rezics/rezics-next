@@ -59,6 +59,7 @@ export async function standingFixture() {
     'moderation:takedown',
     'fixture:own',
   ];
+  const ordinaryClientScopes = actions.filter((action) => action !== 'media:complete');
   const approvals = new Set([actor, principal, recipient]);
   const auth = await createAuthService({
     database: authPool,
@@ -85,8 +86,8 @@ export async function standingFixture() {
       },
     },
   });
-  await auth.internal.registerClient({ clientId: 'web', firstParty: true, scopes: actions });
-  await auth.internal.registerClient({ clientId: 'other-client', firstParty: true, scopes: actions });
+  await auth.internal.registerClient({ clientId: 'web', firstParty: true, scopes: ordinaryClientScopes });
+  await auth.internal.registerClient({ clientId: 'other-client', firstParty: true, scopes: ordinaryClientScopes });
   for (const id of [actor, principal, recipient]) {
     await reader.query(
       `INSERT INTO access.account (route,account_id,kind,state,transaction_id)
