@@ -5,19 +5,19 @@ export type RateLimitDeclaration = {
   readonly units: 1 | 'commands';
 };
 
-function validateDeclaration(input: unknown): asserts input is RateLimitDeclaration {
+function validateDeclaration(input: unknown): RateLimitDeclaration {
   if (typeof input !== 'object' || input === null || Array.isArray(input))
     throw new TypeError('Rate limit declaration must be an object');
   const { family, units } = input as RateLimitDeclaration;
   if (!['write', 'upload', 'report', 'correspondence', 'search', 'provider', 'address'].includes(family))
     throw new TypeError('Unknown rate limit family');
   if (units !== 1 && units !== 'commands') throw new TypeError('Unknown rate limit units');
+  return { family, units };
 }
 
 /** Snapshots trusted server metadata for a mounted route's detail['x-rate-limit']. */
 export function defineRateLimit(input: RateLimitDeclaration): Readonly<RateLimitDeclaration> {
-  validateDeclaration(input);
-  return Object.freeze({ family: input.family, units: input.units });
+  return Object.freeze(validateDeclaration(input));
 }
 
 /**
@@ -26,8 +26,8 @@ export function defineRateLimit(input: RateLimitDeclaration): Readonly<RateLimit
  * This helper neither charges a budget nor proves that a request was charged.
  */
 export function rateLimitUnits(declaration: RateLimitDeclaration, validatedBody: unknown): number {
-  validateDeclaration(declaration);
-  if (declaration.units === 1) return 1;
+  const { units } = validateDeclaration(declaration);
+  if (units === 1) return 1;
   if (typeof validatedBody !== 'object' || validatedBody === null || Array.isArray(validatedBody))
     throw new TypeError('Commands rate limit requires a validated command body');
   const commands = (validatedBody as { commands?: unknown }).commands;
