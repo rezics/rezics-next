@@ -188,7 +188,7 @@ test('every ported component has stories that pass as accessible browser tests',
   const failures = result.testResults.flatMap((file) =>
     file.assertionResults
       .filter((assertion) => assertion.status === 'failed')
-      .map((assertion) => `${file.name}: ${assertion.title}`),
+      .map((assertion) => `${file.name}: ${assertion.title}: ${assertion.failureMessages[0]?.split('\n')[0] ?? ''}`),
   );
   expect(failures.filter((failure) => !failure.includes('accessibility-probe.stories.tsx'))).toEqual([]);
   const probed = byFile.get('accessibility-probe.stories.tsx') ?? [];

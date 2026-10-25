@@ -83,11 +83,11 @@ export const GuidedReading: Story = {
     const page = within(canvasElement.ownerDocument.body);
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Show reading guide' }));
     await waitFor(() => expect(page.getByRole('alertdialog')).toBeVisible());
-    await expect(page.getByRole('heading', { name: 'Start a personal shelf' })).toBeVisible();
+    await waitFor(() => expect(page.getByRole('heading', { name: 'Start a personal shelf' })).toBeVisible());
     await userEvent.click(page.getByRole('button', { name: 'next step' }));
     await waitFor(() => expect(page.getByRole('heading', { name: 'Join a Realm conversation' })).toBeVisible());
     await userEvent.keyboard('{Escape}');
-    await expect(page.getByRole('alertdialog')).toHaveAttribute('data-state', 'closed');
+    await waitFor(() => expect(page.getByRole('alertdialog')).toHaveAttribute('data-state', 'closed'));
   },
 };
 

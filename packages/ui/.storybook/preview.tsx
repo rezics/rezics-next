@@ -1,6 +1,10 @@
 import type { Preview } from '@storybook/react-vite';
 import { LocaleProvider } from '@ark-ui/react/locale';
+import { configure } from 'storybook/test';
 import './preview.css';
+
+// Gates run several at once, and fifteen seconds stays inside the stories' 30-second test timeout.
+configure({ asyncUtilTimeout: 15_000 });
 
 const preview: Preview = {
   globalTypes: {
