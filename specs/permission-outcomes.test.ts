@@ -221,13 +221,26 @@ test('untrusted identity client principal and scope cannot expand authenticated 
       facts.consents.push({ actorId: 'principal', clientId: 'third-party', scopes: ['read'] });
     }
     if ('clientId' in claims) facts.consents = [];
-    if ('scopes' in claims) facts.consents[0]!.scopes = ['read', 'write'];
+    if ('scopes' in claims) {
+      facts.consents[0]!.scopes = ['read', 'write'];
+      for (const grant of facts.grants) grant.actions = ['read', 'write'];
+    }
     if ('requestedBy' in claims) {
       facts.delegatedRequests.push({ id: 'other-assignment', createdBy: 'other', assignedTo: 'agent' });
+      facts.grants.push(grant('other-principal-grant', 'other'));
     }
     await product().replaceFacts(facts);
-    if ('scopes' in claims) target = await authenticate({ ...login, scopes: ['write'] });
-    if ('requestedBy' in claims) target = await authenticate({ ...login, requestedBy: 'other-assignment' });
+    if ('scopes' in claims) {
+      target = await authenticate({ ...login, scopes: ['write'] });
+      expect(await product().execute(target, { ...operation, action: 'write' })).toBe('permitted');
+      // Both accounts and current consent allow read; only the issued scope excludes it.
+      expect(await product().execute(target, operation)).toBe('denied');
+    }
+    if ('requestedBy' in claims) {
+      target = await authenticate({ ...login, requestedBy: 'other-assignment' });
+      expect(await product().execute(target, operation)).toBe('permitted');
+      await replace(f => { f.grants = f.grants.filter(g => g.id !== 'other-principal-grant'); });
+    }
     expect(await product().execute(target, operation, claims)).toBe('denied');
   }
 });
