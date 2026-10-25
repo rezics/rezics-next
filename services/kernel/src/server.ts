@@ -2,6 +2,7 @@ import { createPool } from './database/pool.ts';
 import { createKernel } from './http/kernel.ts';
 import type { KeyRing } from './tokens/seal.ts';
 import { startRelays } from './events/relays.ts';
+import { effectsRelay, launchWork, registerEffects, shutdownWork, type Effect } from './events/effects.ts';
 
 export type ServerConfig = {
   databaseUrl: string;
@@ -60,10 +61,13 @@ export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
   return { databaseUrl, hostname, port, routeKey, tokens: { current, keys } };
 }
 
-export function startServer(config: ServerConfig) {
+export function startServer(config: ServerConfig, options: { effects?: Effect[] } = {}) {
   const pool = createPool(config.databaseUrl);
   const app = createKernel({ pool, routeKey: config.routeKey, tokens: config.tokens });
-  const relays = startRelays(pool, []);
+  let relays: ReturnType<typeof startRelays> | undefined;
+  const work = launchWork({ databaseUrl: config.databaseUrl }).then(() => {
+    relays = startRelays(pool, [effectsRelay(pool, registerEffects(options.effects ?? []))]);
+  });
   const server = Bun.serve({
     hostname: config.hostname,
     port: config.port,
@@ -76,9 +80,17 @@ export function startServer(config: ServerConfig) {
         await server.stop(true);
       } finally {
         try {
-          await relays.stop();
+          await work;
         } finally {
-          await pool.end();
+          try {
+            await relays?.stop();
+          } finally {
+            try {
+              await shutdownWork();
+            } finally {
+              await pool.end();
+            }
+          }
         }
       }
     },

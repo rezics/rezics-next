@@ -1,6 +1,6 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool } from 'pg';
-import { startWorker } from '../worker.ts';
+import type { Relay } from './relays.ts';
 import { EVENT_TYPES, readBatch, type CloudEvent, type Envelope } from './log.ts';
 
 export { DBOS_SCHEMA } from '../work/client.ts';
@@ -81,4 +81,11 @@ export async function shutdownWork(): Promise<void> {
 /** A batch failing after enqueuing is read again and finds the workflows it started. */
 export function relayEffects(pool: Pool, effects: ReturnType<typeof registerEffects>, partition: number) {
   return readBatch(pool, { consumer: EFFECTS_CONSUMER, partition, apply: effects.enqueue });
+}
+
+export function effectsRelay(pool: Pool, effects: ReturnType<typeof registerEffects>): Relay {
+  return {
+    consumer: EFFECTS_CONSUMER,
+    run: (partition) => relayEffects(pool, effects, partition),
+  };
 }
