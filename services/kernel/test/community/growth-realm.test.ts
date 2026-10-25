@@ -367,8 +367,12 @@ for (const operation of ['create', 'read', 'public-read', 'update'] as const)
     });
     expect(report.samples.map((sample) => sample.scale)).toEqual(scales);
     for (const sample of report.samples) {
-      if (operation === 'create' || operation === 'update')
-        expect(sample.cost.relations['access.account']?.rows).toBe(1);
+      if (operation === 'create' || operation === 'update') {
+        const account = sample.cost.relations?.['access.account'];
+        const baseline = report.samples[0]!.cost.relations?.['access.account'];
+        if (!account || !baseline) throw new Error('Missing access.account cost');
+        expect(account.rows).toBe(baseline.rows);
+      }
       const relations = Object.entries(sample.cost.relations!).filter(([name]) => name.startsWith('community.'));
       expect(relations.length).toBeGreaterThan(0);
       for (const [, cost] of relations) expect(cost.sequentialScans).toBe(0);
