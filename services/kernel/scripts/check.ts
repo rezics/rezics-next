@@ -2,10 +2,12 @@ import { spawnSync } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { migrate, moduleExtensionFiles, POSTGRES_IMAGE, schemaDumps } from './database.ts';
+import { buildSearchImage, waitForSearch } from './search.ts';
 
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const pid = String(process.pid);
 let container = '';
+let searchContainer = '';
 
 function run(program: string, args: string[], env: NodeJS.ProcessEnv = process.env): string {
   const result = spawnSync(program, args, { cwd: directory, env, encoding: 'utf8' });
@@ -31,9 +33,10 @@ function cleanupStale(): void {
 }
 
 function cleanup(): void {
-  if (container) {
+  for (const id of [searchContainer, container]) {
+    if (!id) continue;
     try {
-      docker(['rm', '-f', container]);
+      docker(['rm', '-f', id]);
     } catch (error) {
       console.error(error);
     }
@@ -49,6 +52,7 @@ async function main(): Promise<void> {
   if (extensionFiles.length) fail(`Module migrations must not create extensions:\n${extensionFiles.join('\n')}`);
 
   cleanupStale();
+  const searchImage = buildSearchImage();
   container = docker([
     'run',
     '-d',
@@ -73,6 +77,30 @@ async function main(): Promise<void> {
     '-c',
     'full_page_writes=off',
   ]);
+  searchContainer = docker([
+    'run',
+    '-d',
+    '--label',
+    `rezics.kernel.check.pid=${pid}`,
+    '-p',
+    '127.0.0.1::9200',
+    '--tmpfs',
+    '/usr/share/opensearch/data:rw,size=1g,uid=1000,gid=1000,mode=0755',
+    '-e',
+    'discovery.type=single-node',
+    '-e',
+    'DISABLE_SECURITY_PLUGIN=true',
+    '-e',
+    'DISABLE_INSTALL_DEMO_CONFIG=true',
+    '-e',
+    'OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m',
+    searchImage,
+  ]);
+  const searchPortOutput = docker(['port', searchContainer, '9200/tcp']);
+  const searchPortMatch = searchPortOutput.match(/127\.0\.0\.1:(\d+)/);
+  if (!searchPortMatch?.[1]) fail(`Could not determine the test search port: ${searchPortOutput}`);
+  const searchUrl = `http://127.0.0.1:${searchPortMatch[1]}`;
+
   const portOutput = docker(['port', container, '5432/tcp']);
   const match = portOutput.match(/127\.0\.0\.1:(\d+)/);
   if (!match?.[1]) fail(`Could not determine the test database port: ${portOutput}`);
@@ -93,6 +121,7 @@ async function main(): Promise<void> {
   run(resolve(directory, '../../node_modules/.bin/oxfmt'), ['--check', '.'], env);
 
   const testFiles = Array.from(new Bun.Glob('test/**/*.test.ts').scanSync({ cwd: directory })).sort();
+  await waitForSearch(searchUrl, searchContainer);
   for (const [index, file] of testFiles.entries()) {
     const database = `kernel_test_${index + 1}`;
     // Each file gets a fresh copy so its result cannot depend on writes from another file.
@@ -109,7 +138,11 @@ async function main(): Promise<void> {
       '-c',
       `CREATE DATABASE ${database} TEMPLATE rezics`,
     ]);
-    run('bun', ['test', `./${file}`], { ...env, DATABASE_URL: url.replace(/\/rezics(?=\?)/, `/${database}`) });
+    run('bun', ['test', `./${file}`], {
+      ...env,
+      DATABASE_URL: url.replace(/\/rezics(?=\?)/, `/${database}`),
+      OPENSEARCH_URL: searchUrl,
+    });
   }
 }
 

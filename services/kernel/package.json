@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "db": "bun scripts/database.ts",
+    "search": "bun scripts/search.ts",
     "start": "bun src/server.ts",
     "dev": "bun --watch src/server.ts",
     "openapi": "bun scripts/openapi.ts",

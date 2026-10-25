@@ -11,6 +11,12 @@ running database container, using its PostgreSQL version. The check command uses
 the development dump command uses the local development container. Callers that do not set `KERNEL_DATABASE_CONTAINER`
 retain the `docker run` fallback.
 
+## Development search node
+
+Run `bun run search up` from this workspace to create or start the local OpenSearch node and write `OPENSEARCH_URL`
+to `.env`. Use `bun run search down` to stop it while keeping its volume, or `bun run search reset` to remove and
+recreate it. The check command starts its own disposable OpenSearch node.
+
 ## Run the kernel
 
 Run `bun run db up`, then `bun run dev` from this workspace to serve the API locally. The server reads
