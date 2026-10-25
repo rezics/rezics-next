@@ -26,6 +26,10 @@ SELECT
 FROM head
 CROSS JOIN input
 LEFT JOIN positions ON true
-LEFT JOIN core.outbox AS outbox
-  ON outbox.partition_no = input.partition_no AND outbox.position = positions.position
+LEFT JOIN LATERAL (
+  SELECT *
+  FROM core.outbox
+  WHERE partition_no = input.partition_no AND position = positions.position
+  ORDER BY event_seq
+) AS outbox ON true
 ORDER BY positions.position, outbox.event_seq;
