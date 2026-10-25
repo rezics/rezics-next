@@ -1,4 +1,14 @@
 export { createBarrierProofVerifier, type BarrierProof } from './barrier-proofs.ts';
+export { createProvisioningEvidenceVerifier } from './provisioning-evidence.ts';
+export type {
+  ProvisioningAuthorization,
+  ProvisioningReceiptMetadata,
+  ProvisioningEvidenceLocator,
+  ProvisioningEvidenceReference,
+  ProvisioningEvidence,
+  ProvisioningResult,
+} from './provisioning-evidence.ts';
+import type { ProvisioningAuthorization, ProvisioningResult } from './provisioning-evidence.ts';
 export {
   registerMembershipWorkflows,
   type MembershipWorkflowPorts,
@@ -77,7 +87,7 @@ export interface TrustedAccessPorts {
   ): Promise<(AccessAccount & { registrationId: string; expiresAt: string }) | null>;
   /** Bind Access readAssignment: checks provenance, actor, validity, revocation and principal state/fence. */
   readAssignment?(requestedBy: string, assignedActorId: string): Promise<AssignmentProof>;
-  authorizeProvisioning(commandReference: string): Promise<{ accountId: string }>;
+  authorizeProvisioning(commandReference: string): Promise<ProvisioningAuthorization>;
   /** Consume once while rechecking operator relationship, permission, epochs and client evidence. */
   consumeAuthorization?(input: {
     authorization: string;
@@ -196,8 +206,8 @@ export interface AuthService {
       email: string;
       password: string;
       idempotencyKey?: string;
-    }): Promise<{ accountId: string }>;
-    provisionCredentialless(input: { authorization: string }): Promise<{ accountId: string }>;
+    }): Promise<ProvisioningResult>;
+    provisionCredentialless(input: { authorization: string; idempotencyKey?: string }): Promise<ProvisioningResult>;
     /** The coordinator must commit Access tombstone/fence before erasure. */
     eraseAccount(accountId: string): Promise<void>;
     openAutomatedSession(input: {

@@ -14,6 +14,12 @@ import { nativeVerificationPlugin, pruneExpiredVerifications } from './verificat
 import { clientAuthority } from './account-workflows.ts';
 import { createBarrierProofVerifier, type BarrierProof } from './barrier-proofs.ts';
 import type { PoolClient } from 'pg';
+import {
+  createProvisioningEvidenceVerifier,
+  validProvisioningReceipt,
+  type ProvisioningReceiptMetadata,
+  type ProvisioningResult,
+} from './provisioning-evidence.ts';
 import type {
   AccessAccount,
   AuthService,
@@ -197,7 +203,10 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       throw new Denied();
     return account;
   }
-  async function provisioningAccount(accountId: string, commandReference: string): Promise<AccessAccount> {
+  async function provisioningAccount(
+    accountId: string,
+    commandReference: string,
+  ): Promise<AccessAccount & { registrationId?: string; expiresAt?: string }> {
     const reader = trustedAccess.readProvisioningAccount;
     // Only isolated trusted-port fixtures may omit the dedicated production reader.
     const account: (AccessAccount & { registrationId?: string; expiresAt?: string }) | null = reader
@@ -541,6 +550,129 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     return account;
   }
 
+  const provisioningEvidence = createProvisioningEvidenceVerifier({ database });
+  async function pendingProvisioning(authorization: string) {
+    if (typeof authorization !== 'string' || !authorization || authorization.length > 4096) throw new Denied();
+    const approval = await trustedAccess.authorizeProvisioning(authorization);
+    const account = { ...(await provisioningAccount(approval.accountId, authorization)) };
+    if (
+      !account ||
+      account.accountId !== approval.accountId ||
+      account.kind !== 'actor' ||
+      account.state !== 'pending' ||
+      account.fenced
+    )
+      throw new Denied();
+    const receipt =
+      approval.receipt === undefined
+        ? undefined
+        : {
+            registrationId: approval.receipt?.registrationId,
+            reservationId: approval.receipt?.reservationId,
+            authnEpoch: approval.receipt?.authnEpoch,
+            expiresAt: approval.receipt?.expiresAt,
+          };
+    if (
+      receipt !== undefined &&
+      (!validProvisioningReceipt(receipt) ||
+        Date.parse(receipt.expiresAt) <= Date.now() ||
+        receipt.authnEpoch !== account.authnEpoch ||
+        (account.registrationId !== undefined && receipt.registrationId !== account.registrationId) ||
+        (account.expiresAt !== undefined && Date.parse(receipt.expiresAt) !== Date.parse(account.expiresAt)))
+    )
+      throw new Denied();
+    return { account, receipt };
+  }
+  function receiptBinding(receipt: ProvisioningReceiptMetadata | undefined) {
+    return receipt ? [receipt.registrationId, receipt.reservationId, receipt.authnEpoch, receipt.expiresAt] : null;
+  }
+  async function commitProvisioning(input: {
+    authorization: string;
+    receiptKey: string;
+    account: AccessAccount;
+    receipt: ProvisioningReceiptMetadata | undefined;
+    email: string | null;
+    hash: string | null;
+    digest: Buffer;
+  }): Promise<ProvisioningResult> {
+    const { account, receipt, receiptKey } = input;
+    text(receiptKey);
+    async function recheck() {
+      const current = await pendingProvisioning(input.authorization);
+      if (
+        current.account.accountId !== account.accountId ||
+        current.account.automated !== account.automated ||
+        JSON.stringify(receiptBinding(current.receipt)) !== JSON.stringify(receiptBinding(receipt))
+      )
+        throw new Denied();
+    }
+    const connection = await database.connect();
+    try {
+      await connection.query('BEGIN');
+      await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
+        `auth-owner:${account.accountId}`,
+      ]);
+      await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`auth-provision:${receiptKey}`]);
+      const previous = (
+        await connection.query<{ account_id: string; digest: Buffer }>(
+          'SELECT account_id, digest FROM auth_provisioning_receipt WHERE idempotency_key=$1',
+          [receiptKey],
+        )
+      ).rows[0];
+      if (previous) {
+        if (previous.account_id !== account.accountId || !previous.digest.equals(input.digest)) throw new Denied();
+      } else {
+        // These are the installed Better Auth owner and credential models, not a
+        // second credential registry. Their receipt commits in this same transaction.
+        await connection.query(
+          'INSERT INTO "user" (id,name,email,"emailVerified",image) VALUES ($1,\'\',$2,false,NULL)',
+          [account.accountId, input.email],
+        );
+        const credentialId = randomUUID();
+        await connection.query(
+          'INSERT INTO account (id,"accountId","providerId","userId",password,"updatedAt") VALUES ($1,$2,\'credential\',$2,$3,CURRENT_TIMESTAMP)',
+          [credentialId, account.accountId, input.hash],
+        );
+        await connection.query(
+          `INSERT INTO auth_provisioning_receipt
+            (idempotency_key,account_id,digest,registration_id,reservation_id,authn_epoch,expires_at,owner_id,credential_id,provisioning_kind)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+          [
+            receiptKey,
+            account.accountId,
+            input.digest,
+            receipt?.registrationId ?? null,
+            receipt?.reservationId ?? null,
+            receipt?.authnEpoch ?? null,
+            receipt?.expiresAt ?? null,
+            receipt ? account.accountId : null,
+            receipt ? credentialId : null,
+            receipt ? (input.hash === null ? 'credentialless' : 'password') : null,
+          ],
+        );
+      }
+      if (receipt) await recheck();
+      await connection.query('COMMIT');
+    } catch (error) {
+      await connection.query('ROLLBACK');
+      throw error;
+    } finally {
+      connection.release();
+    }
+    if (!receipt) return { accountId: account.accountId };
+    // A pending change during the native commit cannot publish an activation
+    // proof. A retry must still authorize the original registration, never adopt
+    // a later epoch/reservation. The immutable receipt is not upgraded on replay.
+    await recheck();
+    const reference = await provisioningEvidence.createReference({
+      receiptKey,
+      accountId: account.accountId,
+      ...receipt,
+    });
+    if (!reference) throw new Denied();
+    return { accountId: account.accountId, provisioningEvidence: reference };
+  }
+
   const service: AuthService = {
     verifier: {
       issuer: options.issuer,
@@ -608,9 +740,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       sessionUpgradePage: (after, limit) => sessionUpgradePage(database, after, limit),
       signing: signer.control,
       async provisionPassword(input) {
-        // Authorization resolves an approved Access command; HTTP cannot supply this result.
-        const approval = await trustedAccess.authorizeProvisioning(input.authorization);
-        const account = await provisioningAccount(approval.accountId, input.authorization);
+        const { account, receipt } = await pendingProvisioning(input.authorization);
         if (
           typeof input.email !== 'string' ||
           !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email) ||
@@ -621,52 +751,31 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         )
           throw new Denied(400);
         const hash = await (await getContext()).password.hash(input.password);
-        if (input.idempotencyKey !== undefined) {
-          text(input.idempotencyKey);
+        if (input.idempotencyKey !== undefined || receipt) {
           const digest = createHmac('sha256', options.secret)
             .update(
-              JSON.stringify(['auth-provisioning-v1', account.accountId, input.email.toLowerCase(), input.password]),
+              JSON.stringify(
+                receipt
+                  ? [
+                      'auth-provisioning-v2',
+                      account.accountId,
+                      input.email.toLowerCase(),
+                      input.password,
+                      receiptBinding(receipt),
+                    ]
+                  : ['auth-provisioning-v1', account.accountId, input.email.toLowerCase(), input.password],
+              ),
             )
             .digest();
-          const connection = await database.connect();
-          try {
-            await connection.query('BEGIN');
-            await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
-              `auth-provision:${input.idempotencyKey}`,
-            ]);
-            const previous = (
-              await connection.query<{ account_id: string; digest: Buffer }>(
-                'SELECT account_id, digest FROM auth_provisioning_receipt WHERE idempotency_key=$1',
-                [input.idempotencyKey],
-              )
-            ).rows[0];
-            if (previous) {
-              if (previous.account_id !== account.accountId || !previous.digest.equals(digest)) throw new Denied();
-            } else {
-              // Same Better Auth owner model and official password hash. These
-              // writes and their retry receipt commit in one Auth transaction.
-              await connection.query(
-                'INSERT INTO "user" (id,name,email,"emailVerified",image) VALUES ($1,\'\',$2,false,NULL)',
-                [account.accountId, input.email.toLowerCase()],
-              );
-              await connection.query(
-                'INSERT INTO account (id,"accountId","providerId","userId",password,"updatedAt") VALUES ($1,$2,\'credential\',$2,$3,CURRENT_TIMESTAMP)',
-                [randomUUID(), account.accountId, hash],
-              );
-              await connection.query('INSERT INTO auth_provisioning_receipt VALUES ($1,$2,$3)', [
-                input.idempotencyKey,
-                account.accountId,
-                digest,
-              ]);
-            }
-            await connection.query('COMMIT');
-          } catch (error) {
-            await connection.query('ROLLBACK');
-            throw error;
-          } finally {
-            connection.release();
-          }
-          return { accountId: account.accountId };
+          return commitProvisioning({
+            authorization: input.authorization,
+            receiptKey: input.idempotencyKey ?? `password:${account.accountId}`,
+            account,
+            receipt,
+            email: input.email.toLowerCase(),
+            hash,
+            digest,
+          });
         }
         // Use the official PostgreSQL adapter and its explicit external-ID facility.
         await (
@@ -717,11 +826,20 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         return establish(selected, input.headers);
       },
       async provisionCredentialless(input) {
-        const approval = await trustedAccess.authorizeProvisioning(input.authorization);
-        const account = await provisioningAccount(approval.accountId, input.authorization);
+        const { account, receipt } = await pendingProvisioning(input.authorization);
         if (!account.automated) throw new Denied();
-        await owner(account.accountId);
-        return { accountId: account.accountId };
+        const digest = createHmac('sha256', options.secret)
+          .update(JSON.stringify(['auth-credentialless-v1', account.accountId, receiptBinding(receipt)]))
+          .digest();
+        return commitProvisioning({
+          authorization: input.authorization,
+          receiptKey: input.idempotencyKey ?? `credentialless:${account.accountId}`,
+          account,
+          receipt,
+          email: null,
+          hash: null,
+          digest,
+        });
       },
       async eraseAccount(accountId) {
         const account = await trustedAccess.readAccount(accountId);

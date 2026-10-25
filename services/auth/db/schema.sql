@@ -66,6 +66,19 @@ END $$;
 
 
 --
+-- Name: auth_provisioning_receipt_immutable(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_provisioning_receipt_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RAISE EXCEPTION 'Provisioning receipts are immutable';
+END;
+$$;
+
+
+--
 -- Name: auth_revoke_sessions(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -328,7 +341,15 @@ CREATE TABLE public.auth_key_assertion (
 CREATE TABLE public.auth_provisioning_receipt (
     idempotency_key text NOT NULL,
     account_id text NOT NULL,
-    digest bytea NOT NULL
+    digest bytea NOT NULL,
+    registration_id text,
+    reservation_id text,
+    authn_epoch bigint,
+    expires_at timestamp with time zone,
+    owner_id text,
+    credential_id text,
+    provisioning_kind text,
+    CONSTRAINT auth_provisioning_evidence_complete CHECK ((((registration_id IS NULL) AND (reservation_id IS NULL) AND (authn_epoch IS NULL) AND (expires_at IS NULL) AND (owner_id IS NULL) AND (credential_id IS NULL) AND (provisioning_kind IS NULL)) OR ((registration_id IS NOT NULL) AND (reservation_id IS NOT NULL) AND (authn_epoch IS NOT NULL) AND ((authn_epoch >= 1) AND (authn_epoch <= '9007199254740991'::bigint)) AND (expires_at IS NOT NULL) AND (owner_id IS NOT NULL) AND (owner_id = account_id) AND (credential_id IS NOT NULL) AND (provisioning_kind IS NOT NULL) AND (provisioning_kind = ANY (ARRAY['password'::text, 'credentialless'::text])))))
 );
 
 
@@ -803,6 +824,20 @@ CREATE UNIQUE INDEX auth_consent_client_owner ON public.auth_consent USING btree
 
 
 --
+-- Name: auth_provisioning_receipt_credential_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_provisioning_receipt_credential_idx ON public.auth_provisioning_receipt USING btree (credential_id);
+
+
+--
+-- Name: auth_provisioning_receipt_owner_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_provisioning_receipt_owner_idx ON public.auth_provisioning_receipt USING btree (owner_id);
+
+
+--
 -- Name: auth_recovery_account_id_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -887,6 +922,13 @@ CREATE TRIGGER auth_consent_revision BEFORE UPDATE ON public.auth_consent FOR EA
 
 
 --
+-- Name: auth_provisioning_receipt auth_provisioning_receipt_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER auth_provisioning_receipt_immutable BEFORE UPDATE ON public.auth_provisioning_receipt FOR EACH ROW EXECUTE FUNCTION public.auth_provisioning_receipt_immutable();
+
+
+--
 -- Name: session session_capacity; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -961,6 +1003,22 @@ ALTER TABLE ONLY public.auth_consent
 
 ALTER TABLE ONLY public.auth_key_assertion
     ADD CONSTRAINT auth_key_assertion_account_id_fkey FOREIGN KEY (account_id) REFERENCES public."user"(id) ON DELETE CASCADE;
+
+
+--
+-- Name: auth_provisioning_receipt auth_provisioning_receipt_credential_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_provisioning_receipt
+    ADD CONSTRAINT auth_provisioning_receipt_credential_id_fkey FOREIGN KEY (credential_id) REFERENCES public.account(id) ON DELETE CASCADE;
+
+
+--
+-- Name: auth_provisioning_receipt auth_provisioning_receipt_owner_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_provisioning_receipt
+    ADD CONSTRAINT auth_provisioning_receipt_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES public."user"(id) ON DELETE CASCADE;
 
 
 --

@@ -17,7 +17,8 @@ CREATE TABLE auth_registration_stage (
 CREATE INDEX auth_registration_stage_due ON auth_registration_stage (expires_at, registration_id)
   WHERE completed_at IS NULL AND expired_at IS NULL;
 
-CREATE TABLE auth_provisioning_receipt (
+-- A lower UTC evidence migration may already establish this receipt table.
+CREATE TABLE IF NOT EXISTS auth_provisioning_receipt (
   idempotency_key text PRIMARY KEY,
   account_id text NOT NULL UNIQUE,
   digest bytea NOT NULL

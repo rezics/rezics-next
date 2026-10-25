@@ -91,6 +91,59 @@ real trusted implementation; parsing a caller's ID or unsigned grant is not an
 implementation of this port. Tests inject Access fixtures as boundary evidence,
 not as proof of final cross-service integration.
 
+Production activation requires the optional typed `receipt` in the internal
+`authorizeProvisioning` result:
+
+```ts
+type ProvisioningAuthorization = {
+  accountId: string;
+  receipt: {
+    registrationId: string;
+    reservationId: string;
+    authnEpoch: number;
+    expiresAt: string; // canonical UTC ISO timestamp, original pending deadline
+  };
+};
+```
+
+The Access binding/composition owner must populate these from the verified native
+pending receipt and its exact current registration/reservation read. In the
+current native Access lifecycle, `registrationId` is the pending command's
+`reservationId`; supply that identity in both fields, not the Auth staging ID.
+`authnEpoch` is the trusted account read's original pending epoch and must match
+that read exactly. Do not use a constant or upgrade it on replay. The current
+account-only binding must return this additional metadata before it can produce
+activation evidence. Legacy fixtures may omit `receipt`; they receive no proof.
+An invalid or partial receipt fails closed.
+
+`provisionPassword` and `provisionCredentialless` return
+`{ accountId, provisioningEvidence? }`. With exact metadata, both write the native
+Better Auth owner, credential row (null password for credentialless automation)
+and immutable `auth_provisioning_receipt` together. An explicit `idempotencyKey`
+is supported by both; without one, the evidence path uses a stable kind/account
+key. Exact retries preserve the native credential ID and reference. Existing user
+or staging rows never substitute for this commit. Pending authorization is
+rechecked against the original binding before commit and again before publishing
+the reference; expiration, fencing or any binding change denies publication.
+
+`createProvisioningEvidenceVerifier({ database })` exports internal read-only
+capabilities. `createReference({ receiptKey, accountId, registrationId,
+reservationId, authnEpoch, expiresAt })` returns a typed nonsecret reference only
+for the exact committed receipt and bound native owner/credential. The composition
+owner must verify the original pending authorization before publishing a reference;
+the provisioning methods perform that check themselves. Pass `resolve` as Access's
+`provisioningEvidence` resolver. It returns only `{ accountId, registrationId,
+authIdentityId, authnEpoch }`, or null for malformed, missing, expired or mismatched
+evidence. It reads no staging or kernel database and exposes no HTTP minting API,
+password, hash, token or private profile. Native owner/credential deletion cascades
+through indexed receipt references, permanently revoking proof. Old receipts
+without evidence columns remain unproven idempotency history.
+
+The native Auth tests establish actual commit, rollback, replay and erasure only.
+They use an Auth-only structural Access trust fixture. Final registration binding
+must compose the real pending receipt verifier with the actual Access lifecycle
+activation command; callback policy or staging/user existence is insufficient.
+
 Only trusted application code may call the internal effects:
 
 - `internal.provisionPassword({ authorization, email, password })` resolves the
@@ -669,7 +722,7 @@ Touches specifies independent growth axes and fixed inputs, without adding tests
 | Public-key sign-in              | Client/consent check, one `auth_public_key_pkey(account_id,kid)` SELECT, local JOSE verification, one `auth_key_assertion_pkey(account_id,jti)` INSERT + user FK; establishment reads one owner, checks client/consent, INSERTs one session and runs `proof`. Grow A, S, P, J; fix owner/kid, assertion size, client/scopes and one fresh JTI per attempt.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | R=O(1) per table/visit, B=O(L), Q=9–12 (constant); replay denial uses one key read and one conflicting INSERT.                                                                                                                                                               | `Public-key sign-in stays within its bound as J grows`              |
 | Auth barrier proofs             | Native session/consent point reads or native verification lookup and exact recovery consumption; one immutable purpose/account/operation receipt insert and point resolution, credential/consent CAS, and existing bounded session revocation. Digest binds the exact transition; no account/history scans. All new owner references lead with account_id in the unique index for erasure. Expiry index admits B+1 keys (one hasMore peek), locks/deletes at most B≤1000, with no drain loop. One seed grows same-owner proof/consent/recovery history and unrelated owners at 1x/8x/64x; valid/invalid requests and expired batch stay fixed.                                                                                                                                                                                                                                                   | R=N+U*t+M plus Auth receipts: request rows/statements O(1), blocks O(log R); sweep rows O(1+B), blocks O((1+B)log R), Q=1. Varying the admitted batch measures linear cleanup; locked prefixes remain bounded. Scheduling remains separate; expiry already denies.           | `barrier-proofs.test.ts`, `growth-barrier-proofs.test.ts`           |
 | Clients and consent             | Client/consent reads use client/coverage/reduction/pair PKs. First-party consent is materialized in `auth_consent` before website/password/key/operator session or token issuance under the shared client barrier; begin takes its exclusive counterpart. Page: operation PK + one `auth_consent_client_owner(client_id,account_id)` seek, ≤b+1 owners (b≤100); local planner controls prevent scan/sort plans. Floors/receipts/cursors use known anchors; each DBOS page holds ≤64 owners. Cleanup deletes ≤100 sessions/owner once per floor receipt; retained rows fail proof. Finish checks the terminal cursor/receipt; immutable operation history survives. Existing clients need ≤100-owner deployment backfill after old issuers stop plus a 300s JWT drain. Grow unrelated A and affected owners separately at 1x/8x/64x; fix page/cursor. One common seed drives all growth measures. | Page rows O(b), blocks O(b log population), Q=O(1); floor fanout O(affected owners × log population), independent of A. Finish O(1) probes; issuance adds one exact pair upsert. Native session erasure retains its separate s bound. Consent reduction remains O(s+1) rows. | `checkGrowth: client reduction A, affected owners, page and total`  |
-| Provisioning and owner creation | Trusted provisioning/account checks, local hash; password provisioning BEGIN + INSERT one `user` (`user_pkey`, `user_email_key`) + one credential + COMMIT (4 Q). Idempotent form adds lock, `auth_provisioning_receipt_pkey` SELECT and INSERT with `auth_provisioning_receipt_account_id_key` (7 Q new, 4 replay). `owner`/`provisionCredentialless`: lock, owner PK read, optional same two INSERTs in transaction, unlock (3/7 Q). Grow A, T; fix pending/active account, idempotency key, email/password sizes and retry branch.                                                                                                                                                                                                                                                                                                                                                            | R=O(1) per table/visit, B=O(log A+log T), Q≤7 (constant).                                                                                                                                                                                                                    | `Provisioning and owner creation stays within its bound as A grows` |
+| Provisioning and owner creation | Exact receipt PK/account-unique seek and bounded native owner/credential reads; no stage/user-existence or hash scans. Trusted pending receipt metadata preserves registration/reservation, deadline and observed epoch; rechecked before commit/publication. One transaction writes owner, credential and immutable receipt; digest/locks preserve replay identity. Resolver/reference producer: one SELECT. Erasure seeks owner/credential referencing indexes; old unproven receipts remain. Shared seeds grow unrelated accounts, stale same-registration/reservation receipt/stage decoys and mismatched receipts referencing the same credential at 1x/8x/64x. Account-unique indexes forbid same-account receipt/stage history. Measure valid/absent/mismatched lookups, password/credentialless commits, replay and erasure; no timing or planner overrides.                             | R=N+U*t+M plus Auth rows. Reads/writes O(1) rows/statements, O(log R) buffers; FK probes bounded. New evidence Q=9, replay Q=6 including BEGIN/COMMIT and proof read. Indexed erasure O(actual proof changes * log R), one DELETE.                                           | `growth-provisioning-evidence.test.ts`: `checkGrowth` at 1x/8x/64x. |
 | Authorized account effects      | `consume`: human `proof` (twice for opening), constant subject/human Access checks and receipt validation, one `auth_effect_receipt_pkey` INSERT. `setCredential`: one indexed credential read, `owner`, one credential UPDATE or `auth_public_key_pkey` INSERT/DELETE (≤1 each), optional session erasure. `openAutomatedSession`: `owner`, establishment and one `auth_session_opening_pkey`/receipt-unique INSERT + user FK. Grow A, P, E, O with human/subject, credential/client, receipt size and s fixed; separately grow s for destructive effects.                                                                                                                                                                                                                                                                                                                                      | R=O(1), B=O(L), Q=9–14 credential effect (+2 revocation), 17–25 opening; destructive effects R=Θ(s+1), B=O(L+s), Q=O(1) exceeds the criterion: uncapped session erasure.                                                                                                     | `Authorized account effects stays within its bound as s grows`      |
 | Session erasure                 | Native INSERT locks one existing owner; `session_owner_oldest` reads ≤64 stored keys, including expired rows, then evicts oldest (`createdAt,id`) atomically. Native revoke-all checks the upgrade barrier, snapshots ≤64, locks the same owner and deletes ≤64 via `session_userId_idx`; credential/recovery/consent/erasure inherit this session bound with Access first. Installed provider has no refresh history/cascade; additions require family guards. Legacy owners block insert/revoke/erase until resumable pages trim ≤1000 old rows, keeping newest 64; partial-index keyset discovery. Internal expiry maintenance admits ≤1000 via `session_expiry`, then SKIP LOCKED point locks/deletes, without scanning beyond admission. Grow expired/unrelated history independently at fixed owner neighborhood; measure legacy pages separately.                                         | cap=64: insert/revoke rows=O(cap), blocks=O(cap log R), Q=O(1). Expiry batch b≤1000: rows=O(b), blocks=O(b log R), Q=1 even with locks. Legacy page rows=O(cap+b), Q=1. Actual nested plans include native snapshot/trigger/deletion work.                                   | `growth-bounded-sessions.test.ts`: `checkGrowth` at 1x/8x/64x       |
 | Account erasure                 | `eraseAccount`: authoritative Access deleted/fenced check before DELETE by `user_pkey`; one client statement and seven native FK cascade plans. Credential/session seeks use `account_userId_idx`/`session_userId_idx`; consent/key/assertion cascades use leading-account PKs. Recovery/opening cascades now seek `auth_recovery_account_id_idx(account_id)`/`auth_session_opening_subject_account_id_idx(subject_account_id)`. Let k count all matching references. One common native seed grows unrelated owners and all reference populations at 1x/8x/64x with k=12 fixed; `checkGrowth` captures actual DELETE/cascade plans, filtered/loop work and indexed-access buffers. Exact unrelated rows are retained. Separately grow own fanout f=1/8/64 (k=2+5f); index builds are deployment maintenance.                                                                                     | R=Θ(1+k), B=O((1+k)L), Q=1; fixed k gives constant rows/statements and logarithmic buffers, without global H/O scans. Own fanout remains uncapped: f=1/8/64 examines 8/43/323 rows; indexed cascades still pay for each matching reference.                                  | `growth-erasure-indexes.test.ts` (native cascades, 1x/8x/64x)       |
