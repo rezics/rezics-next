@@ -190,6 +190,15 @@ async function reference(m: Media) {
     {
       partition,
       clock,
+      basis: { actorAccountId: m.uploaderId, clientId: 'website', requestedBy: null },
+      // This native collection fixture starts with trusted post:create authority.
+      // Full API authorization is covered by the media outcomes suite.
+      authorization: {
+        action: 'post:create',
+        resource: { route, id: m.containerId },
+        authorize: async () => 'execute',
+        denied: () => new Error('Reference command denied'),
+      },
       receipt: {
         actorAccountId: m.uploaderId,
         kind: 'content.post.create',
@@ -198,6 +207,18 @@ async function reference(m: Media) {
       },
     },
     async (tx, command) => {
+      await tx.query(
+        `INSERT INTO content.post
+        (route,thread_id,post_id,author_account_id,head_revision_id,visibility,security_revision,recorded_transaction_id)
+        VALUES ($1,$2,$3,$4,$5,'published',1,$6)`,
+        [route, m.containerId, itemId, m.uploaderId, revisionId, command.transactionId],
+      );
+      await tx.query(
+        `INSERT INTO content.revision
+        (route,thread_id,post_id,revision_id,body,body_sha256,search_text,licence,subject_ids,board_id,availability,recorded_transaction_id)
+        VALUES ($1,$2,$3,$4,$5,sha256($5),'','CC0-1.0','{}',$6,'available',$7)`,
+        [route, m.containerId, itemId, revisionId, body, board, command.transactionId],
+      );
       await claimMedia(tx, {
         mediaIds: [m.id],
         containerId: m.containerId,
@@ -212,18 +233,6 @@ async function reference(m: Media) {
           scopes: [],
         },
       });
-      await tx.query(
-        `INSERT INTO content.post
-        (route,thread_id,post_id,author_account_id,head_revision_id,visibility,security_revision,recorded_transaction_id)
-        VALUES ($1,$2,$3,$4,$5,'published',1,$6)`,
-        [route, m.containerId, itemId, m.uploaderId, revisionId, command.transactionId],
-      );
-      await tx.query(
-        `INSERT INTO content.revision
-        (route,thread_id,post_id,revision_id,body,body_sha256,search_text,licence,subject_ids,board_id,availability,recorded_transaction_id)
-        VALUES ($1,$2,$3,$4,$5,sha256($5),'','CC0-1.0','{}',$6,'available',$7)`,
-        [route, m.containerId, itemId, revisionId, body, board, command.transactionId],
-      );
       return {
         value: { revisionId, at: authoritativeTimeValue(command.time) },
         events: [
