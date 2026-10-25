@@ -12,11 +12,8 @@ import { PLATFORM_RESOURCE } from '../bootstrap-governance.ts';
 import { createExposureCommands } from './catalogue.ts';
 
 const closed = { additionalProperties: false } as const;
-const paramsSchema = t.Object(
-  { group: t.String({ pattern: '^(?!(?:any|open|close)$)[a-z][a-z_]{0,62}$' }) },
-  closed,
-);
-const headersSchema = t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, closed);
+const paramsSchema = t.Object({ group: t.String({ pattern: '^(?!(?:any|open|close)$)[a-z][a-z_]{0,62}$' }) }, closed);
+const headersSchema = t.Object({ [IDEMPOTENCY_HEADER]: t.String() });
 const success = t.Object(
   { exposure: t.Object({ group: t.String(), open: t.Boolean(), changed: t.Boolean() }, closed) },
   closed,
@@ -64,15 +61,14 @@ export function exposureRoutes(
   dependencies: { pool: Pool; clock: () => Date },
 ) {
   let resolved: ReturnType<typeof createExposureCommands> | undefined;
-  const commands = () =>
-    (resolved ??= createExposureCommands({ pool: dependencies.pool, clock: dependencies.clock }));
+  const commands = () => (resolved ??= createExposureCommands({ pool: dependencies.pool, clock: dependencies.clock }));
 
   const options = (operation: 'open' | 'close') => ({
-        headers: strict(headersSchema),
-        params: strict(paramsSchema),
-        response: { 200: success, ...failures },
-        detail: detail(operation),
-      });
+    headers: strict(headersSchema),
+    params: strict(paramsSchema),
+    response: { 200: success, ...failures },
+    detail: detail(operation),
+  });
   return app
     .post(
       customMethod('/v1/platform/exposure/:group', 'close'),

@@ -1,6 +1,11 @@
 import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
 import { Pool } from 'pg';
-import { createAuthHost, createNativeWorkflowProofPorts, createProvisioningEvidenceVerifier, type AuthService } from '@rezics/auth';
+import {
+  createAuthHost,
+  createNativeWorkflowProofPorts,
+  createProvisioningEvidenceVerifier,
+  type AuthService,
+} from '@rezics/auth';
 import { decodeJwt, exportJWK, generateKeyPair, importJWK, SignJWT } from 'jose';
 import { testDatabase } from '../../../../auth/scripts/database.ts';
 
@@ -10,10 +15,10 @@ const { PLATFORM_RESOURCE } = await import('../../../src/access/bootstrap-govern
 const { createLifecycleInternals } = await import('../../../src/access/lifecycle.ts');
 const { createRegistrationProofBindings } = await import('../../../src/access/registration-proof.ts');
 const { newId, routeOf } = await import('../../../src/route/route.ts');
-const { createPool } = await import('../../../src/database/pool.ts');
+const { createPool, withConnection } = await import('../../../src/database/pool.ts');
 const { ProblemError } = await import('../../../src/http/problem.ts');
 const { createKernel } = await import('../../../src/http/kernel.ts');
-const { actionCatalogue } = await import('../../../src/http/request.ts');
+const { defineRateLimit } = await import('../../../src/http/rate-limit.ts');
 const appModule = await import('../../../src/http/app.ts');
 const { createAccess } = await import('../../../src/access/index.ts');
 
@@ -28,14 +33,7 @@ const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(92)]]) }
 const operationAction = 'context:create';
 const groupAction = 'gate:fixture_group';
 const group = 'fixture_group';
-const clientScopes = [
-  'access:grant',
-  'context:create',
-  'exposure:open',
-  'exposure:close',
-  'gate:any',
-  groupAction,
-];
+const clientScopes = ['access:grant', 'context:create', 'exposure:open', 'exposure:close', 'gate:any', groupAction];
 
 type Person = { accountId: string; email: string; bearer: string };
 const pool = createPool(databaseUrl);
@@ -85,12 +83,20 @@ async function person(name: string, scopes: readonly string[]): Promise<Person> 
 }
 
 async function get(path: string, bearer?: string): Promise<{ response: Response; body: Record<string, unknown> }> {
-  const headers = bearer ? { authorization: `Bearer ${bearer}` } : undefined;
-  const response = await kernel.handle(new Request(`http://kernel.test${path}`, { headers }));
-  return { response, body: (await response.json()) as Record<string, unknown> };
+  const response = await kernel.handle(
+    new Request(`http://kernel.test${path}`, {
+      ...(bearer ? { headers: { authorization: `Bearer ${bearer}` } } : {}),
+    }),
+  );
+  const body = (await response.json()) as Record<string, unknown>;
+  return { response, body };
 }
 
-async function post(path: string, bearer: string, body?: unknown): Promise<{ response: Response; body: Record<string, unknown> }> {
+async function post(
+  path: string,
+  bearer: string,
+  body?: unknown,
+): Promise<{ response: Response; body: Record<string, unknown> }> {
   const headers: Record<string, string> = {
     authorization: `Bearer ${bearer}`,
     'idempotency-key': JSON.stringify(Bun.randomUUIDv7()),
@@ -101,7 +107,8 @@ async function post(path: string, bearer: string, body?: unknown): Promise<{ res
     init.body = JSON.stringify(body);
   }
   const response = await kernel.handle(new Request(`http://kernel.test${path}`, init));
-  return { response, body: (await response.json()) as Record<string, unknown> };
+  const result = (await response.json()) as Record<string, unknown>;
+  return { response, body: result };
 }
 
 async function grant(bearer: string, accountId: string, action: string): Promise<void> {
@@ -136,35 +143,27 @@ beforeAll(async () => {
   const original = appModule.createApp;
   const composition = spyOn(appModule, 'createApp').mockImplementation((dependencies) => {
     const app = original(dependencies);
-    app.get(
-      '/v1/gated-fixture',
-      {
-        detail: {
-          operationId: 'fixture.gated_read',
-          'x-action': operationAction,
-          'x-exposure': `gate:${group}`,
-          security: [{ bearerAuth: [] }],
-        },
-      },
-      async ({ authorize }) => {
-        handlerCalls++;
-        if (!(await authorize(PLATFORM_RESOURCE))) throw new ProblemError('forbidden');
-        domainReads++;
-        return { value: 'gated' };
-      },
-    );
-    app.get(
-      '/v1/public-fixture',
-      {
-        detail: {
-          operationId: 'fixture.public_read',
-          'x-action': 'fixture:public_read',
-          'x-exposure': 'public',
-          security: [{}],
-        },
-      },
-      () => ({ value: 'public' }),
-    );
+    const gatedDetail = {
+      operationId: 'fixture.gated_read',
+      'x-action': operationAction,
+      'x-exposure': `gate:${group}`,
+      'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+      security: [{ bearerAuth: [] }],
+    };
+    const publicDetail = {
+      operationId: 'fixture.public_read',
+      'x-action': 'fixture:read',
+      'x-exposure': 'public',
+      security: [{}],
+    };
+    app.get('/v1/gated-fixture', { detail: gatedDetail }, async ({ authorize }) => {
+      handlerCalls++;
+      const check = await authorize(PLATFORM_RESOURCE);
+      if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
+      domainReads++;
+      return { value: 'gated' };
+    });
+    app.get('/v1/public-fixture', { detail: publicDetail }, () => ({ value: 'public' }));
     return app;
   });
 
@@ -173,7 +172,11 @@ beforeAll(async () => {
     routeKey,
     tokens,
     clock: () => new Date(clockTime),
-    writeRate: { async spend() { return { allowed: true as const }; } },
+    writeRate: {
+      async spend() {
+        return { allowed: true as const };
+      },
+    },
     access: (config) => {
       access = createAccess({
         actions: new Map(config.actions),

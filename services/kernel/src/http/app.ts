@@ -93,16 +93,19 @@ export function createApp({
     })
     .onError('global', ({ error, request, route }) => {
       let action: string | undefined;
+      let mounted: MountedRoute | undefined;
       try {
-        action = actionLabelOfMountedRoute(mountedFor(request, typeof route === 'string' ? route : undefined));
+        mounted = mountedFor(request, typeof route === 'string' ? route : undefined);
+        action = actionLabelOfMountedRoute(mounted);
       } catch {
+        mounted = undefined;
         action = undefined;
       }
+      const detail = mounted?.hooks?.detail as Record<string, unknown> | undefined;
       if (error instanceof PlatformClosedError) {
         const read = action?.endsWith(':read') === true;
-        const effectStatus = read || ['GET', 'HEAD', 'OPTIONS'].includes(request.method.toUpperCase())
-          ? 'not_applicable'
-          : 'not_applied';
+        const effectStatus =
+          read || ['GET', 'HEAD', 'OPTIONS'].includes(request.method.toUpperCase()) ? 'not_applicable' : 'not_applied';
         return new Response(
           JSON.stringify({
             type: `${PROBLEM_TYPE_BASE}platform_closed`,
@@ -115,6 +118,20 @@ export function createApp({
           }),
           { status: 403, headers: { 'content-type': 'application/problem+json' } },
         );
+      }
+      if (
+        error instanceof AuthenticationError &&
+        error.status === 401 &&
+        /(?:^|[\s,])error\s*=\s*(?:"invalid_token"|invalid_token)(?=$|[\s,])/i.test(error.challenge) &&
+        typeof detail?.['x-exposure'] === 'string' &&
+        detail['x-exposure'].startsWith('gate:')
+      ) {
+        // Reject invalid bearers before gate lookup without exposing token validity.
+        return problemResponse(new AuthenticationError(401, 'Bearer'), {
+          method: request.method,
+          id: idFor(request),
+          ...(action ? { action } : {}),
+        });
       }
       return problemResponse(error, { method: request.method, id: idFor(request), ...(action ? { action } : {}) });
     })
@@ -185,7 +202,9 @@ export function createApp({
       const original = originalRequests.get(request) ?? request;
       const mounted = mountedFor(request, route);
       const detail = mounted?.hooks?.detail as Record<string, unknown> | undefined;
+      const gated = typeof detail?.['x-exposure'] === 'string' && detail['x-exposure'].startsWith('gate:');
       if (
+        !gated &&
         ['GET', 'HEAD', 'OPTIONS'].includes(request.method) &&
         detail?.['x-action'] === undefined &&
         detail?.['x-rate-limit'] === undefined

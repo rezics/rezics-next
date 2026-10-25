@@ -6,7 +6,15 @@ import {
   createCommandAdmission,
   installCommandAdmission,
 } from './command-admission.ts';
-import type { Access, AccessConfig as KernelAccessConfig, AccountActor, AccessClient, AccessContext, Actor, Resource } from '../request/access.ts';
+import type {
+  Access,
+  AccessConfig as KernelAccessConfig,
+  AccountActor,
+  AccessClient,
+  AccessContext,
+  Actor,
+  Resource,
+} from '../request/access.ts';
 import { installResourceRoleCatalogue, resourceRoleCatalogue } from './resource-roles.ts';
 import { createAccess as permissionAccess } from './permission.ts';
 import { createAuthenticator, deadlineClient, within, type AuthenticationConfig } from './authenticate.ts';
@@ -263,7 +271,9 @@ export function authorizePlatformGate(
   context: AccessContext,
   at: string,
 ): Promise<boolean> {
-  return platformGateChecks.get(access)?.(actor, actions, clientAction, resource, context, at) ?? Promise.resolve(false);
+  return (
+    platformGateChecks.get(access)?.(actor, actions, clientAction, resource, context, at) ?? Promise.resolve(false)
+  );
 }
 
 /** Standalone instance denies authorization until an app supplies its own catalogue. */

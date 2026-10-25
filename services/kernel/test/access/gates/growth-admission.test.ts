@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase, type GrowthReport } from '../../support/growth.ts';
-import { actorFixture } from '../actor-side-fixture.ts';
 
 await import('reylo/register');
+const { actorFixture } = await import('../actor-side-fixture.ts');
 const { createAccess } = await import('../../../src/access/index.ts');
 const { newId, routeOf } = await import('../../../src/route/route.ts');
 const { createKernel } = await import('../../../src/http/kernel.ts');
@@ -15,6 +15,7 @@ const group = 'growth_fixture';
 const groupAction = `gate:${group}`;
 const fixtureAction = 'fixture:read';
 const fixedTime = new Date('2026-01-15T12:00:00.000Z');
+const accountPlannerSeedCount = 1024;
 let db: GrowthDatabase;
 let kernel: ReturnType<typeof createKernel>;
 let actorId: string;
@@ -74,25 +75,24 @@ beforeAll(async () => {
   const original = appModule.createApp;
   const composition = spyOn(appModule, 'createApp').mockImplementation((dependencies) => {
     const app = original(dependencies);
-    app.get(
-      '/v1/growth-fixture',
-      {
-        detail: {
-          operationId: 'fixture.growth_read',
-          'x-action': fixtureAction,
-          'x-exposure': `gate:${group}`,
-          security: [{ bearerAuth: [] }],
-        },
-      },
-      () => ({ ok: true }),
-    );
+    const fixtureDetail = {
+      operationId: 'fixture.growth_read',
+      'x-action': fixtureAction,
+      'x-exposure': `gate:${group}`,
+      security: [{ bearerAuth: [] }],
+    };
+    app.get('/v1/growth-fixture', { detail: fixtureDetail }, () => ({ ok: true }));
     return app;
   });
   kernel = createKernel({
     pool: db.pool,
     routeKey,
     clock: () => new Date(fixedTime),
-    writeRate: { async spend() { return { allowed: true as const }; } },
+    writeRate: {
+      async spend() {
+        return { allowed: true as const };
+      },
+    },
     access: (config) =>
       createAccess({
         actions: new Map(config.actions),
@@ -110,15 +110,28 @@ beforeAll(async () => {
 
   const route = routeOf(actorId);
   if (route === null) throw new Error('Fixture actor must have a route');
-  accountGrowthIds = Array.from({ length: 64 }, () => newId(route));
+  accountGrowthIds = Array.from({ length: accountPlannerSeedCount + 64 }, () => newId(route));
   grantSubjectIds = Array.from({ length: 64 }, () => newId(route));
   const timestamp = Bun.randomUUIDv7();
   await db.admin.query(
     `INSERT INTO access.account (route, account_id, kind, state, transaction_id)
      SELECT $1, id, 'actor', 'active', $3 FROM unnest($2::uuid[]) id`,
+    [route, accountGrowthIds.slice(0, accountPlannerSeedCount), timestamp],
+  );
+  await db.admin.query(
+    `INSERT INTO access.account (route, account_id, kind, state, transaction_id)
+     SELECT $1, id, 'actor', 'active', $3 FROM unnest($2::uuid[]) id`,
     [route, grantSubjectIds, timestamp],
   );
+  await db.admin.query(
+    `INSERT INTO access.resource_grant
+       (route, resource_id, subject_id, action, valid, transaction_id)
+     SELECT 0, '00000000-0000-8000-8000-000000000000', id, 'gate:unrelated', '(,)', $2
+     FROM unnest($1::uuid[]) id`,
+    [accountGrowthIds.slice(0, accountPlannerSeedCount), timestamp],
+  );
   await db.admin.query('ANALYZE access.account');
+  await db.admin.query('ANALYZE access.resource_grant');
 }, 60_000);
 
 afterAll(async () => {
@@ -145,7 +158,7 @@ test('checkGrowth keeps gate admission bounded as unrelated accounts, grants, an
     repetitions: 1,
     warmups: 1,
     async grow(database, scale, previous) {
-      const ids = accountGrowthIds.slice(previous, scale);
+      const ids = accountGrowthIds.slice(accountPlannerSeedCount + previous, accountPlannerSeedCount + scale);
       await database.admin.query(
         `INSERT INTO access.account (route, account_id, kind, state, transaction_id)
          SELECT $1, id, 'actor', 'active', $3 FROM unnest($2::uuid[]) id`,

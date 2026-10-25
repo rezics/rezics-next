@@ -1,4 +1,4 @@
-import type { Access, AccessConfig as KernelAccessConfig } from '../request/access.ts';
+import type { Access, AccessConfig as KernelAccessConfig, AccessContext, Actor, Resource } from '../request/access.ts';
 import { type AuthenticationConfig } from './authenticate.ts';
 export { createResourcePublicEligibility, createResourceAnonymousEligibility, type ResourceEligibility, type ResourceIdentity, type ResourceEligibilityOptions, type ResourceEligibilityPrepareContext, type ResourceEligibilityVerifyContext, } from './eligibility.ts';
 export type AccessConfig = KernelAccessConfig & {
@@ -12,6 +12,8 @@ export type AccessConfig = KernelAccessConfig & {
  * Only ES256 public keys are accepted; Auth credentials/private keys are never needed.
  */
 export declare function createAccess(config: AccessConfig): Access;
+/** Evaluate exact gate actions on the Global Context, borrowing the mounted operation's scope operand. */
+export declare function authorizePlatformGate(access: Access, actor: Actor, actions: readonly string[], clientAction: string, resource: Resource, context: AccessContext, at: string): Promise<boolean>;
 /** Standalone instance denies authorization until an app supplies its own catalogue. */
 export declare const access: Access;
 export { ACTIVE_ACCOUNTS, type GrantSubject } from './grant-subject.ts';

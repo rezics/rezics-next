@@ -6,7 +6,7 @@ import { Admission } from './admission.ts';
 import { type WriteRateLimiter } from '../access/write-rate.ts';
 import { type WriteRateStageOptions } from '../access/write-rate-stage.ts';
 export declare const REQUEST_DEADLINE_MS = 2000;
-export declare function createApp({ pool, admission, access, tokens, writeRate, rateAttribution, ratePeer, }: {
+export declare function createApp({ pool, admission, access, tokens, writeRate, rateAttribution, ratePeer, clock, }: {
     pool: Pool;
     admission?: Admission;
     access?: Access | AccessFactory;
@@ -15,6 +15,8 @@ export declare function createApp({ pool, admission, access, tokens, writeRate, 
     rateAttribution?: WriteRateStageOptions;
     /** Trusted transport attribution; never a request header resolver. */
     ratePeer?: (request: Request) => string | undefined;
+    /** The kernel's single domain clock, shared by request admission and commands. */
+    clock?: () => Date;
 }): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
     typebox: {};
     error: [{
