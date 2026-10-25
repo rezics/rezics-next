@@ -170,6 +170,78 @@ CREATE TABLE library.follow (
 
 
 --
+-- Name: progress_change; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.progress_change (
+    route integer NOT NULL,
+    session_id uuid NOT NULL,
+    change_no integer NOT NULL,
+    intent jsonb NOT NULL,
+    recorded_at timestamp with time zone NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT progress_change_change_no_check CHECK ((change_no >= 1)),
+    CONSTRAINT progress_change_check CHECK ((route = ((get_byte(uuid_send(session_id), 10) * 256) + get_byte(uuid_send(session_id), 11)))),
+    CONSTRAINT progress_change_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: progress_session; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.progress_session (
+    route integer NOT NULL,
+    session_id uuid NOT NULL,
+    account_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    version_subject_id uuid,
+    mode text NOT NULL,
+    unit text NOT NULL,
+    total numeric,
+    amount numeric,
+    locator text,
+    "position" numeric,
+    completed_unit_count integer NOT NULL,
+    state text NOT NULL,
+    revision integer NOT NULL,
+    started_at timestamp with time zone NOT NULL,
+    completed_at timestamp with time zone,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT progress_session_amount_check CHECK (((amount IS NULL) OR (amount >= (0)::numeric))),
+    CONSTRAINT progress_session_check CHECK ((route = ((get_byte(uuid_send(session_id), 10) * 256) + get_byte(uuid_send(session_id), 11)))),
+    CONSTRAINT progress_session_check1 CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT progress_session_check2 CHECK (((unit <> 'percent'::text) OR (((amount IS NULL) OR (amount <= (100)::numeric)) AND ((total IS NULL) OR (total <= (100)::numeric))))),
+    CONSTRAINT progress_session_check3 CHECK (((state = 'completed'::text) = (completed_at IS NOT NULL))),
+    CONSTRAINT progress_session_check4 CHECK ((((mode = 'scalar_amount'::text) AND (locator IS NULL) AND ("position" IS NULL) AND (completed_unit_count = 0)) OR ((mode = 'cursor_position'::text) AND (amount IS NULL) AND (total IS NULL) AND (completed_unit_count = 0) AND (((locator IS NULL) AND ("position" IS NULL)) OR ((locator IS NOT NULL) AND ("position" IS NOT NULL)))) OR ((mode = 'completed_units'::text) AND (amount IS NULL) AND (total IS NULL) AND (locator IS NULL) AND ("position" IS NULL)))),
+    CONSTRAINT progress_session_completed_unit_count_check CHECK (((completed_unit_count >= 0) AND (completed_unit_count <= 20000))),
+    CONSTRAINT progress_session_locator_check CHECK (((locator IS NULL) OR ((char_length(locator) >= 1) AND (char_length(locator) <= 256)))),
+    CONSTRAINT progress_session_mode_check CHECK ((mode = ANY (ARRAY['scalar_amount'::text, 'cursor_position'::text, 'completed_units'::text]))),
+    CONSTRAINT progress_session_position_check CHECK ((("position" IS NULL) OR ("position" >= (0)::numeric))),
+    CONSTRAINT progress_session_revision_check CHECK ((revision >= 1)),
+    CONSTRAINT progress_session_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT progress_session_state_check CHECK ((state = ANY (ARRAY['active'::text, 'completed'::text, 'abandoned'::text]))),
+    CONSTRAINT progress_session_total_check CHECK (((total IS NULL) OR (total >= (0)::numeric))),
+    CONSTRAINT progress_session_unit_check CHECK ((unit = ANY (ARRAY['page'::text, 'chapter'::text, 'episode'::text, 'volume'::text, 'minute'::text, 'percent'::text])))
+);
+
+
+--
+-- Name: progress_unit; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.progress_unit (
+    route integer NOT NULL,
+    session_id uuid NOT NULL,
+    unit_id text NOT NULL,
+    added_at timestamp with time zone NOT NULL,
+    CONSTRAINT progress_unit_check CHECK ((route = ((get_byte(uuid_send(session_id), 10) * 256) + get_byte(uuid_send(session_id), 11)))),
+    CONSTRAINT progress_unit_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT progress_unit_unit_id_check CHECK (((char_length(unit_id) >= 1) AND (char_length(unit_id) <= 128)))
+);
+
+
+--
 -- Name: subject_collection; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -256,6 +328,30 @@ ALTER TABLE ONLY library.follow
 
 
 --
+-- Name: progress_change progress_change_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.progress_change
+    ADD CONSTRAINT progress_change_pkey PRIMARY KEY (route, session_id, change_no);
+
+
+--
+-- Name: progress_session progress_session_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.progress_session
+    ADD CONSTRAINT progress_session_pkey PRIMARY KEY (route, session_id);
+
+
+--
+-- Name: progress_unit progress_unit_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.progress_unit
+    ADD CONSTRAINT progress_unit_pkey PRIMARY KEY (route, session_id, unit_id);
+
+
+--
 -- Name: subject_collection subject_collection_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -314,6 +410,13 @@ CREATE INDEX follow_account_page ON library.follow USING btree (route, account_i
 
 
 --
+-- Name: progress_session_account_subject; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX progress_session_account_subject ON library.progress_session USING btree (route, account_id, subject_id, started_at DESC, session_id);
+
+
+--
 -- Name: follow follow_target_type_immutable; Type: TRIGGER; Schema: library; Owner: -
 --
 
@@ -326,6 +429,22 @@ CREATE TRIGGER follow_target_type_immutable BEFORE UPDATE OF target_type ON libr
 
 ALTER TABLE ONLY library.collection_member
     ADD CONSTRAINT collection_member_route_collection_id_fkey FOREIGN KEY (route, collection_id) REFERENCES library.collection(route, collection_id);
+
+
+--
+-- Name: progress_change progress_change_route_session_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.progress_change
+    ADD CONSTRAINT progress_change_route_session_id_fkey FOREIGN KEY (route, session_id) REFERENCES library.progress_session(route, session_id);
+
+
+--
+-- Name: progress_unit progress_unit_route_session_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.progress_unit
+    ADD CONSTRAINT progress_unit_route_session_id_fkey FOREIGN KEY (route, session_id) REFERENCES library.progress_session(route, session_id);
 
 
 --
