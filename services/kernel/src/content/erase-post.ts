@@ -8,7 +8,7 @@ import {
   type CommandAuthorization,
   type CommandOutcome,
 } from '../command/command.ts';
-import { accessCheck, type Access, type Actor } from '../request/access.ts';
+import { accessCommandAuthorization, type Access, type Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import readScope from './read-erasure-scope.sql';
 import erase from './erase-content.sql';
@@ -64,25 +64,20 @@ export async function mutateContentPoint(
   const args = (statement: { params: readonly string[] }) =>
     statement.params.map((name) => parameters[name as keyof typeof parameters]);
   let scope: Scope | undefined;
+  const admission = await accessCommandAuthorization(
+    deps.access,
+    actor,
+    point.action,
+    target,
+    { pool: deps.pool, deadline: context.deadline },
+    () => new GrantDeniedError(),
+  );
   const authorization: CommandAuthorization = {
-    action: point.action,
-    resource: target,
-    denied: () => new GrantDeniedError(),
-    async prepare() {
-      return accessCheck(deps.access, actor, point.action, target, { pool: deps.pool, deadline: context.deadline });
-    },
+    ...admission,
     async authorize(tx, attempt, evidence) {
-      if (
-        attempt.basis?.actorAccountId !== identity.principal.id ||
-        attempt.basis.clientId !== identity.basis.clientId ||
-        attempt.basis.requestedBy !== identity.basis.requestedBy ||
-        typeof evidence !== 'function'
-      )
-        throw new GrantDeniedError();
-      const check = evidence as Awaited<ReturnType<typeof accessCheck>>;
       // At trusted T, before even the receipt lookup. Denied replay cannot see
       // the old response or security revision and cannot append an effect.
-      if (!(await check(tx, attempt.time))) throw new GrantDeniedError();
+      if ((await admission.authorize(tx, attempt, evidence)) !== 'execute') throw new GrantDeniedError();
       const rows = await tx.query<Scope>(readScope.sql, args(readScope));
       scope = rows.rows.length === 1 ? rows.rows[0] : undefined;
       if (!scope || (point.action === 'media:erase' && scope.collection_pending)) throw new GrantDeniedError();

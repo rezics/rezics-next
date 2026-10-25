@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
-import { readAccount } from '../access/account-data.ts';
+import { commandAccessContext, requireCommandAdmission } from '../access/command-admission.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import {
@@ -12,7 +12,7 @@ import {
 } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck, type AccountActor, type Actor } from '../request/access.ts';
+import { accessCheck, type Actor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import type {
   AuthorErasureDependencies,
@@ -27,18 +27,6 @@ import type {
 import createOperation from './create-erasure-operation.sql';
 import readEndpoints from './read-first-erasure-post.sql';
 import readIdentity from './read-erasure-operation.sql';
-
-function accountAllowed(account: Awaited<ReturnType<typeof readAccount>>, actor: AccountActor): boolean {
-  return (
-    !!account &&
-    account.kind === 'actor' &&
-    account.state === 'active' &&
-    !account.fenced &&
-    Number.isSafeInteger(actor.authnEpoch) &&
-    actor.authnEpoch > 0 &&
-    BigInt(actor.authnEpoch) >= account.minimumAuthnEpoch
-  );
-}
 
 /** The first actual affected post supplies authority; the author is selection only.
  * The native command boundary rechecks authorization before reading any receipt.
@@ -78,10 +66,12 @@ export async function beginAuthorErasure(
     },
     denied: () => new GrantDeniedError(),
     async prepare(attempt) {
-      const current = await withConnection(deps.pool, (client) =>
-        readAccount(deadlineClient(client, context.deadline), accountRoute, snapshot.accountId),
-      );
-      if (!accountAllowed(current, actor)) throw new GrantDeniedError();
+      const preparation = commandAccessContext({ pool: deps.pool, deadline: context.deadline }, attempt);
+      try {
+        await requireCommandAdmission(deps.access, actor, preparation);
+      } catch {
+        throw new GrantDeniedError();
+      }
       const rows = await withConnection(deps.pool, async (client) => {
         const bounded = deadlineClient(client, context.deadline);
         await readPartition(bounded, partitionOf(route));
@@ -96,13 +86,7 @@ export async function beginAuthorErasure(
       // Empty selection has no actual post on which to establish post:erase.
       if (!endpoints) throw new GrantDeniedError();
       firstPostId = endpoints.post_id;
-      return accessCheck(
-        deps.access,
-        actor,
-        'post:erase',
-        { route, id: firstPostId },
-        { pool: deps.pool, deadline: context.deadline },
-      );
+      return accessCheck(deps.access, actor, 'post:erase', { route, id: firstPostId }, preparation);
     },
     async authorize(tx, attempt, evidence) {
       if (
@@ -240,8 +224,7 @@ export async function readOperation(
     try {
       const bounded = deadlineClient(client, context.deadline);
       await readPartition(bounded, partitionOf(accountRoute));
-      const current = await readAccount(bounded, accountRoute, actor.accountId);
-      const result = accountAllowed(current, actor) && (await check(bounded));
+      const result = await check(bounded);
       await client.query('COMMIT');
       return result;
     } catch (error) {
