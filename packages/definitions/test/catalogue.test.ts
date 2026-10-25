@@ -224,3 +224,21 @@ ${prefixes}imports:
   expect(release.properties['schema:composer']).toMatchObject({ targets: ['schema:Person'], multivalued: true });
   expect(release.properties['schema:isbn']).toEqual(bundledRelease.properties['schema:isbn']!);
 });
+
+test('every bundled term carries labels in all eight UI locales', () => {
+  for (const definition of [...Object.values(bundledRelease.types), ...Object.values(bundledRelease.properties)])
+    expect(Object.keys(definition.labels).sort()).toEqual(uiLocales);
+});
+
+test('every presentation group has one file per UI locale', () => {
+  const groups = new Map<string, string[]>();
+  for (const key of Object.keys(bundledSources().presentation)) {
+    const match = /^([a-z][a-z0-9-]{0,63})\/([^/]+)$/u.exec(key);
+    expect(match).not.toBeNull();
+    const group = match?.[1] ?? '';
+    const locale = match?.[2] ?? '';
+    expect(uiLocales).toContain(locale);
+    groups.set(group, [...(groups.get(group) ?? []), locale]);
+  }
+  for (const locales of groups.values()) expect([...locales].sort()).toEqual(uiLocales);
+});
