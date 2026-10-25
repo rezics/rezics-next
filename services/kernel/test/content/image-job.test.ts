@@ -35,9 +35,9 @@ class ByteStore implements MediaStorage {
   readonly objects = new Map<string, { bytes: Uint8Array; mediaType: string }>();
   readonly writes: string[] = [];
   readonly deletes: string[] = [];
-  onGet?: () => Promise<void>;
-  onPut?: (key: string) => Promise<void>;
-  onDelete?: () => Promise<void>;
+  onGet: (() => Promise<void>) | undefined;
+  onPut: ((key: string) => Promise<void>) | undefined;
+  onDelete: (() => Promise<void>) | undefined;
   async get(key: string): Promise<Uint8Array | null> {
     await this.onGet?.();
     const object = this.objects.get(key);
