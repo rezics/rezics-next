@@ -49,7 +49,7 @@ slots:
       - wd:P629
     annotations:
       datatype: wikibase-item
-      qualifiers: openLibraryId
+      qualifiers: openLibraryId sameAs
   isbn:
     slot_uri: schema:isbn
     description: The ISBN-13 identifier of the edition.
@@ -67,7 +67,7 @@ slots:
       - wd:P123
     annotations:
       datatype: wikibase-item
-      qualifiers: vndbId
+      qualifiers: vndbId sameAs
   numberOfPages:
     slot_uri: schema:numberOfPages
     description: The number of pages in the edition.
@@ -87,4 +87,4 @@ slots:
       - wd:P655
     annotations:
       datatype: wikibase-item
-      qualifiers: position openLibraryId
+      qualifiers: position openLibraryId sameAs

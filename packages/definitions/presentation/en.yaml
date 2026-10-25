@@ -10,6 +10,8 @@ types:
   wd:Q689445: visual novel
 properties:
   schema:url: URL
+  schema:name: name
+  schema:sameAs: sameAs
   schema:birthDate: date of birth
   schema:deathDate: date of death
   schema:author: author

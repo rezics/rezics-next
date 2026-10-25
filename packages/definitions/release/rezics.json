@@ -31,8 +31,10 @@
         "schema:image",
         "schema:inLanguage",
         "schema:isbn",
+        "schema:name",
         "schema:numberOfPages",
         "schema:publisher",
+        "schema:sameAs",
         "schema:translator",
         "schema:url",
         "wdt:P648"
@@ -54,6 +56,8 @@
         "schema:datePublished",
         "schema:image",
         "schema:inLanguage",
+        "schema:name",
+        "schema:sameAs",
         "schema:url",
         "wdt:P5732",
         "wdt:P648"
@@ -71,6 +75,8 @@
       ],
       "properties": [
         "schema:image",
+        "schema:name",
+        "schema:sameAs",
         "schema:url",
         "wdt:P3180"
       ]
@@ -89,6 +95,8 @@
         "schema:birthDate",
         "schema:deathDate",
         "schema:image",
+        "schema:name",
+        "schema:sameAs",
         "schema:url",
         "wdt:P3180",
         "wdt:P6298",
@@ -111,8 +119,10 @@
         "schema:cookTime",
         "schema:datePublished",
         "schema:image",
+        "schema:name",
         "schema:recipeIngredient",
         "schema:recipeYield",
+        "schema:sameAs",
         "schema:url"
       ]
     },
@@ -131,6 +141,8 @@
         "schema:datePublished",
         "schema:image",
         "schema:inLanguage",
+        "schema:name",
+        "schema:sameAs",
         "schema:url",
         "wdt:P5732"
       ]
@@ -150,6 +162,8 @@
         "schema:datePublished",
         "schema:image",
         "schema:inLanguage",
+        "schema:name",
+        "schema:sameAs",
         "schema:url",
         "wdt:P5732"
       ]
@@ -169,6 +183,8 @@
         "schema:datePublished",
         "schema:image",
         "schema:inLanguage",
+        "schema:name",
+        "schema:sameAs",
         "schema:url",
         "wdt:P5732"
       ]
@@ -186,6 +202,8 @@
         "schema:datePublished",
         "schema:image",
         "schema:inLanguage",
+        "schema:name",
+        "schema:sameAs",
         "schema:url",
         "wdt:P3180"
       ]
@@ -205,6 +223,7 @@
       "datatype": "wikibase-item",
       "multivalued": false,
       "qualifiers": [
+        "schema:sameAs",
         "wdt:P648"
       ],
       "value": {
@@ -285,6 +304,7 @@
       "datatype": "wikibase-item",
       "multivalued": true,
       "qualifiers": [
+        "schema:sameAs",
         "wdt:P3180"
       ],
       "value": {
@@ -309,6 +329,7 @@
       "multivalued": true,
       "qualifiers": [
         "schema:position",
+        "schema:sameAs",
         "wdt:P648"
       ],
       "value": {
@@ -362,6 +383,7 @@
       "multivalued": true,
       "qualifiers": [
         "schema:position",
+        "schema:sameAs",
         "wdt:P3180",
         "wdt:P6298",
         "wdt:P648"
@@ -566,6 +588,37 @@
         "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$"
       }
     },
+    "schema:name": {
+      "iri": "http://schema.org/name",
+      "labels": {
+        "en": "name",
+        "ja": "名前",
+        "zh-Hant": "名稱"
+      },
+      "mappings": [],
+      "datatype": "monolingualtext",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "object",
+        "required": [
+          "text",
+          "language"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1500
+          },
+          "language": {
+            "type": "string",
+            "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$"
+          }
+        }
+      }
+    },
     "wdt:P648": {
       "iri": "http://www.wikidata.org/prop/direct/P648",
       "labels": {
@@ -604,6 +657,25 @@
         "minLength": 1,
         "maxLength": 1500,
         "pattern": "^[1-9][0-9]{0,3}$"
+      }
+    },
+    "schema:sameAs": {
+      "iri": "http://schema.org/sameAs",
+      "labels": {
+        "en": "sameAs",
+        "ja": "完全に一致",
+        "zh-Hant": "精確匹配"
+      },
+      "mappings": [
+        "wd:P2888"
+      ],
+      "datatype": "url",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "maxLength": 1500,
+        "pattern": "^https?://[^\\s]+$"
       }
     },
     "schema:url": {

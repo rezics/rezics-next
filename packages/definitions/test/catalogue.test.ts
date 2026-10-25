@@ -41,6 +41,8 @@ test('book work, edition and recipe are profiles of the catalogue', () => {
       'schema:datePublished',
       'schema:image',
       'schema:inLanguage',
+      'schema:name',
+      'schema:sameAs',
       'schema:url',
       'wdt:P5732',
       'wdt:P648',
@@ -55,8 +57,10 @@ test('book work, edition and recipe are profiles of the catalogue', () => {
       'schema:image',
       'schema:inLanguage',
       'schema:isbn',
+      'schema:name',
       'schema:numberOfPages',
       'schema:publisher',
+      'schema:sameAs',
       'schema:translator',
       'schema:url',
       'wdt:P648',
@@ -68,15 +72,17 @@ test('book work, edition and recipe are profiles of the catalogue', () => {
     'schema:cookTime',
     'schema:datePublished',
     'schema:image',
+    'schema:name',
     'schema:recipeIngredient',
     'schema:recipeYield',
+    'schema:sameAs',
     'schema:url',
   ]);
   expect(properties['schema:author']).toMatchObject({
     datatype: 'wikibase-item',
     multivalued: true,
     targets: ['schema:Organization', 'schema:Person'],
-    qualifiers: ['schema:position', 'wdt:P3180', 'wdt:P6298', 'wdt:P648'],
+    qualifiers: ['schema:position', 'schema:sameAs', 'wdt:P3180', 'wdt:P6298', 'wdt:P648'],
     mappings: ['wd:P50'],
   });
   expect(properties['schema:exampleOfWork']).toMatchObject({

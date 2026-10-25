@@ -10,6 +10,8 @@ types:
   wd:Q689445: ビジュアルノベル
 properties:
   schema:url: URL
+  schema:name: 名前
+  schema:sameAs: 完全に一致
   schema:birthDate: 生年月日
   schema:deathDate: 没年月日
   schema:author: 著者

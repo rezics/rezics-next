@@ -10,6 +10,8 @@ types:
   wd:Q689445: 視覺小說
 properties:
   schema:url: URL
+  schema:name: 名稱
+  schema:sameAs: 精確匹配
   schema:birthDate: 出生日期
   schema:deathDate: 逝世日期
   schema:author: 作者

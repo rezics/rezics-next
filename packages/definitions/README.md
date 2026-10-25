@@ -149,10 +149,17 @@ existing subject or a successful create result; media ids come from an upload.
 Use `LicenseRef-unknown` when the source licence is unknown. A source record's
 facts, summary and cover have separate provenance and fence identities.
 
-`facts` contains ordinary statements. An unresolved relation uses `somevalue`
-with the target's source identifier as a qualifier; it never substitutes an
-external identifier for a REZICS subject id. Only `facts` supports `create` and
-`retract`. The following commands share this setup:
+`facts` contains ordinary statements. Treat a source title or name as a
+`schema:name` candidate; changing it does not change the labels set at subject
+creation. Retract the old candidate when the source record changes. Convert an
+ISBN-10 to ISBN-13 under ISO 2108 by prefixing `978` and recomputing the check
+digit, and propose only the ISBN-13 under `schema:isbn`. For a month-only date,
+use Wikibase time precision 10 with day `00`, cite the source record, and omit
+the raw date string. An unresolved relation uses `somevalue` when the target is
+known by a Wikidata item URI, stored in a `schema:sameAs` qualifier; it never
+substitutes an external identifier for a REZICS subject id. If a converter has
+no identifier for a target, it proposes no relation for that target. Only
+`facts` supports `create` and `retract`. The following commands share this setup:
 
 ```ts
 import { fromPlainText } from '@rezics/document';
@@ -188,6 +195,60 @@ const fact: BatchCommand = {
   statement: { property: { id: 'wdt:P5732' }, value: { type: 'value', content: '253' }, references },
 };
 
+const changedTitle: BatchCommand = {
+  op: 'propose',
+  key: 'bangumi:253:title:2',
+  source: source('facts'),
+  subject: subjectId,
+  statement: {
+    property: { id: 'schema:name' },
+    value: { type: 'value', content: { language: 'en', text: 'Revised source title' } },
+    references,
+  },
+};
+
+declare const previousTitleCandidate: string;
+const retractPreviousTitle: BatchCommand = {
+  op: 'retract',
+  key: 'bangumi:253:title:3',
+  source: source('facts'),
+  subject: subjectId,
+  candidate: previousTitleCandidate,
+  references,
+};
+
+// The source has ISBN-10 4-10-101013-0; only its ISBN-13 is proposed.
+const isbn: BatchCommand = {
+  op: 'propose',
+  key: 'bangumi:253:isbn:1',
+  source: source('facts'),
+  subject: subjectId,
+  statement: {
+    property: { id: 'schema:isbn' },
+    value: { type: 'value', content: '978-4-10-101013-7' },
+    references,
+  },
+};
+
+const publicationMonth: BatchCommand = {
+  op: 'propose',
+  key: 'bangumi:253:publication-month:1',
+  source: source('facts'),
+  subject: subjectId,
+  statement: {
+    property: { id: 'schema:datePublished' },
+    value: {
+      type: 'value',
+      content: {
+        time: '+1980-05-00T00:00:00Z',
+        precision: 10,
+        calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+      },
+    },
+    references,
+  },
+};
+
 const unresolvedAuthor: BatchCommand = {
   op: 'propose',
   key: 'openlibrary:OL45804W:author:1',
@@ -196,7 +257,12 @@ const unresolvedAuthor: BatchCommand = {
   statement: {
     property: { id: 'schema:author' },
     value: { type: 'somevalue' },
-    qualifiers: [{ property: { id: 'wdt:P648' }, value: { type: 'value', content: 'OL26320A' } }],
+    qualifiers: [
+      {
+        property: { id: 'schema:sameAs' },
+        value: { type: 'value', content: 'http://www.wikidata.org/entity/Q1001' },
+      },
+    ],
     references: [
       {
         parts: [
