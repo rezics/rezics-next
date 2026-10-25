@@ -112,7 +112,7 @@ async function unavailable(table: string, body: () => Promise<void>) {
 beforeEach(async () => {
   await pool.query('TRUNCATE access.membership_inverse');
   await pool.query(`CREATE TABLE IF NOT EXISTS permission_public_fixture
-    (route integer, id uuid, published boolean, valid tstzrange)`);
+    (route integer, id uuid, published boolean, valid tstzrange, PRIMARY KEY (route,id))`);
   await pool.query('DELETE FROM permission_public_fixture');
   for (const target of [resource, { ...resource, id: id('6789', '10') }])
     await pool.query("INSERT INTO permission_public_fixture VALUES ($1,$2,true,'(,)')", [target.route, target.id]);
@@ -241,7 +241,6 @@ test('grant ranges use exact inclusive start and exclusive end at the final data
       principal_id: principalId,
       anonymous: false,
       floor: false,
-      scope: true,
       at: null,
       roles: '[]',
       evidence_valid: '(,)',
@@ -399,22 +398,30 @@ test('known anonymous metadata needs current publication and retains targeted fi
   const anonymous: Actor = { kind: 'anonymous' };
   const published: Resource = {
     ...resource,
-    anonymousEligibility: createResourcePublicEligibility({
+    eligibility: createResourcePublicEligibility({
       resource,
       action: 'subject:public',
       async prepare({ pool: source }) {
-        const { rows } = await source.query('SELECT id FROM permission_public_fixture WHERE route=$1', [
-          resource.route,
-        ]);
-        return rows.length === 2 ? rows.map((row) => row.id) : null;
+        const targets = [resource, { ...resource, id: id('6789', '10') }];
+        for (const target of targets) {
+          const { rows } = await source.query('SELECT id FROM permission_public_fixture WHERE route=$1 AND id=$2', [
+            target.route,
+            target.id,
+          ]);
+          if (rows.length !== 1) return null;
+        }
+        return targets;
       },
       async verify({ client, at, evidence }) {
-        const { rows } = await client.query(
-          `SELECT id, published AND valid @> $2::timestamptz AS current
-          FROM permission_public_fixture WHERE route=$1`,
-          [resource.route, at],
-        );
-        return rows.length === 2 && rows.every((row) => evidence.includes(row.id) && row.current === true);
+        for (const target of evidence) {
+          const { rows } = await client.query(
+            `SELECT published AND valid @> $3::timestamptz AS current
+            FROM permission_public_fixture WHERE route=$1 AND id=$2`,
+            [target.route, target.id, at],
+          );
+          if (rows.length !== 1 || rows[0].current !== true) return false;
+        }
+        return true;
       },
     }),
   };

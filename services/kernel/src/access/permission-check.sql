@@ -1,9 +1,10 @@
 -- Scalar counts are bounded by exact identity/action and native valid-range
 -- keys (one grant per key, at most three denial reasons). They cannot become
 -- an alternative hashed EXISTS subplan that enumerates the resource ACL.
+-- Access checks the requested scope in process only when the trusted floor is false.
 WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route, :resource_id::uuid AS resource_id, :action::text AS action,
-         NULLIF(:actor_id::text, '')::uuid AS actor_id, NULLIF(:principal_id::text, '')::uuid AS principal_id, :anonymous::boolean AS anonymous, :floor::boolean AS floor, :scope::boolean AS scope, :deadline::timestamptz AS deadline
+         NULLIF(:actor_id::text, '')::uuid AS actor_id, NULLIF(:principal_id::text, '')::uuid AS principal_id, :anonymous::boolean AS anonymous, COALESCE(:floor::nullable(boolean), false) AS floor, :deadline::timestamptz AS deadline
 ), keys AS MATERIALIZED (
   SELECT r.account_id, r.organization_id AS subject_id, 'identity'::text AS subject_kind,
          r.role AS subject_role, r.member, r.valid
@@ -40,7 +41,7 @@ WITH input AS NOT MATERIALIZED (
 SELECT (
   t.at < i.deadline AND t.observed_at < i.deadline
   AND :evidence_valid::tstzrange @> t.at
-  AND (i.floor OR (NOT i.anonymous AND i.scope AND (
+  AND (i.floor OR (NOT i.anonymous AND (
     EXISTS (SELECT 1 FROM probes p WHERE p.account_id = i.actor_id AND p.granted AND p.member AND p.valid @> t.at)
     AND (i.principal_id IS NULL OR EXISTS (
       SELECT 1 FROM probes p WHERE p.account_id = i.principal_id AND p.granted AND p.member AND p.valid @> t.at

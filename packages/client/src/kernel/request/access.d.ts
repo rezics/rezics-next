@@ -13,15 +13,13 @@ export type AccountActor = {
 export type Actor = AccountActor | {
     kind: 'anonymous';
 };
-declare const anonymousEligibility: unique symbol;
-/** Server-created capability. Serialization or copying cannot preserve its authority. */
-export type ResourceAnonymousEligibility = {
-    readonly [anonymousEligibility]: true;
-};
+/** Server-only eligibility cannot be recovered from request JSON. */
 export type Resource = {
     route: number;
     id: string;
     eligibility?: ResourceEligibility;
+    /** Compatibility spelling; uses the same opaque capability and evaluator. */
+    anonymousEligibility?: ResourceEligibility;
 };
 export type ActionCatalogue = ReadonlyMap<string, {
     anonymous: boolean;
@@ -63,4 +61,3 @@ export declare class AuthenticationError extends Error {
 }
 export declare function actorOf(access: Access, request: Request, context: AccessContext): Promise<Actor>;
 export declare const anonymousAccess: Access;
-export {};

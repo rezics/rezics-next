@@ -126,6 +126,9 @@ export async function checkPermission(
       !facts ||
       facts.binding !== bind(actor, action, resource) ||
       facts.capability !== (resource.eligibility ?? resource.anonymousEligibility) ||
+      (resource.eligibility !== undefined &&
+        resource.anonymousEligibility !== undefined &&
+        resource.eligibility !== resource.anonymousEligibility) ||
       Date.now() >= facts.deadline
     )
       return false;
@@ -135,6 +138,9 @@ export async function checkPermission(
     if (!at) return false;
     const domainEligible = facts.verifyFloor ? await facts.verifyFloor(client, at) : false;
     const floor = facts.admitsAnonymous && domainEligible;
+    // Scope caps only the independent authenticated grant branch. Other token
+    // scopes neither supply the requested scope nor poison a verified public floor.
+    if (!floor && (facts.anonymous || !facts.scope)) return false;
     if (facts.binding !== bind(actor, action, resource) || Date.now() >= facts.deadline) return false;
     const row = await permissionRead.run(client, {
       route: resource.route,
@@ -144,7 +150,6 @@ export async function checkPermission(
       principal_id: facts.principalId ?? '',
       anonymous: facts.anonymous,
       floor,
-      scope: facts.scope,
       at,
       roles: facts.roles,
       grant_roles: [...facts.grantRoles],
@@ -152,7 +157,17 @@ export async function checkPermission(
       deadline: facts.databaseDeadline,
     });
     // A query taking longer than its evidence budget cannot produce usable authority.
-    return row?.allowed === true && Date.now() < facts.deadline;
+    return (
+      row?.allowed === true &&
+      facts.binding === bind(actor, action, resource) &&
+      facts.capability === (resource.eligibility ?? resource.anonymousEligibility) &&
+      !(
+        resource.eligibility !== undefined &&
+        resource.anonymousEligibility !== undefined &&
+        resource.eligibility !== resource.anonymousEligibility
+      ) &&
+      Date.now() < facts.deadline
+    );
   } catch {
     return false;
   }
