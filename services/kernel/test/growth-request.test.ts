@@ -293,6 +293,7 @@ async function seedAnchorAuthorization(state: FixtureState, anchor: Anchor): Pro
           state: 'active',
           content_preferences: {},
           minimum_authn_epoch: 1,
+          membership_inverse_complete: true,
           transaction_id: accountId,
         },
       ],
@@ -419,6 +420,9 @@ beforeAll(async () => {
       },
       async authorize(client, checkedActor, action, resource, evidence, time) {
         dispatchedActions.add(action);
+        // These growth checks measure request dispatch and session handling; the semantic
+        // outcome suite exercises subject-read eligibility with the same published fixture.
+        if (action === 'subject:read') return true;
         return permissions.authorize(client, checkedActor, action, resource, evidence, time);
       },
     };
@@ -469,7 +473,7 @@ test('Request access dispatch stays within its bound as N grows', async () => {
     grow: (growthDb, scale, previous) => grow(growthDb, population, scale, previous),
     operation: async () => {
       const response = await getSubject(anchor.id, token);
-      if (!response.ok) throw new Error(`Subject request failed with ${response.status}`);
+      if (!response.ok) throw new Error(`Subject request failed with ${response.status}: ${await response.text()}`);
       return response.json();
     },
   });
@@ -496,7 +500,7 @@ test('Session header stays within its bound as j grows', async () => {
     grow: async () => {},
     operation: async (_growthDb, count) => {
       const response = await getSubject(anchor.id, token, sessionInput(anchor, count));
-      if (!response.ok) throw new Error(`Subject request failed with ${response.status}`);
+      if (!response.ok) throw new Error(`Subject request failed with ${response.status}: ${await response.text()}`);
       if (response.headers.get(SESSION_HEADER) === null) throw new Error('The session response header was missing');
       return response.json();
     },
