@@ -11,11 +11,22 @@ beforeAll(async () => {
   db = await openGrowthDatabase(databaseUrl);
   await db.admin.query('DROP SCHEMA IF EXISTS growth_capture_test CASCADE');
   await db.admin.query('CREATE SCHEMA growth_capture_test');
-  await db.admin.query('CREATE TABLE growth_capture_test.parent (id integer PRIMARY KEY)');
-  await db.admin.query(
-    'CREATE TABLE growth_capture_test.child (id integer PRIMARY KEY, parent_id integer NOT NULL REFERENCES growth_capture_test.parent(id))',
-  );
-  await db.admin.query('INSERT INTO growth_capture_test.parent (id) VALUES (1)');
+  await db.admin.query('CREATE TABLE growth_capture_test.lookup (id integer PRIMARY KEY)');
+  await db.admin.query('INSERT INTO growth_capture_test.lookup (id) VALUES (1)');
+  await db.admin.query('CREATE TABLE growth_capture_test.trigger_input (id integer PRIMARY KEY)');
+  await db.admin.query(`
+    CREATE FUNCTION growth_capture_test.observe_insert() RETURNS trigger
+    LANGUAGE plpgsql AS $function$
+    BEGIN
+      PERFORM id FROM growth_capture_test.lookup WHERE id = NEW.id;
+      RETURN NEW;
+    END
+    $function$
+  `);
+  await db.admin.query(`
+    CREATE TRIGGER observe_insert AFTER INSERT ON growth_capture_test.trigger_input
+    FOR EACH ROW EXECUTE FUNCTION growth_capture_test.observe_insert()
+  `);
 });
 
 afterAll(async () => {
@@ -48,15 +59,15 @@ test('captures each application statement and its executed plan from the product
     });
 });
 
-test('captures nested statements such as a foreign key check', async () => {
+test('captures nested statements run by a trigger function', async () => {
   const database = db!;
   const result = await capture(database, () =>
     withConnection(database.pool, async (client) => {
-      await client.query('INSERT INTO growth_capture_test.child (id, parent_id) VALUES (1, 1)');
+      await client.query('INSERT INTO growth_capture_test.trigger_input (id) VALUES (1)');
     }),
   );
 
-  expect(result.capture.statements).toEqual(['INSERT INTO growth_capture_test.child (id, parent_id) VALUES (1, 1)']);
+  expect(result.capture.statements).toEqual(['INSERT INTO growth_capture_test.trigger_input (id) VALUES (1)']);
   expect(
     result.capture.plans.some(
       (plan) =>
@@ -64,7 +75,7 @@ test('captures nested statements such as a foreign key check', async () => {
         plan !== null &&
         'Query Text' in plan &&
         typeof plan['Query Text'] === 'string' &&
-        plan['Query Text'].includes('growth_capture_test.parent'),
+        plan['Query Text'].includes('SELECT id FROM growth_capture_test.lookup WHERE id = NEW.id'),
     ),
   ).toBe(true);
 });
