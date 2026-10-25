@@ -4,13 +4,14 @@ import { propertyOf, SUBJECT_TYPE, type DataType } from './profile.ts';
 
 export type Value = { type: 'value'; content: unknown } | { type: 'somevalue' } | { type: 'novalue' };
 export type Snak = { property: { id: string; data_type: DataType }; value: Value };
+export type Reference = { parts: Snak[]; hash: string };
 export type Statement = {
-  id: string | null;
-  rank: unknown;
+  id: string;
+  rank: 'normal' | 'preferred' | 'deprecated';
   property: { id: string; data_type: DataType };
-  value: unknown;
-  qualifiers: unknown[];
-  references: unknown[];
+  value: Value;
+  qualifiers: Snak[];
+  references: Reference[];
 };
 export type Item = {
   id: string;

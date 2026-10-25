@@ -4,7 +4,7 @@ import { withConnection, discardConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccountActor, Resource } from '../request/access.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../route/route.ts';
-import { itemFacts, resolveItem, type FactRow, type Item, type Statement } from './item.ts';
+import { itemFacts, resolveItem, type FactRow, type Item } from './item.ts';
 import insertFacts from './insert-facts.sql';
 import insertSubject from './create-subject.sql';
 import readLabelsStatement from './read-labels.sql';
@@ -26,10 +26,7 @@ export class SubjectAccessDeniedError extends Error {
 }
 
 export type SubjectComponent = { partition: number; epoch: number; position: bigint };
-export type ResolvedItem = Item & {
-  statements: Record<string, (Omit<Statement, 'id'> & { id: any })[]>;
-};
-export type CreateSubjectResult = { subject: ResolvedItem; component: SubjectComponent; replayed: boolean };
+export type CreateSubjectResult = { subject: Item; component: SubjectComponent; replayed: boolean };
 
 export async function createSubject(
   pool: Pool,
@@ -74,7 +71,7 @@ export async function createSubject(
         facts,
       });
       return {
-        value: resolveItem(subjectId, facts) as ResolvedItem,
+        value: resolveItem(subjectId, facts),
         events: [{ type: 'com.rezics.subject.created.v1', subject: subjectId, data: { id: subjectId } }],
       };
     },
@@ -130,7 +127,7 @@ export async function readSubject(
   pool: Pool,
   id: string,
   authorize: (client: PoolClient) => Promise<boolean>,
-): Promise<{ subject: ResolvedItem; component: SubjectComponent } | null> {
+): Promise<{ subject: Item; component: SubjectComponent } | null> {
   const route = routeOf(id);
   if (route === null) return null;
   return withConnection(pool, async (client) => {
@@ -151,7 +148,7 @@ export async function readSubject(
       await client.query('COMMIT');
       if (!allowed) return null;
       return {
-        subject: resolveItem(id, asFacts(rows)) as ResolvedItem,
+        subject: resolveItem(id, asFacts(rows)),
         component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
       };
     } catch (error) {

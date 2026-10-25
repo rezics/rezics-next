@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { derivedId, newId, routeOf } from '../src/route/route.ts';
-import { itemFacts, resolveItem, SubjectInputError, type FactRow } from '../src/semantic/item.ts';
+import { itemFacts, resolveItem, SubjectInputError, type FactRow, type Statement } from '../src/semantic/item.ts';
 import { BOOK_PROPERTIES } from '../src/semantic/profile.ts';
 
 const UUID_V8 = /^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -170,7 +170,7 @@ test('resolving the facts gives back the item in the Wikibase shape', () => {
       ...snak(input as { property: { id: string }; value: unknown }),
       qualifiers: ((input.qualifiers as { property: { id: string }; value: unknown }[] | undefined) ?? []).map(snak),
       references,
-    };
+    } as Statement;
   };
   expect(resolveItem(subjectId, facts)).toEqual({
     id: subjectId,
