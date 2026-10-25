@@ -465,6 +465,15 @@ export function startFakeStripe() {
       void server.stop(true);
     },
     pay,
+    chargeId(sessionId: string) {
+      return chargeOf(sessionId).id;
+    },
+    refundRemaining(sessionId: string, amount: number | 'remaining') {
+      const charge = chargeOf(sessionId);
+      return this.refund(sessionId, {
+        amount: amount === 'remaining' ? charge.amount - charge.amount_refunded : amount,
+      });
+    },
     succeedPayment,
     failPayment(sessionId: string) {
       const intent = intentOf(sessionId);
