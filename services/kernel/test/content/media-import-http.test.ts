@@ -115,7 +115,10 @@ beforeAll(async () => {
   bearer = await issue(accountId);
   otherBearer = await issue(otherId);
   limited = await issue(accountId, ['media:read_reservation']);
-  const limiter = createWriteRateLimiter({ secret: 'media-import-http-secret-at-least-32-bytes' });
+  const limiter = createWriteRateLimiter({
+    secret: 'media-import-http-secret-at-least-32-bytes',
+    overrides: '{"new-account":{"upload":{"maximum":1000,"seconds":60}}}',
+  });
   const dependencies = {
     pool: db.pool,
     access,
