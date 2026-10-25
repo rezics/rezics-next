@@ -206,6 +206,11 @@ reads, to thousands of rows at the smallest scale; for example, use 500 x scale 
 relation. Otherwise, the planner scans small relations and the check fails on rows that production would reach through
 an index.
 
+Every scale is measured warm. Keep the default `warmups`. When the operation uses up the state it measures, pass
+`warmup`, which runs the same code path on spare state (another probe, a fresh key) so the measured run is not the
+backend's first. `warmups: 0` measures a cold first sample: a false failure under `logarithmic` and `linear` bounds,
+and a hidden growth under `constant` ones.
+
 ## HTTP contract
 
 When the HTTP contract changes, regenerate both `contracts/openapi.json` with `bun run openapi` and the client

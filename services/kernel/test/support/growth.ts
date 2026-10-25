@@ -17,11 +17,20 @@ export type GrowthCheck = {
   readonly bounds: Readonly<Record<Metric, Bound>>;
   readonly slack?: Partial<Record<Metric, Slack>>;
   readonly repetitions?: number; // measured runs per scale, default 5; the sample is their medianCost
-  readonly warmups?: number; // unmeasured runs per scale before them, default 1
+  /**
+   * Unmeasured runs per scale, after `grow` and before the measured runs, default 1. Calls `warmup` when given,
+   * otherwise `operation`.
+   */
+  readonly warmups?: number;
   /** Grows the data from the previous scale (0 before the first) to this one, normally with seed(). */
   grow(db: GrowthDatabase, scale: number, previous: number): Promise<void>;
-  /** One run of the operation; repetition counts from 0 across all scales and warmups, for fresh keys. */
+  /**
+   * One measured run of the operation. `repetition` counts from 0 across all scales and unmeasured runs, shared
+   * with `warmup`, for fresh keys.
+   */
   operation(db: GrowthDatabase, scale: number, repetition: number): Promise<unknown>;
+  /** One unmeasured run of the same code path on spare state, used for warm-ups in place of `operation`. */
+  warmup?(db: GrowthDatabase, scale: number, repetition: number): Promise<unknown>;
 };
 
 export type GrowthReport = {
@@ -58,7 +67,8 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
   for (const scale of scales) {
     await check.grow(db, scale, previous);
     for (let warmup = 0; warmup < warmups; warmup++) {
-      await check.operation(db, scale, repetition);
+      if (check.warmup) await check.warmup(db, scale, repetition);
+      else await check.operation(db, scale, repetition);
       repetition++;
     }
 
