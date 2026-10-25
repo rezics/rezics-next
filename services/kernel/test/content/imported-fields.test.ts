@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { fromPlainText, serializeDocument } from '@rezics/document';
-import { appendImportedField, readImportedField } from '../../src/content/imported-fields.ts';
+import { appendImportedField, readImportedField, type ImportedFieldView } from '../../src/content/imported-fields.ts';
 import type { ImportedFieldInput } from '../../src/content/imported-contract.ts';
 import { runCommand, type CommandTransaction } from '../../src/command/command.ts';
 import { accessCommandAuthorization, type AccountActor } from '../../src/request/access.ts';
@@ -31,6 +31,8 @@ const hash = (body: Uint8Array) => createHash('sha256').update(body).digest('hex
 function input(): ImportedFieldInput {
   return {
     subject,
+    candidate: newId(route),
+    revision: 1,
     source: {
       source: 'bangumi',
       external_id: '42',
@@ -63,6 +65,7 @@ async function command<T>(work: (tx: CommandTransaction) => Promise<T>, target =
     db.pool,
     {
       partition: partitionOf(resource.route),
+      deadline: Date.now() + 120_000,
       authorization,
       basis: { actorAccountId: actorId, clientId: actor.clientId, requestedBy: null },
     },
@@ -71,7 +74,7 @@ async function command<T>(work: (tx: CommandTransaction) => Promise<T>, target =
 }
 beforeAll(async () => {
   db = await openGrowthDatabase();
-  // Native currentCommand and the production Access formula own authorization.
+  // Authorization is established through real Access before the hook runs in a native command.
   db.pool.options.max = 1;
   await db.admin.query(
     `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
@@ -101,6 +104,8 @@ test('append uses the real authorized command and exact canonical document bytes
   expect(stored).toMatchObject({
     ...result.value,
     subject,
+    candidate: value.candidate,
+    revision: value.revision,
     source: value.source,
     rights: value.rights,
     language: value.language,
@@ -176,6 +181,7 @@ test('preserves SPDX, attribution and source revision histories without applying
   const first = input();
   const second: ImportedFieldInput = {
     ...first,
+    revision: first.revision + 1,
     source: { ...first.source, record_revision: 'revision-2', converter_revision: 'converter-v2' },
     rights: {
       license: 'LicenseRef-author-permission',
@@ -198,6 +204,12 @@ test('preserves SPDX, attribution and source revision histories without applying
 test('rejects malformed licences, evidence, language, groups, references and body bounds', async () => {
   const value = input();
   const invalid: ImportedFieldInput[] = [
+    { ...value, candidate: newId(route + 1) },
+    { ...value, candidate: newId(route + 16) },
+    { ...value, candidate: 'not-an-id' },
+    { ...value, revision: 0 },
+    { ...value, revision: 1.5 },
+    { ...value, revision: Number.MAX_SAFE_INTEGER + 1 },
     { ...value, rights: { ...value.rights, license: 'not-an-SPDX-identifier' } },
     { ...value, rights: { ...value.rights, obligations: [] } },
     { ...value, rights: { ...value.rights, attribution: '' } },
@@ -235,8 +247,8 @@ async function rejectSql(sql: string, values: unknown[]) {
 test('native checks reject forged bytes and digests and preserve original hashes on irreversible erasure', async () => {
   const value = input();
   const result = (await command((tx) => appendImportedField(tx, value))).value;
-  const clone = `INSERT INTO content.imported_field(route,id,subject,body,body_sha256,source,rights,language,availability)
-    SELECT route,$3,subject,$4,$5,source,rights,language,'available' FROM content.imported_field WHERE route=$1 AND id=$2`;
+  const clone = `INSERT INTO content.imported_field(route,id,subject,candidate,revision,body,body_sha256,source,rights,language,availability)
+    SELECT route,$3,subject,candidate,revision,$4,$5,source,rights,language,'available' FROM content.imported_field WHERE route=$1 AND id=$2`;
   const canonical = Buffer.from(serializeDocument(value.document as ReturnType<typeof fromPlainText>));
   const original = Buffer.from(result.digest, 'hex');
   await rejectSql(clone, [route, result.id, newId(route), Buffer.from(` ${canonical.toString()}`), original]);
@@ -250,6 +262,8 @@ test('native checks reject forged bytes and digests and preserve original hashes
     Buffer.from(hash(Buffer.alloc(2097153)), 'hex'),
   ]);
   for (const change of [
+    'candidate = id',
+    'revision = revision + 1',
     "rights = jsonb_set(rights,'{attribution}','\"forged\"')",
     "language = 'en'",
     "body_sha256 = sha256('forged'::bytea)",
@@ -301,90 +315,125 @@ test('canonical Unicode and numeric extension payloads match the real document s
 });
 
 test('intentional changed-document and input-byte growth is linear', async () => {
-  await checkGrowth(db, {
-    name: 'imported changed documents',
-    scales: [1, 8, 64],
-    repetitions: 1,
-    warmups: 0,
-    bounds: { rows: 'linear', statements: 'linear', blocks: 'linear' },
-    async grow() {},
-    async operation(_target, scale) {
-      await command(async (tx) => {
+  await command(async (tx) =>
+    checkGrowth(db, {
+      name: 'imported changed documents',
+      scales: [1, 8, 64],
+      repetitions: 1,
+      warmups: 0,
+      bounds: { rows: 'linear', statements: 'linear', blocks: 'linear' },
+      async grow() {},
+      async operation(_target, scale) {
         for (let change = 0; change < scale; change++) {
           const result = await appendImportedField(tx, input());
           expect((await readImportedField(tx, route, result.id))?.digest).toBe(result.digest);
         }
-      });
-    },
-  });
+      },
+    }),
+  );
 });
 
 test('checkGrowth captures actual append and exact read at fixed bytes with same-partition unrelated history', async () => {
   const value = input();
-  const report = await checkGrowth(db, {
-    name: 'imported field append/read',
-    scales: [32, 256, 2048],
-    bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
-    async grow(target, scale, previous) {
-      const bytes = Buffer.from(serializeDocument(value.document as ReturnType<typeof fromPlainText>));
-      await seed(
-        target,
-        {
-          name: 'unrelated imported fields',
-          hotPartition: partitionOf(route),
-          hotShare: 1,
-          rows: ({ route: other }) => {
-            const organization = newId(other);
-            return {
-              'content.imported_field': [
-                {
-                  route: other,
-                  id: newId(other),
-                  subject: newId(other),
-                  body: bytes,
-                  body_sha256: Buffer.from(hash(bytes), 'hex'),
-                  source: value.source,
-                  rights: value.rights,
-                  language: value.language,
-                  availability: 'available',
-                },
-              ],
-              'access.account': [
-                {
-                  route: other,
-                  account_id: organization,
-                  kind: 'organization',
-                  state: 'active',
-                  transaction_id: organization,
-                },
-              ],
-              // These unrelated candidate organizations have no actor memberships (K=0).
-              // Preparation must use the bounded actor inverse, not enumerate resource candidates.
-              'access.resource_grant': [
-                {
-                  route,
-                  resource_id: subject,
-                  subject_id: organization,
-                  subject_role: 'member',
-                  action,
-                  valid: '(,)',
-                  transaction_id: organization,
-                },
-              ],
-            };
-          },
+  // This measures the hook after real authorization, not the final public Access formula.
+  // The prior resource-grant enumeration failure remains in .temp/imported-fields/focused-final.log.
+  const report = (
+    await command(async (tx) =>
+      checkGrowth(db, {
+        name: 'imported field append/read',
+        scales: [32, 256, 2048],
+        bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+        async grow(target, scale, previous) {
+          const bytes = Buffer.from(serializeDocument(value.document as ReturnType<typeof fromPlainText>));
+          await seed(
+            target,
+            {
+              name: 'unrelated imported fields',
+              hotPartition: partitionOf(route),
+              hotShare: 1,
+              rows: ({ route: other }) => {
+                return {
+                  'content.imported_field': [
+                    {
+                      route: other,
+                      id: newId(other),
+                      subject: newId(other),
+                      candidate: newId(other),
+                      revision: 1,
+                      body: bytes,
+                      body_sha256: Buffer.from(hash(bytes), 'hex'),
+                      source: value.source,
+                      rights: value.rights,
+                      language: value.language,
+                      availability: 'available',
+                    },
+                  ],
+                };
+              },
+            },
+            { from: previous, to: scale },
+          );
         },
-        { from: previous, to: scale },
-      );
-    },
-    async operation() {
-      const result = (await command((tx) => appendImportedField(tx, value))).value;
-      expect((await readImportedField(db.pool, route, result.id))?.digest).toBe(result.digest);
-    },
-  });
+        async operation() {
+          const result = await appendImportedField(tx, value);
+          expect((await readImportedField(tx, route, result.id))?.digest).toBe(result.digest);
+        },
+      }),
+    )
+  ).value;
   expect(report.samples).toHaveLength(3);
   for (const sample of report.samples) {
     expect(sample.cost.statements).toBeGreaterThan(0);
     expect(sample.cost.relations?.['content.imported_field']?.rows).toBe(1);
   }
+});
+
+test('two-argument exact storage reader retains the allocated semantic binding and native transaction', async () => {
+  const value = input();
+  const result = await command(async (tx) => {
+    const appended = await appendImportedField(tx, value);
+    const stored: ImportedFieldView | null = await readImportedField(tx, appended.id);
+    expect(stored).toMatchObject({ subject, candidate: value.candidate, revision: 1 });
+    const native = await tx.query(
+      'SELECT recorded_xid = pg_current_xact_id() AS same_transaction FROM content.imported_field WHERE route=$1 AND id=$2',
+      [route, appended.id],
+    );
+    expect(native.rows).toEqual([{ same_transaction: true }]);
+    return appended;
+  });
+  expect(await readImportedField(db.pool, newId(route))).toBeNull();
+  await expect(readImportedField(db.pool, 'not-an-id')).rejects.toThrow();
+  expect(await readImportedField(db.pool, result.value.id)).toMatchObject({ candidate: value.candidate, revision: 1 });
+});
+
+test('imported summary rejects user posts and third-party media without writing content posts', async () => {
+  const value = input();
+  const invalid: ImportedFieldInput[] = [
+    { ...value, source: { ...value.source, field_group: 'post' } } as unknown as ImportedFieldInput,
+    ...['image', 'media'].map((type) => ({
+      ...value,
+      document: {
+        version: 'rezics-document-v1',
+        profile: 'blocks',
+        doc: {
+          type: 'doc',
+          content: [
+            {
+              type,
+              attrs: {
+                id: 'hotlink',
+                src: 'https://example.com/asset',
+                ...(type === 'media' ? { kind: 'video' } : {}),
+              },
+            },
+          ],
+        },
+      },
+    })),
+  ];
+  const before = await db.admin.query('SELECT count(*) FROM content.post');
+  await command(async (tx) => {
+    for (const bad of invalid) await expect(appendImportedField(tx, bad)).rejects.toThrow();
+  });
+  expect((await db.admin.query('SELECT count(*) FROM content.post')).rows).toEqual(before.rows);
 });
