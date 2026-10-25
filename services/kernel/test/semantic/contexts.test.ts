@@ -1,10 +1,14 @@
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import pg from 'pg';
+import { createAccess, type AccessConfig } from '../../src/access/index.ts';
+import { resourceRoleCatalogue } from '../../src/access/resource-roles.ts';
+import { createGrantCommands } from '../../src/access/grant-commands.ts';
+import { withConnection } from '../../src/database/pool.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
-import { AuthenticationError, type Access, type AccountActor } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
@@ -19,41 +23,90 @@ afterAll(async () => {
 });
 
 const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(3)]]) };
-const account = (accountId: string): AccountActor => ({
-  kind: 'account',
-  accountId,
-  clientId: 'web',
-  scopes: ['context:create', 'context:read'],
-  requestedBy: null,
-  authnEpoch: 1,
+const accounts = {
+  editor: '019a1b2c-3d4e-7f00-8a00-ed170e000001',
+  outsider: '019a1b2c-3d4e-7f00-8a00-0075de000003',
+};
+const actions = ['access:grant', 'context:create', 'context:read', 'context:accept', 'context:adopt'];
+let access: ReturnType<typeof createAccess>;
+let bearerTokens: Record<keyof typeof accounts, string>;
+let jwk: Record<string, unknown>;
+const auth = {
+  issuer: 'https://auth.example.test',
+  audience: 'https://api.rezics.test',
+  jwksUrl: 'https://auth.example.test/jwks',
+  fetch: async () => Response.json({ keys: [jwk] }),
+};
+const kernel = createKernel({
+  pool,
+  access: (config: AccessConfig) => (access ??= createAccess({ ...config, auth })),
+  tokens,
+  routeKey: new Uint8Array(32).fill(4),
+  writeRate: {
+    async spend() {
+      return { allowed: true as const };
+    },
+  },
 });
-const actors: Record<string, AccountActor> = {
-  editor: account('019a1b2c-3d4e-7f00-8a00-ed170e000001'),
-  outsider: account('019a1b2c-3d4e-7f00-8a00-0075de000003'),
-};
-const checks: { action: string; route: number; id: string }[] = [];
-const access: Access = {
-  async authenticate(token) {
-    const actor = actors[token];
-    if (!actor) throw new AuthenticationError(401, 'Bearer error="invalid_token"');
-    return actor;
-  },
-  async authorize(_client, actor, action, resource) {
-    if (action === 'context:read') return true;
-    checks.push({ action, route: resource.route, id: resource.id });
-    return (
-      action === 'context:create' &&
-      actor.kind === 'account' &&
-      actor.accountId === actors.editor!.accountId &&
-      resource.id === GLOBAL_CONTEXT
-    );
-  },
-};
-const kernel = createKernel({ pool, access, tokens, routeKey: new Uint8Array(32).fill(4) });
 
-async function call(method: string, path: string, options: { token?: string; key?: string; body?: unknown } = {}) {
+beforeAll(async () => {
+  const signing = await generateKeyPair('ES256', { extractable: true });
+  jwk = { ...(await exportJWK(signing.publicKey)), kid: 'contexts', alg: 'ES256' };
+  access = createAccess({
+    actions: new Map(actions.map((action) => [action, { anonymous: action === 'context:read' }])),
+    auth,
+  });
+  bearerTokens = {
+    editor: await signedToken(accounts.editor, signing.privateKey),
+    outsider: await signedToken(accounts.outsider, signing.privateKey),
+  };
+  for (const id of Object.values(accounts))
+    await admin.query(
+      "INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES ($1,$2,'actor','active',$2)",
+      [routeOf(id), id],
+    );
+  const unrelated = newId(0);
+  await admin.query(
+    `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+     VALUES (0,$1,$2,'context:create','(,)',$2)`,
+    [GLOBAL_CONTEXT, accounts.editor],
+  );
+  await admin.query(
+    `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+     VALUES (0,$1,$2,'context:create','(,)',$2)`,
+    [unrelated, accounts.outsider],
+  );
+});
+
+async function signedToken(accountId: string, key: Awaited<ReturnType<typeof generateKeyPair>>['privateKey']) {
+  return new SignJWT({
+    client_id: 'web',
+    scope: actions.join(' '),
+    authn_epoch: 1,
+    auth_time: Math.floor(Date.now() / 1000),
+    amr: ['pwd'],
+  })
+    .setProtectedHeader({ alg: 'ES256', kid: 'contexts', typ: 'at+jwt' })
+    .setIssuer(auth.issuer)
+    .setAudience(auth.audience)
+    .setSubject(accountId)
+    .setIssuedAt()
+    .setExpirationTime('5m')
+    .sign(key);
+}
+
+async function call(
+  method: string,
+  path: string,
+  options: { token?: string | null; key?: string; body?: unknown } = {},
+) {
   const headers: Record<string, string> = {};
-  if (options.token) headers.authorization = `Bearer ${options.token}`;
+  if (options.token) {
+    const token = Object.hasOwn(bearerTokens, options.token)
+      ? bearerTokens[options.token as keyof typeof bearerTokens]
+      : options.token;
+    headers.authorization = `Bearer ${token}`;
+  }
   if (options.key !== undefined) headers['idempotency-key'] = options.key;
   if (options.body !== undefined) headers['content-type'] = 'application/json';
   const response = await kernel.handle(
@@ -73,6 +126,14 @@ async function communities(): Promise<number> {
   return rows[0].n;
 }
 
+async function permission(account: keyof typeof accounts, action: string, resource: { route: number; id: string }) {
+  const deadline = Date.now() + 5000;
+  const actor = await access.authenticate(bearerTokens[account], { pool, deadline });
+  const evidence = await access.prepare?.(actor, action, resource, { pool, deadline });
+  if (evidence === undefined) return false;
+  return withConnection(pool, (client) => access.authorize(client, actor, action, resource, evidence));
+}
+
 test('an editor creates a community Context that anyone reads and its key replays', async () => {
   const token = key();
   const body = { labels: { en: 'Literature readers', ja: '文学の読者' } };
@@ -82,7 +143,8 @@ test('an editor creates a community Context that anyone reads and its key replay
   expect(first.body).toEqual({ context: { id: expect.any(String), kind: 'community', labels: body.labels } });
   expect(first.response.headers.get('location')).toBe(`/v1/contexts/${context.id}`);
   expect(first.response.headers.get('rezics-session-token')).toBeTruthy();
-  expect(checks.at(-1)).toEqual({ action: 'context:create', route: 0, id: GLOBAL_CONTEXT });
+  const unrelatedGrant = await create({ labels: { en: 'Unrelated grant' } }, 'outsider');
+  expect([unrelatedGrant.response.status, unrelatedGrant.body.code]).toEqual([403, 'forbidden']);
   const replay = await create(body, 'editor', token);
   expect(replay.response.status).toBe(201);
   expect(replay.body).toEqual(first.body);
@@ -99,6 +161,41 @@ test('an editor creates a community Context that anyone reads and its key replay
   const global = await call('GET', `/v1/contexts/${GLOBAL_CONTEXT}`, { token: 'outsider' });
   expect(global.response.status).toBe(200);
   expect(global.body).toEqual({ context: { id: GLOBAL_CONTEXT, kind: 'global', labels: { en: 'Global' } } });
+});
+
+test('Context creators receive the owner actions, while the moderator role grants acceptance only', async () => {
+  const created = await create({ labels: { en: 'Context owners' } });
+  expect(created.response.status).toBe(201);
+  const resource = { route: routeOf(created.body.context.id)!, id: created.body.context.id };
+  expect(await permission('editor', 'context:accept', resource)).toBe(true);
+  expect(await permission('editor', 'context:adopt', resource)).toBe(true);
+  expect(await permission('outsider', 'context:accept', resource)).toBe(false);
+  expect(await permission('outsider', 'context:adopt', resource)).toBe(false);
+
+  const roles = resourceRoleCatalogue(access)!;
+  expect(roles.types.get('semantic.context')).toEqual({ owner: 'semantic.context.owner', standing: [] });
+  expect(roles.roles.get('semantic.context.owner')).toEqual(['context:accept', 'context:adopt']);
+  expect(roles.roles.get('semantic.context.moderator')).toEqual(['context:accept']);
+
+  await admin.query(
+    `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+     VALUES ($1,$2,$3,'access:grant','(,)',$3)`,
+    [resource.route, resource.id, accounts.editor],
+  );
+  const actor = await access.authenticate(bearerTokens.editor, { pool, deadline: Date.now() + 5000 });
+  const grants = createGrantCommands({ pool, access, managementAction: 'access:grant' });
+  await grants.createRole(
+    { pool, actor, deadline: Date.now() + 5000 },
+    {
+      resource,
+      subject: { kind: 'account', id: accounts.outsider },
+      role: 'semantic.context.moderator',
+      valid: '(,)',
+      key: randomUUID(),
+    },
+  );
+  expect(await permission('outsider', 'context:accept', resource)).toBe(true);
+  expect(await permission('outsider', 'context:adopt', resource)).toBe(false);
 });
 
 test('creating a Context needs context:create on the Global Context and invalid input writes nothing', async () => {

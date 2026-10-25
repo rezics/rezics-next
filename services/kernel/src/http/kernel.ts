@@ -54,7 +54,11 @@ export function createKernel(dependencies: KernelDependencies) {
     access: () => resolveAccess({ actions: actionCatalogue(app) }),
     ...(dependencies.commerce === undefined ? {} : { commerce: dependencies.commerce }),
   });
-  const contextual = contextRoutes(commercial as unknown as ReturnType<typeof definitionRoutes>, dependencies);
+  const contextual = contextRoutes(commercial as unknown as ReturnType<typeof definitionRoutes>, {
+    pool: dependencies.pool,
+    routeKey: dependencies.routeKey,
+    access: () => resolveAccess({ actions: actionCatalogue(contextual) }),
+  });
   const searched = searchRoutes(contextual, dependencies);
   const content = contentRoutes(searched as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,

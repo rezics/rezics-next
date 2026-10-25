@@ -12,7 +12,9 @@
     "content.media.owner": ["media:read_reservation", "media:read", "media:complete", "media:erase"],
     "commerce.offer.owner": ["offer:read", "offer:manage", "order:create"],
     "commerce.offer.standing": ["order:create"],
-    "commerce.payout.owner": ["payout_statement:list", "payout_statement:read"]
+    "commerce.payout.owner": ["payout_statement:list", "payout_statement:read"],
+    "semantic.context.owner": ["context:accept", "context:adopt"],
+    "semantic.context.moderator": ["context:accept"]
   },
   "types": {
     "community.realm": {
@@ -45,6 +47,10 @@
     "commerce.offer": {
       "owner": "commerce.offer.owner",
       "standing": ["commerce.offer.standing"]
+    },
+    "semantic.context": {
+      "owner": "semantic.context.owner",
+      "standing": []
     }
   }
 }

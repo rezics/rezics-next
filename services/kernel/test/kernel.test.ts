@@ -48,6 +48,9 @@ const typed = [
   'GET /v1/payoutStatements/:statementId/lines',
   'POST /v1/payoutStatements/:statementId/$markPaid',
   'POST /v1/subjects/:id/candidates',
+  'POST /v1/subjects/:id/candidates/:candidate/$accept',
+  'POST /v1/subjects/:id/candidates/:candidate/$reject',
+  'POST /v1/subjects/:id/$adopt',
   'GET /v1/subjects/:id/candidates',
   'GET /v1/subjects/:id/revisions',
   'POST /v1/definitions/releases',
@@ -106,6 +109,11 @@ test('subject HTTP rejects document and media values before attempting storage',
   const kernel = createKernel({
     pool,
     routeKey: new Uint8Array(32),
+    writeRate: {
+      async spend() {
+        return { allowed: true as const };
+      },
+    },
     access: {
       async authenticate() {
         return {

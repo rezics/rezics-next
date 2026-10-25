@@ -1,7 +1,9 @@
 import type { Pool } from 'pg';
+import { type ParentAnchor } from '../access/index.ts';
 import { type CommandAuthorization } from '../command/command.ts';
 import type { AccessCheck, AccountActor, Resource } from '../request/access.ts';
 export declare const CREATE_CONTEXT = "context.create";
+export declare const globalContextAnchor: ParentAnchor;
 export declare function contextTarget(routeKey: Uint8Array, accountId: string, idempotencyKey: string): Resource;
 export declare class ContextAccessDeniedError extends Error {
     constructor();
@@ -20,7 +22,7 @@ export declare function createContext(pool: Pool, options: {
     idempotencyKey: string;
     digest: Uint8Array;
     input: unknown;
-    authorize: AccessCheck;
+    authorize?: AccessCheck;
     authorization?: CommandAuthorization;
     deadline?: number;
 }): Promise<{
@@ -44,5 +46,6 @@ export declare function readContext(pool: Pool, id: string, authorize: (client: 
         position: bigint;
     };
 } | null>;
+export declare function contextExists(pool: Pool, id: string): Promise<boolean>;
 export declare function contextLabels(id: string, input: unknown): Record<string, string>;
 export declare function publicContextEligibility(resource: Resource): import("../access/eligibility.ts").ResourceEligibility;

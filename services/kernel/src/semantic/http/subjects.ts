@@ -1,7 +1,15 @@
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import type { KeyRing } from '../../tokens/seal.ts';
-import { listCandidates, listRevisions, proposeStatement, SubjectNotFoundError } from '../candidates.ts';
+import {
+  adoptCandidates,
+  decideCandidate,
+  EditorialConflictError,
+  listCandidates,
+  listRevisions,
+  proposeStatement,
+  SubjectNotFoundError,
+} from '../candidates.ts';
 import { PageCursorError } from '../page.ts';
 import type { Pool } from 'pg';
 import { withConnection } from '../../database/pool.ts';
@@ -9,7 +17,7 @@ import { SubjectInputError, type Item, type Snak } from '../item.ts';
 import { createSubject, readLabels, readSubject, SubjectAccessDeniedError, subjectTarget } from '../subject.ts';
 import { DATA_TYPES, type DataType } from '@rezics/definitions';
 import { GrantDeniedError } from '../../access/grant-commands.ts';
-import { activeRelease, GLOBAL_CONTEXT, readRelease } from '../definitions.ts';
+import { activeRelease, GLOBAL_CONTEXT, readRelease, StaleEditorialHeadError } from '../definitions.ts';
 import { routeOf } from '../../route/route.ts';
 import type { AccountActor } from '../../request/access.ts';
 import { AuthenticationError } from '../../request/access.ts';
@@ -18,6 +26,7 @@ import { defineRateLimit } from '../../http/rate-limit.ts';
 import { ProblemError, problemSchema } from '../../http/problem.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, requestDigest, SESSION_HEADER } from '../../http/request.ts';
 import { subjectReadEligibility } from '../eligibility.ts';
+import { customMethod } from '../../http/custom-method.ts';
 
 const DataTypeSchema = t.Unsafe<DataType>(t.Union(DATA_TYPES.map((dataType) => t.Literal(dataType))));
 const ValueSchema = t.Union([
@@ -80,6 +89,8 @@ const pageQuery = {
 function candidateError(error: unknown): never {
   if (error instanceof SubjectInputError) throw invalidSubjectInput(error);
   if (error instanceof SubjectNotFoundError) throw new ProblemError('not_found');
+  if (error instanceof EditorialConflictError) throw new ProblemError('conflict');
+  if (error instanceof StaleEditorialHeadError) throw new ProblemError('stale_editorial_head');
   if (error instanceof PageCursorError) throw new ProblemError('invalid_request');
   if (error instanceof SubjectAccessDeniedError || error instanceof GrantDeniedError)
     throw new ProblemError('forbidden');
@@ -98,6 +109,68 @@ const readResponse = t.Object(
   { additionalProperties: false },
 );
 const unauthorized = problemSchema('authentication_required', 'invalid_credentials');
+const EditorialBodyContext = t.String({ format: 'uuid' });
+const ExpectedHead = t.Union([t.Integer({ minimum: 1 }), t.Null()]);
+const DecisionBody = t.Object(
+  { context: EditorialBodyContext, expected_head: ExpectedHead },
+  { additionalProperties: false },
+);
+const AdoptionMode = t.Union([t.Literal('inherit'), t.Literal('replace'), t.Literal('suppress')]);
+const SelectionRank = t.Union([t.Literal('normal'), t.Literal('preferred'), t.Literal('deprecated')]);
+const Selection = t.Array(
+  t.Object({ candidate: t.String({ format: 'uuid' }), rank: SelectionRank }, { additionalProperties: false }),
+  { maxItems: 32 },
+);
+const AdoptionBody = t.Object(
+  {
+    context: EditorialBodyContext,
+    property: t.String({ minLength: 1 }),
+    mode: AdoptionMode,
+    selection: Selection,
+    expected_head: ExpectedHead,
+  },
+  { additionalProperties: false },
+);
+const acceptanceResponse = t.Object(
+  {
+    acceptance: t.Object(
+      {
+        context: EditorialBodyContext,
+        candidate: t.String({ format: 'uuid' }),
+        decision: t.Union([t.Literal('accept'), t.Literal('reject')]),
+        head: t.Integer({ minimum: 1 }),
+      },
+      { additionalProperties: false },
+    ),
+    revision: t.Integer({ minimum: 1 }),
+  },
+  { additionalProperties: false },
+);
+const adoptionResponse = t.Object(
+  {
+    adoption: t.Object(
+      {
+        context: EditorialBodyContext,
+        property: t.String(),
+        mode: AdoptionMode,
+        selection: t.Array(
+          t.Object(
+            {
+              candidate: t.String({ format: 'uuid' }),
+              rank: t.Union([t.Literal('normal'), t.Literal('preferred')]),
+            },
+            { additionalProperties: false },
+          ),
+          { maxItems: 32 },
+        ),
+        head: t.Integer({ minimum: 1 }),
+      },
+      { additionalProperties: false },
+    ),
+    revision: t.Integer({ minimum: 1 }),
+  },
+  { additionalProperties: false },
+);
 type SubjectRouteDependencies = { pool: Pool; routeKey: Uint8Array; tokens: KeyRing };
 function invalidSubjectInput(error: SubjectInputError): ProblemError {
   return new ProblemError('invalid_request', { errors: error.violations });
@@ -201,6 +274,7 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
       '/v1/subjects/:id',
       {
         params: t.Object({ id: t.String() }),
+        query: t.Object({ context: t.Optional(EditorialBodyContext) }),
         response: {
           200: withHeaders(readResponse, { [SESSION_HEADER]: t.String(), etag: t.String() }),
           401: unauthorized,
@@ -213,12 +287,14 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
           security: [{ bearerAuth: [] }, {}],
         },
       },
-      async ({ params, authorize, admission, job, session, set }) => {
+      async ({ params, query, authorize, admission, job, session, set }) => {
         const route = routeOf(params.id);
         if (route === null) throw new ProblemError('not_found');
         const resource = { route, id: params.id };
         const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
-        const result = await admission.run('normal', job, () => readSubject(pool, params.id, check));
+        const result = await admission.run('normal', job, () =>
+          readSubject(pool, params.id, check, query.context ?? GLOBAL_CONTEXT),
+        );
         if (!result) throw new ProblemError('not_found');
 
         const release = await readRelease(pool, result.subject.release);
@@ -317,11 +393,209 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
         }
       },
     )
+    .post(
+      customMethod('/v1/subjects/:id/candidates/:candidate', 'accept'),
+      {
+        params: t.Object({ id: t.String(), candidate: t.String({ format: 'uuid' }) }),
+        headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
+        body: DecisionBody,
+        response: {
+          200: withHeaders(acceptanceResponse, { [SESSION_HEADER]: t.String() }),
+          400: problemSchema('invalid_request'),
+          401: unauthorized,
+          403: problemSchema('forbidden'),
+          404: problemSchema('not_found'),
+          409: problemSchema('conflict', 'stale_editorial_head'),
+          422: problemSchema('idempotency_conflict'),
+          503: problemSchema(
+            'semantic_not_ready',
+            'overloaded',
+            'partition_unavailable',
+            'transaction_retry_exhausted',
+            'deadline_exceeded',
+          ),
+        },
+        detail: {
+          operationId: 'subject.accept_candidate',
+          'x-action': 'context:accept',
+          'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params, body, headers, actor, authorizeCommand, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        if (routeOf(params.id) === null) throw new ProblemError('not_found');
+        const contextRoute = routeOf(body.context);
+        if (contextRoute === null) throw new ProblemError('invalid_request');
+        const authorization = await authorizeCommand(
+          { route: contextRoute, id: body.context },
+          () => new SubjectAccessDeniedError(),
+        );
+        try {
+          const { component, acceptance, revision } = await admission.run('normal', job, () =>
+            decideCandidate(pool, {
+              subject: params.id,
+              candidate: params.candidate,
+              decision: 'accept',
+              context: body.context,
+              expectedHead: body.expected_head,
+              actor,
+              idempotencyKey: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+              digest: requestDigest('subject.decide', actor, {
+                subject: params.id,
+                candidate: params.candidate,
+                decision: 'accept',
+                body,
+              }),
+              authorization,
+              deadline: job.deadline,
+            }),
+          );
+          session.record(component);
+          return { acceptance, revision };
+        } catch (error) {
+          return candidateError(error);
+        }
+      },
+    )
+    .post(
+      customMethod('/v1/subjects/:id/candidates/:candidate', 'reject'),
+      {
+        params: t.Object({ id: t.String(), candidate: t.String({ format: 'uuid' }) }),
+        headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
+        body: DecisionBody,
+        response: {
+          200: withHeaders(acceptanceResponse, { [SESSION_HEADER]: t.String() }),
+          400: problemSchema('invalid_request'),
+          401: unauthorized,
+          403: problemSchema('forbidden'),
+          404: problemSchema('not_found'),
+          409: problemSchema('conflict', 'stale_editorial_head'),
+          422: problemSchema('idempotency_conflict'),
+          503: problemSchema(
+            'semantic_not_ready',
+            'overloaded',
+            'partition_unavailable',
+            'transaction_retry_exhausted',
+            'deadline_exceeded',
+          ),
+        },
+        detail: {
+          operationId: 'subject.reject_candidate',
+          'x-action': 'context:accept',
+          'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params, body, headers, actor, authorizeCommand, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        if (routeOf(params.id) === null) throw new ProblemError('not_found');
+        const contextRoute = routeOf(body.context);
+        if (contextRoute === null) throw new ProblemError('invalid_request');
+        const authorization = await authorizeCommand(
+          { route: contextRoute, id: body.context },
+          () => new SubjectAccessDeniedError(),
+        );
+        try {
+          const { component, acceptance, revision } = await admission.run('normal', job, () =>
+            decideCandidate(pool, {
+              subject: params.id,
+              candidate: params.candidate,
+              decision: 'reject',
+              context: body.context,
+              expectedHead: body.expected_head,
+              actor,
+              idempotencyKey: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+              digest: requestDigest('subject.decide', actor, {
+                subject: params.id,
+                candidate: params.candidate,
+                decision: 'reject',
+                body,
+              }),
+              authorization,
+              deadline: job.deadline,
+            }),
+          );
+          session.record(component);
+          return { acceptance, revision };
+        } catch (error) {
+          return candidateError(error);
+        }
+      },
+    )
+    .post(
+      customMethod('/v1/subjects/:id', 'adopt'),
+      {
+        params: t.Object({ id: t.String() }),
+        headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
+        body: AdoptionBody,
+        response: {
+          200: withHeaders(adoptionResponse, { [SESSION_HEADER]: t.String() }),
+          400: problemSchema('invalid_request'),
+          401: unauthorized,
+          403: problemSchema('forbidden'),
+          404: problemSchema('not_found'),
+          409: problemSchema('conflict', 'stale_editorial_head'),
+          422: problemSchema('idempotency_conflict'),
+          503: problemSchema(
+            'semantic_not_ready',
+            'overloaded',
+            'partition_unavailable',
+            'transaction_retry_exhausted',
+            'deadline_exceeded',
+          ),
+        },
+        detail: {
+          operationId: 'subject.adopt',
+          'x-action': 'context:adopt',
+          'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params, body, headers, actor, authorizeCommand, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        if (routeOf(params.id) === null) throw new ProblemError('not_found');
+        const contextRoute = routeOf(body.context);
+        if (contextRoute === null) throw new ProblemError('invalid_request');
+        const active = await activeRelease(pool);
+        if (!active) throw new ProblemError('semantic_not_ready');
+        const authorization = await authorizeCommand(
+          { route: contextRoute, id: body.context },
+          () => new SubjectAccessDeniedError(),
+        );
+        try {
+          const { component, adoption, revision } = await admission.run('normal', job, () =>
+            adoptCandidates(pool, {
+              subject: params.id,
+              context: body.context,
+              property: body.property,
+              mode: body.mode,
+              selection: body.selection as { candidate: string; rank: 'normal' | 'preferred' | 'deprecated' }[],
+              expectedHead: body.expected_head,
+              actor,
+              idempotencyKey: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+              digest: requestDigest('subject.adopt', actor, { subject: params.id, body }),
+              authorization,
+              deadline: job.deadline,
+              release: active,
+            }),
+          );
+          session.record(component);
+          return { adoption, revision };
+        } catch (error) {
+          return candidateError(error);
+        }
+      },
+    )
     .get(
       '/v1/subjects/:id/candidates',
       {
         params: t.Object({ id: t.String() }),
-        query: t.Object({ ...pageQuery, property: t.String({ minLength: 1 }), context: t.Optional(t.String()) }),
+        query: t.Object({
+          ...pageQuery,
+          property: t.String({ minLength: 1 }),
+          context: t.Optional(EditorialBodyContext),
+        }),
         response: {
           200: t.Object({
             candidates: t.Array(
@@ -332,7 +606,7 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
                 revision: t.Integer(),
                 decision: t.Union([t.Literal('accepted'), t.Literal('rejected'), t.Null()]),
                 head: t.Union([t.Integer(), t.Null()]),
-                rank: t.Union([t.Literal('normal'), t.Literal('preferred'), t.Null()]),
+                rank: t.Union([t.Literal('normal'), t.Literal('preferred'), t.Literal('deprecated'), t.Null()]),
               }),
             ),
             adoption: t.Union([

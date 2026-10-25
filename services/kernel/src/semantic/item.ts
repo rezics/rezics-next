@@ -22,7 +22,7 @@ export type Item = {
   revision: number;
   release: string;
   context: string;
-  resolution: Record<string, never>;
+  resolution: Record<string, 'unresolved' | 'suppressed'>;
   labels: Record<string, string>;
   descriptions: Record<string, string>;
   aliases: Record<string, string[]>;
@@ -132,7 +132,12 @@ export function resolveItem(
   rows: readonly FactRow[],
   type: string,
   dataTypes: Readonly<Record<string, DataType>>,
-  metadata: { revision: number; release: string; context: string },
+  metadata: {
+    revision: number;
+    release: string;
+    context: string;
+    resolution?: Record<string, 'unresolved' | 'suppressed'>;
+  },
 ): Item {
   const labels: Record<string, string> = {};
   const descriptions: Record<string, string> = {};
@@ -194,7 +199,7 @@ export function resolveItem(
     id: subjectId,
     type,
     ...metadata,
-    resolution: {},
+    resolution: metadata.resolution ?? {},
     labels,
     descriptions,
     aliases: Object.fromEntries([...aliases].filter(([, values]) => values.length)),

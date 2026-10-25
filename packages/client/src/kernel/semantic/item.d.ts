@@ -39,7 +39,7 @@ export type Item = {
     revision: number;
     release: string;
     context: string;
-    resolution: Record<string, never>;
+    resolution: Record<string, 'unresolved' | 'suppressed'>;
     labels: Record<string, string>;
     descriptions: Record<string, string>;
     aliases: Record<string, string[]>;
@@ -79,4 +79,5 @@ export declare function resolveItem(subjectId: string, rows: readonly FactRow[],
     revision: number;
     release: string;
     context: string;
+    resolution?: Record<string, 'unresolved' | 'suppressed'>;
 }): Item;

@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
-import { createResourcePublicEligibility } from '../access/index.ts';
-import { runCommand, type CommandAuthorization } from '../command/command.ts';
+import { createResourcePublicEligibility, initializeResourceGrants, type ParentAnchor } from '../access/index.ts';
+import { authoritativeTimeValue, runCommand, type CommandAuthorization } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccessCheck, AccountActor, Resource } from '../request/access.ts';
@@ -10,8 +10,21 @@ import insertContext from './create-context.sql';
 import contextPublicExists from './context-public-exists.sql';
 import contextPublicEvidence from './context-public-evidence.sql';
 import readContextStatement from './read-context.sql';
+import { GLOBAL_CONTEXT } from './definitions.ts';
 
 export const CREATE_CONTEXT = 'context.create';
+
+export const globalContextAnchor: ParentAnchor = Object.freeze({
+  resource: Object.freeze({ route: 0, id: GLOBAL_CONTEXT }),
+  async validate(client, time) {
+    authoritativeTimeValue(time);
+    const result = await client.query(
+      "SELECT 1 FROM semantic.context WHERE route = 0 AND context_id = $1 AND kind = 'global'",
+      [GLOBAL_CONTEXT],
+    );
+    return result.rowCount === 1;
+  },
+});
 
 export function contextTarget(routeKey: Uint8Array, accountId: string, idempotencyKey: string): Resource {
   const route = anchorRoute(routeKey, `${accountId}\n${CREATE_CONTEXT}\n${idempotencyKey}`);
@@ -42,7 +55,7 @@ export async function createContext(
     idempotencyKey: string;
     digest: Uint8Array;
     input: unknown;
-    authorize: AccessCheck;
+    authorize?: AccessCheck;
     authorization?: CommandAuthorization;
     deadline?: number;
   },
@@ -72,13 +85,19 @@ export async function createContext(
         resource: options.target,
         denied: () => new ContextAccessDeniedError(),
         async authorize(tx, attempt) {
-          if (!(await options.authorize(tx, attempt.time))) throw new ContextAccessDeniedError();
+          if (!options.authorize || !(await options.authorize(tx, attempt.time))) throw new ContextAccessDeniedError();
           return 'execute';
         },
       },
     },
     async (tx, { transactionId }) => {
       await insertContext.run(tx, { route, context_id: id, labels, transaction_id: transactionId });
+      if (options.authorization)
+        await initializeResourceGrants(tx, {
+          resource: options.target,
+          type: 'semantic.context',
+          creator: options.actor.accountId,
+        });
       return {
         value: { id, kind: 'community' as const, labels },
         events: [{ type: 'com.rezics.semantic.context.created.v1', data: { id } }],
@@ -130,6 +149,10 @@ export async function readContext(
       throw error;
     }
   });
+}
+
+export async function contextExists(pool: Pool, id: string): Promise<boolean> {
+  return (await readContext(pool, id, async () => true)) !== null;
 }
 
 export function contextLabels(id: string, input: unknown): Record<string, string> {

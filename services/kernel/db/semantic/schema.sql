@@ -56,6 +56,26 @@ CREATE TABLE semantic.acceptance (
 
 
 --
+-- Name: acceptance_current; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.acceptance_current (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    context_id uuid NOT NULL,
+    candidate_id uuid NOT NULL,
+    slot_id uuid NOT NULL,
+    head integer NOT NULL,
+    verdict text NOT NULL,
+    revision integer NOT NULL,
+    CONSTRAINT acceptance_current_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
+    CONSTRAINT acceptance_current_head_check CHECK ((head >= 1)),
+    CONSTRAINT acceptance_current_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT acceptance_current_verdict_check CHECK ((verdict = ANY (ARRAY['accept'::text, 'reject'::text, 'abstain'::text])))
+);
+
+
+--
 -- Name: adoption; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -210,6 +230,14 @@ CREATE TABLE semantic.subject (
 
 
 --
+-- Name: acceptance_current acceptance_current_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.acceptance_current
+    ADD CONSTRAINT acceptance_current_pkey PRIMARY KEY (route, subject_id, context_id, candidate_id);
+
+
+--
 -- Name: acceptance acceptance_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -282,10 +310,24 @@ ALTER TABLE ONLY semantic.subject
 
 
 --
+-- Name: acceptance_current_rejected; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX acceptance_current_rejected ON semantic.acceptance_current USING btree (route, subject_id, context_id, slot_id, revision DESC, candidate_id) WHERE (verdict = 'reject'::text);
+
+
+--
 -- Name: candidate_page; Type: INDEX; Schema: semantic; Owner: -
 --
 
 CREATE INDEX candidate_page ON semantic.candidate USING btree (route, subject_id, slot_id, revision, view_order, candidate_id);
+
+
+--
+-- Name: fact_compact_candidate; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX fact_compact_candidate ON semantic.fact USING btree (route, subject_id, statement_id, log_seq DESC) WHERE ((kind = 'statement'::text) AND (operation = 'assert'::text) AND (statement_id IS NOT NULL));
 
 
 --
@@ -370,6 +412,30 @@ CREATE TRIGGER revision_immutable BEFORE DELETE OR UPDATE ON semantic.revision F
 --
 
 CREATE TRIGGER revision_immutable_truncate BEFORE TRUNCATE ON semantic.revision FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: acceptance_current acceptance_current_route_subject_id_candidate_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.acceptance_current
+    ADD CONSTRAINT acceptance_current_route_subject_id_candidate_id_fkey FOREIGN KEY (route, subject_id, candidate_id) REFERENCES semantic.candidate(route, subject_id, candidate_id);
+
+
+--
+-- Name: acceptance_current acceptance_current_route_subject_id_context_id_candidate_i_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.acceptance_current
+    ADD CONSTRAINT acceptance_current_route_subject_id_context_id_candidate_i_fkey FOREIGN KEY (route, subject_id, context_id, candidate_id, head) REFERENCES semantic.acceptance(route, subject_id, context_id, candidate_id, head);
+
+
+--
+-- Name: acceptance_current acceptance_current_route_subject_id_revision_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.acceptance_current
+    ADD CONSTRAINT acceptance_current_route_subject_id_revision_fkey FOREIGN KEY (route, subject_id, revision) REFERENCES semantic.revision(route, subject_id, revision);
 
 
 --

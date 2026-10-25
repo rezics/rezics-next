@@ -15,9 +15,11 @@ import {
 import { ProblemError, problemSchema } from '../../http/problem.ts';
 import { defineRateLimit } from '../../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, requestDigest, SESSION_HEADER } from '../../http/request.ts';
-import { GLOBAL_CONTEXT } from '../definitions.ts';
-
-const globalContext = Object.freeze({ route: 0, id: GLOBAL_CONTEXT });
+import { parentCreationAuthorization } from '../../access/index.ts';
+import { GrantDeniedError } from '../../access/grant-commands.ts';
+import { authoritativeTimeValue } from '../../command/command.ts';
+import type { Access } from '../../request/access.ts';
+import { globalContextAnchor } from '../context.ts';
 
 const LabelsInput = t.Object({ labels: t.Optional(t.Record(t.String(), t.Any())) }, { additionalProperties: false });
 const ContextSchema = t.Object(
@@ -39,7 +41,7 @@ const unavailable = problemSchema(
 
 function contextRoutes(
   app: ReturnType<typeof definitionRoutes>,
-  dependencies: { pool: import('pg').Pool; routeKey: Uint8Array },
+  dependencies: { pool: import('pg').Pool; routeKey: Uint8Array; access: () => Access },
 ) {
   return app
     .post(
@@ -62,13 +64,35 @@ function contextRoutes(
           security: [{ bearerAuth: [] }],
         },
       },
-      async ({ body, headers, actor, authorizeCommand, admission, job, session, set }) => {
+      async ({ body, headers, actor, admission, job, session, set }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         const account: AccountActor = actor;
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const target = contextTarget(dependencies.routeKey, account.accountId, key);
-        const authorization = await authorizeCommand(globalContext, () => new ContextAccessDeniedError());
         try {
+          const authorization = parentCreationAuthorization({
+            access: dependencies.access(),
+            actor: account,
+            action: 'context:create',
+            parent: globalContextAnchor,
+            context: {
+              pool: dependencies.pool,
+              deadline: job.deadline,
+              resource: target,
+              creation: {
+                async validate(client, resource, time) {
+                  authoritativeTimeValue(time);
+                  const rows = await client.query(
+                    `SELECT 1 FROM semantic.context
+                     WHERE route = $1 AND context_id = $2 AND kind = 'community'
+                       AND recorded_transaction_id IS NOT NULL AND xmin = pg_current_xact_id()::xid`,
+                    [resource.route, resource.id],
+                  );
+                  return rows.rowCount === 1;
+                },
+              },
+            },
+          });
           // Validate before entering the command; validation is shared with subject labels.
           contextLabels(target.id, body);
           const result = await admission.run('normal', job, () =>
@@ -78,7 +102,6 @@ function contextRoutes(
               idempotencyKey: key,
               digest: requestDigest('context.create', account, body),
               input: body,
-              authorize: authorization.check,
               authorization,
               deadline: job.deadline,
             }),
@@ -92,7 +115,8 @@ function contextRoutes(
             throw new ProblemError('invalid_request', {
               errors: error.violations.map(({ pointer, code }) => ({ pointer, code })),
             });
-          if (error instanceof ContextAccessDeniedError) throw new ProblemError('forbidden');
+          if (error instanceof ContextAccessDeniedError || error instanceof GrantDeniedError)
+            throw new ProblemError('forbidden');
           throw error;
         }
       },

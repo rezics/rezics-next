@@ -10,6 +10,7 @@ import { itemFacts, resolveItem, type FactRow, type Item } from './item.ts';
 import { SubjectInputError } from './item.ts';
 import { rejectContent } from './rules.ts';
 import { GLOBAL_CONTEXT } from './definitions.ts';
+import { contextExists } from './context.ts';
 import { slotView } from './slots.ts';
 import createRevision from './create-revision.sql';
 import insertFacts from './insert-facts.sql';
@@ -201,9 +202,11 @@ export async function readSubject(
   pool: Pool,
   id: string,
   authorize: (client: PoolClient) => Promise<boolean>,
+  context = GLOBAL_CONTEXT,
 ): Promise<{ subject: Item; component: SubjectComponent } | null> {
   const route = routeOf(id);
   if (route === null) return null;
+  if (context !== GLOBAL_CONTEXT && !(await contextExists(pool, context))) return null;
   const snapshot = await withConnection(pool, async (client) => {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     try {
@@ -222,9 +225,12 @@ export async function readSubject(
       const release = await getRelease(client, rows[0]!.release);
       if (!release) throw new Error('Subject revision release is missing');
       const statementFacts: FactRow[] = [];
+      const resolution: Record<string, 'unresolved' | 'suppressed'> = {};
       if (allowed) {
         for (const property of release.types[rows[0]!.type]!.properties) {
-          statementFacts.push(...(await slotView(client, id, property)));
+          const view = await slotView(client, id, property, context);
+          statementFacts.push(...view.facts);
+          if (view.resolution) resolution[property] = view.resolution;
         }
       }
       await client.query('COMMIT');
@@ -234,13 +240,14 @@ export async function readSubject(
         statementFacts,
         release,
         component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
+        resolution,
       };
     } catch (error) {
       return await rollback(client, error);
     }
   });
   if (!snapshot) return null;
-  const { rows, component, release, statementFacts } = snapshot;
+  const { rows, component, release, statementFacts, resolution } = snapshot;
   const dataTypes = Object.fromEntries(
     Object.entries(release.properties).map(([property, definition]) => [property, definition.datatype]),
   );
@@ -248,7 +255,8 @@ export async function readSubject(
     subject: resolveItem(id, [...asFacts(rows), ...statementFacts], rows[0]!.type, dataTypes, {
       revision: rows[0]!.revision,
       release: rows[0]!.release,
-      context: CONTEXT,
+      context,
+      resolution,
     }),
     component,
   };
