@@ -4,13 +4,16 @@ import type { SessionStore } from './store.ts';
 
 export type SessionEnv = {
   AUTH_ISSUER: string;
+  API_RESOURCE: string;
+  WEBSITE_SCOPES: string;
   WEBSITE_CLIENT_ID: string;
   WEBSITE_CLIENT_KEY: string;
   SESSIONS: DurableObjectNamespace<SessionStore>;
 };
 
 export function configured(env: Partial<SessionEnv>): env is SessionEnv {
-  return Boolean(env.AUTH_ISSUER && env.WEBSITE_CLIENT_ID && env.WEBSITE_CLIENT_KEY && env.SESSIONS);
+  return Boolean(env.AUTH_ISSUER && env.API_RESOURCE && env.WEBSITE_SCOPES
+    && env.WEBSITE_CLIENT_ID && env.WEBSITE_CLIENT_KEY && env.SESSIONS);
 }
 
 class UnreachableIssuer extends Error {}

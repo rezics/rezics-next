@@ -22,15 +22,23 @@ Configure these variables in the environment of `bun run dev`:
 
 - `AUTH_ISSUER`: Auth's exact OpenID issuer identifier. HTTPS is required except for loopback development issuers
   (`127.0.0.1`, `localhost`, or `[::1]`).
+- `API_RESOURCE`: the API's RFC 8707 resource identifier and access token audience, exactly `https://api.rezics.com`
+  in production, with no trailing slash. Tests use `https://api.rezics.test`.
+- `WEBSITE_SCOPES`: the space-separated API scopes registered for the website client, never a wildcard.
+  Media routes need `media:create`, `media:read_reservation`, `media:read`, `media:complete` and `media:erase`;
+  public reads need no scope. Sign-in requests `openid offline_access` followed by these scopes, each once.
 - `WEBSITE_CLIENT_ID`: the confidential website client id, `rezics-website`.
 - `WEBSITE_CLIENT_KEY`: a private P-256 JWK with a `kid`, used for ES256 client assertions. In production this is a
   Worker secret; supply it through Cloudflare's secret management, never through a config file or build output.
-  `AUTH_ISSUER` and `WEBSITE_CLIENT_ID` are production Worker text variables.
+  `AUTH_ISSUER`, `API_RESOURCE`, `WEBSITE_SCOPES` and `WEBSITE_CLIENT_ID` are production Worker text variables.
 
 Auth must register the website client's redirect URI `<site origin>/auth/callback`, its post-logout redirect URI
-`<site origin>/`, the `private_key_jwt` authentication method with the corresponding public key and `kid`, and the
-scopes `openid offline_access media:complete`. Discovery supplies all Auth endpoints, so connecting the Worker to
-Auth later requires configuration only. If any auth variable is missing, `/auth/` routes return 503
+`<site origin>/`, and the `private_key_jwt` authentication method with the corresponding public key and `kid`.
+Pass the same API scope list from `WEBSITE_SCOPES` to Auth's `registerWebsiteClient`.
+Auth's discovery `scopes_supported` lists every available scope. The Worker sends `resource=API_RESOURCE` on the
+authorization request, authorization code exchange and every refresh; revocation takes no resource. Client assertions
+keep `AUTH_ISSUER` as their audience, and ID tokens keep the client id as theirs. Discovery supplies all Auth endpoints,
+so connecting the Worker to Auth later requires configuration only. If any auth variable is missing, `/auth/` routes return 503
 `dependency_unavailable`, session cookies confer no credential and are left intact, and the rest of the site keeps working.
 
 Set `KERNEL_ORIGIN`, the content API's origin, in the environment of `bun run dev`, for example

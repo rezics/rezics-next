@@ -25,7 +25,8 @@ async function signIn(request: Request, env: SessionEnv): Promise<Response> {
   const state = oidc.randomState();
   const nonce = oidc.randomNonce();
   const location = oidc.buildAuthorizationUrl(config, {
-    response_type: 'code', redirect_uri: `${url.origin}/auth/callback`, scope: 'openid offline_access media:complete',
+    response_type: 'code', redirect_uri: `${url.origin}/auth/callback`, resource: env.API_RESOURCE,
+    scope: [...new Set(['openid', 'offline_access', ...env.WEBSITE_SCOPES.split(/\s+/).filter(Boolean)])].join(' '),
     state, nonce, code_challenge: await oidc.calculatePKCECodeChallenge(verifier), code_challenge_method: 'S256',
   });
   const id = randomId();
@@ -52,7 +53,7 @@ async function callback(request: Request, env: SessionEnv): Promise<Response> {
     tokens = await oidc.authorizationCodeGrant(config, url, {
       pkceCodeVerifier: transaction.verifier, expectedState: transaction.state, expectedNonce: transaction.nonce,
       idTokenExpected: true,
-    });
+    }, { resource: env.API_RESOURCE });
   } catch (error) {
     throw unreachable(error) ? dependencyUnavailable() : invalid();
   }

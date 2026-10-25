@@ -49,7 +49,9 @@ export class SessionStore extends DurableObject<SessionEnv> {
     }
     if (record.accessExpiresAt - Date.now() < 60_000) {
       try {
-        const tokens = await oidc.refreshTokenGrant(await authClient(this.env), record.refreshToken);
+        const tokens = await oidc.refreshTokenGrant(await authClient(this.env), record.refreshToken, {
+          resource: this.env.API_RESOURCE,
+        });
         record.accessToken = tokens.access_token;
         record.accessExpiresAt = Date.now() + (tokens.expires_in ?? 0) * 1000;
         record.refreshToken = tokens.refresh_token ?? record.refreshToken;
