@@ -111,7 +111,7 @@ CREATE TABLE core.partition (
 
 CREATE TABLE core.receipt (
     partition_no integer NOT NULL,
-    actor_account_id uuid NOT NULL,
+    principal_id uuid CONSTRAINT receipt_actor_account_id_not_null NOT NULL,
     command_kind text NOT NULL,
     idempotency_key text NOT NULL,
     request_digest bytea NOT NULL,
@@ -120,9 +120,17 @@ CREATE TABLE core.receipt (
     transaction_id uuid NOT NULL,
     response jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
+    principal_kind text NOT NULL,
+    actor_account_id uuid GENERATED ALWAYS AS (
+CASE
+    WHEN (principal_kind = 'account'::text) THEN principal_id
+    ELSE NULL::uuid
+END) STORED,
+    CONSTRAINT receipt_anonymous_key_check CHECK (((principal_kind <> 'anonymous'::text) OR (idempotency_key ~ '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text))),
     CONSTRAINT receipt_epoch_check CHECK ((epoch > 0)),
     CONSTRAINT receipt_idempotency_key_check CHECK (((char_length(idempotency_key) >= 1) AND (char_length(idempotency_key) <= 255))),
     CONSTRAINT receipt_position_check CHECK (("position" > 0)),
+    CONSTRAINT receipt_principal_check CHECK ((((principal_kind = 'account'::text) AND (principal_id <> '00000000-0000-0000-0000-000000000000'::uuid)) OR ((principal_kind = 'anonymous'::text) AND (principal_id = '00000000-0000-0000-0000-000000000000'::uuid)))),
     CONSTRAINT receipt_request_digest_check CHECK ((octet_length(request_digest) = 32))
 );
 
@@ -136,12 +144,19 @@ CREATE TABLE editorial.write_basis (
     transaction_id uuid NOT NULL,
     epoch integer NOT NULL,
     "position" bigint NOT NULL,
-    actor_account_id uuid NOT NULL,
-    client_id text NOT NULL,
+    principal_id uuid CONSTRAINT write_basis_actor_account_id_not_null NOT NULL,
+    client_id text,
     requested_by text,
     recorded_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
+    principal_kind text NOT NULL,
+    actor_account_id uuid GENERATED ALWAYS AS (
+CASE
+    WHEN (principal_kind = 'account'::text) THEN principal_id
+    ELSE NULL::uuid
+END) STORED,
     CONSTRAINT write_basis_epoch_check CHECK ((epoch > 0)),
-    CONSTRAINT write_basis_position_check CHECK (("position" > 0))
+    CONSTRAINT write_basis_position_check CHECK (("position" > 0)),
+    CONSTRAINT write_basis_principal_check CHECK ((((principal_kind = 'account'::text) AND (principal_id <> '00000000-0000-0000-0000-000000000000'::uuid) AND (client_id IS NOT NULL)) OR ((principal_kind = 'anonymous'::text) AND (principal_id = '00000000-0000-0000-0000-000000000000'::uuid) AND (client_id IS NULL) AND (requested_by IS NULL))))
 );
 
 
@@ -183,7 +198,7 @@ ALTER TABLE ONLY core.partition
 --
 
 ALTER TABLE ONLY core.receipt
-    ADD CONSTRAINT receipt_pkey PRIMARY KEY (partition_no, actor_account_id, command_kind, idempotency_key);
+    ADD CONSTRAINT receipt_pkey PRIMARY KEY (partition_no, principal_kind, principal_id, command_kind, idempotency_key);
 
 
 --

@@ -2,14 +2,14 @@ import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import { parseItem } from 'structured-headers';
 import { ProblemError } from './problem.ts';
-import { ANONYMOUS_PRINCIPAL_ID, normalizeCommandKey } from '../command/command.ts';
+import { ANONYMOUS_PRINCIPAL_ID, normalizeCommandKey, type CommandPrincipal } from '../command/command.ts';
 import type { ActionCatalogue, Actor } from '../request/access.ts';
 import { anchorRoute, derivedId } from '../route/route.ts';
 
 export const SESSION_HEADER = 'rezics-session-token';
 export const IDEMPOTENCY_HEADER = 'idempotency-key';
 
-export function idempotencyKeyOf(header: string | null | undefined): string {
+export function idempotencyKeyOf(header: string | null | undefined, principal?: CommandPrincipal): string {
   if (typeof header !== 'string')
     throw new ProblemError('invalid_request', { detail: 'Idempotency-Key must be a structured field string.' });
 
@@ -21,7 +21,13 @@ export function idempotencyKeyOf(header: string | null | undefined): string {
   }
   if (typeof value !== 'string' || value.length < 1 || value.length > 255)
     throw new ProblemError('invalid_request', { detail: 'Idempotency-Key must be a string of 1 to 255 characters.' });
-  return value;
+  try {
+    return principal ? normalizeCommandKey(principal, value) : value;
+  } catch {
+    throw new ProblemError('invalid_request', {
+      detail: 'Anonymous commands require a client-generated UUIDv4 Idempotency-Key.',
+    });
+  }
 }
 
 export function requestDigest(operation: string, actor: Actor, body: unknown): Uint8Array {

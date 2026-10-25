@@ -1,7 +1,8 @@
+import type { CommandPrincipal } from '../command/command.ts';
 import type { ActionCatalogue, Actor } from '../request/access.ts';
 export declare const SESSION_HEADER = "rezics-session-token";
 export declare const IDEMPOTENCY_HEADER = "idempotency-key";
-export declare function idempotencyKeyOf(header: string | null | undefined): string;
+export declare function idempotencyKeyOf(header: string | null | undefined, principal?: CommandPrincipal): string;
 export declare function requestDigest(operation: string, actor: Actor, body: unknown): Uint8Array;
 /** Stable tuple home under the server-owned route key; grants no authorization. */
 export declare function anonymousCommandTarget(routeKey: Uint8Array, operation: string, key: string): {

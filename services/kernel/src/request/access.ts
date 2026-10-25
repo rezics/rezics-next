@@ -102,6 +102,17 @@ export async function accessCommandAuthorization(
     check,
     async authorize(tx, attempt) {
       if (
+        actor.kind === 'anonymous' &&
+        (target.eligibility === undefined ||
+          !attempt.basis ||
+          !('principal' in attempt.basis) ||
+          attempt.basis.principal.kind !== 'anonymous' ||
+          attempt.basis.actorAccountId !== null ||
+          attempt.basis.clientId !== null ||
+          attempt.basis.requestedBy !== null)
+      )
+        throw denied();
+      if (
         actor.kind === 'account' &&
         (attempt.basis?.actorAccountId !== actor.accountId ||
           attempt.basis.clientId !== actor.clientId ||

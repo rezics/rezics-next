@@ -40,7 +40,7 @@ const actor: AccountActor = {
 class Denied extends Error {}
 // These trusted fixtures prove executor ordering/atomicity only. Installed Access
 // and the owning eligibility formula are exercised in the separate Access suite.
-function options(partition: number, key = randomUUID()): PrincipalCommandOptions {
+function options(partition: number, key: string = randomUUID()): PrincipalCommandOptions {
   const authorization: CommandAuthorization = {
     action: 'report:create',
     resource: { route: partition << 4, id: actor.accountId },

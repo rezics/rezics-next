@@ -19,20 +19,22 @@ append AS (
 ),
 basis_write AS (
   INSERT INTO editorial.write_basis (
-    partition_no, transaction_id, epoch, position, actor_account_id, client_id, requested_by
+    partition_no, transaction_id, epoch, position, principal_kind, principal_id, client_id, requested_by
   )
   SELECT input.partition_no, input.transaction_id, fence.epoch, fence.position,
-         (input.basis->>'actorAccountId')::uuid, input.basis->>'clientId', input.basis->>'requestedBy'
+         input.basis->'principal'->>'kind', (input.basis->'principal'->>'id')::uuid,
+         input.basis->>'clientId', input.basis->>'requestedBy'
   FROM input CROSS JOIN fence
   WHERE input.basis IS NOT NULL
   RETURNING partition_no
 ),
 receipt_write AS (
   INSERT INTO core.receipt (
-    partition_no, actor_account_id, command_kind, idempotency_key, request_digest,
+    partition_no, principal_kind, principal_id, command_kind, idempotency_key, request_digest,
     epoch, position, transaction_id, response
   )
-  SELECT input.partition_no, (input.receipt->>'actorAccountId')::uuid, input.receipt->>'kind',
+  SELECT input.partition_no, input.receipt->'principal'->>'kind',
+         (input.receipt->'principal'->>'id')::uuid, input.receipt->>'kind',
          input.receipt->>'key', decode(input.receipt->>'digest', 'base64'), fence.epoch, fence.position,
          input.transaction_id, input.receipt->'response'
   FROM input CROSS JOIN fence

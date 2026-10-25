@@ -22,7 +22,7 @@ export type CommandPrincipal = {
 };
 /** Pure receipt-key validation; the anonymous marker never identifies an account. */
 export declare function normalizeCommandKey(principal: CommandPrincipal, key: string): string;
-type PrincipalCommandIdentity = Readonly<{
+export type PrincipalCommandIdentity = Readonly<{
     principal: Readonly<Extract<CommandPrincipal, {
         kind: 'account';
     }>>;
@@ -40,6 +40,20 @@ type PrincipalCommandIdentity = Readonly<{
     }>;
 }>;
 /** Trusted verified Actor context only, never request JSON or proof of authorization. */
+export declare function principalCommandIdentity(actor: Extract<Actor, {
+    kind: 'anonymous';
+}>): Extract<PrincipalCommandIdentity, {
+    basis: {
+        clientId: null;
+    };
+}>;
+export declare function principalCommandIdentity(actor: Extract<Actor, {
+    kind: 'account';
+}>): Extract<PrincipalCommandIdentity, {
+    basis: {
+        clientId: string;
+    };
+}>;
 export declare function principalCommandIdentity(actor: Actor): PrincipalCommandIdentity;
 export type PrincipalCommandReceipt = {
     kind: string;
@@ -65,6 +79,17 @@ export type CommandBasis = {
     clientId: string;
     requestedBy: string | null;
 };
+/** Anonymous attribution never supplies a legacy account identity. */
+export type CommandAttribution = CommandBasis | {
+    principal: Readonly<Extract<CommandPrincipal, {
+        kind: 'anonymous';
+    }>>;
+    actorAccountId: null;
+    clientId: null;
+    requestedBy: null;
+};
+/** Validate possession before checkout. Account text keys retain their contract. */
+export declare function normalizeCommandKey(principal: CommandPrincipal, key: string): string;
 export type CommandOutcome<T> = {
     value: T;
     partition: number;
@@ -80,7 +105,7 @@ export type AuthoritativeTime = {
 };
 export type CommandAttempt = Readonly<{
     partition: number;
-    basis: Readonly<CommandBasis> | null;
+    basis: Readonly<CommandAttribution> | null;
     time: AuthoritativeTime;
 }>;
 export type CommandAuthorizationMode = 'execute' | 'receipt-only';
@@ -130,7 +155,7 @@ export declare class TooManyEventsError extends Error {
     constructor(partition: number, count: number);
 }
 export declare class CommandUnavailableError extends Error {
-    readonly reason: 'fenced' | 'moved' | 'contention' | 'deadline' | 'overloaded' | 'anonymous-receipts';
+    readonly reason: 'fenced' | 'moved' | 'contention' | 'deadline' | 'overloaded';
     readonly partition: number;
     readonly movedTo: string | null;
     constructor(reason: CommandUnavailableError['reason'], partition: number, movedTo?: string | null);

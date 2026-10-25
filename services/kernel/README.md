@@ -27,7 +27,8 @@ secrets once and keeps them in `.env` across restarts.
 Bearer tokens are verified against the Auth service. The first request that carries one reads `AUTH_ISSUER`
 (the Auth service's canonical origin), `AUTH_AUDIENCE` (the API's HTTPS URL) and `AUTH_JWKS_URL` (the Auth
 service's public JWKS URL, on the exact issuer origin). Without them the kernel still starts and serves anonymous
-requests, and refuses every bearer token.
+requests, and refuses every bearer token. Production `AUTH_AUDIENCE` is fixed to `https://api.rezics.com` (no trailing
+slash), shared with Auth and RFC8707 website resource parameters; tests use `https://api.rezics.test`.
 
 Issuers require HTTPS except for canonical HTTP origins on exactly `127.0.0.1`,
 `localhost` or `[::1]`, including the configured port. Issuers have no userinfo,
@@ -209,3 +210,62 @@ The route-led expiry index supports a separately registered cleanup job restrict
 local route and at most 1000 expired rows per tick, with a 48-hour retention bound. Limiter admission
 grants capacity only; normal Access and command receipt ordering still apply. Turnstile and front
 controls remain independent.
+
+## Anonymous command receipts
+
+`src/command/command.ts` exports `CommandPrincipal`, `PrincipalCommandIdentity`, `PrincipalCommandReceipt`,
+`PrincipalCommandOptions`, `CommandAttribution`, `ANONYMOUS_PRINCIPAL_ID`, `principalCommandIdentity(actor)`,
+`normalizeCommandKey(principal, key)` and the additive `runCommand` principal overload. Construct identity only from
+the verified request `Actor`: spread `principalCommandIdentity(actor)` into command options, place identity at
+`options.principal`, and give `receipt` only `{ kind, key, digest }`. The separate basis contains `clientId` and
+`requestedBy`, both null for anonymous. Existing account-only `actorAccountId` options still normalize to account
+receipts, and account digest/client/requestedBy behavior stays compatible. Mixed identity forms are rejected.
+
+The logical receipt key is `(principal_kind, principal_id, command_kind, idempotency_key)`; its physical primary key
+starts with `partition_no`. Anonymous has kind `anonymous` and the nil UUID kind marker, never a fabricated account,
+credential owner or trusted account bypass. Account principals cannot use that marker. Generated `actor_account_id`
+columns preserve existing account read projections and return null for anonymous. Anonymous write bases have null
+actor/client/requestedBy. The forward-only migration preserves existing account outcomes, digests, positions,
+transactions and creation/recording timestamps. Receipt retention is unchanged.
+
+Anonymous commands require a client-generated UUIDv4 possession key and trusted `CommandAuthorization`. Keys are
+validated before checkout and normalized to lowercase. Nil, other UUID versions/variants, missing keys and arbitrary
+strings fail; no server replacement is minted. `src/http/request.ts` exports
+`idempotencyKeyOf(header, principal?)`, which keeps the existing structured-field string `Idempotency-Key` transport
+and applies principal validation when supplied. Account keys retain the existing 1..255 text contract.
+
+Every command attempt authorizes at fresh authoritative T before its receipt seek, including replay and conflicts.
+Anonymous cannot use the account self-read replay exception. A holder of the same key and matching digest can replay
+the stored outcome across requester/IP/cookie changes; a mismatched digest conflicts. Denial reveals no receipt and
+commits no effect or position. Retry, fencing and atomic receipt/outbox/write-basis behavior use the existing executor.
+
+`src/http/request.ts` also exports `requestDigest(operation, actor, normalizedBody)` for either actor kind,
+`anonymousRequestDigest(operation, { semantic, abuse? })`, and
+`anonymousCommandTarget(routeKey, operation, key)`. The anonymous digest binds the operation, fixed anonymous
+principal and canonical semantic JSON. Supply every effect-relevant normalized field, including the report target,
+reason and content, in `semantic`. Put already-verified Turnstile/CSRF and other request authentication/abuse evidence
+in `abuse`; it is excluded from the digest. A fresh proof can retry the same semantic command. Proof verification,
+Turnstile, CSRF and rate limits remain in front and never replace UUIDv4 possession or Access. Never pass raw request
+JSON containing proof secrets as semantic input or publish keys/digests/proofs in incidental logs or events.
+
+`anonymousCommandTarget` uses the existing stable deployment route key, operation and canonical UUIDv4 key to derive
+a route and UUIDv8 target. Reuse that anchor across retries, including changed bodies, so the authoritative receipt can
+return a conflict instead of relocating the command. No new environment variable or content-specific SQL is needed.
+
+Owning routes must explicitly declare anonymous admission in their installed action catalogue and supply a real
+`ResourceEligibility` from `createResourceAnonymousEligibility` through `Resource.eligibility` to
+`accessCommandAuthorization`. Missing/forged evidence and unknown actions fail closed. Bad supplied bearer tokens
+still fail authentication. PRIVATE report creation can be domain-eligible without making the report public.
+
+The merged eligibility contract currently exports an unavailable evaluator. Actual installed Access positive
+eligibility/replay and stale-domain conformance therefore remain blocked until the full floor evaluator is available.
+`test/access/anonymous-receipts.test.ts` keeps that positive requirement executable and failing; trusted authorization
+fixtures in the core receipt suite prove executor behavior only. They do not establish the anonymous eligibility
+formula or final Goal acceptance. The pre-existing anonymous unavailable-stub assertion is also incompatible with
+enabled anonymous execution and is left unchanged under the frozen-test constraint.
+
+Per attempt, receipt access is one partition/principal/kind/key index seek, followed on a miss by one partition fence
+and k bounded event/basis writes: fixed SQL count and O(k log R) index buffers, plus the owning bounded eligibility
+callback and H container hops. No receipt-history scan or nil-account lookup is introduced. Same-partition,
+same-principal unrelated/history growth evidence at 1x/8x/64x remains required from the shared performance harness;
+this is a declared bound, not a measured growth claim.

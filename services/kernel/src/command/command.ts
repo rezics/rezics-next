@@ -38,7 +38,7 @@ export function normalizeCommandKey(principal: CommandPrincipal, key: string): s
   return key.toLowerCase();
 }
 
-type PrincipalCommandIdentity =
+export type PrincipalCommandIdentity =
   | Readonly<{
       principal: Readonly<Extract<CommandPrincipal, { kind: 'account' }>>;
       basis: Readonly<{ clientId: string; requestedBy: string | null }>;
@@ -49,13 +49,20 @@ type PrincipalCommandIdentity =
     }>;
 
 /** Trusted verified Actor context only, never request JSON or proof of authorization. */
+export function principalCommandIdentity(
+  actor: Extract<Actor, { kind: 'anonymous' }>,
+): Extract<PrincipalCommandIdentity, { basis: { clientId: null } }>;
+export function principalCommandIdentity(
+  actor: Extract<Actor, { kind: 'account' }>,
+): Extract<PrincipalCommandIdentity, { basis: { clientId: string } }>;
+export function principalCommandIdentity(actor: Actor): PrincipalCommandIdentity;
 export function principalCommandIdentity(actor: Actor): PrincipalCommandIdentity {
   if (actor.kind === 'anonymous')
     return Object.freeze({
       principal: Object.freeze({ kind: 'anonymous', id: ANONYMOUS_PRINCIPAL_ID }),
       basis: Object.freeze({ clientId: null, requestedBy: null }),
     });
-  if (actor.accountId === ANONYMOUS_PRINCIPAL_ID) throw new TypeError('The anonymous marker is not an account ID');
+  assertPrincipal({ kind: actor.kind, id: actor.accountId });
   return Object.freeze({
     principal: Object.freeze({ kind: 'account', id: actor.accountId }),
     basis: Object.freeze({ clientId: actor.clientId, requestedBy: actor.requestedBy }),
@@ -85,6 +92,31 @@ export type CommandBasis = {
   requestedBy: string | null;
 };
 
+/** Anonymous attribution never supplies a legacy account identity. */
+export type CommandAttribution =
+  | CommandBasis
+  | {
+      principal: Readonly<Extract<CommandPrincipal, { kind: 'anonymous' }>>;
+      actorAccountId: null;
+      clientId: null;
+      requestedBy: null;
+    };
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function assertPrincipal(principal: CommandPrincipal): void {
+  if (!principal || (principal.kind !== 'account' && principal.kind !== 'anonymous'))
+    throw new TypeError('Invalid command principal');
+  if (principal.kind === 'anonymous') {
+    if (principal.id !== ANONYMOUS_PRINCIPAL_ID) throw new TypeError('Invalid anonymous kind marker');
+  } else if (
+    typeof principal.id !== 'string' ||
+    principal.id.length !== 36 ||
+    !UUID.test(principal.id) ||
+    principal.id === ANONYMOUS_PRINCIPAL_ID
+  )
+    throw new TypeError('The anonymous marker is not an account ID');
+}
+
 export type CommandOutcome<T> = {
   value: T;
   partition: number;
@@ -99,7 +131,7 @@ declare const authoritativeTime: unique symbol;
 export type AuthoritativeTime = { readonly [authoritativeTime]: true };
 export type CommandAttempt = Readonly<{
   partition: number;
-  basis: Readonly<CommandBasis> | null;
+  basis: Readonly<CommandAttribution> | null;
   time: AuthoritativeTime;
 }>;
 export type CommandAuthorizationMode = 'execute' | 'receipt-only';
@@ -176,7 +208,7 @@ export class TooManyEventsError extends Error {
 }
 
 export class CommandUnavailableError extends Error {
-  readonly reason: 'fenced' | 'moved' | 'contention' | 'deadline' | 'overloaded' | 'anonymous-receipts';
+  readonly reason: 'fenced' | 'moved' | 'contention' | 'deadline' | 'overloaded';
   readonly partition: number;
   readonly movedTo: string | null;
   constructor(reason: CommandUnavailableError['reason'], partition: number, movedTo: string | null = null) {
@@ -247,22 +279,84 @@ type LegacyCommandOptions = {
   clock?: (() => Date) | undefined;
 };
 
-function normalizeOptions(options: LegacyCommandOptions | PrincipalCommandOptions): LegacyCommandOptions {
-  if (!('principal' in options)) return options;
-  const { principal, basis, receipt, ...rest } = options;
+type NormalizedOptions = Omit<LegacyCommandOptions, 'basis' | 'receipt'> & {
+  principal?: Readonly<CommandPrincipal>;
+  basis?: CommandAttribution;
+  receipt?: PrincipalCommandReceipt & { principal: Readonly<CommandPrincipal> };
+};
+
+function normalizeOptions(options: LegacyCommandOptions | PrincipalCommandOptions): NormalizedOptions {
+  if (!('principal' in options)) {
+    const { basis, receipt, ...rest } = options;
+    if ((basis && 'principal' in basis) || (receipt && 'principal' in receipt))
+      throw new TypeError('Mixed command identity fields');
+    const principal: CommandPrincipal | undefined =
+      receipt || basis ? { kind: 'account', id: receipt?.actorAccountId ?? basis!.actorAccountId } : undefined;
+    if (principal) assertPrincipal(principal);
+    if (basis) assertPrincipal({ kind: 'account', id: basis.actorAccountId });
+    if (receipt && basis && receipt.actorAccountId !== basis.actorAccountId)
+      throw new TypeError('Receipt actor must match the command basis');
+    return {
+      ...rest,
+      ...(principal ? { principal: Object.freeze(principal) } : {}),
+      ...(basis ? { basis: { ...basis } } : {}),
+      ...(receipt
+        ? {
+            receipt: {
+              principal: Object.freeze(principal!),
+              kind: receipt.kind,
+              key: normalizeCommandKey(principal!, receipt.key),
+              digest: receipt.digest,
+            },
+          }
+        : {}),
+    };
+  }
+  const { principal: inputPrincipal, basis, receipt, ...rest } = options;
+  assertPrincipal(inputPrincipal);
+  const principal = Object.freeze({ ...inputPrincipal });
+  if (
+    'actorAccountId' in options ||
+    'actorAccountId' in inputPrincipal ||
+    !basis ||
+    'actorAccountId' in basis ||
+    'principal' in basis ||
+    (receipt && ('actorAccountId' in receipt || 'principal' in receipt))
+  )
+    throw new TypeError('Mixed command identity fields');
   if (principal.kind === 'anonymous') {
     if (principal.id !== ANONYMOUS_PRINCIPAL_ID || basis.clientId !== null || basis.requestedBy !== null)
       throw new TypeError('Anonymous commands require the kind marker and null attribution');
-    // This guard remains required when anonymous receipt storage becomes available.
     if (!options.authorization) throw new TypeError('Anonymous commands require authorization');
-    throw new CommandUnavailableError('anonymous-receipts', options.partition);
+    if (!receipt) throw new TypeError('Anonymous commands require a client-generated UUIDv4 key');
+    return {
+      ...rest,
+      principal,
+      basis: { principal, actorAccountId: null, clientId: null, requestedBy: null },
+      receipt: {
+        principal,
+        kind: receipt.kind,
+        key: normalizeCommandKey(principal, receipt.key),
+        digest: receipt.digest,
+      },
+    };
   }
-  if (principal.kind !== 'account' || principal.id === ANONYMOUS_PRINCIPAL_ID || basis.clientId === null)
+  if (typeof basis.clientId !== 'string' || basis.clientId.length === 0)
     throw new TypeError('Invalid account command identity');
   return {
     ...rest,
+    principal,
     basis: { actorAccountId: principal.id, clientId: basis.clientId, requestedBy: basis.requestedBy },
-    ...(receipt ? { receipt: { ...receipt, actorAccountId: principal.id } } : {}),
+    ...(receipt
+      ? {
+          receipt: {
+            principal,
+            kind: receipt.kind,
+            key: normalizeCommandKey(principal, receipt.key),
+            digest: receipt.digest,
+          },
+        }
+      : {}),
   };
 }
 
@@ -283,19 +377,12 @@ export async function runCommand<T>(
 ): Promise<CommandOutcome<T>> {
   const options = normalizeOptions(input);
   const { partition } = options;
-  if (
-    options.basis?.actorAccountId === ANONYMOUS_PRINCIPAL_ID ||
-    options.receipt?.actorAccountId === ANONYMOUS_PRINCIPAL_ID
-  )
-    throw new TypeError('The anonymous marker is not an account ID');
   if (options.receipt && (!(options.receipt.digest instanceof Uint8Array) || options.receipt.digest.byteLength !== 32))
     throw new TypeError('A command receipt digest must be exactly 32 bytes');
   if (!Number.isInteger(partition) || partition < 0 || partition > 4095) throw new RangeError('Invalid partition');
   const receiptDigest = options.receipt ? Buffer.from(options.receipt.digest) : null;
   const basis = options.basis ? Object.freeze({ ...options.basis }) : null;
   const authorization = options.authorization;
-  if (options.receipt && basis && options.receipt.actorAccountId !== basis.actorAccountId)
-    throw new TypeError('Receipt actor must match the command basis');
   const deadline = options.deadline ?? Date.now() + 2000;
   let contentionAttempts = 0;
   while (Date.now() < deadline) {
@@ -320,6 +407,7 @@ export async function runCommand<T>(
           attempts.set(tx, attempt);
           const mode = authorization ? await authorization.authorize(tx, attempt, evidence) : 'execute';
           if (mode !== 'execute' && mode !== 'receipt-only') throw new TypeError('Invalid command authorization');
+          if (options.principal?.kind === 'anonymous' && mode !== 'execute') throw authorization!.denied();
           const capability = authorization
             ? (Object.freeze({
                 action: authorization.action,
@@ -331,7 +419,8 @@ export async function runCommand<T>(
           if (options.receipt && receiptDigest) {
             const row = await readReceipt.run(client, {
               partition_no: partition,
-              actor_account_id: options.receipt.actorAccountId,
+              principal_kind: options.receipt.principal.kind,
+              principal_id: options.receipt.principal.id,
               command_kind: options.receipt.kind,
               idempotency_key: options.receipt.key,
             });
@@ -358,7 +447,7 @@ export async function runCommand<T>(
           let value = response.value;
           if (options.receipt && receiptDigest) {
             const serialized = JSON.stringify({
-              actorAccountId: options.receipt.actorAccountId,
+              principal: options.receipt.principal,
               kind: options.receipt.kind,
               key: options.receipt.key,
               digest: receiptDigest.toString('base64'),
@@ -376,7 +465,9 @@ export async function runCommand<T>(
             partition_no: partition,
             events,
             transaction_id: transactionId,
-            basis,
+            basis: basis
+              ? { principal: options.principal, clientId: basis.clientId, requestedBy: basis.requestedBy }
+              : null,
             receipt,
           });
           if (row.length === 0) {
