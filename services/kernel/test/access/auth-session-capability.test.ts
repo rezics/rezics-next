@@ -1,6 +1,6 @@
 import { createAuthService, type AuthService } from '@rezics/auth';
 import { exportJWK, generateKeyPair } from 'jose';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { readAccount } from '../../src/access/account-data.ts';
@@ -163,13 +163,13 @@ let f: Awaited<ReturnType<typeof fixture>>;
 let human: string;
 let subject: string;
 let headers: Headers;
-let failQuery: ((sql: string) => 'before' | 'after' | undefined) | undefined;
+let failQuery: ((sql: string, client: PoolClient) => 'before' | 'after' | undefined) | undefined;
 for (const target of [pool, authPool])
   target.on('connect', (client) => {
     const query = client.query.bind(client);
     client.query = ((...args: Parameters<typeof query>) => {
       const input = args[0] as string | { text: string };
-      const failure = failQuery?.(typeof input === 'string' ? input : input.text);
+      const failure = failQuery?.(typeof input === 'string' ? input : input.text, client);
       if (failure) failQuery = undefined;
       if (failure === 'before') {
         const error = new Error('injected boundary failure');
@@ -381,9 +381,20 @@ test('actual boundary rollback and lost committed acknowledgements never renew a
   }
   const opening = await f.opening(headers, human, subject);
   const before = await counts();
-  failQuery = (sql) => (sql === 'COMMIT' ? 'after' : undefined);
+  let consumingClient: PoolClient | undefined;
+  let lostConsumptionAcknowledgement = false;
+  // Preparation commits a read-only clock transaction first. Lose the durable
+  // consumption acknowledgement on the connection that updates the receipt.
+  failQuery = (sql, client) => {
+    if (sql.includes('UPDATE access.operator_opening_receipt')) consumingClient = client;
+    if (client === consumingClient && sql === 'COMMIT') {
+      lostConsumptionAcknowledgement = true;
+      return 'after';
+    }
+  };
   await expect(f.open(opening.reference, subject, headers)).rejects.toThrow();
   failQuery = undefined;
+  expect(lostConsumptionAcknowledgement).toBe(true);
   const native = (
     await authPool.query('SELECT consumed_at,expires_at FROM access.operator_opening_receipt WHERE receipt_id=$1', [
       opening.outcome.value.receiptId,
