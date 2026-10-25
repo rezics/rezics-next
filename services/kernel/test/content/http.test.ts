@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { normalizeDocument } from '@rezics/document';
 import { createHash, randomUUID } from 'node:crypto';
-import { Value } from 'typebox/value';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { isProblemSchema, openApiDocument } from '../../src/http/openapi.ts';
@@ -107,11 +107,15 @@ test('shared oversized content problem has the approved nonretryable 413 contrac
   });
 });
 
-const snapshot = (text: string) => ({
-  version: 'rezics-document-v1',
-  profile: 'text',
-  doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] },
-});
+const snapshot = (text: string) =>
+  normalizeDocument({
+    version: 'rezics-document-v1',
+    profile: 'text',
+    doc: {
+      type: 'doc',
+      content: [{ type: 'paragraph', attrs: { id: 'http-paragraph' }, content: [{ type: 'text', text }] }],
+    },
+  });
 
 describe('content HTTP with native database adapters', () => {
   let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
@@ -141,7 +145,7 @@ describe('content HTTP with native database adapters', () => {
     await db?.close();
   });
 
-  async function call(method: string, path: string, body?: unknown, key = randomUUID(), authenticated = true) {
+  async function call(method: string, path: string, body?: unknown, key: string = randomUUID(), authenticated = true) {
     const response = await app.handle(
       new Request(`http://kernel.test${path}`, {
         method,

@@ -1,0 +1,121 @@
+import { DocumentSnapshotSchema, type DocumentSnapshot } from '@rezics/document';
+import { t } from 'elysia';
+import type { Static, TSchema } from 'typebox';
+import { Compile } from 'typebox/compile';
+import type { BoardView, ItemView, ThreadView } from './model.ts';
+
+/** Validate the published TypeBox shape without Elysia removing unknown input or response fields. */
+export function strictContentSchema<S extends TSchema>(schema: S) {
+  const validator = Compile(schema);
+  return {
+    '~standard': {
+      version: 1 as const,
+      vendor: 'typebox',
+      types: undefined as { input: Static<S>; output: Static<S> } | undefined,
+      validate(value: unknown) {
+        return validator.Check(value)
+          ? { value: value as Static<S> }
+          : { issues: [{ message: 'Value does not match the content schema' }] };
+      },
+      jsonSchema: { input: () => schema, output: () => schema },
+    },
+  };
+}
+
+const closed = { additionalProperties: false } as const;
+export const ContentIdSchema = t.String({
+  pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+});
+const nullableId = t.Union([ContentIdSchema, t.Null()]);
+const subjects = t.Array(ContentIdSchema, { maxItems: 128, uniqueItems: true });
+const media = t.Array(ContentIdSchema, { maxItems: 32, uniqueItems: true });
+const licence = t.String({ minLength: 1, maxLength: 128 });
+const document = t.Unsafe<DocumentSnapshot>(DocumentSnapshotSchema);
+const visibility = t.Union(['published', 'draft', 'protected', 'taken_down'].map((value) => t.Literal(value)));
+const availability = t.Union([t.Literal('available'), t.Literal('erased')]);
+const metadata = {
+  id: ContentIdSchema,
+  route: t.Integer({ minimum: 0, maximum: 65535 }),
+  visibility,
+  securityRevision: t.String({ pattern: '^[1-9][0-9]*$' }),
+  createdAt: t.String({ format: 'date-time' }),
+};
+const references = { licence, subjectIds: subjects, boardId: ContentIdSchema };
+const item = {
+  ...metadata,
+  ...references,
+  threadId: ContentIdSchema,
+  authorId: ContentIdSchema,
+  parentId: nullableId,
+  revisionId: ContentIdSchema,
+  sha256: t.String({ pattern: '^[0-9a-f]{64}$' }),
+  mediaIds: media,
+};
+
+/** The erased variant cannot carry authored bytes, even to an authorized reader. */
+export const ItemViewSchema = t.Unsafe<ItemView>(
+  t.Union([
+    t.Object({ ...item, availability: t.Literal('available'), body: document }, closed),
+    t.Object({ ...item, availability: t.Literal('erased'), body: t.Null() }, closed),
+  ]),
+);
+export const ThreadViewSchema = t.Unsafe<ThreadView>(
+  t.Object(
+    {
+      ...metadata,
+      ...references,
+      authorId: ContentIdSchema,
+      title: t.Union([t.String(), t.Null()]),
+      availability,
+      firstPost: ItemViewSchema,
+    },
+    closed,
+  ),
+);
+export const BoardViewSchema = t.Unsafe<BoardView>(
+  t.Object({ ...metadata, title: t.Union([t.String(), t.Null()]), availability }, closed),
+);
+export const ThreadInputSchema = t.Object(
+  {
+    title: t.String({ minLength: 1, maxLength: 1024 }),
+    body: document,
+    ...references,
+    visibility: t.Union([t.Literal('published'), t.Literal('draft')]),
+  },
+  closed,
+);
+export const PostInputSchema = t.Object(
+  {
+    body: document,
+    licence,
+    parentId: t.Optional(nullableId),
+    subjectIds: t.Optional(subjects),
+    boardId: t.Optional(ContentIdSchema),
+    mediaIds: t.Optional(media),
+  },
+  closed,
+);
+export const RevisionInputSchema = t.Object(
+  {
+    body: document,
+    licence: t.Optional(licence),
+    subjectIds: t.Optional(subjects),
+    boardId: t.Optional(ContentIdSchema),
+    mediaIds: t.Optional(media),
+  },
+  closed,
+);
+export const ContentPageQuerySchema = t.Object(
+  {
+    cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
+    limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1 })),
+  },
+  closed,
+);
+export const ThreadResponseSchema = t.Object({ thread: ThreadViewSchema }, closed);
+export const PostResponseSchema = t.Object({ post: ItemViewSchema }, closed);
+export const BoardResponseSchema = t.Object({ board: BoardViewSchema }, closed);
+export const ItemPageResponseSchema = t.Object(
+  { items: t.Array(ItemViewSchema, { maxItems: 100 }), next: t.Union([t.String(), t.Null()]) },
+  closed,
+);
