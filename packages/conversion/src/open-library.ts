@@ -7,11 +7,18 @@ import {
 } from '@rezics/definitions/bulk';
 import { checkMediaImportRequest, type MediaImportRequest } from '@rezics/definitions/media-import';
 import { ConversionError, type ConversionInput, type ConvertedRecord } from './index.ts';
-import { commandKey, safeSourceUrl, sourceDigest, sourceEnvelope, type ConversionContext } from './support.ts';
+import {
+  commandKey,
+  marcLanguageTag,
+  safeSourceUrl,
+  sourceDigest,
+  sourceEnvelope,
+  type ConversionContext,
+} from './support.ts';
 
-export const converter_revision = 'open-library@1';
+export const converter_revision = 'open-library@2';
 
-// Explicit allowlist: fourteen top-level fields; each collection <=64 entries,
+// Explicit allowlist: fifteen top-level fields; each collection <=64 entries,
 // authors + works <=64 relations; <=100 commands; <=64 deferred cover assets.
 // Projection <=2 MiB, unknown-licensed prose <=1 MiB, other strings <=1500
 // characters (title included). Unknown/private subtrees are never traversed.
@@ -37,6 +44,7 @@ type NormalizedRecord = {
   covers?: number[];
   links?: { url: string }[];
   publishers?: string[];
+  languages?: { key: string }[];
 };
 type DeferredCover = Omit<MediaImportRequest, 'containerId'>;
 export type OpenLibraryConversion = ConvertedRecord<BatchCommand> & {
@@ -126,6 +134,11 @@ function modified(value: unknown): { value: string } {
     invalid('/last_modified/value', 'invalid_source_timestamp');
   return { value: stamp };
 }
+function language(value: unknown, path: string): { key: string } {
+  const text = string(own(object(value, path), 'key', `${path}/key`), `${path}/key`, 255);
+  if (/^\/languages\/[^/]+$/u.exec(text)?.[0] !== text) invalid(`${path}/key`, 'invalid_language_key');
+  return { key: text };
+}
 function link(value: unknown, path: string): { url: string } {
   const raw = own(object(value, path), 'url', `${path}/url`);
   try {
@@ -199,6 +212,8 @@ function normalize(input: ConversionInput): NormalizedRecord {
     });
   const links = get('links');
   if (links !== undefined) record.links = array(links, '/links', link);
+  const languages = get('languages');
+  if (languages !== undefined) record.languages = array(languages, '/languages', language);
   if (Buffer.byteLength(JSON.stringify(record), 'utf8') > recordBytes) invalid('', 'source_record_byte_limit_2_MiB');
   return record;
 }
@@ -339,6 +354,16 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     });
   propose(fact('wdt:P648', identifier(record.key)), 'identity');
   propose(fact('schema:name', { language: 'und', text: record.title }), 'title');
+  const languageTags = new Set<string>();
+  (record.languages ?? []).forEach((entry, i) => {
+    const tag = marcLanguageTag(entry.key.slice('/languages/'.length));
+    if (tag === null) {
+      report(`/languages/${i}`, 'no_canonical_language_tag');
+      return;
+    }
+    languageTags.add(tag);
+  });
+  for (const tag of [...languageTags].sort()) propose(fact('schema:inLanguage', tag), `language:${tag}`);
   for (const kind of ['authors', 'works'] as const) {
     (record[kind] ?? []).forEach((entry, i) => {
       if (entry.key === undefined) {
