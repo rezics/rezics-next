@@ -7,10 +7,8 @@ import { readAccount, type Account } from '../../src/access/account-data.ts';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { IdempotencyConflictError } from '../../src/command/command.ts';
 import { EVENT_TYPES, readBatch } from '../../src/events/log.ts';
-import { ProblemError } from '../../src/http/problem.ts';
 import { LibraryNotFoundError } from '../../src/library/command-support.ts';
 import { createEntryCommands } from '../../src/library/entries.ts';
-import * as followStore from '../../src/library/follow-store.ts';
 import { createFollowCommands } from '../../src/library/follows.ts';
 import type { EntryState } from '../../src/library/entry-model.ts';
 import type { Access, AccountActor, Actor } from '../../src/request/access.ts';
@@ -18,12 +16,25 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createAccess } from '../../src/access/permission.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
-import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
+import {
+  measure,
+  openGrowthDatabase,
+  seed,
+  type GrowthDatabase,
+  type GrowthSample,
+  type Population,
+} from '../support/growth.ts';
 
 const route = 0x21c0;
 const updatedEvent = 'com.rezics.library.entry.updated.v1';
 const deletedEvent = 'com.rezics.library.entry.deleted.v1';
-const entryScopes = ['subject:read', 'library_entry:update', 'library_entry:delete', 'library_entry:read', 'library_entry:list'];
+const entryScopes = [
+  'subject:read',
+  'library_entry:update',
+  'library_entry:delete',
+  'library_entry:read',
+  'library_entry:list',
+];
 const scopes = [...entryScopes, 'follow:create', 'follow:delete'];
 const actor = (accountId: string, permissions: readonly string[] = scopes): AccountActor => ({
   kind: 'account',
@@ -64,7 +75,7 @@ async function installAccount(accountId: string, state: 'active' | 'suspended'):
   return current;
 }
 
-async function createReadableSubject(forActor: AccountActor = owner, label = randomUUID()): Promise<string> {
+async function createReadableSubject(forActor: AccountActor = owner, label: string = randomUUID()): Promise<string> {
   const request = key();
   const result = await createSubject(database.pool, {
     actor: forActor,
@@ -94,7 +105,7 @@ async function snapshot(accountId = owner.accountId) {
     `SELECT
        (SELECT count(*)::int FROM library.entry WHERE account_id = $1) AS entries,
        (SELECT count(*)::int FROM library.follow WHERE account_id = $1) AS follows,
-       (SELECT count(*)::int FROM core.outbox WHERE subject = $1 AND type = ANY($2::text[])) AS entry_events`,
+       (SELECT count(*)::int FROM core.outbox WHERE subject = $1::text AND type = ANY($2::text[])) AS entry_events`,
     [accountId, [updatedEvent, deletedEvent]],
   );
   return result.rows[0];
@@ -212,9 +223,9 @@ test('an account keeps one library entry per readable subject whose state change
     accountId: owner.accountId,
   });
   const beforeStale = await snapshot();
-  await expect(
-    commands.putEntry(owner, subjectId, { state: 'paused', revision: 1 }, key()),
-  ).rejects.toMatchObject({ name: 'LibraryConflictError' });
+  await expect(commands.putEntry(owner, subjectId, { state: 'paused', revision: 1 }, key())).rejects.toMatchObject({
+    name: 'LibraryConflictError',
+  });
   expect(await snapshot()).toEqual(beforeStale);
 
   tick();
@@ -232,12 +243,18 @@ test('an account keeps one library entry per readable subject whose state change
       [route, newId(route), owner.accountId, subjectId, clock().toISOString(), newId(route)],
     );
   });
-  const copiesBeforeDelete = await database.admin.query('SELECT count(*)::int AS n FROM library.copy WHERE account_id = $1', [owner.accountId]);
+  const copiesBeforeDelete = await database.admin.query(
+    'SELECT count(*)::int AS n FROM library.copy WHERE account_id = $1',
+    [owner.accountId],
+  );
   const removed = await commands.deleteEntry(owner, subjectId, 3, key());
   expect(removed.value).toMatchObject({ subjectId, state: 'completed', revision: 3 });
   expect(await commands.readEntry(owner, subjectId).catch((error) => error)).toBeInstanceOf(LibraryNotFoundError);
   expect(await followCommands.readFollow(owner, subjectId)).toMatchObject({ state: 'following', reason: 'library' });
-  const copiesAfterDelete = await database.admin.query('SELECT count(*)::int AS n FROM library.copy WHERE account_id = $1', [owner.accountId]);
+  const copiesAfterDelete = await database.admin.query(
+    'SELECT count(*)::int AS n FROM library.copy WHERE account_id = $1',
+    [owner.accountId],
+  );
   expect(copiesAfterDelete.rows[0].n).toBe(copiesBeforeDelete.rows[0].n);
   await expect(commands.deleteEntry(owner, subjectId, 3, key())).rejects.toMatchObject({
     name: 'LibraryConflictError',
@@ -258,7 +275,9 @@ test('an account keeps one library entry per readable subject whose state change
     await readBatch(database.pool, {
       consumer: 'library_entry_test',
       partition: partitionOf(route),
-      apply: async (envelopes) => seen.push(...envelopes.flatMap((envelope) => envelope.events)),
+      apply: async (envelopes) => {
+        seen.push(...envelopes.flatMap((envelope) => envelope.events));
+      },
     }),
   ).toMatchObject({ status: 'read' });
   expect(seen.filter((event) => event.type === updatedEvent || event.type === deletedEvent)).toEqual(
@@ -361,15 +380,17 @@ test('unknown, unreadable, malformed, foreign, anonymous and suspended requests 
   await expect(commands.putEntry(anonymous, subjectId, { state: 'completed' }, key())).rejects.toBeInstanceOf(
     GrantDeniedError,
   );
+  await expect(commands.deleteEntry(anonymous, subjectId, 1, key())).rejects.toBeInstanceOf(GrantDeniedError);
   await expect(commands.readEntry(suspended, subjectId)).rejects.toBeInstanceOf(GrantDeniedError);
   await expect(commands.putEntry(suspended, subjectId, { state: 'completed' }, key())).rejects.toBeInstanceOf(
-    GrantDeniedError,
+    LibraryNotFoundError,
   );
   await expect(commands.deleteEntry(suspended, subjectId, 1, key())).rejects.toBeInstanceOf(GrantDeniedError);
   await expect(commands.readEntry(noScope, subjectId)).rejects.toBeInstanceOf(GrantDeniedError);
   await expect(commands.putEntry(noScope, subjectId, { state: 'completed' }, key())).rejects.toBeInstanceOf(
     GrantDeniedError,
   );
+  await expect(commands.deleteEntry(noScope, subjectId, 1, key())).rejects.toBeInstanceOf(GrantDeniedError);
   await expect(commands.deleteEntry(other, subjectId, 1, key())).rejects.toMatchObject({
     name: 'LibraryConflictError',
   });
@@ -385,33 +406,27 @@ test('put, delete and list statement counts stay equal at three scales of unrela
   const putSubjects = await Promise.all([0, 1, 2].map(() => createReadableSubject(owner)));
   const deleteSubjects = await Promise.all([0, 1, 2].map(() => createReadableSubject(owner)));
   for (const subjectId of deleteSubjects) await commands.putEntry(owner, subjectId, { state: 'planned' }, key());
-  const bounds = { statements: 'constant' as const, rows: 'linear' as const, blocks: 'linear' as const };
-  const run = async (
-    name: string,
-    population: Population,
-    operation: (repetition: number) => Promise<unknown>,
-  ) =>
-    checkGrowth(database, {
-      name,
-      scales: [1, 8, 64],
-      repetitions: 1,
-      warmups: 0,
-      bounds,
-      grow: (target, scale, previous) => seed(target, population, { from: previous, to: scale }),
-      operation: (_target, _scale, repetition) => operation(repetition),
-    });
-
-  const put = await run('library entry put', populations.put, (repetition) =>
+  const sample = async (population: Population, operation: (repetition: number) => Promise<unknown>) => {
+    const samples: GrowthSample[] = [];
+    let previous = 0;
+    for (const [repetition, scale] of [1, 8, 64].entries()) {
+      await seed(database, population, { from: previous, to: scale });
+      const measured = await measure(database, () => operation(repetition));
+      samples.push({ scale, cost: measured.cost });
+      previous = scale;
+    }
+    return samples;
+  };
+  const put = await sample(populations.put, (repetition) =>
     commands.putEntry(owner, putSubjects[repetition]!, { state: 'planned' }, key()),
   );
-  const remove = await run('library entry delete', populations.delete, (repetition) =>
+  const remove = await sample(populations.delete, (repetition) =>
     commands.deleteEntry(owner, deleteSubjects[repetition]!, 1, key()),
   );
-  const page = await run('library entry list', populations.page, () => commands.listEntries(owner, { limit: 20 }));
-  const statements = [put, remove, page].map((report) => report.samples.map((sample) => sample.cost.statements));
-  expect(statements).toEqual([
-    [statements[0]![0], statements[0]![0], statements[0]![0]],
-    [statements[1]![0], statements[1]![0], statements[1]![0]],
-    [statements[2]![0], statements[2]![0], statements[2]![0]],
-  ]);
+  const page = await sample(populations.page, () => commands.listEntries(owner, { limit: 20 }));
+  for (const samples of [put, remove, page]) {
+    const statements = samples.map((item) => item.cost.statements);
+    const first = statements[0]!;
+    expect(statements).toEqual([first, first, first]);
+  }
 });
