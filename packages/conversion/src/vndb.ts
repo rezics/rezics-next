@@ -2,7 +2,7 @@ import { checkBatchWrite, type BatchCommand, type BatchReference, type BatchStat
 import { ConversionError, type ConversionInput, type ConvertedRecord, type ConversionDiagnostic } from './index.ts';
 import { commandKey, safeSourceUrl, sourceDigest, sourceEnvelope, type ConversionContext } from './support.ts';
 
-export const converter_revision = 'vndb@1';
+export const converter_revision = 'vndb@2';
 export const vndbLimits = Object.freeze({
   maxTitles: 64,
   maxTitleCandidates: 64,
@@ -231,6 +231,10 @@ export function convertVndb(
       labels[title.language] ??= title.text;
       uniqueTitles.set(JSON.stringify([title.language, title.text]), { language: title.language, text: title.text });
     }
+    const aliases: Record<string, string[]> = Object.create(null);
+    for (const title of uniqueTitles.values()) {
+      if (labels[title.language] !== title.text) (aliases[title.language] ??= []).push(title.text);
+    }
     const statements = [
       statement('wdt:P3180', id),
       ...Array.from(uniqueTitles.values(), (title) => statement('schema:name', title)),
@@ -246,8 +250,6 @@ export function convertVndb(
     }
     const key = (operation: string, group: string): string =>
       commandKey([sourceId, id, revision, digest, registration, 'facts', operation, context.subjectId ?? '', group]);
-    const groupedStatements: Record<string, BatchStatement[]> = Object.create(null);
-    for (const entry of statements) (groupedStatements[entry.property.id] ??= []).push(entry);
     const proposals: BatchCommand[] =
       context.subjectId === undefined
         ? [
@@ -255,7 +257,12 @@ export function convertVndb(
               op: 'create',
               source,
               key: key('create', 'bootstrap'),
-              subject: { type: 'wd:Q689445', labels, statements: groupedStatements },
+              subject: {
+                type: 'wd:Q689445',
+                labels,
+                descriptions: {},
+                ...(Object.keys(aliases).length ? { aliases } : {}),
+              },
             },
           ]
         : statements.map((entry, i) => ({
