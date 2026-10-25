@@ -308,7 +308,7 @@ async function restore(operationId: string) {
       createCurrentConsentReader({ database: authPool }).readCurrentConsent({ actorAccountId, clientId }),
   });
   let restored: AccountActor | undefined;
-  await runCommand(
+  const outcome = await runCommand(
     db.pool,
     {
       partition: partitionOf(route),
@@ -340,8 +340,19 @@ async function restore(operationId: string) {
         },
       },
     },
-    async () => ({ value: null, events: [] }),
+    async () => ({
+      value: null,
+      events: [{ type: 'erasure-provenance-test.restored', data: { operationId } }],
+    }),
   );
+  expect(
+    (
+      await db.admin.query('SELECT type, data FROM core.outbox WHERE partition_no=$1 AND position=$2', [
+        outcome.partition,
+        outcome.position,
+      ])
+    ).rows,
+  ).toEqual([{ type: 'erasure-provenance-test.restored', data: { operationId } }]);
   return restored;
 }
 async function delegatedActor() {
@@ -639,7 +650,7 @@ test('initiation keeps its wire, admission and one-attempt cost; the growth chec
         (sql) =>
           sql.includes('minimum_authn_epoch::text AS "minimumAuthnEpoch"') && sql.includes('FROM access.account'),
       ),
-    ).toHaveLength(creator.requestedBy ? 2 : 1);
+    ).toHaveLength(1);
     expect(statements.filter((sql) => sql.includes('issued_valid::text'))).toHaveLength(creator.requestedBy ? 1 : 0);
     expect(statements.filter((sql) => sql.includes('INSERT INTO content.operation'))).toHaveLength(1);
     expect(statements.filter((sql) => sql.includes('FROM content.post'))).toHaveLength(1);
