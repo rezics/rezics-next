@@ -6,6 +6,8 @@ const entitlement = Type.Object({ entitlementId: id, orderId: id }, { additional
 
 /** Closed, identifier-only data; state is read from the owning commerce partition. */
 export const COMMERCE_EVENTS = {
+  'com.rezics.commerce.payout_statement.updated.v1': Type.Object({ statementId: id }, { additionalProperties: false }),
+  'com.rezics.commerce.payout_statement.paid.v1': Type.Object({ statementId: id }, { additionalProperties: false }),
   'com.rezics.commerce.offer.created.v1': offer,
   'com.rezics.commerce.offer.delisted.v1': offer,
   'com.rezics.commerce.order.created.v1': Type.Object({ orderId: id }, { additionalProperties: false }),

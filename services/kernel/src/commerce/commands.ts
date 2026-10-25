@@ -340,6 +340,7 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
             transactionId: command.transactionId,
             time: authoritativeTimeValue(command.time),
             newEntitlementId: newId(r),
+            amountTaxMinor: snapshot.amountTaxMinor,
           });
           if (!applied.changed) throw new Unchanged();
           const events: CommandEvent[] = [updated(id, applied.order.revision)];

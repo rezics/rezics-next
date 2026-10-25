@@ -177,15 +177,23 @@ export function royaltyLines(
 const amountFields = ['grossMinor', 'taxMinor', 'feeMinor', 'disputeFeeMinor', 'netReceiptsMinor'] as const;
 
 /** Each deduction is included once in net; refund/chargeback subtotals describe movements already in gross. */
-export function statementTotals(lines: readonly RoyaltyLine[], royaltyBasisPoints: number): StatementTotal[] {
-  const basisPoints = integer(royaltyBasisPoints);
-  if (basisPoints < 0n || basisPoints > 10000n) throw new RangeError('Invalid royalty basis points');
+export function statementTotals(
+  lines: readonly (RoyaltyLine & { royaltyBasisPoints?: number })[],
+  royaltyBasisPoints?: number,
+): StatementTotal[] {
+  function rate(value: number): bigint {
+    const result = integer(value);
+    if (result < 0n || result > 10000n) throw new RangeError('Invalid royalty basis points');
+    return result;
+  }
+  if (royaltyBasisPoints !== undefined) rate(royaltyBasisPoints);
   const currencies = new Map<
     string,
-    Record<(typeof amountFields)[number] | 'refundsMinor' | 'chargebacksMinor', bigint>
+    Record<(typeof amountFields)[number] | 'refundsMinor' | 'chargebacksMinor' | 'weightedNetMinor', bigint>
   >();
   const seen = new Map<string, string>();
   for (const line of lines) {
+    const basisPoints = rate(line.royaltyBasisPoints ?? royaltyBasisPoints!);
     const amounts = amountFields.map((field) => integer(line[field]));
     const signature = JSON.stringify([
       line.orderId,
@@ -193,6 +201,7 @@ export function statementTotals(lines: readonly RoyaltyLine[], royaltyBasisPoint
       line.created,
       line.currency,
       ...amountFields.map((field) => line[field]),
+      String(basisPoints),
     ]);
     const previous = seen.get(line.balanceTransactionId);
     if (previous !== undefined) {
@@ -211,16 +220,18 @@ export function statementTotals(lines: readonly RoyaltyLine[], royaltyBasisPoint
         netReceiptsMinor: 0n,
         refundsMinor: 0n,
         chargebacksMinor: 0n,
+        weightedNetMinor: 0n,
       };
       currencies.set(line.currency, total);
     }
     for (const [index, field] of amountFields.entries()) total[field] += amounts[index]!;
+    total.weightedNetMinor += amounts[4]! * basisPoints;
     if (line.kind === 'refund' || line.kind === 'refund_reversal') total.refundsMinor -= amounts[0]!;
     if (line.kind === 'dispute' || line.kind === 'dispute_reversal') total.chargebacksMinor -= amounts[0]!;
   }
   return Array.from(currencies, ([currency, total]) => {
     // BigInt division truncates toward zero, after summing the entire currency statement.
-    const creator = (total.netReceiptsMinor * basisPoints) / 10000n;
+    const creator = total.weightedNetMinor / 10000n;
     return {
       currency,
       grossMinor: minor(total.grossMinor),

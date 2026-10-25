@@ -53,6 +53,7 @@ function asOrder(row: OrderRow): Order {
   return {
     ...row,
     unitAmountMinor: Number(row.unitAmountMinor),
+    amountTaxMinor: row.amountTaxMinor === null ? null : Number(row.amountTaxMinor),
     createdAt: iso(row.createdAt),
     checkoutExpiresAt: row.checkoutExpiresAt === null ? null : iso(row.checkoutExpiresAt),
     observedAt: row.observedAt === null ? null : iso(row.observedAt),
@@ -238,9 +239,11 @@ export async function applyCheckoutDecision(
   route: number,
   state: SettlementState,
   decision: CheckoutDecision,
-  context: WriteContext & { newEntitlementId: string },
+  context: WriteContext & { newEntitlementId: string; amountTaxMinor?: number | null },
 ): Promise<AppliedCheckoutDecision> {
   if (!decision.changed) return { changed: false };
+  if (context.amountTaxMinor != null && (!Number.isSafeInteger(context.amountTaxMinor) || context.amountTaxMinor < 0))
+    throw new RangeError('Invalid Checkout tax amount');
   const lockedOrder = required(await orderLock.run(queryClient(client), { route, id: state.order.id }));
   if (lockedOrder.revision !== state.order.revision) throw new Error('Commerce order revision changed');
   const currentEntitlement = await entitlementLock.run(queryClient(client), { route, order_id: state.order.id });
@@ -266,6 +269,7 @@ export async function applyCheckoutDecision(
         settlement: decision.settlement,
         payment_intent_id: decision.paymentIntentId ?? '',
         observed_at: decision.observedAt,
+        amount_tax_minor: decision.settlement === 'paid' ? (context.amountTaxMinor ?? -1) : -1,
         ...write(context),
       }),
     ),

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
-import type { QueryConfig } from 'pg';
+import type { PoolClient, QueryConfig } from 'pg';
 import { Value } from 'typebox/value';
 import { createAccess } from '../../src/access/index.ts';
 import { createCommerceCommands } from '../../src/commerce/commands.ts';
@@ -21,6 +21,8 @@ import { composeWork } from '../../src/work/registry.ts';
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(databaseUrl);
+const connections = new Set<PoolClient>();
+pool.on('connect', (connection) => connections.add(connection));
 const creator = newId(0x2200);
 // A different creator in the SAME route must also be unable to read the first creator's statements.
 const otherCreator = newId(0x2200);
@@ -79,7 +81,9 @@ async function request(path: string, id: string | null = creator, body?: unknown
       method: body === undefined ? 'GET' : 'POST',
       headers: {
         ...(id ? { authorization: `Bearer ${await token(id)}` } : {}),
-        ...(body === undefined ? {} : { 'content-type': 'application/json', 'idempotency-key': requestKey }),
+        ...(body === undefined
+          ? {}
+          : { 'content-type': 'application/json', 'idempotency-key': JSON.stringify(requestKey) }),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     }),
@@ -485,7 +489,7 @@ test('one seed method at three scales: effect and keyset page SQL counts are ind
   let captured: string[] | undefined;
   const originals = new Map();
   pool.on('connect', instrument);
-  function instrument(connection: Awaited<ReturnType<typeof pool.connect>>) {
+  function instrument(connection: PoolClient) {
     if (originals.has(connection)) return;
     const original = connection.query;
     originals.set(connection, original);
@@ -494,12 +498,8 @@ test('one seed method at three scales: effect and keyset page SQL counts are ind
       return Reflect.apply(original, connection, [sql, ...args]);
     }) as typeof original;
   }
-  // Include existing idle connections, rather than relying on a new connection at each scale.
-  const held = await Promise.all(Array.from({ length: pool.options.max! }, () => pool.connect()));
-  for (const connection of held) {
-    instrument(connection);
-    connection.release();
-  }
+  // Include connections already acquired by the worker without trying to acquire its held clients.
+  for (const connection of connections) instrument(connection);
   try {
     for (const scale of [0, 2000, 8000]) {
       await pool.query('TRUNCATE commerce.royalty_line, commerce.payout_statement');

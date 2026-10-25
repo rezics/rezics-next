@@ -31,6 +31,8 @@ export type Order = {
     unitAmountMinor: number;
     taxCode: string;
     royaltyBasisPoints: number;
+    /** Checkout tax captured at paid fulfilment; older in-memory snapshots may omit it. */
+    amountTaxMinor?: number | null;
     settlement: Settlement;
     checkoutSessionId: string | null;
     checkoutUrl: string | null;

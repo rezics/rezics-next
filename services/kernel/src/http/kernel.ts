@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { createAccess } from '../access/index.ts';
+import { payoutRoutes } from '../commerce/payout-routes.ts';
 import { commerceRoutes, type CommerceDependencies } from '../commerce/routes.ts';
 import type { Access, AccessConfig } from '../request/access.ts';
 import { definitionRoutes } from '../semantic/http/definitions.ts';
@@ -23,12 +24,14 @@ export function createKernel(dependencies: KernelDependencies) {
     subjectRoutes(createApp({ ...dependencies, access: resolveAccess, tokens }), dependencies),
     dependencies,
   );
-  return commerceRoutes(app, {
+  const payouts = payoutRoutes(app, dependencies);
+  const commerce = commerceRoutes(app, {
     pool: dependencies.pool,
     tokens,
     access: () => resolveAccess({ actions: actionCatalogue(app) }),
     ...(dependencies.commerce === undefined ? {} : { commerce: dependencies.commerce }),
   });
+  return commerce as typeof commerce & typeof payouts;
 }
 
 /** The app's type is the Eden contract. */

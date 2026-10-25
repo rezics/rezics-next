@@ -13,6 +13,7 @@ import {
   type StripePort,
 } from './model.ts';
 import { readOrder } from './store.ts';
+import { createPayouts } from './payouts.ts';
 import {
   ORDER_RECONCILE_WORKFLOW,
   orderReconcileWorkflowId,
@@ -23,6 +24,8 @@ import clockQuery from './work-clock.sql';
 
 export type CommerceWorkDependencies = {
   stripe: StripePort;
+  /** Trusted test/service clock for royalty command T; otherwise PostgreSQL supplies it. */
+  royaltyClock?: () => Date;
   checkout: { successUrl: string; cancelUrl: string };
 };
 
@@ -141,7 +144,16 @@ export function createCommerceWork(deps: CommerceWorkDependencies): WorkModule {
         },
         { name: ORDER_RECONCILE_WORKFLOW },
       );
+      const payouts = createPayouts({ pool, clock: deps.royaltyClock });
       registerEffects([
+        {
+          name: 'commerce_royalty',
+          types: ['com.rezics.commerce.transactions.recorded.v1'],
+          async run(event) {
+            const { orderId } = event.data as { orderId: string };
+            await payouts.recordOrder(orderId, `effect:${event.id}:royalty`);
+          },
+        },
         {
           name: 'commerce_reconcile_order',
           types: ['com.rezics.commerce.order.created.v1'],
