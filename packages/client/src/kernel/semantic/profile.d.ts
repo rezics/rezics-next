@@ -1,5 +1,5 @@
 export declare const SUBJECT_TYPE: 'schema:Book';
-export type DataType = 'wikibase-item' | 'external-id' | 'quantity' | 'url';
+export type DataType = 'wikibase-item' | 'external-id' | 'quantity' | 'url' | 'document' | 'media';
 export type PropertyDefinition = {
     id: string;
     dataType: DataType;

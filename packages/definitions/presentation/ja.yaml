@@ -4,6 +4,10 @@ types:
   schema:Book: 書籍
   bf:Instance: 版
   schema:Recipe: レシピ
+  schema:TVSeries: テレビ番組シリーズ
+  schema:MusicAlbum: アルバム
+  schema:VideoGame: コンピュータゲーム
+  wd:Q689445: ビジュアルノベル
 properties:
   schema:url: URL
   schema:birthDate: 生年月日
@@ -20,3 +24,9 @@ properties:
   schema:recipeIngredient: 材料
   schema:cookTime: 調理時間
   schema:recipeYield: 人数
+  schema:abstract: アブストラクト
+  schema:image: 画像
+  wdt:P648: Open Library識別子
+  wdt:P5732: 番組計画主題識別子
+  wdt:P6298: 番組計画人物識別子
+  wdt:P3180: ビジュアルノベル・データベース識別子

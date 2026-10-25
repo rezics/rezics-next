@@ -4,6 +4,10 @@ types:
   schema:Book: 書籍
   bf:Instance: 版本
   schema:Recipe: 食譜
+  schema:TVSeries: 電視系列節目
+  schema:MusicAlbum: 音樂專輯
+  schema:VideoGame: 電子遊戲
+  wd:Q689445: 視覺小說
 properties:
   schema:url: URL
   schema:birthDate: 出生日期
@@ -20,3 +24,9 @@ properties:
   schema:recipeIngredient: 食材
   schema:cookTime: 烹調時間
   schema:recipeYield: 份量
+  schema:abstract: 摘要
+  schema:image: 圖像
+  wdt:P648: 開放圖書館識別碼
+  wdt:P5732: Bangumi主題識別碼
+  wdt:P6298: Bangumi人物識別碼
+  wdt:P3180: 視覺小說數據庫識別碼

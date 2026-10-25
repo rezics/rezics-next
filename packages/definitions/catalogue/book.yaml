@@ -20,6 +20,9 @@ classes:
       - wd:Q47461344
     slots:
       - author
+      - abstract
+      - openLibraryId
+      - bangumiSubjectId
       - datePublished
       - inLanguage
   Edition:
@@ -30,6 +33,7 @@ classes:
       - wd:Q3331189
     slots:
       - exampleOfWork
+      - openLibraryId
       - isbn
       - publisher
       - datePublished
@@ -45,6 +49,7 @@ slots:
       - wd:P629
     annotations:
       datatype: wikibase-item
+      qualifiers: openLibraryId
   isbn:
     slot_uri: schema:isbn
     description: The ISBN-13 identifier of the edition.
@@ -62,6 +67,7 @@ slots:
       - wd:P123
     annotations:
       datatype: wikibase-item
+      qualifiers: vndbId
   numberOfPages:
     slot_uri: schema:numberOfPages
     description: The number of pages in the edition.
@@ -81,4 +87,4 @@ slots:
       - wd:P655
     annotations:
       datatype: wikibase-item
-      qualifiers: position
+      qualifiers: position openLibraryId

@@ -2052,6 +2052,8 @@
                                     "properties": {
                                       "data_type": {
                                         "enum": [
+                                          "document",
+                                          "media",
                                           "wikibase-item",
                                           "external-id",
                                           "quantity",
@@ -2078,6 +2080,8 @@
                                           "properties": {
                                             "data_type": {
                                               "enum": [
+                                                "document",
+                                                "media",
                                                 "wikibase-item",
                                                 "external-id",
                                                 "quantity",
@@ -2173,6 +2177,8 @@
                                                 "properties": {
                                                   "data_type": {
                                                     "enum": [
+                                                      "document",
+                                                      "media",
                                                       "wikibase-item",
                                                       "external-id",
                                                       "quantity",
@@ -2908,6 +2914,8 @@
                                     "properties": {
                                       "data_type": {
                                         "enum": [
+                                          "document",
+                                          "media",
                                           "wikibase-item",
                                           "external-id",
                                           "quantity",
@@ -2934,6 +2942,8 @@
                                           "properties": {
                                             "data_type": {
                                               "enum": [
+                                                "document",
+                                                "media",
                                                 "wikibase-item",
                                                 "external-id",
                                                 "quantity",
@@ -3029,6 +3039,8 @@
                                                 "properties": {
                                                   "data_type": {
                                                     "enum": [
+                                                      "document",
+                                                      "media",
                                                       "wikibase-item",
                                                       "external-id",
                                                       "quantity",

@@ -94,6 +94,10 @@ export function checkTyped(
     if (!record(raw.value) || raw.value.type !== 'value' || !Object.hasOwn(raw.value, 'content')) return;
     const content = raw.value.content;
     const pointer = `${path}/value/content`;
+    if (property.datatype === 'document' || property.datatype === 'media') {
+      add(pointer, 'unsupported');
+      return;
+    }
     const compiled = validator(digest, id, property);
     if (!compiled.Check(content)) {
       const [, errors] = compiled.Errors(content);

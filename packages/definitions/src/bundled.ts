@@ -11,6 +11,7 @@ export function bundledSources() {
       'core.yaml': source('../catalogue/core.yaml'),
       'book.yaml': source('../catalogue/book.yaml'),
       'recipe.yaml': source('../catalogue/recipe.yaml'),
+      'works.yaml': source('../catalogue/works.yaml'),
     },
     presentation: {
       en: source('../presentation/en.yaml'),

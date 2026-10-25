@@ -11,7 +11,8 @@
   "prefixes": {
     "bf": "http://id.loc.gov/ontologies/bibframe/",
     "schema": "http://schema.org/",
-    "wd": "http://www.wikidata.org/entity/"
+    "wd": "http://www.wikidata.org/entity/",
+    "wdt": "http://www.wikidata.org/prop/direct/"
   },
   "types": {
     "bf:Instance": {
@@ -27,12 +28,14 @@
       "properties": [
         "schema:datePublished",
         "schema:exampleOfWork",
+        "schema:image",
         "schema:inLanguage",
         "schema:isbn",
         "schema:numberOfPages",
         "schema:publisher",
         "schema:translator",
-        "schema:url"
+        "schema:url",
+        "wdt:P648"
       ]
     },
     "schema:Book": {
@@ -46,10 +49,14 @@
         "wd:Q47461344"
       ],
       "properties": [
+        "schema:abstract",
         "schema:author",
         "schema:datePublished",
+        "schema:image",
         "schema:inLanguage",
-        "schema:url"
+        "schema:url",
+        "wdt:P5732",
+        "wdt:P648"
       ]
     },
     "schema:Organization": {
@@ -63,7 +70,9 @@
         "wd:Q43229"
       ],
       "properties": [
-        "schema:url"
+        "schema:image",
+        "schema:url",
+        "wdt:P3180"
       ]
     },
     "schema:Person": {
@@ -79,7 +88,11 @@
       "properties": [
         "schema:birthDate",
         "schema:deathDate",
-        "schema:url"
+        "schema:image",
+        "schema:url",
+        "wdt:P3180",
+        "wdt:P6298",
+        "wdt:P648"
       ]
     },
     "schema:Recipe": {
@@ -93,12 +106,88 @@
         "wd:Q219239"
       ],
       "properties": [
+        "schema:abstract",
         "schema:author",
         "schema:cookTime",
         "schema:datePublished",
+        "schema:image",
         "schema:recipeIngredient",
         "schema:recipeYield",
         "schema:url"
+      ]
+    },
+    "schema:VideoGame": {
+      "iri": "http://schema.org/VideoGame",
+      "labels": {
+        "en": "video game",
+        "ja": "コンピュータゲーム",
+        "zh-Hant": "電子遊戲"
+      },
+      "mappings": [
+        "wd:Q7889"
+      ],
+      "properties": [
+        "schema:abstract",
+        "schema:datePublished",
+        "schema:image",
+        "schema:inLanguage",
+        "schema:url",
+        "wdt:P5732"
+      ]
+    },
+    "schema:MusicAlbum": {
+      "iri": "http://schema.org/MusicAlbum",
+      "labels": {
+        "en": "album",
+        "ja": "アルバム",
+        "zh-Hant": "音樂專輯"
+      },
+      "mappings": [
+        "wd:Q482994"
+      ],
+      "properties": [
+        "schema:abstract",
+        "schema:datePublished",
+        "schema:image",
+        "schema:inLanguage",
+        "schema:url",
+        "wdt:P5732"
+      ]
+    },
+    "schema:TVSeries": {
+      "iri": "http://schema.org/TVSeries",
+      "labels": {
+        "en": "television series",
+        "ja": "テレビ番組シリーズ",
+        "zh-Hant": "電視系列節目"
+      },
+      "mappings": [
+        "wd:Q5398426"
+      ],
+      "properties": [
+        "schema:abstract",
+        "schema:datePublished",
+        "schema:image",
+        "schema:inLanguage",
+        "schema:url",
+        "wdt:P5732"
+      ]
+    },
+    "wd:Q689445": {
+      "iri": "http://www.wikidata.org/entity/Q689445",
+      "labels": {
+        "en": "visual novel",
+        "ja": "ビジュアルノベル",
+        "zh-Hant": "視覺小說"
+      },
+      "mappings": [],
+      "properties": [
+        "schema:abstract",
+        "schema:datePublished",
+        "schema:image",
+        "schema:inLanguage",
+        "schema:url",
+        "wdt:P3180"
       ]
     }
   },
@@ -115,7 +204,9 @@
       ],
       "datatype": "wikibase-item",
       "multivalued": false,
-      "qualifiers": [],
+      "qualifiers": [
+        "wdt:P648"
+      ],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -193,7 +284,9 @@
       ],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": [],
+      "qualifiers": [
+        "wdt:P3180"
+      ],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -215,7 +308,8 @@
       "datatype": "wikibase-item",
       "multivalued": true,
       "qualifiers": [
-        "schema:position"
+        "schema:position",
+        "wdt:P648"
       ],
       "value": {
         "type": "string",
@@ -224,6 +318,35 @@
       "targets": [
         "schema:Person"
       ]
+    },
+    "schema:abstract": {
+      "iri": "http://schema.org/abstract",
+      "labels": {
+        "en": "abstract",
+        "ja": "アブストラクト",
+        "zh-Hant": "摘要"
+      },
+      "mappings": [],
+      "datatype": "document",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "object",
+        "required": [
+          "language",
+          "document"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "language": {
+            "type": "string",
+            "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$"
+          },
+          "document": {
+            "type": "object"
+          }
+        }
+      }
     },
     "schema:author": {
       "iri": "http://schema.org/author",
@@ -238,7 +361,10 @@
       "datatype": "wikibase-item",
       "multivalued": true,
       "qualifiers": [
-        "schema:position"
+        "schema:position",
+        "wdt:P3180",
+        "wdt:P6298",
+        "wdt:P648"
       ],
       "value": {
         "type": "string",
@@ -248,6 +374,46 @@
         "schema:Organization",
         "schema:Person"
       ]
+    },
+    "wdt:P6298": {
+      "iri": "http://www.wikidata.org/prop/direct/P6298",
+      "labels": {
+        "en": "bgm.tv person ID",
+        "ja": "番組計画人物識別子",
+        "zh-Hant": "Bangumi人物識別碼"
+      },
+      "mappings": [
+        "wd:P6298"
+      ],
+      "datatype": "external-id",
+      "multivalued": false,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1500,
+        "pattern": "^[1-9][0-9]*$"
+      }
+    },
+    "wdt:P5732": {
+      "iri": "http://www.wikidata.org/prop/direct/P5732",
+      "labels": {
+        "en": "Bangumi subject ID",
+        "ja": "番組計画主題識別子",
+        "zh-Hant": "Bangumi主題識別碼"
+      },
+      "mappings": [
+        "wd:P5732"
+      ],
+      "datatype": "external-id",
+      "multivalued": false,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1500,
+        "pattern": "^[1-9][0-9]*$"
+      }
     },
     "schema:birthDate": {
       "iri": "http://schema.org/birthDate",
@@ -366,6 +532,22 @@
         }
       }
     },
+    "schema:image": {
+      "iri": "http://schema.org/image",
+      "labels": {
+        "en": "image",
+        "ja": "画像",
+        "zh-Hant": "圖像"
+      },
+      "mappings": [],
+      "datatype": "media",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\s\\S])"
+      }
+    },
     "schema:inLanguage": {
       "iri": "http://schema.org/inLanguage",
       "labels": {
@@ -382,6 +564,26 @@
         "minLength": 1,
         "maxLength": 1500,
         "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$"
+      }
+    },
+    "wdt:P648": {
+      "iri": "http://www.wikidata.org/prop/direct/P648",
+      "labels": {
+        "en": "Open Library ID",
+        "ja": "Open Library識別子",
+        "zh-Hant": "開放圖書館識別碼"
+      },
+      "mappings": [
+        "wd:P648"
+      ],
+      "datatype": "external-id",
+      "multivalued": false,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1500,
+        "pattern": "^OL[1-9][0-9]*[AMW]$"
       }
     },
     "schema:position": {
@@ -421,6 +623,26 @@
         "type": "string",
         "maxLength": 1500,
         "pattern": "^https?://[^\\s]+$"
+      }
+    },
+    "wdt:P3180": {
+      "iri": "http://www.wikidata.org/prop/direct/P3180",
+      "labels": {
+        "en": "Visual Novel Database ID",
+        "ja": "ビジュアルノベル・データベース識別子",
+        "zh-Hant": "視覺小說數據庫識別碼"
+      },
+      "mappings": [
+        "wd:P3180"
+      ],
+      "datatype": "external-id",
+      "multivalued": false,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1500,
+        "pattern": "^[vrpcs][1-9][0-9]*$"
       }
     },
     "schema:cookTime": {

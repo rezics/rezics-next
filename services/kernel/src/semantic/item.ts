@@ -296,7 +296,9 @@ function validateContent(
 ): void {
   const type = propertyOf(id)?.dataType;
   if (!type) return;
-  if (type === 'wikibase-item') {
+  if (type === 'document' || type === 'media') {
+    add(at, 'unsupported');
+  } else if (type === 'wikibase-item') {
     if (typeof content !== 'string') add(at, 'invalid_type');
     else if (routeOf(content) === null) add(at, 'invalid_format');
   } else if (type === 'external-id') {

@@ -1,6 +1,6 @@
 export const SUBJECT_TYPE = 'schema:Book' as const;
 
-export type DataType = 'wikibase-item' | 'external-id' | 'quantity' | 'url';
+export type DataType = 'wikibase-item' | 'external-id' | 'quantity' | 'url' | 'document' | 'media';
 
 export type PropertyDefinition = {
   id: string;
@@ -9,6 +9,8 @@ export type PropertyDefinition = {
 };
 
 export const BOOK_PROPERTIES: PropertyDefinition[] = [
+  { id: 'schema:abstract', dataType: 'document', labels: { en: 'abstract', ja: 'アブストラクト' } },
+  { id: 'schema:image', dataType: 'media', labels: { en: 'image', ja: '画像' } },
   { id: 'schema:author', dataType: 'wikibase-item', labels: { en: 'author', ja: '著者' } },
   { id: 'schema:genre', dataType: 'wikibase-item', labels: { en: 'genre', ja: 'ジャンル' } },
   { id: 'schema:isbn', dataType: 'external-id', labels: { en: 'ISBN', ja: 'ISBN' } },

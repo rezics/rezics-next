@@ -4,6 +4,10 @@ types:
   schema:Book: book
   bf:Instance: edition
   schema:Recipe: recipe
+  schema:TVSeries: television series
+  schema:MusicAlbum: album
+  schema:VideoGame: video game
+  wd:Q689445: visual novel
 properties:
   schema:url: URL
   schema:birthDate: date of birth
@@ -20,3 +24,9 @@ properties:
   schema:recipeIngredient: ingredient
   schema:cookTime: cooking time
   schema:recipeYield: servings
+  schema:abstract: abstract
+  schema:image: image
+  wdt:P648: Open Library ID
+  wdt:P5732: Bangumi subject ID
+  wdt:P6298: bgm.tv person ID
+  wdt:P3180: Visual Novel Database ID

@@ -23,7 +23,7 @@ RFC 8785 canonical JSON. Validate first: the digest function does not validate.
 ## Bundled catalogue
 
 The LinkML sources in `catalogue/` define the bundled terms. `rezics.yaml` imports
-the shared `core` terms and the `book` and `recipe` profiles. These profiles add
+the shared `core` terms and the `book`, `recipe` and `works` profiles. These profiles add
 types and properties through catalogue data; they do not need package code. The
 compiled release is checked in at `release/rezics.json`, and `src/bundled.ts`
 exposes both the source files and that release.
@@ -72,7 +72,7 @@ Source conventions:
   represented in one release and are refused.
 - `annotations` permits only `datatype`, `units`, and `qualifiers`. `datatype`
   is required: `wikibase-item` needs a concrete class range or `any_of` concrete
-  class ranges; `string`, `external-id`, and `monolingualtext` need `string`;
+  class ranges; `string`, `external-id`, `monolingualtext`, `document`, and `media` need `string`;
   `url` needs `uri`; `quantity` needs `integer` or `decimal`; `time` needs `date`.
   An omitted range uses the source schema's default, otherwise `string`.
 - `external-id` requires exactly one exact mapping, matching `wd:P<digits>`.
@@ -141,3 +141,121 @@ proposal or retraction never changes what a Context adopted; editors decide it.
 
 The contract has no runtime path. `checkBatchWrite` is linear in request size, bounded by
 `BATCH_LIMIT` and the statement limits.
+
+### Import field groups
+
+A converter never fabricates a REZICS id or a licence. Subject ids come from an
+existing subject or a successful create result; media ids come from an upload.
+Use `LicenseRef-unknown` when the source licence is unknown. A source record's
+facts, summary and cover have separate provenance and fence identities.
+
+`facts` contains ordinary statements. An unresolved relation uses `somevalue`
+with the target's source identifier as a qualifier; it never substitutes an
+external identifier for a REZICS subject id. Only `facts` supports `create` and
+`retract`. The following commands share this setup:
+
+```ts
+import { fromPlainText } from '@rezics/document';
+import type { BatchCommand, Source } from '@rezics/definitions/bulk';
+
+// Supplied by subject creation/lookup and media upload, respectively.
+declare const subjectId: string;
+declare const uploadedMediaId: string;
+const source = (field_group: Source['field_group']): Source => ({
+  source: 'bangumi',
+  external_id: '253',
+  record_revision: 'unversioned',
+  digest: 'd'.repeat(64),
+  converter_revision: 'bangumi@1',
+  field_group,
+});
+const references = [
+  {
+    parts: [
+      {
+        property: { id: 'schema:url' },
+        value: { type: 'value' as const, content: 'https://bgm.tv/subject/253' },
+      },
+    ],
+  },
+];
+
+const fact: BatchCommand = {
+  op: 'propose',
+  key: 'bangumi:253:facts:1',
+  source: source('facts'),
+  subject: subjectId,
+  statement: { property: { id: 'wdt:P5732' }, value: { type: 'value', content: '253' }, references },
+};
+
+const unresolvedAuthor: BatchCommand = {
+  op: 'propose',
+  key: 'openlibrary:OL45804W:author:1',
+  source: { ...source('facts'), source: 'openlibrary', external_id: 'OL45804W', converter_revision: 'openlibrary@1' },
+  subject: subjectId,
+  statement: {
+    property: { id: 'schema:author' },
+    value: { type: 'somevalue' },
+    qualifiers: [{ property: { id: 'wdt:P648' }, value: { type: 'value', content: 'OL26320A' } }],
+    references: [
+      {
+        parts: [
+          {
+            property: { id: 'schema:url' },
+            value: { type: 'value', content: 'https://openlibrary.org/works/OL45804W' },
+          },
+        ],
+      },
+    ],
+  },
+};
+
+const summary: BatchCommand = {
+  op: 'propose',
+  key: 'bangumi:253:summary:1',
+  source: source('summary'),
+  subject: subjectId,
+  rights: {
+    license: 'CC-BY-SA-3.0',
+    obligations: ['cc:Attribution', 'cc:ShareAlike'],
+    attribution: 'Bangumi contributors',
+  },
+  statement: {
+    property: { id: 'schema:abstract' },
+    value: { type: 'value', content: { language: 'ja', document: fromPlainText('吾輩は猫である。名前はまだ無い。') } },
+    references,
+  },
+};
+
+const cover: BatchCommand = {
+  op: 'propose',
+  key: 'bangumi:253:cover:1',
+  source: source('cover'),
+  subject: subjectId,
+  statement: { property: { id: 'schema:image' }, value: { type: 'value', content: uploadedMediaId }, references },
+};
+```
+
+`summary` and `cover` support only `propose` with a concrete `value`. A summary
+requires `rights`: an SPDX licence identifier or `LicenseRef-` identifier of at
+most 80 characters, zero to four distinct CC REL requirements (`cc:Attribution`,
+`cc:ShareAlike`, `cc:Notice`, `cc:SourceCode`), and attribution of 1–500 characters.
+Its document uses the `text` profile accepted by `@rezics/document`, with a
+`serializeDocument` representation of at most 32,768 UTF-8 bytes. The document
+has its own licence and its body is stored by content. `schema:abstract` is
+multivalued, with one summary per language by convention.
+
+A cover value is an uploaded media object's UUID. Credit, licence and provenance
+belong to that media object. Rights on any command except a summary proposal are
+unsupported. Field/property compatibility belongs to release validation: summaries
+use `document` properties, covers use `media`, and facts use neither. Until content's
+hooks are wired, kernel writes reject document and media contents as `unsupported`.
+
+The launch profiles include books, editions, recipes, television series, albums,
+video games and visual novels. Identifier labels follow their Wikidata properties
+([Open Library](https://www.wikidata.org/wiki/Property:P648),
+[Bangumi subjects](https://www.wikidata.org/wiki/Property:P5732),
+[Bangumi people](https://www.wikidata.org/wiki/Property:P6298),
+[VNDB](https://www.wikidata.org/wiki/Property:P3180)); the summary and cover terms
+follow [schema:abstract](https://schema.org/abstract) and
+[schema:image](https://schema.org/image).

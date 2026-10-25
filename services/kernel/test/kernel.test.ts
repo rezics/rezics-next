@@ -47,3 +47,61 @@ test("the kernel app's type, which is the Eden contract, carries exactly the rou
   expect([complete, precise]).toEqual([true, true]);
   expect(served.sort()).toEqual([...typed].sort());
 });
+
+test('subject HTTP rejects document and media values before attempting storage', async () => {
+  const kernel = createKernel({
+    pool,
+    routeKey: new Uint8Array(32),
+    access: {
+      async authenticate() {
+        return {
+          kind: 'account',
+          accountId: '019a1b2c-3d4e-7f00-8a00-5b0000000061',
+          clientId: 'web',
+          scopes: ['subject:create'],
+          requestedBy: null,
+          authnEpoch: 1,
+        };
+      },
+      async authorize() {
+        throw new Error('Invalid contents must be refused before a command runs');
+      },
+    },
+  });
+  for (const [property, content] of [
+    [
+      'schema:abstract',
+      {
+        language: 'en',
+        document: {
+          version: 'rezics-document-v1',
+          profile: 'text',
+          doc: { type: 'doc', content: [{ type: 'paragraph' }] },
+        },
+      },
+    ],
+    ['schema:image', '019a1b2c-3d4e-7f00-8a00-3ed1a0000062'],
+  ] as const) {
+    const response = await kernel.handle(
+      new Request('http://kernel.test/v1/subjects', {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer writer',
+          'idempotency-key': '"content-refused"',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          labels: { en: 'Example' },
+          statements: {
+            [property]: [{ property: { id: property }, value: { type: 'value', content } }],
+          },
+        }),
+      }),
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      code: 'invalid_request',
+      errors: [{ pointer: `/statements/${property}/0/value/content`, code: 'unsupported' }],
+    });
+  }
+});

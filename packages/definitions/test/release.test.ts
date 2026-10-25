@@ -17,7 +17,12 @@ const release = (): Release => ({
       mappings: ['wd:Q207628'],
       properties: ['schema:composer', 'schema:duration', 'schema:url'],
     },
-    'schema:Person': { iri: 'http://schema.org/Person', labels: { en: 'person' }, mappings: ['wd:Q5'], properties: ['schema:url'] },
+    'schema:Person': {
+      iri: 'http://schema.org/Person',
+      labels: { en: 'person' },
+      mappings: ['wd:Q5'],
+      properties: ['schema:url'],
+    },
   },
   properties: {
     'schema:composer': {
@@ -72,7 +77,17 @@ const pointers = (value: unknown) => validateRelease(value).map(({ pointer, code
 
 test('a well-formed release is valid and its digest is the SHA-256 of its RFC 8785 form', () => {
   expect(RELEASE_FORMAT).toBe('https://rezics.com/definitions/release/1');
-  expect(DATA_TYPES).toEqual(['wikibase-item', 'string', 'external-id', 'url', 'monolingualtext', 'quantity', 'time']);
+  expect(DATA_TYPES).toEqual([
+    'wikibase-item',
+    'string',
+    'external-id',
+    'url',
+    'monolingualtext',
+    'quantity',
+    'time',
+    'document',
+    'media',
+  ]);
   expect(validateRelease(release())).toEqual([]);
   const digest = releaseDigest(release());
   expect(digest).toBe(`sha256:${sha256(canonicalize(release())!)}`);
@@ -84,14 +99,17 @@ test('a well-formed release is valid and its digest is the SHA-256 of its RFC 87
 test('the release schema is JSON Schema 2020-12 and refuses unknown members and data types', () => {
   expect(releaseSchema.$schema).toBe('https://json-schema.org/draft/2020-12/schema');
   expect(pointers(edit((draft) => (draft.extra = 1)))).toEqual(['invalid /extra']);
-  expect(pointers(edit((draft) => (draft.format = 'https://rezics.com/definitions/release/2')))).toEqual(['invalid /format']);
+  expect(pointers(edit((draft) => (draft.format = 'https://rezics.com/definitions/release/2')))).toEqual([
+    'invalid /format',
+  ]);
   expect(pointers(edit((draft) => (draft.properties['schema:url'].datatype = 'geo-shape')))).toContain(
     'invalid /properties/schema:url/datatype',
   );
   expect(pointers(edit((draft) => delete draft.types['schema:Person'].labels.en))).toEqual([
     'invalid /types/schema:Person/labels/en',
   ]);
-  for (const garbage of [null, 7, 'release', [], { format: RELEASE_FORMAT }]) expect(validateRelease(garbage).length).toBeGreaterThan(0);
+  for (const garbage of [null, 7, 'release', [], { format: RELEASE_FORMAT }])
+    expect(validateRelease(garbage).length).toBeGreaterThan(0);
 });
 
 test('references inside a release resolve and every CURIE expands through its prefixes', () => {
@@ -102,7 +120,9 @@ test('references inside a release resolve and every CURIE expands through its pr
     'invalid /properties/schema:composer/qualifiers/0',
   ]);
   expect(
-    pointers(edit((draft) => (draft.types['schema:MusicComposition'].properties = ['schema:composer', 'schema:lyricist']))),
+    pointers(
+      edit((draft) => (draft.types['schema:MusicComposition'].properties = ['schema:composer', 'schema:lyricist'])),
+    ),
   ).toEqual(['invalid /types/schema:MusicComposition/properties/1']);
   expect(pointers(edit((draft) => (draft.types['schema:Person'].mappings = ['bf:Agent'])))).toEqual([
     'invalid /types/schema:Person/mappings/0',
@@ -159,7 +179,12 @@ test('patterns must be safe and releases are bounded', () => {
   ]);
   const crowded = edit((draft) => {
     for (let index = 0; index < 257; index++)
-      draft.types[`schema:T${index}`] = { iri: `http://schema.org/T${index}`, labels: { en: 't' }, mappings: [], properties: [] };
+      draft.types[`schema:T${index}`] = {
+        iri: `http://schema.org/T${index}`,
+        labels: { en: 't' },
+        mappings: [],
+        properties: [],
+      };
   });
   expect(pointers(crowded)).toEqual(['limit /types']);
 });

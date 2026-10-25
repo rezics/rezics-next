@@ -7,6 +7,7 @@ prefixes:
   schema: http://schema.org/
   wd: http://www.wikidata.org/entity/
   bf: http://id.loc.gov/ontologies/bibframe/
+  wdt: http://www.wikidata.org/prop/direct/
 default_range: string
 imports:
   - linkml:types
@@ -16,6 +17,7 @@ classes:
     description: A thing that can be identified by a URL.
     slots:
       - url
+      - image
   Person:
     is_a: Thing
     class_uri: schema:Person
@@ -25,8 +27,13 @@ classes:
     slots:
       - birthDate
       - deathDate
+      - openLibraryId
+      - bangumiPersonId
+      - vndbId
   Organization:
     is_a: Thing
+    slots:
+      - vndbId
     class_uri: schema:Organization
     description: An organization.
     exact_mappings:
@@ -67,7 +74,7 @@ slots:
       - wd:P50
     annotations:
       datatype: wikibase-item
-      qualifiers: position
+      qualifiers: position openLibraryId bangumiPersonId vndbId
   position:
     slot_uri: schema:position
     description: The one-based position of an attributed person or organization.
@@ -90,3 +97,47 @@ slots:
     pattern: '^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$'
     annotations:
       datatype: string
+  abstract:
+    slot_uri: schema:abstract
+    description: A summary document, with one value per language by convention.
+    multivalued: true
+    annotations:
+      datatype: document
+  image:
+    slot_uri: schema:image
+    description: An uploaded media object depicting this thing.
+    multivalued: true
+    annotations:
+      datatype: media
+  openLibraryId:
+    slot_uri: wdt:P648
+    description: Open Library ID.
+    pattern: '^OL[1-9][0-9]*[AMW]$'
+    exact_mappings:
+      - wd:P648
+    annotations:
+      datatype: external-id
+  bangumiSubjectId:
+    slot_uri: wdt:P5732
+    description: Bangumi subject ID.
+    pattern: '^[1-9][0-9]*$'
+    exact_mappings:
+      - wd:P5732
+    annotations:
+      datatype: external-id
+  bangumiPersonId:
+    slot_uri: wdt:P6298
+    description: bgm.tv person ID.
+    pattern: '^[1-9][0-9]*$'
+    exact_mappings:
+      - wd:P6298
+    annotations:
+      datatype: external-id
+  vndbId:
+    slot_uri: wdt:P3180
+    description: Visual Novel Database ID.
+    pattern: '^[vrpcs][1-9][0-9]*$'
+    exact_mappings:
+      - wd:P3180
+    annotations:
+      datatype: external-id

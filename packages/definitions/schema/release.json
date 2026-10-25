@@ -128,7 +128,17 @@
           "$ref": "#/$defs/curies"
         },
         "datatype": {
-          "enum": ["wikibase-item", "string", "external-id", "url", "monolingualtext", "quantity", "time"]
+          "enum": [
+            "wikibase-item",
+            "string",
+            "external-id",
+            "url",
+            "monolingualtext",
+            "quantity",
+            "time",
+            "document",
+            "media"
+          ]
         },
         "multivalued": {
           "type": "boolean"

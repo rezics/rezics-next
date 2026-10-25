@@ -208,3 +208,41 @@ test('item values are collected with their target types for the caller to check'
     },
   ]);
 });
+
+test('document and media values await content hooks, including nested snaks', () => {
+  for (const property of ['schema:abstract', 'schema:image']) {
+    // Rejection precedes content validation, including for malformed values.
+    for (const content of [null, 'not a snapshot or media id', KOKORO])
+      expect(violations(book({ [property]: [snak(property, content)] }))).toEqual([
+        { pointer: `/statements/${property}/0/value/content`, code: 'unsupported' },
+      ]);
+    expect(violations(book({ [property]: [{ property: { id: property }, value: { type: 'somevalue' } }] }))).toEqual(
+      [],
+    );
+    expect(
+      violations(
+        book({
+          'schema:author': [
+            snak('schema:author', SOSEKI, {
+              references: [{ parts: [snak(property, null)] }],
+            }),
+          ],
+        }),
+      ),
+    ).toEqual([{ pointer: '/statements/schema:author/0/references/0/parts/0/value/content', code: 'unsupported' }]);
+    const release = structuredClone(bundledRelease);
+    release.properties['schema:author']!.qualifiers.push(property);
+    expect(
+      check(
+        book({
+          'schema:author': [
+            snak('schema:author', SOSEKI, {
+              qualifiers: [snak(property, null)],
+            }),
+          ],
+        }),
+        release,
+      ).violations,
+    ).toEqual([{ pointer: '/statements/schema:author/0/qualifiers/0/value/content', code: 'unsupported' }]);
+  }
+});

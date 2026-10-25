@@ -229,3 +229,36 @@ test('an unknown or malformed id reads as nothing', async () => {
   expect(await readSubject(pool, 'not-an-id', allow)).toBeNull();
   expect(await readSubject(pool, randomUUID(), allow)).toBeNull();
 });
+
+test('subject creation rejects document and media contents until content hooks are wired', () => {
+  for (const property of ['schema:abstract', 'schema:image']) {
+    const statement = { property: { id: property }, value: { type: 'value', content: null } };
+    for (const [statements, pointer] of [
+      [{ [property]: [statement] }, `/statements/${property}/0/value/content`],
+      [
+        {
+          'schema:author': [
+            { property: { id: 'schema:author' }, value: { type: 'somevalue' }, qualifiers: [statement] },
+          ],
+        },
+        '/statements/schema:author/0/qualifiers/0/value/content',
+      ],
+      [
+        {
+          'schema:author': [
+            { property: { id: 'schema:author' }, value: { type: 'somevalue' }, references: [{ parts: [statement] }] },
+          ],
+        },
+        '/statements/schema:author/0/references/0/parts/0/value/content',
+      ],
+    ] as const) {
+      try {
+        itemFacts(soseki, { labels: { en: 'Example' }, statements });
+        throw new Error('Expected rejection before content storage');
+      } catch (error) {
+        expect(error).toBeInstanceOf(SubjectInputError);
+        expect((error as SubjectInputError).violations).toEqual([{ pointer, code: 'unsupported' }]);
+      }
+    }
+  }
+});

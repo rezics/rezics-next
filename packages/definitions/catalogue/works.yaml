@@ -1,0 +1,51 @@
+id: https://rezics.com/catalogue/works
+name: works
+version: 1.0.0
+description: Launch profiles for television, music, games and visual novels.
+prefixes:
+  linkml: https://w3id.org/linkml/
+  schema: http://schema.org/
+  wd: http://www.wikidata.org/entity/
+default_range: string
+imports:
+  - linkml:types
+  - core
+classes:
+  LaunchWork:
+    abstract: true
+    is_a: Thing
+    slots:
+      - datePublished
+      - inLanguage
+      - abstract
+  TVSeries:
+    is_a: LaunchWork
+    class_uri: schema:TVSeries
+    exact_mappings:
+      - wd:Q5398426
+    slots:
+      - bangumiSubjectId
+  MusicAlbum:
+    is_a: LaunchWork
+    class_uri: schema:MusicAlbum
+    exact_mappings:
+      - wd:Q482994
+    slots:
+      - bangumiSubjectId
+  VideoGame:
+    abstract: true
+    is_a: LaunchWork
+    class_uri: schema:VideoGame
+    description: Shared video game fields; source identifiers are declared on concrete profiles.
+  BangumiVideoGame:
+    is_a: VideoGame
+    class_uri: schema:VideoGame
+    exact_mappings:
+      - wd:Q7889
+    slots:
+      - bangumiSubjectId
+  VisualNovel:
+    is_a: VideoGame
+    class_uri: wd:Q689445
+    slots:
+      - vndbId

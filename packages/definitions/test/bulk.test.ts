@@ -47,7 +47,7 @@ const valid: BatchWriteRequest = {
     {
       op: 'propose',
       key: 'bangumi:12:2',
-      source: source('summary'),
+      source: source(),
       subject,
       statement: { ...statement, rank: 'preferred' },
     },

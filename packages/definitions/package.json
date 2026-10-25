@@ -18,9 +18,12 @@
     "@neverblink/linkml": "0.17.1",
     "canonicalize": "5.1.0",
     "recheck": "4.5.0",
-    "typebox": "1.4.3"
+    "typebox": "1.4.3",
+    "@rezics/document": "workspace:*",
+    "spdx-license-ids": "3.0.24"
   },
   "devDependencies": {
-    "@types/bun": "1.4.4"
+    "@types/bun": "1.4.4",
+    "@types/spdx-license-ids": "3.0.0"
   }
 }

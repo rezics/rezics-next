@@ -20,6 +20,7 @@ classes:
       - wd:Q219239
     slots:
       - author
+      - abstract
       - datePublished
       - recipeIngredient
       - cookTime

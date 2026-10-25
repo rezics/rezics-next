@@ -6,7 +6,13 @@ import { releaseDigest, validateRelease } from '../src/index.ts';
 test('the committed bundled release is the compilation of the bundled catalogue', async () => {
   const sources = bundledSources();
   expect(sources.root).toBe('rezics.yaml');
-  expect(Object.keys(sources.schemas).sort()).toEqual(['book.yaml', 'core.yaml', 'recipe.yaml', 'rezics.yaml']);
+  expect(Object.keys(sources.schemas).sort()).toEqual([
+    'book.yaml',
+    'core.yaml',
+    'recipe.yaml',
+    'rezics.yaml',
+    'works.yaml',
+  ]);
   expect(Object.keys(sources.presentation).sort()).toEqual(['en', 'ja', 'zh-Hant']);
   expect(await compileCatalogue(sources)).toEqual(bundledRelease);
   expect(validateRelease(bundledRelease)).toEqual([]);
@@ -19,13 +25,26 @@ test('book work, edition and recipe are profiles of the catalogue', () => {
   expect(Object.keys(types).sort()).toEqual([
     'bf:Instance',
     'schema:Book',
+    'schema:MusicAlbum',
     'schema:Organization',
     'schema:Person',
     'schema:Recipe',
+    'schema:TVSeries',
+    'schema:VideoGame',
+    'wd:Q689445',
   ]);
   expect(types['schema:Book']).toMatchObject({
     mappings: ['wd:Q47461344'],
-    properties: ['schema:author', 'schema:datePublished', 'schema:inLanguage', 'schema:url'],
+    properties: [
+      'schema:abstract',
+      'schema:author',
+      'schema:datePublished',
+      'schema:image',
+      'schema:inLanguage',
+      'schema:url',
+      'wdt:P5732',
+      'wdt:P648',
+    ],
   });
   expect(types['bf:Instance']).toMatchObject({
     iri: 'http://id.loc.gov/ontologies/bibframe/Instance',
@@ -33,18 +52,22 @@ test('book work, edition and recipe are profiles of the catalogue', () => {
     properties: [
       'schema:datePublished',
       'schema:exampleOfWork',
+      'schema:image',
       'schema:inLanguage',
       'schema:isbn',
       'schema:numberOfPages',
       'schema:publisher',
       'schema:translator',
       'schema:url',
+      'wdt:P648',
     ],
   });
   expect(types['schema:Recipe']!.properties).toEqual([
+    'schema:abstract',
     'schema:author',
     'schema:cookTime',
     'schema:datePublished',
+    'schema:image',
     'schema:recipeIngredient',
     'schema:recipeYield',
     'schema:url',
@@ -53,7 +76,7 @@ test('book work, edition and recipe are profiles of the catalogue', () => {
     datatype: 'wikibase-item',
     multivalued: true,
     targets: ['schema:Organization', 'schema:Person'],
-    qualifiers: ['schema:position'],
+    qualifiers: ['schema:position', 'wdt:P3180', 'wdt:P6298', 'wdt:P648'],
     mappings: ['wd:P50'],
   });
   expect(properties['schema:exampleOfWork']).toMatchObject({
@@ -82,7 +105,8 @@ test('book work, edition and recipe are profiles of the catalogue', () => {
 
 test('a fixture vertical over the bundled catalogue adds a type without code', async () => {
   const sources = bundledSources();
-  const prefixes = 'prefixes:\n  linkml: https://w3id.org/linkml/\n  schema: http://schema.org/\n  wd: http://www.wikidata.org/entity/\n';
+  const prefixes =
+    'prefixes:\n  linkml: https://w3id.org/linkml/\n  schema: http://schema.org/\n  wd: http://www.wikidata.org/entity/\n';
   const music = `id: https://rezics.com/catalogue/fixture/music
 name: music
 version: 1.0.0
@@ -125,7 +149,9 @@ ${prefixes}imports:
     presentation: { ...sources.presentation, en: JSON.stringify(labels) },
   });
   expect(release.catalogue).toEqual({ id: 'https://rezics.com/catalogue/fixture', version: '1.0.0' });
-  expect(Object.keys(release.types).sort()).toEqual([...Object.keys(bundledRelease.types), 'schema:MusicComposition'].sort());
+  expect(Object.keys(release.types).sort()).toEqual(
+    [...Object.keys(bundledRelease.types), 'schema:MusicComposition'].sort(),
+  );
   expect(release.properties['schema:composer']).toMatchObject({ targets: ['schema:Person'], multivalued: true });
   expect(release.properties['schema:isbn']).toEqual(bundledRelease.properties['schema:isbn']!);
 });

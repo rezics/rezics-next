@@ -14,6 +14,8 @@ export const DATA_TYPES = [
   'monolingualtext',
   'quantity',
   'time',
+  'document',
+  'media',
 ] as const;
 export type DataType = (typeof DATA_TYPES)[number];
 export type TypeDefinition = {
@@ -60,6 +62,11 @@ export function valueSchema(datatype: DataType, options: ValueOptions = {}) {
 }
 
 function buildValueSchema(datatype: DataType, options: ValueOptions) {
+  if (
+    (datatype === 'document' || datatype === 'media') &&
+    (options.units !== undefined || options.integer !== undefined)
+  )
+    throw new TypeError(`Quantity options are not supported for ${datatype}`);
   if (options.pattern !== undefined && !['string', 'external-id', 'monolingualtext'].includes(datatype))
     throw new TypeError(`Patterns are not supported for ${datatype}`);
   const text = {
@@ -69,6 +76,8 @@ function buildValueSchema(datatype: DataType, options: ValueOptions) {
     ...(options.pattern === undefined ? {} : { pattern: options.pattern }),
   };
   switch (datatype) {
+    case 'media':
+      return { type: 'string', pattern: `${UUID}(?![\\s\\S])` };
     case 'wikibase-item':
       return { type: 'string', pattern: UUID };
     case 'string':
@@ -82,6 +91,16 @@ function buildValueSchema(datatype: DataType, options: ValueOptions) {
         required: ['text', 'language'],
         additionalProperties: false,
         properties: { text, language: { type: 'string', pattern: '^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$' } },
+      };
+    case 'document':
+      return {
+        type: 'object',
+        required: ['language', 'document'],
+        additionalProperties: false,
+        properties: {
+          language: { type: 'string', pattern: '^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$' },
+          document: { type: 'object' },
+        },
       };
     case 'quantity':
       return {
@@ -236,8 +255,10 @@ function semantics(release: Release, add: (pointer: string, code?: ReleaseViolat
     const options: ValueOptions = {};
     if (['string', 'external-id', 'monolingualtext'].includes(property.datatype) && typeof pattern === 'string')
       options.pattern = pattern;
-    if (property.units) options.units = property.units;
-    options.integer = amount.pattern === INTEGER;
+    if (property.datatype === 'quantity') {
+      if (property.units) options.units = property.units;
+      options.integer = amount.pattern === INTEGER;
+    }
     if (canonicalize(value) !== canonicalize(valueSchema(property.datatype, options))) add(at(pointer, 'value'));
     patterns(value, at(pointer, 'value'));
   }

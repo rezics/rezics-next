@@ -20,7 +20,7 @@ function fixture(datatype: DataType = 'string'): Release {
         ...(datatype === 'wikibase-item' ? { targets: ['ex:T'] } : {}),
         ...(datatype === 'quantity' ? { units: ['1'] } : {}),
         qualifiers: [],
-        value: valueSchema(datatype, { units: ['1'] }),
+        value: valueSchema(datatype, datatype === 'quantity' ? { units: ['1'] } : {}),
       },
     },
   };
