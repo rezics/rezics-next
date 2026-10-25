@@ -98,9 +98,27 @@ function taskCommits(options: PromotionOptions, task: Task): string[] {
 }
 // Specification and research tasks deliver suites that stay red until a later task binds them; the root gate covers them.
 const RED_BY_DESIGN = new Set(['specification', 'research']);
+const WORKSPACE = /^(?:apps|services|packages)\/[^/]+|^tools\/goal(?=\/|$)/;
+// The root gate runs every workspace's full check and the control plane's gate. A test command confined to those
+// trees reruns a subset of it, so a batch of hundreds of tasks costs one root gate plus the few commands that
+// reach outside, such as root specs, each run once.
+export function coveredByRootGate(command: readonly string[]): boolean {
+  if (command[0] === 'bun' && command[1] === 'run' && command[2] === '--cwd' && command[4] === 'check')
+    return WORKSPACE.exec(command[3] ?? '')?.[0] === command[3];
+  const shell = command[0] === 'sh' && command[1] === '-c' ? /^cd ((?:apps|services|packages)\/[^/\s]+) && /.exec(command[2] ?? '') : null;
+  if (shell) return !/[;|]|&&\s*cd\b/.test(command[2]!.slice(shell[0].length));
+  if (command[0] !== 'bun' || !command.includes('test')) return false;
+  const paths = command.filter(argument => argument.includes('/'));
+  return paths.length > 0 && paths.every(path => WORKSPACE.test(path));
+}
 function commandsFor(rootGate: readonly string[], tasks: readonly Task[]): string[][] {
-  return [rootGate, ...tasks.filter(task => !RED_BY_DESIGN.has(task.taskClass)).map(task => task.brief.acceptance.command)]
-    .map(command => [...command]);
+  const commands = new Map<string, string[]>([[JSON.stringify(rootGate), [...rootGate]]]);
+  for (const task of tasks) {
+    const command = task.brief.acceptance.command;
+    if (RED_BY_DESIGN.has(task.taskClass) || coveredByRootGate(command)) continue;
+    commands.set(JSON.stringify(command), [...command]);
+  }
+  return [...commands.values()];
 }
 function resultKey(result: PromotionGateResult): string { return `${result.commit}\n${JSON.stringify(result.command)}`; }
 function appendResult(run: PromotionRun, target: 'headResults' | 'prefixResults', result: PromotionGateResult): PromotionRun {
