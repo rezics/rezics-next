@@ -1,10 +1,11 @@
 import type { Pool } from 'pg';
 import type { CommandOutcome, CommandTransaction } from '../command/command.ts';
 import type { Access, Actor } from '../request/access.ts';
-import type { MediaId, PostId, ReadContext, RequestContext, ThreadId } from './model.ts';
+import type { ImportedSource, Rights } from './imported-contract.ts';
+import type { MediaId, PostId, ReadContext, RequestContext, RevisionId, ThreadId } from './model.ts';
 import { unfinishedPort } from './model.ts';
 
-export type MediaPurpose = 'post-image';
+export type MediaPurpose = 'post-image' | 'cover';
 export type MediaState = 'reserved' | 'uploaded' | 'available' | 'rejected';
 export type MediaVariant = Readonly<{
   format: 'webp' | 'avif';
@@ -15,29 +16,40 @@ export type MediaVariant = Readonly<{
   sha256: string;
   key: string;
 }>;
-export type MediaMetadata = Readonly<{
+type MediaMetadataBase = Readonly<{
   id: MediaId;
   key: string;
   containerId: ThreadId | PostId;
   uploaderId: string;
   route: number;
-  purpose: MediaPurpose;
-  mediaType: string;
-  byteCount: number;
   reservationRequestId: string;
   declaredSha256?: string;
   sha256: string | null;
   state: MediaState;
   claimedAt: string | null;
   erased: boolean;
+  takenDown: boolean;
+  securityRevision: string;
   collectionPending: boolean;
   createdAt: string;
   decision: string | null;
   variants: readonly MediaVariant[];
 }>;
+/** Browser reservations describe post images with measured-size inputs. Imported covers
+ * remain unmeasured until the trusted fetch and processing path observes the bytes. */
+export type MediaMetadata =
+  | (MediaMetadataBase & Readonly<{ purpose: 'post-image'; mediaType: string; byteCount: number }>)
+  | (MediaMetadataBase &
+      Readonly<{
+        purpose: 'cover';
+        mediaType: string | null;
+        byteCount: number | null;
+        rights: Rights;
+        source: ImportedSource;
+      }>);
 export type MediaReservationInput = Readonly<{
   containerId: ThreadId | PostId;
-  purpose: MediaPurpose;
+  purpose: 'post-image';
   mediaType: string;
   byteCount: number;
   sha256?: string;
@@ -61,13 +73,25 @@ export type DownloadDecision =
       cacheControl: 'private, no-cache' | 'private, no-store';
     }>
   | Readonly<{ allowed: false }>;
-export type ClaimMediaInput = Readonly<{
+type ClaimMediaBase = Readonly<{
   mediaIds: readonly MediaId[];
   containerId: ThreadId | PostId;
   author: Actor;
-  itemId: PostId;
-  revisionId: string;
 }>;
+export type ClaimMediaInput = ClaimMediaBase &
+  (
+    | Readonly<{ itemId: PostId; revisionId: RevisionId; reference?: never }>
+    | Readonly<{
+        reference: Readonly<{
+          kind: 'semantic_candidate';
+          subjectId: string;
+          candidateId: string;
+          revision: number;
+        }>;
+        itemId?: never;
+        revisionId?: never;
+      }>
+  );
 export function reserveMedia(
   _dependencies: MediaDependencies,
   _actor: Actor,

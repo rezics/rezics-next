@@ -47,6 +47,8 @@ test('imported field ports retain the core transaction, access and evidence type
   };
   const input: ImportedFieldInput = {
     subject: '00000000-0000-8000-8000-000000000000',
+    candidate: '00000000-0000-8000-8000-000000000001',
+    revision: 1,
     source,
     rights,
     language: 'en',

@@ -28,6 +28,10 @@ export type ImportedSource = Readonly<{
 /** Input for persisting a summary document in the semantic command transaction. */
 export type ImportedFieldInput = Readonly<{
   subject: string;
+  /** Allocated semantic candidate UUID, scoped to the subject partition. */
+  candidate: string;
+  /** Actual positive semantic revision allocated before the field is appended. */
+  revision: number;
   source: ImportedSource;
   rights: Rights;
   language: string;
