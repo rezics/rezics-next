@@ -2,10 +2,12 @@ import { afterEach, beforeEach, expect, setDefaultTimeout, test } from 'bun:test
 import { createHash } from 'node:crypto';
 import { isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { documentText, fromPlainText, serializeDocument } from '@rezics/document';
 import type { ApiResult, ContentThreadDriver, Fixture, ItemView, ThreadInput, ThreadView } from './content-thread-driver';
 
 setDefaultTimeout(30_000);
+let documentText: typeof import('@rezics/document').documentText;
+let fromPlainText: typeof import('@rezics/document').fromPlainText;
+let serializeDocument: typeof import('@rezics/document').serializeDocument;
 let driver: ContentThreadDriver;
 let fixture: Fixture;
 let current: ContentThreadDriver | undefined;
@@ -17,6 +19,8 @@ beforeEach(async () => {
   }
   const url = isAbsolute(location) ? pathToFileURL(location) : new URL(location);
   if (url.protocol !== 'file:') throw new Error('Content thread driver must use a file URL');
+  // Keep the missing-driver outcome independent of workspace dependency setup.
+  ({ documentText, fromPlainText, serializeDocument } = await import('@rezics/document'));
   const binding = await import(url.href);
   if (typeof binding.createContentThreadDriver !== 'function') {
     throw new Error('Content thread driver must export createContentThreadDriver');
