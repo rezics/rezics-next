@@ -38,6 +38,36 @@ export type ImportedFieldInput = Readonly<{
   document: unknown;
 }>;
 
+/** Validate the metadata byte and character caps before an import hook writes anything. */
+export function validateImportedFieldMetadata(value: unknown): string[] {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return ['metadata'];
+  const input = value as { source?: unknown; rights?: unknown };
+  const failures: string[] = [];
+  const text = (item: unknown, maximum: number): item is string =>
+    typeof item === 'string' && item.length > 0 && item.length <= maximum;
+  const bytes = (item: unknown, maximum: number): boolean => {
+    try {
+      return new TextEncoder().encode(JSON.stringify(item)).byteLength <= maximum;
+    } catch {
+      return false;
+    }
+  };
+  const source = input.source as Record<string, unknown> | null;
+  const rights = input.rights as Record<string, unknown> | null;
+  if (!source || typeof source !== 'object' || !bytes(source, 65536)) failures.push('source');
+  if (
+    !rights ||
+    typeof rights !== 'object' ||
+    !bytes(rights, 8192) ||
+    !text(rights.license, 128) ||
+    !text(rights.attribution, 1024) ||
+    !Array.isArray(rights.obligations) ||
+    !rights.obligations.every((item) => text(item, 1024))
+  )
+    failures.push('rights');
+  return failures;
+}
+
 const SOURCE_PATTERN = /^[a-z][a-z0-9_-]{0,31}$/;
 const AMBIGUOUS_CONTROLS = /[\u0000-\u001f\u007f-\u009f]/u;
 

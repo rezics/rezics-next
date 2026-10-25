@@ -30,7 +30,12 @@ export class DocumentTooLargeError extends Error {
 
 /** Accept a current SPDX license identifier or a syntactically valid local LicenseRef. */
 export function isSpdxLicense(value: unknown): value is string {
-  return typeof value === 'string' && (licenseIds.has(value) || licenseReference.test(value));
+  return (
+    typeof value === 'string' &&
+    value.length >= 1 &&
+    value.length <= 128 &&
+    (licenseIds.has(value) || licenseReference.test(value))
+  );
 }
 
 /** Accept UUIDs that carry a routable REZICS route; existence is intentionally not checked. */

@@ -294,6 +294,7 @@ CREATE TABLE content.board (
     CONSTRAINT board_check CHECK ((route = ((get_byte(uuid_send(board_id), 10) * 256) + get_byte(uuid_send(board_id), 11)))),
     CONSTRAINT board_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT board_security_revision_check CHECK ((security_revision > 0)),
+    CONSTRAINT board_title_size CHECK (((char_length(title) >= 1) AND (char_length(title) <= 1024))),
     CONSTRAINT board_visibility_check CHECK ((visibility = ANY (ARRAY['published'::text, 'draft'::text, 'protected'::text, 'taken_down'::text])))
 );
 
@@ -345,6 +346,7 @@ CREATE TABLE content.imported_field (
     CONSTRAINT imported_field_check2 CHECK ((route = ((get_byte(uuid_send(candidate), 10) * 256) + get_byte(uuid_send(candidate), 11)))),
     CONSTRAINT imported_field_check3 CHECK ((((availability = 'available'::text) AND (body IS NOT NULL)) OR ((availability = 'erased'::text) AND (body IS NULL)))),
     CONSTRAINT imported_field_language_check CHECK (((length(language) >= 1) AND (length(language) <= 128))),
+    CONSTRAINT imported_field_metadata_size CHECK (((octet_length(convert_to((source)::text, 'UTF8'::name)) <= 65536) AND (octet_length(convert_to((rights)::text, 'UTF8'::name)) <= 8192) AND ((char_length((rights ->> 'license'::text)) >= 1) AND (char_length((rights ->> 'license'::text)) <= 128)) AND (((rights ->> 'license'::text) ~ '^[A-Za-z0-9.+-]+$'::text) OR ((rights ->> 'license'::text) ~ '^LicenseRef-[A-Za-z0-9.-]+$'::text)) AND ((char_length((rights ->> 'attribution'::text)) >= 1) AND (char_length((rights ->> 'attribution'::text)) <= 1024)) AND (jsonb_typeof((rights -> 'obligations'::text)) = 'array'::text))),
     CONSTRAINT imported_field_revision_check CHECK (((revision >= 1) AND (revision <= '9007199254740991'::bigint))),
     CONSTRAINT imported_field_rights_check CHECK ((jsonb_typeof(rights) = 'object'::text)),
     CONSTRAINT imported_field_route_check CHECK (((route >= 0) AND (route <= 65535))),
@@ -393,6 +395,7 @@ CREATE TABLE content.media (
     CONSTRAINT media_check5 CHECK (((claimed_at IS NULL) OR (state = 'available'::text))),
     CONSTRAINT media_check6 CHECK (((NOT collection_pending) OR (claimed_at IS NULL))),
     CONSTRAINT media_check7 CHECK ((NOT (collection_pending AND erased))),
+    CONSTRAINT media_cover_metadata_size CHECK (((purpose <> 'cover'::text) OR (((char_length(source_url) >= 1) AND (char_length(source_url) <= 2048)) AND (octet_length(convert_to((credit)::text, 'UTF8'::name)) <= 8192) AND ((char_length((credit ->> 'rightsHolder'::text)) >= 1) AND (char_length((credit ->> 'rightsHolder'::text)) <= 1024)) AND ((char_length(((credit -> 'via'::text) ->> 'name'::text)) >= 1) AND (char_length(((credit -> 'via'::text) ->> 'name'::text)) <= 1024)) AND ((char_length(((credit -> 'via'::text) ->> 'url'::text)) >= 1) AND (char_length(((credit -> 'via'::text) ->> 'url'::text)) <= 2048)) AND ((char_length((credit ->> 'license'::text)) >= 1) AND (char_length((credit ->> 'license'::text)) <= 128)) AND (((credit ->> 'license'::text) ~ '^[A-Za-z0-9.+-]+$'::text) OR ((credit ->> 'license'::text) ~ '^LicenseRef-[A-Za-z0-9.-]+$'::text)) AND (octet_length(convert_to((provenance)::text, 'UTF8'::name)) <= 65536) AND ((jsonb_array_length((provenance -> 'references'::text)) >= 1) AND (jsonb_array_length((provenance -> 'references'::text)) <= 128))))),
     CONSTRAINT media_cover_provenance_check CHECK (((purpose <> 'cover'::text) OR (((source_url IS NOT NULL) AND (source_url ~ '^https://[^[:space:]]+$'::text) AND (char_length(source_url) <= 2048) AND (credit IS NOT NULL) AND (jsonb_typeof(credit) = 'object'::text) AND (jsonb_typeof((credit -> 'rightsHolder'::text)) = 'string'::text) AND ((char_length((credit ->> 'rightsHolder'::text)) >= 1) AND (char_length((credit ->> 'rightsHolder'::text)) <= 1024)) AND (jsonb_typeof((credit -> 'via'::text)) = 'object'::text) AND (jsonb_typeof(((credit -> 'via'::text) -> 'name'::text)) = 'string'::text) AND ((char_length(((credit -> 'via'::text) ->> 'name'::text)) >= 1) AND (char_length(((credit -> 'via'::text) ->> 'name'::text)) <= 1024)) AND (((credit -> 'via'::text) ->> 'url'::text) ~ '^https://[^[:space:]]+$'::text) AND (jsonb_typeof((credit -> 'license'::text)) = 'string'::text) AND (char_length((credit ->> 'license'::text)) > 0) AND (jsonb_typeof((credit -> 'obligations'::text)) = 'array'::text) AND (provenance IS NOT NULL) AND (jsonb_typeof(provenance) = 'object'::text) AND ((provenance ->> 'source'::text) ~ '^[a-z][a-z0-9_-]{0,31}$'::text) AND (char_length((provenance ->> 'external_id'::text)) > 0) AND (char_length((provenance ->> 'record_revision'::text)) > 0) AND ((provenance ->> 'digest'::text) ~ '^[0-9a-f]{64}$'::text) AND (char_length((provenance ->> 'converter_revision'::text)) > 0) AND ((provenance ->> 'field_group'::text) = 'cover'::text) AND (jsonb_typeof((provenance -> 'references'::text)) = 'array'::text) AND ((jsonb_array_length((provenance -> 'references'::text)) >= 1) AND (jsonb_array_length((provenance -> 'references'::text)) <= 128))) IS TRUE))),
     CONSTRAINT media_decision_check CHECK (((decision IS NULL) OR (char_length(decision) > 0))),
     CONSTRAINT media_declared_measurements_check CHECK (((purpose = 'cover'::text) OR ((byte_count IS NOT NULL) AND (media_type IS NOT NULL)))),
@@ -532,6 +535,7 @@ CREATE TABLE content.revision (
     CONSTRAINT revision_check1 CHECK ((route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)))),
     CONSTRAINT revision_check2 CHECK ((route = ((get_byte(uuid_send(post_id), 10) * 256) + get_byte(uuid_send(post_id), 11)))),
     CONSTRAINT revision_check3 CHECK ((((availability = 'erased'::text) AND (body IS NULL) AND (search_text IS NULL)) OR ((availability = 'available'::text) AND (body IS NOT NULL) AND (search_text IS NOT NULL)))),
+    CONSTRAINT revision_licence_size CHECK ((((char_length(licence) >= 1) AND (char_length(licence) <= 128)) AND ((licence ~ '^[A-Za-z0-9.+-]+$'::text) OR (licence ~ '^LicenseRef-[A-Za-z0-9.-]+$'::text)))),
     CONSTRAINT revision_media_ids_limit CHECK ((cardinality(media_ids) <= 32)),
     CONSTRAINT revision_media_routes_check CHECK (content.media_routes_match(route, media_ids)),
     CONSTRAINT revision_route_check CHECK (((route >= 0) AND (route <= 65535))),
@@ -579,6 +583,7 @@ CREATE TABLE content.thread (
     CONSTRAINT thread_check CHECK ((route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)))),
     CONSTRAINT thread_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT thread_security_revision_check CHECK ((security_revision > 0)),
+    CONSTRAINT thread_title_size CHECK (((title IS NULL) OR ((char_length(title) >= 1) AND (char_length(title) <= 1024)))),
     CONSTRAINT thread_visibility_check CHECK ((visibility = ANY (ARRAY['published'::text, 'draft'::text, 'protected'::text, 'taken_down'::text])))
 );
 

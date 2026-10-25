@@ -15,6 +15,37 @@ export type CoverReference = Readonly<{
   source: ImportedSource;
 }>;
 
+/** Return field errors for imported cover metadata before a write is attempted. */
+export function validateCoverReferenceMetadata(value: unknown): string[] {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return ['metadata'];
+  const input = value as Record<string, unknown>;
+  const credit = input.credit as Record<string, unknown> | null;
+  const provenance = input.provenance;
+  const bytes = (item: unknown, maximum: number) => {
+    try {
+      return new TextEncoder().encode(JSON.stringify(item)).byteLength <= maximum;
+    } catch {
+      return false;
+    }
+  };
+  const text = (item: unknown, maximum: number) =>
+    typeof item === 'string' && item.length > 0 && item.length <= maximum;
+  const errors: string[] = [];
+  if (!text(input.sourceUrl, 2048)) errors.push('sourceUrl');
+  if (
+    !credit ||
+    typeof credit !== 'object' ||
+    !bytes(credit, 8192) ||
+    !text(credit.rightsHolder, 1024) ||
+    !text((credit.via as Record<string, unknown> | null)?.name, 1024) ||
+    !text((credit.via as Record<string, unknown> | null)?.url, 2048) ||
+    !text(credit.license, 128)
+  )
+    errors.push('credit');
+  if (!bytes(provenance, 65536)) errors.push('provenance');
+  return errors;
+}
+
 /** Read an available source-backed reference. This neither claims media nor grants disclosure permission. */
 export async function checkMediaObject(
   client: Pick<PoolClient, 'query'>,
@@ -37,7 +68,7 @@ function coverReference(row: Awaited<ReturnType<typeof claimCoverMediaStatement.
   };
   // Persisted import data must meet the same native source/credit contract as a new import.
   // Do not repair malformed rights, infer a licence, or replace the original source references.
-  if (checkMediaImportRequest(input).length > 0) return null;
+  if (validateCoverReferenceMetadata(input).length > 0 || checkMediaImportRequest(input).length > 0) return null;
   const { credit, provenance } = input as MediaImportRequest;
   return {
     id: row.mediaId,
