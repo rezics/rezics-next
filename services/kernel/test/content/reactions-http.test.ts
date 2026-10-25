@@ -31,7 +31,7 @@ const routeKey = new Uint8Array(32).fill(91);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(92)]]) };
 const contentRoute = 0x4231;
 const boardRoute = 0x5231;
-const reactionPaths = ['/v1/threads/{threadId}/reaction', '/v1/posts/{postId}/reaction'] as const;
+const reactionPaths = ['/v1/threads/{id}/reaction', '/v1/posts/{id}/reaction'] as const;
 
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
 let authPool: Pool;
@@ -293,10 +293,10 @@ test.serial(
     expect(resolved.roles.get('content.thread.standing')).toContain('reaction:set');
     expect(resolved.roles.get('content.post.standing')).toContain('reaction:set');
     const document = openApiDocument(kernel);
-    expect(document.paths['/v1/threads/{threadId}/reaction']?.put?.operationId).toBe('thread.set_reaction');
-    expect(document.paths['/v1/threads/{threadId}/reaction']?.delete?.operationId).toBe('thread.clear_reaction');
-    expect(document.paths['/v1/posts/{postId}/reaction']?.put?.operationId).toBe('post.set_reaction');
-    expect(document.paths['/v1/posts/{postId}/reaction']?.delete?.operationId).toBe('post.clear_reaction');
+    expect(document.paths['/v1/threads/{id}/reaction']?.put?.operationId).toBe('thread.set_reaction');
+    expect(document.paths['/v1/threads/{id}/reaction']?.delete?.operationId).toBe('thread.clear_reaction');
+    expect(document.paths['/v1/posts/{id}/reaction']?.put?.operationId).toBe('post.set_reaction');
+    expect(document.paths['/v1/posts/{id}/reaction']?.delete?.operationId).toBe('post.clear_reaction');
     for (const path of reactionPaths) {
       expect(document.paths[path]?.put?.['x-action']).toBe('reaction:set');
       expect(document.paths[path]?.delete?.['x-action']).toBe('reaction:set');
