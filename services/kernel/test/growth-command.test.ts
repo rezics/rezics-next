@@ -114,6 +114,18 @@ async function grow(growthDb: GrowthDatabase, scale: number, previous: number): 
   });
 }
 
+async function createAnchorCommand(): Promise<void> {
+  await runCommand(
+    pool,
+    {
+      partition: anchorPartition,
+      basis,
+      receipt: { actorAccountId: actor, kind, key: `${prefix}anchor`, digest },
+    },
+    async () => ({ value: { ok: true }, events: events() }),
+  );
+}
+
 function check(name: string, operation: Parameters<typeof checkGrowth>[1]['operation']) {
   return checkGrowth(db, {
     name,
@@ -125,6 +137,7 @@ function check(name: string, operation: Parameters<typeof checkGrowth>[1]['opera
 
 test('New command stays within its bound as N grows', async () => {
   await reset();
+  await createAnchorCommand();
   await check('New command', async (_growthDb, scale, repetition) =>
     runCommand(
       pool,
@@ -155,6 +168,7 @@ test('Idempotent replay stays within its bound as N grows', async () => {
 
 test('Denied replay stays within its bound as N grows', async () => {
   await reset();
+  await createAnchorCommand();
   const authorization: CommandAuthorization = {
     action: 'growth.denied',
     resource: { route: anchorRoute, id: newId(anchorRoute) },
@@ -170,6 +184,7 @@ test('Denied replay stays within its bound as N grows', async () => {
 
 test('One contention retry stays within its bound as N grows', async () => {
   await reset();
+  await createAnchorCommand();
   let injected = false;
   await check('One contention retry', async (_growthDb, scale, repetition) =>
     runCommand(
