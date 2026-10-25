@@ -1,10 +1,10 @@
 import type { KernelClient } from '@rezics/client';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
-import type { ComponentProps } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import type { Related, Subject } from '../../subject/types';
 import { dataComponents, PageData, pageText, type PageMessages } from './data';
 import { serializeJsonLd, subjectJsonLd } from './jsonld';
-import { layoutComponents, PageRoot, pageDefinitions } from './layout';
+import { layoutComponents, PageHost, PageRoot, pageDefinitions } from './layout';
 import { CompositionRender, type PageDocument } from './render';
 
 const subjectIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -21,6 +21,8 @@ export type SubjectPageLoad =
   | { kind: 'missing' }
   | { kind: 'redirect'; id: string }
   | { kind: 'page'; page: SubjectPageData };
+
+export type SubjectActionsInput = { id: string; type: string; locale: string };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -72,13 +74,16 @@ export function SubjectPage({
   locale,
   messages,
   link,
+  actions,
 }: {
   page: SubjectPageData;
   locale: string;
   messages: PageMessages;
   link?: ComponentProps<typeof PageData>['link'];
+  actions?: (subject: SubjectActionsInput) => ReactNode;
 }) {
   const read = subjectBody(page);
+  const renderedActions = read && actions ? actions({ id: page.subject, type: read.subject.type, locale }) : null;
   const jsonLd = read
     ? serializeJsonLd(
         subjectJsonLd({
@@ -91,21 +96,23 @@ export function SubjectPage({
     : undefined;
   return (
     <>
-      <PageData
-        locale={locale}
-        subject={page.subject}
-        document={page.document}
-        reads={page.reads}
-        messages={messages}
-        {...(link ? { link } : {})}
-      >
-        <CompositionRender
+      <PageHost actions={renderedActions}>
+        <PageData
+          locale={locale}
+          subject={page.subject}
           document={page.document}
-          definitions={pageDefinitions}
-          components={{ ...layoutComponents, ...dataComponents }}
-          root={PageRoot}
-        />
-      </PageData>
+          reads={page.reads}
+          messages={messages}
+          {...(link ? { link } : {})}
+        >
+          <CompositionRender
+            document={page.document}
+            definitions={pageDefinitions}
+            components={{ ...layoutComponents, ...dataComponents }}
+            root={PageRoot}
+          />
+        </PageData>
+      </PageHost>
       {jsonLd !== undefined && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd }} />}
     </>
   );

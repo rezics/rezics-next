@@ -1,5 +1,5 @@
 import { APPEARANCE, platformRegistry } from '@rezics/composition';
-import { isValidElement, type ReactNode } from 'react';
+import { createContext, isValidElement, useContext, type ReactNode } from 'react';
 import { pageText, usePageLocale } from './data';
 
 /** `{ type, slots }` for every platform component, shared by layout and data renderers. */
@@ -35,6 +35,14 @@ const columnSplit = {
 const columnClass = 'grid min-w-0 grid-cols-1 items-start gap-6 in-data-[density=compact]:gap-4';
 const columnChild = 'flex min-w-0 flex-col gap-4 in-data-[density=compact]:gap-3';
 const slotClass = 'flex min-w-0 flex-col gap-3 empty:hidden in-data-[density=compact]:gap-2';
+const headerSlotClass = [
+  'flex min-w-0 flex-col gap-3 empty:hidden in-data-[density=compact]:gap-2',
+  'sm:flex-row sm:items-start sm:justify-between [&>*:first-child]:min-w-0 [&>*:first-child]:flex-1',
+  '[&>[data-slot=actions]]:shrink-0',
+].join(' ');
+const actionsSlotClass = 'flex flex-wrap items-center gap-2';
+
+const PageHostContext = createContext<ReactNode>(null);
 
 const headingClass = {
   2: 'text-2xl leading-snug in-data-[heading-scale=lg]:text-3xl',
@@ -64,6 +72,43 @@ function content(value: unknown): ReactNode {
   if (isValidElement(value)) return value;
   if (Array.isArray(value)) return value.map((item) => content(item));
   return null;
+}
+
+/** Puck passes slot content through a callback; inspect its child list to omit empty wrappers. */
+function puckSlotHasContent(value: ReactNode): boolean | undefined {
+  if (
+    !isValidElement<{ as?: unknown }>(value) ||
+    typeof value.type !== 'function' ||
+    typeof value.props.as !== 'function' ||
+    value.props.as.name !== 'SlotContent'
+  )
+    return;
+  const renderSlot = value.type as (props: { as?: unknown }) => ReactNode;
+  const rendered = renderSlot(value.props);
+  return isValidElement<{ content?: unknown }>(rendered) && Array.isArray(rendered.props.content)
+    ? rendered.props.content.length > 0
+    : false;
+}
+
+function hasContent(value: ReactNode): boolean {
+  if (value == null || typeof value === 'boolean') return false;
+  if (typeof value === 'string') return value.length > 0;
+  if (typeof value === 'number') return true;
+  if (Array.isArray(value)) return value.some(hasContent);
+  const puckSlotContent = puckSlotHasContent(value);
+  if (puckSlotContent !== undefined) return puckSlotContent;
+  if (isValidElement<{ children?: ReactNode }>(value)) {
+    if ((value.type as unknown) === Symbol.for('react.fragment')) return hasContent(value.props.children);
+    if (typeof value.type === 'function' && value.type.name === 'SlotContent') {
+      return hasContent(value.props.children);
+    }
+  }
+  return true;
+}
+
+/** Provide controls owned by the page host to its template's actions slot. */
+export function PageHost({ actions, children }: { actions?: ReactNode; children?: ReactNode }) {
+  return <PageHostContext.Provider value={actions ?? null}>{children}</PageHostContext.Provider>;
 }
 
 function choice<const Values extends readonly string[]>(
@@ -134,10 +179,20 @@ function Text(props: Record<string, unknown>) {
 }
 
 function Slot(props: Record<string, unknown>) {
+  const actions = useContext(PageHostContext);
   const children = content(props.children);
   switch (props.name) {
     case 'header':
-      return <header className={slotClass}>{children}</header>;
+      return <header className={headerSlotClass}>{children}</header>;
+    case 'actions': {
+      if (!hasContent(actions) && !hasContent(children)) return null;
+      return (
+        <div className={actionsSlotClass} data-slot="actions">
+          {actions}
+          {children}
+        </div>
+      );
+    }
     case 'hero':
       return (
         <section className={slotClass} data-slot="hero">
