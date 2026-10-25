@@ -5,11 +5,11 @@ export type WorkQueueOptions = NonNullable<Parameters<typeof DBOS.registerQueue>
 /** ADR-0033: governance has its own capacity; import enqueues must name their source partition. */
 export const WORK_QUEUES = Object.freeze({
   governance: Object.freeze({ workerConcurrency: 2 }),
-  effects: Object.freeze({ partitionConcurrency: 1 }),
+  effects: Object.freeze({ workerConcurrency: 8, partitionConcurrency: 1 }),
   workflows: Object.freeze({}),
-  delivery: Object.freeze({}),
-  import: Object.freeze({ partitionConcurrency: 1 }),
-  maintenance: Object.freeze({}),
+  delivery: Object.freeze({ workerConcurrency: 4 }),
+  import: Object.freeze({ workerConcurrency: 2, partitionConcurrency: 1 }),
+  maintenance: Object.freeze({ workerConcurrency: 2 }),
 } satisfies Record<string, Readonly<WorkQueueOptions>>);
 
 export type WorkQueueName = keyof typeof WORK_QUEUES;

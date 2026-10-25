@@ -1,18 +1,18 @@
 import { expect, test } from 'bun:test';
 import { CommandUnavailableError, IdempotencyConflictError } from '../src/command/command.ts';
-import { WORK_QUEUES } from '../src/work/queues.ts';
+import { WORK_QUEUES, type WorkQueueOptions } from '../src/work/queues.ts';
 import { COMMAND_STEP_RETRIES } from '../src/work/retries.ts';
 
 test('every work queue except workflows bounds its per-process concurrency', () => {
-  const unbounded = Object.entries(WORK_QUEUES)
-    .filter(([, options]) => options.workerConcurrency === undefined)
-    .map(([name]) => name);
+  const entries = Object.entries(WORK_QUEUES) as [string, Readonly<WorkQueueOptions>][];
+  const unbounded = entries.filter(([, options]) => options.workerConcurrency === undefined).map(([name]) => name);
 
   expect(unbounded).toEqual(['workflows']);
-  for (const [name, options] of Object.entries(WORK_QUEUES)) {
+  for (const [name, options] of entries) {
     if (name === 'workflows') continue;
-    expect(Number.isInteger(options.workerConcurrency) && options.workerConcurrency! > 0 && options.workerConcurrency! <= 8)
-      .toBe(true);
+    expect(
+      Number.isInteger(options.workerConcurrency) && options.workerConcurrency! > 0 && options.workerConcurrency! <= 8,
+    ).toBe(true);
   }
 });
 
