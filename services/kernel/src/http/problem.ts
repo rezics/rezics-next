@@ -26,6 +26,8 @@ export const PROBLEMS = {
   transaction_retry_exhausted: { status: 503, title: 'Transaction Retry Exhausted', retryable: true },
   deadline_exceeded: { status: 503, title: 'Deadline Exceeded', retryable: true },
   dependency_unavailable: { status: 503, title: 'Dependency Unavailable', retryable: true },
+  rate_limited: { status: 429, title: 'Request Budget Exhausted', retryable: true },
+  rate_limit_unavailable: { status: 503, title: 'Request Budget Unavailable', retryable: true },
   index_not_ready: { status: 503, title: 'Search Index Not Ready', retryable: true },
   search_restart_required: { status: 409, title: 'Search Restart Required', retryable: false },
   unsupported_query: { status: 422, title: 'Unsupported Query', retryable: false },
@@ -205,15 +207,17 @@ function safeFieldErrors(errors: readonly FieldError[] | undefined): FieldError[
   return result.length ? result : undefined;
 }
 
-function effectStatus(method: string): 'not_applicable' | 'not_applied' {
-  return ['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase()) ? 'not_applicable' : 'not_applied';
+function effectStatus(method: string, action?: string): 'not_applicable' | 'not_applied' {
+  return action?.split(':')[1] === 'read' || ['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase())
+    ? 'not_applicable'
+    : 'not_applied';
 }
 
 function hasInvalidToken(challenge: string): boolean {
   return /(?:^|[\s,])error\s*=\s*(?:"invalid_token"|invalid_token)(?=$|[\s,])/i.test(challenge);
 }
 
-export function problemResponse(error: unknown, context: { method: string; id: string }): Response {
+export function problemResponse(error: unknown, context: { method: string; id: string; action?: string }): Response {
   let code: ProblemCode = 'internal_error';
   let detail: string | undefined;
   let errors: readonly FieldError[] | undefined;
@@ -269,7 +273,7 @@ export function problemResponse(error: unknown, context: { method: string; id: s
     status: definition.status,
     code,
     retryable: definition.retryable,
-    effect_status: effectStatus(context.method),
+    effect_status: effectStatus(context.method, context.action),
     request_id: context.id,
     ...(detail === undefined ? {} : { detail: truncateDetail(detail) }),
     ...(safeErrors ? { errors: safeErrors } : {}),

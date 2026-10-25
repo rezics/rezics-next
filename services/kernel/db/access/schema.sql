@@ -86,6 +86,22 @@ $$;
 
 
 --
+-- Name: guard_account_creation_time(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.guard_account_creation_time() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.created_at IS DISTINCT FROM OLD.created_at THEN
+    RAISE EXCEPTION 'Account creation time is immutable' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: guard_account_identity(); Type: FUNCTION; Schema: access; Owner: -
 --
 
@@ -243,14 +259,19 @@ CREATE TABLE access.account (
     operator_reservation_id uuid,
     membership_inverse_complete boolean DEFAULT false NOT NULL,
     handle_operation_id text,
+    created_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
+    rate_tier text DEFAULT 'ordinary'::text NOT NULL,
     CONSTRAINT account_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT account_check1 CHECK (((operator_account_id IS NULL) OR ((kind = 'actor'::text) AND (operator_account_id <> account_id)))),
     CONSTRAINT account_content_preferences_check CHECK ((jsonb_typeof(content_preferences) = 'object'::text)),
+    CONSTRAINT account_created_at_check CHECK (isfinite(created_at)),
     CONSTRAINT account_handle_check CHECK ((handle ~ '^[a-z0-9][a-z0-9_-]{0,63}$'::text)),
     CONSTRAINT account_kind_check CHECK ((kind = ANY (ARRAY['actor'::text, 'organization'::text]))),
     CONSTRAINT account_minimum_authn_epoch_check CHECK ((minimum_authn_epoch > 0)),
     CONSTRAINT account_operator_relation_version_check CHECK ((operator_relation_version >= 0)),
+    CONSTRAINT account_rate_tier_check CHECK ((rate_tier = ANY (ARRAY['ordinary'::text, 'trusted'::text, 'service'::text]))),
     CONSTRAINT account_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT account_service_tier_actor CHECK (((rate_tier <> 'service'::text) OR (kind = 'actor'::text))),
     CONSTRAINT account_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'active'::text, 'suspended'::text, 'deleted'::text])))
 );
 
@@ -801,6 +822,13 @@ CREATE INDEX organization_member_owner_probe ON access.organization_member USING
 --
 
 CREATE INDEX write_rate_counter_expiry ON access.write_rate_counter USING btree (route, expires_at, identity_digest, family);
+
+
+--
+-- Name: account account_creation_time; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER account_creation_time BEFORE UPDATE ON access.account FOR EACH ROW EXECUTE FUNCTION access.guard_account_creation_time();
 
 
 --

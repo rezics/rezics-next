@@ -20,7 +20,7 @@ export declare function createKernel(dependencies: KernelDependencies): (import(
     macro: {};
     macroFn: {};
     parser: {};
-    response: import("elysia/types").ExtractErrorFromHandle<Response>;
+    response: {};
 }, {
     health: {
         get: {
@@ -1665,7 +1665,7 @@ export declare function createKernel(dependencies: KernelDependencies): (import(
     macro: {};
     macroFn: {};
     parser: {};
-    response: import("elysia/types").ExtractErrorFromHandle<Response>;
+    response: {};
 }, {
     health: {
         get: {
@@ -1944,7 +1944,7 @@ export declare function createKernel(dependencies: KernelDependencies): (import(
     macro: {};
     macroFn: {};
     parser: {};
-    response: import("elysia/types").ExtractErrorFromHandle<Response>;
+    response: {};
 }, {
     health: {
         get: {
@@ -3533,7 +3533,7 @@ export declare function createKernel(dependencies: KernelDependencies): (import(
     macro: {};
     macroFn: {};
     parser: {};
-    response: import("elysia/types").ExtractErrorFromHandle<Response>;
+    response: {};
 }, {
     health: {
         get: {

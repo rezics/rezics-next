@@ -7,6 +7,7 @@ import {
   accessCheck,
   accessCommandAuthorization,
   actorOf,
+  AuthenticationError,
   type Access,
   type AccessFactory,
   type Resource,
@@ -18,6 +19,8 @@ import { customMethodVerb } from './custom-method.ts';
 import { ProblemError, problemResponse } from './problem.ts';
 import { actionCatalogue, actionForRequest, SESSION_HEADER } from './request.ts';
 import healthCheck from './health.sql';
+import { createWriteRateLimiter, type WriteRateLimiter } from '../access/write-rate.ts';
+import { createWriteRateStage, type WriteRateStageOptions } from '../access/write-rate-stage.ts';
 
 export const REQUEST_DEADLINE_MS = 2000;
 
@@ -26,13 +29,23 @@ export function createApp({
   admission = new Admission(),
   access = createAccess,
   tokens,
+  writeRate = createWriteRateLimiter(),
+  rateAttribution,
+  ratePeer,
 }: {
   pool: Pool;
   admission?: Admission;
   access?: Access | AccessFactory;
   tokens?: KeyRing;
+  writeRate?: WriteRateLimiter;
+  rateAttribution?: WriteRateStageOptions;
+  /** Trusted transport attribution; never a request header resolver. */
+  ratePeer?: (request: Request) => string | undefined;
 }) {
   const sessionKeys = tokens ?? { current: 1, keys: new Map([[1, new Uint8Array(randomBytes(32))]]) };
+  const rateStage = createWriteRateStage(writeRate, rateAttribution);
+  let socketPeer: (request: Request) => string | undefined = () => undefined;
+  const originalRequests = new WeakMap<Request, Request>();
   const requestIds = new WeakMap<Request, string>();
   const arrivals = new WeakMap<Request, number>();
   let mountedApp: { routes: readonly { method: string; path: string; hooks?: { detail?: unknown } }[] };
@@ -59,15 +72,32 @@ export function createApp({
       idFor(request);
       arrivals.set(request, Date.now());
     })
-    .onError('global', ({ error, request }) => problemResponse(error, { method: request.method, id: idFor(request) }))
+    .onError('global', ({ error, request, route }) => {
+      const mounted = mountedApp.routes.find(
+        (entry) =>
+          entry.path === (route ?? new URL(request.url).pathname) &&
+          (entry.method === request.method || entry.method === 'ALL' || entry.method === '*'),
+      );
+      const action = (mounted?.hooks?.detail as Record<string, unknown> | undefined)?.['x-action'];
+      return problemResponse(error, {
+        method: request.method,
+        id: idFor(request),
+        ...(typeof action === 'string' ? { action } : {}),
+      });
+    })
     .derive(async ({ request, route, set }) => {
       const job = { deadline: (arrivals.get(request) ?? Date.now()) + REQUEST_DEADLINE_MS, signal: request.signal };
       const actor =
         request.headers.get('authorization') === null
           ? { kind: 'anonymous' as const }
-          : await admission.run('reserved', job, () =>
-              actorOf(accessForApp(), request, { pool, deadline: job.deadline }),
-            );
+          : await admission.run('reserved', job, async () => {
+              try {
+                return await actorOf(accessForApp(), request, { pool, deadline: job.deadline });
+              } catch (error) {
+                if (error instanceof AuthenticationError) throw error;
+                throw new AuthenticationError(401, 'Bearer error="invalid_token"');
+              }
+            });
 
       const scope = actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous';
       const encoded = request.headers.get(SESSION_HEADER);
@@ -118,6 +148,19 @@ export function createApp({
         },
       };
     })
+    .onBeforeHandle('global', async ({ request, route, body, actor, job, server }) => {
+      const original = originalRequests.get(request) ?? request;
+      await admission.run('normal', job, () =>
+        rateStage({
+          request,
+          route,
+          body,
+          routes: mountedApp.routes,
+          context: { pool, actor, deadline: job.deadline },
+          peer: ratePeer ? ratePeer(original) : (server?.requestIP(original)?.address ?? socketPeer(original)),
+        }),
+      );
+    })
     .get('/health', { detail: { hide: true } }, async ({ admission: lanes, job }) => {
       try {
         await lanes.run('reserved', job, () =>
@@ -131,6 +174,7 @@ export function createApp({
       }
     });
   mountedApp = app;
+  socketPeer = (request) => app.server?.requestIP(request)?.address;
   app.wrap((handle) => {
     const verbs = new Set(app.routes.map((route) => customMethodVerb(route.path)).filter((verb) => verb !== undefined));
     return (request) => {
@@ -143,7 +187,9 @@ export function createApp({
       const colon = path.lastIndexOf(':');
       if (colon > path.lastIndexOf('/') && verbs.has(path.slice(colon + 1))) {
         url.pathname = `${path.slice(0, colon)}/$${path.slice(colon + 1)}`;
-        return handle(new Request(url, request));
+        const rewritten = new Request(url, request);
+        originalRequests.set(rewritten, request);
+        return handle(rewritten);
       }
       return handle(request);
     };

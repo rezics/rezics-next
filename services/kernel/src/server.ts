@@ -1,3 +1,5 @@
+import { createWriteRateLimiter, type WriteRateLimiter } from './access/write-rate.ts';
+import { createWriteRateStage, type WriteRateStageOptions } from './access/write-rate-stage.ts';
 import { createPool } from './database/pool.ts';
 import { createKernel } from './http/kernel.ts';
 import type { KeyRing } from './tokens/seal.ts';
@@ -19,6 +21,8 @@ export type ServerConfig = {
   routeKey: Uint8Array;
   tokens: KeyRing;
   commerce: CommerceConfig;
+  writeRate?: WriteRateLimiter;
+  rateAttribution?: WriteRateStageOptions;
 };
 
 function required(env: NodeJS.ProcessEnv, variable: string): string {
@@ -60,7 +64,25 @@ export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
   const port = Number(portValue);
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new ConfigError('KERNEL_PORT');
 
-  return { databaseUrl, hostname, port, routeKey, tokens: { current, keys }, commerce: readCommerceConfig(env) };
+  const writeRate = createWriteRateLimiter({
+    ...(env.KERNEL_WRITE_RATE_SECRET === undefined ? {} : { secret: env.KERNEL_WRITE_RATE_SECRET }),
+    ...(env.KERNEL_WRITE_RATE_OVERRIDES === undefined ? {} : { overrides: env.KERNEL_WRITE_RATE_OVERRIDES }),
+  });
+  const rateAttribution: WriteRateStageOptions = {
+    trustedProxyPeers: env.KERNEL_RATE_TRUSTED_PROXY_PEERS?.split(',') ?? [],
+    clientIpHeader: env.KERNEL_RATE_CLIENT_IP_HEADER ?? 'cf-connecting-ip',
+  };
+  createWriteRateStage(writeRate, rateAttribution); // Validate trusted transport configuration at startup.
+  return {
+    databaseUrl,
+    hostname,
+    port,
+    routeKey,
+    tokens: { current, keys },
+    commerce: readCommerceConfig(env),
+    writeRate,
+    rateAttribution,
+  };
 }
 
 export async function startServer(config: ServerConfig, options: { effects?: Effect[] } = {}) {
@@ -74,10 +96,14 @@ export async function startServer(config: ServerConfig, options: { effects?: Eff
   const workClient = createWorkClient(config.databaseUrl);
   // Observe startup rejection immediately; the webhook and stop still receive it.
   void workClient.catch(() => {});
+  const peers = new WeakMap<Request, string>();
   const app = createKernel({
     pool,
     routeKey: config.routeKey,
     tokens: config.tokens,
+    ...(config.writeRate === undefined ? {} : { writeRate: config.writeRate }),
+    ...(config.rateAttribution === undefined ? {} : { rateAttribution: config.rateAttribution }),
+    ratePeer: (request) => peers.get(request),
     commerce: {
       stripe: createStripePort({ ...config.commerce.stripe, clock: () => new Date() }),
       successUrl: config.commerce.successUrl,
@@ -93,7 +119,11 @@ export async function startServer(config: ServerConfig, options: { effects?: Eff
   const server = Bun.serve({
     hostname: config.hostname,
     port: config.port,
-    fetch: app.fetch,
+    fetch(request, transport) {
+      const address = transport.requestIP(request)?.address;
+      if (address) peers.set(request, address);
+      return app.fetch(request);
+    },
   });
   return {
     url: server.url,

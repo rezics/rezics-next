@@ -3,12 +3,18 @@ import { type Access, type AccessFactory, type Resource } from '../request/acces
 import { type SessionComponent } from '../tokens/session.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { Admission } from './admission.ts';
+import { type WriteRateLimiter } from '../access/write-rate.ts';
+import { type WriteRateStageOptions } from '../access/write-rate-stage.ts';
 export declare const REQUEST_DEADLINE_MS = 2000;
-export declare function createApp({ pool, admission, access, tokens, }: {
+export declare function createApp({ pool, admission, access, tokens, writeRate, rateAttribution, ratePeer, }: {
     pool: Pool;
     admission?: Admission;
     access?: Access | AccessFactory;
     tokens?: KeyRing;
+    writeRate?: WriteRateLimiter;
+    rateAttribution?: WriteRateStageOptions;
+    /** Trusted transport attribution; never a request header resolver. */
+    ratePeer?: (request: Request) => string | undefined;
 }): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
     typebox: {};
     error: [{
@@ -24,7 +30,7 @@ export declare function createApp({ pool, admission, access, tokens, }: {
     macro: {};
     macroFn: {};
     parser: {};
-    response: import("elysia/types").ExtractErrorFromHandle<Response>;
+    response: {};
 }, {}, import("elysia").DefaultEphemeral, {
     derive: {
         readonly admission: Admission;

@@ -10,6 +10,7 @@ import {
 } from '../request/access.ts';
 import { readAccount, type Account } from './account-data.ts';
 import { readAssignment } from './delegation-commands.ts';
+import { bindAccountRateIdentity } from './write-rate-identity.ts';
 
 export type AuthenticationConfig = {
   issuer: string;
@@ -223,6 +224,7 @@ export function createAuthenticator(configuration?: AuthenticationConfig) {
         deadline: context.deadline,
         expires,
       });
+      bindAccountRateIdentity(actor, { ...context, actor }, account, expires);
       return actor;
     } catch {
       throw invalid();

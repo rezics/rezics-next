@@ -172,3 +172,42 @@ Preparation may read a separately anchored parent before the resource transactio
 DBOS uses shared system tables and one effects queue without a core partition queue key; its queue scheduling and separate enqueue transactions do not establish per-core-partition placement or atomicity with the checkpoint transaction.
 No single relay scans all partitions in this base because no partition-discovery scheduler exists; its eventual discovery shape remains unproven.
 Fence waiting adds a partition read with A = 1/T = 3 after rollback and on each 25 ms poll until the deadline; the default two-second deadline bounds waiting in time, but configurable deadlines are not a fixed statement-count cap.
+
+## Write rate deployment configuration
+
+Every kernel application installs the shared write rate stage after authentication and body validation,
+before command effects. Set `KERNEL_WRITE_RATE_SECRET` to a private, stable random secret of at least
+32 bytes (for example `openssl rand -base64 32`). Keep it identical across replicas; rotating it starts
+new counter identities. Missing keys and unavailable counter storage refuse writes with 503 and
+`Cache-Control: no-store`. Exhausted capacity returns 429 with a positive integer `Retry-After`.
+Never log the key, bearer tokens or client IP addresses.
+
+`KERNEL_WRITE_RATE_OVERRIDES` optionally contains strict partial budget JSON, for example
+`{"anonymous":{"write":{"maximum":10,"seconds":60}}}`. Unknown classes, families or fields,
+noninteger values, maximum outside 1–1000000, and seconds outside 1–86400 fail startup validation.
+The default is the versioned `RATE_LIMIT_V1` catalogue. Report and provider capacity have separate
+family keys from ordinary writes. Imports and semantic batches spend the total command count once,
+up to 100, before any command runs; a denied batch spends no units.
+
+Anonymous attribution uses the socket peer. Behind a proxy, set `KERNEL_RATE_TRUSTED_PROXY_PEERS`
+to comma-separated exact literal peer IPs and optionally `KERNEL_RATE_CLIENT_IP_HEADER` (default
+`cf-connecting-ip`). Each trusted peer must replace that header with a single validated client IP.
+Untrusted forwarding headers are ignored. Equivalent IPv6 spellings and addresses within one /64
+share capacity; IPv4-mapped IPv6 shares its IPv4 identity. Missing attribution shares a conservative
+unknown-peer identity. `startServer` supplies Bun's actual socket address, including for custom methods.
+
+Account age and private tier come from the existing verified actor anchor read. Ordinary human and
+automated accounts use new-account capacity for seven days, then member capacity. Trusted capacity
+requires the private server-administered `trusted` tier; service capacity also requires an active
+automated actor explicitly provisioned with the `service` tier. Public profiles, JWT claims, OAuth
+clients and request JSON cannot set these facts. Historic unknown creation times start at migration
+time. Creation time is immutable. Tier provisioning is private database administration; there is no
+public tier upgrade API. Changing class does not change the counter key.
+
+The consumed Access counter is one routed UNLOGGED table. A spend performs one atomic PK upsert
+for at most one row, including batch100; it creates no receipt, WAL event or outbox item. Crash or
+partition movement may reset windows. Requests do not sweep counters or start background workers.
+The route-led expiry index supports a separately registered cleanup job restricted to one admitted
+local route and at most 1000 expired rows per tick, with a 48-hour retention bound. Limiter admission
+grants capacity only; normal Access and command receipt ordering still apply. Turnstile and front
+controls remain independent.

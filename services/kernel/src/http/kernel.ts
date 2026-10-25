@@ -8,6 +8,7 @@ import { contextRoutes } from '../semantic/http/contexts.ts';
 import { subjectRoutes } from '../semantic/http/subjects.ts';
 import { createApp } from './app.ts';
 import { actionCatalogue } from './request.ts';
+import { declareKernelWriteRates } from './write-rate-routes.ts';
 
 export type KernelDependencies = Parameters<typeof createApp>[0] & {
   routeKey: Uint8Array;
@@ -33,6 +34,7 @@ export function createKernel(dependencies: KernelDependencies) {
     ...(dependencies.commerce === undefined ? {} : { commerce: dependencies.commerce }),
   });
   const kernel = contextRoutes(commerce as unknown as ReturnType<typeof definitionRoutes>, dependencies);
+  declareKernelWriteRates(kernel);
   return kernel as unknown as typeof commerce & typeof payouts & typeof kernel;
 }
 
