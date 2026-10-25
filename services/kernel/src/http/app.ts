@@ -1,32 +1,41 @@
 import { Elysia } from 'elysia';
 import { randomBytes } from 'node:crypto';
 import type { Pool } from 'pg';
-import { access as installedAccess } from '../access/index.ts';
+import { createAccess } from '../access/index.ts';
 import { withConnection } from '../database/pool.ts';
-import { accessCheck, actorOf, type Access, type Resource } from '../request/access.ts';
+import { accessCheck, actorOf, type Access, type AccessFactory, type Resource } from '../request/access.ts';
 import { decodeSession, encodeSession, mergeSession, type SessionComponent } from '../tokens/session.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { Admission } from './admission.ts';
 import { ProblemError, problemResponse } from './problem.ts';
-import { actionForRequest, SESSION_HEADER } from './request.ts';
+import { actionCatalogue, actionForRequest, SESSION_HEADER } from './request.ts';
 
 export const REQUEST_DEADLINE_MS = 2000;
 
 export function createApp({
   pool,
   admission = new Admission(),
-  access = installedAccess,
+  access = createAccess,
   tokens,
 }: {
   pool: Pool;
   admission?: Admission;
-  access?: Access;
+  access?: Access | AccessFactory;
   tokens?: KeyRing;
 }) {
   const sessionKeys = tokens ?? { current: 1, keys: new Map([[1, new Uint8Array(randomBytes(32))]]) };
   const requestIds = new WeakMap<Request, string>();
   const arrivals = new WeakMap<Request, number>();
   let mountedApp: { routes: readonly { method: string; path: string; hooks?: { detail?: unknown } }[] };
+  let resolvedAccess: Access | undefined;
+  const accessForApp = (): Access => {
+    if (typeof access !== 'function') return access;
+    if (!resolvedAccess) {
+      // Routes are mounted after createApp returns, so build access on its first use.
+      resolvedAccess = access({ actions: actionCatalogue(mountedApp) });
+    }
+    return resolvedAccess;
+  };
   const idFor = (request: Request): string => {
     let id = requestIds.get(request);
     if (!id) {
@@ -47,7 +56,9 @@ export function createApp({
       const actor =
         request.headers.get('authorization') === null
           ? { kind: 'anonymous' as const }
-          : await admission.run('reserved', job, () => actorOf(access, request, { pool, deadline: job.deadline }));
+          : await admission.run('reserved', job, () =>
+              actorOf(accessForApp(), request, { pool, deadline: job.deadline }),
+            );
 
       const scope = actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous';
       const encoded = request.headers.get(SESSION_HEADER);
@@ -68,21 +79,22 @@ export function createApp({
         actor,
         session,
         authorize: (resource: Resource) => {
+          const currentAccess = accessForApp();
           const action = actionForRequest(mountedApp, request, route);
           const context = { pool, deadline: job.deadline };
-          const prepare = access.prepare;
+          const prepare = currentAccess.prepare;
           const checkedAccess: Access = {
-            authenticate: (token, received) => access.authenticate(token, received),
+            authenticate: (token, received) => currentAccess.authenticate(token, received),
             ...(prepare
               ? {
                   prepare: (preparedActor, preparedAction, preparedResource, received) =>
                     admission.run('normal', job, () =>
-                      prepare.call(access, preparedActor, preparedAction, preparedResource, received),
+                      prepare.call(currentAccess, preparedActor, preparedAction, preparedResource, received),
                     ),
                 }
               : {}),
             authorize: (client, checkedActor, checkedAction, checkedResource, evidence) =>
-              access.authorize(client, checkedActor, checkedAction, checkedResource, evidence),
+              currentAccess.authorize(client, checkedActor, checkedAction, checkedResource, evidence),
           };
           return accessCheck(checkedAccess, actor, action, resource, context);
         },

@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { type Access, type Resource } from '../request/access.ts';
+import { type Access, type AccessFactory, type Resource } from '../request/access.ts';
 import { type SessionComponent } from '../tokens/session.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { Admission } from './admission.ts';
@@ -7,7 +7,7 @@ export declare const REQUEST_DEADLINE_MS = 2000;
 export declare function createApp({ pool, admission, access, tokens, }: {
     pool: Pool;
     admission?: Admission;
-    access?: Access;
+    access?: Access | AccessFactory;
     tokens?: KeyRing;
 }): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
     typebox: {};

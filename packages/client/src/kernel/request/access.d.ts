@@ -17,6 +17,12 @@ export type Resource = {
 export type ActionCatalogue = ReadonlyMap<string, {
     anonymous: boolean;
 }>;
+/** Actions available to an access implementation for one application. */
+export type AccessConfig = {
+    actions: ActionCatalogue;
+};
+/** Builds an access implementation from an application's configuration. */
+export type AccessFactory = (config: AccessConfig) => Access;
 export type AccessContext = {
     pool: Pool;
     deadline: number;
