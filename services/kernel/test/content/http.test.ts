@@ -137,7 +137,7 @@ describe('content HTTP with native database adapters', () => {
     await db.admin.query(
       `INSERT INTO content.board
          (route, board_id, subject_id, title, visibility, security_revision, recorded_transaction_id)
-       VALUES ($1, $2, $3, 'HTTP board', 'public', 1, $4)`,
+       VALUES ($1, $2, $3, 'HTTP board', 'published', 1, $4)`,
       [routeOf(boardId), boardId, subjectIds[0], randomUUID()],
     );
   });
@@ -209,11 +209,11 @@ describe('content HTTP with native database adapters', () => {
     expect(exact.body.post).toEqual(post);
     const history = await call('GET', `/v1/posts/${post.id}/revisions?limit=1`);
     expect(history.response.status).toBe(200);
-    expect(history.body.items).toHaveLength(1);
+    expect(history.body.revisions).toHaveLength(1);
     expect(history.body.next).toEqual(expect.any(String));
     const page = await call('GET', `/v1/threads/${thread.id}/posts?limit=1`);
     expect(page.response.status).toBe(200);
-    expect(page.body.items).toHaveLength(1);
+    expect(page.body.posts).toHaveLength(1);
     expect(page.body.next).toEqual(expect.any(String));
     expect((await call('GET', `/v1/threads/${thread.id}/posts?limit=101`)).response.status).toBe(400);
     const stored = await db.admin.query(
@@ -320,7 +320,7 @@ describe('content HTTP with native database adapters', () => {
         // This app and its actual Access use the observed db.pool; P=2 and H remain fixed.
         const response = await reader.handle(new Request(`http://kernel.test/v1/threads/${thread.id}/posts?limit=2`));
         expect(response.status).toBe(200);
-        expect((await response.json()).items).toHaveLength(2);
+        expect((await response.json()).posts).toHaveLength(2);
       },
     });
     expect(report.samples.map(({ scale }) => scale)).toEqual([32, 256, 2048]);
