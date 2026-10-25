@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import { commandTime, type AuthoritativeTime, type CommandAuthorization } from '../command/command.ts';
 
 export type AccountActor = {
   kind: 'account';
@@ -13,7 +14,7 @@ export type Actor = AccountActor | { kind: 'anonymous' };
 
 export type Resource = { route: number; id: string };
 
-export type ActionCatalogue = ReadonlyMap<string, { anonymous: boolean }>;
+export type ActionCatalogue = ReadonlyMap<string, { anonymous: boolean; replay?: 'self-account-read' }>;
 
 /** Actions available to an access implementation for one application. */
 export type AccessConfig = { actions: ActionCatalogue };
@@ -24,16 +25,21 @@ export type AccessFactory = (config: AccessConfig) => Access;
 export type AccessContext = { pool: Pool; deadline: number };
 
 export type AccessClient = Pick<PoolClient, 'query'>;
+export type AccessCheck = (client: AccessClient, time?: AuthoritativeTime) => Promise<boolean>;
+export type AccessCommandAuthorization = CommandAuthorization & { readonly check: AccessCheck };
 
 export interface Access {
   authenticate(token: string, context: AccessContext): Promise<AccountActor>;
   prepare?(actor: Actor, action: string, resource: Resource, context: AccessContext): Promise<unknown>;
+  /** Derived only from the installed action catalogue's explicit declaration. */
+  replayAuthorization?(action: string): 'self-account-read' | undefined;
   authorize(
     client: AccessClient,
     actor: Actor,
     action: string,
     resource: Resource,
     evidence?: unknown,
+    time?: AuthoritativeTime,
   ): Promise<boolean>;
 }
 
@@ -43,9 +49,61 @@ export async function accessCheck(
   action: string,
   resource: Resource,
   context: AccessContext,
-): Promise<(client: AccessClient) => Promise<boolean>> {
+): Promise<AccessCheck> {
   const evidence = access.prepare ? await access.prepare(actor, action, resource, context) : null;
-  return (client) => access.authorize(client, actor, action, resource, evidence);
+  return (client, time = commandTime(client)) => access.authorize(client, actor, action, resource, evidence, time);
+}
+
+/** Prepare request evidence once. The command boundary invokes the final formula
+ * on every real attempt, at its trusted T, before looking up any receipt.
+ * The explicit self-read exception can retrieve a receipt but never run a body.
+ */
+export async function accessCommandAuthorization(
+  access: Access,
+  actor: Actor,
+  action: string,
+  resource: Resource,
+  context: AccessContext,
+  denied: () => Error,
+): Promise<AccessCommandAuthorization> {
+  const target = Object.freeze({ ...resource });
+  let check: AccessCheck = async () => false;
+  let selfRead: AccessCheck | undefined;
+  try {
+    check = await accessCheck(access, actor, action, target, context);
+    if (actor.kind === 'account' && access.replayAuthorization?.(action) === 'self-account-read') {
+      selfRead = await accessCheck(
+        access,
+        actor,
+        'account:read',
+        {
+          route: Number.parseInt(actor.accountId.slice(24, 28), 16),
+          id: actor.accountId,
+        },
+        context,
+      );
+    }
+  } catch {
+    // Failure to obtain independently anchored evidence denies at the boundary.
+  }
+  return {
+    action,
+    resource: target,
+    denied,
+    check,
+    async authorize(tx, attempt) {
+      if (
+        actor.kind === 'account' &&
+        (attempt.basis?.actorAccountId !== actor.accountId ||
+          attempt.basis.clientId !== actor.clientId ||
+          attempt.basis.requestedBy !== actor.requestedBy)
+      )
+        throw denied();
+      if (await check(tx, attempt.time)) return 'execute';
+      if (selfRead && (await selfRead(tx, attempt.time))) return 'receipt-only';
+      throw denied();
+    },
+  };
 }
 
 export class AuthenticationError extends Error {

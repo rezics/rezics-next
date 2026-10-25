@@ -45,7 +45,7 @@ type Route = {
 
 type RouteApp = { routes: readonly Route[] };
 
-type RouteDeclaration = { action: string; anonymous: boolean };
+type RouteDeclaration = { action: string; anonymous: boolean; replay?: 'self-account-read' };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -64,25 +64,33 @@ function declaration(route: Route): RouteDeclaration {
 
   const security = detail.security;
   if (!Array.isArray(security) || security.length === 0) throw new Error(`${label}: routes declare security`);
+  const replay = detail['x-replay-authorization'];
+  if (replay !== undefined && replay !== 'self-account-read')
+    throw new Error(`${label}: unsupported x-replay-authorization`);
 
   return {
     action,
     anonymous: security.some((requirement) => isRecord(requirement) && Object.keys(requirement).length === 0),
+    ...(replay === undefined ? {} : { replay }),
   };
 }
 
 /** Derives the configured action set from the routes mounted on an application. */
 export function actionCatalogue(app: RouteApp): ActionCatalogue {
-  const catalogue = new Map<string, { anonymous: boolean }>();
+  const catalogue = new Map<string, { anonymous: boolean; replay?: 'self-account-read' }>();
   for (const route of app.routes) {
     const detail = isRecord(route.hooks?.detail) ? route.hooks.detail : {};
     if (detail.hide === true) continue;
 
-    const { action, anonymous } = declaration(route);
+    const { action, anonymous, replay } = declaration(route);
     const previous = catalogue.get(action);
     if (previous && previous.anonymous !== anonymous)
       throw new Error(`${route.method.toUpperCase()} ${route.path}: ${action} is declared with different security`);
-    catalogue.set(action, { anonymous });
+    if (previous && previous.replay !== replay)
+      throw new Error(
+        `${route.method.toUpperCase()} ${route.path}: ${action} is declared with different replay authorization`,
+      );
+    catalogue.set(action, { anonymous, ...(replay === undefined ? {} : { replay }) });
   }
   return catalogue;
 }

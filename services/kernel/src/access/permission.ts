@@ -1,10 +1,12 @@
 import type { Account } from './account-data.ts';
+import { authoritativeTimeValue, type AuthoritativeTime } from '../command/command.ts';
 import {
   accessCheck,
   AuthenticationError,
   type Access,
   type AccessClient,
   type AccessContext,
+  type AccessCheck,
   type AccountActor,
   type ActionCatalogue,
   type Actor,
@@ -79,6 +81,7 @@ export async function checkPermission(
   action: string,
   resource: Resource,
   evidence?: unknown,
+  time?: AuthoritativeTime,
 ): Promise<boolean> {
   try {
     const facts = typeof evidence === 'object' && evidence !== null ? prepared.get(evidence) : undefined;
@@ -93,6 +96,7 @@ export async function checkPermission(
       roles: facts.roles,
       evidence_valid: facts.valid,
       deadline: facts.databaseDeadline,
+      at: time ? authoritativeTimeValue(time) : '',
     });
     // A query taking longer than its evidence budget cannot produce usable authority.
     return row?.allowed === true && Date.now() < facts.deadline;
@@ -106,6 +110,7 @@ export function createAccess(config: PermissionConfig): Access {
   // Copy metadata so later mutation of the caller's map cannot expand a mounted catalogue.
   const actions = new Map([...config.actions].map(([action, metadata]) => [action, { ...metadata }]));
   return {
+    replayAuthorization: (action) => actions.get(action)?.replay,
     authenticate:
       config.authenticate ??
       (async () => {
@@ -245,14 +250,14 @@ export async function checkDelegationBounds(
   actions: readonly string[],
   resource: Resource,
   context: AccessContext,
-): Promise<(client: AccessClient) => Promise<boolean>> {
+): Promise<AccessCheck> {
   try {
     if (actions.length === 0) return async () => false;
-    const checks: ((client: AccessClient) => Promise<boolean>)[] = [];
+    const checks: AccessCheck[] = [];
     for (const action of new Set(actions)) checks.push(await accessCheck(access, actor, action, resource, context));
-    return async (client) => {
+    return async (client, time) => {
       try {
-        for (const check of checks) if (!(await check(client))) return false;
+        for (const check of checks) if (!(await check(client, time))) return false;
         return true;
       } catch {
         return false;

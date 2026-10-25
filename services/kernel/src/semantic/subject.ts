@@ -1,8 +1,8 @@
 import type { Pool, PoolClient } from 'pg';
-import { runCommand, type CommandTransaction } from '../command/command.ts';
+import { runCommand, type CommandAuthorization } from '../command/command.ts';
 import { withConnection, discardConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
-import type { AccountActor, Resource } from '../request/access.ts';
+import type { AccessCheck, AccountActor, Resource } from '../request/access.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../route/route.ts';
 import { itemFacts, resolveItem, type FactRow, type Item } from './item.ts';
 import insertFacts from './insert-facts.sql';
@@ -36,7 +36,8 @@ export async function createSubject(
     idempotencyKey: string;
     digest: Uint8Array;
     item: unknown;
-    authorize: (tx: CommandTransaction) => Promise<boolean>;
+    authorize: AccessCheck;
+    authorization?: CommandAuthorization;
     deadline?: number;
   },
 ): Promise<CreateSubjectResult> {
@@ -60,9 +61,17 @@ export async function createSubject(
         clientId: options.actor.clientId,
         requestedBy: options.actor.requestedBy,
       },
+      authorization: options.authorization ?? {
+        action: 'subject:create',
+        resource: options.target,
+        denied: () => new SubjectAccessDeniedError(),
+        async authorize(tx, attempt) {
+          if (!(await options.authorize(tx, attempt.time))) throw new SubjectAccessDeniedError();
+          return 'execute';
+        },
+      },
     },
     async (tx, { transactionId }) => {
-      if (!(await options.authorize(tx))) throw new SubjectAccessDeniedError();
       await insertSubject.run(tx, { route, subject_id: subjectId, transaction_id: transactionId });
       await insertFacts.run(tx, {
         route,

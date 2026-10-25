@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import fenceStatement from './fence.sql';
 import readReceipt from './read-receipt.sql';
+import readTime from './time.sql';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 
@@ -30,7 +31,64 @@ export type CommandOutcome<T> = {
   replayed: boolean;
 };
 
-type CommandContext = { transactionId: string };
+declare const authoritativeTime: unique symbol;
+/** Only runCommand can mint a time. Its value is usable for the live attempt only. */
+export type AuthoritativeTime = { readonly [authoritativeTime]: true };
+export type CommandAttempt = Readonly<{
+  partition: number;
+  basis: Readonly<CommandBasis> | null;
+  time: AuthoritativeTime;
+}>;
+export type CommandAuthorizationMode = 'execute' | 'receipt-only';
+/** Trusted service binding, never operation JSON. prepare runs with no resource
+ * connection held; it can check a separately anchored parent at this attempt's T.
+ * authorize makes the final resource check before any receipt is read.
+ */
+export type CommandAuthorization = {
+  readonly action: string;
+  readonly resource: Readonly<{ route: number; id: string }>;
+  prepare?(attempt: CommandAttempt): Promise<unknown>;
+  authorize(tx: CommandTransaction, attempt: CommandAttempt, evidence: unknown): Promise<CommandAuthorizationMode>;
+  denied(): Error;
+};
+declare const completedAuthorization: unique symbol;
+export type CompletedCommandAuthorization = Readonly<{
+  [completedAuthorization]: true;
+  action: string;
+  resource: Readonly<{ route: number; id: string }>;
+  mode: CommandAuthorizationMode;
+}>;
+export type CurrentCommand = CommandAttempt & Readonly<{ authorization: CompletedCommandAuthorization | null }>;
+type CommandContext = { transactionId: string; time: AuthoritativeTime };
+const times = new WeakMap<AuthoritativeTime, string>();
+const attempts = new WeakMap<CommandTransaction, CommandAttempt>();
+const commands = new WeakMap<CommandTransaction, CurrentCommand>();
+
+export function authoritativeTimeValue(time: AuthoritativeTime): string {
+  const at = times.get(time);
+  if (at === undefined) throw new TypeError('Authoritative time is not from a live command attempt');
+  return at;
+}
+/** Read-only context is unavailable before authorization or after the attempt. */
+export function currentCommand(tx: CommandTransaction): CurrentCommand {
+  const context = commands.get(tx);
+  if (!context) throw new TypeError('No authorized live command transaction');
+  return context;
+}
+/** Allows existing Access checks in a mutation to reuse the same attempt time. */
+export function commandTime(tx: CommandTransaction): AuthoritativeTime | undefined {
+  return attempts.get(tx)?.time;
+}
+
+async function mintTime(client: CommandTransaction, clock?: () => Date): Promise<AuthoritativeTime> {
+  const configured = clock?.();
+  if (configured && !Number.isFinite(configured.getTime())) throw new TypeError('Invalid command clock');
+  const row = await readTime.run(client, { at: configured?.toISOString() ?? '' });
+  if (!row) throw new TypeError('No authoritative database time');
+  const time = Object.freeze({}) as AuthoritativeTime;
+  times.set(time, row.at);
+  return time;
+}
 
 export class IdempotencyConflictError extends Error {
   readonly partition: number;
@@ -68,9 +126,53 @@ function jitter(): Promise<void> {
   return pause(5 + Math.floor(Math.random() * 16));
 }
 
+async function boundedRead<T>(client: PoolClient, deadline: number, read: () => Promise<T>): Promise<T> {
+  await client.query('BEGIN ISOLATION LEVEL READ COMMITTED READ ONLY');
+  try {
+    await client.query(`SET LOCAL statement_timeout = '${Math.min(200, remaining(deadline))}ms'`);
+    const value = await read();
+    await client.query('COMMIT');
+    return value;
+  } catch (error) {
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackError) {
+      discardConnection(client, rollbackError as Error);
+    }
+    throw error;
+  }
+}
+
+async function waitForWritable(pool: Pool, partition: number, deadline: number): Promise<void> {
+  while (Date.now() + 25 < deadline) {
+    // The failed attempt has rolled back and released its client. Sleeping never
+    // retains a transaction, evidence check or pool connection.
+    await pause(25);
+    if (Date.now() >= deadline) break;
+    const state = await withConnection(pool, (client) =>
+      boundedRead(client, deadline, () => readPartition(client, partition)),
+    ).catch((error: unknown) => {
+      if (codeOf(error) === '57014') throw new CommandUnavailableError('fenced', partition);
+      throw error;
+    });
+    if (state?.writeState === 'active') return;
+    if (state?.writeState === 'moved') throw new CommandUnavailableError('moved', partition, state.movedTo);
+    if (!state) throw new CommandUnavailableError('deadline', partition);
+  }
+  throw new CommandUnavailableError('fenced', partition);
+}
+
 export async function runCommand<T>(
   pool: Pool,
-  options: { partition: number; deadline?: number; basis?: CommandBasis; receipt?: CommandReceipt },
+  options: {
+    partition: number;
+    deadline?: number;
+    basis?: CommandBasis;
+    receipt?: CommandReceipt;
+    authorization?: CommandAuthorization | undefined;
+    /** Trusted service configuration only, never a request timestamp. */
+    clock?: (() => Date) | undefined;
+  },
   body: (tx: CommandTransaction, context: CommandContext) => Promise<CommandResult<T>>,
 ): Promise<CommandOutcome<T>> {
   const { partition } = options;
@@ -78,13 +180,42 @@ export async function runCommand<T>(
     throw new TypeError('A command receipt digest must be exactly 32 bytes');
   if (!Number.isInteger(partition) || partition < 0 || partition > 4095) throw new RangeError('Invalid partition');
   const receiptDigest = options.receipt ? Buffer.from(options.receipt.digest) : null;
+  const basis = options.basis ? Object.freeze({ ...options.basis }) : null;
+  const authorization = options.authorization;
+  if (options.receipt && basis && options.receipt.actorAccountId !== basis.actorAccountId)
+    throw new TypeError('Receipt actor must match the command basis');
   const deadline = options.deadline ?? Date.now() + 2000;
   let contentionAttempts = 0;
   while (Date.now() < deadline) {
+    let time: AuthoritativeTime | undefined;
     try {
+      let evidence: unknown;
+      if (authorization?.prepare) {
+        // The clock read finishes before parent/org evidence and child checkout.
+        time = await withConnection(pool, (client) =>
+          boundedRead(client, deadline, () => mintTime(client, options.clock)),
+        );
+        evidence = await authorization.prepare(Object.freeze({ partition, basis, time }));
+      }
       const result = await withConnection(pool, async (client) => {
         await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
+        const tx: CommandTransaction = { query: client.query.bind(client) };
         try {
+          await client.query("SET LOCAL lock_timeout = '200ms'");
+          await client.query(`SET LOCAL statement_timeout = '${remaining(deadline)}ms'`);
+          time ??= await mintTime(client, options.clock);
+          const attempt = Object.freeze({ partition, basis, time });
+          attempts.set(tx, attempt);
+          const mode = authorization ? await authorization.authorize(tx, attempt, evidence) : 'execute';
+          if (mode !== 'execute' && mode !== 'receipt-only') throw new TypeError('Invalid command authorization');
+          const capability = authorization
+            ? (Object.freeze({
+                action: authorization.action,
+                resource: Object.freeze({ ...authorization.resource }),
+                mode,
+              }) as CompletedCommandAuthorization)
+            : null;
+          commands.set(tx, Object.freeze({ ...attempt, authorization: capability }));
           if (options.receipt && receiptDigest) {
             const row = await readReceipt.run(client, {
               partition_no: partition,
@@ -105,10 +236,9 @@ export async function runCommand<T>(
               };
             }
           }
-          await client.query("SET LOCAL lock_timeout = '200ms'");
-          await client.query(`SET LOCAL statement_timeout = '${remaining(deadline)}ms'`);
+          if (mode === 'receipt-only') throw authorization!.denied();
           const transactionId = Bun.randomUUIDv7();
-          const response = await body(client, { transactionId });
+          const response = await body(tx, { transactionId, time });
           if (response.events.length === 0) throw new TypeError('A command must emit at least one event');
           let receipt: Record<string, unknown> | null = null;
           let value = response.value;
@@ -126,7 +256,6 @@ export async function runCommand<T>(
               throw new TypeError('A command receipt value must be JSON serializable');
             value = receipt.response as T;
           }
-          const basis = options.basis ?? null;
           const events = response.events.map((event) => ({ ...event, id: Bun.randomUUIDv7() }));
           await client.query(`SET LOCAL statement_timeout = '${remaining(deadline)}ms'`);
           const row = await fenceStatement.run(client, {
@@ -143,9 +272,12 @@ export async function runCommand<T>(
               discardConnection(client, rollbackError as Error);
               throw rollbackError;
             }
-            const state = await readPartition(client, partition);
+            attempts.delete(tx);
+            commands.delete(tx);
+            times.delete(time);
+            const state = await boundedRead(client, deadline, () => readPartition(client, partition));
             if (state?.writeState === 'moved') throw new CommandUnavailableError('moved', partition, state.movedTo);
-            if (state?.writeState === 'fenced') {
+            if (state?.writeState === 'fenced' || state?.writeState === 'active') {
               return null;
             }
             throw new CommandUnavailableError('deadline', partition);
@@ -175,12 +307,18 @@ export async function runCommand<T>(
             throw rollbackError;
           }
           throw error;
+        } finally {
+          attempts.delete(tx);
+          commands.delete(tx);
+          if (time) times.delete(time);
         }
       });
       if (result) return result;
-      if (Date.now() + 25 >= deadline) throw new CommandUnavailableError('fenced', partition);
-      await pause(25);
+      // Do not keep a failed attempt's T/capability alive during operational waits.
+      if (time) times.delete(time);
+      await waitForWritable(pool, partition, deadline);
     } catch (error) {
+      if (time) times.delete(time);
       if (error instanceof IdempotencyConflictError) throw error;
       if (error instanceof CommandUnavailableError) throw error;
       if (codeOf(error) === '57014' || Date.now() >= deadline) throw new CommandUnavailableError('deadline', partition);
@@ -196,6 +334,8 @@ export async function runCommand<T>(
         continue;
       }
       throw error;
+    } finally {
+      if (time) times.delete(time);
     }
   }
   throw new CommandUnavailableError('deadline', partition);

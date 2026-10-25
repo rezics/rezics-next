@@ -196,7 +196,8 @@ export declare function createKernel(dependencies: KernelDependencies): import("
             readonly components: import("../tokens/session.ts").SessionComponent[];
             record(component: import("../tokens/session.ts").SessionComponent): void;
         };
-        readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<(client: import("../request/access.ts").AccessClient) => Promise<boolean>>;
+        readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
+        readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
     };
     schema: {};
     schemas: {};
@@ -669,7 +670,8 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 readonly components: import("../tokens/session.ts").SessionComponent[];
                 record(component: import("../tokens/session.ts").SessionComponent): void;
             };
-            readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<(client: import("../request/access.ts").AccessClient) => Promise<boolean>>;
+            readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
+            readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
         };
     }>>) => import("elysia/types").MaybePromise<void>;
     readonly path: string;
@@ -694,7 +696,8 @@ export declare function createKernel(dependencies: KernelDependencies): import("
         readonly components: import("../tokens/session.ts").SessionComponent[];
         record(component: import("../tokens/session.ts").SessionComponent): void;
     };
-    readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<(client: import("../request/access.ts").AccessClient) => Promise<boolean>>;
+    readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
+    readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
     subject: import("../semantic/item.ts").Item;
     related: Record<string, {

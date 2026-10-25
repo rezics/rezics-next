@@ -4,14 +4,17 @@ WITH input AS NOT MATERIALIZED (
          :anonymous::boolean AS anonymous, :roles::jsonb AS roles,
          :evidence_valid::tstzrange AS evidence_valid, :deadline::timestamptz AS deadline
 ), authority AS (
-  SELECT clock_timestamp() AS at
+  -- Commands bind their opaque attempt time. Unbound read checks retain their
+  -- existing statement-clock semantics.
+  SELECT COALESCE(NULLIF(:at::text, '')::timestamptz, clock_timestamp()) AS at,
+         clock_timestamp() AS observed_at
 ), roles AS (
   SELECT r.account_id, r.organization_id, r.role, r.valid
   FROM input i, jsonb_to_recordset(i.roles)
     AS r(account_id uuid, organization_id uuid, role text, valid tstzrange)
 )
 SELECT (
-  t.at < i.deadline AND i.evidence_valid @> t.at
+  t.at < i.deadline AND t.observed_at < i.deadline AND i.evidence_valid @> t.at
   AND (i.anonymous OR (
     EXISTS (
       SELECT 1 FROM access.resource_grant g

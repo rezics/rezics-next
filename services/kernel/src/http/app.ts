@@ -3,7 +3,14 @@ import { randomBytes } from 'node:crypto';
 import type { Pool } from 'pg';
 import { createAccess } from '../access/index.ts';
 import { withConnection } from '../database/pool.ts';
-import { accessCheck, actorOf, type Access, type AccessFactory, type Resource } from '../request/access.ts';
+import {
+  accessCheck,
+  accessCommandAuthorization,
+  actorOf,
+  type Access,
+  type AccessFactory,
+  type Resource,
+} from '../request/access.ts';
 import { decodeSession, encodeSession, mergeSession, type SessionComponent } from '../tokens/session.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { Admission } from './admission.ts';
@@ -75,30 +82,39 @@ export function createApp({
         },
       };
 
+      const permission = () => {
+        const currentAccess = accessForApp();
+        const action = actionForRequest(mountedApp, request, route);
+        const context = { pool, deadline: job.deadline };
+        const prepare = currentAccess.prepare;
+        const checkedAccess: Access = {
+          authenticate: (token, received) => currentAccess.authenticate(token, received),
+          replayAuthorization: (checkedAction) => currentAccess.replayAuthorization?.(checkedAction),
+          ...(prepare
+            ? {
+                prepare: (preparedActor, preparedAction, preparedResource, received) =>
+                  admission.run('normal', job, () =>
+                    prepare.call(currentAccess, preparedActor, preparedAction, preparedResource, received),
+                  ),
+              }
+            : {}),
+          authorize: (client, checkedActor, checkedAction, checkedResource, evidence, time) =>
+            currentAccess.authorize(client, checkedActor, checkedAction, checkedResource, evidence, time),
+        };
+        return { checkedAccess, action, context };
+      };
       return {
         admission,
         job,
         actor,
         session,
         authorize: (resource: Resource) => {
-          const currentAccess = accessForApp();
-          const action = actionForRequest(mountedApp, request, route);
-          const context = { pool, deadline: job.deadline };
-          const prepare = currentAccess.prepare;
-          const checkedAccess: Access = {
-            authenticate: (token, received) => currentAccess.authenticate(token, received),
-            ...(prepare
-              ? {
-                  prepare: (preparedActor, preparedAction, preparedResource, received) =>
-                    admission.run('normal', job, () =>
-                      prepare.call(currentAccess, preparedActor, preparedAction, preparedResource, received),
-                    ),
-                }
-              : {}),
-            authorize: (client, checkedActor, checkedAction, checkedResource, evidence) =>
-              currentAccess.authorize(client, checkedActor, checkedAction, checkedResource, evidence),
-          };
+          const { checkedAccess, action, context } = permission();
           return accessCheck(checkedAccess, actor, action, resource, context);
+        },
+        authorizeCommand: (resource: Resource, denied: () => Error) => {
+          const { checkedAccess, action, context } = permission();
+          return accessCommandAuthorization(checkedAccess, actor, action, resource, context, denied);
         },
       };
     })

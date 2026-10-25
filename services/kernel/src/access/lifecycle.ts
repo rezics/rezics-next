@@ -1,9 +1,22 @@
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
-import { runCommand, type CommandTransaction, type CommandOutcome } from '../command/command.ts';
+import {
+  runCommand,
+  authoritativeTimeValue,
+  currentCommand,
+  type CommandAuthorization,
+  type CommandTransaction,
+  type CommandOutcome,
+} from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
-import { accessCheck, type Access, type AccountActor, type AccessClient } from '../request/access.ts';
+import {
+  accessCommandAuthorization,
+  type Access,
+  type AccountActor,
+  type AccessClient,
+  type ActionCatalogue,
+} from '../request/access.ts';
 import { anchorRoute, derivedId, routeOf, partitionOf } from '../route/route.ts';
 import type { PermissionContext } from './permission.ts';
 import accountRead from './lifecycle-account.sql';
@@ -31,9 +44,9 @@ import fenceClear from './lifecycle-fence-clear.sql';
  */
 export const REGISTRATION_TTL_MS = 30 * 60 * 1000;
 export const HANDLE_REDIRECT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-export const LIFECYCLE_ACTIONS = new Map([
+export const LIFECYCLE_ACTIONS: ActionCatalogue = new Map([
   ['account:update', { anonymous: false }],
-  ['account:delete', { anonymous: false }],
+  ['account:delete', { anonymous: false, replay: 'self-account-read' }],
   ['organization:membership', { anonymous: false }],
 ]);
 const ACTOR_ACTIONS = ['account:update', 'account:delete'];
@@ -96,19 +109,21 @@ type Mutation = {
   input: unknown;
   actor?: AccountActor;
   deadline?: number;
+  authorization?: CommandAuthorization;
 };
 
 /** All idempotency digests include the anchor, actual kernel actor/client and
  * requested_by. Core's partition receipt key is explicitly prefixed by route.
  * Responses/events contain identity and coordination facts, never patch bodies.
  */
-function executor(pool: Pool) {
+function executor(pool: Pool, clock?: () => Date) {
   return async function execute<T>(
     options: Mutation,
     body: (tx: CommandTransaction, transactionId: string) => Promise<T>,
   ): Promise<CommandOutcome<T>> {
     requireAllowed(typeof options.key === 'string' && options.key.length > 0 && options.key.length <= 256);
     const actor = options.actor;
+    requireAllowed(!actor || options.authorization);
     const basis = {
       actorAccountId: actor?.accountId ?? SERVICE_ID,
       clientId: actor?.clientId ?? 'internal-access',
@@ -123,6 +138,8 @@ function executor(pool: Pool) {
         partition: partitionOf(options.route),
         ...(options.deadline === undefined ? {} : { deadline: options.deadline }),
         basis,
+        clock,
+        authorization: options.authorization,
         receipt: {
           actorAccountId: basis.actorAccountId,
           kind: `access.${options.kind}`,
@@ -286,7 +303,7 @@ export function createLifecycleInternals(
 ) {
   const { pool } = config;
   const clock = config.clock ?? (() => new Date());
-  const execute = executor(pool);
+  const execute = executor(pool, config.clock);
   const routeKey = new Uint8Array(config.routeKey);
   return {
     /** Stable route AND identity: the coordinator's durable registration key is
@@ -304,7 +321,7 @@ export function createLifecycleInternals(
       return execute(
         { route, id: handle, kind: 'handle-reserved', key: input.key, input: { handle, accountId: input.accountId } },
         async (tx, transactionId) => {
-          const at = iso(clock);
+          const at = authoritativeTimeValue(currentCommand(tx).time);
           const expiresAt = new Date(Date.parse(at) + REGISTRATION_TTL_MS).toISOString();
           const reservationId = derivedId(ID_NAMESPACE, `${transactionId}:handle`, route);
           requireAllowed(
@@ -345,7 +362,7 @@ export function createLifecycleInternals(
               claim.accountId === input.accountId &&
               claim.reservationId === input.reservationId &&
               claim.expiresAt &&
-              Date.parse(claim.expiresAt) > Date.parse(iso(clock)),
+              Date.parse(claim.expiresAt) > Date.parse(authoritativeTimeValue(currentCommand(tx).time)),
           );
           await accountCreate.run(tx, {
             route,
@@ -384,7 +401,7 @@ export function createLifecycleInternals(
             account_id: input.accountId,
             registration_id: proof.registrationId,
             authn_epoch: proof.authnEpoch,
-            at: iso(clock),
+            at: authoritativeTimeValue(currentCommand(tx).time),
             transaction_id: transactionId,
           });
           requireAllowed(affected(changed));
@@ -436,7 +453,7 @@ export function createLifecycleInternals(
                 state: 'active',
                 reservation_id: input.reservationId,
                 reserved_until: '',
-                at: iso(clock),
+                at: authoritativeTimeValue(currentCommand(tx).time),
                 transaction_id: transactionId,
               }),
             ),
@@ -452,7 +469,7 @@ export function createLifecycleInternals(
       return execute(
         { route, id: handle, kind: 'handle-redirected', key: input.key, input: { handle, accountId: input.accountId } },
         async (tx, transactionId) => {
-          const at = iso(clock);
+          const at = authoritativeTimeValue(currentCommand(tx).time);
           const reservedUntil = new Date(Date.parse(at) + HANDLE_REDIRECT_TTL_MS).toISOString();
           requireAllowed(
             affected(
@@ -477,7 +494,9 @@ export function createLifecycleInternals(
       const handle = normalized(input.handle);
       const route = handleRoute(handle);
       return execute({ route, id: handle, kind: 'handle-expired', key: input.key, input: { handle } }, async (tx) => {
-        requireAllowed(affected(await handleExpire.run(tx, { route, handle, at: iso(clock) })));
+        requireAllowed(
+          affected(await handleExpire.run(tx, { route, handle, at: authoritativeTimeValue(currentCommand(tx).time) })),
+        );
         return { handle, released: true };
       });
     },
@@ -645,20 +664,16 @@ export function createLifecycleInternals(
  */
 export function createLifecycleCommands(config: Boundary & { access: Access }) {
   const { pool, access } = config;
-  const clock = config.clock ?? (() => new Date());
-  const execute = executor(pool);
+  const execute = executor(pool, config.clock);
   async function authorize(context: LifecycleRequest, action: string, accountId: string) {
-    try {
-      return await accessCheck(
-        access,
-        context.actor,
-        action,
-        { route: accountRoute(accountId), id: accountId },
-        { ...context, pool },
-      );
-    } catch {
-      return async () => false;
-    }
+    return accessCommandAuthorization(
+      access,
+      context.actor,
+      action,
+      { route: accountRoute(accountId), id: accountId },
+      { ...context, pool },
+      () => new LifecycleDeniedError(),
+    );
   }
   return {
     async updateAccount(context: LifecycleRequest, input: LifecycleCommand & { patch: unknown }) {
@@ -666,7 +681,8 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
       context = snapshotRequest(context);
       const route = accountRoute(input.accountId);
       const patch = validatePatch(input.patch);
-      const allowed = await authorize(context, 'account:update', input.accountId);
+      const authorization = await authorize(context, 'account:update', input.accountId);
+      const allowed = authorization.check;
       return execute(
         {
           route,
@@ -676,6 +692,7 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
           input: { patch },
           actor: context.actor,
           deadline: context.deadline,
+          authorization,
         },
         async (tx, transactionId) => {
           await locked(tx, input.accountId);
@@ -715,7 +732,8 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
         input.organizationId,
         input.reservationId,
       );
-      const allowed = await authorize(context, 'organization:membership', input.organizationId);
+      const authorization = await authorize(context, 'organization:membership', input.organizationId);
+      const allowed = authorization.check;
       return execute(
         {
           route,
@@ -725,6 +743,7 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
           input,
           actor: context.actor,
           deadline: context.deadline,
+          authorization,
         },
         async (tx, transactionId) => {
           const org = await locked(tx, input.organizationId);
@@ -734,7 +753,7 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
             route,
             organization_id: input.organizationId,
             member_id: input.memberAccountId,
-            at: iso(clock),
+            at: authoritativeTimeValue(currentCommand(tx).time),
           });
           requireAllowed(
             owners && owners.owners > 0 && (input.role === 'owner' || owners.target === 0 || owners.owners > 1),
@@ -761,7 +780,8 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
       input = { ...input };
       context = snapshotRequest(context);
       const route = accountRoute(input.accountId);
-      const allowed = await authorize(context, 'account:delete', input.accountId);
+      const authorization = await authorize(context, 'account:delete', input.accountId);
+      const allowed = authorization.check;
       return execute(
         {
           route,
@@ -771,6 +791,7 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
           input: {},
           actor: context.actor,
           deadline: context.deadline,
+          authorization,
         },
         async (tx, transactionId) => {
           const account = await locked(tx, input.accountId);
@@ -783,7 +804,7 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
               route,
               organization_id: input.accountId,
               member_id: input.accountId,
-              at: iso(clock),
+              at: authoritativeTimeValue(currentCommand(tx).time),
             });
             requireAllowed(owners && owners.owners === 0);
           }
@@ -826,7 +847,7 @@ function snapshotRequest(context: LifecycleRequest): LifecycleRequest {
   requireAllowed(context.actor.kind === 'account');
   return {
     ...context,
-    actor: { ...context.actor, scopes: [...context.actor.scopes] },
+    actor: Object.isFrozen(context.actor) ? context.actor : { ...context.actor, scopes: [...context.actor.scopes] },
     ...(context.account ? { account: structuredClone(context.account) } : {}),
   };
 }

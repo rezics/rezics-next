@@ -136,12 +136,12 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey }: Su
           security: [{ bearerAuth: [] }],
         },
       },
-      async ({ body, headers, actor, authorize, admission, job, session, set }) => {
+      async ({ body, headers, actor, authorizeCommand, admission, job, session, set }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         const account: AccountActor = actor;
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const target = subjectTarget(routeKey, account.accountId, key);
-        const check = await authorize(target);
+        const authorization = await authorizeCommand(target, () => new SubjectAccessDeniedError());
         try {
           const result = await admission.run('normal', job, () =>
             createSubject(pool, {
@@ -150,7 +150,8 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey }: Su
               idempotencyKey: key,
               digest: requestDigest('subject.create', account, body),
               item: body,
-              authorize: check,
+              authorize: authorization.check,
+              authorization,
               deadline: job.deadline,
             }),
           );

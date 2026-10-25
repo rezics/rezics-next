@@ -1,4 +1,4 @@
-WITH authority AS (SELECT clock_timestamp() AS at)
+WITH authority AS (SELECT :at::timestamptz AS at, clock_timestamp() AS observed_at)
 INSERT INTO access.operator_opening_receipt
   (route, operator_account_id, receipt_id, subject_account_id, acting_human_id,
    purpose, action, client_id, scopes, requested_by, human_authn_epoch,
@@ -9,5 +9,5 @@ SELECT :route, :operator_id, :receipt_id, :subject_id, :human_id,
        :human_floor, :operator_floor, :subject_floor, :version,
        :reservation_id, t.at, t.at + interval '60 seconds', :transaction_id
 FROM authority t
-WHERE t.at < :deadline::timestamptz AND :membership_valid::tstzrange @> t.at
+WHERE t.observed_at < :deadline::timestamptz AND :membership_valid::tstzrange @> t.at
 RETURNING expires_at::text AS "expiresAt";

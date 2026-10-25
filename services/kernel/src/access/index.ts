@@ -23,6 +23,7 @@ export function createAccess(config: AccessConfig): Access {
   });
   return {
     authenticate: authentication.authenticate,
+    replayAuthorization: (action) => actions.get(action)?.replay,
     async prepare(actor, action, resource, context) {
       if (!actions.has(action)) return null;
       try {
@@ -42,7 +43,7 @@ export function createAccess(config: AccessConfig): Access {
         return null;
       }
     },
-    async authorize(client, actor, action, resource: Resource, evidence) {
+    async authorize(client, actor, action, resource: Resource, evidence, time) {
       if (!actions.has(action)) return false;
       const facts = typeof evidence === 'object' && evidence !== null ? prepared.get(evidence) : undefined;
       if (
@@ -55,7 +56,7 @@ export function createAccess(config: AccessConfig): Access {
         return false;
       try {
         return await within(facts.deadline, () =>
-          permissions.authorize(deadlineClient(client, facts.deadline), actor, action, resource, evidence),
+          permissions.authorize(deadlineClient(client, facts.deadline), actor, action, resource, evidence, time),
         );
       } catch {
         return false;

@@ -1,7 +1,14 @@
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
-import { runCommand, type CommandOutcome, type CommandTransaction } from '../command/command.ts';
+import {
+  runCommand,
+  currentCommand,
+  authoritativeTimeValue,
+  type CommandAuthorization,
+  type CommandOutcome,
+  type CommandTransaction,
+} from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import {
   accessCheck,
@@ -85,13 +92,22 @@ export type OperatorConfig = {
   /** Registered colon-form account/access permission protecting the operator resource. */
   managementAction: string;
 };
-type Mutation = { anchor: string; kind: string; key: string; input: unknown; actor?: AccountActor; deadline?: number };
+type Mutation = {
+  anchor: string;
+  kind: string;
+  key: string;
+  input: unknown;
+  actor?: AccountActor;
+  deadline?: number;
+  authorization?: CommandAuthorization;
+};
 function executor(pool: Pool) {
   return async function execute<T>(
     options: Mutation,
     body: (tx: CommandTransaction, transactionId: string) => Promise<T>,
   ): Promise<CommandOutcome<T>> {
     requireAllowed(typeof options.key === 'string' && options.key.length > 0 && options.key.length <= 256);
+    requireAllowed(!options.actor || options.authorization);
     const anchorRoute = route(options.anchor);
     const basis = {
       actorAccountId: options.actor?.accountId ?? SERVICE_ID,
@@ -106,6 +122,7 @@ function executor(pool: Pool) {
       {
         partition: partitionOf(anchorRoute),
         basis,
+        authorization: options.authorization,
         ...(options.deadline === undefined ? {} : { deadline: options.deadline }),
         receipt: {
           actorAccountId: basis.actorAccountId,
@@ -143,7 +160,7 @@ function request(context: LifecycleRequest): LifecycleRequest {
   requireAllowed(Number.isFinite(context.deadline) && Date.now() < context.deadline);
   return {
     ...context,
-    actor: { ...context.actor, scopes: [...context.actor.scopes] },
+    actor: Object.isFrozen(context.actor) ? context.actor : { ...context.actor, scopes: [...context.actor.scopes] },
     account: structuredClone(context.account),
   };
 }
@@ -512,12 +529,13 @@ export function createOperatorCommands(config: OperatorConfig) {
           input: { ...input, managementAction },
           actor: context.actor,
           deadline: context.deadline,
+          authorization: openingAuthorization(context, input, facts),
         },
         async (tx, transactionId) => {
           await finalOpening(tx, context, input, facts);
           const receiptId = derivedId(NAMESPACE, `${transactionId}:opening`, route(input.operatorAccountId));
           const inserted = await openingInsert.run(tx, {
-            ...receiptParameters(context, input, facts),
+            ...receiptParameters(tx, context, input, facts),
             receipt_id: receiptId,
             transaction_id: transactionId,
           });
@@ -549,11 +567,12 @@ export function createOperatorCommands(config: OperatorConfig) {
           input: { ...input, managementAction },
           actor: context.actor,
           deadline: context.deadline,
+          authorization: openingAuthorization(context, input, facts),
         },
         async (tx, transactionId) => {
           await finalOpening(tx, context, input, facts);
           const consumed = await openingConsume.run(tx, {
-            ...receiptParameters(context, input, facts),
+            ...receiptParameters(tx, context, input, facts),
             receipt_id: input.receiptId,
             transaction_id: transactionId,
           });
@@ -569,12 +588,29 @@ export function createOperatorCommands(config: OperatorConfig) {
       return outcome;
     },
   };
+  function openingAuthorization(
+    context: LifecycleRequest,
+    input: { operatorAccountId: string; subjectAccountId: string },
+    facts: OpeningEvidence,
+  ): CommandAuthorization {
+    return {
+      action: managementAction,
+      resource: { route: route(input.operatorAccountId), id: input.operatorAccountId },
+      denied: () => new OperatorDeniedError(),
+      async authorize(tx) {
+        await finalOpening(tx, context, input, facts);
+        return 'execute';
+      },
+    };
+  }
   function receiptParameters(
+    tx: CommandTransaction,
     context: LifecycleRequest,
     input: { operatorAccountId: string; subjectAccountId: string; purpose: OperatorPurpose },
     facts: OpeningEvidence,
   ) {
     return {
+      at: authoritativeTimeValue(currentCommand(tx).time),
       route: route(input.operatorAccountId),
       operator_id: input.operatorAccountId,
       subject_id: input.subjectAccountId,
