@@ -6,6 +6,7 @@ import organizationRoleRead from './account-organization-role.sql';
 type Queryable = Pick<Pool | PoolClient, 'query'>;
 type AccountRow = NonNullable<Awaited<ReturnType<typeof accountRead.run>>>;
 
+/** Private authoritative row, including lifecycle's fenced flag; never a public profile. */
 export type Account = Omit<AccountRow, 'minimumAuthnEpoch'> & { minimumAuthnEpoch: bigint };
 export type AccountKind = Account['kind'];
 export type AccountState = Account['state'];
@@ -24,7 +25,9 @@ export type PublicAccount =
     }
   | { accountId: string; kind: string; state: 'deleted' };
 
-/** Internal Access/kernel point read: state and the authentication floor share one anchored row. */
+/** Internal Access/kernel point read: state, authentication floor and fence share one anchored row.
+ * Trusted Auth composition must return unavailable for a fenced account before establishing a session.
+ */
 export async function readAccount(client: Queryable, route: number, accountId: string): Promise<Account | null> {
   const row = await accountRead.run(client, { route, account_id: accountId });
   if (!row) return null;

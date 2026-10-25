@@ -1,4 +1,4 @@
-SELECT p.valid::text AS valid, a.account_id::text AS "accountId", a.kind, a.state,
+SELECT p.valid::text AS valid, a.account_id::text AS "accountId", a.kind, a.state, a.authn_fenced AS fenced,
        a.operator_account_id::text AS "operatorAccountId"
 FROM access.principal_assignment p
 JOIN access.account a ON a.route = p.route AND a.account_id = p.principal_id

@@ -63,6 +63,7 @@ function eligible(account: Account, actor: AccountActor): boolean {
     account.route === routeOf(actor.accountId) &&
     account.kind === 'actor' &&
     account.state === 'active' &&
+    account.fenced === false &&
     Number.isSafeInteger(actor.authnEpoch) &&
     actor.authnEpoch > 0 &&
     BigInt(actor.authnEpoch) >= account.minimumAuthnEpoch
@@ -162,7 +163,13 @@ export function createAccess(config: PermissionConfig): Access {
               actor_id: actor.accountId,
               at,
             });
-            if (!assignment || assignment.kind !== 'actor' || assignment.state !== 'active') return evidence;
+            if (
+              !assignment ||
+              assignment.kind !== 'actor' ||
+              assignment.state !== 'active' ||
+              assignment.fenced !== false
+            )
+              return evidence;
             principalId = principal;
             valid = assignment.valid;
             members.push({ accountId: principal, automated: assignment.operatorAccountId !== null });
@@ -186,7 +193,7 @@ export function createAccess(config: PermissionConfig): Access {
               });
               if (
                 !memberships.length ||
-                memberships.some((row) => row.kind !== 'organization' || row.state !== 'active')
+                memberships.some((row) => row.kind !== 'organization' || row.state !== 'active' || row.fenced !== false)
               )
                 return evidence;
               roles.push({

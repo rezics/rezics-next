@@ -187,7 +187,7 @@ export function createAuthenticator(configuration?: AuthenticationConfig) {
       claims(payload, config);
       const accountId = payload.sub!;
       const client = deadlineClient(context.pool, context.deadline);
-      // The only actor point read: current state and epoch floor share its anchor.
+      // The only actor point read: current state, epoch floor and fence share its anchor.
       const account = await readAccount(client, routeOf(accountId), accountId);
       if (
         !account ||
@@ -195,6 +195,7 @@ export function createAuthenticator(configuration?: AuthenticationConfig) {
         account.route !== routeOf(accountId) ||
         account.kind !== 'actor' ||
         account.state !== 'active' ||
+        account.fenced !== false ||
         BigInt(payload.authn_epoch as number) < account.minimumAuthnEpoch
       )
         throw invalid();
@@ -211,7 +212,8 @@ export function createAuthenticator(configuration?: AuthenticationConfig) {
           actor_id: accountId,
           at: time.at,
         });
-        if (!assignment || assignment.kind !== 'actor' || assignment.state !== 'active') throw invalid();
+        if (!assignment || assignment.kind !== 'actor' || assignment.state !== 'active' || assignment.fenced !== false)
+          throw invalid();
         requestedBy = payload.requested_by as string;
       }
       const expires = payload.exp! * 1000;
