@@ -425,10 +425,12 @@ export class MergeTrain {
           const checked = await runIntegrationChecks(commands, trainTree, logPath);
           o.fence.assertCurrent(request);
           if (target() !== base) continue;
+          const key = `integration-check:${JSON.stringify(integrationChecks)}`;
+          // An integrated candidate is dev's next head, so its result is that head's baseline.
+          o.queue.saveBaseline(candidate, key, checked);
           if (!checked.passed) {
             result.timedOut = checked.timedOut;
             result.firstFailure = firstFailure(checked.output);
-            const key = `integration-check:${JSON.stringify(integrationChecks)}`;
             let baseline = o.queue.baseline(base, key);
             if (!baseline) {
               git(trainTree, 'reset', '--hard', base);

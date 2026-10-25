@@ -93,6 +93,35 @@ test('a branch is refused for an error that dev, already failing the check, does
   }
 });
 
+test('a branch on an integrated candidate reuses its check result as the dev baseline', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    h.advanceDev('broken');
+    integrationChecks(h, [
+      {
+        paths: ['**'],
+        command: ['sh', '-c', "test ! -e broken || { echo 'src/a.ts(3,1): error TS2322: dev error'; exit 1; }"],
+      },
+    ]);
+    const first = h.dispatch('first');
+    await h.start(first);
+    await h.train(undefined, false);
+    const second = h.dispatch('second');
+    await h.start(second);
+    await h.train(undefined, false);
+
+    expect(h.outcomes.map((outcome) => [outcome.passed, outcome.stage])).toEqual([
+      [true, 'merge'],
+      [true, 'merge'],
+    ]);
+    expect(readFileSync(h.outcomes[0]!.logPath, 'utf8')).toContain('Integration check baseline on dev');
+    expect(readFileSync(h.outcomes[1]!.logPath, 'utf8')).not.toContain('Integration check baseline on dev');
+  } finally {
+    h.dispose();
+  }
+});
+
 test('newErrorLines ignores moved positions and timings and counts repeats', () => {
   const dev = 'src/a.ts(3,1): error TS2322: same\nerror: script "typecheck" exited with code 1 after 2.31s';
   expect(
