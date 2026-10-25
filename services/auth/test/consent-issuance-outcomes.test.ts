@@ -1,37 +1,54 @@
 import { expect, test } from 'bun:test';
 import {
-  createNativeDriver, createReferenceDriver, retained, removed,
-  type ConsentIssuanceDriver, type Evidence,
+  createNativeDriver,
+  createReferenceDriver,
+  removed,
+  retained,
+  type ConsentIssuanceDriver,
+  type Evidence,
 } from './consent-issuance-outcomes-driver.ts';
 
-// The default is the actual native reproduction. Only the verifier selects a
-// synthetic control; those runs establish assertion sensitivity, not product facts.
+// Outcome specification for a personal consent reduction racing a fresh
+// establishment. The default driver is the native composition; only the spec
+// verifier selects a synthetic control, which proves assertion sensitivity only.
+const references = ['correct', 'stale', 'deny-all', 'bad-order'] as const;
 function driver(max = 4): Promise<ConsentIssuanceDriver> {
   const behavior = process.env.CONSENT_OUTCOME_REFERENCE;
   if (!behavior) return createNativeDriver(max);
-  if (!['correct', 'stale', 'deny-all', 'bad-order'].includes(behavior)) throw new Error('Unknown reference behavior');
-  return Promise.resolve(createReferenceDriver(behavior as Parameters<typeof createReferenceDriver>[0]));
+  if (!references.includes(behavior as (typeof references)[number])) throw new Error('Unknown reference behavior');
+  return Promise.resolve(createReferenceDriver(behavior as (typeof references)[number]));
 }
 
 function gapEvidence(gap: Evidence) {
   expect(gap.proof.reference).toMatch(/^[a-f0-9]{64}$/);
   expect(gap.proof.operationKey).toMatch(/^[a-f0-9]{64}$/);
   expect(gap.proof.digest).toMatch(/^[a-f0-9]{64}$/);
-  expect(gap.proof.receiptId).toBeNull();
+  expect(gap.proof.applied).toBe(false);
   expect(gap.receipt.receiptId.length).toBeGreaterThan(0);
   expect(gap.receipt.accountId).toBe(gap.account.accountId);
   expect(gap.receipt.minimumAuthnEpoch).toBe(String(gap.proof.previousEpoch + 1));
-  expect(gap.account.minimumAuthnEpoch).toBe(gap.receipt.minimumAuthnEpoch);
-  expect(gap.account.fenced).toBe(false);
+  expect(gap.account).toMatchObject({
+    minimumAuthnEpoch: gap.receipt.minimumAuthnEpoch,
+    receiptId: gap.receipt.receiptId,
+    fenced: false,
+  });
+  expect(gap.applied).toBeNull();
   expect(gap.consent.scopes).toEqual([retained, removed]);
   expect(gap.events).toEqual(['committed-auth-proof', 'committed-access-receipt', 'paused-before-consent-cas']);
 }
 
 function completedEvidence(gap: Evidence, end: Evidence, mode: 'resume' | 'restart') {
-  expect(end.proof).toEqual({ ...gap.proof, receiptId: gap.receipt.receiptId });
+  expect(end.proof).toEqual({ ...gap.proof, applied: true });
   expect(end.receipt).toEqual(gap.receipt);
   expect(end.account).toEqual(gap.account);
+  expect(end.applied).toEqual({
+    receiptId: gap.receipt.receiptId,
+    purpose: 'consent-reduction',
+    minimumAuthnEpoch: Number(gap.receipt.minimumAuthnEpoch),
+  });
   expect(end.consent).toEqual({ revision: String(BigInt(gap.consent.revision) + 1n), scopes: [retained] });
+  expect(end.events).not.toContain('auth-proof-not-visible');
+  expect(end.events).not.toContain('access-receipt-not-durable');
   const first = (event: string) => end.events.indexOf(event);
   expect(first('committed-auth-proof')).toBe(0);
   expect(first('committed-access-receipt')).toBeGreaterThan(first('committed-auth-proof'));
@@ -39,10 +56,19 @@ function completedEvidence(gap: Evidence, end: Evidence, mode: 'resume' | 'resta
   expect(first('signin-http-start')).toBeGreaterThan(first('paused-before-consent-cas'));
   expect(first('signin-http-complete')).toBeGreaterThan(first('signin-http-start'));
   expect(first('token-http-complete')).toBeGreaterThan(first('signin-http-complete'));
-  expect(first('consent-http-complete')).toBeGreaterThan(first('paused-before-consent-cas'));
+  expect(first('consent-http-complete')).toBeGreaterThan(first('token-http-complete'));
+  expect(end.events.indexOf('consent-http-complete')).toBe(end.events.length - 1);
   if (mode === 'restart') {
-    expect(first('auth-instance-restarted')).toBeGreaterThan(first('paused-before-consent-cas'));
-    expect(first('auth-instance-restarted')).toBeLessThan(first('consent-http-complete'));
+    expect(first('acknowledgement-lost')).toBeGreaterThan(first('paused-before-consent-cas'));
+    expect(first('auth-instance-restarted')).toBeGreaterThan(first('acknowledgement-lost'));
+    // The restarted instance re-presents the same committed proof and Access replays its receipt.
+    expect(end.events.lastIndexOf('committed-auth-proof')).toBeGreaterThan(first('auth-instance-restarted'));
+    expect(end.events.lastIndexOf('committed-access-receipt')).toBeGreaterThan(
+      end.events.lastIndexOf('committed-auth-proof'),
+    );
+  } else {
+    expect(end.events).not.toContain('acknowledgement-lost');
+    expect(end.events).not.toContain('auth-instance-restarted');
   }
 }
 
@@ -54,31 +80,40 @@ for (const mode of ['resume', 'restart'] as const) {
       gapEvidence(gap);
       const pending = d.beginAttempt('target', [retained, removed]);
       const scheduling = await d.atGap(pending);
-      let gapUse;
+      let during;
       if (scheduling === 'completed') {
-        const issued = await pending.result;
-        if (issued.jwt) gapUse = await d.use(issued.jwt, removed);
+        const raced = await pending.result;
+        if (raced.jwt) during = await d.use(raced.jwt, removed);
       }
       expect((await d.finish(mode)).status).toBe(200);
       const issued = await pending.result;
       const end = await d.inspect();
       expect(end.consent.scopes).toEqual([retained]);
       expect(end.account.minimumAuthnEpoch).toBe(gap.receipt.minimumAuthnEpoch);
-      const after = issued.jwt ? await d.use(issued.jwt, removed) : { authenticated: false, allowed: false, epoch: null };
-      // Deliberately report only nonsecret facts, never cookies or JWT material.
-      if (!process.env.CONSENT_OUTCOME_REFERENCE) console.info('Native consent outcome', {
-        mode, scheduling, signin: issued.signin.status, token: issued.token?.status, gapUse, after, gap, end,
-      });
-      expect(after.allowed, 'removed scope remained usable after completed consent reduction').toBe(false);
-      // A retained scope is allowed to survive; the contract does not require
-      // wholesale JWT invalidation if Access enforces the effective scope set.
+      const after = issued.jwt ? await d.use(issued.jwt, removed) : null;
+      // Report nonsecret facts only, never cookies or JWT material.
+      if (!process.env.CONSENT_OUTCOME_REFERENCE)
+        console.info('Native consent race outcome', {
+          mode,
+          scheduling,
+          signin: issued.signin.status,
+          token: issued.token?.status ?? null,
+          during: during ?? null,
+          after,
+          floor: { before: gap.proof.previousEpoch, after: end.account.minimumAuthnEpoch },
+          consent: end.consent,
+        });
+      expect(after?.allowed ?? false, 'removed scope remained usable after completed consent reduction').toBe(false);
+      // A retained scope may survive: the contract never requires wholesale invalidation.
       const fresh = await d.beginAttempt('target', [retained]).result;
       expect(fresh.jwt).not.toBeNull();
       expect((await d.use(fresh.jwt!, retained)).allowed).toBe(true);
       const forbidden = await d.beginAttempt('target', [removed]).result;
       if (forbidden.jwt) expect((await d.use(forbidden.jwt, removed)).allowed).toBe(false);
-    } finally { await d.close(); }
-  }, 60_000);
+    } finally {
+      await d.close();
+    }
+  }, 90_000);
 }
 
 for (const identity of ['other-account', 'other-client'] as const) {
@@ -94,9 +129,11 @@ for (const identity of ['other-account', 'other-client'] as const) {
       expect(issued.jwt).not.toBeNull();
       expect((await d.use(issued.jwt!, removed)).allowed).toBe(true);
       expect((await d.finish('resume')).status).toBe(200);
-      expect((await d.use(issued.jwt!, removed)).allowed).toBe(true);
-    } finally { await d.close(); }
-  }, 60_000);
+      expect((await d.use(issued.jwt!, removed)).allowed, 'unaffected identity lost an unreduced scope').toBe(true);
+    } finally {
+      await d.close();
+    }
+  }, 90_000);
 }
 
 test('HTTP and durable evidence order matches the exact native receipt', async () => {
@@ -110,17 +147,18 @@ test('HTTP and durable evidence order matches the exact native receipt', async (
     expect(issued.signin.status).toBe(200);
     expect(issued.token?.status).toBe(200);
     expect(issued.jwt).not.toBeNull();
-    expect((await d.use(issued.jwt!, removed)).allowed).toBe(true);
     expect((await d.finish('restart')).status).toBe(200);
     completedEvidence(gap, await d.inspect(), 'restart');
-  } finally { await d.close(); }
-}, 60_000);
+  } finally {
+    await d.close();
+  }
+}, 90_000);
 
 test('native max=1 Auth pool progresses through held-connection proxy', async () => {
   const d = await driver(1);
   try {
-    // startReduction includes native /consent's nested database.connect(). Its
-    // success with one slot exercises the actual AsyncLocalStorage proxy.
+    // Native /consent nests database.connect() inside its issuance hold and calls
+    // Access, whose Auth evidence verifier shares this one-connection pool.
     gapEvidence(await d.startReduction());
     expect((await d.finish('resume')).status).toBe(200);
     const issued = await d.beginAttempt('target', [retained]).result;
@@ -128,5 +166,7 @@ test('native max=1 Auth pool progresses through held-connection proxy', async ()
     expect(issued.token?.status).toBe(200);
     expect(issued.jwt).not.toBeNull();
     expect((await d.use(issued.jwt!, retained)).allowed).toBe(true);
-  } finally { await d.close(); }
-}, 60_000);
+  } finally {
+    await d.close();
+  }
+}, 90_000);

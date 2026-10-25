@@ -1,48 +1,80 @@
 import { expect, test } from 'bun:test';
 
-async function suite(reference: string | null, filter?: string) {
+// Spec verifier. Synthetic reference drivers prove that each outcome assertion
+// rejects a demonstrably wrong behaviour and admits a correct one; they are not
+// production proof. The native runs bind the same outcomes to the product.
+const suiteFile = `${import.meta.dir}/consent-issuance-outcomes.test.ts`;
+async function suite(reference: string | null, filter: string) {
   const env = { ...process.env };
   delete env.CONSENT_OUTCOME_REFERENCE;
   if (reference) env.CONSENT_OUTCOME_REFERENCE = reference;
-  const child = Bun.spawn([process.execPath, 'test', `${import.meta.dir}/consent-issuance-outcomes.test.ts`,
-    ...(filter ? ['--test-name-pattern', filter] : [])], { env, stdout: 'pipe', stderr: 'pipe' });
+  const child = Bun.spawn([process.execPath, 'test', suiteFile, '--test-name-pattern', filter], {
+    env,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
   const [stdout, stderr, code] = await Promise.all([
-    new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
   ]);
   return { code, output: stdout + stderr };
+}
+function counts(output: string, pass: number, fail: number) {
+  expect(output).toMatch(new RegExp(`\\b${pass} pass\\b`));
+  expect(output).toMatch(new RegExp(`\\b${fail} fail\\b`));
+}
+async function native(filter: string, pass: number, reason: string) {
+  const run = await suite(null, filter);
+  if (run.code) console.error(run.output);
+  expect(run.code, reason).toBe(0);
+  counts(run.output, pass, 0);
 }
 
 test('outcome specification rejects stale-scope issuance after committed floor advance', async () => {
   const wrong = await suite('stale', 'removed scope');
   expect(wrong.code).toBe(1);
   expect(wrong.output).toContain('removed scope remained usable after completed consent reduction');
-  expect(wrong.output).toMatch(/2 fail/);
-  const correct = await suite('correct');
+  counts(wrong.output, 0, 2);
+  const correct = await suite('correct', '.');
   if (correct.code) console.error(correct.output);
   expect(correct.code).toBe(0);
-  expect(correct.output).toMatch(/6 pass/);
-  expect(correct.output).toMatch(/0 fail/);
-}, 30_000);
+  counts(correct.output, 6, 0);
+  await native(
+    'removed scope',
+    2,
+    'a native establishment in the consent gap kept the removed scope usable after the reduction completed',
+  );
+}, 240_000);
 
 test('positive concurrency control permits unaffected identities', async () => {
   const wrong = await suite('deny-all', 'unaffected');
   expect(wrong.code).toBe(1);
-  expect(wrong.output).toMatch(/2 fail/);
+  counts(wrong.output, 0, 2);
   const correct = await suite('correct', 'unaffected');
   expect(correct.code).toBe(0);
-  expect(correct.output).toMatch(/2 pass/);
-}, 30_000);
+  counts(correct.output, 2, 0);
+  await native('unaffected', 2, 'an unaffected native identity did not progress during the consent gap');
+}, 240_000);
 
 test('evidence uses native HTTP and durable proof ordering', async () => {
   const wrong = await suite('bad-order', 'HTTP and durable');
   expect(wrong.code).toBe(1);
-  expect(wrong.output).toMatch(/1 fail/);
+  counts(wrong.output, 0, 1);
   const correct = await suite('correct', 'HTTP and durable');
   expect(correct.code).toBe(0);
-  // Unlike the synthetic controls, this executes the real PostgreSQL receipts,
-  // service HTTP requests, ordinary signer, and installed Access JWT verifier.
-  const native = await suite(null, 'HTTP and durable|native max=1');
-  if (native.code) console.error(native.output);
-  expect(native.code).toBe(0);
-  expect(native.output).toMatch(/2 pass/);
-}, 120_000);
+  counts(correct.output, 1, 0);
+  const stalled = await suite('deny-all', 'native max=1');
+  expect(stalled.code).toBe(1);
+  counts(stalled.output, 0, 1);
+  const progressing = await suite('correct', 'native max=1');
+  expect(progressing.code).toBe(0);
+  counts(progressing.output, 1, 0);
+  // Real PostgreSQL receipts, service HTTP, the ordinary signer and installed Access.
+  await native('HTTP and durable', 1, 'native HTTP and durable evidence did not follow the exact receipt order');
+  await native(
+    'native max=1',
+    1,
+    'a one-connection Auth pool, shared with the evidence verifier Access calls, did not complete a consent reduction',
+  );
+}, 240_000);
