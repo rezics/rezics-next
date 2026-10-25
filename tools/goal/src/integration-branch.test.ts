@@ -95,7 +95,7 @@ test('dev is created from main when missing', async () => {
   } finally { h.dispose(); }
 });
 
-test.failing('promotion gates the dev head and fast-forwards main and marks every task in the batch merged', async () => {
+test('promotion gates the dev head and fast-forwards main and marks every task in the batch merged', async () => {
   const h = integrationHarness();
   try {
     const first = await h.seed('alpha', [], requires('alpha'));
@@ -118,7 +118,7 @@ test.failing('promotion gates the dev head and fast-forwards main and marks ever
   } finally { h.dispose(); }
 });
 
-test.failing('a failing promotion reverts the culprit on dev and sends it a fix round and promotes the remaining tasks', async () => {
+test('a failing promotion reverts the culprit on dev and sends it a fix round and promotes the remaining tasks', async () => {
   const h = integrationHarness();
   try {
     const first = await h.seed('alpha'); const prefix = h.head();
@@ -143,7 +143,7 @@ test.failing('a failing promotion reverts the culprit on dev and sends it a fix 
   } finally { h.dispose(); }
 });
 
-test.failing('a reverted culprit takes its after dependents in the batch with it and they are held behind it', async () => {
+test('a reverted culprit takes its after dependents in the batch with it and they are held behind it', async () => {
   const h = integrationHarness();
   try {
     const culprit = await h.seed('bad', [], failsWith('bad'));
@@ -164,7 +164,7 @@ test.failing('a reverted culprit takes its after dependents in the batch with it
   } finally { h.dispose(); }
 });
 
-test.failing('a promotion failure that main shares is an environment failure and reverts nothing', async () => {
+test('a promotion failure that main shares is an environment failure and reverts nothing', async () => {
   const h = integrationHarness();
   try {
     const first = await h.seed('alpha'); const second = await h.seed('beta');
@@ -181,7 +181,7 @@ test.failing('a promotion failure that main shares is an environment failure and
   } finally { h.dispose(); }
 });
 
-test.failing('a goal with integrated tasks is still in flight and completion is judged on main', async () => {
+test('a goal with integrated tasks is still in flight and completion is judged on main', async () => {
   const h = integrationHarness();
   try {
     const integrated = await h.seed('integrated');

@@ -41,7 +41,30 @@ export type PoolReading = {
 export type Task = {
   id: string; sequence: number; brief: Brief; briefPath: string; state: TaskState;
   worktree: string; branch: string; base: string; taskClass: TaskClass; currentAttempt: number;
-  createdAt: string; integratedCommit?: string; mergedCommit?: string;
+  createdAt: string; integratedBase?: string; integratedCommits?: string[]; integratedCommit?: string; mergedCommit?: string;
+};
+export type IntegrationPlan = { taskId: string; attempt: number; base: string; commit: string; commits: string[] };
+export type RetryIntent = AttemptRef & {
+  options: { evidence?: string; escalation?: string; fixRound?: number; consulted?: boolean; consultation?: string;
+    excludePools?: string[]; conflictFiles?: string[]; profile?: Profile };
+  status: 'pending' | 'started'; nextAttempt?: number;
+};
+export type PromotionGateResult = {
+  commit: string; command: string[]; passed: boolean; timedOut: boolean; firstFailure?: FirstFailure;
+};
+export type PromotionRun = {
+  id: string;
+  phase: 'gate-head' | 'classify-main' | 'classify-prefixes' | 'revert-planned' | 'revert-published'
+    | 'route-culprit' | 'gate-remainder' | 'publish-main' | 'report-environment';
+  mainBase: string; devHead: string; taskIds: string[];
+  rootGate: string[]; promotionParallelism: number;
+  boundaries: { taskId: string; commit: string }[];
+  headResults: PromotionGateResult[]; prefixResults: PromotionGateResult[];
+  failedCommand?: string[]; firstFailure?: FirstFailure;
+  mainResult?: PromotionGateResult; culpritAttempt?: number;
+  culpritTaskId?: string; closureTaskIds?: string[]; remainingTaskIds?: string[];
+  revertBase?: string; revertCommit?: string;
+  promoteHead?: string; promoteTaskIds?: string[];
 };
 export type AttemptFailure = 'spec-conflict' | 'scope-growth' | 'pool-exhausted' | 'tool';
 export type Attempt = AttemptRef & {

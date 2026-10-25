@@ -10,7 +10,7 @@ const git = (cwd: string, ...args: string[]) => spawnSync('git', args, { cwd, en
 const merged = (taskId: string, commit: string): GateOutcome => ({ taskId, attempt: 1, passed: true, stage: 'merge',
   mergedCommit: commit, logPath: 'fixture', hostMs: 1, changedFiles: ['dependency.txt'], diffLines: 1 });
 
-test('a retry whose reshaped brief waits for an unmerged task holds, keeps its commits, and resumes on main after the merge', async () => {
+test('a retry whose reshaped brief waits for an unintegrated task holds, keeps its commits, and resumes on dev after integration', async () => {
   const h = harness();
   try {
     const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
@@ -29,15 +29,17 @@ test('a retry whose reshaped brief waits for an unmerged task holds, keeps its c
     await job.start(dependency.id); await job.drain();
     writeFileSync(join(h.root, 'dependency.txt'), 'merged\n');
     git(h.root, 'add', 'dependency.txt'); git(h.root, 'commit', '-qm', 'Merge the dependency');
-    const main = git(h.root, 'rev-parse', 'main');
-    job.onGateOutcome(merged(dependency.id, main)); await job.drain();
+    const main = git(h.root, 'rev-parse', 'main'), oldDev = git(h.root, 'rev-parse', 'dev');
+    git(h.root, 'update-ref', 'refs/heads/dev', main, oldDev);
+    const dev = git(h.root, 'rev-parse', 'dev');
+    job.onGateOutcome(merged(dependency.id, dev)); await job.drain();
 
     const resumed = h.store.task(task.id);
     expect(resumed.currentAttempt).toBe(2);
-    expect(resumed.base).toBe(main);
+    expect(resumed.base).toBe(dev);
     expect(existsSync(join(resumed.worktree, 'dependency.txt'))).toBe(true);
-    expect(spawnSync('git', ['merge-base', '--is-ancestor', main, 'HEAD'], { cwd: resumed.worktree }).status).toBe(0);
-    expect(git(resumed.worktree, 'log', '--format=%s', `${main}..HEAD`)).toContain('Complete fixture');
+    expect(spawnSync('git', ['merge-base', '--is-ancestor', dev, 'HEAD'], { cwd: resumed.worktree }).status).toBe(0);
+    expect(git(resumed.worktree, 'log', '--format=%s', `${dev}..HEAD`)).toContain('Complete fixture');
   } finally { h.dispose(); }
 });
 

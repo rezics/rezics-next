@@ -29,6 +29,7 @@ function rebaseConflictFiles(outcome: GateOutcome): string[] {
 
 export class WorkerJob implements GateOutcomeSink {
   private readonly pending = new Set<Promise<void>>();
+  private readonly retryIntentsInProgress = new Set<string>();
   constructor(readonly tasks: WorkerTasks, readonly landing: LandingQueue, readonly inbox: ManagerInbox,
     readonly consultation: typeof consult = consult, readonly afterSettle: () => Promise<void> = async () => {}) {}
   private track(work: Promise<void>): void {
@@ -43,6 +44,66 @@ export class WorkerJob implements GateOutcomeSink {
       await Promise.all(batch);
       for (const item of batch) this.pending.delete(item);
     }
+  }
+  private async runRetryIntent(ref: AttemptRef): Promise<void> {
+    const key = `${ref.taskId}:${ref.attempt}`;
+    if (this.retryIntentsInProgress.has(key)) return;
+    this.retryIntentsInProgress.add(key);
+    const store = this.tasks.store;
+    try {
+      let intent = store.retryIntent(ref);
+      if (!intent || intent.status !== 'pending') return;
+      let task = store.task(ref.taskId);
+      if (task.currentAttempt > ref.attempt) {
+        const current = store.attempt({ taskId: ref.taskId, attempt: task.currentAttempt });
+        if (current.state === 'pending' && task.state === 'ready') {
+          const worker = await this.tasks.retry(task.id, intent.options);
+          task = store.task(task.id);
+          store.updateRetryIntent(ref, value => { value.status = 'started'; value.nextAttempt = task.currentAttempt; });
+          if (worker) await this.follow(worker);
+          return;
+        }
+        store.updateRetryIntent(ref, value => { value.status = 'started'; value.nextAttempt = task.currentAttempt; });
+        return;
+      }
+      if (task.currentAttempt !== ref.attempt) return;
+      if (!['landing', 'ready'].includes(task.state)) {
+        store.updateRetryIntent(ref, value => { value.status = 'started'; value.nextAttempt = task.currentAttempt; });
+        return;
+      }
+      if (intent.options.escalation === 'repeated-assertion' && !intent.options.consulted) {
+        try {
+          const evidencePath = intent.options.evidence ?? evidenceBundle(task, store.attempt(ref));
+          const answer = await this.consultation(this.tasks, ref, evidencePath);
+          intent = store.updateRetryIntent(ref, value => { value.options.consultation = answer; value.options.consulted = true; });
+          const record = store.record(ref);
+          if (record) { record.consulted = true; store.putRecord(record); }
+        } catch (error) {
+          store.event(ref, 'consultation-unavailable', { error: String(error) });
+          intent = store.updateRetryIntent(ref, value => {
+            value.options.escalation = 'environment'; value.options.fixRound = store.attempt(ref).fixRound;
+          });
+        }
+      }
+      const worker = await this.tasks.retry(task.id, intent.options);
+      task = store.task(task.id);
+      store.updateRetryIntent(ref, value => { value.status = 'started'; value.nextAttempt = task.currentAttempt; });
+      if (worker) await this.follow(worker);
+    } catch (error) {
+      if (error instanceof TaskHeldForDependenciesError) {
+        store.updateRetryIntent(ref, value => { value.status = 'started'; value.nextAttempt = store.task(ref.taskId).currentAttempt; });
+        return;
+      }
+      throw error;
+    } finally { this.retryIntentsInProgress.delete(key); }
+  }
+  private async resumeRetryIntents(): Promise<void> {
+    for (const intent of this.tasks.store.retryIntents().filter(value => value.status === 'pending'))
+      await this.runRetryIntent({ taskId: intent.taskId, attempt: intent.attempt });
+  }
+  resumePendingRetries(): void {
+    for (const intent of this.tasks.store.retryIntents().filter(value => value.status === 'pending'))
+      this.track(this.runRetryIntent({ taskId: intent.taskId, attempt: intent.attempt }));
   }
   async start(taskId: string, options: RetryOptions = {}): Promise<void> {
     try { await this.follow(await this.tasks.retry(taskId, options)); }
@@ -195,6 +256,42 @@ export class WorkerJob implements GateOutcomeSink {
         } catch (error) { await this.endAsEnvironment(ref, error, true); }
       } finally { lease.release(); }
     }
+    await this.resumeRetryIntents();
+  }
+  reportPromotionEnvironment(taskId: string, failure: NonNullable<GateOutcome['firstFailure']>): void {
+    const store = this.tasks.store, task = store.task(taskId), ref = { taskId, attempt: task.currentAttempt };
+    store.write(ref, () => {
+      const duplicate = store.events(taskId).some(event => event.kind === 'promotion-environment'
+        && JSON.parse(event.body).fingerprint === failure.fingerprint);
+      if (duplicate) return;
+      const event = { managerId: task.brief.manager, taskId, kind: 'environment' as const,
+        summary: `environment: promotion gate failure also occurs on main: ${failure.assertion}`.replace(/[\r\n]+/g, ' '),
+        evidencePath: store.attempt(ref).evidencePath };
+      store.event(ref, 'promotion-environment', failure);
+      store.event(ref, 'manager-event', event);
+      this.inbox.deliver(event);
+    });
+  }
+  onPromotionComplete(taskIds: readonly string[], promotionId: string): void {
+    const store = this.tasks.store;
+    const goals = new Set(taskIds.map(id => store.task(id).brief.goal));
+    for (const goal of goals) {
+      const goalTasks = store.tasks().filter(task => task.brief.goal === goal);
+      if (!goalTasks.some(task => (task.brief.after ?? []).length)) continue;
+      if (goalTasks.some(task => ['ready', 'running', 'landing', 'held', 'integrated'].includes(task.state))) continue;
+      const terminal = goalTasks.at(-1);
+      if (!terminal?.currentAttempt) continue;
+      const ref = { taskId: terminal.id, attempt: terminal.currentAttempt };
+      store.write(ref, () => {
+        const duplicate = store.events(terminal.id).some(event => event.kind === 'promotion-idle'
+          && JSON.parse(event.body).promotionId === promotionId);
+        if (duplicate) return;
+        const event = { managerId: terminal.brief.manager, taskId: terminal.id, kind: 'goal-idle' as const,
+          summary: `Goal ${goal} has no tasks in flight.` };
+        store.event(ref, 'promotion-idle', { promotionId, ...event });
+        this.inbox.deliver(event);
+      });
+    }
   }
   /** Launch/exit facts do not fabricate a gate outcome. */
   onAttemptExit(ref: AttemptRef): void {
@@ -247,13 +344,26 @@ export class WorkerJob implements GateOutcomeSink {
     let released: string[] = [];
     store.write(outcome, () => {
       const duplicate = store.events(task.id).some(e => e.attempt === outcome.attempt && e.kind === 'gate-outcome' && JSON.parse(e.body).stage === outcome.stage);
-      if (duplicate) return;
+      if (duplicate) {
+        if (!outcome.passed && outcome.stage === 'gate' && store.retryIntent(outcome)?.status === 'pending')
+          action = async () => this.runRetryIntent(outcome);
+        return;
+      }
       store.event(outcome, 'gate-outcome', outcome);
       record.diffLines = outcome.diffLines; record.changedFiles = [...outcome.changedFiles]; record.hostMs = (record.hostMs ?? 0) + outcome.hostMs;
       record.firstFailure = outcome.firstFailure?.fingerprint ?? null; record.outcome = outcome.passed ? 'passed' : 'gate-failed';
       if (outcome.passed) {
         if (outcome.mergedCommit) {
-          store.updateTask(outcome, t => { t.state = 'integrated'; t.integratedCommit = outcome.mergedCommit!; });
+          const plan = store.integrationPlan(outcome);
+          let alreadyOnMain = false;
+          try { git(this.tasks.settings.mainCheckout, ['merge-base', '--is-ancestor', outcome.mergedCommit,
+            `refs/heads/${this.tasks.settings.mainBranch}`]); alreadyOnMain = true; } catch {}
+          store.updateTask(outcome, t => {
+            t.state = alreadyOnMain ? 'merged' : 'integrated'; t.integratedCommit = outcome.mergedCommit!;
+            if (alreadyOnMain) t.mergedCommit = outcome.mergedCommit!;
+            if (plan) { t.integratedBase = plan.base; t.integratedCommits = plan.commits; }
+          });
+          if (plan) store.clearIntegrationPlan(outcome);
           const tasks = store.tasks(), byId = new Map(tasks.map(candidate => [candidate.id, candidate]));
           released = tasks.filter(candidate => candidate.state === 'held'
             && (candidate.brief.after ?? []).every(id => ['integrated', 'merged'].includes(byId.get(id)?.state ?? ''))).map(candidate => candidate.id);
@@ -333,6 +443,13 @@ export class WorkerJob implements GateOutcomeSink {
         if (failureClass === 'pool-exhausted') {
           const key = this.tasks.settings.pools.find(p => p.name === attempt.pool)?.allowanceKey;
           options.excludePools = this.tasks.settings.pools.filter(p => p.allowanceKey === key).map(p => p.name);
+        }
+        if (outcome.stage === 'gate') {
+          store.updateTask(outcome, current => { current.state = 'ready'; });
+          store.saveRetryIntent(outcome, options);
+          action = async () => this.runRetryIntent(outcome);
+          store.putRecord(record);
+          return;
         }
         action = async () => {
           store.assertCurrent(outcome);

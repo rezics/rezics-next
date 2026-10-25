@@ -135,7 +135,7 @@ by durable task sequence, starting with `high`; retries retain the original prof
 Bulk text prompts prohibit translation services, scripts and character mappings. Workers return a structured result
 using `worker-result.schema.json`, including any concrete blocker and the approaches tried.
 
-## Integration, promotion and attempt fencing
+## Integration, promotion, culprit isolation and attempt fencing
 
 The tracked repository gate is `bun tools/goal/scripts/gate.ts`. It runs `bun install --frozen-lockfile` followed by
 `bun run check` from an isolated checkout. Task acceptance commands are saved with the task for promotion. Integration
@@ -146,6 +146,12 @@ the main checkout or the worker's checkout.
 New tasks and retries branch from the integration branch. If it does not exist, the controller creates it from `main`.
 Held tasks become ready when each `after:` dependency is integrated or merged. Integrated tasks remain in flight until
 promotion completes; Goal completion still requires every scoped task to be merged and the gate to pass on `main`.
+
+The train promotes the `dev` head to `main` under a separate lease after the root gate and every task acceptance command
+pass. If a gate fails, the promoter compares its first failure with `main`, then checks task prefixes concurrently up to
+`promotionParallelism`. A failure shared with `main` is reported as an environment failure. Otherwise the promoter
+reverts the culprit and its `after:` dependents in the batch in one forward commit on `dev`, sends the culprit through
+the normal fix-round handling, holds those dependents, and promotes the remaining tasks.
 
 When a rebase conflicts only in derived files, the train restores their upstream versions, regenerates them with the commands in `defaults.json`, stages them and continues; any other conflict fails at the rebase stage.
 

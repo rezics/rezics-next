@@ -4,13 +4,17 @@ import { makeRecord, readMeasurement } from './records.ts';
 import { migrate } from './db.ts';
 import { StaleAttemptError } from './contracts.ts';
 import type { AttemptFence, AttemptRef, LandingRequest } from './contracts.ts';
-import type { Attempt, AttemptRecord, Brief, PoolReading, Task } from './types.ts';
+import type { Attempt, AttemptRecord, Brief, IntegrationPlan, PoolReading, PromotionRun, RetryIntent, Task } from './types.ts';
 
 export const workerMigrations = [{ module: 'worker', version: 1, sql: `
 CREATE TABLE worker_tasks (id TEXT PRIMARY KEY, sequence INTEGER NOT NULL UNIQUE, current_attempt INTEGER NOT NULL, body TEXT NOT NULL);
 CREATE TABLE worker_attempts (task_id TEXT NOT NULL REFERENCES worker_tasks(id), attempt INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(task_id, attempt));
 CREATE TABLE worker_events (sequence INTEGER PRIMARY KEY AUTOINCREMENT, task_id TEXT NOT NULL REFERENCES worker_tasks(id), attempt INTEGER NOT NULL, kind TEXT NOT NULL, at TEXT NOT NULL, body TEXT NOT NULL);
 CREATE TABLE worker_records (task_id TEXT NOT NULL REFERENCES worker_tasks(id), attempt INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(task_id, attempt));
+` }, { module: 'worker', version: 2, sql: `
+CREATE TABLE worker_integration_plans (task_id TEXT NOT NULL, attempt INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(task_id, attempt));
+CREATE TABLE worker_promotions (id INTEGER PRIMARY KEY CHECK (id=1), body TEXT NOT NULL);
+CREATE TABLE worker_retry_intents (task_id TEXT NOT NULL, attempt INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(task_id, attempt));
 ` }] as const;
 type Body = { body: string };
 const decode = <T>(row: unknown): T | undefined => row ? JSON.parse((row as Body).body) as T : undefined;
@@ -45,9 +49,90 @@ export class WorkerStore implements AttemptFence {
       if (task.state === 'integrated' || task.state === 'merged') throw new Error('attempt already integrated');
       const commit = merge();
       if (!commit) return '';
-      task.state = 'integrated'; task.integratedCommit = commit; this.saveTask(task);
+      const plan = this.integrationPlan(ref);
+      task.state = 'integrated'; task.integratedCommit = commit;
+      if (plan) { task.integratedBase = plan.base; task.integratedCommits = plan.commits; }
+      this.saveTask(task);
+      if (plan) this.clearIntegrationPlan(ref);
       return commit;
     });
+  }
+  planIntegration(ref: AttemptRef, base: string, commit: string, commits: readonly string[]): void {
+    this.write(ref, () => {
+      const plan: IntegrationPlan = { ...ref, base, commit, commits: [...commits] };
+      this.db.query('INSERT OR REPLACE INTO worker_integration_plans VALUES (?,?,?)')
+        .run(ref.taskId, ref.attempt, JSON.stringify(plan));
+    });
+  }
+  integrationPlan(ref: AttemptRef): IntegrationPlan | undefined {
+    return decode<IntegrationPlan>(this.db.query('SELECT body FROM worker_integration_plans WHERE task_id=? AND attempt=?')
+      .get(ref.taskId, ref.attempt));
+  }
+  clearIntegrationPlan(ref: AttemptRef): void {
+    this.db.query('DELETE FROM worker_integration_plans WHERE task_id=? AND attempt=?').run(ref.taskId, ref.attempt);
+  }
+  promotion(): PromotionRun | undefined {
+    return decode<PromotionRun>(this.db.query('SELECT body FROM worker_promotions WHERE id=1').get());
+  }
+  savePromotion(run: PromotionRun): void {
+    this.db.transaction(() => {
+      this.db.query('INSERT OR REPLACE INTO worker_promotions VALUES (1,?)').run(JSON.stringify(run));
+    }).immediate();
+  }
+  clearPromotion(): void { this.db.query('DELETE FROM worker_promotions WHERE id=1').run(); }
+  applyPromotionFailure(culprit: string, dependents: readonly string[]): void {
+    this.db.transaction(() => {
+      const task = this.task(culprit);
+      if (task.state === 'integrated') { task.state = 'landing'; this.saveTask(task); }
+      for (const id of dependents) {
+        const dependent = this.task(id);
+        if (dependent.state === 'integrated') { dependent.state = 'held'; this.saveTask(dependent); }
+      }
+    }).immediate();
+  }
+  markPromoted(taskIds: readonly string[], commit: string): void {
+    this.db.transaction(() => {
+      for (const id of taskIds) {
+        const task = this.task(id);
+        if (task.state === 'integrated') { task.state = 'merged'; task.mergedCommit = commit; this.saveTask(task); }
+      }
+    }).immediate();
+  }
+  publishPromotion(taskIds: readonly string[], commit: string, advance: () => void): void {
+    this.db.transaction(() => {
+      const tasks = taskIds.map(id => this.task(id));
+      if (tasks.some(task => !['integrated', 'merged'].includes(task.state)))
+        throw new Error('promotion batch changed before main advanced');
+      advance();
+      for (const task of tasks) if (task.state === 'integrated') {
+        task.state = 'merged'; task.mergedCommit = commit; this.saveTask(task);
+      }
+    }).immediate();
+  }
+  saveRetryIntent(ref: AttemptRef, options: RetryIntent['options']): void {
+    this.db.transaction(() => {
+      const existing = this.retryIntent(ref);
+      if (!existing) {
+        const intent: RetryIntent = { ...ref, options, status: 'pending' };
+        this.db.query('INSERT INTO worker_retry_intents VALUES (?,?,?)').run(ref.taskId, ref.attempt, JSON.stringify(intent));
+      }
+    }).immediate();
+  }
+  retryIntents(): RetryIntent[] {
+    return this.db.query('SELECT body FROM worker_retry_intents ORDER BY task_id, attempt').all().map(row => decode<RetryIntent>(row)!);
+  }
+  retryIntent(ref: AttemptRef): RetryIntent | undefined {
+    return decode<RetryIntent>(this.db.query('SELECT body FROM worker_retry_intents WHERE task_id=? AND attempt=?').get(ref.taskId, ref.attempt));
+  }
+  updateRetryIntent(ref: AttemptRef, update: (intent: RetryIntent) => void): RetryIntent {
+    return this.db.transaction(() => {
+      const intent = this.retryIntent(ref);
+      if (!intent) throw new Error('unknown retry intent');
+      update(intent);
+      this.db.query('UPDATE worker_retry_intents SET body=? WHERE task_id=? AND attempt=?')
+        .run(JSON.stringify(intent), ref.taskId, ref.attempt);
+      return intent;
+    }).immediate();
   }
   /** Keep the check and every associated write under BEGIN IMMEDIATE. */
   write<T>(ref: AttemptRef, action: () => T): T {

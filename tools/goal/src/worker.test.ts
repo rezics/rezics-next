@@ -19,7 +19,7 @@ function waitForFile(path: string): Promise<void> {
     if (existsSync(path)) { clearTimeout(timer); watcher.close(); resolve(); }
   });
 }
-test('brief -> worktree -> fake official CLI -> record -> fenced enqueue, then merged gate outcome', async () => {
+test('brief -> worktree -> fake official CLI -> record -> fenced enqueue, then integration outcome', async () => {
   const h = harness(), landings: LandingRequest[] = [], inbox: ManagerEvent[] = [];
   try {
     const task = h.tasks.dispatch(h.briefFile);
@@ -36,10 +36,10 @@ test('brief -> worktree -> fake official CLI -> record -> fenced enqueue, then m
     const evidence = h.store.attempt(ref).evidencePath;
     expect(readFileSync(join(evidence, 'diff.patch'), 'utf8')).toContain('+accepted');
     job.onGateOutcome({ ...ref, passed: true, stage: 'merge', logPath: 'fixture', changedFiles: ['result.txt'], diffLines: 1, hostMs: 31, mergedCommit: git(task.worktree, ['rev-parse', 'HEAD']) });
-    expect(h.store.task(task.id).state).toBe('merged'); expect(h.store.record(ref)?.hostMs).toBe(31);
+    expect(h.store.task(task.id).state).toBe('integrated'); expect(h.store.record(ref)?.hostMs).toBe(31);
     expect(h.store.record(ref)?.outcome).toBe('passed'); expect(inbox).toEqual([]);
     await job.recover(task.id);
-    expect(h.store.task(task.id).state).toBe('merged'); expect(h.store.record(ref)?.outcome).toBe('passed'); expect(landings).toHaveLength(1);
+    expect(h.store.task(task.id).state).toBe('integrated'); expect(h.store.record(ref)?.outcome).toBe('passed'); expect(landings).toHaveLength(1);
   } finally { h.dispose(); }
 });
 test('retry atomically fences a live process and its CLI writes; replacement launches only after the entire old group exits', async () => {

@@ -10,7 +10,7 @@ const git = (cwd: string, ...args: string[]) => spawnSync('git', args, { cwd, en
 const merged = (taskId: string, commit: string): GateOutcome => ({ taskId, attempt: 1, passed: true, stage: 'merge',
   mergedCommit: commit, logPath: 'fixture', hostMs: 1, changedFiles: ['result.txt'], diffLines: 1 });
 
-test('a held task starts from the main that contains the work it waited for', async () => {
+test('a held task starts from dev after its dependency integrates there', async () => {
   const h = harness();
   try {
     const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
@@ -19,14 +19,16 @@ test('a held task starts from the main that contains the work it waited for', as
     writeFileSync(secondBrief, markdown.replace('waiting: []', `waiting: []\nafter: [${first.id}]`));
     const second = h.tasks.dispatch(secondBrief);
     await job.start(first.id);
-    // The train merged the first task, so main moved on after the second task was dispatched.
+    // Simulate the dependency being integrated into dev after the second task was dispatched.
     writeFileSync(join(h.root, 'dependency.txt'), 'merged\n');
     git(h.root, 'add', 'dependency.txt'); git(h.root, 'commit', '-qm', 'Merge the dependency');
-    const main = git(h.root, 'rev-parse', 'main');
-    job.onGateOutcome(merged(first.id, main)); await job.drain();
+    const main = git(h.root, 'rev-parse', 'main'), oldDev = git(h.root, 'rev-parse', 'dev');
+    git(h.root, 'update-ref', 'refs/heads/dev', main, oldDev);
+    const dev = git(h.root, 'rev-parse', 'dev');
+    job.onGateOutcome(merged(first.id, dev)); await job.drain();
     const released = h.store.task(second.id);
     expect(released.currentAttempt).toBe(1);
-    expect(released.base).toBe(main);
+    expect(released.base).toBe(dev);
     expect(existsSync(join(released.worktree, 'dependency.txt'))).toBe(true);
   } finally { h.dispose(); }
 });

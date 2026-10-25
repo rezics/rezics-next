@@ -12,6 +12,7 @@ import { WorkerJob } from './job.ts';
 import { SqliteLandingQueue } from './land.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { MergeTrain, type TrainOptions } from './merge-train.ts';
+import { promote } from './promotion.ts';
 import { gateRunner, type GateRunner } from './merge.ts';
 import { codeVersion } from './runtime-version.ts';
 import { completionChecker } from './completion.ts';
@@ -129,7 +130,7 @@ export type Runtime = IntegrationRuntime & {
 export type RuntimeOptions = {
   settings?: Settings; db?: Database; tasks?: WorkerTasks; runGate?: GateRunner;
   managerServices?: Partial<ManagerServices>;
-  train?: Pick<TrainOptions, 'merge' | 'beforeRelease'>;
+  train?: Pick<TrainOptions, 'merge' | 'beforeRelease' | 'beforeIntegrationAdvance' | 'beforePromotionAdvance' | 'promote'>;
 };
 
 /** The only production composition: every module shares this database connection and worker fence. */
@@ -149,11 +150,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   const queue = new SqliteLandingQueue(db, store);
   const inbox = new SqliteManagerInbox(db, settings.integration.inboxDirectory);
   const execute = gateRunner(settings.integration.gateTimeoutMs);
-  const runGate: GateRunner = options.runGate ?? (async (argv, cwd, log) => {
-    const baseline = await execute(settings.gate, cwd, log);
-    if (!baseline.passed || JSON.stringify(argv) === JSON.stringify(settings.gate)) return baseline;
-    return execute(argv, cwd, log);
-  });
+  const runGate: GateRunner = options.runGate ?? execute;
   let train!: MergeTrain;
   const pump = () => train.pump();
   const job = new WorkerJob(tasks, queue, inbox, undefined, pump);
@@ -170,6 +167,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   train = new MergeTrain({ mainCheckout: settings.mainCheckout, stateDirectory: settings.stateDirectory,
     worktreeRoot: settings.worktreeRoot, mainBranch: settings.mainBranch, integrationBranch: settings.integrationBranch,
     queue, fence: store, sink: job,
+    promote: () => promote({ settings, job, runGate, ...(options.train?.beforePromotionAdvance ? { beforeAdvance: options.train.beforePromotionAdvance } : {}) }),
     runGate, gateIdentity: JSON.stringify(settings.gate), codeIsCurrent, handOff, ...options.train });
   const landing: IntegrationRuntime['landing'] = taskId => {
     const task = store.task(taskId), ref = { taskId, attempt: task.currentAttempt };
@@ -206,6 +204,8 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   };
   return { db, ...settings, settings, store, tasks, job, queue, inbox, train, fence: store, sink: job,
     managerSocket: settings.integration.managerSocket, supermanager: settings.integration.supermanager, managerServices, landing, manager, pump,
-    hostCommand: command, codeIsCurrent, recoverOrphans: (options?: { adoptRunning?: boolean }) => job.recoverOrphans(options),
+    hostCommand: command, codeIsCurrent, recoverOrphans: async (options?: { adoptRunning?: boolean }) => {
+      await job.recoverOrphans(options); await pump();
+    },
     async drain() { await pump(); await job.drain(); }, close() { db.close(); } };
 }

@@ -4,7 +4,7 @@ import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import defaults from '../defaults.json';
 import { StaleAttemptError } from './contracts.ts';
-import type { AttemptFence, GateOutcome, GateOutcomeSink, GateStage } from './contracts.ts';
+import type { AttemptFence, AttemptRef, GateOutcome, GateOutcomeSink, GateStage } from './contracts.ts';
 import { SqliteLandingQueue, type LandingEntry } from './land.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import { changedFiles, diffLineCount, firstFailure, gateRunner, git, nonGeneratedFiles, outsideScope, type GateRunner } from './merge.ts';
@@ -58,8 +58,11 @@ export type TrainOptions = {
   queue: SqliteLandingQueue; fence: AttemptFence; sink: GateOutcomeSink;
   runGate?: GateRunner; gateIdentity?: string; mainBranch?: string; integrationBranch?: string;
   codeIsCurrent?: () => boolean; handOff?: () => void | Promise<void>;
+  /** Runs after the landing lease is released, in the same process that drained the queue. */
+  promote?: () => Promise<void>;
   /** Test seams around the final synchronous Git operation and train shutdown. */
   merge?: (cwd: string, candidate: string) => void; beforeRelease?: () => Promise<void>;
+  beforeIntegrationAdvance?: () => void; beforePromotionAdvance?: () => void;
 };
 
 export class MergeTrain {
@@ -121,6 +124,12 @@ export class MergeTrain {
         return;
       }
       // The empty check is outside the lease: enqueueing while we drained can wake no owner, so retry if needed.
+      if (o.queue.next()) continue;
+      await o.promote?.();
+      if (o.codeIsCurrent && !o.codeIsCurrent()) {
+        await o.handOff?.();
+        return;
+      }
       if (!o.queue.next()) return;
     }
   }
@@ -205,6 +214,10 @@ export class MergeTrain {
           git(trainTree, 'diff', '--quiet', 'HEAD', '--');
         }
         stage = 'merge';
+        const integrationCommits = git(trainTree, 'rev-list', '--reverse', `${base}..${candidate}`)
+          .split('\n').filter(Boolean);
+        const planner = o.fence as AttemptFence & { planIntegration?: (ref: AttemptRef, base: string, commit: string, commits: readonly string[]) => void };
+        planner.planIntegration?.(request, base, candidate, integrationCommits);
         o.queue.candidate(entry.id, candidate);
         if (target() !== base) continue;
         if (git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${mainBranch}`)
@@ -214,6 +227,7 @@ export class MergeTrain {
           if (target() !== base) return '';
           if (git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${mainBranch}`) throw new Error('Main checkout HEAD changed');
           if (integratesIntoDev) {
+            o.beforeIntegrationAdvance?.();
             try { git(o.mainCheckout, 'update-ref', targetRef, candidate, base); }
             catch (error) { if (target() !== base) return ''; throw error; }
           } else if (o.merge) o.merge(o.mainCheckout, candidate);

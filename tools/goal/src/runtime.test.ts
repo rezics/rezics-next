@@ -12,7 +12,7 @@ import { settle } from './settle.ts';
 
 function simpleBrief(path: string): void { writeFileSync(path, markdown.replace('command: [bun, test]', 'command: ["true"]')); }
 
-test('shared runtime dispatches a fake CLI commit through settle and train into main with a passed record', async () => {
+test('shared runtime dispatches a fake CLI commit through settle, dev integration and main promotion', async () => {
   const h = harness(); h.settings.gate = ['true']; simpleBrief(h.briefFile);
   try {
     const runtime = createRuntime({ tasks: h.tasks });
@@ -37,7 +37,10 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
   try {
     const runtime = createRuntime({ tasks: h.tasks });
     const task = h.tasks.dispatch(h.briefFile);
+    const devBeforeDependency = git(h.root, ['rev-parse', 'dev']);
     writeFileSync(join(h.root, 'dependency.txt'), 'landed predecessor'); git(h.root, ['add', 'dependency.txt']); git(h.root, ['commit', '-m', 'Add predecessor']);
+    const dependency = git(h.root, ['rev-parse', 'main']);
+    git(h.root, ['update-ref', 'refs/heads/dev', dependency, devBeforeDependency]);
     await runtime.job.start(task.id); await runtime.job.drain();
     const records = h.store.records();
     expect(records.map(record => record.outcome)).toEqual(['gate-failed', 'passed']);
@@ -73,7 +76,7 @@ test('an enqueue while the train is finishing waits for the lease and lands with
   } finally { release(); h.dispose(); }
 }, 15000);
 
-for (const when of ['gate', 'merge'] as const) test(`cross-process supersession at the ${when} step is serialized with the actual Git advance`, async () => {
+for (const when of ['dev', 'promotion'] as const) test(`cross-process supersession at the ${when} advance is serialized with the actual Git advance`, async () => {
   const h = harness(); simpleBrief(h.briefFile);
   let train: ReturnType<typeof spawn> | undefined, retry: ReturnType<typeof spawn> | undefined;
   try {
@@ -84,9 +87,8 @@ for (const when of ['gate', 'merge'] as const) test(`cross-process supersession 
     const wait = "console.log('held'); const b=Buffer.alloc(1); readSync(0,b,0,1,null);";
     const source = `import {readSync} from 'node:fs';
 import {createRuntime} from ${JSON.stringify(join(import.meta.dir, 'config.ts'))};
-import {git} from ${JSON.stringify(join(import.meta.dir, 'merge.ts'))};
-const runtime=createRuntime({runGate:async()=>{${when === 'gate' ? wait : ''}return {passed:true,output:'',timedOut:false}},
-train:{merge(cwd,candidate){${when === 'merge' ? wait : ''}git(cwd,'merge','--ff-only','--no-edit',candidate)}}});
+const runtime=createRuntime({runGate:async()=>({passed:true,output:'',timedOut:false}),
+train:{${when === 'dev' ? `promote:async()=>{},beforeIntegrationAdvance(){${wait}}` : ''}${when === 'promotion' ? `beforePromotionAdvance(){${wait}}` : ''}}});
 await runtime.pump(); runtime.close();`;
     const contender = `import {openDb} from ${JSON.stringify(join(import.meta.dir, 'db.ts'))};
 import {WorkerStore} from ${JSON.stringify(join(import.meta.dir, 'store.ts'))};
@@ -114,12 +116,12 @@ store.db.close();`;
     let errors = ''; train.stderr!.on('data', data => { errors += data; });
     await new Promise<void>(resolve => createInterface({ input: train!.stdout! }).once('line', () => resolve()));
     retry.stdin!.write('x'); retry.stdin!.end(); await contended;
-    expect(messages).toContain(when === 'merge' ? 'blocked' : 'superseded');
+    expect(messages).toContain('blocked');
     train.stdin!.write('x'); train.stdin!.end();
     expect(await trainExit).toBe(0); expect(errors).toBe(''); expect(await retryExit).toBe(0);
     const current = h.store.task(task.id);
-    if (when === 'gate') {
-      expect(messages).toContain('superseded'); expect(current.currentAttempt).toBe(2); expect(current.state).toBe('ready');
+    if (when === 'dev') {
+      expect(messages).toContain('cannot retry integrated task'); expect(current.currentAttempt).toBe(1); expect(current.state).toBe('integrated');
       expect(existsSync(join(h.root, 'result.txt'))).toBe(false);
     } else {
       expect(messages).toContain('cannot retry merged task'); expect(current.currentAttempt).toBe(1); expect(current.state).toBe('merged');
