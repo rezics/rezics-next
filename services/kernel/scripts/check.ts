@@ -21,13 +21,24 @@ function docker(args: string[]): string {
 }
 
 function cleanupStale(): void {
-  const ids = docker(['ps', '-aq', '--filter', 'label=rezics.kernel.check.pid']).split('\n').filter(Boolean);
-  for (const id of ids) {
-    const owner = docker(['inspect', '-f', '{{ index .Config.Labels "rezics.kernel.check.pid" }}', id]);
+  // One listing carries each owner, so a concurrent check's container that exits meanwhile cannot fail an inspect.
+  const rows = docker([
+    'ps',
+    '-a',
+    '--filter',
+    'label=rezics.kernel.check.pid',
+    '--format',
+    '{{.ID}} {{.Label "rezics.kernel.check.pid"}}',
+  ])
+    .split('\n')
+    .filter(Boolean);
+  for (const row of rows) {
+    const [id, owner] = row.split(' ');
     try {
       process.kill(Number(owner), 0);
     } catch {
-      docker(['rm', '-f', id]);
+      // Removing a container that is already gone is the outcome we want.
+      spawnSync('docker', ['rm', '-f', id!], { cwd: directory, encoding: 'utf8' });
     }
   }
 }
