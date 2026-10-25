@@ -36,6 +36,8 @@ import type { ConversionContext } from '../packages/conversion/src/support';
  * source/redirect URL validation and byte/time/pixel caps active.
  * Run the real registered content jobs/Sharp pipeline; no fake media state/job,
  * Auth, Access, document persistence, tuple-home fences or evaluator.
+ * Source envelopes retain only native record revision/digest/converter metadata;
+ * never invent a native snapshot revision or map fixture labels to fingerprints.
  * Register fixture feed openlibrary explicitly with createSourceRegistration's
  * source alias; never rewrite observed native source envelopes.
  * Cover transport uses POST /v1/media:importFromUrl {containerId,sourceUrl,credit,provenance}
@@ -49,6 +51,7 @@ import type { ConversionContext } from '../packages/conversion/src/support';
 export type Source = 'bangumi' | 'vndb' | 'openlibrary' | 'wikidata';
 export interface Dump {
   source: Source;
+  /** Fixture label only; never source metadata or acknowledgement authority. */
   snapshot: string;
   bytes: Uint8Array;
   converterRevision: string;
@@ -93,16 +96,30 @@ export interface Effects {
   receipts: number;
 }
 export interface Baseline {
+  /** Exact RunStore.source generation fingerprint, opaque or null; no label mapping. */
   snapshot: string | null;
+  /** Exact maintained RunStore.source count; no history COUNT/scan. */
   records: number;
-  acknowledgedBatches: number;
 }
 export interface Exchange {
-  request: { url: string; method: string; headers: Headers; body: unknown; key: string };
+  request: {
+    url: string;
+    method: string;
+    headers: Headers;
+    body: unknown;
+    /** Untouched actual serialized UTF-8 HTTP body, not observer JSON.stringify output. */
+    serializedBody: string;
+    /** Keys in actual serialized command order. */
+    keys: string[];
+  };
   response: HttpResponse;
   atMs: number;
-  /** Independently observed durable receipt ID; null for rejected requests. */
-  receiptId: string | null;
+  /**
+   * Ordered per-command observations from actual persisted core.receipt PKs.
+   * Identity serializes the native composite PK, never a generated UUID/batch ID.
+   * Rejected 429/denied requests expose no receipts (an empty array).
+   */
+  receipts: { key: string; identity: string | null }[];
 }
 export interface Run {
   outcome: 'complete' | 'mass-disappearance' | 'invalid-input' | 'denied' | 'interrupted';
@@ -194,13 +211,37 @@ export interface ImportApiDriver {
   ): Promise<HttpResponse>;
   disclose(proposal: Proposal): Promise<{ status: number; bytes: Uint8Array }>;
   baseline(source: Source): Promise<Baseline>;
-  /** Durable importer acknowledgement for this stable batch key, never inferred from HTTP status. */
+  /**
+   * Durable individual command ACK from the source-owned journal/RunStore command done
+   * and bootstrap binding ACK as applicable; never HTTP status or duplicate authority.
+   * Exact source/owner/command-key seeks only, O(log N); no receipt/history enumeration.
+   */
   acknowledged(key: string): Promise<boolean>;
+  /**
+   * Native complete record ACK for the current run from RunStore.key acknowledged
+   * (or its installed same-database transaction adapter), only after ALL record
+   * commands. Exact source/record point read; no synthetic ACK table or status count.
+   */
+  recordAcknowledged(source: Source, externalId: string): Promise<boolean>;
+  /** Exact persisted per-command receipt PK lookup using the captured command context. */
+  receipt(key: string): Promise<string | null>;
   restart(): Promise<void>;
   setBulkPermission(allowed: boolean): Promise<void>;
-  /** Reissue exactly this captured request, using the same real actor/token. */
+  /**
+   * Reissue exactly this captured request, using the same real actor/token.
+   * Every command must be reauthorized before its own receipt lookup.
+   */
   replay(exchange: Exchange): Promise<HttpResponse>;
   adopt(source: Source, externalId: string, property: string, value: Json): Promise<void>;
+  /**
+   * Final rights complaint: for cover, call the actual content media takedown API
+   * AND the separate tuple-home fence API, as ordinary commands in their own
+   * partitions. No cross-partition transaction or simulated atomic rollback.
+   * For facts/summary apply the appropriate tuple fence. Bind to real routes once
+   * the pending content media takedown HTTP endpoint exists; never invent a route.
+   * Retain appeal bytes under the content contract; no hidden purge. Final public
+   * disclosure independently checks the current tuple-home fence reference.
+   */
   takedown(source: Source, externalId: string, fieldGroup: string): Promise<void>;
   /** Configure real import limit and authoritative test clock; no fake 429s. */
   rateLimit(input: { requests: number; windowMs: number; nowMs: number }): Promise<void>;
@@ -241,7 +282,9 @@ export interface ImportApiDriver {
    * Supply actual schema/index metadata and every growing read alias for the
    * indexed-key proof in test support. No status/FFI/VM/index-height estimates.
    * SQLite blocks:0 means unavailable buffers, not zero physical IO.
-   * Account every operation in a phase; no hidden adapter work or elapsed time.
+   * Account every operation in its actual phase, including bootstrap, later proposals,
+   * nested journals/authorization/fences/receipts; no hidden setup or adapter work,
+   * elapsed time or static proof. Preserve the shared N/U scales and M variation.
    * Reader/converter counters include all parser/converter invocations and bytes.
    */
   measure(action: () => Promise<void>): Promise<Record<CostPhase, Counters>>;

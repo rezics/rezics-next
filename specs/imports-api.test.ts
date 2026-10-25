@@ -1,6 +1,11 @@
 import { expect, setDefaultTimeout, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { checkBatchWrite } from '@rezics/definitions/bulk';
+import {
+  checkBatchWrite,
+  checkBatchWriteResult,
+  type BatchCommand,
+  type BatchWriteResult,
+} from '@rezics/definitions/bulk';
 import { checkMediaImportRequest, type MediaImportRequest } from '@rezics/definitions/media-import';
 import { documentText, parseDocument } from '@rezics/document';
 import { assertGrowth, type GrowthSample } from '../services/kernel/test/support/growth-bound';
@@ -9,7 +14,16 @@ import { costOf } from '../services/kernel/test/support/growth-cost';
 import { assertIndexedSqlite } from './support/verify-import-api';
 import { isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import type { Counters, Dump, ImportApiDriver, Proposal, RecordView, Run, Source } from './imports-api-driver';
+import type {
+  Counters,
+  Dump,
+  Exchange,
+  ImportApiDriver,
+  Proposal,
+  RecordView,
+  Run,
+  Source,
+} from './imports-api-driver';
 
 setDefaultTimeout(120_000);
 const encoder = new TextEncoder();
@@ -244,9 +258,40 @@ async function coverField(d: ImportApiDriver, proposal: Proposal) {
   expect(sha256(media.response.bytes)).toBe(media.digest);
   return media;
 }
+function wireCommands(exchange: Exchange): BatchCommand[] {
+  expect(checkBatchWrite(exchange.request.body)).toEqual([]);
+  expect(JSON.parse(exchange.request.serializedBody)).toEqual(exchange.request.body);
+  expect(encoder.encode(exchange.request.serializedBody).length).toBeLessThanOrEqual(65536);
+  const commands = (exchange.request.body as { commands: BatchCommand[] }).commands;
+  expect(exchange.request.keys).toEqual(commands.map((command) => command.key));
+  expect(new Set(exchange.request.keys).size).toBe(commands.length);
+  for (const key of exchange.request.keys) expect(key.length).toBeGreaterThan(0);
+  return commands;
+}
+async function completedBaseline(d: ImportApiDriver, source: Source, records: number, previous: string | null) {
+  const baseline = await d.baseline(source);
+  expect(typeof baseline.snapshot).toBe('string');
+  expect(baseline.snapshot!.length).toBeGreaterThan(0);
+  expect(baseline.snapshot).not.toBe(previous);
+  expect(baseline.records).toBe(records);
+  return baseline;
+}
+async function commandReceipts(d: ImportApiDriver, exchange: Exchange) {
+  wireCommands(exchange);
+  expect(checkBatchWriteResult(exchange.response.body)).toEqual([]);
+  const result = exchange.response.body as unknown as BatchWriteResult;
+  expect(result.results.map((entry) => entry.key).sort()).toEqual([...exchange.request.keys].sort());
+  expect(exchange.receipts.map((receipt) => receipt.key)).toEqual(exchange.request.keys);
+  for (const receipt of exchange.receipts) {
+    expect(typeof receipt.identity).toBe('string');
+    expect(receipt.identity!.length).toBeGreaterThan(0);
+    expect(await d.receipt(receipt.key)).toBe(receipt.identity);
+  }
+}
 async function launch(d: ImportApiDriver, source: Source) {
   const input = await dump(source),
-    before = await d.effects();
+    before = await d.effects(),
+    baseline = await d.baseline(source);
   let run!: Run;
   const measured = await d.measure(async () => {
     run = await d.run(input);
@@ -269,7 +314,7 @@ async function launch(d: ImportApiDriver, source: Source) {
     expect((x.request.body as { commands: unknown[] }).commands.length).toBeLessThanOrEqual(100);
     expect(encoder.encode(JSON.stringify(x.request.body)).length).toBeLessThanOrEqual(65536);
     expect(x.request.headers.get('authorization')).toMatch(/^Bearer \S+$/);
-    expect(x.request.key.length).toBeGreaterThan(0);
+    await commandReceipts(d, x);
     expect(x.response.status).toBeGreaterThanOrEqual(200);
     expect(x.response.status).toBeLessThan(300);
   }
@@ -309,7 +354,7 @@ async function launch(d: ImportApiDriver, source: Source) {
       (await d.read(source, { bangumi: '2', vndb: 'v2', openlibrary: '/works/OL2W', wikidata: 'Q2' }[source])).proposals
         .length,
   );
-  expect(await d.baseline(source)).toMatchObject({ snapshot: input.snapshot, records: 2 });
+  await completedBaseline(d, source, 2, baseline.snapshot);
   return { input, view };
 }
 async function catalogue(count: number, changed = false): Promise<Dump> {
@@ -404,9 +449,15 @@ test('identical dumps after importer restart have zero duplicate effects for eve
   scenario(async (d) => {
     for (const source of Object.keys(files) as Source[]) {
       const { input, view } = await launch(d, source);
-      const effects = await d.effects();
+      const effects = await d.effects(),
+        baseline = await d.baseline(source);
       await d.restart();
       expect((await d.run(input)).outcome).toBe('complete');
+      expect(await d.effects()).toEqual(effects);
+      expect(await d.baseline(source)).toEqual(baseline);
+      // Changing only the fixture label cannot advance the persisted pointer.
+      expect((await d.run({ ...input, snapshot: 'another-fixture-label' })).outcome).toBe('complete');
+      expect(await d.baseline(source)).toEqual(baseline);
       expect(await d.effects()).toEqual(effects);
       const after = await d.read(source, keys[source]);
       retrieved(after);
@@ -418,7 +469,8 @@ test('changed records and converter revisions append proposals while community a
     const { input, view } = await launch(d, 'openlibrary');
     await d.adopt('openlibrary', keys.openlibrary, d.properties.title, 'Community title');
     const adoptedView = await d.read('openlibrary', keys.openlibrary);
-    const before = await d.effects();
+    const before = await d.effects(),
+      baseline = await d.baseline(input.source);
     const changed = {
       ...input,
       snapshot: '2020-01-02',
@@ -431,6 +483,7 @@ test('changed records and converter revisions append proposals while community a
       ),
     };
     expect((await d.run(changed)).outcome).toBe('complete');
+    const changedBaseline = await completedBaseline(d, input.source, 2, baseline.snapshot);
     const next = await d.read('openlibrary', keys.openlibrary);
     retrieved(next);
     const old = field(view, d.properties.title, 'A Catalogue Journey');
@@ -453,6 +506,7 @@ test('changed records and converter revisions append proposals while community a
     const secondBefore = await d.read('openlibrary', '/works/OL2W');
     await d.restart();
     expect((await d.run({ ...changed, converterRevision: 'conversion-v2' })).outcome).toBe('complete');
+    await completedBaseline(d, input.source, 2, changedBaseline.snapshot);
     const reconverted = await d.read('openlibrary', keys.openlibrary);
     retrieved(reconverted);
     const newVersion = reconverted.proposals.filter((p) => p.converterRevision === 'conversion-v2');
@@ -497,7 +551,8 @@ test('exactly twenty percent disappearance proposes source removal without delet
     await d.run(await catalogue(5));
     const removed = await d.read('bangumi', '5');
     await d.adopt('bangumi', '5', d.properties.title, 'Retained community title');
-    const before = await d.effects();
+    const before = await d.effects(),
+      baseline = await d.baseline('bangumi');
     const run = await d.run({ ...(await catalogue(4)), snapshot: '2020-01-02' });
     expect(run.outcome).toBe('complete');
     expect(run.vanished).toEqual(['5']);
@@ -517,13 +572,15 @@ test('exactly twenty percent disappearance proposes source removal without delet
     expect(after.subjects).toBe(before.subjects);
     expect(after.proposals - before.proposals).toBe(proposals.length);
     expect(after.revisions - before.revisions).toBeGreaterThan(0);
-    expect(await d.baseline('bangumi')).toMatchObject({ records: 4, snapshot: '2020-01-02' });
+    await completedBaseline(d, 'bangumi', 4, baseline.snapshot);
     // Also exercise a permitted disappearance strictly below the threshold.
     expect((await d.run(await catalogue(10))).outcome).toBe('complete');
-    const smallBefore = await d.effects();
+    const smallBefore = await d.effects(),
+      smallBaseline = await d.baseline('bangumi');
     const small = await d.run({ ...(await catalogue(9)), snapshot: '2020-01-03' });
     expect(small.outcome).toBe('complete');
     expect(small.vanished).toEqual(['10']);
+    await completedBaseline(d, 'bangumi', 9, smallBaseline.snapshot);
     const smallView = await d.read('bangumi', '10');
     retrieved(smallView);
     expect(smallView.subject).not.toBeNull();
@@ -626,11 +683,12 @@ test('cover fences prevent reimport on unchanged and changed refresh and hide la
     expect((await d.fence('bangumi', '1', cover.fieldGroup, 'ordinary')).status).toBe(403);
     const initial = await d.fence('bangumi', '1', cover.fieldGroup, 'bulk');
     expect(initial.status).toBe(200);
-    expect(initial.body).toMatchObject({ fenced: false, securityRevision: expect.anything() });
+    expect(initial.body).toMatchObject({ fenced: false, securityRevision: null });
     await d.takedown('bangumi', '1', cover.fieldGroup);
     const fenced = await d.fence('bangumi', '1', cover.fieldGroup, 'bulk');
     expect(fenced.status).toBe(200);
     expect(fenced.body.fenced).toBe(true);
+    expect(fenced.body.securityRevision).toMatch(/^[1-9][0-9]*$/);
     expect(fenced.body.securityRevision).not.toEqual(initial.body.securityRevision);
     // No refresh is needed for final disclosure to observe a later fence.
     expect((await d.disclose(cover)).status).toBe(404);
@@ -667,38 +725,55 @@ test('ordinary actors and revoked bulk replays are denied before receipt disclos
     const denied = await d.run(input, { as: 'ordinary' });
     expect(denied.outcome).toBe('denied');
     expect(denied.exchanges.length).toBeGreaterThan(0);
-    for (const x of denied.exchanges) expect(x.response.status).toBe(403);
+    for (const x of denied.exchanges) {
+      wireCommands(x);
+      expect(x.response.status).toBe(403);
+      expect(x.receipts).toEqual([]);
+      for (const key of x.request.keys) expect(await d.acknowledged(key)).toBe(false);
+    }
     expect(await d.effects()).toEqual(empty);
-    expect(await d.baseline(input.source)).toMatchObject({ snapshot: null, acknowledgedBatches: 0 });
-    const allowed = await d.run(input),
-      committed = allowed.exchanges[0]!;
+    expect(await d.baseline(input.source)).toMatchObject({ snapshot: null, records: 0 });
+    const allowed = await d.run(input);
     expect(allowed.outcome).toBe('complete');
     const before = await d.effects(),
       baseline = await d.baseline(input.source);
-    expect(committed.receiptId).not.toBeNull();
+    for (const exchange of allowed.exchanges) await commandReceipts(d, exchange);
     await d.setBulkPermission(false);
-    const replay = await d.replay(committed);
-    expect(replay.status).toBe(403);
-    expect(replay.body).not.toEqual(committed.response.body);
-    const serialized = JSON.stringify(replay.body);
-    for (const p of (await d.read(input.source, keys.openlibrary)).proposals) expect(serialized).not.toContain(p.id);
-    expect(serialized).not.toContain(committed.request.key);
-    expect(serialized).not.toContain(committed.receiptId!);
-    expect(await d.effects()).toEqual(before);
-    expect(await d.baseline(input.source)).toEqual(baseline);
+    for (const committed of allowed.exchanges) {
+      const replay = await d.replay(committed);
+      expect(replay.status).toBe(403);
+      expect(replay.body).not.toEqual(committed.response.body);
+      const serialized = JSON.stringify(replay.body);
+      for (const id of ['/works/OL1W', '/works/OL2W']) {
+        const view = await d.read(input.source, id);
+        expect(serialized).not.toContain(view.subject!.id);
+        for (const p of view.proposals) expect(serialized).not.toContain(p.id);
+      }
+      for (const receipt of committed.receipts) {
+        expect(serialized).not.toContain(receipt.key);
+        expect(serialized).not.toContain(receipt.identity!);
+      }
+      expect(await d.effects()).toEqual(before);
+      expect(await d.baseline(input.source)).toEqual(baseline);
+    }
   }));
 test('importer obeys actual Retry-After and never acknowledges a rejected batch', () =>
   scenario(async (d) => {
     await d.rateLimit({ requests: 1, windowMs: 1000, nowMs: Date.parse('2020-01-01T00:00:00Z') });
+    const baseline = await d.baseline('bangumi');
     let rejected = 0;
     const run = await d.run(await catalogue(17), {
       onRateLimited: async (x) => {
         rejected++;
         expect(x.response.status).toBe(429);
-        expect(x.receiptId).toBeNull();
+        wireCommands(x);
+        expect(x.receipts).toEqual([]);
         expect(x.response.headers.get('retry-after')).not.toBeNull();
-        expect(await d.acknowledged(x.request.key)).toBe(false);
-        expect((await d.baseline('bangumi')).acknowledgedBatches).toBeLessThan(3);
+        for (const key of x.request.keys) {
+          expect(await d.acknowledged(key)).toBe(false);
+          expect(await d.receipt(key)).toBeNull();
+        }
+        expect(await d.baseline('bangumi')).toEqual(baseline);
       },
     });
     expect(run.outcome).toBe('complete');
@@ -706,9 +781,13 @@ test('importer obeys actual Retry-After and never acknowledges a rejected batch'
     for (let i = 0; i < run.exchanges.length; i++) {
       const x = run.exchanges[i]!;
       if (x.response.status !== 429) continue;
-      const retry = run.exchanges.slice(i + 1).find((next) => next.request.key === x.request.key)!;
+      const retry = run.exchanges
+        .slice(i + 1)
+        .find((next) => JSON.stringify(next.request.keys) === JSON.stringify(x.request.keys))!;
       expect(retry).toBeDefined();
+      expect(retry.request.keys).toEqual(x.request.keys);
       expect(retry.request.body).toEqual(x.request.body);
+      expect(retry.request.serializedBody).toBe(x.request.serializedBody);
       const raw = x.response.headers.get('retry-after')!;
       const delay = /^\d+$/.test(raw) ? Number(raw) * 1000 : Date.parse(raw) - x.atMs;
       expect(Number.isFinite(delay)).toBe(true);
@@ -723,29 +802,97 @@ test('importer obeys actual Retry-After and never acknowledges a rejected batch'
     expect(new Set(proposals.map((p) => p.id)).size).toBe(proposals.length);
     expect((await d.effects()).proposals).toBe(proposals.length);
     expect(run.exchanges.filter((x) => x.response.status === 429).length).toBe(rejected);
-    expect(await d.baseline('bangumi')).toMatchObject({ records: 17, acknowledgedBatches: 3 });
+    await completedBaseline(d, 'bangumi', 17, baseline.snapshot);
+    for (const x of run.exchanges) {
+      if (x.response.status === 429) continue;
+      await commandReceipts(d, x);
+      for (const key of x.request.keys) expect(await d.acknowledged(key)).toBe(true);
+    }
   }));
 test('transport uncertainty retries stable keys after restart without duplicate effects', () =>
   scenario(async (d) => {
     const input = await dump('wikidata');
+    const before = await d.effects(),
+      baseline = await d.baseline(input.source);
     const interrupted = await d.run(input, { loseCommittedResponse: true });
     expect(interrupted.outcome).toBe('interrupted');
     const committed = interrupted.exchanges[0]!;
     expect(committed.response.status).toBeGreaterThanOrEqual(200);
     expect(committed.response.status).toBeLessThan(300);
-    expect((await d.baseline('wikidata')).acknowledgedBatches).toBe(0);
-    expect(await d.acknowledged(committed.request.key)).toBe(false);
+    const creates = wireCommands(committed);
+    expect(creates.every((command) => command.op === 'create')).toBe(true);
+    await commandReceipts(d, committed);
+    expect(await d.baseline(input.source)).toEqual(baseline);
+    for (const command of creates) {
+      expect(await d.acknowledged(command.key)).toBe(false);
+      expect(await d.recordAcknowledged(input.source, command.source.external_id)).toBe(false);
+    }
     const effects = await d.effects();
-    expect(effects.proposals).toBeGreaterThan(0);
+    expect(effects.subjects - before.subjects).toBeGreaterThan(0);
+    // Replay at the actual transport boundary before letting the importer proceed.
+    const replay = await d.replay(committed);
+    expect(replay.status).toBe(committed.response.status);
+    expect(replay.body).toEqual(committed.response.body);
+    await commandReceipts(d, committed);
+    expect(await d.effects()).toEqual(effects);
+    for (const command of creates) {
+      expect(await d.acknowledged(command.key)).toBe(false);
+      expect(await d.recordAcknowledged(input.source, command.source.external_id)).toBe(false);
+    }
+    expect(await d.baseline(input.source)).toEqual(baseline);
     await d.restart();
     const retry = await d.run(input);
     expect(retry.outcome).toBe('complete');
-    expect(retry.exchanges[0]!.request.key).toBe(committed.request.key);
+    expect(retry.exchanges[0]!.request.keys).toEqual(committed.request.keys);
     expect(retry.exchanges[0]!.request.body).toEqual(committed.request.body);
+    expect(retry.exchanges[0]!.request.serializedBody).toBe(committed.request.serializedBody);
     expect(retry.exchanges[0]!.response.body).toEqual(committed.response.body);
-    expect(await d.effects()).toEqual(effects);
-    expect(await d.baseline('wikidata')).toMatchObject({ records: 2, acknowledgedBatches: 1 });
-    expect(await d.acknowledged(committed.request.key)).toBe(true);
+    expect(retry.exchanges[0]!.receipts).toEqual(committed.receipts);
+    const unique = new Map<string, BatchCommand>();
+    const identities = new Set<string>();
+    for (const x of [...interrupted.exchanges, ...retry.exchanges]) {
+      await commandReceipts(d, x);
+      for (const command of wireCommands(x)) {
+        if (unique.has(command.key)) expect(command).toEqual(unique.get(command.key)!);
+        unique.set(command.key, command);
+        expect(await d.acknowledged(command.key)).toBe(true);
+        identities.add((await d.receipt(command.key))!);
+      }
+    }
+    expect(identities.size).toBe(unique.size);
+    const final = await d.effects();
+    expect(final.receipts - before.receipts).toBe(unique.size);
+    expect(final.subjects - before.subjects).toBe(2);
+    expect([...unique.values()].filter((c) => c.op === 'create').length).toBe(2);
+    const views = await Promise.all(['Q1', 'Q2'].map((id) => d.read(input.source, id)));
+    expect(new Set(views.map((view) => view.subject!.id)).size).toBe(2);
+    const proposals = views.flatMap((view) => view.proposals);
+    expect(proposals.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(proposals.map((p) => p.id)).size).toBe(proposals.length);
+    expect(final.proposals - before.proposals).toBe(proposals.length);
+    expect([...unique.values()].filter((c) => c.op === 'propose').length).toBe(proposals.length);
+    for (const command of unique.values()) {
+      const exchange = retry.exchanges.find((x) => x.request.keys.includes(command.key))!;
+      const result = (exchange.response.body as unknown as BatchWriteResult).results.find(
+        (r) => r.key === command.key,
+      )!;
+      expect('value' in result).toBe(true);
+      if (!('value' in result)) throw new Error('Missing actual command effect');
+      const view = await d.read(input.source, command.source.external_id);
+      retrieved(view);
+      if (command.op === 'create') {
+        if (!('id' in result.value)) throw new Error('Missing actual create ID');
+        expect(view.subject!.id).toBe(result.value.id);
+        for (const proposal of view.proposals) expect(proposal.subjectId).toBe(result.value.id);
+      } else {
+        expect(command.op).toBe('propose');
+        if (!('candidate' in result.value)) throw new Error('Missing actual proposal ID');
+        expect(command.subject).toBe(view.subject!.id);
+        expect(view.proposals.map((p) => p.id)).toContain(result.value.candidate);
+      }
+    }
+    for (const id of ['Q1', 'Q2']) expect(await d.recordAcknowledged(input.source, id)).toBe(true);
+    await completedBaseline(d, input.source, 2, baseline.snapshot);
   }));
 test('malformed and truncated dumps never publish disappearances or advance snapshots', () =>
   scenario(async (d) => {
