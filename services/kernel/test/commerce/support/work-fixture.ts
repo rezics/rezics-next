@@ -198,7 +198,13 @@ export async function workFixture() {
       const event = (await this.events(orderId, 'order.created'))[0]!;
       const workflowID = `fx:${event.epoch}:${event.partition_no}:${event.position}:${event.event_seq}:commerce_reconcile_order`;
       await client.enqueue(
-        { workflowName: 'effect', queueName: 'effects', workflowID, workflowIDReusePolicy: 'return-existing' },
+        {
+          workflowName: 'effect',
+          queueName: 'effects',
+          queuePartitionKey: String(event.partition_no),
+          workflowID,
+          workflowIDReusePolicy: 'return-existing',
+        },
         'commerce_reconcile_order',
         {
           specversion: '1.0',
