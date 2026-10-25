@@ -6,9 +6,12 @@ export type LanguageValue = {
  * Filterable form of a statement value.
  * `year` is the astronomical year of a time value.
  * `amount` is the decimal amount of a quantity.
+ * A code value is the statement `value`.
  */
 export type FacetValue = {
     kind: 'item';
+} | {
+    kind: 'code';
 } | {
     kind: 'time';
     year: number;
@@ -20,7 +23,7 @@ export type FacetValue = {
 /** One adopted statement value. The semantic source fills `facet` and `qualifiers`. */
 export type IndexedStatement = {
     property: string;
-    /** Stored statement value. An item value is the target subject id. */
+    /** Stored statement value. An item value is the target subject id; a code value is the code. */
     value: string;
     /** Present when the value's datatype can be a facet. */
     facet?: FacetValue;

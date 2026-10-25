@@ -1,4 +1,4 @@
-import type { DataType } from '@rezics/definitions';
+import type { DataType, Release } from '@rezics/definitions';
 import { type Violation } from '@rezics/definitions/validate';
 export type { Violation } from '@rezics/definitions/validate';
 export type Value = {
@@ -67,6 +67,8 @@ export type FactRow = {
     fact_revision?: number | null;
     fact_release?: string | null;
 };
+/** Datatypes for the properties named by these facts, without walking the rest of the release. */
+export declare function factDataTypes(release: Release, facts: readonly FactRow[]): Record<string, DataType>;
 export declare class SubjectInputError extends Error {
     readonly violations: Violation[];
     constructor(violations: Violation[]);
