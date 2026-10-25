@@ -59,6 +59,52 @@ const post = (n: number) => ({
   availability: 'available',
   body: documentBody(n),
 });
+/** Inflate the page read's embedded subject and its reads. The page still makes one kernel call. */
+function growPageRead(body: Record<string, any>, size: number) {
+  const each = Math.max(1, Math.floor(size / 4));
+  const reads = body.reads as Record<string, { status?: number; body?: { subject?: Record<string, any> } }>;
+  for (const read of Object.values(reads)) {
+    const subject = read?.body?.subject;
+    if (!subject || typeof subject !== 'object' || Array.isArray(subject)) continue;
+    subject.labels = Object.fromEntries(Array.from({ length: each }, (_, i) => [`x${i}`, `Label ${i}`]));
+    subject.aliases = { en: Array.from({ length: size === 1 ? 0 : each }, (_, i) => `Alias ${i}`) };
+    subject.statements = Object.fromEntries(
+      Array.from({ length: size === 1 ? 0 : each }, (_, i) => [
+        `property-${i}`,
+        [
+          {
+            id: `statement-${i}`,
+            rank: 'normal',
+            property: { id: `property-${i}`, data_type: 'string' },
+            value: { type: 'value', content: `value-${i}` },
+            qualifiers: [],
+            references: [],
+          },
+        ],
+      ]),
+    );
+    subject.related_subjects = Array.from({ length: size === 1 ? 0 : size - each * 3 }, (_, i) => ({
+      id: `related-${i}`,
+      labels: { en: `Related ${i}` },
+    }));
+  }
+  for (let i = 0; i < (size === 1 ? 0 : size); i++) {
+    reads[`grown-${i}`] = {
+      status: 200,
+      body: {
+        subject: {
+          id: contentId(500 + i),
+          type: 'schema:Thing',
+          labels: { en: `Grown ${i}` },
+          descriptions: {},
+          aliases: {},
+          statements: {},
+        },
+      },
+    };
+  }
+}
+
 const kernel = Bun.serve({
   port: 0,
   hostname: '127.0.0.1',
@@ -156,36 +202,13 @@ const kernel = Bun.serve({
         as_of: new Date(0).toISOString(),
       });
     }
-    if (url.pathname === `/v1/subjects/${subjectId}`) {
-      kernelCalls.push(`${request.method} ${url.pathname}${url.search}`);
+    if (request.method === 'POST' && url.pathname === '/v1/pages:read') {
+      kernelCalls.push(`${request.method} ${url.pathname}`);
       const response = await fakeKernel(request);
       const body = (await response.json()) as Record<string, any>;
-      const subject = body.subject ?? body;
-      const each = Math.max(1, Math.floor(subjectSize / 4));
-      subject.labels = {
-        ...Object.fromEntries(Array.from({ length: each }, (_, i) => [`x${i}`, `Label ${i}`])),
-      };
-      subject.aliases = { en: Array.from({ length: subjectSize === 1 ? 0 : each }, (_, i) => `Alias ${i}`) };
-      subject.statements = Object.fromEntries(
-        Array.from({ length: subjectSize === 1 ? 0 : each }, (_, i) => [
-          `property-${i}`,
-          [
-            {
-              id: `statement-${i}`,
-              rank: 'normal',
-              property: { id: `property-${i}`, data_type: 'string' },
-              value: { type: 'value', content: `value-${i}` },
-              qualifiers: [],
-              references: [],
-            },
-          ],
-        ]),
-      );
-      subject.related_subjects = Array.from({ length: subjectSize === 1 ? 0 : subjectSize - each * 3 }, (_, i) => ({
-        id: `related-${i}`,
-        labels: { en: `Related ${i}` },
-      }));
-      return Response.json(body);
+      if (response.status === 200 && body.subject === subjectId && body.reads && typeof body.reads === 'object')
+        growPageRead(body, subjectSize);
+      return Response.json(body, { status: response.status });
     }
     kernelCalls.push(`${request.method} ${url.pathname}${url.search}`);
     return fakeKernel(request);
@@ -267,7 +290,7 @@ test('home page stays within its bound as s grows', async () => {
     authCalls.length = 0;
     const response = await fetch(`${origin}/en/`);
     expect(response.status).toBe(200);
-    expect(kernelCalls).toEqual([]);
+    expect(kernelCalls).toEqual(['POST /v1/pages:read']);
     expect(authCalls).toEqual([]);
   }
 }, 300_000);
@@ -279,7 +302,7 @@ test('subject page stays within its bound as s grows', async () => {
     kernelCalls.length = 0;
     const response = await fetch(`${origin}/en/subjects/${subjectId}`);
     expect(response.status).toBe(200);
-    expect(kernelCalls).toEqual([`GET /v1/subjects/${subjectId}`]);
+    expect(kernelCalls).toEqual(['POST /v1/pages:read']);
   }
 }, 300_000);
 test('board page stays within its bound as s grows', async () => {

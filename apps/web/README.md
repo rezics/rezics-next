@@ -393,12 +393,12 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 
 ### Subject page (`/<locale>/subjects/<id>`)
 
-- **Touches:** Root preferences/D and subject loader are independent; one public K `GET /v1/subjects/<id>` supplies
-  subject and related labels; local rendering follows; merged ID redirects without another K
-- **Bound:** ≤1 K + ≤1 D; 0 R/A; O(s) parsing/rendering and buffered JSON plus O(t) session bytes; **exceeds the
-  criterion** for a bounded neighbourhood because the full subject payload has no s cap; no N+1 for results, labels or
-  media
-- **Growth check:** Follow-up: `subject page stays within its bound as s grows`
+- **Touches:** Root preferences/D and the subject loader are independent; one public K `POST /v1/pages:read` supplies the
+  template, the subject and the template's planned reads; local rendering follows; a merged id redirects without
+  another K
+- **Bound:** ≤1 K (`pages:read`) and ≤1 D (preferences) per page view; the kernel behind that read is one subject read
+  plus the template's planned reads (at most 16); 0 R/A
+- **Growth check:** `tests/request-cost.test.ts`: `subject page stays within its bound as s grows`
 
 ### Credential resolution (media prelude)
 
