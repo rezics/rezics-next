@@ -95,11 +95,7 @@ function mediaAccepted(id: string, containerId = SUBJECT): MediaImportAccepted {
   return { media: { id, containerId, purpose: 'cover', state: 'reserved' } };
 }
 
-function mediaStatus(
-  request: MediaImportRequest,
-  id: string,
-  containerId = SUBJECT,
-): MediaImportStatus {
+function mediaStatus(request: MediaImportRequest, id: string, containerId = SUBJECT): MediaImportStatus {
   return {
     media: {
       id,
@@ -121,10 +117,14 @@ function population(count: number, scale: number, label: string): Owner[] {
   );
 }
 
-function seedRecords(database: Database, owners: Owner[], options: {
-  candidateCounts?: ReadonlyMap<string, number>;
-  coverKeys?: ReadonlyMap<string, string>;
-} = {}): void {
+function seedRecords(
+  database: Database,
+  owners: Owner[],
+  options: {
+    candidateCounts?: ReadonlyMap<string, number>;
+    coverKeys?: ReadonlyMap<string, string>;
+  } = {},
+): void {
   const statement = database.prepare(
     'INSERT INTO binding_records (source, external_id, state, subject, bootstrap_key, candidate_count, cover_key) VALUES (?, ?, ?, ?, ?, ?, ?)',
   );
@@ -177,7 +177,8 @@ function seedGroups(database: Database, owners: Owner[], counts: ReadonlyMap<str
     'INSERT INTO binding_groups (source, external_id, field_group, candidate_count) VALUES (?, ?, ?, ?)',
   );
   const transaction = database.transaction(() => {
-    for (const record of owners) statement.run(record.source, record.external_id, 'facts', counts.get(record.external_id) ?? 0);
+    for (const record of owners)
+      statement.run(record.source, record.external_id, 'facts', counts.get(record.external_id) ?? 0);
   });
   try {
     transaction.immediate();
@@ -192,10 +193,7 @@ function seedCandidates(database: Database, owners: Owner[], target: Owner, targ
   );
   const transaction = database.transaction(() => {
     for (let index = 0; index < owners.length; index++) {
-      const record =
-        index < targetCount
-          ? target
-          : owners[1 + ((index - targetCount) % (owners.length - 1))]!;
+      const record = index < targetCount ? target : owners[1 + ((index - targetCount) % (owners.length - 1))]!;
       const candidate = uuid(1000 + index);
       const requestKey = key(record, `candidate-${index}`);
       statement.run(
@@ -249,9 +247,7 @@ function seedMedia(database: Database, owners: Owner[], target: Owner, targetKey
 }
 
 function describeEvidence(evidence: readonly SqliteEvidence[]): string {
-  return evidence
-    .map(({ sql, plan }) => `SQL: ${sql}\nPlan: ${JSON.stringify(plan)}`)
-    .join('\n');
+  return evidence.map(({ sql, plan }) => `SQL: ${sql}\nPlan: ${JSON.stringify(plan)}`).join('\n');
 }
 
 async function measuredAtScale<T>(
@@ -273,7 +269,9 @@ async function measuredAtScale<T>(
     try {
       probe.verifyPlans();
     } catch (error) {
-      throw new Error(`${error instanceof Error ? error.message : String(error)}\n${describeEvidence(measured.statements)}`);
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}\n${describeEvidence(measured.statements)}`,
+      );
     }
     return { value: measured.value, cost: measured.cost, statements: measured.statements };
   } finally {
