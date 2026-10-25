@@ -1,3 +1,4 @@
+import { checkSubjectInput } from '@rezics/definitions/validate';
 import type { Release } from '@rezics/definitions';
 import type { Pool, PoolClient } from 'pg';
 import { runCommand, type CommandAuthorization } from '../command/command.ts';
@@ -7,7 +8,7 @@ import type { AccessCheck, AccountActor, Resource } from '../request/access.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../route/route.ts';
 import { itemFacts, resolveItem, type FactRow, type Item } from './item.ts';
 import { SubjectInputError } from './item.ts';
-import { checkTyped } from './rules.ts';
+import { rejectContent } from './rules.ts';
 import { GLOBAL_CONTEXT } from './definitions.ts';
 import { slotView } from './slots.ts';
 import createRevision from './create-revision.sql';
@@ -54,24 +55,14 @@ export async function createSubject(
   const { route, id: subjectId } = options.target;
   if (routeOf(subjectId) !== route) throw new RangeError('Subject target id must carry its route');
   const input = options.item as Record<string, unknown>;
-  let facts: FactRow[];
-  let structural: SubjectInputError | undefined;
-  try {
-    facts = itemFacts(subjectId, options.item, typeof input?.type === 'string' ? input.type : undefined);
-  } catch (error) {
-    if (!(error instanceof SubjectInputError)) throw error;
-    structural = error;
-    facts = [];
-  }
-  const typed = checkTyped(options.release.release, options.release.digest, options.item);
-  if (structural || typed.violations.length) {
-    throw new SubjectInputError([...(structural?.violations ?? []), ...typed.violations]);
-  }
+  const checked = checkSubjectInput(options.item, options.release.release, rejectContent);
+  if (checked.violations.length) throw new SubjectInputError(checked.violations);
+  const facts = itemFacts(subjectId, options.item, typeof input?.type === 'string' ? input.type : undefined);
   const dataTypes = Object.fromEntries(
     Object.entries(options.release.release.properties).map(([id, property]) => [id, property.datatype]),
   );
   const grouped = new Map<number, Set<string>>();
-  for (const item of typed.items) {
+  for (const item of checked.targets) {
     const itemRoute = routeOf(item.id);
     if (itemRoute === null) continue;
     const itemPartition = partitionOf(itemRoute);
@@ -89,7 +80,7 @@ export async function createSubject(
       for (const row of rows) itemTypes.set(row.id, row.type);
     }),
   );
-  const targetErrors = typed.items.flatMap((item) => {
+  const targetErrors = checked.targets.flatMap((item) => {
     const targetType = itemTypes.get(item.id);
     return targetType && item.targets.includes(targetType)
       ? []

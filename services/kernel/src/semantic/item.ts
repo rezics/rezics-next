@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { DataType } from '@rezics/definitions';
+import { checkSubjectStructure, type Violation } from '@rezics/definitions/validate';
+export type { Violation } from '@rezics/definitions/validate';
 import { derivedId, routeOf } from '../route/route.ts';
 
 export type Value = { type: 'value'; content: unknown } | { type: 'somevalue' } | { type: 'novalue' };
@@ -46,11 +48,6 @@ export type FactRow = {
   fact_revision?: number | null;
   fact_release?: string | null;
 };
-export type Violation = {
-  pointer: string;
-  code: 'required' | 'unknown_field' | 'invalid_type' | 'invalid_format' | 'out_of_range' | 'unsupported';
-};
-
 export class SubjectInputError extends Error {
   readonly violations: Violation[];
   constructor(violations: Violation[]) {
@@ -62,12 +59,8 @@ export class SubjectInputError extends Error {
 
 export const SLOT_NS = 'c30d6caa-d9e8-4108-a42a-35701219e8ec';
 const STATEMENT_NS = '9f44e74c-b77c-47aa-96d0-b7a4aa330182';
-const languagePattern = /^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/;
-const own = (value: object, key: string) => Object.prototype.hasOwnProperty.call(value, key);
 const isObject = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
-const pointer = (base: string, part: string | number) =>
-  `${base}/${String(part).replaceAll('~', '~0').replaceAll('/', '~1')}`;
 
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
@@ -82,164 +75,8 @@ function canonical(value: unknown): string {
 export function itemFacts(subjectId: string, input: unknown, _type?: string): Fact[] {
   const route = routeOf(subjectId);
   if (route === null) throw new RangeError('Subject id must be a canonical routed id');
-  const errors: Violation[] = [];
-  const add = (at: string, code: Violation['code']) => {
-    if (errors.length < 16) errors.push({ pointer: at, code });
-  };
-  const fields = (obj: Record<string, unknown>, allowed: string[], base: string) => {
-    for (const key of Object.keys(obj)) if (!allowed.includes(key)) add(pointer(base, key), 'unknown_field');
-  };
-  if (!isObject(input)) {
-    throw new SubjectInputError([{ pointer: '', code: 'invalid_type' }]);
-  }
-  fields(input, ['type', 'labels', 'descriptions', 'aliases', 'statements'], '');
-  const terms: { kind: 'label' | 'description'; language: string; body: string }[] = [];
-  const aliasTerms: { language: string; body: string }[] = [];
-  const termMap = (key: 'labels' | 'descriptions' | 'aliases') => {
-    const raw = input[key];
-    if (raw === undefined) return;
-    if (!isObject(raw)) {
-      add(`/${key}`, 'invalid_type');
-      return;
-    }
-    for (const [lang, value] of Object.entries(raw)) {
-      const at = `/${key}/${lang.replaceAll('~', '~0').replaceAll('/', '~1')}`;
-      if (!languagePattern.test(lang)) {
-        add(at, 'invalid_format');
-        continue;
-      }
-      if (key === 'aliases') {
-        if (!Array.isArray(value)) {
-          add(at, 'invalid_type');
-          continue;
-        }
-        if (value.length > 32) add(at, 'out_of_range');
-        const seen = new Set<string>();
-        value.forEach((item, i) => {
-          if (typeof item !== 'string') {
-            add(pointer(at, i), 'invalid_type');
-            return;
-          }
-          if (item.length < 1 || item.length > 250 || item.trim() !== item)
-            add(pointer(at, i), item.length > 250 ? 'out_of_range' : 'invalid_format');
-          if (seen.has(item)) add(pointer(at, i), 'invalid_format');
-          seen.add(item);
-          aliasTerms.push({ language: lang, body: item });
-        });
-      } else {
-        if (typeof value !== 'string') {
-          add(at, 'invalid_type');
-          continue;
-        }
-        if (value.length < 1 || value.length > 250) add(at, value.length > 250 ? 'out_of_range' : 'invalid_format');
-        else if (value.trim() !== value) add(at, 'invalid_format');
-        terms.push({ kind: key === 'labels' ? 'label' : 'description', language: lang, body: value });
-      }
-    }
-  };
-  termMap('labels');
-  termMap('descriptions');
-  termMap('aliases');
-  if (!isObject(input.labels) || Object.keys(input.labels).length === 0) add('/labels', 'required');
-
-  type StatementDraft = {
-    property: string;
-    rank: string;
-    value: unknown;
-    qualifiers: unknown[];
-    references: { parts: unknown[] }[];
-  };
-  const drafts: { property: string; entries: StatementDraft[] }[] = [];
-  const validateSnak = (raw: unknown, at: string, expected?: string): unknown => {
-    if (!isObject(raw)) {
-      add(at, 'invalid_type');
-      return null;
-    }
-    fields(raw, ['property', 'value'], at);
-    if (!isObject(raw.property)) {
-      add(`${at}/property`, 'invalid_type');
-      return null;
-    }
-    fields(raw.property, ['id'], `${at}/property`);
-    const id = raw.property.id;
-    if (typeof id !== 'string') {
-      add(`${at}/property/id`, 'invalid_type');
-      return null;
-    }
-    if (expected && id !== expected) add(`${at}/property/id`, 'invalid_format');
-    const val = raw.value;
-    if (!isObject(val) || typeof val.type !== 'string' || !['value', 'somevalue', 'novalue'].includes(val.type)) {
-      add(`${at}/value`, 'invalid_format');
-      return null;
-    }
-    fields(val, val.type === 'value' ? ['type', 'content'] : ['type'], `${at}/value`);
-    if (val.type === 'value') {
-      if (!own(val, 'content')) add(`${at}/value/content`, 'required');
-      else if (val.content === undefined) add(`${at}/value/content`, 'invalid_type');
-    } else if (own(val, 'content')) add(`${at}/value/content`, 'unknown_field');
-    return { property: id, value: val };
-  };
-  if (input.statements !== undefined) {
-    if (!isObject(input.statements)) add('/statements', 'invalid_type');
-    else
-      for (const [prop, list] of Object.entries(input.statements)) {
-        const at = `/statements/${prop.replaceAll('~', '~0').replaceAll('/', '~1')}`;
-        if (!Array.isArray(list)) {
-          add(at, 'invalid_type');
-          continue;
-        }
-        if (list.length > 32) add(at, 'out_of_range');
-        const entries: StatementDraft[] = [];
-        list.forEach((entry, i) => {
-          const path = pointer(at, i);
-          if (!isObject(entry)) {
-            add(path, 'invalid_type');
-            return;
-          }
-          fields(entry, ['property', 'value', 'rank', 'qualifiers', 'references'], path);
-          const snak = validateSnak({ property: entry.property, value: entry.value }, path, prop) as {
-            property: string;
-            value: unknown;
-          } | null;
-          const rank = entry.rank === undefined ? 'normal' : entry.rank;
-          if (typeof rank !== 'string') add(`${path}/rank`, 'invalid_type');
-          else if (!['normal', 'preferred', 'deprecated'].includes(rank)) add(`${path}/rank`, 'invalid_format');
-          const qualifiers: unknown[] = [];
-          if (entry.qualifiers !== undefined) {
-            if (!Array.isArray(entry.qualifiers)) add(`${path}/qualifiers`, 'invalid_type');
-            else {
-              if (entry.qualifiers.length > 16) add(`${path}/qualifiers`, 'out_of_range');
-              entry.qualifiers.forEach((q, n) => qualifiers.push(validateSnak(q, `${path}/qualifiers/${n}`)));
-            }
-          }
-          const references: { parts: unknown[] }[] = [];
-          if (entry.references !== undefined) {
-            if (!Array.isArray(entry.references)) add(`${path}/references`, 'invalid_type');
-            else {
-              if (entry.references.length > 16) add(`${path}/references`, 'out_of_range');
-              entry.references.forEach((ref, n) => {
-                const refPath = `${path}/references/${n}`;
-                if (!isObject(ref)) {
-                  add(refPath, 'invalid_type');
-                  return;
-                }
-                fields(ref, ['parts'], refPath);
-                if (!Array.isArray(ref.parts) || ref.parts.length < 1 || ref.parts.length > 16)
-                  add(`${refPath}/parts`, 'out_of_range');
-                const parts: unknown[] = [];
-                if (Array.isArray(ref.parts))
-                  ref.parts.forEach((part, j) => parts.push(validateSnak(part, `${refPath}/parts/${j}`)));
-                references.push({ parts });
-              });
-            }
-          }
-          if (snak && typeof rank === 'string')
-            entries.push({ property: prop, rank, value: snak.value, qualifiers, references });
-        });
-        drafts.push({ property: prop, entries });
-      }
-  }
-  if (errors.length) throw new SubjectInputError(errors);
+  const { violations, terms, aliasTerms, drafts } = checkSubjectStructure(input);
+  if (violations.length) throw new SubjectInputError(violations);
   const facts: Fact[] = [];
   const put = (
     kind: Fact['kind'],
@@ -287,7 +124,6 @@ export function itemFacts(subjectId: string, input: unknown, _type?: string): Fa
         statementId,
       );
     });
-  if (facts.length > 512) throw new SubjectInputError([{ pointer: '', code: 'out_of_range' }]);
   return facts;
 }
 

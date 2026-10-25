@@ -187,6 +187,24 @@ sorted by file and RFC 6901 pointer and capped at 64. Label files are named
 checked with `validateRelease`; a failure at that point throws a plain `Error`
 because it indicates a compiler defect.
 
+## Portable input validation
+
+`@rezics/definitions/validate` exports `Violation`, `ItemTarget`,
+`checkSubjectInput(input, release)` and `checkStatementInput(statement, release)`.
+These pure checks share the kernel's structural and release validation, including
+RFC 6901 pointers, error codes, ordering and a 16-violation cap. Subject pointers
+start at the subject root; proposal pointers start at `/statement`. Each returns
+`{ violations, targets }`. Item targets carry the value pointer, subject id and
+allowed target types for the caller to check against its database. The checks do
+not read a database or import the kernel; compiled value validators are cached
+per release. Supply an immutable, validated release and parsed JSON inputs.
+
+Structural limits apply to every release: decimal strings have at most 127
+characters and a time's year has at most 16 digits. An oversized value reports
+`out_of_range` at its decimal member or `/time`, without further value checks.
+The release value schemas retain their Wikibase shapes. Document and media
+values are portable; kernel writes still refuse them until content hooks exist.
+
 ## Bulk subject writes
 
 `@rezics/definitions/bulk` exports the portable TypeBox request and response contract for
@@ -196,7 +214,8 @@ key, a source identity and exactly one operation: create a subject, propose a st
 or retract a candidate. `checkBatchWrite` validates shapes, field names, limits, enums,
 and duplicate keys, returning RFC 6901 pointers and one of `required`, `unknown_field`,
 `invalid_type`, `invalid_format`, `out_of_range`, or `unsupported`. Passing a release
-currently throws because release dependent checks are not implemented. Results preserve
+also runs the shared subject and statement input checks, then field/property compatibility
+checks: summaries use `document`, covers use `media`, and facts use neither. Results preserve
 one result per command and its request order; each result contains either a value or an
 RFC 9457 problem.
 
@@ -222,7 +241,9 @@ receipt replays the first outcome, so a command is never lost or applied twice. 
 proposal or retraction never changes what a Context adopted; editors decide it.
 
 The contract has no runtime path. `checkBatchWrite` is linear in request size, bounded by
-`BATCH_LIMIT` and the statement limits.
+`BATCH_LIMIT` and the statement limits. Proposals require nonempty `references`;
+missing or empty references report `required`. Proposal ranks are `normal` or
+`preferred`.
 
 ### Import field groups
 
@@ -243,7 +264,10 @@ the raw date string. An unresolved relation uses `somevalue` when the target is
 known by a Wikidata item URI, stored in a `schema:sameAs` qualifier; it never
 substitutes an external identifier for a REZICS subject id. If a converter has
 no identifier for a target, it proposes no relation for that target. Only `facts` supports `create`;
-every group supports `propose` and `retract`, and a retraction carries no rights. The following
+a create subject contains only `type`, `labels`, `descriptions` and `aliases`.
+`statements` on a create is `unsupported`. Propose each source statement separately
+so its source-candidate key can track refresh and retraction.
+Every group supports `propose` and `retract`, and a retraction carries no rights. The following
 commands share this setup:
 
 Each imported record fact cites the exact source record with its URL, its
@@ -301,6 +325,14 @@ const references = [
     ],
   },
 ];
+
+const create: BatchCommand = {
+  op: 'create',
+  key: 'bangumi:253:create',
+  source: source('facts'),
+  subject: { type: 'schema:Book', labels: { ja: '吾輩は猫である' } },
+};
+// After creation returns subjectId, send each statement as a propose command.
 
 const fact: BatchCommand = {
   op: 'propose',

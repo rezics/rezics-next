@@ -2,6 +2,8 @@ import { checkDocument, serializeDocument } from '@rezics/document';
 import spdxLicenseIds from 'spdx-license-ids';
 import { Type, type Static } from 'typebox';
 import { valueSchema, type Release } from './index.ts';
+import { checkSubjectInput, checkSubjectStructure, checkStatementInput, type Violation } from './validate.ts';
+export type { Violation } from './validate.ts';
 
 export const BATCH_LIMIT = 100;
 export const FIELD_GROUPS = ['facts', 'summary', 'cover'] as const;
@@ -46,7 +48,6 @@ const subjectBody = Type.Object({
   labels: langmap,
   descriptions: Type.Optional(langmap),
   aliases: Type.Optional(Type.Record(Type.String({ minLength: 1 }), Type.Array(Type.String({ minLength: 1 })))),
-  statements: Type.Optional(Type.Record(Type.String({ minLength: 1 }), Type.Array(BatchStatementSchema))),
 });
 const uuid = Type.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
 const key = Type.String({ minLength: 1, maxLength: 255, pattern: '^[\\x20-\\x7e]+$' });
@@ -114,10 +115,6 @@ export const BatchWriteResultSchema = Type.Object({
   results: Type.Array(result, { minItems: 1, maxItems: BATCH_LIMIT }),
 });
 export type BatchWriteResult = Static<typeof BatchWriteResultSchema>;
-export type Violation = {
-  pointer: string;
-  code: 'required' | 'unknown_field' | 'invalid_type' | 'invalid_format' | 'out_of_range' | 'unsupported';
-};
 type Schema = Record<string, any>;
 const esc = (x: string | number) => `/${String(x).replace(/~/g, '~0').replace(/\//g, '~1')}`;
 function validate(schema: Schema, value: unknown, pointer: string, out: Violation[]) {
@@ -220,10 +217,61 @@ function check(input: unknown, schema: Schema): Violation[] {
   validate(schema, input, '', violations);
   return violations;
 }
+// Subject and statement diagnostics come from the same checks as their single routes.
+// The exported schema still describes their complete wire shapes.
+const batchEnvelope = {
+  ...BatchWriteRequestSchema,
+  properties: {
+    commands: {
+      ...BatchWriteRequestSchema.properties.commands,
+      items: {
+        anyOf: BatchCommandSchema.anyOf.map((variant) => ({
+          ...variant,
+          properties: {
+            ...variant.properties,
+            ...(variant.properties.op.const === 'create' ? { subject: Type.Unknown() } : {}),
+            ...(variant.properties.op.const === 'propose' ? { statement: Type.Unknown() } : {}),
+          },
+        })),
+      },
+    },
+  },
+};
+
 export function checkBatchWrite(input: unknown, release?: Release): { pointer: string; code: string }[] {
-  if (release !== undefined) throw new Error('release checks are not implemented');
-  const errors = check(input, BatchWriteRequestSchema as Schema);
+  const errors = check(input, batchEnvelope);
   if (!record(input) || !Array.isArray(input.commands) || input.commands.length > BATCH_LIMIT) return errors;
+  input.commands.forEach((command, i) => {
+    if (!record(command)) return;
+    const prefix = `/commands/${i}`;
+    if (command.op === 'create' && Object.hasOwn(command, 'subject')) {
+      const raw = command.subject;
+      const subject = record(raw)
+        ? Object.fromEntries(Object.entries(raw).filter(([key]) => key !== 'statements'))
+        : raw;
+      if (record(raw) && Object.hasOwn(raw, 'statements'))
+        errors.push({ pointer: `${prefix}/subject/statements`, code: 'unsupported' });
+      const violations = release
+        ? checkSubjectInput(subject, release).violations
+        : checkSubjectStructure(subject).violations;
+      errors.push(...violations.map((error) => ({ ...error, pointer: `${prefix}/subject${error.pointer}` })));
+      if (!release && record(subject)) {
+        if (subject.type === undefined) errors.push({ pointer: `${prefix}/subject/type`, code: 'required' });
+        else if (typeof subject.type !== 'string')
+          errors.push({ pointer: `${prefix}/subject/type`, code: 'invalid_type' });
+        else if (!subject.type.length) errors.push({ pointer: `${prefix}/subject/type`, code: 'out_of_range' });
+      }
+    } else if (command.op === 'propose' && Object.hasOwn(command, 'statement')) {
+      errors.push(
+        ...checkStatementInput(command.statement, release).violations.map((error) => ({
+          ...error,
+          pointer: prefix + error.pointer,
+        })),
+      );
+      if (!release && record(command.statement) && command.statement.rank === 'deprecated')
+        errors.push({ pointer: `${prefix}/statement/rank`, code: 'unsupported' });
+    }
+  });
   const seen = new Set<unknown>();
   input.commands.forEach((command, i) => {
     if (record(command) && Object.hasOwn(command, 'key')) {
@@ -248,6 +296,18 @@ export function checkBatchWrite(input: unknown, release?: Release): { pointer: s
       return;
     }
     if (command.op !== 'propose') return;
+    if (release && record(command.statement) && record(command.statement.property)) {
+      const id = command.statement.property.id;
+      const property =
+        typeof id === 'string' && Object.hasOwn(release.properties, id) ? release.properties[id] : undefined;
+      if (
+        property &&
+        ((group === 'summary' && property.datatype !== 'document') ||
+          (group === 'cover' && property.datatype !== 'media') ||
+          (group === 'facts' && ['document', 'media'].includes(property.datatype)))
+      )
+        errors.push({ pointer: `${pointer}/statement/property/id`, code: 'unsupported' });
+    }
     if (summary) {
       if (!Object.hasOwn(command, 'rights')) errors.push({ pointer: `${pointer}/rights`, code: 'required' });
       else if (

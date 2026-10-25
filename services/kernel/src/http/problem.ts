@@ -1,3 +1,5 @@
+import { issuePointers, type RawIssue } from '@rezics/definitions/validate';
+export { issuePointers } from '@rezics/definitions/validate';
 import { NotFound, ParseError, ValidationError, t } from 'elysia';
 import type { TSchema } from 'typebox';
 import { CommandUnavailableError, IdempotencyConflictError, TooManyEventsError } from '../command/command.ts';
@@ -120,62 +122,6 @@ export function problemSchema<const Codes extends readonly [ProblemCode, ...Prob
   const statuses = new Set(codes.map((code) => PROBLEMS[code].status));
   if (statuses.size !== 1) throw new TypeError('Problem response alternatives must share one status');
   return schemaFor(codes, statuses.values().next().value!);
-}
-
-type RawIssue = {
-  keyword?: unknown;
-  instancePath?: unknown;
-  params?: unknown;
-};
-
-function escapePointerSegment(segment: string): string {
-  return segment.replace(/~/g, '~0').replace(/\//g, '~1');
-}
-
-function appendPointer(pointer: string, segment: string): string {
-  return `${pointer}/${escapePointerSegment(segment)}`;
-}
-
-export function issuePointers(issue: RawIssue): { pointer: string; code: FieldErrorCode }[] {
-  const keyword = issue.keyword;
-  const pointer =
-    typeof issue.instancePath === 'string' && pointerPattern.test(issue.instancePath) ? issue.instancePath : '';
-  const params =
-    typeof issue.params === 'object' && issue.params !== null ? (issue.params as Record<string, unknown>) : {};
-  if (keyword === 'required') {
-    const names = Array.isArray(params.requiredProperties)
-      ? params.requiredProperties
-      : [params.missingProperty ?? params.required];
-    return names
-      .filter((name): name is string => typeof name === 'string')
-      .map((name) => ({ pointer: appendPointer(pointer, name), code: 'required' }));
-  }
-  if (keyword === 'additionalProperties') {
-    const names = Array.isArray(params.additionalProperties)
-      ? params.additionalProperties
-      : [params.additionalProperty ?? params.propertyName];
-    return names
-      .filter((name): name is string => typeof name === 'string')
-      .map((name) => ({ pointer: appendPointer(pointer, name), code: 'unknown_field' }));
-  }
-  if (typeof keyword !== 'string') return [];
-  if (keyword === 'type') return [{ pointer, code: 'invalid_type' }];
-  if (
-    [
-      'minimum',
-      'maximum',
-      'exclusiveMinimum',
-      'exclusiveMaximum',
-      'minLength',
-      'maxLength',
-      'minItems',
-      'maxItems',
-    ].includes(keyword)
-  )
-    return [{ pointer, code: 'out_of_range' }];
-  if (['pattern', 'format', 'const', 'enum', 'multipleOf'].includes(keyword))
-    return [{ pointer, code: 'invalid_format' }];
-  return [];
 }
 
 function validationFieldErrors(error: ValidationError): FieldError[] {

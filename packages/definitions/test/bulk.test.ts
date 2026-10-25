@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { bundledRelease } from '../src/bundled.ts';
 import {
   BATCH_LIMIT,
   FIELD_GROUPS,
@@ -25,7 +26,7 @@ const reference: BatchReference = {
 };
 const statement: BatchStatement = {
   property: { id: 'schema:name' },
-  value: { type: 'value', content: 'Example' },
+  value: { type: 'value', content: { language: 'en', text: 'Example' } },
   qualifiers: [],
   references: [reference],
 };
@@ -41,7 +42,6 @@ const valid: BatchWriteRequest = {
       subject: {
         type: 'schema:Book',
         labels: { ja: 'Example' },
-        statements: { 'schema:name': [statement] },
       },
     },
     {
@@ -67,7 +67,7 @@ test('a batch of create, propose and retract commands is structurally valid', ()
   expect([...FIELD_GROUPS]).toEqual(['facts', 'summary', 'cover']);
   expect(checkBatchWrite(valid)).toEqual([]);
   expect(checkBatchWrite(JSON.parse(JSON.stringify(valid)))).toEqual([]);
-  expect(() => checkBatchWrite(valid, {} as never)).toThrow('release checks are not implemented');
+  expect(checkBatchWrite(valid, bundledRelease)).toEqual([]);
 });
 
 test('malformed batches are refused with pointers into the batch', () => {
@@ -109,7 +109,7 @@ test('malformed batches are refused with pointers into the batch', () => {
     [
       { commands: [{ ...propose, statement: { ...statement, references: [] } }] },
       '/commands/0/statement/references',
-      'out_of_range',
+      'required',
     ],
     [
       { commands: [{ ...propose, statement: without(statement, 'references') }] },
@@ -120,6 +120,15 @@ test('malformed batches are refused with pointers into the batch', () => {
       { commands: [{ ...create, subject: without(create.subject as object, 'labels') }] },
       '/commands/0/subject/labels',
       'required',
+    ],
+    [
+      {
+        commands: [
+          { ...create, subject: { ...(create.subject as object), statements: { 'schema:name': [statement] } } },
+        ],
+      },
+      '/commands/0/subject/statements',
+      'unsupported',
     ],
     [{ commands: [{ ...retract, candidate: 7 }] }, '/commands/0/candidate', 'invalid_type'],
   ];

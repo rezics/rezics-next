@@ -1,3 +1,4 @@
+import { checkStatementInput } from '@rezics/definitions/validate';
 import type { Release } from '@rezics/definitions';
 import type { Pool, PoolClient } from 'pg';
 import { runCommand, type CommandAuthorization } from '../command/command.ts';
@@ -10,7 +11,7 @@ import type { KeyRing } from '../tokens/seal.ts';
 import { GLOBAL_CONTEXT, readRelease } from './definitions.ts';
 import { itemFacts, resolveItem, SubjectInputError, type Violation } from './item.ts';
 import { PageCursorError } from './page.ts';
-import { checkTyped } from './rules.ts';
+import { rejectContent } from './rules.ts';
 import { candidateFact, expandSlot, resolveSlot, slotId, type Candidate } from './slots.ts';
 import readTypes from './read-item-types.sql';
 
@@ -26,36 +27,18 @@ function validatedStatement(
   raw: unknown,
 ) {
   const property = record(raw) && record(raw.property) && typeof raw.property.id === 'string' ? raw.property.id : '';
-  const escaped = property.replaceAll('~', '~0').replaceAll('/', '~1');
-  const prefix = `/statements/${escaped}/0`;
-  const remap = (violation: Violation): Violation => ({
-    ...violation,
-    pointer:
-      violation.pointer === `/statements/${escaped}`
-        ? '/statement/property/id'
-        : violation.pointer.replace(prefix, '/statement'),
-  });
-  const input = { type, labels: { en: 'Validation' }, statements: { [property]: [raw] } };
-  const typed = checkTyped(release.release, release.digest, input);
-  const violations = typed.violations.map(remap);
-  if (!record(raw) || !Array.isArray(raw.references) || !raw.references.length)
-    violations.push({ pointer: '/statement/references', code: 'required' });
-  let facts: ReturnType<typeof itemFacts> = [];
-  try {
-    facts = itemFacts(subject, input, type);
-  } catch (error) {
-    if (!(error instanceof SubjectInputError)) throw error;
-    violations.push(...error.violations.map(remap));
-  }
+  const definition = Object.hasOwn(release.release.types, type) ? release.release.types[type] : undefined;
+  const subjectErrors: Violation[] = !definition
+    ? [{ pointer: '/type', code: 'unsupported' }]
+    : !definition.properties.includes(property)
+      ? [{ pointer: '/statement/property/id', code: 'unsupported' }]
+      : [];
+  const checked = checkStatementInput(raw, subjectErrors.length ? undefined : release.release, { rejectContent });
+  const violations = [...subjectErrors, ...checked.violations];
   if (violations.length) throw new SubjectInputError(violations);
-  return {
-    property,
-    fact: facts.find((fact) => fact.kind === 'statement')!,
-    items: typed.items.map((item) => ({
-      ...item,
-      pointer: item.pointer.replace(prefix, '/statement'),
-    })),
-  };
+  const input = { type, labels: { en: 'Validation' }, statements: { [property]: [raw] } };
+  const facts = itemFacts(subject, input, type);
+  return { property, fact: facts.find((fact) => fact.kind === 'statement')!, items: checked.targets };
 }
 
 export async function proposeStatement(
