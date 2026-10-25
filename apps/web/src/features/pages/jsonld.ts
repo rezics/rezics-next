@@ -1,0 +1,159 @@
+import type { Related, Subject } from '../../subject/types.ts';
+
+type JsonValue = string | number | JsonValue[] | { [key: string]: JsonValue };
+type Statement = Subject['statements'][string][number];
+
+const idBase = 'https://rezics.com/id/';
+const prefixes = new Map([
+  ['wd', 'http://www.wikidata.org/entity/'],
+  ['wdt', 'http://www.wikidata.org/prop/direct/'],
+  ['bf', 'http://id.loc.gov/ontologies/bibframe/'],
+]);
+const reserved = new Set([
+  '@context',
+  '@id',
+  '@type',
+  'additionalType',
+  'url',
+  'name',
+  'description',
+  'alternateName',
+  'identifier',
+]);
+
+function languages(locale: string): string[] {
+  return [locale, ...(locale === 'zh-Hant' ? ['zh-Hans'] : locale === 'zh-Hans' ? ['zh-Hant'] : []), 'en'];
+}
+
+function text<T extends string | string[]>(values: Record<string, T>, order: string[]): T | undefined {
+  for (const language of order) {
+    if (Object.hasOwn(values, language) && values[language]?.length) return values[language];
+  }
+  for (const value of Object.values(values)) {
+    if (value.length) return value;
+  }
+}
+
+function record(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function date(value: unknown): string | undefined {
+  // Accept both a time payload and an explicitly wrapped time value.
+  if (record(value) && value.type === 'value') value = value.content;
+  if (!record(value) || typeof value.time !== 'string' || typeof value.precision !== 'number') return;
+  if (!Number.isInteger(value.precision) || value.precision < 9) return;
+  const parts = /^\+?(\d+)-(\d{2})-(\d{2})T/.exec(value.time);
+  if (!parts || !/[1-9]/.test(parts[1]!)) return;
+  const year = parts[1]!.replace(/^0+/, '').padStart(4, '0');
+  if (value.precision === 9) return year;
+  const month = Number(parts[2]);
+  if (month < 1 || month > 12) return;
+  if (value.precision === 10) return `${year}-${parts[2]}`;
+  const day = Number(parts[3]);
+  if (day < 1 || day > 31) return;
+  return `${year}-${parts[2]}-${parts[3]}`;
+}
+
+function statementValue(statement: Statement, references: Map<string, JsonValue>): JsonValue | undefined {
+  if (statement.value.type !== 'value') return;
+  const content = statement.value.content;
+  switch (statement.property.data_type) {
+    case 'wikibase-item':
+      return typeof content === 'string' ? references.get(content) : undefined;
+    case 'string':
+    case 'external-id':
+    case 'url':
+      return typeof content === 'string' ? content : undefined;
+    case 'monolingualtext':
+      if (record(content) && typeof content.text === 'string' && typeof content.language === 'string')
+        return { '@value': content.text, '@language': content.language };
+      return;
+    case 'quantity': {
+      if (!record(content) || typeof content.amount !== 'string' || typeof content.unit !== 'string') return;
+      const amount = Number(content.amount);
+      if (!content.amount.trim() || !Number.isFinite(amount)) return;
+      return content.unit === '1' ? amount : { '@type': 'QuantitativeValue', value: amount, unitText: content.unit };
+    }
+    case 'time':
+      return date(content);
+    case 'document':
+    case 'media':
+      return;
+  }
+}
+
+/** Map only the public subject representation and the related labels it discloses. */
+export function subjectJsonLd({
+  subject,
+  related,
+  locale,
+  url,
+}: {
+  subject: Subject;
+  related: Related;
+  locale: string;
+  url: string;
+}): Record<string, JsonValue> {
+  const order = languages(locale);
+  const entries: [string, JsonValue][] = [
+    ['@context', 'https://schema.org'],
+    ['@id', `${idBase}${subject.id}`],
+    ['@type', subject.type.startsWith('schema:') ? subject.type.slice(7) : 'Thing'],
+    ['url', url],
+  ];
+  if (!subject.type.startsWith('schema:')) {
+    const separator = subject.type.indexOf(':');
+    const base = separator > 0 ? prefixes.get(subject.type.slice(0, separator)) : undefined;
+    if (base) entries.push(['additionalType', base + subject.type.slice(separator + 1)]);
+  }
+  const name = text(subject.labels, order);
+  const description = text(subject.descriptions, order);
+  const aliases = text(subject.aliases, order);
+  if (name !== undefined) entries.push(['name', name]);
+  if (description !== undefined) entries.push(['description', description]);
+  if (aliases !== undefined) entries.push(['alternateName', [...aliases]]);
+
+  // Select each related label once, even when many statements reference the same subject.
+  const references = new Map<string, JsonValue>();
+  for (const [id, entry] of Object.entries(related)) {
+    const label = text(entry.labels, order);
+    references.set(id, { '@id': `${idBase}${entry.redirect ?? id}`, ...(label === undefined ? {} : { name: label }) });
+  }
+
+  const identifiers: JsonValue[] = [];
+  for (const [property, statements] of Object.entries(subject.statements)) {
+    const key = property.startsWith('schema:') ? property.slice(7) : undefined;
+    const externalId = /^wdt:P\d+$/.test(property);
+    if ((key === undefined && !externalId) || (key !== undefined && reserved.has(key))) continue;
+    const rank = statements.some((statement) => statement.rank === 'preferred') ? 'preferred' : 'normal';
+    const values: JsonValue[] = [];
+    for (const statement of statements) {
+      if (statement.rank !== rank) continue;
+      if (externalId && statement.property.data_type !== 'external-id') continue;
+      const value = statementValue(statement, references);
+      if (value === undefined) continue;
+      if (externalId) {
+        identifiers.push({
+          '@type': 'PropertyValue',
+          propertyID: `http://www.wikidata.org/entity/${property.slice(4)}`,
+          value,
+        });
+      } else {
+        values.push(value);
+      }
+    }
+    if (key !== undefined && values.length) entries.push([key, values.length === 1 ? values[0]! : values]);
+  }
+  if (identifiers.length) entries.push(['identifier', identifiers]);
+  // fromEntries also preserves hostile property names such as __proto__ as ordinary own keys.
+  return Object.fromEntries(entries);
+}
+
+/** Escape HTML-sensitive characters while preserving the JSON value exactly. */
+export function serializeJsonLd(value: unknown): string {
+  return JSON.stringify(value).replace(
+    /[<>&\u2028\u2029]/g,
+    (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`,
+  );
+}
