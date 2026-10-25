@@ -506,6 +506,22 @@ CREATE TABLE access.standing_parent_installation (
 
 
 --
+-- Name: write_rate_counter; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE UNLOGGED TABLE access.write_rate_counter (
+    identity_digest text NOT NULL,
+    family text NOT NULL,
+    count integer NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    CONSTRAINT write_rate_counter_count_check CHECK ((count >= 0)),
+    CONSTRAINT write_rate_counter_expires_at_check CHECK (isfinite(expires_at)),
+    CONSTRAINT write_rate_counter_family_check CHECK ((family ~ '^[a-z][a-z0-9_.:-]{0,63}$'::text)),
+    CONSTRAINT write_rate_counter_identity_digest_check CHECK ((identity_digest ~ '^[a-f0-9]{64}$'::text))
+);
+
+
+--
 -- Name: account account_pkey; Type: CONSTRAINT; Schema: access; Owner: -
 --
 
@@ -646,6 +662,21 @@ ALTER TABLE ONLY access.standing_parent_installation
 --
 
 CREATE INDEX organization_member_owner_probe ON access.organization_member USING gist (route, organization_id, valid) WHERE (role = 'owner'::text);
+
+
+--
+-- Name: write_rate_counter write_rate_counter_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.write_rate_counter
+    ADD CONSTRAINT write_rate_counter_pkey PRIMARY KEY (identity_digest, family);
+
+
+--
+-- Name: write_rate_counter_expiry; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX write_rate_counter_expiry ON access.write_rate_counter USING btree (expires_at);
 
 
 --
