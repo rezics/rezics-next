@@ -1,0 +1,16 @@
+{
+  "name": "@rezics/filter",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "scripts": {
+    "check": "oxfmt --check . && bun run tsc --noEmit --project tsconfig.json && bun test"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.4",
+    "@types/node": "26.6.5"
+  }
+}

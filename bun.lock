@@ -139,6 +139,14 @@
         "@types/node": "26.6.5",
       },
     },
+    "packages/filter": {
+      "name": "@rezics/filter",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@types/bun": "1.4.4",
+        "@types/node": "26.6.5",
+      },
+    },
     "packages/ui": {
       "name": "@rezics/ui",
       "dependencies": {
@@ -821,6 +829,8 @@
     "@rezics/definitions": ["@rezics/definitions@workspace:packages/definitions"],
 
     "@rezics/document": ["@rezics/document@workspace:packages/document"],
+
+    "@rezics/filter": ["@rezics/filter@workspace:packages/filter"],
 
     "@rezics/importer": ["@rezics/importer@workspace:services/importer"],
 
