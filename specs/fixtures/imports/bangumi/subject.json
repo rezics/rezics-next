@@ -1,0 +1,23 @@
+{
+  "id": 424242,
+  "type": 2,
+  "name": "The Clockwork Observatory",
+  "name_cn": "发条天文台",
+  "summary": "A watchmaker restores an abandoned observatory.\n\nAt midnight, the telescope reveals a city that nobody remembers.\nThe final sentence must survive conversion: SUMMARY_END_SENTINEL.",
+  "infobox": "{{Infobox animanga/TVAnime\n|中文名=发条天文台\n|话数=12\n}}",
+  "platform": "TV",
+  "date": "2024-04-01",
+  "nsfw": false,
+  "images": {
+    "large": "https://lain.bgm.tv/pic/cover/l/ab/cd/424242_fixture.jpg",
+    "common": "https://lain.bgm.tv/pic/cover/c/ab/cd/424242_fixture.jpg",
+    "medium": "https://lain.bgm.tv/pic/cover/m/ab/cd/424242_fixture.jpg",
+    "small": "https://lain.bgm.tv/pic/cover/s/ab/cd/424242_fixture.jpg",
+    "grid": "https://lain.bgm.tv/pic/cover/g/ab/cd/424242_fixture.jpg"
+  },
+  "tags": [{ "name": "Science fiction", "count": 17, "total_cont": 21 }],
+  "user_posts": [{ "id": 991001, "user_id": "ACCOUNT_ID_SENTINEL", "text": "USER_POST_PRIVATE_SENTINEL" }],
+  "comments": [{ "user": { "id": "COMMENT_ACCOUNT_SENTINEL" }, "text": "COMMENT_PRIVATE_SENTINEL" }],
+  "reviews": [{ "author": "REVIEW_ACCOUNT_SENTINEL", "body": "REVIEW_PRIVATE_SENTINEL" }],
+  "account_id": "TOP_LEVEL_ACCOUNT_SENTINEL"
+}
