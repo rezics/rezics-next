@@ -5,12 +5,13 @@ Access owns account state and lifecycle, bearer identity evidence, resource perm
 ## Operator responsibility pages
 
 `createOperatorCommands` remains an internal privileged application port; it has no public list route.
-Production composition must pass `cursorKeys?: KeyRing` to use `responsibilityPage`:
+Production composition must supply `OperatorConfig.cursorKeys: KeyRing` to use `responsibilityPage` (the field remains optional when constructing commands for other operations):
 `current` is the active key ID (integer 0–255), and `keys` maps trusted IDs to signing keys of at least 32 bytes.
 Keep this ring stable across requests, workers and restarts, and retain verification keys during rotation for the shared 15-minute cursor lifetime.
 Construction without this field still supports existing commands; every page call fails closed without a valid active key.
 There is no environment lookup, generated key or unsigned fallback in this factory.
 The existing pool must reach the operator anchor's `core.partition` row; its epoch is read through `readPartition` in the same repeatable-read snapshot as the page, so callers supply no epoch override.
+A missing anchor partition also denies the page call before reading responsibilities.
 
 The only page contract is `{ operatorAccountId, cursor?: string, limit?: number }` returning `{ operators, next: string | null }`.
 The default limit is 20; explicit limits must be integers from 1 to 100.
