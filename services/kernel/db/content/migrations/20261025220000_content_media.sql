@@ -85,5 +85,18 @@ CREATE TABLE content.media_variant (
   )
 );
 
+CREATE UNIQUE INDEX media_variant_slot_idx
+  ON content.media_variant (
+    route,
+    media_id,
+    (
+      CASE format WHEN 'avif' THEN 0 ELSE 6 END
+      + CASE
+        WHEN width < 320 THEN 1
+        ELSE array_position(ARRAY[320, 640, 960, 1280, 1920, 2560], width)
+      END
+    )
+  );
+
 -- migrate:down
 -- Forward only: media identity and erasure metadata are durable.

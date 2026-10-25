@@ -347,6 +347,21 @@ CREATE INDEX media_collection_pending_idx ON content.media USING btree (route, c
 
 
 --
+-- Name: media_variant_slot_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE UNIQUE INDEX media_variant_slot_idx ON content.media_variant USING btree (route, media_id, ((
+CASE format
+    WHEN 'avif'::text THEN 0
+    ELSE 6
+END +
+CASE
+    WHEN (width < 320) THEN 1
+    ELSE array_position(ARRAY[320, 640, 960, 1280, 1920, 2560], width)
+END)));
+
+
+--
 -- Name: board board_identity; Type: TRIGGER; Schema: content; Owner: -
 --
 

@@ -225,7 +225,7 @@ test('content media tables expose route-leading identity, lifecycle, and variant
       AND key.ordinality <= index.indnkeyatts
     GROUP BY indexrelid
   `);
-  expect(indexes.length).toBeGreaterThanOrEqual(7);
+  expect(indexes.length).toBeGreaterThanOrEqual(8);
   for (const index of indexes) expect(index.columns[0]).toBe('route');
   expect(indexes).toEqual(
     expect.arrayContaining([
@@ -233,6 +233,10 @@ test('content media tables expose route-leading identity, lifecycle, and variant
       expect.objectContaining({
         name: 'content.media_variant_pkey',
         columns: ['route', 'media_id', 'format', 'width'],
+      }),
+      expect.objectContaining({
+        name: 'content.media_variant_slot_idx',
+        columns: ['route', 'media_id'],
       }),
       expect.objectContaining({
         name: 'content.media_collection_eligible_idx',
@@ -450,14 +454,29 @@ test('variants retain actual output metadata and route-scoped media ownership', 
   `,
     [media.route, media.mediaId, 'b'.repeat(64), `m/${media.mediaId}/webp-127`, transactionId()],
   );
+  await pool.query(
+    `INSERT INTO content.media_variant (
+      route, media_id, format, width, height, media_type, byte_count, sha256, key, transaction_id
+    ) VALUES ($1, $2, 'avif', 127, 61, 'image/avif', 79, $3, $4, $5)`,
+    [media.route, media.mediaId, 'b'.repeat(64), `m/${media.mediaId}/avif-127`, transactionId()],
+  );
   const { rows } = await pool.query(
     `
     SELECT format, width, height, media_type, byte_count, sha256, key
-    FROM content.media_variant WHERE route = $1 AND media_id = $2
+    FROM content.media_variant WHERE route = $1 AND media_id = $2 ORDER BY format
   `,
     [media.route, media.mediaId],
   );
   expect(rows).toEqual([
+    {
+      format: 'avif',
+      width: 127,
+      height: 61,
+      media_type: 'image/avif',
+      byte_count: '79',
+      sha256: 'b'.repeat(64),
+      key: `m/${media.mediaId}/avif-127`,
+    },
     {
       format: 'webp',
       width: 127,
@@ -468,6 +487,40 @@ test('variants retain actual output metadata and route-scoped media ownership', 
       key: `m/${media.mediaId}/webp-127`,
     },
   ]);
+
+  const ladderMedia = await insertMedia({ state: 'available', actualByteCount: 256, sha256 });
+  for (const format of ['avif', 'webp']) {
+    for (const width of [320, 640, 960, 1280, 1920, 2560]) {
+      await pool.query(
+        `INSERT INTO content.media_variant (
+          route, media_id, format, width, height, media_type, byte_count, sha256, key, transaction_id
+        ) VALUES ($1, $2, $3, $4, 100, $5, 80, $6, $7, $8)`,
+        [
+          ladderMedia.route,
+          ladderMedia.mediaId,
+          format,
+          width,
+          format === 'avif' ? 'image/avif' : 'image/webp',
+          'e'.repeat(64),
+          `m/${ladderMedia.mediaId}/${format}-${width}`,
+          transactionId(),
+        ],
+      );
+    }
+  }
+  const { rows: ladderCount } = await pool.query(
+    'SELECT count(*)::integer AS count FROM content.media_variant WHERE route = $1 AND media_id = $2',
+    [ladderMedia.route, ladderMedia.mediaId],
+  );
+  expect(ladderCount[0]?.count).toBe(12);
+  expect(
+    await failure(
+      `INSERT INTO content.media_variant (
+        route, media_id, format, width, height, media_type, byte_count, sha256, key, transaction_id
+      ) VALUES ($1, $2, 'avif', 319, 100, 'image/avif', 80, $3, $4, $5)`,
+      [ladderMedia.route, ladderMedia.mediaId, 'f'.repeat(64), `m/${ladderMedia.mediaId}/avif-319`, transactionId()],
+    ),
+  ).toMatchObject({ code: '23505' });
 
   const invalidVariants = [
     { format: 'jpeg', width: 320, type: 'image/jpeg', key: `m/${media.mediaId}/jpeg-320` },
