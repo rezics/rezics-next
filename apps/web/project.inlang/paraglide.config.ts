@@ -1,8 +1,16 @@
-export default {
+import type { CompilerOptions } from '@inlang/paraglide-js';
+
+const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'] as const;
+
+const config: Omit<CompilerOptions, 'project'> = {
   outdir: './src/paraglide',
-  strategy: ['url', 'cookie', 'preferredLanguage', 'baseLocale'],
+  emitTsDeclarations: true,
+  strategy: ['url', 'cookie', 'custom-accept-language', 'baseLocale'],
+  cookieName: 'rezics_locale',
   urlPatterns: [
-    { pattern: '/', localized: [['en', '/en'], ['zh-Hant', '/zh-Hant'], ['zh-Hans', '/zh-Hans'], ['ja', '/ja'], ['ko', '/ko'], ['de', '/de'], ['fr', '/fr'], ['es', '/es']] },
-    { pattern: '/:path(.*)?', localized: [['en', '/en/:path(.*)?'], ['zh-Hant', '/zh-Hant/:path(.*)?'], ['zh-Hans', '/zh-Hans/:path(.*)?'], ['ja', '/ja/:path(.*)?'], ['ko', '/ko/:path(.*)?'], ['de', '/de/:path(.*)?'], ['fr', '/fr/:path(.*)?'], ['es', '/es/:path(.*)?']] },
+    { pattern: '/', localized: locales.map((locale) => [locale, `/${locale}`]) },
+    { pattern: '/:path(.*)?', localized: locales.map((locale) => [locale, `/${locale}/:path(.*)?`]) },
   ],
 };
+
+export default config;
