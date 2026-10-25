@@ -1,1 +1,26 @@
-{"home_heading":"大切なことを、もっと明確に","not_found_heading":"ページが見つかりません","not_found_message":"お探しのページは見つかりませんでした。","shell_skip_to_content":"本文へ移動","shell_navigation":"メインナビゲーション","shell_language":"言語","shell_theme":"表示設定","shell_theme_system":"システム設定","shell_theme_light":"ライト","shell_theme_dark":"ダーク","nav_home":"ホーム","shell_open_navigation":"ナビゲーションを開く","shell_collapse_navigation":"ナビゲーションを折りたたむ","error_heading":"エラーが発生しました","error_message":"もう一度お試しください。","account_sign_in":"ログイン","account_sign_out":"ログアウト","shell_expand_navigation":"ナビゲーションを展開する","subject_value_unknown":"不明な値","subject_value_none":"値なし","subject_value_unlabelled":"ラベルのない項目","subject_aliases":"別名","subject_sources":"出典","subject_qualifiers":"修飾子"}
+{
+  "home_heading": "大切なことを、もっと明確に",
+  "not_found_heading": "ページが見つかりません",
+  "not_found_message": "お探しのページは見つかりませんでした。",
+  "shell_skip_to_content": "本文へ移動",
+  "shell_navigation": "メインナビゲーション",
+  "shell_language": "言語",
+  "shell_theme": "表示設定",
+  "shell_theme_system": "システム設定",
+  "shell_theme_light": "ライト",
+  "shell_theme_dark": "ダーク",
+  "nav_home": "ホーム",
+  "shell_open_navigation": "ナビゲーションを開く",
+  "shell_collapse_navigation": "ナビゲーションを折りたたむ",
+  "error_heading": "エラーが発生しました",
+  "error_message": "もう一度お試しください。",
+  "account_sign_in": "ログイン",
+  "account_sign_out": "ログアウト",
+  "shell_expand_navigation": "ナビゲーションを展開する",
+  "subject_value_unknown": "不明な値",
+  "subject_value_none": "値なし",
+  "subject_value_unlabelled": "ラベルのない項目",
+  "subject_aliases": "別名",
+  "subject_sources": "出典",
+  "subject_qualifiers": "修飾子"
+}

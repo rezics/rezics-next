@@ -3,11 +3,21 @@ import * as oidc from 'openid-client';
 import { authClient, type SessionEnv } from './client.ts';
 
 export type Login = {
-  kind: 'login'; state: string; nonce: string; verifier: string; returnTo: string; expiresAt: number;
+  kind: 'login';
+  state: string;
+  nonce: string;
+  verifier: string;
+  returnTo: string;
+  expiresAt: number;
 };
 export type Session = {
-  kind: 'session'; subject: string; accessToken: string; accessExpiresAt: number;
-  refreshToken: string; idToken: string; expiresAt: number;
+  kind: 'session';
+  subject: string;
+  accessToken: string;
+  accessExpiresAt: number;
+  refreshToken: string;
+  idToken: string;
+  expiresAt: number;
 };
 type Credential = { status: 'active'; accessToken: string } | { status: 'absent' } | { status: 'unavailable' };
 
@@ -16,14 +26,14 @@ export class SessionStore extends DurableObject<SessionEnv> {
   private ending = false;
 
   async create(record: Login | Session): Promise<void> {
-    await this.ctx.storage.transaction(async storage => {
+    await this.ctx.storage.transaction(async (storage) => {
       await storage.put('record', record);
       await storage.setAlarm(record.expiresAt);
     });
   }
 
   async takeLogin(): Promise<Login | undefined> {
-    return this.ctx.storage.transaction(async storage => {
+    return this.ctx.storage.transaction(async (storage) => {
       const record = await storage.get<Login | Session>('record');
       await storage.delete('record');
       await storage.deleteAlarm();
@@ -41,7 +51,9 @@ export class SessionStore extends DurableObject<SessionEnv> {
   // this promise until the rotated refresh token has been durably stored.
   credential(): Promise<Credential> {
     if (this.ending) return Promise.resolve({ status: 'absent' });
-    this.refreshing ??= this.readCredential().finally(() => { this.refreshing = undefined; });
+    this.refreshing ??= this.readCredential().finally(() => {
+      this.refreshing = undefined;
+    });
     return this.refreshing;
   }
 

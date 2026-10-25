@@ -24,10 +24,7 @@
         "es": "novela de Natsume Sōseki publicada en 1914"
       },
       "aliases": {
-        "ja": [
-          "こゝろ",
-          "心"
-        ]
+        "ja": ["こゝろ", "心"]
       },
       "statements": {
         "schema:author": [
@@ -153,9 +150,7 @@
         "ja": "日本の小説家（1867–1916）"
       },
       "aliases": {
-        "ja": [
-          "漱石"
-        ]
+        "ja": ["漱石"]
       },
       "statements": {}
     },
@@ -173,9 +168,7 @@
         "ja": "平安時代初期に成立した物語"
       },
       "aliases": {
-        "ja": [
-          "竹取の翁の物語"
-        ]
+        "ja": ["竹取の翁の物語"]
       },
       "statements": {
         "schema:author": [

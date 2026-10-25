@@ -36,9 +36,14 @@ function site(): Promise<string> {
   started ??= (async () => {
     const port = await freePort();
     let output = '';
-    const keep = (chunk: Buffer) => { output = (output + chunk.toString()).slice(-8000); };
-    child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'],
-      { cwd: app, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const keep = (chunk: Buffer) => {
+      output = (output + chunk.toString()).slice(-8000);
+    };
+    child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
+      cwd: app,
+      detached: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
     child.stdout!.on('data', keep);
     child.stderr!.on('data', keep);
     const origin = `http://127.0.0.1:${port}`;
@@ -67,7 +72,10 @@ async function open(path: string, options: BrowserContextOptions = {}): Promise<
 
 afterAll(async () => {
   await browser?.close();
-  if (child?.pid) try { process.kill(-child.pid, 'SIGTERM'); } catch {}
+  if (child?.pid)
+    try {
+      process.kill(-child.pid, 'SIGTERM');
+    } catch {}
 });
 
 async function until(check: () => Promise<boolean>, what: string): Promise<void> {
@@ -79,132 +87,179 @@ async function until(check: () => Promise<boolean>, what: string): Promise<void>
 }
 
 // Measurements and audits wait until transitions and animations have finished.
-const settled = (page: Page) => page.waitForFunction(() =>
-  document.getAnimations().every(animation => animation.playState !== 'running'));
+const settled = (page: Page) =>
+  page.waitForFunction(() => document.getAnimations().every((animation) => animation.playState !== 'running'));
 
 const navigationWidth = async (page: Page, name: string) =>
   (await page.getByRole('navigation', { name, exact: true }).boundingBox())?.width ?? 0;
 
 const isFocused = (page: Page, name: string) =>
-  page.getByRole('link', { name, exact: true }).evaluate(element => element === document.activeElement);
+  page.getByRole('link', { name, exact: true }).evaluate((element) => element === document.activeElement);
 
 function themed(origin: string, theme: string): NonNullable<BrowserContextOptions['storageState']> {
-  return { cookies: [{
-    name: 'rezics_theme', value: theme, domain: new URL(origin).hostname, path: '/',
-    expires: -1, httpOnly: false, secure: false, sameSite: 'Lax',
-  }], origins: [] };
+  return {
+    cookies: [
+      {
+        name: 'rezics_theme',
+        value: theme,
+        domain: new URL(origin).hostname,
+        path: '/',
+        expires: -1,
+        httpOnly: false,
+        secure: false,
+        sameSite: 'Lax',
+      },
+    ],
+    origins: [],
+  };
 }
 
 async function violations(page: Page, where: string): Promise<string[]> {
   await settled(page);
   const result = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice']).analyze();
-  return result.violations.map(violation =>
-    `${where}: ${violation.id} ${violation.nodes.map(node => node.target.join(' ')).join(', ')}`);
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'])
+    .analyze();
+  return result.violations.map(
+    (violation) => `${where}: ${violation.id} ${violation.nodes.map((node) => node.target.join(' ')).join(', ')}`,
+  );
 }
 
-test('the skip link stays out of sight and takes no space until it is focused', async () => {
-  const en = await messages('en');
-  for (const javaScriptEnabled of [true, false])
-    for (const viewport of [desktop, phone]) {
-      const where = `${viewport.width}px${javaScriptEnabled ? '' : ' without JavaScript'}`;
-      const page = await open('/en', { javaScriptEnabled, viewport });
-      const skip = page.getByRole('link', { name: en.shell_skip_to_content!, exact: true });
-      expect(await skip.count(), where).toBe(1);
-      expect(await page.getByRole('banner').count(), where).toBe(1);
-      expect((await page.getByRole('banner').boundingBox())?.y, where).toBe(0);
-      const before = await skip.boundingBox();
-      expect(!before || before.width * before.height <= 1 || before.x + before.width <= 0
-        || before.y + before.height <= 0 || before.x >= viewport.width || before.y >= viewport.height, where).toBe(true);
-      await page.keyboard.press('Tab');
-      expect(await isFocused(page, en.shell_skip_to_content!), where).toBe(true);
-      const focused = await skip.boundingBox();
-      expect(focused !== null && focused.width >= 24 && focused.height >= 24 && focused.x >= 0 && focused.y >= 0
-        && focused.x + focused.width <= viewport.width && focused.y + focused.height <= viewport.height, where).toBe(true);
-      await page.context().close();
+test(
+  'the skip link stays out of sight and takes no space until it is focused',
+  async () => {
+    const en = await messages('en');
+    for (const javaScriptEnabled of [true, false])
+      for (const viewport of [desktop, phone]) {
+        const where = `${viewport.width}px${javaScriptEnabled ? '' : ' without JavaScript'}`;
+        const page = await open('/en', { javaScriptEnabled, viewport });
+        const skip = page.getByRole('link', { name: en.shell_skip_to_content!, exact: true });
+        expect(await skip.count(), where).toBe(1);
+        expect(await page.getByRole('banner').count(), where).toBe(1);
+        expect((await page.getByRole('banner').boundingBox())?.y, where).toBe(0);
+        const before = await skip.boundingBox();
+        expect(
+          !before ||
+            before.width * before.height <= 1 ||
+            before.x + before.width <= 0 ||
+            before.y + before.height <= 0 ||
+            before.x >= viewport.width ||
+            before.y >= viewport.height,
+          where,
+        ).toBe(true);
+        await page.keyboard.press('Tab');
+        expect(await isFocused(page, en.shell_skip_to_content!), where).toBe(true);
+        const focused = await skip.boundingBox();
+        expect(
+          focused !== null &&
+            focused.width >= 24 &&
+            focused.height >= 24 &&
+            focused.x >= 0 &&
+            focused.y >= 0 &&
+            focused.x + focused.width <= viewport.width &&
+            focused.y + focused.height <= viewport.height,
+          where,
+        ).toBe(true);
+        await page.context().close();
+      }
+  },
+  timeout,
+);
+
+test(
+  'the desktop navigation collapses to icons that keep their names, and the first paint remembers it',
+  async () => {
+    for (const locale of locales) {
+      const text = await messages(locale);
+      expect(text.shell_expand_navigation?.trim(), locale).toBeTruthy();
+      expect(text.shell_expand_navigation, locale).not.toBe(text.shell_collapse_navigation);
     }
-}, timeout);
+    const en = await messages('en');
+    const nav = en.shell_navigation!;
+    const page = await open('/en');
+    const home = page
+      .getByRole('navigation', { name: nav, exact: true })
+      .getByRole('link', { name: en.nav_home!, exact: true });
+    expect(await navigationWidth(page, nav)).toBeGreaterThanOrEqual(160);
+    const before = await page.context().cookies();
 
-test('the desktop navigation collapses to icons that keep their names, and the first paint remembers it', async () => {
-  for (const locale of locales) {
-    const text = await messages(locale);
-    expect(text.shell_expand_navigation?.trim(), locale).toBeTruthy();
-    expect(text.shell_expand_navigation, locale).not.toBe(text.shell_collapse_navigation);
-  }
-  const en = await messages('en');
-  const nav = en.shell_navigation!;
-  const page = await open('/en');
-  const home = page.getByRole('navigation', { name: nav, exact: true }).getByRole('link', { name: en.nav_home!, exact: true });
-  expect(await navigationWidth(page, nav)).toBeGreaterThanOrEqual(160);
-  const before = await page.context().cookies();
+    await page.getByRole('button', { name: en.shell_collapse_navigation!, exact: true }).click();
+    await page.getByRole('button', { name: en.shell_expand_navigation!, exact: true }).waitFor();
+    await until(async () => (await navigationWidth(page, nav)) <= 96, 'the navigation collapses');
+    expect(await home.count()).toBe(1);
+    expect(await home.isVisible()).toBe(true);
+    expect(await home.getAttribute('aria-current')).toBe('page');
 
-  await page.getByRole('button', { name: en.shell_collapse_navigation!, exact: true }).click();
-  await page.getByRole('button', { name: en.shell_expand_navigation!, exact: true }).waitFor();
-  await until(async () => await navigationWidth(page, nav) <= 96, 'the navigation collapses');
-  expect(await home.count()).toBe(1);
-  expect(await home.isVisible()).toBe(true);
-  expect(await home.getAttribute('aria-current')).toBe('page');
+    // One preference is kept in one cookie, and the server paints it before any script runs.
+    const cookies = await page.context().cookies();
+    expect(cookies.filter((cookie) => !before.some((old) => old.name === cookie.name)).length).toBe(1);
+    const again = await open('/en', { javaScriptEnabled: false, storageState: { cookies, origins: [] } });
+    expect(await navigationWidth(again, nav)).toBeLessThanOrEqual(96);
+    expect(await again.getByRole('button', { name: en.shell_expand_navigation!, exact: true }).count()).toBe(1);
+    await again.context().close();
 
-  // One preference is kept in one cookie, and the server paints it before any script runs.
-  const cookies = await page.context().cookies();
-  expect(cookies.filter(cookie => !before.some(old => old.name === cookie.name)).length).toBe(1);
-  const again = await open('/en', { javaScriptEnabled: false, storageState: { cookies, origins: [] } });
-  expect(await navigationWidth(again, nav)).toBeLessThanOrEqual(96);
-  expect(await again.getByRole('button', { name: en.shell_expand_navigation!, exact: true }).count()).toBe(1);
-  await again.context().close();
+    await page.getByRole('button', { name: en.shell_expand_navigation!, exact: true }).click();
+    await until(async () => (await navigationWidth(page, nav)) >= 160, 'the navigation expands');
+    await page.context().close();
+  },
+  timeout,
+);
 
-  await page.getByRole('button', { name: en.shell_expand_navigation!, exact: true }).click();
-  await until(async () => await navigationWidth(page, nav) >= 160, 'the navigation expands');
-  await page.context().close();
-}, timeout);
+test(
+  'the phone navigation opens as a modal sheet that holds focus, gives it back, and closes on navigation',
+  async () => {
+    const origin = await site();
+    const en = await messages('en');
+    const page = await open('/en', { viewport: phone });
+    const trigger = page.getByRole('button', { name: en.shell_open_navigation!, exact: true });
+    await trigger.click();
+    const sheet = page.getByRole('dialog');
+    await sheet.waitFor();
+    const home = sheet
+      .getByRole('navigation', { name: en.shell_navigation!, exact: true })
+      .getByRole('link', { name: en.nav_home!, exact: true });
+    expect(await home.getAttribute('aria-current')).toBe('page');
+    for (let step = 0; step < 6; step++) {
+      expect(await sheet.evaluate((element) => element.contains(document.activeElement)), `tab ${step}`).toBe(true);
+      await page.keyboard.press('Tab');
+    }
+    await page.keyboard.press('Escape');
+    await sheet.waitFor({ state: 'hidden' });
+    expect(await trigger.evaluate((element) => element === document.activeElement)).toBe(true);
+    await page.context().close();
 
-test('the phone navigation opens as a modal sheet that holds focus, gives it back, and closes on navigation', async () => {
-  const origin = await site();
-  const en = await messages('en');
-  const page = await open('/en', { viewport: phone });
-  const trigger = page.getByRole('button', { name: en.shell_open_navigation!, exact: true });
-  await trigger.click();
-  const sheet = page.getByRole('dialog');
-  await sheet.waitFor();
-  const home = sheet.getByRole('navigation', { name: en.shell_navigation!, exact: true })
-    .getByRole('link', { name: en.nav_home!, exact: true });
-  expect(await home.getAttribute('aria-current')).toBe('page');
-  for (let step = 0; step < 6; step++) {
-    expect(await sheet.evaluate(element => element.contains(document.activeElement)), `tab ${step}`).toBe(true);
-    await page.keyboard.press('Tab');
-  }
-  await page.keyboard.press('Escape');
-  await sheet.waitFor({ state: 'hidden' });
-  expect(await trigger.evaluate(element => element === document.activeElement)).toBe(true);
-  await page.context().close();
+    const lost = await open('/en/no-such-page', { viewport: phone });
+    await lost.getByRole('button', { name: en.shell_open_navigation!, exact: true }).click();
+    const drawer = lost.getByRole('dialog');
+    await drawer.waitFor();
+    await drawer.getByRole('link', { name: en.nav_home!, exact: true }).click();
+    await lost.waitForURL(`${origin}/en`);
+    await drawer.waitFor({ state: 'hidden' });
+    await lost.context().close();
+  },
+  timeout,
+);
 
-  const lost = await open('/en/no-such-page', { viewport: phone });
-  await lost.getByRole('button', { name: en.shell_open_navigation!, exact: true }).click();
-  const drawer = lost.getByRole('dialog');
-  await drawer.waitFor();
-  await drawer.getByRole('link', { name: en.nav_home!, exact: true }).click();
-  await lost.waitForURL(`${origin}/en`);
-  await drawer.waitFor({ state: 'hidden' });
-  await lost.context().close();
-}, timeout);
+test(
+  'the collapsed navigation and the open phone sheet have no accessibility violations in either theme',
+  async () => {
+    const origin = await site();
+    const en = await messages('en');
+    const found: string[] = [];
+    for (const theme of ['light', 'dark']) {
+      const wide = await open('/en', { storageState: themed(origin, theme) });
+      await wide.getByRole('button', { name: en.shell_collapse_navigation!, exact: true }).click();
+      await wide.getByRole('button', { name: en.shell_expand_navigation!, exact: true }).waitFor();
+      await until(async () => (await navigationWidth(wide, en.shell_navigation!)) <= 96, 'the navigation collapses');
+      found.push(...(await violations(wide, `${theme} collapsed`)));
+      await wide.context().close();
 
-test('the collapsed navigation and the open phone sheet have no accessibility violations in either theme', async () => {
-  const origin = await site();
-  const en = await messages('en');
-  const found: string[] = [];
-  for (const theme of ['light', 'dark']) {
-    const wide = await open('/en', { storageState: themed(origin, theme) });
-    await wide.getByRole('button', { name: en.shell_collapse_navigation!, exact: true }).click();
-    await wide.getByRole('button', { name: en.shell_expand_navigation!, exact: true }).waitFor();
-    await until(async () => await navigationWidth(wide, en.shell_navigation!) <= 96, 'the navigation collapses');
-    found.push(...await violations(wide, `${theme} collapsed`));
-    await wide.context().close();
-
-    const narrow = await open('/en', { viewport: phone, storageState: themed(origin, theme) });
-    await narrow.getByRole('button', { name: en.shell_open_navigation!, exact: true }).click();
-    await narrow.getByRole('dialog').waitFor();
-    found.push(...await violations(narrow, `${theme} phone sheet`));
-    await narrow.context().close();
-  }
-  expect(found).toEqual([]);
-}, timeout);
+      const narrow = await open('/en', { viewport: phone, storageState: themed(origin, theme) });
+      await narrow.getByRole('button', { name: en.shell_open_navigation!, exact: true }).click();
+      await narrow.getByRole('dialog').waitFor();
+      found.push(...(await violations(narrow, `${theme} phone sheet`)));
+      await narrow.context().close();
+    }
+    expect(found).toEqual([]);
+  },
+  timeout,
+);

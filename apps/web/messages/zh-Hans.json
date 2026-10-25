@@ -1,1 +1,26 @@
-{"home_heading":"看清真正重要的事","not_found_heading":"找不到页面","not_found_message":"找不到您请求的页面。","shell_skip_to_content":"跳到内容","shell_navigation":"主要导航","shell_language":"语言","shell_theme":"外观","shell_theme_system":"跟随系统","shell_theme_light":"浅色","shell_theme_dark":"深色","nav_home":"首页","shell_open_navigation":"打开导航","shell_collapse_navigation":"收起导航","error_heading":"发生错误","error_message":"请重试。","account_sign_in":"登录","account_sign_out":"退出登录","shell_expand_navigation":"展开导航","subject_value_unknown":"未知的值","subject_value_none":"没有值","subject_value_unlabelled":"未标记的主题","subject_aliases":"又名","subject_sources":"来源","subject_qualifiers":"限定条件"}
+{
+  "home_heading": "看清真正重要的事",
+  "not_found_heading": "找不到页面",
+  "not_found_message": "找不到您请求的页面。",
+  "shell_skip_to_content": "跳到内容",
+  "shell_navigation": "主要导航",
+  "shell_language": "语言",
+  "shell_theme": "外观",
+  "shell_theme_system": "跟随系统",
+  "shell_theme_light": "浅色",
+  "shell_theme_dark": "深色",
+  "nav_home": "首页",
+  "shell_open_navigation": "打开导航",
+  "shell_collapse_navigation": "收起导航",
+  "error_heading": "发生错误",
+  "error_message": "请重试。",
+  "account_sign_in": "登录",
+  "account_sign_out": "退出登录",
+  "shell_expand_navigation": "展开导航",
+  "subject_value_unknown": "未知的值",
+  "subject_value_none": "没有值",
+  "subject_value_unlabelled": "未标记的主题",
+  "subject_aliases": "又名",
+  "subject_sources": "来源",
+  "subject_qualifiers": "限定条件"
+}

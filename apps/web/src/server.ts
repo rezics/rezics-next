@@ -7,7 +7,13 @@ import { problem, problemResponse } from './media/kernel.ts';
 import { mediaRequest, type MediaEnv } from './media/index.ts';
 import { createStartHandler, defaultStreamHandler } from '@tanstack/react-start/server';
 import { paraglideMiddleware } from './paraglide/server.js';
-import { defineCustomServerStrategy, extractLocaleFromRequestAsync, extractLocaleFromRequestWithStrategies, localizeUrl, locales } from './paraglide/runtime.js';
+import {
+  defineCustomServerStrategy,
+  extractLocaleFromRequestAsync,
+  extractLocaleFromRequestWithStrategies,
+  localizeUrl,
+  locales,
+} from './paraglide/runtime.js';
 
 export { SessionStore } from './session/store.ts';
 
@@ -27,8 +33,11 @@ const fetchHandler = createStartHandler(defaultStreamHandler);
 export default {
   async fetch(request: Request) {
     const url = new URL(request.url);
-    if (cookie(request, SESSION_COOKIE) !== undefined && !['GET', 'HEAD', 'OPTIONS'].includes(request.method)
-      && request.headers.get('origin') !== url.origin)
+    if (
+      cookie(request, SESSION_COOKIE) !== undefined &&
+      !['GET', 'HEAD', 'OPTIONS'].includes(request.method) &&
+      request.headers.get('origin') !== url.origin
+    )
       return problemResponse(problem(403, 'forbidden', 'Forbidden'));
     if (url.pathname.startsWith('/auth/')) return authRequest(request, env as Partial<SessionEnv>);
     if (!url.pathname.startsWith('/media/')) return siteRequest(request);
@@ -51,7 +60,10 @@ async function siteRequest(request: Request): Promise<Response> {
   if (url.pathname === '/') {
     const locale = await extractLocaleFromRequestAsync(request);
     const location = localizeUrl(url, { locale });
-    return new Response(null, { status: 302, headers: { Location: location.href, 'Cache-Control': 'private, no-store' } });
+    return new Response(null, {
+      status: 302,
+      headers: { Location: location.href, 'Cache-Control': 'private, no-store' },
+    });
   }
   return paraglideMiddleware(request, () => fetchHandler(request)).then((response: Response) => {
     const headers = new Headers(response.headers);
@@ -72,7 +84,8 @@ function matchUiLocaleTag(header: string | null): string | undefined {
     const exact = locales.find((locale) => locale.toLowerCase() === tag);
     if (exact) return exact;
     const [language, ...subtags] = tag.split('-');
-    if (language === 'zh') return subtags.some((part) => ['hant', 'tw', 'hk', 'mo'].includes(part)) ? 'zh-Hant' : 'zh-Hans';
+    if (language === 'zh')
+      return subtags.some((part) => ['hant', 'tw', 'hk', 'mo'].includes(part)) ? 'zh-Hant' : 'zh-Hans';
     const base = locales.find((locale) => locale.toLowerCase() === language);
     if (base) return base;
   }

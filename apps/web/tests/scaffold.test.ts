@@ -8,7 +8,10 @@ const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'];
 const timeout = 180_000;
 
 async function messages(locale: string): Promise<Record<string, unknown>> {
-  const { $schema: _, ...entries } = (await Bun.file(join(app, 'messages', `${locale}.json`)).json()) as Record<string, unknown>;
+  const { $schema: _, ...entries } = (await Bun.file(join(app, 'messages', `${locale}.json`)).json()) as Record<
+    string,
+    unknown
+  >;
   return entries;
 }
 
@@ -31,9 +34,14 @@ function site(): Promise<string> {
   started ??= (async () => {
     const port = await freePort();
     let output = '';
-    const keep = (chunk: Buffer) => { output = (output + chunk.toString()).slice(-8000); };
-    child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'],
-      { cwd: app, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const keep = (chunk: Buffer) => {
+      output = (output + chunk.toString()).slice(-8000);
+    };
+    child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
+      cwd: app,
+      detached: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
     child.stdout!.on('data', keep);
     child.stderr!.on('data', keep);
     const origin = `http://127.0.0.1:${port}`;
@@ -52,50 +60,72 @@ function site(): Promise<string> {
 }
 
 afterAll(() => {
-  if (child?.pid) try { process.kill(-child.pid, 'SIGTERM'); } catch {}
+  if (child?.pid)
+    try {
+      process.kill(-child.pid, 'SIGTERM');
+    } catch {}
 });
 
 function htmlLang(html: string): string | undefined {
   return /<html[^>]*\slang="([^"]+)"/.exec(html)?.[1];
 }
 
-test('the documented dev command serves server-rendered pages from the Worker', async () => {
-  const manifest = (await Bun.file(join(app, 'package.json')).json()) as {
-    name: string; scripts?: Record<string, string>;
-    dependencies?: Record<string, string>; devDependencies?: Record<string, string>;
-  };
-  expect(manifest.name).toBe('@rezics/web');
-  expect(typeof manifest.scripts?.check).toBe('string');
-  expect(typeof manifest.scripts?.dev).toBe('string');
-  const versions = { ...manifest.dependencies, ...manifest.devDependencies };
-  for (const name of ['@tanstack/react-start', '@cloudflare/vite-plugin', '@inlang/paraglide-js', 'react', 'tailwindcss'])
-    expect(versions[name]).toMatch(/^\d+\.\d+\.\d+(?:-[\w.]+)?$/);
-  expect(await Bun.file(join(app, 'README.md')).text()).toContain('bun run dev');
+test(
+  'the documented dev command serves server-rendered pages from the Worker',
+  async () => {
+    const manifest = (await Bun.file(join(app, 'package.json')).json()) as {
+      name: string;
+      scripts?: Record<string, string>;
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+    expect(manifest.name).toBe('@rezics/web');
+    expect(typeof manifest.scripts?.check).toBe('string');
+    expect(typeof manifest.scripts?.dev).toBe('string');
+    const versions = { ...manifest.dependencies, ...manifest.devDependencies };
+    for (const name of [
+      '@tanstack/react-start',
+      '@cloudflare/vite-plugin',
+      '@inlang/paraglide-js',
+      'react',
+      'tailwindcss',
+    ])
+      expect(versions[name]).toMatch(/^\d+\.\d+\.\d+(?:-[\w.]+)?$/);
+    expect(await Bun.file(join(app, 'README.md')).text()).toContain('bun run dev');
 
-  const response = await fetch(`${await site()}/en/`);
-  expect(response.status).toBe(200);
-  expect(response.headers.get('content-type')).toContain('text/html');
-  expect(response.headers.get('cache-control')).toMatch(/(?=.*\bprivate\b)(?=.*\bno-store\b)/);
-  expect(htmlLang(await response.text())).toBe('en');
-}, timeout);
-
-test('every launch locale renders its own messages under its path prefix', async () => {
-  const origin = await site();
-  const english = await messages('en');
-  expect(typeof english.home_heading).toBe('string');
-  for (const locale of locales) {
-    const own = await messages(locale);
-    if (locale !== 'en') expect(own.home_heading).not.toBe(english.home_heading);
-    const response = await fetch(`${origin}/${locale}/`);
+    const response = await fetch(`${await site()}/en/`);
     expect(response.status).toBe(200);
-    const html = await response.text();
-    expect(htmlLang(html)).toBe(locale);
-    expect(html).toContain(Bun.escapeHTML(String(own.home_heading)));
-  }
-}, timeout);
+    expect(response.headers.get('content-type')).toContain('text/html');
+    expect(response.headers.get('cache-control')).toMatch(/(?=.*\bprivate\b)(?=.*\bno-store\b)/);
+    expect(htmlLang(await response.text())).toBe('en');
+  },
+  timeout,
+);
+
+test(
+  'every launch locale renders its own messages under its path prefix',
+  async () => {
+    const origin = await site();
+    const english = await messages('en');
+    expect(typeof english.home_heading).toBe('string');
+    for (const locale of locales) {
+      const own = await messages(locale);
+      if (locale !== 'en') expect(own.home_heading).not.toBe(english.home_heading);
+      const response = await fetch(`${origin}/${locale}/`);
+      expect(response.status).toBe(200);
+      const html = await response.text();
+      expect(htmlLang(html)).toBe(locale);
+      expect(html).toContain(Bun.escapeHTML(String(own.home_heading)));
+    }
+  },
+  timeout,
+);
 
 test('every locale carries every English message and nothing else', async () => {
-  const settings = (await Bun.file(join(app, 'project.inlang', 'settings.json')).json()) as { baseLocale: string; locales: string[] };
+  const settings = (await Bun.file(join(app, 'project.inlang', 'settings.json')).json()) as {
+    baseLocale: string;
+    locales: string[];
+  };
   expect(settings.baseLocale).toBe('en');
   expect([...settings.locales].sort()).toEqual([...locales].sort());
   const keys = Object.keys(await messages('en')).sort();
@@ -107,27 +137,35 @@ test('every locale carries every English message and nothing else', async () => 
   }
 });
 
-test('the root redirects to the negotiated locale', async () => {
-  const origin = await site();
-  async function target(headers: Record<string, string>): Promise<string> {
-    const response = await fetch(`${origin}/`, { headers, redirect: 'manual' });
-    expect([302, 303, 307]).toContain(response.status);
-    expect(response.headers.get('cache-control')).toMatch(/\bno-store\b/);
-    return new URL(response.headers.get('location')!, origin).pathname.replace(/\/$/, '');
-  }
-  expect(await target({})).toBe('/en');
-  expect(await target({ 'accept-language': 'ja,en;q=0.5' })).toBe('/ja');
-  expect(await target({ 'accept-language': 'zh-TW' })).toBe('/zh-Hant');
-  expect(await target({ 'accept-language': 'zh-HK,zh;q=0.8' })).toBe('/zh-Hant');
-  expect(await target({ 'accept-language': 'zh-CN,zh;q=0.8' })).toBe('/zh-Hans');
-  expect(await target({ 'accept-language': 'fr-CA' })).toBe('/fr');
-  expect(await target({ 'accept-language': 'pt-BR' })).toBe('/en');
-  expect(await target({ 'accept-language': 'ja', cookie: 'rezics_locale=ko' })).toBe('/ko');
-}, timeout);
+test(
+  'the root redirects to the negotiated locale',
+  async () => {
+    const origin = await site();
+    async function target(headers: Record<string, string>): Promise<string> {
+      const response = await fetch(`${origin}/`, { headers, redirect: 'manual' });
+      expect([302, 303, 307]).toContain(response.status);
+      expect(response.headers.get('cache-control')).toMatch(/\bno-store\b/);
+      return new URL(response.headers.get('location')!, origin).pathname.replace(/\/$/, '');
+    }
+    expect(await target({})).toBe('/en');
+    expect(await target({ 'accept-language': 'ja,en;q=0.5' })).toBe('/ja');
+    expect(await target({ 'accept-language': 'zh-TW' })).toBe('/zh-Hant');
+    expect(await target({ 'accept-language': 'zh-HK,zh;q=0.8' })).toBe('/zh-Hant');
+    expect(await target({ 'accept-language': 'zh-CN,zh;q=0.8' })).toBe('/zh-Hans');
+    expect(await target({ 'accept-language': 'fr-CA' })).toBe('/fr');
+    expect(await target({ 'accept-language': 'pt-BR' })).toBe('/en');
+    expect(await target({ 'accept-language': 'ja', cookie: 'rezics_locale=ko' })).toBe('/ko');
+  },
+  timeout,
+);
 
-test('an unknown page is a localized not-found page', async () => {
-  const response = await fetch(`${await site()}/de/no-such-page`);
-  expect(response.status).toBe(404);
-  expect(response.headers.get('cache-control')).toMatch(/\bno-store\b/);
-  expect(htmlLang(await response.text())).toBe('de');
-}, timeout);
+test(
+  'an unknown page is a localized not-found page',
+  async () => {
+    const response = await fetch(`${await site()}/de/no-such-page`);
+    expect(response.status).toBe(404);
+    expect(response.headers.get('cache-control')).toMatch(/\bno-store\b/);
+    expect(htmlLang(await response.text())).toBe('de');
+  },
+  timeout,
+);

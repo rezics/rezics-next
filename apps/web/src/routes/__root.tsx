@@ -16,11 +16,31 @@ const readPreferences = createServerFn({ method: 'GET' }).handler(async () => {
   const host = getRequestHeader('host') ?? 'localhost';
   const protocol = getRequestHeader('x-forwarded-proto') ?? 'http';
   const session = await readSessionState(getRequest(), env as Partial<SessionEnv>);
-  return { theme, origin: `${protocol}://${host}`, collapsed: /(?:^|;\s*)rezics_nav=collapsed(?:;|$)/.test(cookie), session };
+  return {
+    theme,
+    origin: `${protocol}://${host}`,
+    collapsed: /(?:^|;\s*)rezics_nav=collapsed(?:;|$)/.test(cookie),
+    session,
+  };
 });
 export const Route = createRootRoute({
   loader: () => readPreferences(),
-  head: ({ loaderData }) => ({ meta: [{ charSet: 'utf-8' }, { name: 'viewport', content: 'width=device-width, initial-scale=1' }, { title: m.home_heading() }], links: [{ rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' }, ...locales.map(locale => ({ rel: 'alternate', hrefLang: locale, href: `${loaderData?.origin ?? 'http://localhost'}/${locale}` })), { rel: 'alternate', hrefLang: 'x-default', href: `${loaderData?.origin ?? 'http://localhost'}/` }] }),
+  head: ({ loaderData }) => ({
+    meta: [
+      { charSet: 'utf-8' },
+      { name: 'viewport', content: 'width=device-width, initial-scale=1' },
+      { title: m.home_heading() },
+    ],
+    links: [
+      { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' },
+      ...locales.map((locale) => ({
+        rel: 'alternate',
+        hrefLang: locale,
+        href: `${loaderData?.origin ?? 'http://localhost'}/${locale}`,
+      })),
+      { rel: 'alternate', hrefLang: 'x-default', href: `${loaderData?.origin ?? 'http://localhost'}/` },
+    ],
+  }),
   component: Root,
   notFoundComponent: NotFoundPage,
   errorComponent: ErrorPage,
@@ -30,5 +50,17 @@ function Root() {
   useLayoutEffect(() => {
     document.documentElement.dataset.hydrated = '';
   }, []);
-  return <html lang={getLocale()} className={theme === 'system' ? undefined : theme}><head><HeadContent /></head><body><AppShell theme={theme} collapsed={collapsed} session={session}><Outlet /></AppShell><Scripts /></body></html>;
+  return (
+    <html lang={getLocale()} className={theme === 'system' ? undefined : theme}>
+      <head>
+        <HeadContent />
+      </head>
+      <body>
+        <AppShell theme={theme} collapsed={collapsed} session={session}>
+          <Outlet />
+        </AppShell>
+        <Scripts />
+      </body>
+    </html>
+  );
 }

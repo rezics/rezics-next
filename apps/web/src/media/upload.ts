@@ -27,16 +27,18 @@ export async function upload(request: Request, id: string, env: MediaEnv): Promi
   const controller = new AbortController();
   let writeBegan = false;
   try {
-    const counted = request.body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
-      transform(chunk, stream) {
-        measured += chunk.byteLength;
-        if (measured > media.byteCount) throw tooLarge();
-        stream.enqueue(chunk);
-      },
-      flush() {
-        if (measured < media.byteCount) throw invalidRequest();
-      },
-    }));
+    const counted = request.body.pipeThrough(
+      new TransformStream<Uint8Array, Uint8Array>({
+        transform(chunk, stream) {
+          measured += chunk.byteLength;
+          if (measured > media.byteCount) throw tooLarge();
+          stream.enqueue(chunk);
+        },
+        flush() {
+          if (measured < media.byteCount) throw invalidRequest();
+        },
+      }),
+    );
     const pumping = counted.pipeTo(fixed.writable, { signal: controller.signal });
     const hashing = Promise.all([hashBytes.pipeTo(digest, { signal: controller.signal }), digest.digest]);
     writeBegan = true;
@@ -53,8 +55,10 @@ export async function upload(request: Request, id: string, env: MediaEnv): Promi
     if (media.sha256 !== null && sha256 !== media.sha256) throw invalidRequest();
     if (written.status === 'rejected' || written.value === null) throw dependencyUnavailable();
     const completion = await completeReservation(env.KERNEL_ORIGIN, id, credential, {
-      containerId: media.containerId, reservationRequestId: media.reservationRequestId,
-      byteCount: measured, sha256,
+      containerId: media.containerId,
+      reservationRequestId: media.reservationRequestId,
+      byteCount: measured,
+      sha256,
     });
     return Response.json(completion, { headers: { 'cache-control': 'private, no-store' } });
   } catch (error) {

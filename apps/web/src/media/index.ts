@@ -13,7 +13,8 @@ export async function mediaRequest(request: Request, env: Partial<MediaEnv> = {}
     const allow = variant === undefined ? 'PUT' : 'GET, HEAD';
     if (!(variant === undefined ? request.method === 'PUT' : ['GET', 'HEAD'].includes(request.method)))
       return problemResponse(problem(405, 'invalid_request', 'Invalid Request'), { allow });
-    return variant === undefined ? await upload(request, id!, env as MediaEnv)
+    return variant === undefined
+      ? await upload(request, id!, env as MediaEnv)
       : await download(request, id!, variant, env as MediaEnv);
   } catch (error) {
     const response = problemResponse(error);

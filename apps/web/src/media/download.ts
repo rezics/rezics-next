@@ -2,11 +2,14 @@ import { viewerCredential } from '../session/request.ts';
 import { authorizeDownload, notFound, problem, problemResponse } from './kernel.ts';
 import type { MediaEnv } from './index.ts';
 
-export const validVariant = (variant: string) => /^(?:original|(?:webp|avif)-(?:320|640|960|1280|1920|2560))$/.test(variant);
+export const validVariant = (variant: string) =>
+  /^(?:original|(?:webp|avif)-(?:320|640|960|1280|1920|2560))$/.test(variant);
 
 function matchesValidator(header: string | null, etag: string): boolean {
   // Entity tags are quoted strings; commas inside a tag do not separate validators.
-  return (header?.match(/(?:W\/)?"[^"\r\n]*"|\*/g) ?? []).some((tag) => tag === '*' || tag.replace(/^W\//, '') === etag);
+  return (header?.match(/(?:W\/)?"[^"\r\n]*"|\*/g) ?? []).some(
+    (tag) => tag === '*' || tag.replace(/^W\//, '') === etag,
+  );
 }
 
 type Range = { offset: number; length: number };
@@ -30,10 +33,22 @@ function byteRange(header: string | null, size: number): Range | 'unsatisfiable'
 
 function extension(type: string): string {
   const extensions: Record<string, string> = {
-    'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp', 'image/avif': 'avif',
-    'image/svg+xml': 'svg', 'image/bmp': 'bmp', 'image/tiff': 'tif', 'image/x-icon': 'ico',
-    'video/mp4': 'mp4', 'video/webm': 'webm', 'audio/mpeg': 'mp3', 'audio/ogg': 'ogg',
-    'application/pdf': 'pdf', 'application/octet-stream': 'bin', 'text/plain': 'txt',
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/gif': 'gif',
+    'image/webp': 'webp',
+    'image/avif': 'avif',
+    'image/svg+xml': 'svg',
+    'image/bmp': 'bmp',
+    'image/tiff': 'tif',
+    'image/x-icon': 'ico',
+    'video/mp4': 'mp4',
+    'video/webm': 'webm',
+    'audio/mpeg': 'mp3',
+    'audio/ogg': 'ogg',
+    'application/pdf': 'pdf',
+    'application/octet-stream': 'bin',
+    'text/plain': 'txt',
   };
   return extensions[type] ?? 'bin';
 }
@@ -60,7 +75,10 @@ export async function download(request: Request, id: string, variant: string, en
   headers.set('accept-ranges', 'bytes');
   headers.set('x-content-type-options', 'nosniff');
   headers.set('content-security-policy', "default-src 'none'; sandbox");
-  headers.set('content-disposition', `${variant === 'original' ? 'attachment' : 'inline'}; filename="${id}-${variant}.${extension(decision.mediaType)}"`);
+  headers.set(
+    'content-disposition',
+    `${variant === 'original' ? 'attachment' : 'inline'}; filename="${id}-${variant}.${extension(decision.mediaType)}"`,
+  );
   if (range) headers.set('content-range', `bytes ${range.offset}-${range.offset + range.length - 1}/${metadata.size}`);
   let body: ReadableStream | null = null;
   if (request.method !== 'HEAD') {

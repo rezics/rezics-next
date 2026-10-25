@@ -1,1 +1,26 @@
-{"home_heading":"看清真正重要的事","not_found_heading":"找不到頁面","not_found_message":"找不到您要求的頁面。","shell_skip_to_content":"跳至內容","shell_navigation":"主要導覽","shell_language":"語言","shell_theme":"外觀","shell_theme_system":"跟隨系統","shell_theme_light":"淺色","shell_theme_dark":"深色","nav_home":"首頁","shell_open_navigation":"開啟導覽","shell_collapse_navigation":"收合導覽","error_heading":"發生錯誤","error_message":"請再試一次。","account_sign_in":"登入","account_sign_out":"登出","shell_expand_navigation":"展開導覽","subject_value_unknown":"未知的值","subject_value_none":"沒有值","subject_value_unlabelled":"未標示的主題","subject_aliases":"又名","subject_sources":"來源","subject_qualifiers":"限定條件"}
+{
+  "home_heading": "看清真正重要的事",
+  "not_found_heading": "找不到頁面",
+  "not_found_message": "找不到您要求的頁面。",
+  "shell_skip_to_content": "跳至內容",
+  "shell_navigation": "主要導覽",
+  "shell_language": "語言",
+  "shell_theme": "外觀",
+  "shell_theme_system": "跟隨系統",
+  "shell_theme_light": "淺色",
+  "shell_theme_dark": "深色",
+  "nav_home": "首頁",
+  "shell_open_navigation": "開啟導覽",
+  "shell_collapse_navigation": "收合導覽",
+  "error_heading": "發生錯誤",
+  "error_message": "請再試一次。",
+  "account_sign_in": "登入",
+  "account_sign_out": "登出",
+  "shell_expand_navigation": "展開導覽",
+  "subject_value_unknown": "未知的值",
+  "subject_value_none": "沒有值",
+  "subject_value_unlabelled": "未標示的主題",
+  "subject_aliases": "又名",
+  "subject_sources": "來源",
+  "subject_qualifiers": "限定條件"
+}

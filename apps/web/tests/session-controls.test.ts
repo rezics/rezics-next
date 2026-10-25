@@ -56,8 +56,13 @@ const fake = Bun.serve({
     const issuer = `${url.origin}/auth`;
     const authenticated = async (form: URLSearchParams) => {
       try {
-        await jwtVerify(form.get('client_assertion') ?? '', clientKeys.publicKey,
-          { issuer: clientId, subject: clientId, audience: issuer, algorithms: ['ES256'], maxTokenAge: '120s' });
+        await jwtVerify(form.get('client_assertion') ?? '', clientKeys.publicKey, {
+          issuer: clientId,
+          subject: clientId,
+          audience: issuer,
+          algorithms: ['ES256'],
+          maxTokenAge: '120s',
+        });
         return true;
       } catch {
         return false;
@@ -65,15 +70,28 @@ const fake = Bun.serve({
     };
 
     if (url.pathname === '/auth/.well-known/openid-configuration')
-      return json({ issuer, authorization_endpoint: `${issuer}/authorize`, token_endpoint: `${issuer}/token`, jwks_uri: `${issuer}/jwks`,
-        revocation_endpoint: `${issuer}/revoke`, end_session_endpoint: `${issuer}/logout`,
-        response_types_supported: ['code'], code_challenge_methods_supported: ['S256'], id_token_signing_alg_values_supported: ['ES256'],
-        token_endpoint_auth_methods_supported: ['private_key_jwt'], token_endpoint_auth_signing_alg_values_supported: ['ES256'] });
+      return json({
+        issuer,
+        authorization_endpoint: `${issuer}/authorize`,
+        token_endpoint: `${issuer}/token`,
+        jwks_uri: `${issuer}/jwks`,
+        revocation_endpoint: `${issuer}/revoke`,
+        end_session_endpoint: `${issuer}/logout`,
+        response_types_supported: ['code'],
+        code_challenge_methods_supported: ['S256'],
+        id_token_signing_alg_values_supported: ['ES256'],
+        token_endpoint_auth_methods_supported: ['private_key_jwt'],
+        token_endpoint_auth_signing_alg_values_supported: ['ES256'],
+      });
     if (url.pathname === '/auth/jwks') return json({ keys: [issuerJwk] });
     if (url.pathname === '/auth/authorize') {
       const params = url.searchParams;
       const code = `code-${randomUUID()}`;
-      codes.set(code, { challenge: params.get('code_challenge')!, nonce: params.get('nonce')!, redirectUri: params.get('redirect_uri')! });
+      codes.set(code, {
+        challenge: params.get('code_challenge')!,
+        nonce: params.get('nonce')!,
+        redirectUri: params.get('redirect_uri')!,
+      });
       const back = new URL(params.get('redirect_uri')!);
       back.searchParams.set('code', code);
       back.searchParams.set('state', params.get('state')!);
@@ -83,20 +101,38 @@ const fake = Bun.serve({
       const form = new URLSearchParams(await request.text());
       if (!(await authenticated(form))) return json({ error: 'invalid_client' }, 401);
       counter += 1;
-      const tokens: Record<string, unknown> = { access_token: `access-${counter}`, token_type: 'Bearer', expires_in: expiresIn,
-        refresh_token: `refresh-${counter}`, scope: ['openid', 'offline_access', ...scopes].join(' ') };
+      const tokens: Record<string, unknown> = {
+        access_token: `access-${counter}`,
+        token_type: 'Bearer',
+        expires_in: expiresIn,
+        refresh_token: `refresh-${counter}`,
+        scope: ['openid', 'offline_access', ...scopes].join(' '),
+      };
       if (form.get('grant_type') === 'authorization_code') {
         const grant = codes.get(form.get('code') ?? '');
         codes.delete(form.get('code') ?? '');
-        if (!grant || form.get('redirect_uri') !== grant.redirectUri
-          || createHash('sha256').update(form.get('code_verifier') ?? '').digest('base64url') !== grant.challenge)
+        if (
+          !grant ||
+          form.get('redirect_uri') !== grant.redirectUri ||
+          createHash('sha256')
+            .update(form.get('code_verifier') ?? '')
+            .digest('base64url') !== grant.challenge
+        )
           return json({ error: 'invalid_grant' }, 400);
-        tokens.id_token = await new SignJWT({ nonce: grant.nonce }).setProtectedHeader({ alg: 'ES256', kid: 'issuer-1' })
-          .setIssuer(issuer).setSubject('alice').setAudience(clientId).setIssuedAt().setExpirationTime('5m')
+        tokens.id_token = await new SignJWT({ nonce: grant.nonce })
+          .setProtectedHeader({ alg: 'ES256', kid: 'issuer-1' })
+          .setIssuer(issuer)
+          .setSubject('alice')
+          .setAudience(clientId)
+          .setIssuedAt()
+          .setExpirationTime('5m')
           .sign(issuerKeys.privateKey);
         idTokens.push(tokens.id_token as string);
         signInRefreshTokens.push(tokens.refresh_token as string);
-      } else if (form.get('grant_type') !== 'refresh_token' || !liveRefreshTokens.delete(form.get('refresh_token') ?? ''))
+      } else if (
+        form.get('grant_type') !== 'refresh_token' ||
+        !liveRefreshTokens.delete(form.get('refresh_token') ?? '')
+      )
         return json({ error: 'invalid_grant' }, 400);
       liveRefreshTokens.add(tokens.refresh_token as string);
       return json(tokens);
@@ -110,7 +146,10 @@ const fake = Bun.serve({
     }
     if (url.pathname === '/auth/logout') {
       endSessions.push(url.searchParams);
-      return new Response(null, { status: 302, headers: { location: url.searchParams.get('post_logout_redirect_uri') ?? issuer } });
+      return new Response(null, {
+        status: 302,
+        headers: { location: url.searchParams.get('post_logout_redirect_uri') ?? issuer },
+      });
     }
     return json({ error: 'not_found' }, 404);
   },
@@ -136,12 +175,22 @@ function site(): Promise<string> {
   started ??= (async () => {
     const port = await freePort();
     let output = '';
-    const keep = (chunk: Buffer) => { output = (output + chunk.toString()).slice(-8000); };
+    const keep = (chunk: Buffer) => {
+      output = (output + chunk.toString()).slice(-8000);
+    };
     child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-      cwd: app, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, KERNEL_ORIGIN: fake.url.origin, AUTH_ISSUER: `${fake.url.origin}/auth`,
-        WEBSITE_CLIENT_ID: clientId, WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk), API_RESOURCE: resource,
-        WEBSITE_SCOPES: scopes.join(' ') },
+      cwd: app,
+      detached: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        KERNEL_ORIGIN: fake.url.origin,
+        AUTH_ISSUER: `${fake.url.origin}/auth`,
+        WEBSITE_CLIENT_ID: clientId,
+        WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
+        API_RESOURCE: resource,
+        WEBSITE_SCOPES: scopes.join(' '),
+      },
     });
     child.stdout!.on('data', keep);
     child.stderr!.on('data', keep);
@@ -166,33 +215,39 @@ async function open(path: string, options: BrowserContextOptions = {}): Promise<
   const context = await browser.newContext({ viewport: desktop, reducedMotion: 'reduce', ...options });
   const page = await context.newPage();
   await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
-  if (options.javaScriptEnabled !== false) await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+  if (options.javaScriptEnabled !== false)
+    await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
   return page;
 }
 
 afterAll(async () => {
   await browser?.close();
   fake.stop(true);
-  if (child?.pid) try { process.kill(-child.pid, 'SIGTERM'); } catch {}
+  if (child?.pid)
+    try {
+      process.kill(-child.pid, 'SIGTERM');
+    } catch {}
 });
 
 const signInLink = (page: Page, own: Messages) => page.getByRole('link', { name: own.account_sign_in!, exact: true });
-const signOutButton = (page: Page, own: Messages) => page.getByRole('button', { name: own.account_sign_out!, exact: true });
-const homeLink = (page: Page, own: Messages) => page.getByRole('navigation', { name: own.shell_navigation!, exact: true })
-  .getByRole('link', { name: own.nav_home!, exact: true });
+const signOutButton = (page: Page, own: Messages) =>
+  page.getByRole('button', { name: own.account_sign_out!, exact: true });
+const homeLink = (page: Page, own: Messages) =>
+  page
+    .getByRole('navigation', { name: own.shell_navigation!, exact: true })
+    .getByRole('link', { name: own.nav_home!, exact: true });
 
 // Follows the page's sign-in link through Auth and back to the page it was opened from.
 async function signIn(page: Page, own: Messages, javaScriptEnabled = true) {
   const origin = await site();
   const from = page.url();
   await Promise.all([
-    page.waitForResponse(response => response.url().startsWith(`${origin}/auth/callback`)),
+    page.waitForResponse((response) => response.url().startsWith(`${origin}/auth/callback`)),
     signInLink(page, own).click(),
   ]);
   await page.waitForURL(from);
   await page.waitForLoadState('networkidle');
-  if (javaScriptEnabled)
-    await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+  if (javaScriptEnabled) await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
 }
 
 async function eventually(read: () => Promise<string | null>, expected: string): Promise<void> {
@@ -205,130 +260,163 @@ async function eventually(read: () => Promise<string | null>, expected: string):
   expect(value).toBe(expected);
 }
 
-test('a signed-out page offers sign-in that returns to the page it was opened from', async () => {
-  for (const locale of locales) {
-    const own = await messages(locale);
-    for (const key of ['account_sign_in', 'account_sign_out']) expect(own[key]?.trim(), `${locale} ${key}`).toBeTruthy();
-  }
-  const origin = await site();
-  const de = await messages('de');
-  const page = await open('/de/no-such-page?from=test');
-  const returnTo = async () => {
-    const target = new URL((await signInLink(page, de).getAttribute('href'))!, origin);
-    expect(`${target.origin}${target.pathname}`).toBe(`${origin}/auth/sign-in`);
-    return target.searchParams.get('return_to');
-  };
-  expect(await signInLink(page, de).count()).toBe(1);
-  expect(await signOutButton(page, de).count()).toBe(0);
-  expect(await returnTo()).toBe('/de/no-such-page?from=test');
-  // After a client-side navigation the link returns to the new page.
-  await homeLink(page, de).click();
-  await page.waitForURL(`${origin}/de`);
-  await eventually(returnTo, '/de');
-  await page.context().close();
+test(
+  'a signed-out page offers sign-in that returns to the page it was opened from',
+  async () => {
+    for (const locale of locales) {
+      const own = await messages(locale);
+      for (const key of ['account_sign_in', 'account_sign_out'])
+        expect(own[key]?.trim(), `${locale} ${key}`).toBeTruthy();
+    }
+    const origin = await site();
+    const de = await messages('de');
+    const page = await open('/de/no-such-page?from=test');
+    const returnTo = async () => {
+      const target = new URL((await signInLink(page, de).getAttribute('href'))!, origin);
+      expect(`${target.origin}${target.pathname}`).toBe(`${origin}/auth/sign-in`);
+      return target.searchParams.get('return_to');
+    };
+    expect(await signInLink(page, de).count()).toBe(1);
+    expect(await signOutButton(page, de).count()).toBe(0);
+    expect(await returnTo()).toBe('/de/no-such-page?from=test');
+    // After a client-side navigation the link returns to the new page.
+    await homeLink(page, de).click();
+    await page.waitForURL(`${origin}/de`);
+    await eventually(returnTo, '/de');
+    await page.context().close();
 
-  const ja = await messages('ja');
-  const small = await open('/ja', { javaScriptEnabled: false, viewport: phone });
-  expect(await signInLink(small, ja).count()).toBe(1);
-  const target = new URL((await signInLink(small, ja).getAttribute('href'))!, origin);
-  expect(target.searchParams.get('return_to')).toBe('/ja');
-  await small.context().close();
-}, timeout);
+    const ja = await messages('ja');
+    const small = await open('/ja', { javaScriptEnabled: false, viewport: phone });
+    expect(await signInLink(small, ja).count()).toBe(1);
+    const target = new URL((await signInLink(small, ja).getAttribute('href'))!, origin);
+    expect(target.searchParams.get('return_to')).toBe('/ja');
+    await small.context().close();
+  },
+  timeout,
+);
 
-test('signing in returns to the same page signed in, and signing out revokes the session and ends it at Auth', async () => {
-  const origin = await site();
-  const ja = await messages('ja');
-  // Without JavaScript: the link and the form work as plain HTML.
-  const page = await open('/ja/no-such-page', { javaScriptEnabled: false, locale: 'ja' });
-  await signIn(page, ja, false);
-  const refreshToken = signInRefreshTokens.at(-1)!;
-  const idToken = idTokens.at(-1)!;
-  expect(new URL(page.url()).pathname).toBe('/ja/no-such-page');
-  expect(await signOutButton(page, ja).count()).toBe(1);
-  expect(await signInLink(page, ja).count()).toBe(0);
-  const cookies = await page.context().cookies();
-  const session = cookies.find(cookie => cookie.name === sessionCookie);
-  expect(session).toBeDefined();
-  expect(cookies.some(cookie => cookie.name === loginCookie)).toBe(false);
-  // Every server-rendered page knows the session, not only the one the callback returned to.
-  await page.goto(`${origin}/ja`, { waitUntil: 'networkidle' });
-  expect(await signOutButton(page, ja).count()).toBe(1);
+test(
+  'signing in returns to the same page signed in, and signing out revokes the session and ends it at Auth',
+  async () => {
+    const origin = await site();
+    const ja = await messages('ja');
+    // Without JavaScript: the link and the form work as plain HTML.
+    const page = await open('/ja/no-such-page', { javaScriptEnabled: false, locale: 'ja' });
+    await signIn(page, ja, false);
+    const refreshToken = signInRefreshTokens.at(-1)!;
+    const idToken = idTokens.at(-1)!;
+    expect(new URL(page.url()).pathname).toBe('/ja/no-such-page');
+    expect(await signOutButton(page, ja).count()).toBe(1);
+    expect(await signInLink(page, ja).count()).toBe(0);
+    const cookies = await page.context().cookies();
+    const session = cookies.find((cookie) => cookie.name === sessionCookie);
+    expect(session).toBeDefined();
+    expect(cookies.some((cookie) => cookie.name === loginCookie)).toBe(false);
+    // Every server-rendered page knows the session, not only the one the callback returned to.
+    await page.goto(`${origin}/ja`, { waitUntil: 'networkidle' });
+    expect(await signOutButton(page, ja).count()).toBe(1);
 
-  await Promise.all([
-    page.waitForResponse(response => response.url().startsWith(`${fake.url.origin}/auth/logout`)),
-    signOutButton(page, ja).click(),
-  ]);
-  await page.waitForURL(`${origin}/ja`);
-  await page.waitForLoadState('networkidle');
-  expect(revoked).toContain(refreshToken);
-  const ended = endSessions.at(-1)!;
-  expect(ended.get('post_logout_redirect_uri')).toBe(`${origin}/`);
-  expect(ended.get('id_token_hint')).toBe(idToken);
-  expect(await signInLink(page, ja).count()).toBe(1);
-  expect(await signOutButton(page, ja).count()).toBe(0);
-  expect((await page.context().cookies()).some(cookie => cookie.name === sessionCookie)).toBe(false);
+    await Promise.all([
+      page.waitForResponse((response) => response.url().startsWith(`${fake.url.origin}/auth/logout`)),
+      signOutButton(page, ja).click(),
+    ]);
+    await page.waitForURL(`${origin}/ja`);
+    await page.waitForLoadState('networkidle');
+    expect(revoked).toContain(refreshToken);
+    const ended = endSessions.at(-1)!;
+    expect(ended.get('post_logout_redirect_uri')).toBe(`${origin}/`);
+    expect(ended.get('id_token_hint')).toBe(idToken);
+    expect(await signInLink(page, ja).count()).toBe(1);
+    expect(await signOutButton(page, ja).count()).toBe(0);
+    expect((await page.context().cookies()).some((cookie) => cookie.name === sessionCookie)).toBe(false);
 
-  // The ended session's id, sent again, reads as signed out.
-  await page.context().addCookies([session!]);
-  await page.goto(`${origin}/ja`, { waitUntil: 'networkidle' });
-  expect(await signInLink(page, ja).count()).toBe(1);
-  expect(await signOutButton(page, ja).count()).toBe(0);
-  await page.context().close();
-}, timeout);
+    // The ended session's id, sent again, reads as signed out.
+    await page.context().addCookies([session!]);
+    await page.goto(`${origin}/ja`, { waitUntil: 'networkidle' });
+    expect(await signInLink(page, ja).count()).toBe(1);
+    expect(await signOutButton(page, ja).count()).toBe(0);
+    await page.context().close();
+  },
+  timeout,
+);
 
-test('pages read the signed-in state without contacting Auth or refreshing tokens', async () => {
-  const origin = await site();
-  const en = await messages('en');
-  const page = await open('/en');
-  expiresIn = 1;
-  try {
+test(
+  'pages read the signed-in state without contacting Auth or refreshing tokens',
+  async () => {
+    const origin = await site();
+    const en = await messages('en');
+    const page = await open('/en');
+    expiresIn = 1;
+    try {
+      await signIn(page, en);
+    } finally {
+      expiresIn = 3600;
+    }
+    // The access token has expired, so a refresh would be due if a page asked for a credential.
+    await Bun.sleep(1_500);
+    const before = authRequests;
+    stalled = true;
+    try {
+      await page.goto(`${origin}/en/no-such-page`, { waitUntil: 'networkidle', timeout: 20_000 });
+      await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+      expect(await signOutButton(page, en).count()).toBe(1);
+      await homeLink(page, en).click();
+      await page.waitForURL(`${origin}/en`, { timeout: 20_000 });
+      await page.waitForLoadState('networkidle', { timeout: 20_000 });
+      expect(await signOutButton(page, en).count()).toBe(1);
+      expect(authRequests).toBe(before);
+    } finally {
+      stalled = false;
+    }
+    await page.context().close();
+  },
+  timeout,
+);
+
+test(
+  'the session controls have no accessibility violations signed in or out, in either theme at phone and desktop widths',
+  async () => {
+    const origin = await site();
+    const en = await messages('en');
+    const page = await open('/en');
     await signIn(page, en);
-  } finally {
-    expiresIn = 3600;
-  }
-  // The access token has expired, so a refresh would be due if a page asked for a credential.
-  await Bun.sleep(1_500);
-  const before = authRequests;
-  stalled = true;
-  try {
-    await page.goto(`${origin}/en/no-such-page`, { waitUntil: 'networkidle', timeout: 20_000 });
-    await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
-    expect(await signOutButton(page, en).count()).toBe(1);
-    await homeLink(page, en).click();
-    await page.waitForURL(`${origin}/en`, { timeout: 20_000 });
-    await page.waitForLoadState('networkidle', { timeout: 20_000 });
-    expect(await signOutButton(page, en).count()).toBe(1);
-    expect(authRequests).toBe(before);
-  } finally {
-    stalled = false;
-  }
-  await page.context().close();
-}, timeout);
+    const session = (await page.context().cookies()).filter((cookie) => cookie.name === sessionCookie);
+    expect(session.length).toBe(1);
+    await page.context().close();
 
-test('the session controls have no accessibility violations signed in or out, in either theme at phone and desktop widths', async () => {
-  const origin = await site();
-  const en = await messages('en');
-  const page = await open('/en');
-  await signIn(page, en);
-  const session = (await page.context().cookies()).filter(cookie => cookie.name === sessionCookie);
-  expect(session.length).toBe(1);
-  await page.context().close();
-
-  const found: string[] = [];
-  for (const signedIn of [false, true])
-    for (const theme of ['light', 'dark'])
-      for (const viewport of [phone, desktop]) {
-        const view = await open('/en', { viewport, storageState: { cookies: [...(signedIn ? session : []), {
-          name: 'rezics_theme', value: theme, domain: new URL(origin).hostname, path: '/',
-          expires: -1, httpOnly: false, secure: false, sameSite: 'Lax',
-        }], origins: [] } });
-        const label = `${signedIn ? 'signed in' : 'signed out'} ${theme} ${viewport.width}px`;
-        expect(await (signedIn ? signOutButton(view, en) : signInLink(view, en)).count(), label).toBe(1);
-        const result = await new AxeBuilder({ page: view })
-          .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice']).analyze();
-        for (const violation of result.violations)
-          found.push(`${label}: ${violation.id} ${violation.nodes.map(node => node.target.join(' ')).join(', ')}`);
-        await view.context().close();
-      }
-  expect(found).toEqual([]);
-}, timeout);
+    const found: string[] = [];
+    for (const signedIn of [false, true])
+      for (const theme of ['light', 'dark'])
+        for (const viewport of [phone, desktop]) {
+          const view = await open('/en', {
+            viewport,
+            storageState: {
+              cookies: [
+                ...(signedIn ? session : []),
+                {
+                  name: 'rezics_theme',
+                  value: theme,
+                  domain: new URL(origin).hostname,
+                  path: '/',
+                  expires: -1,
+                  httpOnly: false,
+                  secure: false,
+                  sameSite: 'Lax',
+                },
+              ],
+              origins: [],
+            },
+          });
+          const label = `${signedIn ? 'signed in' : 'signed out'} ${theme} ${viewport.width}px`;
+          expect(await (signedIn ? signOutButton(view, en) : signInLink(view, en)).count(), label).toBe(1);
+          const result = await new AxeBuilder({ page: view })
+            .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'])
+            .analyze();
+          for (const violation of result.violations)
+            found.push(`${label}: ${violation.id} ${violation.nodes.map((node) => node.target.join(' ')).join(', ')}`);
+          await view.context().close();
+        }
+    expect(found).toEqual([]);
+  },
+  timeout,
+);

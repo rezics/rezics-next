@@ -33,9 +33,14 @@ function site(): Promise<string> {
   started ??= (async () => {
     const port = await freePort();
     let output = '';
-    const keep = (chunk: Buffer) => { output = (output + chunk.toString()).slice(-8000); };
-    child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'],
-      { cwd: app, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const keep = (chunk: Buffer) => {
+      output = (output + chunk.toString()).slice(-8000);
+    };
+    child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
+      cwd: app,
+      detached: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
     child.stdout!.on('data', keep);
     child.stderr!.on('data', keep);
     const origin = `http://127.0.0.1:${port}`;
@@ -60,7 +65,10 @@ async function context(options: BrowserContextOptions = {}) {
 
 afterAll(async () => {
   await browser?.close();
-  if (child?.pid) try { process.kill(-child.pid, 'SIGTERM'); } catch {}
+  if (child?.pid)
+    try {
+      process.kill(-child.pid, 'SIGTERM');
+    } catch {}
 });
 
 // A loaded machine, reproduced: the browser runs scripts four times slower, and the test stops waiting as soon as
@@ -75,38 +83,56 @@ async function slow(path: string): Promise<Page> {
   return page;
 }
 
-test('the document marks itself hydrated only in the browser', async () => {
-  const origin = await site();
-  for (const path of ['/en', '/de/no-such-page']) {
-    const html = await (await fetch(`${origin}${path}`)).text();
-    expect(/<html[^>]*\sdata-hydrated/.test(html), path).toBe(false);
-    const page = await (await context({ javaScriptEnabled: false })).newPage();
-    await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
-    expect(await page.locator('html[data-hydrated]').count(), path).toBe(0);
+test(
+  'the document marks itself hydrated only in the browser',
+  async () => {
+    const origin = await site();
+    for (const path of ['/en', '/de/no-such-page']) {
+      const html = await (await fetch(`${origin}${path}`)).text();
+      expect(/<html[^>]*\sdata-hydrated/.test(html), path).toBe(false);
+      const page = await (await context({ javaScriptEnabled: false })).newPage();
+      await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+      expect(await page.locator('html[data-hydrated]').count(), path).toBe(0);
+      await page.context().close();
+    }
+  },
+  timeout,
+);
+
+test(
+  'once the document is marked hydrated, controls answer the first click even on a slow processor',
+  async () => {
+    const en = await messages('en');
+    const page = await slow('/en');
+    await page.getByRole('button', { name: en.shell_theme!, exact: true }).click();
+    const dark = page
+      .getByRole('menuitemradio', { name: en.shell_theme_dark!, exact: true })
+      .or(page.getByRole('radio', { name: en.shell_theme_dark!, exact: true }))
+      .first();
+    await dark.waitFor({ timeout: 10_000 });
+    await dark.click();
+    expect(await page.evaluate(() => document.documentElement.classList.contains('dark'))).toBe(true);
     await page.context().close();
-  }
-}, timeout);
+  },
+  timeout,
+);
 
-test('once the document is marked hydrated, controls answer the first click even on a slow processor', async () => {
-  const en = await messages('en');
-  const page = await slow('/en');
-  await page.getByRole('button', { name: en.shell_theme!, exact: true }).click();
-  const dark = page.getByRole('menuitemradio', { name: en.shell_theme_dark!, exact: true })
-    .or(page.getByRole('radio', { name: en.shell_theme_dark!, exact: true })).first();
-  await dark.waitFor({ timeout: 10_000 });
-  await dark.click();
-  expect(await page.evaluate(() => document.documentElement.classList.contains('dark'))).toBe(true);
-  await page.context().close();
-}, timeout);
-
-test('once the document is marked hydrated, following a link is a client-side navigation even on a slow processor', async () => {
-  const origin = await site();
-  const de = await messages('de');
-  const page = await slow('/de/no-such-page');
-  await page.evaluate(() => { (window as unknown as { kept: boolean }).kept = true; });
-  await page.getByRole('navigation', { name: de.shell_navigation!, exact: true })
-    .getByRole('link', { name: de.nav_home!, exact: true }).click();
-  await page.waitForURL(`${origin}/de`);
-  expect(await page.evaluate(() => (window as unknown as { kept?: boolean }).kept)).toBe(true);
-  await page.context().close();
-}, timeout);
+test(
+  'once the document is marked hydrated, following a link is a client-side navigation even on a slow processor',
+  async () => {
+    const origin = await site();
+    const de = await messages('de');
+    const page = await slow('/de/no-such-page');
+    await page.evaluate(() => {
+      (window as unknown as { kept: boolean }).kept = true;
+    });
+    await page
+      .getByRole('navigation', { name: de.shell_navigation!, exact: true })
+      .getByRole('link', { name: de.nav_home!, exact: true })
+      .click();
+    await page.waitForURL(`${origin}/de`);
+    expect(await page.evaluate(() => (window as unknown as { kept?: boolean }).kept)).toBe(true);
+    await page.context().close();
+  },
+  timeout,
+);

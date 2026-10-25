@@ -33,12 +33,19 @@ export function problem(status: number, code: string, title: string): MediaProbl
   return new MediaProblem({ type: `https://rezics.com/problems/${code}`, title, status, code });
 }
 export const notFound = () => problem(404, 'not_found', 'Not Found');
-export const dependencyUnavailable = (status = 502) => problem(status, 'dependency_unavailable', 'Dependency Unavailable');
+export const dependencyUnavailable = (status = 502) =>
+  problem(status, 'dependency_unavailable', 'Dependency Unavailable');
 
 export function problemResponse(error: unknown, headers?: HeadersInit): Response {
   const { problem: body } = error instanceof MediaProblem ? error : dependencyUnavailable();
-  return Response.json(body, { status: body.status, headers: { ...Object.fromEntries(new Headers(headers)),
-    'content-type': 'application/problem+json', 'cache-control': 'private, no-store' } });
+  return Response.json(body, {
+    status: body.status,
+    headers: {
+      ...Object.fromEntries(new Headers(headers)),
+      'content-type': 'application/problem+json',
+      'cache-control': 'private, no-store',
+    },
+  });
 }
 
 function viewerHeaders(credential: string | null): Headers {
@@ -50,7 +57,7 @@ function viewerHeaders(credential: string | null): Headers {
 async function call<T>(url: string, init: RequestInit): Promise<T> {
   const response = await fetch(url, { ...init, redirect: 'manual' });
   if (response.status !== 200) {
-    const body = await response.json() as Partial<ProblemBody>;
+    const body = (await response.json()) as Partial<ProblemBody>;
     if (typeof body.type === 'string' && typeof body.title === 'string' && typeof body.code === 'string')
       throw new MediaProblem({ type: body.type, title: body.title, code: body.code, status: response.status });
     throw dependencyUnavailable();
@@ -64,7 +71,12 @@ export async function readReservation(origin: string, id: string, credential: st
   return (await call<{ media: Media }>(mediaUrl(origin, id), { headers: viewerHeaders(credential) })).media;
 }
 
-export function completeReservation(origin: string, id: string, credential: string | null, input: CompletionInput): Promise<Completion> {
+export function completeReservation(
+  origin: string,
+  id: string,
+  credential: string | null,
+  input: CompletionInput,
+): Promise<Completion> {
   const headers = viewerHeaders(credential);
   headers.set('content-type', 'application/json');
   headers.set('idempotency-key', JSON.stringify(`complete-${id}-${input.sha256}`));
@@ -75,7 +87,12 @@ export function completeReservation(origin: string, id: string, credential: stri
   });
 }
 
-export async function authorizeDownload(origin: string, id: string, variant: string, credential: string | null): Promise<DownloadDecision> {
+export async function authorizeDownload(
+  origin: string,
+  id: string,
+  variant: string,
+  credential: string | null,
+): Promise<DownloadDecision> {
   try {
     return await call(`${mediaUrl(origin, id)}:authorizeDownload?variant=${encodeURIComponent(variant)}`, {
       headers: viewerHeaders(credential),

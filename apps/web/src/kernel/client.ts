@@ -8,7 +8,8 @@ export function kernelClient() {
     return createKernelClient('http://kernel.local', {
       fetch: (async (input, init) => {
         const [{ createFakeKernelFetch }, { default: fixtures }] = await Promise.all([
-          import('./fake.ts'), import('./fixtures.json'),
+          import('./fake.ts'),
+          import('./fixtures.json'),
         ]);
         return createFakeKernelFetch(fixtures as unknown as Parameters<typeof createFakeKernelFetch>[0])(input, init);
       }) as typeof fetch,
