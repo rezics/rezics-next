@@ -8,31 +8,31 @@ import { createSqliteProbe } from './support/sqlite-growth.ts';
 const SCALES = [1, 8, 64] as const;
 const DIGEST = 'a'.repeat(64);
 const seedSequence = `WITH RECURSIVE seq(n) AS (
-  SELECT 1
+  SELECT ?
   UNION ALL
   SELECT n + 1 FROM seq WHERE n < ?
 ) `;
 
-function seed(database: RecordStore['database'], units: number) {
-  database.query(
-    `${seedSequence}INSERT INTO acknowledged_records
+function seedHistory(database: RecordStore['database'], from: number, through: number) {
+  if (from > through) return;
+  database
+    .query(
+      `${seedSequence}INSERT INTO acknowledged_records
       (source,record_key,record_revision,digest,converter_revision,state)
     SELECT 'history' || n, 'Q' || printf('%05d', n), 'unversioned', ?, 'fixture@1', 'present' FROM seq`,
-  ).run(units, DIGEST);
-  database.query(
-    `${seedSequence}INSERT INTO record_source_counts (source,present_count)
+    )
+    .run(from, through, DIGEST);
+  database
+    .query(
+      `${seedSequence}INSERT INTO record_source_counts (source,present_count)
     SELECT 'history' || n, 1 FROM seq`,
-  ).run(units);
-  for (const scale of SCALES) {
-    database
-      .query(`INSERT INTO record_source_counts (source,present_count) VALUES (?,0)`)
-      .run(`growth${scale}`);
-    database
-      .query(`INSERT INTO acknowledged_records
-        (source,record_key,record_revision,digest,converter_revision,state)
-      VALUES (?,?,?,?,?,'vanished')`)
-      .run(`growth${scale}`, `QMEASURE${scale}`, 'unversioned', DIGEST, 'fixture@1');
-  }
+    )
+    .run(from, through);
+}
+
+function seedMeasurementRows(database: RecordStore['database']) {
+  for (const scale of SCALES)
+    database.query(`INSERT INTO record_source_counts (source,present_count) VALUES (?,0)`).run(`growth${scale}`);
 }
 
 function presentRecord(source: string, recordKey: string): RecordRow {
@@ -61,10 +61,15 @@ test('Record upsert stays within its bound as R grows', () => {
   const samples: GrowthSample[] = [];
 
   try {
-    seed(store.database, 500 * SCALES.at(-1)!);
-    store.database.exec('ANALYZE');
+    seedMeasurementRows(store.database);
+    let seeded = 0;
 
     for (const scale of SCALES) {
+      const target = 500 * scale;
+      seedHistory(store.database, seeded + 1, target);
+      seeded = target;
+      store.database.exec('ANALYZE');
+
       const source = `growth${scale}`;
       const key = `QMEASURE${scale}`;
       const measured = probe.measure(() => store.put(presentRecord(source, key)));
