@@ -64,6 +64,7 @@ describe('moderation HTTP with migrated storage and current Access', () => {
       [routeOf(boardId), boardId, newId(0x6789), randomUUID()],
     );
     await fixture.grant(fixture.actor, 'thread:create', { route: routeOf(boardId)!, id: boardId });
+    await fixture.grant(fixture.actor, 'board:read', { route: routeOf(boardId)!, id: boardId });
   });
   afterAll(async () => {
     await fixture?.close();
