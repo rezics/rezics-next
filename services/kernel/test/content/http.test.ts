@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { normalizeDocument } from '@rezics/document';
 import { createHash, randomUUID } from 'node:crypto';
+import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
+import { standingFixture } from '../access/standing-fixture.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { isProblemSchema, openApiDocument } from '../../src/http/openapi.ts';
@@ -120,6 +122,10 @@ const snapshot = (text: string) =>
 describe('content HTTP with native database adapters', () => {
   let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
   let app: ReturnType<typeof createKernel>;
+  let anonymousApp: ReturnType<typeof createKernel>;
+  let fixture: Awaited<ReturnType<typeof standingFixture>>;
+  let actor: AccountActor;
+  let bearer: string;
   const boardId = newId(0x4321);
   const subjectIds = [newId(0x6789)];
   const input = (text = 'HTTP canonical content') => ({
@@ -133,7 +139,31 @@ describe('content HTTP with native database adapters', () => {
 
   beforeAll(async () => {
     db = await openGrowthDatabase();
-    app = createKernel({ pool: db.pool, routeKey, tokens, access });
+    fixture = await standingFixture();
+    await fixture.reset();
+    // Capture genuine Auth issuance, preserving verification on the same observed pool.
+    const authenticate = fixture.access.authenticate;
+    fixture.access.authenticate = (token, boundary) => {
+      bearer = token;
+      return authenticate(token, { ...boundary, pool: db.pool });
+    };
+    try {
+      actor = (await fixture.context()).actor;
+    } finally {
+      fixture.access.authenticate = authenticate;
+    }
+    app = createKernel({
+      pool: db.pool,
+      routeKey,
+      tokens,
+      access: fixture.access,
+      writeRate: createWriteRateLimiter({ secret: 'content-http-test-only-secret-at-least-32-bytes' }),
+    });
+    // The native standing fixture's catalogue declares bearer-only reads. Anonymous
+    // requests use the Kernel's mounted catalogue and production public-floor Access.
+    anonymousApp = createKernel({ pool: db.pool, routeKey, tokens });
+    await fixture.grant(actor.accountId, 'thread:create', { route: routeOf(boardId)!, id: boardId });
+    await fixture.grant(actor.accountId, 'board:read', { route: routeOf(boardId)!, id: boardId });
     await db.admin.query(
       `INSERT INTO content.board
          (route, board_id, subject_id, title, visibility, security_revision, recorded_transaction_id)
@@ -142,15 +172,16 @@ describe('content HTTP with native database adapters', () => {
     );
   });
   afterAll(async () => {
+    await fixture?.close();
     await db?.close();
   });
 
   async function call(method: string, path: string, body?: unknown, key: string = randomUUID(), authenticated = true) {
-    const response = await app.handle(
+    const response = await (authenticated ? app : anonymousApp).handle(
       new Request(`http://kernel.test${path}`, {
         method,
         headers: {
-          ...(authenticated ? { authorization: 'Bearer content-http-fixture' } : {}),
+          ...(authenticated ? { authorization: `Bearer ${bearer}` } : {}),
           ...(body === undefined ? {} : { 'content-type': 'application/json', 'idempotency-key': JSON.stringify(key) }),
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -290,10 +321,23 @@ describe('content HTTP with native database adapters', () => {
         const client = await database.admin.connect();
         try {
           await client.query('BEGIN');
-          for (let ordinal = previous; ordinal < scale; ordinal++) {
+          for (let ordinal = previous * 16; ordinal < scale * 16; ordinal++) {
             const postId = newId(thread.route);
             const revisionId = newId(thread.route);
             const transaction = randomUUID();
+            const distractorBoard = newId(routeOf(boardId)!);
+            await client.query(
+              `INSERT INTO content.board
+                 (route, board_id, subject_id, title, visibility, security_revision, recorded_transaction_id)
+               VALUES ($1, $2, $3, 'Distractor board', 'published', 1, $4)`,
+              [routeOf(boardId), distractorBoard, subjectIds[0], transaction],
+            );
+            await client.query(
+              `INSERT INTO content.thread
+                 (route, thread_id, author_account_id, board_id, title, visibility, security_revision, recorded_transaction_id)
+               VALUES ($1, $2, $3, $4, 'Distractor thread', 'published', 1, $5)`,
+              [thread.route, newId(thread.route), actor.accountId, distractorBoard, transaction],
+            );
             await client.query(
               `INSERT INTO content.post
                  (route, thread_id, post_id, author_account_id, head_revision_id, visibility, security_revision, recorded_transaction_id)
@@ -314,7 +358,7 @@ describe('content HTTP with native database adapters', () => {
         } finally {
           client.release();
         }
-        await database.admin.query('VACUUM (ANALYZE) content.post, content.revision');
+        await database.admin.query('VACUUM (ANALYZE) content.board, content.thread, content.post, content.revision');
       },
       async operation() {
         // This app and its actual Access use the observed db.pool; P=2 and H remain fixed.
