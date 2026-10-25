@@ -1,7 +1,7 @@
 import { watch, type FSWatcher } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import type { GateOutcome, GateOutcomeSink, LandingQueue, ManagerInbox, AttemptRef } from './contracts.ts';
-import { liveGroups, sameProcess, terminateProcessGroup, waitForProcess, waitForProcessGroup } from './process.ts';
+import { liveGroups, sameProcess, stopProcessesUnder, terminateProcessGroup, waitForProcess, waitForProcessGroup } from './process.ts';
 import { StaleAttemptError } from './contracts.ts';
 import { acquireDirectoryLease, acquireDirectoryLeaseWaiting, LeaseHeldError, type DirectoryLease } from './lease.ts';
 import { classifyFailure } from './failures.ts';
@@ -174,6 +174,7 @@ export class WorkerJob implements GateOutcomeSink {
       try {
         await terminateProcessGroup(current.process, this.tasks.settings.terminationGraceMs);
         for (const process of current.auxiliaryProcesses) await terminateProcessGroup(process, this.tasks.settings.terminationGraceMs);
+        await stopProcessesUnder(task.worktree, this.tasks.settings.terminationGraceMs);
       } catch (cleanupError) {
         detail = `${detail}; process cleanup failed: ${String(cleanupError)}`.slice(0, 4000);
       }

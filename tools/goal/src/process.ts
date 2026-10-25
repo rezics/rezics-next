@@ -1,5 +1,6 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, readlinkSync } from 'node:fs';
 import { spawn } from 'node:child_process';
+import { resolve } from 'node:path';
 export type ProcessIdentity = { pid: number; start: string; boot: string; group: number };
 
 // The boot id cannot change while this process runs; reading it for every /proc entry dominated each scan.
@@ -99,4 +100,41 @@ export async function terminateProcessGroup(identity: ProcessIdentity | null, gr
   await Promise.all(remaining.map(identity => waitForProcess(identity)));
   await gone;
   if (groupMembers(identity.group).length) throw new Error('worker process group is still alive');
+}
+/**
+ * Stop every process whose working directory is inside a directory, such as a finished attempt's worktree. A dev
+ * server that a worker or a test starts in a new session leaves the worker's process group, so only its place finds
+ * it. This process and its ancestors are spared.
+ */
+export async function stopProcessesUnder(directory: string, graceMs: number, procRoot = '/proc'): Promise<number> {
+  const root = resolve(directory);
+  const spared = new Set<number>();
+  for (let pid = process.pid; pid > 1 && !spared.has(pid);) {
+    spared.add(pid);
+    try { pid = Number(readFileSync(`${procRoot}/${pid}/stat`, 'utf8').split(') ').pop()!.split(' ')[1]); } catch { break; }
+  }
+  const inside = () => readdirSync(procRoot).filter(name => /^\d+$/.test(name) && !spared.has(Number(name))).flatMap(name => {
+    let cwd: string;
+    try { cwd = readlinkSync(`${procRoot}/${name}/cwd`).replace(/ \(deleted\)$/, ''); } catch { return []; }
+    if (cwd !== root && !cwd.startsWith(`${root}/`)) return [];
+    const identity = processIdentity(Number(name), procRoot);
+    return identity ? [identity] : [];
+  });
+  const signal = (members: ProcessIdentity[], name: NodeJS.Signals) => {
+    for (const member of members) {
+      if (!sameProcess(member, procRoot)) continue;
+      try { process.kill(member.pid, name); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
+    }
+  };
+  const found = inside();
+  if (!found.length) return 0;
+  signal(found, 'SIGTERM');
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([Promise.all(found.map(member => waitForProcess(member))), new Promise<void>(done => { timer = setTimeout(done, graceMs); })]);
+  } finally { clearTimeout(timer); }
+  const remaining = found.filter(member => sameProcess(member, procRoot));
+  signal(remaining, 'SIGKILL');
+  await Promise.all(remaining.map(member => waitForProcess(member)));
+  return found.length;
 }
