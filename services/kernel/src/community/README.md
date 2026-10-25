@@ -98,3 +98,21 @@ under those same checks. A protected Realm that the actor cannot read is indisti
 | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | Publish, withdraw or reject | One admission observation, one Realm point read and one subject point read at T, then one record insert and one head upsert in the Realm partition | O(1) rows, O(log R) blocks, plus A             | `growth-publication.test.ts`: a fixed probe at 256, 2048 and 16384 publications on other Realms and subjects |
 | List or read publications   | One keyset seek of L adopted heads plus final disclosure of the Realm and each subject; no count or offset                                         | O(L * (conditions + chain)); O(1) for one head | `growth-publication.test.ts`: the probe Realm and page stay fixed at the same scales                         |
+
+A Realm's `boardSchemeId` is initially null. `setBoardScheme` requires `realm:manage`,
+reads the proposed subject through Semantic's own subject/statement reader and
+`subjectReadEligibility` at the command's T, and accepts only `skos:ConceptScheme`.
+It appends a revision and compares the expected head before updating the identity.
+Metadata-only revisions inherit the scheme from their predecessor. The Realm reader
+in `board-scheme.ts` includes the scheme in its exact head read, including HTTP reads.
+`PUT /v1/realms/{realmId}/boardScheme` requires `If-Match`, `Idempotency-Key`, and
+`{ schemeId }`. Board concepts remain ordinary `skos:Concept` subjects linked by
+`skos:inScheme`; Semantic has no per-Context scheme table.
+
+| Operation             | Touches                                                                                                                                                                                                                                                                | Bound                                             | Growth check                                                                                                                                                                                  |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Set/read board scheme | One admission observation shared by Realm management and subject eligibility; one Realm head point read and Semantic's subject/type read at T; one revision insert and head compare-and-set in the Realm partition. Reading includes the scheme in the Realm head seek | O(1) rows and statements; O(log R) blocks, plus A | `board-scheme.test.ts`: fixed Realm and scheme at 256, 2048 and 16384 other Realms and subjects; constant rows/statements and zero sequential scans on Realm and subject identities/revisions |
+
+The board scheme HTTP tests use genuine Auth-issued tokens and production Access.
+The kernel does not mount `account:suspend`, so the suspended-account persona is
+omitted rather than simulated by a database state mutation.

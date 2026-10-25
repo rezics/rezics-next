@@ -113,6 +113,22 @@ END;
 $$;
 
 
+--
+-- Name: inherit_realm_board_scheme(); Type: FUNCTION; Schema: community; Owner: -
+--
+
+CREATE FUNCTION community.inherit_realm_board_scheme() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  SELECT board_scheme_id INTO NEW.board_scheme_id
+  FROM community.realm_revision
+  WHERE route = NEW.route AND realm_id = NEW.realm_id AND revision_id = NEW.predecessor;
+  RETURN NEW;
+END;
+$$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -172,6 +188,8 @@ CREATE TABLE community.realm (
     head_revision_id uuid NOT NULL,
     created_at timestamp with time zone NOT NULL,
     creator uuid NOT NULL,
+    board_scheme_id uuid,
+    CONSTRAINT realm_board_scheme_id_check CHECK (((board_scheme_id)::text ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text)),
     CONSTRAINT realm_check CHECK ((realm_id <> space_id)),
     CONSTRAINT realm_check1 CHECK ((route = ((get_byte(uuid_send(space_id), 10) * 256) + get_byte(uuid_send(space_id), 11)))),
     CONSTRAINT realm_check2 CHECK ((route = ((get_byte(uuid_send(realm_id), 10) * 256) + get_byte(uuid_send(realm_id), 11)))),
@@ -197,6 +215,8 @@ CREATE TABLE community.realm_revision (
     context_id uuid NOT NULL,
     created_at timestamp with time zone NOT NULL,
     author uuid NOT NULL,
+    board_scheme_id uuid,
+    CONSTRAINT realm_revision_board_scheme_id_check CHECK (((board_scheme_id)::text ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text)),
     CONSTRAINT realm_revision_check CHECK ((predecessor <> revision_id)),
     CONSTRAINT realm_revision_check1 CHECK ((route = ((get_byte(uuid_send(realm_id), 10) * 256) + get_byte(uuid_send(realm_id), 11)))),
     CONSTRAINT realm_revision_check2 CHECK ((route = ((get_byte(uuid_send(revision_id), 10) * 256) + get_byte(uuid_send(revision_id), 11)))),
@@ -363,6 +383,13 @@ CREATE TRIGGER publication_immutable BEFORE DELETE OR UPDATE ON community.public
 --
 
 CREATE TRIGGER realm_identity BEFORE UPDATE ON community.realm FOR EACH ROW EXECUTE FUNCTION community.guard_realm();
+
+
+--
+-- Name: realm_revision realm_revision_board_scheme; Type: TRIGGER; Schema: community; Owner: -
+--
+
+CREATE TRIGGER realm_revision_board_scheme BEFORE INSERT ON community.realm_revision FOR EACH ROW WHEN (((new.board_scheme_id IS NULL) AND (new.predecessor IS NOT NULL))) EXECUTE FUNCTION community.inherit_realm_board_scheme();
 
 
 --

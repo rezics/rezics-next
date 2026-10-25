@@ -25,13 +25,12 @@ import {
 } from './space.ts';
 import {
   createRealm,
-  readRealm,
   RealmConflictError,
   RealmInputError,
   updateRealm,
-  type Realm,
   type RealmDependencies,
 } from './realm.ts';
+import { readRealm, setBoardScheme, type Realm } from './board-scheme.ts';
 import {
   listPublications,
   publish,
@@ -73,6 +72,7 @@ const realm = t.Object(
     state: t.Literal('active'),
     visibility: t.Union([t.Literal('public'), t.Literal('protected')]),
     contextId: id,
+    boardSchemeId: t.Union([id, t.Null()]),
     headRevisionId: id,
     createdAt: instant,
     creator: id,
@@ -245,6 +245,7 @@ function publishedRealm(value: Realm) {
     state: 'active' as const,
     visibility: value.visibility as 'public' | 'protected',
     contextId: value.contextId,
+    boardSchemeId: value.boardSchemeId,
     headRevisionId: value.headRevisionId,
     createdAt: value.createdAt,
     creator: value.creator,
@@ -507,6 +508,53 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
                 ...(body.summary === undefined ? {} : { summary: body.summary }),
                 ...(body.visibility === undefined ? {} : { visibility: body.visibility }),
                 ...(body.contextId === undefined ? {} : { contextId: body.contextId }),
+              },
+              { idempotencyKey: key, deadline: job.deadline },
+            );
+            const current = await readRealm(realmDependencies(), actor, result.value.realmId, {
+              deadline: job.deadline,
+            });
+            if (!current || current.headRevisionId !== result.value.revisionId) throw new ProblemError('not_found');
+            const representation = publishedRealm(current);
+            session.record(result);
+            set.headers.etag = JSON.stringify(representation.headRevisionId);
+            return { realm: representation };
+          });
+        } catch (error) {
+          communityProblem(error);
+        }
+      },
+    )
+    .put(
+      '/v1/realms/:realmId/boardScheme',
+      {
+        params: realmParams,
+        headers: updateHeaders,
+        body: strict(t.Object({ schemeId: id }, closed)),
+        response: {
+          200: withHeaders(strict(realmResponse), { ...sessionHeader, etag: t.String() }),
+          ...writeFailures,
+        },
+        detail: {
+          operationId: 'realm.board_scheme',
+          'x-action': 'realm:manage',
+          'x-rate-limit': writeRate,
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { realmId }, body, headers, actor, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const expectedHead = matchHead(headers['if-match']);
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        try {
+          return await admission.run('normal', job, async () => {
+            const result = await setBoardScheme(
+              realmDependencies(),
+              actor,
+              {
+                realmId,
+                expectedHead,
+                schemeId: body.schemeId,
               },
               { idempotencyKey: key, deadline: job.deadline },
             );
