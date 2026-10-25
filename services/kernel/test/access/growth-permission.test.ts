@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { readAccount } from '../../src/access/account-data.ts';
-import { createAccess as createPermissionAccess } from '../../src/access/permission.ts';
+import { createAccess as createPermissionAccess, permissionEvidenceDeadline } from '../../src/access/permission.ts';
 import { creationCapability, parentCreationAuthorization } from '../../src/access/parent-creation.ts';
 import { runCommand } from '../../src/command/command.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
@@ -20,10 +20,14 @@ if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test data
 const action = 'subject:read';
 const anchorRoute = 0x6789;
 const anchorPartition = partitionOf(anchorRoute);
-const ordinalsPerScaleUnit = 100;
-const runsPerScale = 4;
+const ordinalsPerScaleUnit = 500;
 const schema = 'growth_permission_test';
 const resources = `${schema}.resources`;
+const seedEventType = 'com.rezics.growth.permission-seed.v1';
+const seedClientId = 'growth-permission-seed';
+const seedCommandKind = 'growth-permission-seed';
+const anchorEventType = 'com.rezics.growth.permission-anchor.v1';
+const receiptDigest = Buffer.alloc(32, 7);
 
 let db: GrowthDatabase | undefined;
 let actorId = '';
@@ -34,19 +38,26 @@ let actor: AccountActor;
 let permissions: ReturnType<typeof createPermissionAccess>;
 
 const seededAccountIds: string[] = [];
+const seededOrganizationIds: string[] = [];
 const seededResourceIds: string[] = [];
+const seededTestResourceIds: string[] = [];
 
-// This population matches lifecycle-create.sql account inserts and grant-create.sql's one-action direct grants.
+// This population mirrors Access account, organization membership, grant, role-grant and denial rows, fence.sql records, and the resource creation port's route/id insert.
 const population: Population = {
   name: 'access-permission-unrelated',
   hotPartition: anchorPartition,
   hotShare: 1,
-  rows: ({ route }) => {
+  rows: ({ ordinal, route, partition }) => {
     const accountId = newId(route);
+    const seededOrganizationId = newId(route);
     const resourceId = newId(route);
     const rowTransactionId = newId(route);
+    const position = ordinal * 100 + 100;
     seededAccountIds.push(accountId);
+    seededAccountIds.push(seededOrganizationId);
+    seededOrganizationIds.push(seededOrganizationId);
     seededResourceIds.push(resourceId);
+    seededTestResourceIds.push(resourceId);
     return {
       'access.account': [
         {
@@ -55,6 +66,16 @@ const population: Population = {
           kind: 'actor',
           handle: null,
           state: 'pending',
+          registration_id: null,
+          registration_expires_at: null,
+          transaction_id: rowTransactionId,
+        },
+        {
+          route,
+          account_id: seededOrganizationId,
+          kind: 'organization',
+          handle: null,
+          state: 'active',
           registration_id: null,
           registration_expires_at: null,
           transaction_id: rowTransactionId,
@@ -72,7 +93,88 @@ const population: Population = {
           transaction_id: rowTransactionId,
         },
       ],
+      'access.organization_member': [
+        {
+          route,
+          organization_id: seededOrganizationId,
+          member_account_id: accountId,
+          role: 'member',
+          valid: '(,)',
+          transaction_id: rowTransactionId,
+        },
+      ],
+      'access.resource_role_grant': [
+        {
+          route,
+          resource_id: resourceId,
+          subject_kind: 'identity',
+          subject_id: accountId,
+          subject_role: '',
+          grant_role: 'growth.unused',
+          valid: '(,)',
+          transaction_id: rowTransactionId,
+        },
+      ],
+      'access.resource_denial': [
+        {
+          route,
+          resource_id: resourceId,
+          subject_id: accountId,
+          subject_role: '',
+          action,
+          reason: 'resource',
+          valid: '(,)',
+          transaction_id: rowTransactionId,
+        },
+      ],
+      [`${schema}.resources`]: [{ route, id: resourceId }],
+      'core.outbox': [
+        {
+          partition_no: partition,
+          position,
+          event_seq: 0,
+          event_count: 1,
+          epoch: 1,
+          id: newId(route),
+          type: seedEventType,
+          subject: 'seeded',
+          data: { value: 1 },
+        },
+      ],
+      'editorial.write_basis': [
+        {
+          partition_no: partition,
+          transaction_id: rowTransactionId,
+          epoch: 1,
+          position,
+          actor_account_id: actorId,
+          client_id: seedClientId,
+          requested_by: null,
+        },
+      ],
+      'core.receipt': [
+        {
+          partition_no: partition,
+          actor_account_id: actorId,
+          command_kind: seedCommandKind,
+          idempotency_key: `seed-${ordinal}`,
+          request_digest: receiptDigest,
+          epoch: 1,
+          position,
+          transaction_id: rowTransactionId,
+          response: { ok: true },
+        },
+      ],
     };
+  },
+  finish: async (admin, range) => {
+    await admin.query(
+      `UPDATE core.partition p SET position = GREATEST(p.position, v.position)
+       FROM (SELECT partition_no, max(position)::bigint AS position FROM core.outbox
+             WHERE position >= $1 * 100 + 100 AND position < $2 * 100 + 100 GROUP BY partition_no) v
+       WHERE p.partition_no = v.partition_no`,
+      [range.from, range.to],
+    );
   },
 };
 
@@ -98,17 +200,8 @@ beforeAll(async () => {
     creation_xid xid8 NOT NULL DEFAULT pg_current_xact_id(),
     PRIMARY KEY (route, id)
   )`);
-  await db.admin.query(`INSERT INTO ${resources} (route, id) VALUES ($1, $2)`, [target.route, target.id]);
-  // Keep the fixture's anchored parent and child reads on the primary-key plan at every measured scale.
-  const unrelatedResources = Array.from({ length: 1_024 }, () => newId(anchorRoute));
-  await db.admin.query(
-    `INSERT INTO ${resources} (route, id)
-     SELECT $1, resource_id FROM unnest($2::uuid[]) AS rows(resource_id)`,
-    [anchorRoute, unrelatedResources],
-  );
-  await db.admin.query(`ANALYZE ${resources}`);
 
-  // These direct fixture writes use the same account, membership and grant columns as Access test fixtures.
+  // These fixture writes use the account, membership and grant shapes used by existing Access tests.
   await db.admin.query(
     `INSERT INTO access.account (route, account_id, kind, state, transaction_id)
      VALUES ($1, $2, 'actor', 'active', $3), ($1, $4, 'organization', 'active', $3)`,
@@ -120,12 +213,6 @@ beforeAll(async () => {
      VALUES ($1, $2, $3, 'owner', '(,)'::tstzrange, $4)`,
     [anchorRoute, organizationId, actorId, transactionId],
   );
-  await db.admin.query(
-    `INSERT INTO access.resource_grant
-     (route, resource_id, subject_kind, subject_id, subject_role, action, valid, transaction_id)
-     VALUES ($1, $2, 'identity', $3, 'owner', $4, '(,)'::tstzrange, $5)`,
-    [target.route, target.id, organizationId, action, transactionId],
-  );
 
   const account = await readAccount(db.pool, anchorRoute, actorId);
   if (!account) throw new Error('Growth fixture actor account was not readable');
@@ -133,15 +220,36 @@ beforeAll(async () => {
     actions: new Map([[action, { anonymous: false }]]),
     accountEvidence: () => account,
   });
+
+  // The fixed parent and its role grant are created before the first scale through the command and Access fixtures used by these tests.
+  await runCommand(
+    db.pool,
+    {
+      partition: anchorPartition,
+      deadline: Date.now() + 5_000,
+      basis: { actorAccountId: actorId, clientId: actor.clientId, requestedBy: null },
+    },
+    async (tx) => {
+      await tx.query(`INSERT INTO ${resources} (route, id) VALUES ($1, $2)`, [target.route, target.id]);
+      return {
+        value: target,
+        events: [{ type: anchorEventType, subject: 'permission-parent', data: target }],
+      };
+    },
+  );
+  await db.admin.query(
+    `INSERT INTO access.resource_grant
+     (route, resource_id, subject_kind, subject_id, subject_role, action, valid, transaction_id)
+     VALUES ($1, $2, 'identity', $3, 'owner', $4, '(,)'::tstzrange, $5)`,
+    [target.route, target.id, organizationId, action, transactionId],
+  );
+  await db.admin.query(`ANALYZE ${resources}`);
 }, 90_000);
 
 afterAll(async () => {
   if (!db) return;
   try {
-    if (seededResourceIds.length)
-      await db.admin.query('DELETE FROM access.resource_grant WHERE resource_id = ANY($1::uuid[])', [
-        seededResourceIds,
-      ]);
+    await resetSeededRows();
     if (target?.id)
       await db.admin.query('DELETE FROM access.resource_grant WHERE route = $1 AND resource_id = $2', [
         target.route,
@@ -177,16 +285,54 @@ function growth(name: string, operation: GrowthCheck['operation']): GrowthCheck 
   };
 }
 
+async function resetSeededRows(): Promise<void> {
+  const database = db!;
+  if (seededResourceIds.length) {
+    await database.admin.query('DELETE FROM access.resource_grant WHERE resource_id = ANY($1::uuid[])', [
+      seededResourceIds,
+    ]);
+    await database.admin.query('DELETE FROM access.resource_role_grant WHERE resource_id = ANY($1::uuid[])', [
+      seededResourceIds,
+    ]);
+    await database.admin.query('DELETE FROM access.resource_denial WHERE resource_id = ANY($1::uuid[])', [
+      seededResourceIds,
+    ]);
+  }
+  if (seededOrganizationIds.length)
+    await database.admin.query('DELETE FROM access.organization_member WHERE organization_id = ANY($1::uuid[])', [
+      seededOrganizationIds,
+    ]);
+  if (seededAccountIds.length)
+    await database.admin.query('DELETE FROM access.account WHERE account_id = ANY($1::uuid[])', [seededAccountIds]);
+  if (seededTestResourceIds.length)
+    await database.admin.query(`DELETE FROM ${resources} WHERE id = ANY($1::uuid[])`, [seededTestResourceIds]);
+  await database.admin.query('DELETE FROM core.receipt WHERE command_kind = $1', [seedCommandKind]);
+  await database.admin.query('DELETE FROM editorial.write_basis WHERE client_id = $1', [seedClientId]);
+  await database.admin.query('DELETE FROM core.outbox WHERE type = $1', [seedEventType]);
+  await database.admin.query(
+    `UPDATE core.partition p SET position = COALESCE((
+       SELECT max(o.position) FROM core.outbox o WHERE o.partition_no = p.partition_no
+     ), 0) WHERE p.partition_no = $1`,
+    [anchorPartition],
+  );
+  seededResourceIds.length = 0;
+  seededAccountIds.length = 0;
+  seededOrganizationIds.length = 0;
+  seededTestResourceIds.length = 0;
+}
+
 async function prepare(growthDb: GrowthDatabase, resource = target): Promise<unknown> {
   const evidence = await permissions.prepare!(actor, action, resource, {
     pool: growthDb.pool,
     deadline: Date.now() + 5_000,
   });
-  if (typeof evidence !== 'object' || evidence === null) throw new Error('Permission preparation produced no evidence');
+  if (permissionEvidenceDeadline(evidence) === undefined)
+    throw new Error('Permission preparation produced no usable evidence');
   return evidence;
 }
 
 test('Permission preparation stays within its bound as O grows', async () => {
+  await resetSeededRows();
   const report = await checkGrowth(
     db!,
     growth('Permission preparation stays within its bound as O grows', async (growthDb) => prepare(growthDb)),
@@ -196,6 +342,7 @@ test('Permission preparation stays within its bound as O grows', async () => {
 }, 85_000);
 
 test('Final permission check stays within its bound as G grows', async () => {
+  await resetSeededRows();
   const evidenceByRun = new Map<number, unknown>();
   const check = growth('Final permission check stays within its bound as G grows', async (growthDb, _scale, run) => {
     const evidence = evidenceByRun.get(run);
@@ -209,24 +356,21 @@ test('Final permission check stays within its bound as G grows', async () => {
     }
   });
   const grow = check.grow;
-  const scaleIndex = new Map([
-    [1, 0],
-    [8, 1],
-    [64, 2],
-  ]);
   await checkGrowth(db!, {
     ...check,
     grow: async (growthDb, scale, previous) => {
       await grow(growthDb, scale, previous);
-      const firstRun = scaleIndex.get(scale)! * runsPerScale;
-      for (let run = firstRun; run < firstRun + runsPerScale; run++) evidenceByRun.set(run, await prepare(growthDb));
+      const scaleIndex = scale === 1 ? 0 : scale === 8 ? 1 : 2;
+      const firstRun = scaleIndex * 4;
+      for (let run = firstRun; run < firstRun + 4; run++) evidenceByRun.set(run, await prepare(growthDb));
     },
   });
-  expect(evidenceByRun.size).toBe(runsPerScale * 3);
+  expect(evidenceByRun.size).toBe(12);
 }, 85_000);
 
 test('Parent creation authorization stays within its bound as G grows', async () => {
-  const operation: GrowthCheck['operation'] = async (growthDb) => {
+  await resetSeededRows();
+  const operation: GrowthCheck['operation'] = async (growthDb, scale, repetition) => {
     const child: Resource = { route: target.route, id: newId(target.route) };
     const deadline = Date.now() + 5_000;
     const authorization = parentCreationAuthorization({
@@ -267,6 +411,12 @@ test('Parent creation authorization stays within its bound as G grows', async ()
         partition: partitionOf(child.route),
         deadline,
         basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
+        receipt: {
+          actorAccountId: actor.accountId,
+          kind: 'growth-permission-parent',
+          key: `parent-${scale}-${repetition}`,
+          digest: receiptDigest,
+        },
         authorization,
       },
       async (tx) => {
