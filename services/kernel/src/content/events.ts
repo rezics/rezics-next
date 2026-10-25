@@ -2,6 +2,7 @@ import { Type, type Static } from 'typebox';
 import { BOARD_EVENTS } from './board-events.ts';
 import { MEDIA_EVENTS } from './media-events.ts';
 import { MEDIA_IMPORT_EVENTS } from './media-import-events.ts';
+import { MEDIA_MODERATION_EVENTS } from './media-moderation-events.ts';
 import { MODERATION_EVENTS } from './moderation-events.ts';
 import { OPERATION_EVENTS } from './operation-events.ts';
 import { REPORT_EVENTS } from './report-events.ts';
@@ -25,6 +26,7 @@ export const CONTENT_EVENTS = {
   ),
   ...MEDIA_EVENTS,
   ...MEDIA_IMPORT_EVENTS,
+  ...MEDIA_MODERATION_EVENTS,
   ...MODERATION_EVENTS,
   ...REPORT_EVENTS,
   ...OPERATION_EVENTS,
