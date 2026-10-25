@@ -15,6 +15,8 @@ import type { Collection, CollectionMember } from './collection-model.ts';
 import { createCollectionReads } from './collection-reads.ts';
 import { createCollectionCommands } from './collections.ts';
 
+import { basicQuery, curatorFields, embedded, fullMembers, fullView, subjectFields, viewQuery } from './views.ts';
+
 type Dependencies = { pool: Pool; access: () => Access; tokens: KeyRing; clock: KernelClock };
 const closed = { additionalProperties: false } as const;
 // Domain commands and reads distinguish malformed resource IDs from malformed JSON.
@@ -39,8 +41,6 @@ const collectionSchema = t.Object(
 const memberSchema = t.Object({ id, subjectId: id, note: nullableString, addedAt: t.String() }, closed);
 const collectionResponse = t.Object({ collection: collectionSchema }, closed);
 const memberResponse = t.Object({ member: memberSchema }, closed);
-const collectionPage = t.Object({ collections: t.Array(collectionSchema), next: nullableString }, closed);
-const memberPage = t.Object({ members: t.Array(memberSchema), next: nullableString }, closed);
 const subjectPage = t.Object(
   {
     collections: t.Array(
@@ -58,10 +58,18 @@ const subjectPage = t.Object(
   },
   closed,
 );
+const fullSubjectPage = t.Object(
+  {
+    ...subjectPage.properties,
+    collections: t.Array(embedded(subjectPage.properties.collections.items, curatorFields)),
+  },
+  closed,
+);
 const collectionParams = t.Object({ collectionId: id }, closed);
 const memberParams = t.Object({ collectionId: id, memberId: id }, closed);
 const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
 const pageQuery = {
+  ...viewQuery,
   cursor: t.Optional(t.String({ maxLength: 4096 })),
   limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1, default: 20 })),
 };
@@ -133,6 +141,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
   const { pool, tokens, clock } = dependencies;
   let commands: ReturnType<typeof createCollectionCommands> | undefined;
   let reads: ReturnType<typeof createCollectionReads> | undefined;
+  const viewDependencies = () => ({ ...dependencies, access: dependencies.access() });
   const write = () => (commands ??= createCollectionCommands({ pool, access: dependencies.access(), clock }));
   const read = () => (reads ??= createCollectionReads({ pool, access: dependencies.access(), tokens }));
   return app
@@ -159,22 +168,34 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       '/v1/collections',
       {
         query: t.Object({ curatorAccountId: id, ...pageQuery }, closed),
-        response: { 200: collectionPage, ...failures },
+        response: {
+          200: t.Object(
+            { collections: t.Array(embedded(collectionSchema, curatorFields)), next: nullableString },
+            closed,
+          ),
+          ...failures,
+        },
         detail: detail('collection.list', 'collection:read', true),
       },
       async ({ query, actor, admission, job }) =>
-        admission.run('normal', job, () => read().listCollections(actor, query)),
+        admission.run('normal', job, async () =>
+          fullView(viewDependencies(), actor, query.view, await read().listCollections(actor, basicQuery(query))),
+        ),
     )
     .get(
       '/v1/collections/:collectionId',
       {
+        query: t.Object(viewQuery, closed),
         params: collectionParams,
-        response: { 200: collectionResponse, ...failures },
+        response: { 200: t.Object({ collection: embedded(collectionSchema, curatorFields) }, closed), ...failures },
         detail: detail('collection.get', 'collection:read', true),
       },
-      async ({ params, actor, admission, job }) => ({
-        collection: await admission.run('normal', job, () => read().readCollection(actor, params.collectionId)),
-      }),
+      async ({ params, query, actor, admission, job }) =>
+        admission.run('normal', job, async () =>
+          fullView(viewDependencies(), actor, query.view, {
+            collection: await read().readCollection(actor, params.collectionId),
+          }),
+        ),
     )
     .patch(
       '/v1/collections/:collectionId',
@@ -232,11 +253,18 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       {
         params: collectionParams,
         query: t.Object(pageQuery, closed),
-        response: { 200: memberPage, ...failures },
+        response: {
+          200: t.Object({ members: t.Array(embedded(memberSchema, subjectFields)), next: nullableString }, closed),
+          ...failures,
+        },
         detail: detail('collection_member.list', 'collection:read', true),
       },
       async ({ params, query, actor, admission, job }) =>
-        admission.run('normal', job, () => read().listMembers(actor, params.collectionId, query)),
+        admission.run('normal', job, () =>
+          query.view === 'FULL'
+            ? fullMembers(viewDependencies(), actor, params.collectionId, basicQuery(query))
+            : read().listMembers(actor, params.collectionId, basicQuery(query)),
+        ),
     )
     .post(
       '/v1/collections/:collectionId/members',
@@ -321,10 +349,17 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       {
         params: t.Object({ subjectId: id }, closed),
         query: t.Object(pageQuery, closed),
-        response: { 200: subjectPage, ...failures },
+        response: { 200: fullSubjectPage, ...failures },
         detail: detail('subject_collection.list', 'collection:read', true),
       },
       async ({ params, query, actor, admission, job }) =>
-        admission.run('normal', job, () => read().listSubjectCollections(actor, params.subjectId, query)),
+        admission.run('normal', job, async () =>
+          fullView(
+            viewDependencies(),
+            actor,
+            query.view,
+            await read().listSubjectCollections(actor, params.subjectId, basicQuery(query)),
+          ),
+        ),
     );
 }

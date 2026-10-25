@@ -19,6 +19,8 @@ import type { Copy, Entry } from './entry-model.ts';
 import type { Follow, FollowPageCursor } from './follow-model.ts';
 import { createFollowCommands } from './follows.ts';
 
+import { basicQuery, embedded, fullView, subjectFields, targetFields, viewQuery } from './views.ts';
+
 type Dependencies = { pool: Pool; tokens: KeyRing; access: () => Access; clock?: KernelClock };
 const closed = { additionalProperties: false } as const;
 const id = t.String();
@@ -33,6 +35,7 @@ const state = t.Union([
 ]);
 const status = t.Union([t.Literal('ordered'), t.Literal('owned'), t.Literal('lent'), t.Literal('disposed')]);
 const pageQuery = {
+  ...viewQuery,
   cursor: t.Optional(t.String({ maxLength: 4096 })),
   limit: t.Optional(t.Integer({ minimum: 1, maximum: 100, default: 20 })),
 };
@@ -131,31 +134,40 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       '/v1/libraryEntries',
       {
         query: t.Object({ ...pageQuery, state: t.Optional(state) }, closed),
-        response: { 200: t.Object({ libraryEntries: t.Array(entrySchema), next: nullable }, closed), ...failures },
+        response: {
+          200: t.Object({ libraryEntries: t.Array(embedded(entrySchema, subjectFields)), next: nullable }, closed),
+          ...failures,
+        },
         detail: detail('library_entry.list', 'library_entry:list'),
       },
       async ({ actor, query, admission, job }) => {
         account(actor);
-        const result = await admission.run('normal', job, () => command(() => entries().listEntries(actor, query)));
-        return { libraryEntries: result.entries.map(entryView), next: result.next };
+        const result = await admission.run('normal', job, () =>
+          command(() => entries().listEntries(actor, basicQuery(query))),
+        );
+        return fullView(config(), actor, query.view, {
+          libraryEntries: result.entries.map(entryView),
+          next: result.next,
+        });
       },
     )
     .get(
       '/v1/libraryEntries/:subjectId',
       {
+        query: t.Object(viewQuery, closed),
         params: t.Object({ subjectId: id }),
-        response: { 200: entryResponse, ...failures },
+        response: { 200: t.Object({ libraryEntry: embedded(entrySchema, subjectFields) }, closed), ...failures },
         detail: detail('library_entry.get', 'library_entry:read'),
       },
-      async ({ actor, params, admission, job }) => {
+      async ({ actor, params, query, admission, job }) => {
         point(actor, params.subjectId, 'library_entry:read');
-        return {
+        return fullView(config(), actor, query.view, {
           libraryEntry: entryView(
             await admission.run('normal', job, () =>
               command(() => entries().readEntry(actor, params.subjectId), 'not_found'),
             ),
           ),
-        };
+        });
       },
     )
     .put(
@@ -223,31 +235,37 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       '/v1/copies',
       {
         query: t.Object(pageQuery, closed),
-        response: { 200: t.Object({ copies: t.Array(copySchema), next: nullable }, closed), ...failures },
+        response: {
+          200: t.Object({ copies: t.Array(embedded(copySchema, subjectFields)), next: nullable }, closed),
+          ...failures,
+        },
         detail: detail('copy.list', 'copy:list'),
       },
       async ({ actor, query, admission, job }) => {
         account(actor);
-        const result = await admission.run('normal', job, () => command(() => copies().listCopies(actor, query)));
-        return { copies: result.copies.map(copyView), next: result.next };
+        const result = await admission.run('normal', job, () =>
+          command(() => copies().listCopies(actor, basicQuery(query))),
+        );
+        return fullView(config(), actor, query.view, { copies: result.copies.map(copyView), next: result.next });
       },
     )
     .get(
       '/v1/copies/:copyId',
       {
+        query: t.Object(viewQuery, closed),
         params: t.Object({ copyId: id }),
-        response: { 200: copyResponse, ...failures },
+        response: { 200: t.Object({ copy: embedded(copySchema, subjectFields) }, closed), ...failures },
         detail: detail('copy.get', 'copy:read'),
       },
-      async ({ actor, params, admission, job }) => {
+      async ({ actor, params, query, admission, job }) => {
         point(actor, params.copyId, 'copy:read');
-        return {
+        return fullView(config(), actor, query.view, {
           copy: copyView(
             await admission.run('normal', job, () =>
               command(() => copies().readCopy(actor, params.copyId), 'not_found'),
             ),
           ),
-        };
+        });
       },
     )
     .patch(
@@ -336,24 +354,28 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
     .get(
       '/v1/follows/:targetId',
       {
+        query: t.Object(viewQuery, closed),
         params: t.Object({ targetId: id }),
-        response: { 200: followResponse, ...failures },
+        response: { 200: t.Object({ follow: embedded(followSchema, targetFields) }, closed), ...failures },
         detail: detail('follow.get', 'follow:read'),
       },
-      async ({ actor, params, admission, job }) => {
+      async ({ actor, params, query, admission, job }) => {
         point(actor, params.targetId, 'follow:read');
         const follow = await admission.run('normal', job, () =>
           command(() => follows().readFollow(actor, params.targetId), 'not_found'),
         );
         if (!follow) throw new ProblemError('not_found');
-        return { follow: followView(follow) };
+        return fullView(config(), actor, query.view, { follow: followView(follow) });
       },
     )
     .get(
       '/v1/follows',
       {
         query: t.Object(pageQuery, closed),
-        response: { 200: t.Object({ follows: t.Array(followSchema), next: nullable }, closed), ...failures },
+        response: {
+          200: t.Object({ follows: t.Array(embedded(followSchema, targetFields)), next: nullable }, closed),
+          ...failures,
+        },
         detail: detail('follow.list', 'follow:list'),
       },
       async ({ actor, query, admission, job }) => {
@@ -391,7 +413,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
             let more = rows.length > size;
             if (!more && size === 100 && last)
               more = (await follows().listFollows(actor, { cursor: last, limit: 1 })).length > 0;
-            return {
+            return fullView(config(), actor, query.view, {
               follows: shown.map(followView),
               next:
                 more && last && partition
@@ -400,7 +422,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
                       after: [last.updatedAt, last.targetId],
                     })
                   : null,
-            };
+            });
           }),
         );
       },

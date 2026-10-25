@@ -14,6 +14,8 @@ import { createSessionCommands, ProgressConflictError, ProgressInvalidError } fr
 import { LibraryNotFoundError } from './command-support.ts';
 import { createPublishedLogCommands } from './published-logs.ts';
 
+import { basicQuery, embedded, fullView, logFields, sessionFields, viewQuery } from './views.ts';
+
 type Dependencies = { pool: Pool; access: () => Access; tokens: KeyRing; clock: KernelClock };
 
 const closed = { additionalProperties: false } as const;
@@ -50,7 +52,6 @@ const sessionSchema = t.Object(
   closed,
 );
 const progressSessionResponse = t.Object({ progressSession: sessionSchema }, closed);
-const sessionPageResponse = t.Object({ progressSessions: t.Array(sessionSchema), next: nullableString }, closed);
 const changeIntent = t.Union([
   t.Object({ amount: t.String() }, closed),
   t.Object({ locator: t.String(), position: t.String() }, closed),
@@ -82,7 +83,6 @@ const publishedLogSchema = t.Object(
   closed,
 );
 const publishedLogResponse = t.Object({ publishedLog: publishedLogSchema }, closed);
-const publishedLogPageResponse = t.Object({ publishedLogs: t.Array(publishedLogSchema), next: nullableString }, closed);
 const idempotencyHeaders = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
 const invalid = problemSchema('invalid_request', 'invalid_cursor');
 const unauthorized = problemSchema('authentication_required', 'invalid_credentials');
@@ -100,6 +100,7 @@ const unavailable = problemSchema(
 const bearer = [{ bearerAuth: [] }];
 const writeRate = defineRateLimit({ family: 'write', units: 1 });
 const pageQuery = {
+  ...viewQuery,
   limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1, default: 20 })),
   cursor: t.Optional(t.String({ maxLength: 4096 })),
 };
@@ -193,6 +194,7 @@ async function mapped<T>(run: () => Promise<T>, denied: 'forbidden' | 'not_found
 
 /** HTTP transport for private progress sessions and their public published snapshots. */
 export function progressRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: Dependencies) {
+  const config = () => ({ ...dependencies, access: dependencies.access() });
   const { pool, tokens, clock } = dependencies;
   let sessions: ReturnType<typeof createSessionCommands> | undefined;
   let published: ReturnType<typeof createPublishedLogCommands> | undefined;
@@ -243,7 +245,10 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
       {
         query: t.Object({ subjectId: t.String(), ...pageQuery }, closed),
         response: {
-          200: sessionPageResponse,
+          200: t.Object(
+            { progressSessions: t.Array(embedded(sessionSchema, sessionFields)), next: nullableString },
+            closed,
+          ),
           400: invalid,
           401: unauthorized,
           403: forbidden,
@@ -257,8 +262,14 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
         requireAccount(actor);
         return admission.run('normal', job, () =>
           mapped(async () => {
-            const result = await sessionCommands().listSessions(actor, query.subjectId, query);
-            return { progressSessions: result.sessions.map(sessionView), next: result.next };
+            // One shared subject plus up to 99 distinct versions stays within 100 anchored reads.
+            const page = basicQuery(query);
+            const options = query.view === 'FULL' ? { ...page, limit: Math.min(page.limit ?? 20, 99) } : page;
+            const result = await sessionCommands().listSessions(actor, query.subjectId, options);
+            return fullView(config(), actor, query.view, {
+              progressSessions: result.sessions.map(sessionView),
+              next: result.next,
+            });
           }),
         );
       },
@@ -266,16 +277,24 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
     .get(
       '/v1/progressSessions/:sessionId',
       {
+        query: t.Object(viewQuery, closed),
         params: t.Object({ sessionId: t.String() }, closed),
-        response: { 200: progressSessionResponse, 401: unauthorized, 404: notFound, 503: unavailable },
+        response: {
+          200: t.Object({ progressSession: embedded(sessionSchema, sessionFields) }, closed),
+          400: invalid,
+          401: unauthorized,
+          404: notFound,
+          503: unavailable,
+        },
         detail: detail('progress_session.read', 'progress_session:read'),
       },
-      async ({ params, actor, admission, job }) =>
+      async ({ params, query, actor, admission, job }) =>
         admission.run('normal', job, () =>
           mapped(
-            async () => ({
-              progressSession: sessionView(await sessionCommands().readSession(actor, params.sessionId)),
-            }),
+            async () =>
+              fullView(config(), actor, query.view, {
+                progressSession: sessionView(await sessionCommands().readSession(actor, params.sessionId)),
+              }),
             'not_found',
           ),
         ),
@@ -375,7 +394,7 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
       async ({ params, query, actor, admission, job }) =>
         admission.run('normal', job, () =>
           mapped(async () => {
-            const result = await sessionCommands().listUnits(actor, params.sessionId, query);
+            const result = await sessionCommands().listUnits(actor, params.sessionId, basicQuery(query));
             return { completedUnits: result.units.map((unit) => unit.unitId), next: result.next };
           }, 'not_found'),
         ),
@@ -391,7 +410,7 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
       async ({ params, query, actor, admission, job }) =>
         admission.run('normal', job, () =>
           mapped(async () => {
-            const result = await sessionCommands().listChanges(actor, params.sessionId, query);
+            const result = await sessionCommands().listChanges(actor, params.sessionId, basicQuery(query));
             return { changes: result.changes.map(changeView), next: result.next };
           }, 'not_found'),
         ),
@@ -429,14 +448,23 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
     .get(
       '/v1/publishedLogs/:logId',
       {
+        query: t.Object(viewQuery, closed),
         params: t.Object({ logId: t.String() }, closed),
-        response: { 200: publishedLogResponse, 404: notFound, 503: unavailable },
+        response: {
+          200: t.Object({ publishedLog: embedded(publishedLogSchema, logFields) }, closed),
+          400: invalid,
+          404: notFound,
+          503: unavailable,
+        },
         detail: detail('published_log.read', 'published_log:read', true),
       },
-      async ({ params, actor, admission, job }) =>
+      async ({ params, query, actor, admission, job }) =>
         admission.run('normal', job, () =>
           mapped(
-            async () => ({ publishedLog: await publishedCommands().readPublishedLog(actor, params.logId) }),
+            async () =>
+              fullView(config(), actor, query.view, {
+                publishedLog: await publishedCommands().readPublishedLog(actor, params.logId),
+              }),
             'not_found',
           ),
         ),
@@ -445,14 +473,23 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
       '/v1/publishedLogs',
       {
         query: t.Object({ accountId: t.String(), ...pageQuery }, closed),
-        response: { 200: publishedLogPageResponse, 400: invalid, 404: notFound, 409: conflict, 503: unavailable },
+        response: {
+          200: t.Object(
+            { publishedLogs: t.Array(embedded(publishedLogSchema, logFields)), next: nullableString },
+            closed,
+          ),
+          400: invalid,
+          404: notFound,
+          409: conflict,
+          503: unavailable,
+        },
         detail: detail('published_log.list', 'published_log:read', true),
       },
       async ({ query, actor, admission, job }) =>
         admission.run('normal', job, () =>
-          mapped(() => {
-            const { accountId, ...page } = query;
-            return publishedCommands().listPublishedLogs(actor, { accountId, ...page });
+          mapped(async () => {
+            const page = basicQuery(query);
+            return fullView(config(), actor, query.view, await publishedCommands().listPublishedLogs(actor, page));
           }),
         ),
     )

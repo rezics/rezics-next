@@ -2708,6 +2708,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 body: unknown;
                 params: {};
                 query: {
+                    view?: "BASIC" | "FULL";
                     cursor?: string;
                     limit?: string | number;
                     curatorAccountId: string;
@@ -2716,6 +2717,11 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 response: {
                     200: {
                         collections: {
+                            curator?: {
+                                id: string;
+                                handle: string | null;
+                                displayName: string | null;
+                            } | null;
                             id: string;
                             curatorAccountId: string;
                             title: string;
@@ -2840,11 +2846,18 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                     params: {
                         collectionId: string;
                     };
-                    query: unknown;
+                    query: {
+                        view?: "BASIC" | "FULL";
+                    };
                     headers: unknown;
                     response: {
                         200: {
                             collection: {
+                                curator?: {
+                                    id: string;
+                                    handle: string | null;
+                                    displayName: string | null;
+                                } | null;
                                 id: string;
                                 curatorAccountId: string;
                                 title: string;
@@ -2926,7 +2939,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                 code: never;
                             }[];
                         };
-                        422: {
+                        422: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3228,6 +3241,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                             collectionId: string;
                         };
                         query: {
+                            view?: "BASIC" | "FULL";
                             cursor?: string;
                             limit?: string | number;
                         };
@@ -3235,6 +3249,11 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                         response: {
                             200: {
                                 members: {
+                                    subject?: {
+                                        id: string;
+                                        type: string;
+                                        label: string;
+                                    } | null;
                                     id: string;
                                     subjectId: string;
                                     note: string | null;
@@ -3903,6 +3922,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
         subjectId: import("typebox").TString;
     }>;
     query: import("typebox").TObject<{
+        view: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"BASIC">, import("typebox").TLiteral<"FULL">]>>;
         cursor: import("typebox").TOptional<import("typebox").TString>;
         limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
     }>;
@@ -4006,13 +4026,19 @@ export declare function createKernel(dependencies: KernelDependencies): import("
             }>>>;
         }>;
         200: import("typebox").TObject<{
+            next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
             collections: import("typebox").TArray<import("typebox").TObject<{
                 id: import("typebox").TString;
                 curatorAccountId: import("typebox").TString;
                 title: import("typebox").TString;
                 multiplicity: import("typebox").TInteger;
+            } & {
+                curator: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                    id: import("typebox").TString;
+                    handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                }>, import("typebox").TNull]>>;
             }>>;
-            next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
         }>;
     };
     detail: {
@@ -4135,13 +4161,18 @@ export declare function createKernel(dependencies: KernelDependencies): import("
             }[];
         };
         200: {
+            next: string | null;
             collections: {
+                curator?: {
+                    id: string;
+                    handle: string | null;
+                    displayName: string | null;
+                } | null;
                 id: string;
                 curatorAccountId: string;
                 title: string;
                 multiplicity: number;
             }[];
-            next: string | null;
         };
     }>;
     problem: import("elysia").SelectiveProblem<{
@@ -4244,13 +4275,18 @@ export declare function createKernel(dependencies: KernelDependencies): import("
             }[];
         };
         200: {
+            next: string | null;
             collections: {
+                curator?: {
+                    id: string;
+                    handle: string | null;
+                    displayName: string | null;
+                } | null;
                 id: string;
                 curatorAccountId: string;
                 title: string;
                 multiplicity: number;
             }[];
-            next: string | null;
         };
     }>;
     defer: (fn: import("elysia/types").AfterResponseHandler<NoInfer<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
@@ -4258,6 +4294,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
             subjectId: import("typebox").TString;
         }>;
         query: import("typebox").TObject<{
+            view: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"BASIC">, import("typebox").TLiteral<"FULL">]>>;
             cursor: import("typebox").TOptional<import("typebox").TString>;
             limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
         }>;
@@ -4361,13 +4398,19 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 }>>>;
             }>;
             200: import("typebox").TObject<{
+                next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                 collections: import("typebox").TArray<import("typebox").TObject<{
                     id: import("typebox").TString;
                     curatorAccountId: import("typebox").TString;
                     title: import("typebox").TString;
                     multiplicity: import("typebox").TInteger;
+                } & {
+                    curator: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                        id: import("typebox").TString;
+                        handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    }>, import("typebox").TNull]>>;
                 }>>;
-                next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
             }>;
         };
         detail: {
@@ -4404,6 +4447,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     store: {};
     body: unknown;
     query: {
+        view?: "BASIC" | "FULL";
         cursor?: string;
         limit?: number;
     };
@@ -4425,13 +4469,25 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
     readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
-    collections: import("../library/collection-reads.ts").PublicCollectionView[];
+    collections: ({
+        id: string;
+        curatorAccountId: string;
+        title: string;
+        multiplicity: number;
+    } & object & {
+        curator?: {
+            id: string;
+            handle: string | null;
+            displayName: string | null;
+        } | null;
+    })[];
     next: string | null;
-}>, {
+} & object>, {
     params: import("typebox").TObject<{
         subjectId: import("typebox").TString;
     }>;
     query: import("typebox").TObject<{
+        view: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"BASIC">, import("typebox").TLiteral<"FULL">]>>;
         cursor: import("typebox").TOptional<import("typebox").TString>;
         limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
     }>;
@@ -4535,13 +4591,19 @@ export declare function createKernel(dependencies: KernelDependencies): import("
             }>>>;
         }>;
         200: import("typebox").TObject<{
+            next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
             collections: import("typebox").TArray<import("typebox").TObject<{
                 id: import("typebox").TString;
                 curatorAccountId: import("typebox").TString;
                 title: import("typebox").TString;
                 multiplicity: import("typebox").TInteger;
+            } & {
+                curator: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                    id: import("typebox").TString;
+                    handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                }>, import("typebox").TNull]>>;
             }>>;
-            next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
         }>;
     };
     detail: {
@@ -7107,6 +7169,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 body: unknown;
                 params: {};
                 query: {
+                    view?: "BASIC" | "FULL";
                     cursor?: string;
                     limit?: number;
                     state?: "completed" | "dropped" | "in_progress" | "paused" | "planned";
@@ -7115,6 +7178,11 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 response: {
                     200: {
                         libraryEntries: {
+                            subject?: {
+                                id: string;
+                                type: string;
+                                label: string;
+                            } | null;
                             subjectId: string;
                             state: "completed" | "dropped" | "in_progress" | "paused" | "planned";
                             revision: number;
@@ -7235,11 +7303,18 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                     params: {
                         subjectId: string;
                     };
-                    query: unknown;
+                    query: {
+                        view?: "BASIC" | "FULL";
+                    };
                     headers: unknown;
                     response: {
                         200: {
                             libraryEntry: {
+                                subject?: {
+                                    id: string;
+                                    type: string;
+                                    label: string;
+                                } | null;
                                 subjectId: string;
                                 state: "completed" | "dropped" | "in_progress" | "paused" | "planned";
                                 revision: number;
@@ -7317,7 +7392,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                 code: never;
                             }[];
                         };
-                        422: {
+                        422: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -7757,6 +7832,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 body: unknown;
                 params: {};
                 query: {
+                    view?: "BASIC" | "FULL";
                     cursor?: string;
                     limit?: number;
                 };
@@ -7764,6 +7840,11 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 response: {
                     200: {
                         copies: {
+                            subject?: {
+                                id: string;
+                                type: string;
+                                label: string;
+                            } | null;
                             id: string;
                             subjectId: string;
                             status: "disposed" | "lent" | "ordered" | "owned";
@@ -7888,11 +7969,18 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                     params: {
                         copyId: string;
                     };
-                    query: unknown;
+                    query: {
+                        view?: "BASIC" | "FULL";
+                    };
                     headers: unknown;
                     response: {
                         200: {
                             copy: {
+                                subject?: {
+                                    id: string;
+                                    type: string;
+                                    label: string;
+                                } | null;
                                 id: string;
                                 subjectId: string;
                                 status: "disposed" | "lent" | "ordered" | "owned";
@@ -7974,7 +8062,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                 code: never;
                             }[];
                         };
-                        422: {
+                        422: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -8529,11 +8617,18 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                     params: {
                         targetId: string;
                     };
-                    query: unknown;
+                    query: {
+                        view?: "BASIC" | "FULL";
+                    };
                     headers: unknown;
                     response: {
                         200: {
                             follow: {
+                                target?: {
+                                    id: string;
+                                    type: string;
+                                    label: string;
+                                } | null;
                                 targetId: string;
                                 targetType: "collection" | "space" | "subject";
                                 state: "following" | "unfollowed";
@@ -8611,7 +8706,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                 code: never;
                             }[];
                         };
-                        422: {
+                        422: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -8666,6 +8761,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     error: [];
 }, "get", "/v1/follows", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
     query: import("typebox").TObject<{
+        view: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"BASIC">, import("typebox").TLiteral<"FULL">]>>;
         cursor: import("typebox").TOptional<import("typebox").TString>;
         limit: import("typebox").TOptional<import("typebox").TInteger>;
     }>;
@@ -8775,6 +8871,12 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 state: import("typebox").TUnion<[import("typebox").TLiteral<"following">, import("typebox").TLiteral<"unfollowed">]>;
                 reason: import("typebox").TUnion<[import("typebox").TLiteral<"explicit">, import("typebox").TLiteral<"library">, import("typebox").TLiteral<"membership">]>;
                 updatedAt: import("typebox").TString;
+            } & {
+                target: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                    id: import("typebox").TString;
+                    type: import("typebox").TString;
+                    label: import("typebox").TString;
+                }>, import("typebox").TNull]>>;
             }>>;
             next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
         }>;
@@ -8898,6 +9000,11 @@ export declare function createKernel(dependencies: KernelDependencies): import("
         };
         200: {
             follows: {
+                target?: {
+                    id: string;
+                    type: string;
+                    label: string;
+                } | null;
                 targetId: string;
                 targetType: "collection" | "space" | "subject";
                 state: "following" | "unfollowed";
@@ -9008,6 +9115,11 @@ export declare function createKernel(dependencies: KernelDependencies): import("
         };
         200: {
             follows: {
+                target?: {
+                    id: string;
+                    type: string;
+                    label: string;
+                } | null;
                 targetId: string;
                 targetType: "collection" | "space" | "subject";
                 state: "following" | "unfollowed";
@@ -9019,6 +9131,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     }>;
     defer: (fn: import("elysia/types").AfterResponseHandler<NoInfer<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
         query: import("typebox").TObject<{
+            view: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"BASIC">, import("typebox").TLiteral<"FULL">]>>;
             cursor: import("typebox").TOptional<import("typebox").TString>;
             limit: import("typebox").TOptional<import("typebox").TInteger>;
         }>;
@@ -9128,6 +9241,12 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                     state: import("typebox").TUnion<[import("typebox").TLiteral<"following">, import("typebox").TLiteral<"unfollowed">]>;
                     reason: import("typebox").TUnion<[import("typebox").TLiteral<"explicit">, import("typebox").TLiteral<"library">, import("typebox").TLiteral<"membership">]>;
                     updatedAt: import("typebox").TString;
+                } & {
+                    target: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                        id: import("typebox").TString;
+                        type: import("typebox").TString;
+                        label: import("typebox").TString;
+                    }>, import("typebox").TNull]>>;
                 }>>;
                 next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
             }>;
@@ -9164,6 +9283,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     store: {};
     body: unknown;
     query: {
+        view?: "BASIC" | "FULL";
         cursor?: string;
         limit?: number;
     };
@@ -9183,16 +9303,23 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
     readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
-    follows: {
+    follows: ({
         targetId: string;
         targetType: import("../library/follow-model.ts").FollowTargetType;
         state: import("../library/follow-model.ts").FollowState;
         reason: import("../library/follow-model.ts").FollowReason;
         updatedAt: string;
-    }[];
+    } & object & {
+        target?: {
+            id: string;
+            label: string;
+            type: string;
+        } | null;
+    })[];
     next: string | null;
-}>, {
+} & object>, {
     query: import("typebox").TObject<{
+        view: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"BASIC">, import("typebox").TLiteral<"FULL">]>>;
         cursor: import("typebox").TOptional<import("typebox").TString>;
         limit: import("typebox").TOptional<import("typebox").TInteger>;
     }>;
@@ -9302,6 +9429,12 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 state: import("typebox").TUnion<[import("typebox").TLiteral<"following">, import("typebox").TLiteral<"unfollowed">]>;
                 reason: import("typebox").TUnion<[import("typebox").TLiteral<"explicit">, import("typebox").TLiteral<"library">, import("typebox").TLiteral<"membership">]>;
                 updatedAt: import("typebox").TString;
+            } & {
+                target: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                    id: import("typebox").TString;
+                    type: import("typebox").TString;
+                    label: import("typebox").TString;
+                }>, import("typebox").TNull]>>;
             }>>;
             next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
         }>;
@@ -54328,6 +54461,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 body: unknown;
                 params: {};
                 query: {
+                    view?: "BASIC" | "FULL";
                     limit?: string | number;
                     cursor?: string;
                     subjectId: string;
@@ -54336,6 +54470,16 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 response: {
                     200: {
                         progressSessions: {
+                            subject?: {
+                                id: string;
+                                type: string;
+                                label: string;
+                            } | null;
+                            versionSubject?: {
+                                id: string;
+                                type: string;
+                                label: string;
+                            } | null;
                             id: string;
                             subjectId: string;
                             versionSubjectId: string | null;
@@ -54462,11 +54606,23 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                     params: {
                         sessionId: string;
                     };
-                    query: unknown;
+                    query: {
+                        view?: "BASIC" | "FULL";
+                    };
                     headers: unknown;
                     response: {
                         200: {
                             progressSession: {
+                                subject?: {
+                                    id: string;
+                                    type: string;
+                                    label: string;
+                                } | null;
+                                versionSubject?: {
+                                    id: string;
+                                    type: string;
+                                    label: string;
+                                } | null;
                                 id: string;
                                 subjectId: string;
                                 versionSubjectId: string | null;
@@ -54482,6 +54638,20 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                 startedAt: string;
                                 completedAt: string | null;
                             };
+                        };
+                        400: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
                         };
                         401: {
                             type: unknown;
@@ -54510,6 +54680,17 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                 pointer: string;
                                 code: never;
                             }[];
+                        };
+                        422: Response | {
+                            type: 'validation';
+                            code: 'validation';
+                            title: 'Validation Error';
+                            status: 422;
+                            detail?: string;
+                            on: string;
+                            found?: unknown;
+                            property?: string;
+                            expected?: string;
                         };
                         503: {
                             type: unknown;
@@ -54967,6 +55148,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                             sessionId: string;
                         };
                         query: {
+                            view?: "BASIC" | "FULL";
                             limit?: string | number;
                             cursor?: string;
                         };
@@ -55061,6 +55243,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                             sessionId: string;
                         };
                         query: {
+                            view?: "BASIC" | "FULL";
                             limit?: string | number;
                             cursor?: string;
                         };
@@ -55286,11 +55469,23 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                     params: {
                         logId: string;
                     };
-                    query: unknown;
+                    query: {
+                        view?: "BASIC" | "FULL";
+                    };
                     headers: unknown;
                     response: {
                         200: {
                             publishedLog: {
+                                subject?: {
+                                    id: string;
+                                    type: string;
+                                    label: string;
+                                } | null;
+                                account?: {
+                                    id: string;
+                                    handle: string | null;
+                                    displayName: string | null;
+                                } | null;
                                 id: string;
                                 accountId: string;
                                 subjectId: string;
@@ -55300,6 +55495,20 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                 note: string | null;
                                 publishedAt: string;
                             };
+                        };
+                        400: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
                         };
                         404: {
                             type: unknown;
@@ -55314,6 +55523,17 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                 pointer: string;
                                 code: never;
                             }[];
+                        };
+                        422: Response | {
+                            type: 'validation';
+                            code: 'validation';
+                            title: 'Validation Error';
+                            status: 422;
+                            detail?: string;
+                            on: string;
+                            found?: unknown;
+                            property?: string;
+                            expected?: string;
                         };
                         503: {
                             type: unknown;
@@ -55342,6 +55562,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 body: unknown;
                 params: {};
                 query: {
+                    view?: "BASIC" | "FULL";
                     limit?: string | number;
                     cursor?: string;
                     accountId: string;
@@ -55350,6 +55571,16 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 response: {
                     200: {
                         publishedLogs: {
+                            subject?: {
+                                id: string;
+                                type: string;
+                                label: string;
+                            } | null;
+                            account?: {
+                                id: string;
+                                handle: string | null;
+                                displayName: string | null;
+                            } | null;
                             id: string;
                             accountId: string;
                             subjectId: string;

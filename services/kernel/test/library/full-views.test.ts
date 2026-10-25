@@ -8,7 +8,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { syncSubjectListing } from '../../src/library/listing.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import { bootstrapRelease } from '../../src/semantic/definitions.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
 import { capture, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
 
@@ -64,7 +64,7 @@ function request(method: string, path: string, body?: unknown, as: Persona = 'ow
   );
 }
 async function json(response: Response, status = 200) {
-  expect(response.status).toBe(status);
+  expect(response.status, await response.clone().text()).toBe(status);
   return response.json();
 }
 const viewPath = (path: string, view: string) => `${path}${path.includes('?') ? '&' : '?'}view=${view}`;
@@ -107,7 +107,7 @@ async function fixture() {
   const log = (await json(await request('POST', '/v1/publishedLogs', { sessionId: session.id }), 201)).publishedLog;
   await json(await request('PUT', `/v1/follows/${subjectId}`));
   await json(await request('PUT', `/v1/follows/${collection.id}`));
-  await syncSubjectListing(db.pool, { subjectId });
+  await syncSubjectListing({ pool: db.pool }, { subjectId, collectionId: collection.id });
   return { subjectId, versionSubjectId, collection, member, entry, copy, session, log };
 }
 const account = { id: accounts.owner, handle: 'full-owner', displayName: 'Full Owner' };
@@ -159,7 +159,7 @@ beforeAll(async () => {
         .setAudience('https://api.rezics.test')
         .setSubject(id)
         .setIssuedAt()
-        .setExpirationTime('1h')
+        .setExpirationTime('5m')
         .sign(signing.privateKey),
     );
   }
@@ -275,6 +275,16 @@ test('FULL never discloses a subject denied after insertion or a private follow 
     expect(JSON.stringify(value)).not.toContain('Embedded book');
   }
   expect((await json(await request('GET', viewPath(`/v1/follows/${f.subjectId}`, 'FULL')))).follow.target).toBeNull();
+  await db.admin.query(
+    "UPDATE semantic.subject SET visibility='hidden', security_revision=security_revision+1 WHERE route=$1 AND subject_id=$2",
+    [routeOf(f.subjectId), f.subjectId],
+  );
+  for (const as of ['other', 'anonymous'] as const) {
+    const hidden = await json(await request('GET', viewPath(`/v1/publishedLogs/${f.log.id}`, 'FULL'), undefined, as));
+    expect(hidden.publishedLog.subject).toBeNull();
+    expect(JSON.stringify(hidden)).not.toContain('Embedded book');
+  }
+
   expect(
     (await json(await request('GET', viewPath(`/v1/collections/${f.collection.id}/members`, 'FULL')))).members,
   ).toEqual([]);
@@ -337,7 +347,9 @@ test('FULL pages of twenty have constant SQL at three unrelated scales and bound
     const id = await subject(`Page book ${i}`);
     await json(await request('POST', `/v1/collections/${f.collection.id}/members`, { subjectId: id }), 201);
   }
+  for (let i = 1; i < 20; i++) await json(await request('POST', '/v1/publishedLogs', { sessionId: f.session.id }), 201);
   const counts: number[] = [];
+  const logCounts: number[] = [];
   for (const [from, to] of [
     [0, 20],
     [20, 160],
@@ -350,7 +362,62 @@ test('FULL pages of twenty have constant SQL at three unrelated scales and bound
         hotPartition: routeOf(accounts.owner)! >>> 4,
         rows: ({ route }) => {
           const id = newId(route);
-          return { 'access.account': [{ route, account_id: id, kind: 'actor', state: 'active', transaction_id: id }] };
+          const collectionId = newId(route),
+            subjectId = newId(route);
+          const at = '2020-01-01T00:00:00.000Z';
+          return {
+            'access.account': [{ route, account_id: id, kind: 'actor', state: 'active', transaction_id: id }],
+            'semantic.subject': [
+              {
+                route,
+                subject_id: subjectId,
+                type: 'schema:Book',
+                recorded_transaction_id: id,
+                current_release: bundledDigest,
+              },
+            ],
+            'library.collection': [
+              {
+                route,
+                collection_id: collectionId,
+                curator_account_id: id,
+                title: 'Unrelated',
+                visibility: 'public',
+                state: 'active',
+                revision: 1,
+                member_count: 1,
+                order_epoch: 0,
+                created_at: at,
+                updated_at: at,
+                transaction_id: id,
+              },
+            ],
+            'library.collection_member': [
+              {
+                route,
+                collection_id: collectionId,
+                member_id: newId(route),
+                subject_id: subjectId,
+                ordinal_key: 'a0',
+                added_at: at,
+                transaction_id: id,
+              },
+            ],
+            'library.published_log': [
+              {
+                route,
+                log_id: newId(route),
+                account_id: id,
+                session_id: newId(route),
+                subject_id: subjectId,
+                session_state: 'active',
+                started_at: at,
+                completed_at: null,
+                published_at: at,
+                transaction_id: id,
+              },
+            ],
+          };
         },
       },
       { from, to },
@@ -362,7 +429,100 @@ test('FULL pages of twenty have constant SQL at three unrelated scales and bound
     expect(measured.capture.statements.filter((sql) => sql.includes('FROM semantic.subject AS s'))).toHaveLength(20);
     expect(measured.capture.statements.filter((sql) => sql.includes('display_name')).length).toBeLessThanOrEqual(20);
     counts.push(measured.capture.statements.length);
+    const logs = await capture(db, () =>
+      request('GET', `/v1/publishedLogs?accountId=${accounts.owner}&view=FULL&limit=20`),
+    );
+    const body = await json(logs.value);
+    expect(body.publishedLogs).toHaveLength(20);
+    expect(
+      body.publishedLogs.every(
+        (log: { account: unknown; subject: unknown }) =>
+          JSON.stringify(log.account) === JSON.stringify(account) &&
+          JSON.stringify(log.subject) === JSON.stringify(summary(f.subjectId)),
+      ),
+    ).toBe(true);
+    expect(logs.capture.statements.filter((sql) => sql.includes('FROM semantic.subject AS s'))).toHaveLength(1);
+    expect(
+      logs.capture.statements.filter((sql) => sql.includes("CASE WHEN state <> 'deleted' THEN handle")),
+    ).toHaveLength(1);
+    logCounts.push(logs.capture.statements.length);
   }
   expect(counts[1]).toBe(counts[0]);
   expect(counts[2]).toBe(counts[0]);
+  expect(logCounts[1]).toBe(logCounts[0]);
+  expect(logCounts[2]).toBe(logCounts[0]);
+});
+
+test('version subjects have independent authorization and sessions without a version omit the embedding', async () => {
+  const f = await fixture();
+  await db.admin.query(
+    `INSERT INTO access.resource_denial
+    (route, resource_id, subject_id, subject_role, action, reason, valid, transaction_id)
+    VALUES ($1,$2,$3,'','subject:read','resource','(,)'::tstzrange,$4)`,
+    [routeOf(f.versionSubjectId), f.versionSubjectId, accounts.owner, randomUUID()],
+  );
+  const full = await json(await request('GET', viewPath(`/v1/progressSessions/${f.session.id}`, 'FULL')));
+  expect(full.progressSession.subject).toEqual(summary(f.subjectId));
+  expect(full.progressSession.versionSubject).toBeNull();
+  expect(JSON.stringify(full)).not.toContain('Embedded version');
+  const session = (
+    await json(
+      await request('POST', '/v1/progressSessions', {
+        subjectId: f.subjectId,
+        mode: 'scalar_amount',
+        unit: 'page',
+      }),
+      201,
+    )
+  ).progressSession;
+  const plain = await json(await request('GET', viewPath(`/v1/progressSessions/${session.id}`, 'FULL')));
+  expect(plain.progressSession.subject).toEqual(summary(f.subjectId));
+  expect(plain.progressSession).not.toHaveProperty('versionSubject');
+});
+
+test('Space follow summaries use the readable current Space name and conceal denied names', async () => {
+  await db.admin.query(
+    `INSERT INTO access.resource_grant(route, resource_id, subject_id, action, valid, transaction_id)
+    VALUES (0,$1,$2,'space:create','(,)'::tstzrange,$3)`,
+    [GLOBAL_CONTEXT, accounts.owner, randomUUID()],
+  );
+  const space = (await json(await request('POST', '/v1/spaces', { title: 'Named Space' }), 201)).space;
+  await json(await request('PUT', `/v1/follows/${space.spaceId}`));
+  const path = viewPath(`/v1/follows/${space.spaceId}`, 'FULL');
+  expect((await json(await request('GET', path))).follow.target).toEqual({
+    id: space.spaceId,
+    type: 'space',
+    label: 'Named Space',
+  });
+  await db.admin.query(
+    `INSERT INTO access.resource_denial
+    (route, resource_id, subject_id, subject_role, action, reason, valid, transaction_id)
+    VALUES ($1,$2,$3,'','space:read','resource','(,)'::tstzrange,$4)`,
+    [routeOf(space.spaceId), space.spaceId, accounts.owner, randomUUID()],
+  );
+  const hidden = await json(await request('GET', path));
+  expect(hidden.follow.target).toBeNull();
+  expect(JSON.stringify(hidden)).not.toContain('Named Space');
+});
+
+test('FULL members preserve private Collection access and interoperate with BASIC cursors', async () => {
+  const subjectId = await subject();
+  const collection = (
+    await json(await request('POST', '/v1/collections', { title: 'Private books', visibility: 'private' }), 201)
+  ).collection;
+  for (let i = 0; i < 3; i++)
+    await json(await request('POST', `/v1/collections/${collection.id}/members`, { subjectId }), 201);
+  const path = `/v1/collections/${collection.id}/members?limit=1`;
+  const basic = await json(await request('GET', path));
+  const full = await json(await request('GET', viewPath(path, 'FULL')));
+  expect(full.members).toEqual(basic.members.map((member: object) => ({ ...member, subject: summary(subjectId) })));
+  expect(full.next).toBeString();
+  const basicAfterFull = await json(await request('GET', `${path}&cursor=${encodeURIComponent(full.next)}`));
+  const fullAfterBasic = await json(await request('GET', `${path}&view=FULL&cursor=${encodeURIComponent(basic.next)}`));
+  expect(fullAfterBasic.members).toEqual(
+    basicAfterFull.members.map((member: object) => ({ ...member, subject: summary(subjectId) })),
+  );
+  for (const as of ['other', 'anonymous'] as const)
+    await json(await request('GET', viewPath(path, 'FULL'), undefined, as), 404);
+  await json(await request('GET', `${path}&view=FULL&cursor=invalid`), 400);
 });
