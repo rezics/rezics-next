@@ -32,7 +32,10 @@ export class SqliteLandingQueue implements LandingQueue {
     this.db.query('INSERT OR REPLACE INTO landing_baselines VALUES (?,?,?)').run(commit, command, JSON.stringify(result));
   }
   next(): LandingEntry | undefined {
-    const row = this.db.query('SELECT * FROM landing_queue WHERE delivered = 0 ORDER BY id LIMIT 1').get() as
+    // Control-plane changes land first, since they change how fast everything else lands.
+    const tasks = this.db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'worker_tasks'").get();
+    const priority = tasks ? "COALESCE((SELECT json_extract(body, '$.brief.goal') = 'control-plane' FROM worker_tasks WHERE id = task), 0) DESC, " : '';
+    const row = this.db.query(`SELECT * FROM landing_queue WHERE delivered = 0 ORDER BY ${priority}id LIMIT 1`).get() as
       { id: number; request: string; outcome: string | null; delivered: number; candidate: string | null } | null;
     return row ? { ...row, request: JSON.parse(row.request), outcome: row.outcome ? JSON.parse(row.outcome) : null } : undefined;
   }
