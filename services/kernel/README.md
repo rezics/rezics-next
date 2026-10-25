@@ -41,6 +41,25 @@ and `https://api.rezics.test` in tests. Verification still uses standard JOSE,
 cached public keys and current account state, epoch floor and fence checks;
 failures retain the `invalid_token` response.
 
+## Durable work
+
+Run `bun run worker` for the kernel's single durable-work process. It requires `DATABASE_URL` and accepts
+`KERNEL_EXECUTOR_ID`, falling back to `NOMAD_JOB_NAME` plus `NOMAD_ALLOC_INDEX` when configured, or the SDK's local
+identity. `KERNEL_WORKER_POOL_SIZE` defaults to 10 and must be between 1 and 100; the module pool, enqueue client and
+SDK share this bounded pool. SIGINT and SIGTERM stop dispatch and drain in-flight workflows before closing it.
+Migrations, not the worker, create and upgrade the `dbos` schema.
+
+The worker registers the six ADR-0033 queues once, calls every module registration in order, then launches DBOS
+once. Governance has separate concurrency; import work supplies its source as `queuePartitionKey`. A module exports
+one `WorkModule` registration for its workflows, effects and schedules and adds one entry to `KERNEL_WORK_MODULES`
+in `src/work/modules.ts`, just as its HTTP routes register in `createKernel`. Registrations receive the pool, queue
+options and work client. Duplicate module names and registration after launch are refused. Modules never launch
+DBOS or create their own worker. The list is empty until modules add their work.
+
+API processes use `createWorkClient(databaseUrl)` from `src/work/client.ts` to enqueue by workflow and queue name,
+pass that client to modules, and call `close()` on shutdown. Enqueueing needs no running worker; the next worker
+runs the persisted work. Reuse a workflow ID for idempotency.
+
 ## Check
 
 Run `bun run check` from this workspace. It starts a disposable PostgreSQL database, applies migrations and checks the

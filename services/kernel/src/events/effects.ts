@@ -1,8 +1,9 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool } from 'pg';
+import { startWorker } from '../worker.ts';
 import { EVENT_TYPES, readBatch, type CloudEvent, type Envelope } from './log.ts';
 
-export const DBOS_SCHEMA = 'dbos';
+export { DBOS_SCHEMA } from '../work/client.ts';
 export const EFFECTS_QUEUE = 'effects';
 export const EFFECTS_CONSUMER = 'effects';
 
@@ -66,21 +67,15 @@ export function registerEffects(effects: Effect[]): { enqueue(envelopes: readonl
   };
 }
 
-export async function launchWork({ databaseUrl, executorId }: WorkOptions): Promise<void> {
-  DBOS.setConfig({
-    name: 'rezics-kernel',
-    systemDatabaseUrl: databaseUrl,
-    systemDatabaseSchemaName: DBOS_SCHEMA,
-    runMigrations: false,
-    logLevel: 'warn',
-    ...(executorId === undefined ? {} : { executorID: executorId }),
-  });
-  await DBOS.launch();
-  await DBOS.registerQueue(EFFECTS_QUEUE);
+let worker: Awaited<ReturnType<typeof startWorker>> | undefined;
+
+/** Compatibility for effect callers that registered their functions before launch. */
+export async function launchWork(options: WorkOptions): Promise<void> {
+  worker = await startWorker({ ...options, poolSize: 10 }, []);
 }
 
 export async function shutdownWork(): Promise<void> {
-  await DBOS.shutdown();
+  await worker?.stop();
 }
 
 /** A batch failing after enqueuing is read again and finds the workflows it started. */
