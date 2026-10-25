@@ -241,8 +241,9 @@ commits no effect or position. Retry, fencing and atomic receipt/outbox/write-ba
 
 `src/http/request.ts` also exports `requestDigest(operation, actor, normalizedBody)` for either actor kind,
 `anonymousRequestDigest(operation, { semantic, abuse? })`, and
-`anonymousCommandTarget(routeKey, operation, key)`. The anonymous digest binds the operation, fixed anonymous
-principal and canonical semantic JSON. Supply every effect-relevant normalized field, including the report target,
+`anonymousCommandTarget(routeKey, operation, key)`. The anonymous digest binds the operation and canonical semantic
+JSON with fixed null anonymous client/requestedBy attribution; the executor binds it to the fixed anonymous receipt
+principal. Supply every effect-relevant normalized field, including the report target,
 reason and content, in `semantic`. Put already-verified Turnstile/CSRF and other request authentication/abuse evidence
 in `abuse`; it is excluded from the digest. A fresh proof can retry the same semantic command. Proof verification,
 Turnstile, CSRF and rate limits remain in front and never replace UUIDv4 possession or Access. Never pass raw request
@@ -257,15 +258,16 @@ Owning routes must explicitly declare anonymous admission in their installed act
 `accessCommandAuthorization`. Missing/forged evidence and unknown actions fail closed. Bad supplied bearer tokens
 still fail authentication. PRIVATE report creation can be domain-eligible without making the report public.
 
-The merged eligibility contract currently exports an unavailable evaluator. Actual installed Access positive
-eligibility/replay and stale-domain conformance therefore remain blocked until the full floor evaluator is available.
-`test/access/anonymous-receipts.test.ts` keeps that positive requirement executable and failing; trusted authorization
-fixtures in the core receipt suite prove executor behavior only. They do not establish the anonymous eligibility
-formula or final Goal acceptance. The pre-existing anonymous unavailable-stub assertion is also incompatible with
-enabled anonymous execution and is left unchanged under the frozen-test constraint.
+The installed Access evaluator and generic eligibility capability are exercised by
+`test/access/anonymous-receipts.test.ts`, including successful execution/replay and denial after domain facts change.
+The core receipt suite's trusted authorization fixtures separately prove executor ordering and atomicity. Owning
+content commands and final conformance must still prove their actual domain eligibility and normalized request fields.
 
 Per attempt, receipt access is one partition/principal/kind/key index seek, followed on a miss by one partition fence
 and k bounded event/basis writes: fixed SQL count and O(k log R) index buffers, plus the owning bounded eligibility
-callback and H container hops. No receipt-history scan or nil-account lookup is introduced. Same-partition,
-same-principal unrelated/history growth evidence at 1x/8x/64x remains required from the shared performance harness;
-this is a declared bound, not a measured growth claim.
+callback and H container hops. No receipt-history scan or nil-account lookup is introduced.
+`test/anonymous-receipts-growth.test.ts` uses the shared PostgreSQL plan/buffer harness at 1x/8x/64x with
+512/4,096/32,768 unrelated receipts, outbox events and write bases in the same partition and anonymous namespace.
+It holds one execute/replay/conflict sequence fixed, checks constant statements/rows and logarithmic shared-buffer
+growth, and rejects receipt sequential scans. The trusted authorization fixture isolates core executor cost;
+the owning eligibility callback and H-hop costs remain additional.

@@ -3,7 +3,6 @@ import { createHash, randomUUID } from 'node:crypto';
 import pg from 'pg';
 import {
   ANONYMOUS_PRINCIPAL_ID,
-  CommandUnavailableError,
   IdempotencyConflictError,
   authoritativeTimeValue,
   currentCommand,
@@ -13,6 +12,9 @@ import {
   type PrincipalCommandOptions,
   type PrincipalCommandReceipt,
 } from '../src/command/command.ts';
+import { createAccess, createResourceAnonymousEligibility } from '../src/access/index.ts';
+import { accessCommandAuthorization } from '../src/request/access.ts';
+import { newId } from '../src/route/route.ts';
 import { createPool } from '../src/database/pool.ts';
 import type { AccountActor } from '../src/request/access.ts';
 
@@ -88,37 +90,93 @@ test('anonymous commands without authorization reject before any pool access or 
   expect(trap.calls()).toBe(0);
 });
 
-test('authorized anonymous commands remain unavailable before SQL, checkout, authorization or body', async () => {
-  const trap = queryTrap();
-  const unexpected = () => {
-    throw new Error('Unavailable anonymous command invoked a callback');
-  };
-  const authorization: CommandAuthorization = {
-    action: 'test:report',
-    resource: { route: 24, id: actor.accountId },
-    prepare: unexpected,
-    authorize: unexpected,
-    denied: unexpected,
-  };
-  for (const optionalReceipt of [
-    {},
-    { receipt: { kind: 'test.report', key: randomUUID(), digest: digest('report') } },
-  ]) {
-    await expect(
-      runCommand(
-        trap.pool,
-        {
-          ...principalCommandIdentity({ kind: 'anonymous' }),
-          partition: 24,
-          ...optionalReceipt,
-          authorization,
-          clock: unexpected,
-        },
-        unexpected,
-      ),
-    ).rejects.toBeInstanceOf(CommandUnavailableError);
+test('authorized anonymous commands check native Access before receipt and body and commit exactly one effect', async () => {
+  const observed = createPool(databaseUrl!);
+  const order: string[] = [];
+  const wrapped = new WeakSet<pg.PoolClient>();
+  observed.on('acquire', (client) => {
+    if (wrapped.has(client)) return;
+    wrapped.add(client);
+    const query = client.query.bind(client);
+    client.query = ((...args: Parameters<typeof client.query>) => {
+      const input: unknown = args[0];
+      const statement = typeof input === 'string' ? input : (input as pg.QueryConfig).text;
+      if (/FROM core\.receipt/.test(statement)) order.push('receipt');
+      return query(...args);
+    }) as typeof client.query;
+  });
+  try {
+    const resource = { route: 25 << 4, id: newId(25 << 4) };
+    await observed.query(`CREATE TABLE public.anonymous_contract_domain
+      (route integer NOT NULL, id uuid NOT NULL, admitted boolean NOT NULL, PRIMARY KEY (route,id))`);
+    await observed.query('INSERT INTO public.anonymous_contract_domain VALUES ($1,$2,true)', [
+      resource.route,
+      resource.id,
+    ]);
+    const eligibility = createResourceAnonymousEligibility({
+      resource,
+      action: 'test:report',
+      async prepare() {
+        return { id: resource.id };
+      },
+      async verify({ client, resource: target, evidence }) {
+        order.push('access');
+        return (
+          evidence.id === target.id &&
+          (
+            await client.query('SELECT admitted FROM public.anonymous_contract_domain WHERE route=$1 AND id=$2', [
+              target.route,
+              target.id,
+            ])
+          ).rows[0]?.admitted === true
+        );
+      },
+    });
+    const access = createAccess({ actions: new Map([['test:report', { anonymous: true }]]) });
+    const authorization = await accessCommandAuthorization(
+      access,
+      { kind: 'anonymous' },
+      'test:report',
+      { ...resource, eligibility },
+      { pool: observed, deadline: Date.now() + 2_000 },
+      () => new Error('Anonymous authorization denied'),
+    );
+    const options: PrincipalCommandOptions = {
+      ...principalCommandIdentity({ kind: 'anonymous' }),
+      partition: 25,
+      receipt: { kind: 'test.report', key: randomUUID(), digest: digest('report') },
+      authorization,
+    };
+    let effects = 0;
+    const execute = async () => {
+      order.push('body');
+      effects++;
+      return { value: { accepted: true }, events: [event] };
+    };
+    const first = await runCommand(observed, options, execute);
+    expect(first.replayed).toBe(false);
+    expect(await runCommand(observed, options, execute)).toEqual({ ...first, replayed: true });
+    expect(order).toEqual(['access', 'receipt', 'body', 'access', 'receipt']);
+    expect(effects).toBe(1);
+    await observed.query('UPDATE public.anonymous_contract_domain SET admitted=false WHERE route=$1 AND id=$2', [
+      resource.route,
+      resource.id,
+    ]);
+    order.length = 0;
+    await expect(runCommand(observed, options, execute)).rejects.toThrow('Anonymous authorization denied');
+    expect(order).toEqual(['access']);
+    expect(effects).toBe(1);
+    expect(
+      (
+        await observed.query(`SELECT position,
+      (SELECT count(*)::int FROM core.receipt WHERE partition_no=25) AS receipts,
+      (SELECT count(*)::int FROM core.outbox WHERE partition_no=25) AS events
+      FROM core.partition WHERE partition_no=25`)
+      ).rows,
+    ).toEqual([{ position: '1', receipts: 1, events: 1 }]);
+  } finally {
+    await observed.end();
   }
-  expect(trap.calls()).toBe(0);
 });
 
 test('the nil marker cannot become an account or carry anonymous client attribution', async () => {

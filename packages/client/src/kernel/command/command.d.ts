@@ -88,8 +88,6 @@ export type CommandAttribution = CommandBasis | {
     clientId: null;
     requestedBy: null;
 };
-/** Validate possession before checkout. Account text keys retain their contract. */
-export declare function normalizeCommandKey(principal: CommandPrincipal, key: string): string;
 export type CommandOutcome<T> = {
     value: T;
     partition: number;

@@ -1,4 +1,4 @@
-import type { CommandPrincipal } from '../command/command.ts';
+import { type CommandPrincipal } from '../command/command.ts';
 import type { ActionCatalogue, Actor } from '../request/access.ts';
 export declare const SESSION_HEADER = "rezics-session-token";
 export declare const IDEMPOTENCY_HEADER = "idempotency-key";

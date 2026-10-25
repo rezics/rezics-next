@@ -118,7 +118,8 @@ async function verifySnapshot(client: PoolClient, reference: Reference): Promise
   // Use core's trusted reader and exact primary key; never search response JSON or history.
   const receipt = await readReceipt.run(client, {
     partition_no: native.partition,
-    actor_account_id: native.actorAccountId,
+    principal_kind: 'account',
+    principal_id: native.actorAccountId,
     command_kind: native.kind,
     idempotency_key: native.key,
   });
