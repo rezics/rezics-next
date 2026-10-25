@@ -179,7 +179,10 @@ bun tools/goal/src/cli.ts manager complete <manager>
 bun tools/goal/src/cli.ts inbox wait <manager>
 bun tools/goal/src/cli.ts inbox read <manager>
 bun tools/goal/src/cli.ts inbox ack <manager>
+bun tools/goal/src/cli.ts inbox send <manager> <kind> <summary> [--task <task>] [--evidence <path>]
 ```
+
+`inbox send` delivers a one-line decision event to another manager and records the sending manager as its source.
 
 `land` and `train` use the same queue and sink as dispatch. The manager host starts automatically and persists until
 stopped. An untracked `<managerDirectory>/<goal>.json` can select a local `pool`, `objective`, `brief`, `effort`,

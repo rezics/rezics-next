@@ -77,6 +77,7 @@ export type ManagerEventKind =
 export type ManagerEvent = {
   managerId: string;
   kind: ManagerEventKind;
+  from?: string;
   taskId?: string;
   /** One line; the manager reads details through the control plane. */
   summary: string;

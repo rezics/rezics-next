@@ -10,6 +10,7 @@ export function createIntegrationRuntime(): IntegrationRuntime {
   return {
     db: openDb(join(stateDirectory, 'state.sqlite')), mainCheckout, stateDirectory,
     worktreeRoot: join(stateDirectory, 'trees'), managerSocket: join(stateDirectory, 'manager.sock'),
+    supermanager: 'supermanager',
     hostCommand: [process.execPath, import.meta.filename],
     fence: { assertCurrent() {}, commitMerge(_ref, merge) { return merge(); } }, sink: { onGateOutcome() {} },
     landing(task) { return { taskId: task, attempt: 1, branch: task, worktree: '', declaredPaths: ['**'], gate: ['true'] }; },

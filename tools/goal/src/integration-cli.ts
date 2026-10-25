@@ -2,9 +2,9 @@ import type { Database } from 'bun:sqlite';
 import { spawn } from 'node:child_process';
 import { createServer, createConnection } from 'node:net';
 import { createInterface } from 'node:readline';
-import { chmodSync, closeSync, mkdirSync, openSync, readFileSync, rmSync } from 'node:fs';
+import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import type { AttemptFence, GateOutcomeSink, LandingRequest } from './contracts.ts';
+import type { AttemptFence, GateOutcomeSink, LandingRequest, ManagerEventKind } from './contracts.ts';
 import { SqliteLandingQueue } from './land.ts';
 import { MergeTrain } from './merge-train.ts';
 import { SqliteManagerInbox } from './inbox.ts';
@@ -15,6 +15,7 @@ import { acquireDirectoryLease } from './lease.ts';
 export type IntegrationRuntime = {
   queue?: SqliteLandingQueue; inbox?: SqliteManagerInbox; pump?(): Promise<void>; drain?(): Promise<void>; hostCommand?: string[];
   db: Database; mainCheckout: string; stateDirectory: string; worktreeRoot: string; managerSocket: string;
+  supermanager?: string;
   fence: AttemptFence; sink: GateOutcomeSink;
   landing(task: string): LandingRequest;
   manager(goal: string, engine: 'codex' | 'claude', budget: number): ManagerSpec;
@@ -119,11 +120,29 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
     else await new MergeTrain({ ...runtime, queue }).run(); return 0; }
   if (command === '_manager-host') { await serveManagers(runtime); return 0; }
   if (command === 'inbox' && id) {
-    await recordManagerCommand(runtime);
-    if (subcommand === 'wait') console.log(JSON.stringify(await inbox.wait(id)));
-    else if (subcommand === 'read') console.log(JSON.stringify(inbox.read(id)));
-    else if (subcommand === 'ack') inbox.acknowledge(id, flags.length ? flags.map(Number) : undefined);
-    else return 2;
+    if (subcommand === 'send') {
+      const [kind, summary, ...options] = flags;
+      if (!kind || !summary) return 2;
+      const values = new Map<string, string>();
+      for (let index = 0; index < options.length; index += 2) {
+        const option = options[index]; const value = options[index + 1];
+        if ((option !== '--task' && option !== '--evidence') || !value || values.has(option)) return 2;
+        values.set(option, value);
+      }
+      const allowed = new Set(['spec-conflict', 'scope-growth', 'round-limit', 'stalled', 'failed-after-consult', 'goal-unmet', 'instruction']);
+      if (!allowed.has(kind) || /[\r\n]/.test(summary)) return 2;
+      await recordManagerCommand(runtime);
+      inbox.deliver({ managerId: id, kind: kind as ManagerEventKind, summary,
+        from: process.env.GOAL_MANAGER || runtime.supermanager || 'supermanager',
+        ...(values.has('--task') ? { taskId: values.get('--task')! } : {}),
+        ...(values.has('--evidence') ? { evidencePath: values.get('--evidence')! } : {}) });
+    } else {
+      await recordManagerCommand(runtime);
+      if (subcommand === 'wait') console.log(JSON.stringify(await inbox.wait(id)));
+      else if (subcommand === 'read') console.log(JSON.stringify(inbox.read(id)));
+      else if (subcommand === 'ack') inbox.acknowledge(id, flags.length ? flags.map(Number) : undefined);
+      else return 2;
+    }
     return 0;
   }
   if (command === 'manager' && id) {
@@ -152,5 +171,5 @@ export async function recordManagerCommand(runtime: IntegrationRuntime): Promise
     const rows = runtime.db.query("SELECT state FROM manager_sessions").all() as { state: string }[];
     manager = rows.map(row => JSON.parse(row.state)).find(state => state.threadId === process.env.CODEX_THREAD_ID)?.id;
   }
-  if (manager) await hostRequest(runtime.managerSocket, { command: 'decision', manager });
+  if (manager && existsSync(runtime.managerSocket)) await hostRequest(runtime.managerSocket, { command: 'decision', manager });
 }
