@@ -164,7 +164,7 @@ These are in-process methods, with no internal HTTP authorization endpoint.
 Registration command durability, retries and Access activation remain the
 registration workflow's responsibility.
 
-Better Auth 1.7.12's installed public `$context.adapter` types support
+Better Auth 1.8.0-beta.2's installed public `$context.adapter` types support
 `create({ forceAllowId: true })` and `transaction()`. Provisioning uses that
 facility with `user.id = account_id`, and credential `accountId = userId`.
 No internal identity mapping is necessary. The tests inspect actual PostgreSQL
@@ -308,6 +308,7 @@ Better Auth. Host consent UI must show the selected client and scopes explicitly
 | `POST /signout`              | Cookie and `{}`; Better Auth deletes the session and clears its cookie                                                                                                                                           |
 | `GET /.well-known/jwks.json` | Public `PublicJwks`, containing only ES256 verification material                                                                                                                                                 |
 
+The website client's OAuth/OIDC routes are listed under "Website client".
 Unrecognized routes, including `/api/auth/*`, signup and raw password recovery,
 are unavailable. No automated recovery-email route exists. Failure responses expose
 only `authentication_denied`, never credential or Access details.
@@ -691,7 +692,9 @@ Derived from `src/`, `db/migrations/`, `db/schema.sql` and installed Better Auth
 1.7.12: `db/internal-adapter.mjs`, `db/with-hooks.mjs`, session/sign-in/sign-out/password
 routes, password utilities, core adapter factory and PostgreSQL Kysely adapter.
 The owner schema, indexed verification, bounded session and trusted-establishment
-plugins run; OAuth/JWT plugins do not.
+plugins run on every route. The JWT and website OAuth provider plugins serve only
+the website protocol routes; their costs are listed under "Website client".
+The dependencies are now Better Auth 1.8.0-beta.2; the growth tests below run on it.
 A counts accounts (`user`, at most one credential `account` each), S retained sessions,
 s one account's sessions, K signing keys, C clients; D, P, J, E, O, H, V and T count
 consents, public credentials, assertion JTIs, effect receipts, openings, recovery
@@ -953,112 +956,163 @@ uses native `checkGrowth` at 1/8/64 × 500, grows unrelated owners/clients and t
 selected person's other-client/history rows, and retains full SQL/auto_explain
 provenance in `.temp/current-consent-growth.json`. No planner overrides or
 wall-clock growth gate are used.
-## Native website provider integration blocker
+## Website client
 
-The confidential website provider is not mounted. The frozen website tests
-remain unchanged and fail until that integration exists. The local HTTP issuer
-support is already present; it is not the remaining dependency.
+The website's backend-for-frontend (BFF) is the confidential, first-party OAuth
+2.0 / OpenID Connect client `rezics-website`, exported as `WEBSITE_CLIENT_ID`. It
+authenticates with `private_key_jwt` (ES256) and uses authorization code with
+PKCE S256 and refresh-token rotation. A person's access, refresh and ID tokens
+live only in the BFF's server-side session; the browser carries the website
+session cookie and, briefly, an authorization code. The service mounts Better
+Auth's official `@better-auth/oauth-provider` behind `service.handler`, with
+native models mapped onto the existing single client registry (`auth_client`)
+and consent authority (`auth_consent`). No second client store, consent store,
+session system or grant engine exists.
 
-The required `@better-auth/oauth-provider` version `1.7.12` and its exact compatible
-peers are pinned for a reproducible native-provider diagnostic:
+### Registration and key rotation
+
+Registration is a trusted, in-process deployment operation. There is no dynamic
+or HTTP client registration:
+
+```ts
+await auth.internal.registerWebsiteClient({
+  publicJwks: { keys: [websitePublicJwk] }, // public P-256 ES256 keys only
+  redirectUris: ['https://rezics.com/auth/callback'],
+  postLogoutRedirectUris: ['https://rezics.com/'],
+  scopes: ['openid', 'offline_access', 'media:create', 'media:read', 'media:complete' /* , … */],
+});
+```
+
+- The website generates its private P-256 JWK and keeps it as a Worker secret.
+  Deployment passes only `{ keys: [public JWK] }`. Each key needs a unique `kid`,
+  `alg: "ES256"` and `use: "sig"`; private members, other curves or algorithms
+  are refused. One to three keys may be registered.
+- Redirect and post-logout URIs match exactly. Each list holds one to eight
+  canonical absolute URIs without query, fragment or userinfo. A local
+  deployment with an HTTP loopback issuer registers its own callback, for
+  example `http://localhost:3000/auth/callback` and `http://localhost:3000/`.
+  An HTTPS issuer refuses non-HTTPS redirects, so production has no loopback
+  allowance.
+- Scopes must include `openid`, `offline_access` and `media:complete`. When the
+  composition supplies the trusted mounted action catalogue (`siteActions`),
+  every other scope must be one of its actions. Scope changes are additive;
+  removing a scope is refused here and belongs to the client reduction workflow.
+- The call is idempotent. It replaces keys and redirect lists, so rotate a key
+  by registering both keys, switching the website, then registering the new key
+  alone. It also writes the API resource row (the configured audience) and links
+  the client to it.
+
+`media:complete` is reserved for this client. Generic `registerClient` refuses
+it and the `rezics-website` ID for every client, first party or not, and cookie,
+key and operator issuance refuse both.
+
+### Endpoints
+
+All paths are relative to the configured issuer. These protocol routes are the
+documented exceptions to the JSON and `Origin` rules of the public HTTP contract:
+server-to-server OAuth calls send `application/x-www-form-urlencoded` bodies
+without a browser `Origin`, and logout also accepts `GET`. Form bodies are at
+most 16 KiB, every field may appear once, and unknown fields are refused.
+
+| Method and path                            | Input / result                                                                                                                                                                                                                                                                                                                         |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /.well-known/openid-configuration`    | Discovery: exact `issuer`; `/authorize`, `/token`, `/revoke`, `/logout` and `/.well-known/jwks.json`; `response_types_supported: ["code"]`; grants `authorization_code` and `refresh_token`; PKCE `S256`; `private_key_jwt` with ES256; `scopes_supported` from the registered client. Also served at `oauth-authorization-server`     |
+| `GET /authorize`                           | `client_id`, exact `redirect_uri`, `response_type=code`, `state`, `code_challenge` (S256), `code_challenge_method=S256`, `resource` (the API audience), `scope` with `openid offline_access`, optional `nonce`, `prompt`, `max_age`. Uses the Auth session cookie; redirects with a one-use code and `state` only to the validated URI |
+| `POST /token`                              | `grant_type=authorization_code` with `code`, `redirect_uri`, `code_verifier`; or `grant_type=refresh_token` with `refresh_token` and an optional narrower `scope`. Both require `client_id`, `client_assertion_type`, `client_assertion` and `resource`. JSON bodies keep the existing cookie `/token` route                           |
+| `POST /revoke`                             | RFC 7009 `token` and optional `token_type_hint`, with the same client authentication and `resource`                                                                                                                                                                                                                                    |
+| `GET` or `POST /logout`, `/logout/confirm` | OpenID Connect RP-Initiated Logout 1.0: `id_token_hint`, `client_id`, `post_logout_redirect_uri`, `state`. No client key is needed                                                                                                                                                                                                     |
+| `GET /login`                               | Login entry for the browser: sign in through `POST /signin` with a registered login client, then resume the authorization URL                                                                                                                                                                                                          |
+
+Client assertions are ES256 JWTs signed with a registered `kid`, with
+`iss = sub = rezics-website`, `aud` exactly the configured issuer identifier (not
+the token endpoint URL), `iat` not in the future, a lifetime of at most 120
+seconds and a nonempty `jti` of at most 128 characters. The native provider
+records each `jti` once, so a replayed assertion fails across processes and
+restarts.
+
+A successful token response is `{ access_token, token_type: "Bearer",
+expires_in: 300, refresh_token, id_token, scope }`. The access token is the
+existing five-minute API JWT (`typ: at+jwt`, `aud` the API audience): `sub` is
+the authenticated person, `client_id` is `rezics-website`, and `authn_epoch`,
+`auth_time` and `amr` come from the authenticated session. The ID token has
+`aud: rezics-website`, the same `sub`, `auth_time`, `nonce` when sent and a
+session-bound `sid`; it carries no profile or email, and the API verifier refuses
+it as an access token. The refresh token is opaque and stored only as a hash.
+
+Every code redemption and refresh rechecks the current Access state, epoch and
+fence, the native session, the registered client scopes and consent; missing or
+unavailable evidence denies. A refresh cannot add scopes, change client, subject
+or audience, or outlive its session. Website-layer refusals return HTTP 400
+`{"error":"invalid_request"}`; native protocol errors such as `invalid_grant`
+pass through. Responses never echo tokens, codes or assertions.
+
+Revocation and logout run the Access-first invalidation port before reporting
+success, so JWTs minted earlier fail kernel's next anchored account read. Logout
+keeps ten minutes of non-authenticating recent-session evidence so an expired
+`id_token_hint` for a recently ended session is still accepted, then ends the
+real Better Auth session and clears its cookie.
+
+Limitations: only the authorization code and refresh token grants exist; there
+is no implicit, client credentials, token exchange or dynamic registration.
+`refreshTokenReuseInterval` is zero, so a refresh retried after a lost response
+counts as reuse and revokes its family. Access tokens are JWTs, so revocation
+relies on the Access floor rather than on token rows.
+
+### Refresh families (provider patch)
+
+`patches/@better-auth%2Foauth-provider@1.8.0-beta.2.patch`, registered in the root
+`patchedDependencies`, fixes a provider defect: reuse detection did not
+linearize with rotation. A rotation revoked its parent, then inserted the child
+in a separate write. A concurrent replay, even in another process, deleted the
+client/user refresh history (a request-time scan) between those writes, and the
+child stayed usable. The patch header names the defect; drop the patch once
+upstream ships an equivalent fix.
+
+With the patch, each authorization grant has one `oauthRefreshFamily` row keyed
+by the code's stored identifier, which every rotated token carries as
+`authorizationCodeId`. The code grant creates the family before consuming the
+code. Rotation locks the family row and performs the parent compare-and-swap
+and child insert in one transaction on the bound native adapter. Only adapter
+calls run inside it, so hooks and signing never hold its connection. The
+refresh grant re-reads the presented token under the same lock before issuance
+work, so a replay that races a rotation waits and is classified as reuse. Reuse,
+a lost compare-and-swap, code replay and revocation revoke the family
+permanently by exact key (RFC 9700 section 4.14.2); token rows stay
+authoritative and expire lazily. The website layer refuses a revoked family
+before native work and, when its request revokes a family, also runs Access
+invalidation with reason `refresh-replay`.
 
 ```sh
 bun run --cwd services/auth scripts/probe-native-refresh.ts
 ```
 
-The default command asserts the required outcome: replay must make a resumed
-child unusable. It currently exits nonzero on the pinned, unadapted provider.
-`--observe-native` instead asserts the observed native failure and exits zero
-when the reproduction is stable. Neither mode changes the frozen website tests.
+The probe owns a disposable database through `testDatabase`, registers the
+client through `registerWebsiteClient` and runs the native provider in two
+processes with `pool.max=1` over loopback HTTP. It pauses one rotation just
+before its child insert, replays the parent from the other process, resumes the
+rotation, restarts the replay process and presents the child. It requires the
+child to fail: it passes with the patch and fails on the unpatched provider,
+where the child refresh returns HTTP 200. `--observe-native` instead asserts
+that race. The probe prints only statuses and counts.
 
-This script owns a disposable PostgreSQL database through `testDatabase`. It
-applies the installed provider's native schema only in that database, provisions
-and authenticates a person through the existing Auth service, and exercises the
-native provider in two separate processes over real loopback HTTP sockets with an ES256 registered client
-assertion, authorization code, S256 and API resource. Its native assertion uses
-the provider's endpoint audience; it does not implement or change the website's
-required issuer-audience adaptation. The diagnostic prints only statuses and
-counts. Credentials, signing keys, cookies, codes and tokens remain in memory.
-The fixture is not a deployment/bootstrap implementation.
+Through the real website handler, one refresh rotation costs 28 statements and
+30 rows and one replay revocation 18 statements and 16 rows at 1x/8x/64x, while
+the measured family's rotated history, the person's other families and other
+people's families grow (`growth-website-refresh.test.ts`). Code exchange,
+refresh, replay and revocation touch the family and token rows by exact key or
+hash and never scan refresh history. Ending a native session still reads that
+session's own token rows by `sessionId`, bounded by one session's rotations.
 
-Both processes use `pool.max=1` against the same isolated issuer database. The
-diagnostic deterministically pauses one native rotation immediately before
-its replacement refresh row is inserted. A replay in the other process detects the revoked
-parent, returns HTTP 400 and finishes deleting all refresh rows. Resuming the
-first request returns HTTP 200. The replay process is then stopped and restarted;
-the child refresh token returns HTTP 200 through that restarted process too.
-Native replay cleanup therefore does not prevent a concurrent
-rotation from recreating usable refresh authority. Both custom issuance hooks
-are skipped in the replay process, as its independent hook counter asserts.
+`internal.pruneExpiredProtocolState(batch)` removes at most one batch (1 through
+1000, default 1000) of expired access tokens, refresh tokens, refresh families,
+client assertions and recent logout evidence per invocation. Removing a family
+never revives a token, because the provider refuses tokens of a missing family.
+Each kind uses its expiry index; one invocation stays constant in rows and
+statements as expired and live history grow (`website-protocol-retention.test.ts`).
+The maintenance tick does not call it yet; its step list is fixed by the
+schedule tests, so the Auth host must schedule it separately.
 
-A read-only adapter experiment also runs with `pool.max=1`. Inside the official
-`runWithTransaction` context, `getCurrentAdapter` returns a distinct transaction
-adapter and its point read succeeds. A point read through the root adapter waits
-until that transaction releases its connection. This is a connection-binding
-check, not a growth or latency measurement. Only a read is left pending, and the
-script awaits it after commit. A timed-out mutation is never allowed to continue.
-
-The installed package's `dist/introspect-DeWu79D4.mjs` contains the concrete
-conflicting operations:
-
-- `createRefreshToken` conditionally updates the parent using `incrementOne`,
-  then separately calls `adapter.create` for the child, without a surrounding
-  transaction. A failed conditional update returns `invalid_grant` without
-  invalidating the family.
-- `invalidateRefreshFamily` reads refresh history with `findMany` by client and
-  user, builds an array of row IDs, deletes corresponding access rows, then
-  deletes refresh rows. It has no family tombstone or atomic barrier against a
-  concurrent child insert. Its own source comment documents this race and the
-  missing transactional adapter contract.
-- `handleRefreshTokenGrant` invokes that history cleanup directly for replay,
-  before `createUserTokens` and its `customAccessTokenClaims` and
-  `customTokenResponseFields` hooks. The published `OAuthOptions` and extension
-  interfaces expose no replacement or transaction hook for this cleanup or
-  the parent-update/child-insert pair.
-
-The binding gap is in the installed `@better-auth/core/dist/context/transaction.mjs`
-and `@better-auth/kysely-adapter/dist/index.mjs`: the former supplies the scoped
-adapter through `getCurrentAdapter`; the latter's `transaction` creates a new
-adapter bound to a Kysely transaction. Native OAuth calls use
-`ctx.context.adapter` directly, including both rotation mutations and replay
-cleanup. Wrapping the handler in `runWithTransaction` alone does not redirect
-those calls. Holding a separate pool connection for a family lock would exhaust
-the demonstrated one-connection pool.
-
-The history read/delete path also conflicts with the required bounded token
-request operations independent of same-account history. No growth measurement
-is claimed here; the executable diagnostic establishes the concurrency failure.
-
-An additional PostgreSQL storage/serialization adaptation is permitted, but has
-not been implemented or proved here. The transaction experiment rules out only
-a bare transaction wrapper; it does not establish that a connection-aware
-adapter wrapper is impossible. Such a wrapper must redirect every native call
-to its actual transaction adapter, commit a permanent family guard on replay
-and conditional-update failure, and make every child insert check that guard
-under the same lock. It must also replace broad history cleanup with bounded
-family seeks and cover code replay, revocation and session deletion. The
-current reproduction does not establish those properties, simultaneous
-code/revoke/logout behavior, or the required three-scale growth bounds.
-
-A minimal provider-source alternative would introduce one internal
-`withRefreshFamily` storage seam, taking an exact immutable family key and a
-callback that receives the bound transaction adapter. All refresh validation,
-parent compare-and-swap, child insertion and replay cleanup would use that
-adapter. Replay and compare-and-swap loss would durably mark a family revoked;
-child insertion would check the monotonic marker before becoming usable.
-Invalidation would stop enumerating client/user history. Native token rows,
-hashed bearers, PKCE, consent and grant validation would remain authoritative.
-Access floor invalidation would commit before acquiring the Auth transaction,
-and retention would be separately bounded. This is a patch proposal, not an
-installed package fork or proof that the permitted adapter alternative cannot
-work. No provider source or `node_modules` files are modified.
-
-The production provider remains unmounted. Generic client registration now
-reserves `rezics-website` for confidential bootstrap and rejects `media:complete`
-for every generic client, including first-party clients. Generic cookie,
-actor-key and operator issuance also refuse that client identity and exclusive
-scope. `WEBSITE_CLIENT_ID` is exported, but `registerWebsiteClient` and the
-website's native issuance path are not implemented. Existing consent and
-session authorities and migrations are unchanged.
-`bun run --cwd services/auth check` still reports the unimplemented website
-acceptance failures; this diagnostic is not acceptance success.
+`website-client.test.ts` covers discovery, registration, code, PKCE, refresh
+rotation and replay with two people. `website-logout.test.ts` covers revocation
+and RP-initiated logout: refused cross-person, hintless, forged and
+unregistered-redirect requests, then a matching hint that ends the real session.
