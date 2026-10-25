@@ -23,10 +23,11 @@ This transport is for website uploads; imported covers use content's own server-
 
 Viewer credentials come from an explicit `Authorization` header, forwarded unchanged, or from the person's server-side
 session. Access and refresh tokens stay in the Worker; the browser holds an opaque `__Host-rezics_session` cookie.
-Only routes that use the credential resolve tokens, currently `/media` and `/media/…`. Pages read the session's presence,
-lifetime and CSRF token from its Durable Object alongside theme preferences, without refreshing tokens or contacting Auth. Missing, invalid,
-expired or unreadable sessions render as signed out without changing the cookie. Media requests resolve before calling
-the kernel, so unreachable Auth returns 502 even for downloads that otherwise conceal upstream errors. An explicit
+Only routes that use the credential resolve tokens, currently `/media` and `/media/…`, `POST /checkout`, and order reads.
+Offer pages and other pages read the session's presence, lifetime and CSRF token from its Durable Object alongside theme
+preferences, without refreshing tokens or contacting Auth. Missing, invalid, expired or unreadable sessions render as signed
+out without changing the cookie. Media requests, checkout start and order reads resolve before calling the kernel, so
+unreachable Auth returns 502 even for downloads that otherwise conceal upstream errors. An explicit
 `Authorization` header skips credential resolution; an unsafe request with a session cookie still validates its token.
 Unsafe requests carrying that cookie require an exact allowed `Origin` and the session's CSRF token in
 `X-CSRF-Token`. The only form-field exception is the sign-out form's `csrf_token` field. The signed-in document head
@@ -51,7 +52,8 @@ Configure these variables in the environment of `bun run dev`:
 - `WEBSITE_SCOPES`: exactly the space-separated scopes registered for the website client, including `openid offline_access`, never a wildcard.
   Media routes need `media:create`, `media:read_reservation`, `media:read`, `media:complete` and `media:erase`;
   posting routes need `thread:create` and `post:create`; presentation curation needs `presentation:publish` and
-  `presentation:activate`; public reads need no scope. Sign-in requests
+  `presentation:activate`; checkout start needs `order:create` and the order return page needs `order:read`.
+  Offer pages and other public reads need no scope. Sign-in requests
   `openid offline_access` followed by these scopes, each once.
 - `WEBSITE_CLIENT_ID`: the confidential website client id, `rezics-website`.
 - `SITE_ORIGINS`: comma-separated exact origins (scheme, host and optional port, with no trailing slash). Production
@@ -99,7 +101,7 @@ const websiteScopes = registration.scopes.join(' ');
 ```
 
 The catalogue must include the five media scopes above, the posting scopes `thread:create` and `post:create`,
-and the curation scopes `presentation:publish` and `presentation:activate`.
+the curation scopes `presentation:publish` and `presentation:activate`, and `order:create` and `order:read`.
 Registration and `WEBSITE_SCOPES` must change together
 when more protected site features are mounted. Auth's [website contract](../../services/auth/README.md#website-client)
 defines registration and key rotation.
@@ -127,8 +129,8 @@ For local Auth, migrate a separate PostgreSQL database with Auth's documented `d
 the same trusted bootstrap with `issuer: 'http://127.0.0.1:4200'`, `audience: 'https://api.rezics.test'`,
 Auth's own signing key/secret and the trusted Access ports. Serve `auth.handler` on that exact loopback origin.
 Register the generated website public key with redirect `http://127.0.0.1:3000/auth/callback`, post-logout URI
-`http://127.0.0.1:3000/`, and exactly these scopes for the current media, posting and presentation curation routes:
-`openid offline_access media:create media:read_reservation media:read media:complete media:erase thread:create post:create presentation:publish presentation:activate`.
+`http://127.0.0.1:3000/`, and exactly these scopes for the current media, posting, presentation curation and checkout routes:
+`openid offline_access media:create media:read_reservation media:read media:complete media:erase thread:create post:create presentation:publish presentation:activate order:create order:read`.
 From `apps/web`, run:
 
 ```sh
@@ -136,7 +138,7 @@ AUTH_ISSUER=http://127.0.0.1:4200 \
 API_RESOURCE=https://api.rezics.test \
 WEBSITE_CLIENT_ID=rezics-website \
 WEBSITE_CLIENT_KEY="$(cat .temp/website-private.jwk)" \
-WEBSITE_SCOPES='openid offline_access media:create media:read_reservation media:read media:complete media:erase thread:create post:create presentation:publish presentation:activate' \
+WEBSITE_SCOPES='openid offline_access media:create media:read_reservation media:read media:complete media:erase thread:create post:create presentation:publish presentation:activate order:create order:read' \
 KERNEL_ORIGIN=http://127.0.0.1:4300 \
 bun run dev --host 127.0.0.1 --port 3000 --strictPort
 ```
@@ -446,6 +448,24 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
   `a download asks the kernel on every request and serves ranges, validators and the decided cache policy` asserts one
   decision for 304 and zero for invalid variant; `tests/request-cost.test.ts`:
   `download stays within its bound as s grows` for R
+
+### Offer page (`/<locale>/offers/<id>`)
+
+- **Touches:** Root preferences → D `signedIn`; one anonymous K `GET /v1/offers/<id>`; the price is formatted locally from `unitAmountMinor` and the currency's minor-unit digits. The page renders one idempotency key and reuses it for retries
+- **Bound:** 1 K, ≤1 D, 0 R and 0 A. Constant offer; no list
+- **Growth check:** constant: no list or page size
+
+### Checkout start (`POST /checkout`)
+
+- **Touches:** CSRF origin and token checks, then D `credential` → one K `POST /v1/orders` with `{ offerId }` and the page's `Idempotency-Key`
+- **Bound:** ≤1 D (credential, with any refresh's A) → 1 K. Constant body; no list
+- **Growth check:** constant: no list or page size
+
+### Order return (`/<locale>/orders/<id>`)
+
+- **Touches:** `/orders/<id>` redirects with the same locale rules as `/` and keeps the query. The buyer read is D `credential` → K `GET /v1/orders/<id>`. Pending settlement rechecks every 2 s for at most 30 s
+- **Bound:** ≤1 D → 1 K per read, and at most 16 reads per return visit because of the pending rechecks. Constant order; no list
+- **Growth check:** constant: no list or page size
 
 ### Storybook (`bun run storybook`)
 

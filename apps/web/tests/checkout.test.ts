@@ -379,7 +379,7 @@ async function eventually(check: () => boolean) {
 }
 
 // Add anonymous offer loading and locale currency formatting to turn this into test(...).
-test.failing(
+test(
   "an offer page shows its title and price in the visitor's locale",
   async () => {
     for (const locale of ['en', 'de', 'ja']) {
@@ -404,7 +404,7 @@ test.failing(
 );
 
 // Add the CSRF-protected order start route and Stripe redirect to turn this into test(...).
-test.failing(
+test(
   "a signed-in buyer starts checkout and is sent to Stripe's checkout URL",
   async () => {
     const auth = await signIn();
@@ -437,7 +437,7 @@ test.failing(
 );
 
 // Send anonymous buyers through sign-in with an offer return_to to turn this into test(...).
-test.failing(
+test(
   'a signed-out visitor is sent to sign in and back to the offer',
   async () => {
     calls.length = 0;
@@ -479,7 +479,7 @@ test.failing(
 );
 
 // Refuse delisted offers and handle a start-time 409 to turn this into test(...).
-test.failing(
+test(
   'a delisted offer says it is unavailable and starts nothing',
   async () => {
     const auth = await signIn();
@@ -515,7 +515,7 @@ test.failing(
 );
 
 // Preserve the rendered idempotency key across 503 and null-URL retries to turn this into test(...).
-test.failing(
+test(
   'an unavailable kernel lets the buyer retry with the same idempotency key',
   async () => {
     const auth = await signIn();
@@ -554,7 +554,7 @@ test.failing(
 );
 
 // Add locale-preserving order returns and poll pending settlement to turn this into test(...).
-test.failing(
+test(
   'the return page shows a paid order and rechecks a pending one until it settles',
   async () => {
     const auth = await signIn();
@@ -599,7 +599,7 @@ test.failing(
 );
 
 // Add the canceled return note and link to its offer to turn this into test(...).
-test.failing(
+test(
   'a canceled checkout returns to the offer with a note',
   async () => {
     const auth = await signIn();
@@ -624,7 +624,7 @@ test.failing(
 );
 
 // Map the buyer-scoped kernel 404 to the site's not-found page to turn this into test(...).
-test.failing(
+test(
   "another person's order is not found",
   async () => {
     const auth = await signIn();

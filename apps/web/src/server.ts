@@ -16,6 +16,8 @@ import { problem, problemResponse } from './media/kernel.ts';
 import { mediaRequest, type MediaEnv } from './media/index.ts';
 import { suggestSubjects } from './search/suggestions.ts';
 import { limitRead, readLimitKey, type ReadRateLimitEnv } from './rate-limit/read.ts';
+import { orderStatusResponse } from './checkout/order.server.ts';
+import { startCheckout } from './checkout/start.ts';
 import { createStartHandler, defaultStreamHandler } from '@tanstack/react-start/server';
 import { paraglideMiddleware } from './paraglide/server.js';
 import {
@@ -51,6 +53,30 @@ export default {
       !isAllowedSiteOrigin(request, request.headers.get('origin'), sessionEnv.SITE_ORIGINS)
     )
       return problemResponse(problem(403, 'forbidden', 'Forbidden'));
+    const orderStatus = /^\/orders\/([^/]+)\/status$/.exec(url.pathname);
+    if (orderStatus && request.method === 'GET') {
+      try {
+        await prepareSession(request, sessionEnv);
+        const refused = await limitRead(
+          request,
+          env as typeof env & ReadRateLimitEnv,
+          readLimitKey(request, sessionSubject(request)),
+        );
+        if (refused) return refused;
+        return await orderStatusResponse(request, orderStatus[1]!);
+      } catch (error) {
+        return problemResponse(error);
+      }
+    }
+    if (url.pathname === '/checkout') {
+      if (request.method !== 'POST')
+        return problemResponse(problem(405, 'invalid_request', 'Invalid Request'), { allow: 'POST' });
+      try {
+        return await startCheckout(request, sessionEnv);
+      } catch (error) {
+        return problemResponse(error);
+      }
+    }
     const isRead = request.method === 'GET' || request.method === 'HEAD';
     const isMedia = url.pathname === '/media' || url.pathname.startsWith('/media/');
     let clearSessionCookie = false;
@@ -138,6 +164,14 @@ export default {
 async function siteRequest(request: Request): Promise<Response> {
   const url = new URL(request.url);
   if (url.pathname === '/') {
+    const locale = await extractLocaleFromRequestAsync(request);
+    const location = localizeUrl(url, { locale });
+    return new Response(null, {
+      status: 302,
+      headers: { Location: location.href, 'Cache-Control': 'private, no-store' },
+    });
+  }
+  if ((request.method === 'GET' || request.method === 'HEAD') && /^\/orders\/[^/]+$/.test(url.pathname)) {
     const locale = await extractLocaleFromRequestAsync(request);
     const location = localizeUrl(url, { locale });
     return new Response(null, {
