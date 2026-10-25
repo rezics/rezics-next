@@ -230,6 +230,9 @@ export class MergeTrain {
         git(trainTree, 'reset', '--hard', tip);
         git(trainTree, 'clean', '-fdx');
         const derivedFiles = o.derivedFiles ?? defaultDerivedFiles;
+        // A worker that left its work uncommitted would otherwise integrate nothing and release its dependents.
+        if (Number(git(trainTree, 'rev-list', '--count', `${originalBase}..HEAD`)) === 0)
+          throw new Error('No committed changes beyond the base: commit the work before finishing');
         rebaseOnto(trainTree, base, originalBase, logPath, derivedFiles);
         const frozen = frozenFilesForTask(o.stateDirectory, request.taskId);
         const changedFrozen = changedFrozenFiles(trainTree, frozen);
