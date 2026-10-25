@@ -49,7 +49,20 @@ test('manager startup follows installed protocol and two managers share one app-
     expect(s.managers.get(s.spec.id).turns).toBe(1);
     await s.managers.start({ ...s.spec, id: 'second' });
     expect(s.connections).toBe(1);
-    expect(s.windows[0]?.argv).toContain('resume'); expect(s.windows[0]?.argv).toContain('--dangerously-bypass-approvals-and-sandbox'); expect(s.windows[0]?.argv).toContain('thread-1');
+  } finally { await s.close(); }
+});
+
+test('the Codex viewer resumes the thread on the remote endpoint without permission flags', async () => {
+  const s = await setup();
+  try {
+    Object.defineProperty(s.client, 'endpoint', { value: 'ws://127.0.0.1:10001' });
+    const manager = await s.managers.start(s.spec);
+    const argv = s.windows[0]?.argv ?? [];
+    expect(argv).toContain('resume');
+    expect(argv).toContain(manager.threadId);
+    expect(argv).toContain('--remote');
+    expect(argv).toContain('ws://127.0.0.1:10001');
+    expect(argv).not.toContain('--dangerously-bypass-approvals-and-sandbox');
   } finally { await s.close(); }
 });
 

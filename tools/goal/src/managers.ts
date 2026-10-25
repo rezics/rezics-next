@@ -140,7 +140,7 @@ export class ManagerSessions {
       'Read and acknowledge inbox events. Do not perform mechanical gates, retries or merges yourself.';
   }
   private registerCodexViewer(state: ManagerState, client: AppServer): void {
-    const viewer = [state.pool.executable ?? 'codex', 'resume', '--dangerously-bypass-approvals-and-sandbox', state.threadId!];
+    const viewer = [state.pool.executable ?? 'codex', 'resume', state.threadId!];
     if (client.endpoint) viewer.push('--remote', client.endpoint);
     this.services.windows.register(state.id, ['env', `CODEX_HOME=${state.pool.codexHome}`, `GOAL_MANAGER=${state.id}`,
       ...viewer], state.cwd);
