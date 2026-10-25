@@ -26,6 +26,8 @@ import type {
 import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createAccess } from '../../src/access/index.ts';
+import { createKernel } from '../../src/http/kernel.ts';
+import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
@@ -97,6 +99,7 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
   let host: Awaited<ReturnType<typeof createAuthHost>> | undefined;
   let service: AuthService;
   let access: ReturnType<typeof createAccess>;
+  let kernelHttp: ReturnType<typeof createKernel>;
   let bindings: ReturnType<typeof createNativeAccountBindings>;
   let approvals: ReturnType<typeof createWorkflowApprovals>;
   const issuer = `https://credential-${suffix}.auth.test`;
@@ -182,6 +185,13 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
         jwksUrl: `${issuer}/.well-known/jwks.json`,
         fetch: async () => service.handler(new Request(`${issuer}/.well-known/jwks.json`)),
       },
+    });
+    kernelHttp = createKernel({
+      pool: kernel(),
+      routeKey,
+      tokens: referenceKeys,
+      access: () => access,
+      writeRate: createWriteRateLimiter({ secret }),
     });
     const proofs = createNativeWorkflowProofPorts({ database: auth() });
     bindings = createNativeAccountBindings({
@@ -431,7 +441,7 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
       await service.internal.registerClient({ clientId, firstParty: false, scopes });
       const human = await person();
       const other = await person();
-      const owner = mode === 'organization-operator' ? await person() : human;
+      const owner = mode === 'organization-operator' ? await person() : other;
       const organizationId = newId(routeOf(human.accountId)!);
       const reservation = await bindings.internalLifecycle.reserveCoordination({
         accountId: owner.accountId,
@@ -474,7 +484,7 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
         });
       }
       const operatorId = mode === 'own-human' ? null : mode === 'human-operator' ? human.accountId : organizationId;
-      const automated = async (operator: string) => {
+      const automated = async (operator: string, manager: string) => {
         const key = randomUUID();
         const handle = `bot_${key.replaceAll('-', '')}`;
         const operation = {
@@ -486,7 +496,7 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
           authorization: 'approval-request',
         };
         const approval = await approvals.approve(
-          await bearer(human.caller),
+          await bearer(manager),
           { operationKey: key, operation },
           { pool: kernel(), deadline: Date.now() + 10000 },
         );
@@ -500,7 +510,8 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
         });
         return { ...created, email };
       };
-      const bot = await automated(operatorId ?? human.accountId);
+      const botManager = operatorId === null ? other.caller : human.caller;
+      const bot = await automated(operatorId ?? other.accountId, botManager);
       const subjectId = operatorId === null ? human.accountId : bot.accountId;
       const existing = await publicKey();
       const otherExisting = await publicKey();
@@ -508,7 +519,7 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
       await install(human.caller, subjectId, existing.credential);
       await install(human.caller, subjectId, otherExisting.credential);
       const otherClient = await login(human.email, originalPassword, 'credential-other-client');
-      if (subjectId !== bot.accountId) await install(human.caller, bot.accountId, (await publicKey()).credential);
+      if (subjectId !== bot.accountId) await install(botManager, bot.accountId, (await publicKey()).credential);
       // Retain fixture credentials only in the harness; sign-in still runs through Auth.
       const automatedCaller = await login(bot.email, originalPassword, loginClient);
       const caller = required(callers.get(human.caller), 'Missing caller');
@@ -738,14 +749,25 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
       } else if (fact === 'missing-evidence') {
         const resourceId = f.operatorId ?? f.subjectId;
         const owner = organizationFixtures.get(f.organizationId)?.owner;
-        await bindings.grants.revoke(await context(owner ?? f.caller), {
-          resource: { route: routeOf(resourceId)!, id: resourceId },
-          subjectId: f.humanId,
-          subjectRole: '',
-          actions: ['account:manage'],
-          valid: '(,)',
-          key: randomUUID(),
-        });
+        await successful(
+          await kernelHttp.handle(
+            new Request(`${audience}/v1/grants:revoke`, {
+              method: 'POST',
+              headers: {
+                authorization: `Bearer ${await bearer(owner ?? f.caller)}`,
+                'content-type': 'application/json',
+                'idempotency-key': JSON.stringify(randomUUID()),
+              },
+              body: JSON.stringify({
+                resource: { route: routeOf(resourceId)!, id: resourceId },
+                subject: { kind: 'account', id: f.humanId },
+                actions: ['account:manage'],
+                valid: '(,)',
+              }),
+            }),
+          ),
+          'native grant renunciation',
+        );
       } else if (fact === 'human-floor' || fact === 'subject-floor' || fact === 'operator-floor') {
         const subjectId =
           fact === 'human-floor'

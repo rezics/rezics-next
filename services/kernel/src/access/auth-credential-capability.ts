@@ -59,9 +59,13 @@ export type CredentialCapabilityConfig = {
   verifyCredentialEffect: CredentialEffectVerifier;
 };
 
-export type CredentialCapability = Required<
-  Pick<TrustedAccessPorts, 'approveCredentialEffect' | 'revalidateCredentialEffect'>
-> & {
+type CredentialRevalidationInput = Parameters<NonNullable<TrustedAccessPorts['revalidateCredentialEffect']>>[0] & {
+  /** Auth's saved committing opening identity; required for result disclosure. */
+  committedOpeningReceiptId?: string;
+};
+
+export type CredentialCapability = Required<Pick<TrustedAccessPorts, 'approveCredentialEffect'>> & {
+  revalidateCredentialEffect(input: CredentialRevalidationInput): Promise<void>;
   /** Seal only a verified native exact opening locator; no caller approval minting.
    */
   createOpeningReference(opening: CredentialOpeningLocator): string;
@@ -415,7 +419,8 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
           same(input.human.scope, opening.scopes) &&
           input.human.authn_epoch === opening.humanEpoch,
       );
-      if (input.replay) allowed(!input.consumedOpening && !input.floorReceipt);
+      if (input.replay)
+        allowed(!input.consumedOpening && !input.floorReceipt && input.committedOpeningReceiptId === opening.receiptId);
       else allowed(input.consumedOpening && same(input.consumedOpening, opening));
       let prior: CredentialFloorReceipt | null = null;
       if (input.floorReceipt) {

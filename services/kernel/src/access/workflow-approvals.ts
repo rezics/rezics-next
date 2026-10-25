@@ -19,6 +19,7 @@ import {
   verifiedBearerExpiry,
 } from './approved-identity.ts';
 import { resourceAuthorization } from './resource-authorization.ts';
+import { GrantDeniedError } from './grant-commands.ts';
 import { permissionEvidenceDeadline } from './permission.ts';
 import type { LifecycleRequest } from './lifecycle.ts';
 import credentialRead from './auth-credential-capability-workflow-read.sql';
@@ -596,7 +597,12 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
             ],
           };
         },
-      );
+      ).catch((error: unknown) => {
+        // The shared native formula reports a grant refusal. At this Auth
+        // boundary it is an approval denial, never binding unavailability.
+        if (error instanceof GrantDeniedError) throw denied();
+        throw error;
+      });
       requireAllowed(!result.replayed);
       return result.value;
     },

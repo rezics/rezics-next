@@ -15,6 +15,7 @@ let db: GrowthDatabase;
 let auth: AuthService;
 let authPool: Pool;
 let bindings: ReturnType<typeof createNativeAccountBindings>;
+let access: ReturnType<typeof createAccess>;
 let revokeAfterConsume = false;
 let sequence = 0;
 const key = () => `bridge-${++sequence}`;
@@ -60,7 +61,7 @@ beforeAll(async () => {
   db = await openGrowthDatabase();
   db.pool.options.max = 1;
   migrateAuth(db.url);
-  const access = createAccess({
+  access = createAccess({
     actions: new Map([['account:manage', { anonymous: false }]]),
     auth: {
       issuer,
@@ -186,6 +187,41 @@ test('automated key add through a narrowed operator opening applies once', async
     ).rows[0],
   ).toMatchObject({ credential_purpose: 'add-key', consumed_at: expect.any(Date) });
 });
+test('a native formula refusal before credential consumption is forbidden', async () => {
+  const human = await person();
+  const input = await staged(human.accountId, human.headers, await publicKey());
+  const approval = await auth.internal.approveCredentialEffect(input);
+  const response = await request('/token', {}, human.headers);
+  expect(response.status).toBe(200);
+  const { access_token } = (await response.json()) as { access_token: string };
+  const context = { pool: db.pool, deadline: Date.now() + 10000 };
+  const actor = await access.authenticate(access_token, context);
+  await bindings.grants.revoke(
+    { ...context, actor },
+    {
+      resource: { route: routeOf(human.accountId)!, id: human.accountId },
+      subject: { kind: 'account', id: human.accountId },
+      actions: ['account:manage'],
+      valid: '(,)',
+      key: key(),
+    },
+  );
+  await expect(
+    auth.internal.applyCredentialEffect({ ...input, authorization: approval.reference }),
+  ).rejects.toMatchObject({ status: 403 });
+  expect((await db.admin.query('SELECT kid FROM auth_public_key WHERE account_id=$1', [human.accountId])).rows).toEqual(
+    [],
+  );
+  expect(
+    (
+      await db.admin.query(
+        "SELECT consumed_at FROM access.workflow_approval WHERE actor_id=$1 AND operation->>'kind'='credential'",
+        [human.accountId],
+      )
+    ).rows[0].consumed_at,
+  ).toBeNull();
+});
+
 test('revalidation after revocation spends the opening without mutation', async () => {
   const human = await person();
   const credential = await publicKey();

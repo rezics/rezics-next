@@ -1041,20 +1041,23 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           replay: boolean,
           consumedOpening?: CredentialEffectAuthorization,
           floorReceipt?: CredentialFloorReceipt,
+          committedOpeningReceiptId?: string,
         ) => {
-          await withCredentialProof(human, () =>
-            trustedAccess.revalidateCredentialEffect!({
-              stage: stage.binding,
-              human,
-              authorization,
-              replay,
-              ...(consumedOpening ? { consumedOpening } : {}),
-              ...(floorReceipt ? { floorReceipt } : {}),
-            }),
-          );
+          // This receipt identity comes only from Auth's atomically committed row.
+          // It is never accepted from the public credential command's input.
+          const validation = {
+            stage: stage.binding,
+            human,
+            authorization,
+            replay,
+            ...(consumedOpening ? { consumedOpening } : {}),
+            ...(floorReceipt ? { floorReceipt } : {}),
+            ...(committedOpeningReceiptId ? { committedOpeningReceiptId } : {}),
+          };
+          await withCredentialProof(human, () => trustedAccess.revalidateCredentialEffect!(validation));
         };
         if (stage.row.committed_at) {
-          await revalidate(true);
+          await revalidate(true, undefined, undefined, stage.row.opening_receipt_id ?? undefined);
           await humanProof(input.headers);
           return { receiptId: stage.row.receipt_id, replayed: true };
         }
@@ -1107,7 +1110,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           await connection.query('SELECT auth_assert_session_capacity($1,true)', [subject.accountId]);
           const locked = await credentials.read(input.effectRef, b, connection, true);
           if (locked.row.committed_at) {
-            await revalidate(true);
+            await revalidate(true, undefined, undefined, locked.row.opening_receipt_id ?? undefined);
             await humanProof(input.headers);
             await connection.query('COMMIT');
             return { receiptId: locked.row.receipt_id, replayed: true };

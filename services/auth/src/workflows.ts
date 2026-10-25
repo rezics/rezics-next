@@ -368,8 +368,18 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       async (...args: A) => {
         try {
           return await fn(...args);
-        } catch {
-          throw new Error(`Account workflow step failed: ${name}`);
+        } catch (error) {
+          const failure = new Error(`Account workflow step failed: ${name}`);
+          // Persist only the native refusal status, never the command's secret
+          // input, permission context or original error in a durable step.
+          if (
+            typeof error === 'object' &&
+            error !== null &&
+            'status' in error &&
+            (error.status === 401 || error.status === 403)
+          )
+            throw Object.assign(failure, { status: 403 });
+          throw failure;
         }
       },
       { name: `accounts.${name}`, retriesAllowed: false },

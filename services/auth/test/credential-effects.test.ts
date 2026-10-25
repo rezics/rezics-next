@@ -9,6 +9,7 @@ import {
   type CredentialEffectAuthorization,
   type CredentialEffectBinding,
   type SessionProof,
+  type TrustedAccessPorts,
 } from '../src/index.ts';
 
 // Auth behaviour only: native authorization/floor policy is a trusted-port double.
@@ -81,8 +82,17 @@ export async function credentialFixture(suppliedPool?: Pool) {
         await afterConsume();
         return result;
       },
-      async revalidateCredentialEffect() {
+      async revalidateCredentialEffect(
+        input: Parameters<NonNullable<TrustedAccessPorts['revalidateCredentialEffect']>>[0] & {
+          committedOpeningReceiptId?: string;
+        },
+      ) {
         if (!allowed) throw new Error('Fixture authority revoked');
+        if (input.replay) {
+          expect(input.committedOpeningReceiptId).toBeString();
+          if (!openings.get(input.authorization)?.spent || input.committedOpeningReceiptId !== input.authorization)
+            throw Object.assign(new Error('Fixture replay opening denied'), { status: 403 });
+        }
       },
       async advanceCredentialFloor(input: {
         stage: CredentialEffectBinding;
@@ -255,6 +265,33 @@ test('lost acknowledgement returns the saved result without repeating the effect
     ).rejects.toThrow();
     f.revoke();
     await expect(f.apply(op, approval.reference)).rejects.toThrow();
+  } finally {
+    await f.close();
+  }
+}, 60000);
+
+test('only the committing approval can disclose a saved credential result', async () => {
+  const f = await credentialFixture();
+  try {
+    const op = await f.stage({ kind: 'key', kid: 'new-key', publicJwk: f.publicJwk });
+    const input = { ...op, subjectAccountId: op.subjectId, headers: f.headers };
+    const spent = await f.service.internal.approveCredentialEffect(input);
+    f.afterConsume(async () => {
+      throw new Error('Lost consume acknowledgement');
+    });
+    await expect(f.apply(op, spent.reference)).rejects.toThrow('Lost consume acknowledgement');
+    f.afterConsume(async () => {});
+    const committing = await f.service.internal.approveCredentialEffect(input);
+    const committed = await f.apply(op, committing.reference);
+    await f.restart();
+    const before = (await f.pool.query('SELECT * FROM auth_effect_receipt WHERE operation_key=$1', [op.key])).rows;
+    await expect(f.apply(op, spent.reference)).rejects.toMatchObject({ status: 403 });
+    const fresh = await f.service.internal.approveCredentialEffect(input);
+    await expect(f.apply(op, fresh.reference)).rejects.toMatchObject({ status: 403 });
+    expect(await f.apply(op, committing.reference)).toEqual({ ...committed, replayed: true });
+    expect((await f.pool.query('SELECT * FROM auth_effect_receipt WHERE operation_key=$1', [op.key])).rows).toEqual(
+      before,
+    );
   } finally {
     await f.close();
   }
