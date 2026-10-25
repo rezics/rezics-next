@@ -2,6 +2,9 @@ Run the site locally with `bun run dev` from `apps/web`. Run `bun run check` to 
 The Worker inspector is off by default; `WORKER_INSPECTOR_PORT=<port> bun run dev` opens it on that port for DevTools.
 Browser tests wait for `html[data-hydrated]` before interacting with a page.
 
+`bun run test` runs tests in a private network namespace containing only loopback, so host interface changes do not interrupt browsers.
+Tests needing the host network, such as a container's published port, are named `*.host.test.ts` and run on the host through `bun run test:host`; never put a browser in one.
+
 The Cloudflare Vite plugin deploys with `cf deploy` (not run here).
 
 Every launch locale, including English, has a URL prefix.
@@ -38,7 +41,7 @@ Configure these variables in the environment of `bun run dev`:
   (`127.0.0.1`, `localhost`, or `[::1]`).
 - `API_RESOURCE`: the API's RFC 8707 resource identifier and access token audience, exactly `https://api.rezics.com`
   in production, with no trailing slash. Tests use `https://api.rezics.test`.
-- `WEBSITE_SCOPES`: the space-separated API scopes registered for the website client, never a wildcard.
+- `WEBSITE_SCOPES`: exactly the space-separated scopes registered for the website client, including `openid offline_access`, never a wildcard.
   Media routes need `media:create`, `media:read_reservation`, `media:read`, `media:complete` and `media:erase`;
   public reads need no scope. Sign-in requests `openid offline_access` followed by these scopes, each once.
 - `WEBSITE_CLIENT_ID`: the confidential website client id, `rezics-website`.
@@ -48,12 +51,83 @@ Configure these variables in the environment of `bun run dev`:
 
 Auth must register the website client's redirect URI `<site origin>/auth/callback`, its post-logout redirect URI
 `<site origin>/`, and the `private_key_jwt` authentication method with the corresponding public key and `kid`.
-Pass the same API scope list from `WEBSITE_SCOPES` to Auth's `registerWebsiteClient`.
+Pass exactly the registered scope list, including `openid offline_access`, as `WEBSITE_SCOPES`.
 Auth's discovery `scopes_supported` lists every available scope. The Worker sends `resource=API_RESOURCE` on the
 authorization request, authorization code exchange and every refresh; revocation takes no resource. Client assertions
 keep `AUTH_ISSUER` as their audience, and ID tokens keep the client id as theirs. Discovery supplies all Auth endpoints,
-so connecting the Worker to Auth later requires configuration only. If any auth variable is missing, `/auth/` routes return 503
+and the host binding test exercises Auth's real handler, password sign-in, code exchange, rotation and logout.
+If any auth variable is missing, `/auth/` routes return 503
 `dependency_unavailable`, session cookies confer no credential and are left intact, and the rest of the site keeps working.
+
+For production, set `WEBSITE_CLIENT_ID=rezics-website`, `API_RESOURCE=https://api.rezics.com`,
+and `AUTH_ISSUER` to the deployment's canonical Auth issuer origin, without a trailing slash.
+Register exactly `https://rezics.com/auth/callback` and post-logout URI `https://rezics.com/`.
+The trusted Auth bootstrap entry is `createAuthService(options)` followed by
+`auth.internal.registerWebsiteClient(registration)`; it has no public registration endpoint.
+Use the mounted protected action catalogue supplied to Auth as `siteActions`:
+
+```ts
+const registration = {
+  publicJwks: { keys: [websitePublicJwk] },
+  redirectUris: ['https://rezics.com/auth/callback'],
+  postLogoutRedirectUris: ['https://rezics.com/'],
+  scopes: [
+    'openid',
+    'offline_access',
+    ...[...mountedWebsiteActions].filter(([, action]) => !action.anonymous).map(([name]) => name),
+  ],
+};
+await auth.internal.registerWebsiteClient(registration);
+// Deploy this exact string as the Worker's WEBSITE_SCOPES text variable.
+const websiteScopes = registration.scopes.join(' ');
+```
+
+The catalogue must include the five media scopes above. Registration and `WEBSITE_SCOPES` must change together
+when more protected site features are mounted. Auth's [website contract](../../services/auth/README.md#website-client)
+defines registration and key rotation.
+
+Generate the website's own P-256 key from `apps/web`, keeping intermediate files under `.temp/`:
+
+```sh
+mkdir -p .temp
+umask 077
+bun -e 'import { generateKeyPair, exportJWK } from "jose";
+const pair = await generateKeyPair("ES256", { extractable: true });
+const metadata = { kid: crypto.randomUUID(), alg: "ES256", use: "sig" };
+await Bun.write(".temp/website-private.jwk", JSON.stringify({ ...await exportJWK(pair.privateKey), ...metadata }));
+await Bun.write(".temp/website-public.jwk", JSON.stringify({ ...await exportJWK(pair.publicKey), ...metadata }));'
+chmod 600 .temp/website-private.jwk
+```
+
+Install the private JSON as the `WEBSITE_CLIENT_KEY` Worker secret through Cloudflare's secret management.
+Pass only `.temp/website-public.jwk` to the Auth bootstrap as `websitePublicJwk`; Auth refuses private key material.
+Keep Auth's issuer signing key separate. Retain the website private key in deployment secret storage and remove
+the intermediate private file after installing it. Rotate by registering both old and new public keys, switching
+the Worker secret, then removing the old public key from registration.
+
+For local Auth, migrate a separate PostgreSQL database with Auth's documented `db migrate` command, then run
+the same trusted bootstrap with `issuer: 'http://127.0.0.1:4200'`, `audience: 'https://api.rezics.test'`,
+Auth's own signing key/secret and the trusted Access ports. Serve `auth.handler` on that exact loopback origin.
+Register the generated website public key with redirect `http://127.0.0.1:3000/auth/callback`, post-logout URI
+`http://127.0.0.1:3000/`, and, for the current media routes, exactly these scopes:
+`openid offline_access media:create media:read_reservation media:read media:complete media:erase`.
+From `apps/web`, run:
+
+```sh
+AUTH_ISSUER=http://127.0.0.1:4200 \
+API_RESOURCE=https://api.rezics.test \
+WEBSITE_CLIENT_ID=rezics-website \
+WEBSITE_CLIENT_KEY="$(cat .temp/website-private.jwk)" \
+WEBSITE_SCOPES='openid offline_access media:create media:read_reservation media:read media:complete media:erase' \
+KERNEL_ORIGIN=http://127.0.0.1:4300 \
+bun run dev --host 127.0.0.1 --port 3000 --strictPort
+```
+
+Use the same hostname throughout so Auth's session cookie reaches `/authorize` and `/logout`.
+Sign in with the person's password at Auth before following the site's sign-in link. Local HTTP changes neither
+the HTTPS API resource nor the issuer audience in client assertions. The automated proof needs Docker and runs
+from the repository root with `bun test apps/web/tests/auth-binding.host.test.ts`; it creates and removes its own
+migrated database, Auth listener and site process, and waits for the real five-minute token's refresh threshold.
 
 Set `KERNEL_ORIGIN`, the content API's origin, in the environment of `bun run dev`, for example
 `KERNEL_ORIGIN=http://127.0.0.1:3000 bun run dev`. Production supplies it as a Worker variable. When it is missing,
