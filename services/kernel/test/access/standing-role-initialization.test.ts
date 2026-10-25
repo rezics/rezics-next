@@ -113,6 +113,7 @@ test('same-transaction initialization writes catalogue roles at T in the child p
   expect(rows.every((r) => Date.parse(r.start) === Date.parse(result.value.at))).toBe(true);
   expect(await allowed(f.recipient, 'board:read', child)).toBe(true);
   expect(await allowed(f.principal, 'thread:create', child)).toBe(true);
+  expect(await allowed(f.principal, 'report:create', child)).toBe(true);
   expect(await allowed(f.principal, 'board:read', child)).toBe(false);
   expect(await allowed(f.recipient, 'moderation:takedown', child)).toBe(false);
   expect((await create('content.board', { child, key })).replayed).toBe(true);
@@ -145,12 +146,14 @@ test('type data limits standing reads, owner erasure and moderation, with no rol
   const thread = (await create('content.thread')).value.child;
   expect(await allowed(f.principal, 'post:create', thread)).toBe(true);
   expect(await allowed(f.principal, 'reaction:set', thread)).toBe(true);
+  expect(await allowed(f.principal, 'report:create', thread)).toBe(true);
   expect(await allowed(f.principal, 'thread:read', thread)).toBe(false);
   const post = (await create('content.post')).value.child;
+  expect((await roles(post)).map((r) => r.grant_role)).toEqual(['content.post.owner', 'content.post.standing']);
   expect(await allowed(f.recipient, 'post:erase', post)).toBe(true);
   expect(await allowed(f.principal, 'post:erase', post)).toBe(false);
-  expect(await allowed(f.principal, 'reaction:set', post)).toBe(false);
-  expect(await allowed(f.principal, 'report:create', post)).toBe(false);
+  expect(await allowed(f.principal, 'reaction:set', post)).toBe(true);
+  expect(await allowed(f.principal, 'report:create', post)).toBe(true);
   expect(await allowed(f.principal, 'post:read', post)).toBe(false);
   const media = (await create('content.media')).value.child;
   expect((await roles(media)).map((r) => r.grant_role)).toEqual(['content.media.owner']);

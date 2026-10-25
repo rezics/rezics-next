@@ -7,11 +7,11 @@
     "community.space.owner": ["space:read", "space:manage"],
     "community.space.standing": ["space:read"],
     "content.board.owner": ["board:read", "thread:create"],
-    "content.board.standing": ["thread:create"],
+    "content.board.standing": ["thread:create", "report:create"],
     "content.thread.owner": ["thread:read", "post:create", "media:create"],
-    "content.thread.standing": ["post:create", "media:create", "reaction:set"],
+    "content.thread.standing": ["post:create", "media:create", "reaction:set", "report:create"],
     "content.post.owner": ["post:read", "post:revise", "post:erase", "media:create"],
-    "content.post.standing": ["reaction:set"],
+    "content.post.standing": ["reaction:set", "report:create"],
     "content.media.owner": ["media:read_reservation", "media:read", "media:complete", "media:erase"],
     "commerce.offer.owner": ["offer:read", "offer:manage", "order:create"],
     "commerce.offer.standing": ["order:create"],
@@ -39,7 +39,7 @@
     },
     "content.post": {
       "owner": "content.post.owner",
-      "standing": []
+      "standing": ["content.post.standing"]
     },
     "content.media": {
       "owner": "content.media.owner",

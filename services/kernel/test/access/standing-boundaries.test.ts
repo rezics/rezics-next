@@ -8,12 +8,13 @@ import {
 import { createGrantCommands, GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { createDelegationCommands } from '../../src/access/delegation-commands.ts';
 import { accessCheck, accessCommandAuthorization, type Resource } from '../../src/request/access.ts';
+import { resourceRoleCatalogue } from '../../src/access/resource-roles.ts';
 import { runCommand, authoritativeTimeValue, type CommandAuthorization } from '../../src/command/command.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { standingFixture } from './standing-fixture.ts';
 let f: Awaited<ReturnType<typeof standingFixture>>;
 beforeAll(async () => {
-  f = await standingFixture();
+  f = await standingFixture(['reaction:set']);
 }, 30000);
 beforeEach(async () => {
   await f.reset();
@@ -52,9 +53,9 @@ async function creation() {
   };
   return { context, child, options, authorization };
 }
-async function insert(tx: Parameters<Parameters<typeof runCommand>[2]>[0], child: Resource) {
+async function insert(tx: Parameters<Parameters<typeof runCommand>[2]>[0], child: Resource, type = 'content.board') {
   await tx.query('INSERT INTO public.standing_resource VALUES ($1,$2)', [child.route, child.id]);
-  await initializeResourceGrants(tx, { resource: child, type: 'content.board', creator: f.recipient });
+  await initializeResourceGrants(tx, { resource: child, type, creator: f.recipient });
   return { value: child, events: [{ type: 'com.rezics.fixture.created.v1', data: child }] };
 }
 
@@ -152,6 +153,8 @@ test('a parent proof cannot outlive its actual Access evidence deadline', async 
 test('role grants retain independent principal, consent and denial operands and native nonoverlap', async () => {
   const c = await creation();
   await runCommand(f.pool, c.options, (tx) => insert(tx, c.child));
+  const standing = await f.context(f.principal);
+  expect(await (await accessCheck(f.access, standing.actor, 'report:create', c.child, standing))(f.pool)).toBe(true);
   const request = newId(routeOf(f.principal)!);
   await createDelegationCommands({ pool: f.pool, access: f.access, action: 'account:delegate' }).create(
     await f.context(f.principal),
@@ -193,6 +196,21 @@ test('role grants retain independent principal, consent and denial operands and 
   ]);
   await commands().revokeRole(context, role);
   expect(await check(f.pool)).toBe(false);
+});
+
+test('post standing role resolves both restored actions and initializes on the post type', async () => {
+  const template = resourceRoleCatalogue(f.access)?.types.get('content.post');
+  expect(template).toEqual({ owner: 'content.post.owner', standing: ['content.post.standing'] });
+  const c = await creation();
+  await runCommand(f.pool, c.options, (tx) => insert(tx, c.child, 'content.post'));
+  const standing = await f.context(f.principal);
+  for (const action of ['reaction:set', 'report:create'])
+    expect(await (await accessCheck(f.access, standing.actor, action, c.child, standing))(f.pool)).toBe(true);
+  const roles = await f.reader.query<{ grant_role: string }>(
+    'SELECT grant_role FROM access.resource_role_grant WHERE route=$1 AND resource_id=$2 ORDER BY grant_role',
+    [c.child.route, c.child.id],
+  );
+  expect(roles.rows.map((row) => row.grant_role)).toEqual(['content.post.owner', 'content.post.standing']);
 });
 
 test('one-time setup marker cannot resurrect a revoked standing grant under another actor receipt', async () => {
