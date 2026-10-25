@@ -507,7 +507,7 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
         },
         detail: {
           operationId: 'subject.restore',
-          'x-action': 'moderation:hide',
+          'x-action': 'moderation:takedown',
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
           security: [{ bearerAuth: [] }],
         },
@@ -515,13 +515,11 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
       async ({ params, body, headers, actor, authorizeCommand, admission, job, session }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         if (routeOf(params.id) === null) throw new ProblemError('not_found');
-        const expected = await admission.run('normal', job, () => readSubjectVisibility(pool, params.id));
-        if (!expected) throw new ProblemError('not_found');
-        const action = expected.visibility === 'taken_down' ? 'moderation:takedown' : 'moderation:hide';
+        const target = await admission.run('normal', job, () => readSubjectVisibility(pool, params.id));
+        if (!target) throw new ProblemError('not_found');
         const authorization = await authorizeCommand(
           { route: 0, id: GLOBAL_CONTEXT },
           () => new SubjectAccessDeniedError(),
-          action,
         );
         try {
           const result = await admission.run('normal', job, () =>
@@ -534,7 +532,6 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
               digest: requestDigest('subject.restore', actor, { subject: params.id, body }),
               authorization,
               deadline: job.deadline,
-              expected,
             }),
           );
           session.record(result.component);

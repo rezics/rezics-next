@@ -112,7 +112,6 @@ export async function moderateSubject(
     digest: Uint8Array;
     authorization: CommandAuthorization;
     deadline: number;
-    expected?: SubjectVisibilityState;
   },
 ) {
   const route = routeOf(options.subject);
@@ -141,12 +140,6 @@ export async function moderateSubject(
         subject_id: options.subject,
       })) as SubjectVisibilityState | null;
       if (!current) throw new ModerationSubjectNotFoundError();
-      if (
-        options.expected &&
-        (current.visibility !== options.expected.visibility ||
-          current.securityRevision !== options.expected.securityRevision)
-      )
-        throw new ModerationConflictError();
 
       const nextVisibility: SubjectVisibility =
         options.action === 'hide' ? 'hidden' : options.action === 'take_down' ? 'taken_down' : 'visible';

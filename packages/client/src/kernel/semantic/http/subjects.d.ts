@@ -1494,7 +1494,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
             record(component: import("../../tokens/session.ts").SessionComponent): void;
         };
         readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../../request/access.ts").AccessCheck>;
-        readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error, actionOverride?: string) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
+        readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
     };
     schema: {};
     schemas: {};
@@ -1820,7 +1820,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                 record(component: import("../../tokens/session.ts").SessionComponent): void;
             };
             readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../../request/access.ts").AccessCheck>;
-            readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error, actionOverride?: string) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
+            readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
         };
     }>>) => import("elysia/types").MaybePromise<void>;
     readonly path: string;
@@ -1849,7 +1849,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
         record(component: import("../../tokens/session.ts").SessionComponent): void;
     };
     readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../../request/access.ts").AccessCheck>;
-    readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error, actionOverride?: string) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
+    readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
     next: string | null;
     revisions: {

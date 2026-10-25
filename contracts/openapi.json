@@ -38560,7 +38560,7 @@
             "bearerAuth": []
           }
         ],
-        "x-action": "moderation:hide",
+        "x-action": "moderation:takedown",
         "x-rate-limit": {
           "family": "write",
           "units": 1

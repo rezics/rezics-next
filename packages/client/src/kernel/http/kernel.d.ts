@@ -2564,7 +2564,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
             record(component: import("../tokens/session.ts").SessionComponent): void;
         };
         readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-        readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error, actionOverride?: string) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+        readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
     };
     schema: {};
     schemas: {};
@@ -3426,7 +3426,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 record(component: import("../tokens/session.ts").SessionComponent): void;
             };
             readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-            readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error, actionOverride?: string) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+            readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
         };
     }>>) => import("elysia/types").MaybePromise<void>;
     readonly path: string;
@@ -3460,7 +3460,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
         record(component: import("../tokens/session.ts").SessionComponent): void;
     };
     readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-    readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error, actionOverride?: string) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+    readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
     realm: {
         realmId: string;
@@ -6388,7 +6388,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
             record(component: import("../tokens/session.ts").SessionComponent): void;
         };
         readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-        readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error, actionOverride?: string) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+        readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
     };
     schema: {};
     schemas: {};
@@ -7088,7 +7088,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 record(component: import("../tokens/session.ts").SessionComponent): void;
             };
             readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-            readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error, actionOverride?: string) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+            readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
         };
     }>>) => import("elysia/types").MaybePromise<void>;
     readonly path: string;
@@ -7131,7 +7131,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
         record(component: import("../tokens/session.ts").SessionComponent): void;
     };
     readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-    readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error, actionOverride?: string) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+    readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
     grant: {
         resource: {
@@ -9642,7 +9642,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
             record(component: import("../tokens/session.ts").SessionComponent): void;
         };
         readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-        readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error, actionOverride?: string) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+        readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
     };
     schema: {};
     schemas: {};
@@ -10194,7 +10194,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 record(component: import("../tokens/session.ts").SessionComponent): void;
             };
             readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-            readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error, actionOverride?: string) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+            readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
         };
     }>>) => import("elysia/types").MaybePromise<void>;
     readonly path: string;
@@ -10222,7 +10222,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
         record(component: import("../tokens/session.ts").SessionComponent): void;
     };
     readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-    readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error, actionOverride?: string) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+    readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<Readonly<{
     allowed: true;
     key: string;
@@ -14192,7 +14192,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
             record(component: import("../tokens/session.ts").SessionComponent): void;
         };
         readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-        readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error, actionOverride?: string) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+        readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
     };
     schema: {};
     schemas: {};
@@ -14710,7 +14710,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 record(component: import("../tokens/session.ts").SessionComponent): void;
             };
             readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-            readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error, actionOverride?: string) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+            readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
         };
     }>>) => import("elysia/types").MaybePromise<void>;
     readonly path: string;
@@ -14736,7 +14736,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
         record(component: import("../tokens/session.ts").SessionComponent): void;
     };
     readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-    readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error, actionOverride?: string) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+    readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
     board: Readonly<{
         id: import("../content/model.ts").BoardId;
@@ -15072,7 +15072,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
             record(component: import("../tokens/session.ts").SessionComponent): void;
         };
         readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-        readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error, actionOverride?: string) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+        readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
     };
     schema: {};
     schemas: {};
@@ -15392,7 +15392,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 record(component: import("../tokens/session.ts").SessionComponent): void;
             };
             readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-            readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error, actionOverride?: string) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+            readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
         };
     }>>) => import("elysia/types").MaybePromise<void>;
     readonly path: string;
@@ -15419,7 +15419,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
         record(component: import("../tokens/session.ts").SessionComponent): void;
     };
     readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-    readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error, actionOverride?: string) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+    readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
     subjects: {
         id: string;
@@ -17477,7 +17477,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
             record(component: import("../tokens/session.ts").SessionComponent): void;
         };
         readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-        readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error, actionOverride?: string) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+        readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
     };
     schema: {};
     schemas: {};
@@ -17743,7 +17743,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 record(component: import("../tokens/session.ts").SessionComponent): void;
             };
             readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-            readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error, actionOverride?: string) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+            readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
         };
     }>>) => import("elysia/types").MaybePromise<void>;
     readonly path: string;
@@ -17769,7 +17769,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
         record(component: import("../tokens/session.ts").SessionComponent): void;
     };
     readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-    readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error, actionOverride?: string) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+    readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
     context: import("../semantic/context.ts").ContextRecord;
 }>, {
@@ -20050,7 +20050,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
             record(component: import("../tokens/session.ts").SessionComponent): void;
         };
         readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-        readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error, actionOverride?: string) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+        readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
     };
     schema: {};
     schemas: {};
@@ -20492,7 +20492,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 record(component: import("../tokens/session.ts").SessionComponent): void;
             };
             readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-            readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error, actionOverride?: string) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+            readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
         };
     }>>) => import("elysia/types").MaybePromise<void>;
     readonly path: string;
@@ -20522,7 +20522,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
         record(component: import("../tokens/session.ts").SessionComponent): void;
     };
     readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-    readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error, actionOverride?: string) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+    readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
     statement: {
         id: string;
@@ -23101,7 +23101,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
             record(component: import("../tokens/session.ts").SessionComponent): void;
         };
         readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-        readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error, actionOverride?: string) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+        readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
     };
     schema: {};
     schemas: {};
@@ -23371,7 +23371,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 record(component: import("../tokens/session.ts").SessionComponent): void;
             };
             readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-            readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error, actionOverride?: string) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+            readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
         };
     }>>) => import("elysia/types").MaybePromise<void>;
     readonly path: string;
@@ -23397,7 +23397,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
         record(component: import("../tokens/session.ts").SessionComponent): void;
     };
     readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-    readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error, actionOverride?: string) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+    readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
     entitlement: {
         id: string;
@@ -23518,7 +23518,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
             record(component: import("../tokens/session.ts").SessionComponent): void;
         };
         readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-        readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error, actionOverride?: string) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+        readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
     };
     schema: {};
     schemas: {};
@@ -23688,7 +23688,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 record(component: import("../tokens/session.ts").SessionComponent): void;
             };
             readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-            readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error, actionOverride?: string) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+            readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
         };
     }>>) => import("elysia/types").MaybePromise<void>;
     readonly path: string;
@@ -23712,7 +23712,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
         record(component: import("../tokens/session.ts").SessionComponent): void;
     };
     readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-    readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error, actionOverride?: string) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+    readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
     received: true;
 }>, {
@@ -25723,7 +25723,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
             record(component: import("../tokens/session.ts").SessionComponent): void;
         };
         readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-        readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error, actionOverride?: string) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+        readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
     };
     schema: {};
     schemas: {};
@@ -25989,7 +25989,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 record(component: import("../tokens/session.ts").SessionComponent): void;
             };
             readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-            readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error, actionOverride?: string) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+            readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
         };
     }>>) => import("elysia/types").MaybePromise<void>;
     readonly path: string;
@@ -26015,7 +26015,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
         record(component: import("../tokens/session.ts").SessionComponent): void;
     };
     readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-    readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error, actionOverride?: string) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+    readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
     context: import("../semantic/context.ts").ContextRecord;
 }>, {
