@@ -27,7 +27,7 @@ type Metadata = {
   num_edits: number;
   num_users: number;
 };
-type GroupedRecord = { vn: { id: string }; vn_titles: Title[]; entry_meta: Metadata };
+type GroupedRecord = { vn: { id: string; olang: string }; vn_titles: Title[]; entry_meta: Metadata };
 type Stored = { id: string; child: string };
 type Run = { state: State; sourceRecords: number; stagedRows: number; stagedBytes: number };
 type Options = {
@@ -41,9 +41,9 @@ type Options = {
 };
 
 // COPY TO STDOUT, not executable SQL. Official generator/dump evidence and hashes:
-// specs/imports-vndb-tables-driver.ts. Only the identity, titles and native revision
-// are required by the grouped metadata input. Other VN columns are validated and
-// discarded, including description and image identifiers.
+// specs/imports-vndb-tables-driver.ts. Only the identity, original language, titles
+// and native revision are required by the grouped input. Other VN columns are
+// validated and discarded, including description and image identifiers.
 const COLUMNS: Record<Table, readonly string[]> = {
   vn: [
     'id',
@@ -390,7 +390,7 @@ export class VndbTablesStore {
     const id = nativeId(cells.id, table !== 'entry_meta');
     if (table === 'entry_meta' && id[0] !== 'v') return 0;
     let child = '';
-    let record: { id: string } | Title | Metadata;
+    let record: { id: string; olang: string } | Title | Metadata;
     if (table === 'vn') {
       for (const name of ['image', 'c_image']) {
         const value = cells[name];
@@ -399,13 +399,13 @@ export class VndbTablesStore {
           integer(value.slice(2), 2147483647, 1);
         }
       }
-      language(cells.olang);
+      const olang = language(cells.olang);
       for (const name of ['c_votecount', 'c_lengthnum']) integer(cells[name], 2147483647);
       for (const name of ['c_rating', 'c_average', 'c_length'])
         if (cells[name] !== null) integer(cells[name], name === 'c_length' ? 32767 : 1000);
       integer(cells.length, 5);
       integer(cells.devstatus, 2);
-      record = { id };
+      record = { id, olang };
     } else if (table === 'vn_titles') {
       child = language(cells.lang);
       check(cells.official === 't' || cells.official === 'f');
@@ -492,15 +492,17 @@ export class VndbTablesStore {
     if (options.after !== null) nativeId(options.after);
     check(this.inspect(source, runId).state === 'ready');
     const rows = this.db
-      .query(`SELECT id FROM vndb_table_rows
+      .query(`SELECT id,payload FROM vndb_table_rows
       WHERE source=? AND run_id=? AND table_name='vn' AND id_number>? AND child=''
       ORDER BY id_number LIMIT ?`)
       .all(source, runId, options.after === null ? 0 : Number(options.after.slice(1)), options.limit + 1) as {
       id: string;
+      payload: string;
     }[];
-    const records = rows.slice(0, options.limit).map(({ id }) => {
+    const records = rows.slice(0, options.limit).map(({ id, payload }) => {
       const entry_meta = this.metadata(source, runId, id);
-      const record: GroupedRecord = { vn: { id }, vn_titles: this.titles(source, runId, id), entry_meta };
+      const vn = JSON.parse(payload) as GroupedRecord['vn'];
+      const record: GroupedRecord = { vn, vn_titles: this.titles(source, runId, id), entry_meta };
       return { key: id, revision: entry_meta.revision, record };
     });
     return { records, next: rows.length > options.limit ? records.at(-1)!.key : null };

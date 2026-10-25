@@ -34,7 +34,7 @@ test('native title caps preserve valid proposals and assets', () => {
     const generated = seed(fields);
     const output = convertVndb(generated.input, context);
     expect(checkBatchWrite({ commands: output.proposals })).toEqual([]);
-    expect(output.proposals).toHaveLength(fields + 1);
+    expect(output.proposals).toHaveLength(fields + 2);
     expect(output.assets).toEqual([]);
     expect(Buffer.byteLength(JSON.stringify(generated.record))).toBeLessThan(vndbLimits.recordBytes);
   }

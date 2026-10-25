@@ -1,20 +1,29 @@
 import { checkBatchWrite, type BatchCommand, type BatchReference, type BatchStatement } from '@rezics/definitions/bulk';
 import { ConversionError, type ConversionInput, type ConvertedRecord, type ConversionDiagnostic } from './index.ts';
-import { commandKey, safeSourceUrl, sourceDigest, sourceEnvelope, type ConversionContext } from './support.ts';
+import {
+  canonicalLanguageTag,
+  commandKey,
+  inLanguageTag,
+  safeSourceUrl,
+  sourceDigest,
+  sourceEnvelope,
+  type ConversionContext,
+} from './support.ts';
 
-export const converter_revision = 'vndb@3';
+export const converter_revision = 'vndb@4';
 export const vndbLimits = Object.freeze({
   maxTitles: 64,
   maxTitleCandidates: 64,
   maxLinks: 32,
   stringBytes: 4096,
   recordBytes: 64 * 1024,
-  maxCommands: 97,
+  // One identifier + 64 title candidates + 32 links + one original language = 98 of 100.
+  maxCommands: 98,
 });
 
 type Title = { id: string; lang: string; official: boolean; title: string; latin: string | null };
 type NormalizedRecord = {
-  vn: { id: string };
+  vn: { id: string; olang?: string };
   entry_meta: { id: string; revision: number };
   vn_titles: Title[];
   vn_extlinks: { id: string; link: number }[];
@@ -101,10 +110,17 @@ function website(value: string, pointer: string): string {
   }
 }
 
+function latinLanguageTag(tag: string): string | null {
+  const parts = tag.split('-');
+  if (/^[A-Z][a-z]{3}$/u.test(parts[1] ?? '')) parts[1] = 'Latn';
+  else parts.splice(1, 0, 'Latn');
+  return canonicalLanguageTag(parts.join('-'));
+}
+
 /**
  * Projection of decoded dump tables, not a live API response. Schema authority:
  * https://g.blicky.net/vndb.git/tree/sql/schema.sql and https://vndb.org/d14.
- * Allowlist: vn.id; entry_meta.id/revision; vn_titles.id/lang/official/title/latin;
+ * Allowlist: vn.id/olang; entry_meta.id/revision; vn_titles.id/lang/official/title/latin;
  * vn_extlinks.id/link; extlinks.id/site/value. All other fields/tables are untouched.
  * https://vndb.org/d17#4 distinguishes ODbL database and DbCL contents licensing.
  * Neither licenses description/image republication; no creative content is projected.
@@ -115,6 +131,9 @@ function project(input: ConversionInput): NormalizedRecord {
   const vn = row(field(record, 'vn', '/vn'), '/vn');
   const id = nativeId(field(vn, 'id', '/vn/id'), '/vn/id');
   if (input.external_id !== id) fail('Source envelope ID does not match vn.id', '/external_id');
+  const olangValue = field(vn, 'olang', '/vn/olang');
+  const projectedVn: NormalizedRecord['vn'] = { id };
+  if (olangValue !== undefined) projectedVn.olang = text(olangValue, '/vn/olang');
   const meta = row(field(record, 'entry_meta', '/entry_meta'), '/entry_meta');
   if (nativeId(field(meta, 'id', '/entry_meta/id'), '/entry_meta/id') !== id)
     fail('entry_meta ID does not match vn.id', '/entry_meta/id');
@@ -125,9 +144,9 @@ function project(input: ConversionInput): NormalizedRecord {
     const p = `/vn_titles/${i}`;
     const entry = row(value, p);
     if (nativeId(field(entry, 'id', `${p}/id`), `${p}/id`) !== id) fail('Title ID does not match vn.id', `${p}/id`);
-    const lang = text(field(entry, 'lang', `${p}/lang`), `${p}/lang`);
-    if (lang.length > 64 || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/u.test(lang))
-      fail('Invalid title language', `${p}/lang`);
+    const rawLanguage = text(field(entry, 'lang', `${p}/lang`), `${p}/lang`);
+    const lang = canonicalLanguageTag(rawLanguage);
+    if (lang === null) throw new ConversionError('Invalid title language', `${p}/lang`);
     const official = field(entry, 'official', `${p}/official`);
     if (typeof official !== 'boolean') fail('Expected title official boolean', `${p}/official`);
     const title = titleText(field(entry, 'title', `${p}/title`), `${p}/title`);
@@ -170,7 +189,7 @@ function project(input: ConversionInput): NormalizedRecord {
   )
     fail('External link group has mismatched or duplicate IDs', '/vn_extlinks');
   const normalized = {
-    vn: { id },
+    vn: projectedVn,
     entry_meta: { id, revision },
     vn_titles: titles,
     vn_extlinks: links,
@@ -218,7 +237,11 @@ export function convertVndb(
     const titles: { language: string; text: string; official: boolean }[] = [];
     for (const title of normalizedRecord.vn_titles) {
       titles.push({ language: title.lang, text: title.title, official: title.official });
-      if (title.latin !== null) titles.push({ language: `${title.lang}-Latn`, text: title.latin, official: false });
+      if (title.latin !== null) {
+        const language = latinLanguageTag(title.lang);
+        if (language === null) throw new ConversionError('Invalid title language', '/vn_titles');
+        titles.push({ language, text: title.latin, official: false });
+      }
     }
     if (titles.length > vndbLimits.maxTitleCandidates) fail('Title candidates exceed source cap', '/vn_titles');
     // Prefer official titles for initial labels; all titles remain actual candidates.
@@ -240,6 +263,15 @@ export function convertVndb(
       ...Array.from(uniqueTitles.values(), (title) => statement('schema:name', title)),
     ];
     const diagnostics: ConversionDiagnostic[] = [];
+    if (normalizedRecord.vn.olang !== undefined) {
+      const language = inLanguageTag(normalizedRecord.vn.olang);
+      if (language === null) {
+        diagnostics.push({
+          pointer: '/vn/olang',
+          code: 'Original language has no supported canonical language tag; omitted from proposals',
+        });
+      } else statements.push(statement('schema:inLanguage', language));
+    }
     for (const [i, link] of normalizedRecord.extlinks.entries()) {
       if (link.site === 'website') statements.push(statement('schema:url', link.value));
       else

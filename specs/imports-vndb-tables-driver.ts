@@ -18,12 +18,12 @@
  * entry_meta's exported column is id, although the generator selects itemid.
  *
  * Grouped payload follows the independently frozen imports-vndb-driver.ts suite:
- * vn {id}, vn_titles array, entry_meta object with numeric per-entry revision.
+ * vn {id, olang}, vn_titles array, entry_meta object with numeric per-entry revision.
  * Validate all known input columns, then retain only the converter's needed
  * columns. Descriptions, image IDs and unused VN columns are discarded, never
  * reconstructed by this adapter. Preserve native entry_meta dates and counters.
  * entry_meta also contains other entry types: skip those, not orphan v IDs.
- * No auxiliary table is needed for the current metadata-only converter. Use the
+ * No auxiliary table is needed for the current converter. Use the
  * actual VNDB @rezics/conversion module and its converter_revision by reference.
  * converter below forwards the real converter call by reference, with only the
  * native input envelope framing allowed by imports-vndb-driver.ts. A table page
@@ -65,7 +65,7 @@ export interface Entry {
   linkTarget?: string;
 }
 export interface GroupedRecord {
-  vn: { id: string };
+  vn: { id: string; olang: string };
   vn_titles: Array<{ id: string; lang: string; official: boolean; title: string; latin: string | null }>;
   entry_meta: { id: string; created: string; lastmod: string; revision: number; num_edits: number; num_users: number };
 }
