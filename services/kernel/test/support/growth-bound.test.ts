@@ -111,3 +111,41 @@ test('names the metric, values and largest relations in the error', () => {
   expect((error as Error).message).toContain('largest_rows');
   expect((error as Error).message).toContain('largest_blocks');
 });
+
+test('names sequentially scanned relations in a bound error', () => {
+  const samples: GrowthSample[] = [1, 8, 64].map((scale, index) => ({
+    scale,
+    cost: {
+      rows: [1, 10, 100][index]!,
+      blocks: 1,
+      statements: 1,
+      relations: {
+        small_relation: { rows: 100, blocks: 2, sequentialScans: index === 2 ? 1 : 0 },
+      },
+    },
+  }));
+  let error: unknown;
+  try {
+    assertGrowth(samples, allBounds('constant'));
+  } catch (caught) {
+    error = caught;
+  }
+
+  expect(error).toBeInstanceOf(GrowthBoundError);
+  expect((error as Error).message).toContain(
+    "Sequential scans: small_relation (100 rows) (a sequential scan of a small relation is the planner's choice; seed every relation the operation reads to thousands of rows at the smallest scale)",
+  );
+
+  const withoutScans = samples.map((sample) => ({
+    ...sample,
+    cost: { ...sample.cost, relations: { small_relation: { rows: 100, blocks: 2, sequentialScans: 0 } } },
+  }));
+  let errorWithoutScans: unknown;
+  try {
+    assertGrowth(withoutScans, allBounds('constant'));
+  } catch (caught) {
+    errorWithoutScans = caught;
+  }
+  expect(errorWithoutScans).toBeInstanceOf(GrowthBoundError);
+  expect((errorWithoutScans as Error).message).not.toContain('Sequential scans:');
+});

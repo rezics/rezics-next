@@ -70,6 +70,40 @@ test('a sequential scan counts filtered out rows as examined', async () => {
   expect(cost.relations['growth_cost_test.seq_rows']).toEqual({ rows: 100, blocks: expect.any(Number), nodes: 1 });
 });
 
+test('counts sequential scans per relation', () => {
+  const plan = [
+    {
+      Plan: {
+        'Node Type': 'Append',
+        'Actual Rows': 0,
+        'Shared Hit Blocks': 0,
+        'Shared Read Blocks': 0,
+        Plans: [
+          {
+            'Node Type': 'Seq Scan',
+            'Relation Name': 'sequential_relation',
+            'Actual Rows': 1,
+            'Shared Hit Blocks': 0,
+            'Shared Read Blocks': 0,
+          },
+          {
+            'Node Type': 'Index Scan',
+            'Relation Name': 'indexed_relation',
+            'Actual Rows': 1,
+            'Shared Hit Blocks': 0,
+            'Shared Read Blocks': 0,
+          },
+        ],
+      },
+    },
+  ];
+
+  const cost = costOf({ statements: [], plans: [plan] });
+
+  expect(cost.relations.sequential_relation?.sequentialScans).toBe(1);
+  expect(cost.relations.indexed_relation?.sequentialScans).toBe(0);
+});
+
 test('an inner index scan multiplies per-loop rows by its loop count', async () => {
   await client.query('BEGIN');
   try {
