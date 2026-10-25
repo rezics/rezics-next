@@ -15,11 +15,12 @@ const preview: Preview = {
   parameters: { a11y: { test: 'error' } },
   decorators: [
     (Story, context) => {
-      const locale = String(context.globals.locale ?? 'en') as (typeof locales)[number];
-      setLocale(locale, { reload: false });
+      const theme = context.globals.theme === 'dark' ? 'dark' : 'light';
+      const locale = String(context.globals.locale ?? 'en');
+      setLocale(locale as (typeof locales)[number], { reload: false });
       document.documentElement.lang = locale;
       document.documentElement.classList.remove('light', 'dark');
-      document.documentElement.classList.add(context.globals.theme === 'dark' ? 'dark' : 'light');
+      document.documentElement.classList.add(theme);
       return <Story />;
     },
   ],

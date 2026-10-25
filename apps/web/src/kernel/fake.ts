@@ -17,9 +17,10 @@ export function createRecordedKernelFetch(recordings: Record<string, KernelRecor
     const name = id === '00000000-0000-4000-8000-000000000000' ? 'missing-subject' : id ? 'subject' : undefined;
     const recording = request.method === 'GET' && name ? recordings[name] : undefined;
     if (!recording) return new Response(null, { status: 404 });
-    return Response.json(recording, {
-      status: recording.status,
-      headers: { 'content-type': recording.status === 404 ? 'application/problem+json' : 'application/json' },
+    const { status, ...body } = recording;
+    return Response.json(body, {
+      status,
+      headers: { 'content-type': status === 404 ? 'application/problem+json' : 'application/json' },
     });
   }) as typeof fetch;
 }
