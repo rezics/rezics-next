@@ -297,7 +297,7 @@ describe('content HTTP with native database adapters', () => {
             await client.query(
               `INSERT INTO content.post
                  (route, thread_id, post_id, author_account_id, head_revision_id, visibility, security_revision, recorded_transaction_id)
-               VALUES ($1, $2, $3, $4, $5, 'public', 1, $6)`,
+               VALUES ($1, $2, $3, $4, $5, 'published', 1, $6)`,
               [thread.route, thread.id, postId, actor.accountId, revisionId, transaction],
             );
             await client.query(
