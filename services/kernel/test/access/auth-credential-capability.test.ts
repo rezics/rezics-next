@@ -1,5 +1,5 @@
 import { createCredentialCapability } from '../../src/access/auth-credential-capability.ts';
-import { createWorkflowApprovals } from '../../src/access/workflow-approvals.ts';
+import { credentialWorkflowApprovals, createWorkflowApprovals } from '../../src/access/workflow-approvals.ts';
 import {
   createAuthService,
   type AuthService,
@@ -83,15 +83,14 @@ async function fixture(pool: Pool, authPool: Pool, url: string) {
       activeKid: 'operator-key',
       privateKeys: [{ ...(await exportJWK(pair.privateKey)), kid: 'operator-key' }],
     },
-    trustedAccess: createAuthBindings({
-      pool,
-      ...registration,
-      async consumeAuthAuthorization(input) {
+    trustedAccess: {
+      ...createAuthBindings({ pool, ...registration }),
+      async consumeAuthorization(input) {
         result = await capability.consumeAuthAuthorization({ ...pending, human: input.human });
         // Stop before the legacy Auth mutation: these tests prove kernel checks only.
         throw new Error('kernel-test-complete');
       },
-    }),
+    },
   });
   await service.internal.registerClient({
     clientId: 'operator-web',
@@ -112,7 +111,7 @@ async function fixture(pool: Pool, authPool: Pool, url: string) {
       }),
     );
   async function person() {
-    const id = newId(0x9200);
+    const id = newId(0x9200 + (sequence++ % 32) * 16);
     const handle = `session_person_${key().replaceAll('-', '_')}`;
     const held = await internal.reserveHandle({ accountId: id, handle, key: key() });
     const input = { accountId: id, handle, reservationId: held.value.reservationId, key: key() };
@@ -210,7 +209,7 @@ async function fixture(pool: Pool, authPool: Pool, url: string) {
         };
       }
       const token = (await (await request('/token', {}, headers)).json()) as { access_token: string };
-      const approval = await approvals.approveCredential(token.access_token, binding, {
+      const approval = await credentialWorkflowApprovals(approvals).approveCredential(token.access_token, binding, {
         pool,
         deadline: Date.now() + 3000,
       });
@@ -241,7 +240,7 @@ async function fixture(pool: Pool, authPool: Pool, url: string) {
           authorization: reference,
           subjectAccountId: binding.subjectAccountId,
           headers,
-          credential: { kind: 'password', password },
+          credential: { kind: 'key', kid: 'staged-test-key', remove: true },
         });
       } catch (error) {
         if (!(error instanceof Error) || error.message !== 'kernel-test-complete') throw error;
@@ -277,7 +276,7 @@ let headers: Headers;
 beforeAll(async () => {
   db = await openGrowthDatabase();
   db.pool.options.max = 1;
-  f = await fixture(db.pool, db.openPool({ max: 1 }), db.url);
+  f = await fixture(db.pool, db.openPool({ max: 2 }), db.url);
   human = await f.person();
   subject = await f.automate(human);
   headers = await f.login(human);
@@ -298,6 +297,21 @@ test('operator credential opening binds one purpose operation key and Auth commi
     receiptId: broad.outcome.value.receiptId,
   });
   await expect(f.consume(ref, binding, headers)).rejects.toThrow();
+  await expect(
+    db.admin.query(
+      `UPDATE access.operator_opening_receipt
+       SET credential_operation_key=$4,credential_effect_reference=$5,credential_effect_digest=$6
+       WHERE route=$1 AND operator_account_id=$2 AND receipt_id=$3`,
+      [
+        routeOf(human)!,
+        human,
+        broad.outcome.value.receiptId,
+        binding.operationKey,
+        binding.effectReference,
+        binding.effectDigest,
+      ],
+    ),
+  ).rejects.toThrow('credential_binding_closed');
   const exact = await f.approve(headers, binding);
   for (const patch of [
     { purpose: 'remove-key' as const },
@@ -336,24 +350,54 @@ test('own human credential approval uses account manage through the formula and 
   await f.operators.provisionManagementDefaults({ operatorAccountId: human, key: f.key() });
   const noScope = await f.login(human, ['read']);
   await expect(f.approve(noScope, next)).rejects.toThrow();
+  const denied = await f.approve(headers, next);
+  await db.admin.query(
+    `INSERT INTO access.resource_denial
+      (route,resource_id,subject_id,subject_role,action,reason,valid,transaction_id)
+     VALUES ($1,$2,$2,'','account:manage','resource','(,)',$2)`,
+    [routeOf(human)!, human],
+  );
+  await expect(f.consume(denied.reference, next, headers)).rejects.toThrow();
+  await db.admin.query('DELETE FROM access.resource_denial WHERE route=$1 AND resource_id=$2', [
+    routeOf(human)!,
+    human,
+  ]);
 });
 
 test('every consume rechecks formula state fence floor and operator relation', async () => {
-  for (const [id, change, restore] of [
-    [human, "state='suspended'", "state='active'"],
-    [subject, 'authn_fenced=true', 'authn_fenced=false'],
-    [subject, 'minimum_authn_epoch=2', 'minimum_authn_epoch=1'],
-    [
-      subject,
-      'operator_relation_version=operator_relation_version+1',
-      'operator_relation_version=operator_relation_version-1',
-    ],
+  for (const [target, change] of [
+    ['human', "state='suspended'"],
+    ['subject', 'authn_fenced=true'],
+    ['subject', 'minimum_authn_epoch=2'],
   ]) {
-    const binding = f.stage(subject, human);
-    const opening = await f.approve(headers, binding);
-    await db.admin.query(`UPDATE access.account SET ${change} WHERE route=$1 AND account_id=$2`, [routeOf(id!)!, id]);
-    await expect(f.consume(opening.reference, binding, headers)).rejects.toThrow();
-    await db.admin.query(`UPDATE access.account SET ${restore} WHERE route=$1 AND account_id=$2`, [routeOf(id!)!, id]);
+    const h = await f.person();
+    const s = await f.automate(h);
+    const cookie = await f.login(h);
+    const binding = f.stage(s, h);
+    const opening = await f.approve(cookie, binding);
+    const id = target === 'human' ? h : s;
+    await db.admin.query(`UPDATE access.account SET ${change} WHERE route=$1 AND account_id=$2`, [routeOf(id)!, id]);
+    await expect(f.consume(opening.reference, binding, cookie)).rejects.toThrow();
+  }
+  {
+    const h = await f.person();
+    const s = await f.automate(h);
+    const cookie = await f.login(h);
+    const binding = f.stage(s, h);
+    const opening = await f.approve(cookie, binding);
+    const other = await f.person();
+    const held = await f.operators.reserveResponsibility({
+      operatorAccountId: other,
+      subjectAccountId: s,
+      key: f.key(),
+    });
+    await f.operators.recordOperatorRelation({
+      ...held.value,
+      expectedOperatorAccountId: h,
+      expectedVersion: '1',
+      key: f.key(),
+    });
+    await expect(f.consume(opening.reference, binding, cookie)).rejects.toThrow();
   }
   const binding = f.stage(subject, human);
   const opening = await f.approve(headers, binding);
@@ -402,6 +446,37 @@ test('credential floor hook requires an exact committed floor receipt', async ()
   ).rows[0];
   expect(Number(row.minimum_authn_epoch)).toBe(2);
   expect(row.authn_fenced).toBe(false);
+  await db.admin.query(
+    'DELETE FROM access.credential_floor_receipt WHERE route=$1 AND account_id=$2 AND opening_receipt_id=$3',
+    [routeOf(s)!, s, authorization.receiptId],
+  );
+  await expect(f.capability.advanceCredentialFloor(input)).rejects.toThrow();
+
+  const person = await f.person();
+  const ownCookie = await f.login(person);
+  const ownBinding = f.stage(person, person, 'remove-password');
+  const ownApproval = await f.approve(ownCookie, ownBinding);
+  const own = await f.consume(ownApproval.reference, ownBinding, ownCookie);
+  const ownInput = {
+    stage: ownBinding,
+    consumedOpening: own.authorization,
+    expectedPreviousFloor: 1,
+    key: ownBinding.operationKey,
+    purpose: ownBinding.purpose,
+  };
+  const ownReceipt = await f.capability.advanceCredentialFloor(ownInput);
+  expect(ownReceipt.minimumAuthnEpoch).toBe(2);
+  expect(await f.capability.advanceCredentialFloor(ownInput)).toEqual(ownReceipt);
+  await db.admin.query(
+    "DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND action='account:manage'",
+    [routeOf(person)!, person],
+  );
+  await expect(f.capability.advanceCredentialFloor(ownInput)).rejects.toThrow();
+  await f.operators.provisionManagementDefaults({ operatorAccountId: person, key: f.key() });
+  const authenticatedAgain = await f.login(person);
+  await expect(f.approve(authenticatedAgain, { ...ownBinding, effectDigest: 'b'.repeat(64) })).rejects.toThrow();
+  const resumed = await f.approve(authenticatedAgain, ownBinding);
+  expect((await f.consume(resumed.reference, ownBinding, authenticatedAgain)).authorization.subjectEpoch).toBe(2);
 });
 
 test('legacy unbound credential inputs fail unavailable before any I/O in both capabilities', async () => {
@@ -415,26 +490,25 @@ test('lost committed credential consumption acknowledgement leaves the opening s
   const opening = await f.approve(headers, binding);
   let target: PoolClient | undefined;
   let lost = false;
-  const original = db.pool.connect.bind(db.pool);
-  db.pool.connect = (async () => {
-    const client = await original();
-    const query = client.query.bind(client);
-    client.query = (async (...args: unknown[]) => {
-      const sql = typeof args[0] === 'string' ? args[0] : (args[0] as { text: string }).text;
-      if (sql.includes('UPDATE access.operator_opening_receipt')) target = client;
-      const value = await (query as (...args: unknown[]) => Promise<unknown>)(...args);
-      if (client === target && sql === 'COMMIT' && !lost) {
-        lost = true;
-        throw new Error('lost acknowledgement');
-      }
-      return value;
-    }) as typeof client.query;
-    return client;
-  }) as typeof db.pool.connect;
+  const client = await db.pool.connect();
+  const query = client.query.bind(client);
+  client.query = ((...args: Parameters<typeof query>) => {
+    const raw = args[0] as string | { text: string };
+    const sql = typeof raw === 'string' ? raw : raw.text;
+    if (sql.includes('UPDATE access.operator_opening_receipt')) target = client;
+    const value = (query as (...args: unknown[]) => Promise<unknown>)(...args);
+    return client === target && sql === 'COMMIT' && !lost
+      ? value.then(() => {
+          lost = true;
+          throw new Error('lost acknowledgement');
+        })
+      : value;
+  }) as typeof client.query;
+  client.release();
   try {
     await expect(f.consume(opening.reference, binding, headers)).rejects.toThrow();
   } finally {
-    db.pool.connect = original;
+    client.query = query;
   }
   expect(lost).toBe(true);
   expect(
@@ -458,6 +532,7 @@ test('activation grants self account manage to persons only', async () => {
     pool: db.pool,
     routeKey: new Uint8Array(32).fill(32),
     provisioningEvidence: async () => proof,
+    recoveryEvidence: async () => null,
   });
   await internal.activate({ accountId: id, key: f.key(), evidence: {} });
   const grants = await db.admin.query(
@@ -473,10 +548,16 @@ test('activation grants self account manage to persons only', async () => {
   });
   const autoHandle = `automated_${f.key().replaceAll('-', '_')}`;
   const registration = await f.internal.reserveHandle({ accountId: automated, handle: autoHandle, key: f.key() });
-  await f.internal.createAutomatedPending({
-    ...held.value,
+  await f.internal.createPending({
+    accountId: automated,
     handle: autoHandle,
     reservationId: registration.value.reservationId,
+    key: f.key(),
+  });
+  await f.operators.recordOperatorRelation({
+    ...held.value,
+    expectedOperatorAccountId: null,
+    expectedVersion: '0',
     key: f.key(),
   });
   const autoProof = {
@@ -489,6 +570,7 @@ test('activation grants self account manage to persons only', async () => {
     pool: db.pool,
     routeKey: new Uint8Array(32).fill(32),
     provisioningEvidence: async () => autoProof,
+    recoveryEvidence: async () => null,
   });
   await autoInternal.activate({ accountId: automated, key: f.key(), evidence: {} });
   expect(
@@ -496,6 +578,27 @@ test('activation grants self account manage to persons only', async () => {
       await db.admin.query(
         "SELECT action FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND subject_id=$2 AND action='account:manage'",
         [routeOf(automated)!, automated],
+      )
+    ).rows,
+  ).toEqual([]);
+  const organization = newId(0x9310);
+  const owner = await f.internal.reserveCoordination({
+    accountId: human,
+    relatedAccountId: organization,
+    purpose: 'membership',
+    key: f.key(),
+  });
+  await f.internal.createOrganization({
+    organizationId: organization,
+    ownerAccountId: human,
+    ownerReservationId: owner.value.reservationId,
+    key: f.key(),
+  });
+  expect(
+    (
+      await db.admin.query(
+        "SELECT action FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND action='account:manage'",
+        [routeOf(organization)!, organization],
       )
     ).rows,
   ).toEqual([]);

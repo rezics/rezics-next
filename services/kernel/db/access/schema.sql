@@ -235,6 +235,11 @@ CREATE FUNCTION access.workflow_approval_immutable() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
+  IF OLD.operation->>'kind' = 'credential' AND OLD.consumed_at IS NULL AND OLD.consumed_transaction_id IS NULL
+    AND NEW.consumed_at IS NOT NULL AND NEW.consumed_transaction_id IS NOT NULL
+    AND NEW.consumed_at >= OLD.created_at AND NEW.consumed_at < OLD.expires_at
+    AND (to_jsonb(OLD) - 'consumed_at' - 'consumed_transaction_id') = (to_jsonb(NEW) - 'consumed_at' - 'consumed_transaction_id')
+  THEN RETURN NEW; END IF;
   RAISE EXCEPTION 'Workflow approvals are immutable';
 END;
 $$;
@@ -286,6 +291,30 @@ CREATE TABLE access.account (
     CONSTRAINT account_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT account_service_tier_actor CHECK (((rate_tier <> 'service'::text) OR (kind = 'actor'::text))),
     CONSTRAINT account_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'active'::text, 'suspended'::text, 'deleted'::text])))
+);
+
+
+--
+-- Name: credential_floor_receipt; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.credential_floor_receipt (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    opening_receipt_id uuid NOT NULL,
+    receipt_id uuid NOT NULL,
+    operation_key text NOT NULL,
+    effect_reference text NOT NULL,
+    effect_digest text NOT NULL,
+    purpose text NOT NULL,
+    previous_floor bigint NOT NULL,
+    minimum_authn_epoch bigint NOT NULL,
+    fenced boolean NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT credential_floor_receipt_check CHECK ((minimum_authn_epoch = (previous_floor + 1))),
+    CONSTRAINT credential_floor_receipt_check1 CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT credential_floor_receipt_previous_floor_check CHECK ((previous_floor > 0)),
+    CONSTRAINT credential_floor_receipt_purpose_check CHECK ((purpose = ANY (ARRAY['set-password'::text, 'remove-password'::text, 'remove-key'::text])))
 );
 
 
@@ -498,6 +527,11 @@ CREATE TABLE access.operator_opening_receipt (
     consumed_at timestamp with time zone,
     transaction_id uuid NOT NULL,
     consumed_transaction_id uuid,
+    credential_purpose text,
+    credential_operation_key text,
+    credential_effect_reference text,
+    credential_effect_digest text,
+    CONSTRAINT credential_binding_closed CHECK ((((credential_purpose IS NULL) AND (credential_operation_key IS NULL) AND (credential_effect_reference IS NULL) AND (credential_effect_digest IS NULL)) OR ((purpose = 'credential-management'::text) AND (credential_purpose IS NOT NULL) AND (credential_purpose = ANY (ARRAY['set-password'::text, 'remove-password'::text, 'add-key'::text, 'remove-key'::text])) AND (credential_operation_key IS NOT NULL) AND ((length(credential_operation_key) >= 1) AND (length(credential_operation_key) <= 255)) AND (credential_effect_reference IS NOT NULL) AND ((length(credential_effect_reference) >= 1) AND (length(credential_effect_reference) <= 4096)) AND (credential_effect_digest IS NOT NULL) AND (credential_effect_digest ~ '^[a-f0-9]{64}$'::text)))),
     CONSTRAINT operator_opening_receipt_check CHECK ((route = ((get_byte(uuid_send(operator_account_id), 10) * 256) + get_byte(uuid_send(operator_account_id), 11)))),
     CONSTRAINT operator_opening_receipt_check1 CHECK ((expires_at <= (created_at + '00:01:00'::interval))),
     CONSTRAINT operator_opening_receipt_human_authn_epoch_check CHECK ((human_authn_epoch > 0)),
@@ -676,6 +710,9 @@ CREATE TABLE access.workflow_approval (
     expires_at timestamp with time zone NOT NULL,
     jwt_expires_at timestamp with time zone NOT NULL,
     transaction_id uuid NOT NULL,
+    consumed_at timestamp with time zone,
+    consumed_transaction_id uuid,
+    CONSTRAINT credential_expiry CHECK ((((operation ->> 'kind'::text) <> 'credential'::text) OR (expires_at <= (created_at + '00:01:00'::interval)))),
     CONSTRAINT workflow_approval_authn_epoch_check CHECK (((authn_epoch > 0) AND (authn_epoch <= '9007199254740991'::bigint))),
     CONSTRAINT workflow_approval_check CHECK ((route = ((get_byte(uuid_send(approval_id), 10) * 256) + get_byte(uuid_send(approval_id), 11)))),
     CONSTRAINT workflow_approval_check1 CHECK ((route = ((get_byte(uuid_send(actor_id), 10) * 256) + get_byte(uuid_send(actor_id), 11)))),
@@ -714,6 +751,14 @@ CREATE UNLOGGED TABLE access.write_rate_counter (
 
 ALTER TABLE ONLY access.account
     ADD CONSTRAINT account_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: credential_floor_receipt credential_floor_receipt_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.credential_floor_receipt
+    ADD CONSTRAINT credential_floor_receipt_pkey PRIMARY KEY (route, account_id, opening_receipt_id);
 
 
 --

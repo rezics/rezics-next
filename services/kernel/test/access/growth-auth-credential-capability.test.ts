@@ -1,5 +1,5 @@
 import { createCredentialCapability } from '../../src/access/auth-credential-capability.ts';
-import { createWorkflowApprovals } from '../../src/access/workflow-approvals.ts';
+import { credentialWorkflowApprovals, createWorkflowApprovals } from '../../src/access/workflow-approvals.ts';
 import {
   createAuthService,
   type AuthService,
@@ -8,7 +8,7 @@ import {
   type CredentialEffectAuthorization,
 } from '@rezics/auth';
 import { exportJWK, generateKeyPair } from 'jose';
-import type { Pool, PoolClient } from 'pg';
+import type { Pool } from 'pg';
 import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { readAccount } from '../../src/access/account-data.ts';
@@ -83,15 +83,14 @@ async function fixture(pool: Pool, authPool: Pool, url: string) {
       activeKid: 'operator-key',
       privateKeys: [{ ...(await exportJWK(pair.privateKey)), kid: 'operator-key' }],
     },
-    trustedAccess: createAuthBindings({
-      pool,
-      ...registration,
-      async consumeAuthAuthorization(input) {
+    trustedAccess: {
+      ...createAuthBindings({ pool, ...registration }),
+      async consumeAuthorization(input) {
         result = await capability.consumeAuthAuthorization({ ...pending, human: input.human });
         // Stop before the legacy Auth mutation: these tests prove kernel checks only.
         throw new Error('kernel-test-complete');
       },
-    }),
+    },
   });
   await service.internal.registerClient({
     clientId: 'operator-web',
@@ -112,7 +111,7 @@ async function fixture(pool: Pool, authPool: Pool, url: string) {
       }),
     );
   async function person() {
-    const id = newId(0x9200);
+    const id = newId(0x9200 + (sequence++ % 32) * 16);
     const handle = `session_person_${key().replaceAll('-', '_')}`;
     const held = await internal.reserveHandle({ accountId: id, handle, key: key() });
     const input = { accountId: id, handle, reservationId: held.value.reservationId, key: key() };
@@ -210,7 +209,7 @@ async function fixture(pool: Pool, authPool: Pool, url: string) {
         };
       }
       const token = (await (await request('/token', {}, headers)).json()) as { access_token: string };
-      const approval = await approvals.approveCredential(token.access_token, binding, {
+      const approval = await credentialWorkflowApprovals(approvals).approveCredential(token.access_token, binding, {
         pool,
         deadline: Date.now() + 3000,
       });
@@ -241,7 +240,7 @@ async function fixture(pool: Pool, authPool: Pool, url: string) {
           authorization: reference,
           subjectAccountId: binding.subjectAccountId,
           headers,
-          credential: { kind: 'password', password },
+          credential: { kind: 'key', kid: 'staged-test-key', remove: true },
         });
       } catch (error) {
         if (!(error instanceof Error) || error.message !== 'kernel-test-complete') throw error;
@@ -277,7 +276,7 @@ let headers: Headers;
 beforeAll(async () => {
   db = await openGrowthDatabase();
   db.pool.options.max = 1;
-  f = await fixture(db.pool, db.openPool({ max: 1 }), db.url);
+  f = await fixture(db.pool, db.openPool({ max: 2 }), db.url);
   human = await f.person();
   subject = await f.automate(human);
   headers = await f.login(human);
@@ -285,52 +284,109 @@ beforeAll(async () => {
 afterAll(async () => db?.close());
 
 test('credential capability growth stays fixed at 1x/8x/64x', async () => {
-  const report = await checkGrowth(db, {
-    name: 'credential capability',
-    bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
-    repetitions: 3,
-    warmups: 1,
-    grow: async (database, scale, previous) => {
-      for (let i = previous * 4; i < scale * 4; i++) {
-        const binding = f.stage(subject, human);
-        const opening = await f.approve(headers, binding);
-        await f.consume(opening.reference, binding, headers);
-        const id = newId(routeOf(human)!);
-        await database.admin.query(
-          `INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES ($1,$2,'actor','active',$2)`,
-          [routeOf(id)!, id],
-        );
-        await database.admin.query(
-          `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id) VALUES ($1,$2,$2,'account:manage','(,)',$2)`,
-          [routeOf(id)!, id],
-        );
-        await database.admin.query(
-          `INSERT INTO access.workflow_approval(route,approval_id,actor_id,client_id,scopes,authn_epoch,operation_key,operation,digest,created_at,expires_at,jwt_expires_at,transaction_id) VALUES ($1,$2,$2,'old','{}',1,$2,'{}',$3,clock_timestamp()-interval '1 day',clock_timestamp()-interval '1 day'+interval '60 seconds',clock_timestamp()+interval '1 day',$2)`,
-          [routeOf(id)!, id, 'a'.repeat(64)],
-        );
-      }
-      for (const table of [
-        'core.receipt',
-        'access.account',
-        'access.resource_grant',
-        'access.operator_opening_receipt',
-        'access.workflow_approval',
-      ])
-        await database.admin.query(`VACUUM (ANALYZE) ${table}`);
-    },
-    operation: async () => {
-      const binding = f.stage(subject, human);
-      const opening = await f.approve(headers, binding);
-      const result = await f.consume(opening.reference, binding, headers);
-      expect(result.authorization.operationKey).toBe(binding.operationKey);
-      await expect(f.consume(opening.reference, binding, headers)).rejects.toThrow();
-      const own = f.stage(human, human);
-      const approved = await f.approve(headers, own);
-      expect((await f.consume(approved.reference, own, headers)).authorization.operatorAccountId).toBeNull();
-      await expect(f.consume(approved.reference, own, headers)).rejects.toThrow();
-    },
-  });
-  expect(report.samples.map((s) => s.scale)).toEqual([1, 8, 64]);
-  for (const sample of report.samples)
-    expect(sample.cost.relations?.['access.operator_opening_receipt']?.rows).toBeGreaterThan(0);
+  const initial = f.stage(subject, human);
+  const opening = await f.approve(headers, initial);
+  await f.consume(opening.reference, initial, headers);
+  const template = opening.receiptId;
+  // Keep every measured point read beyond the small-table planner crossover.
+  const baseline = Array.from({ length: 4096 }, () => newId(routeOf(human)!));
+  await db.admin.query(
+    `INSERT INTO access.account(route,account_id,kind,state,transaction_id) SELECT $1,id,'actor','active',id FROM unnest($2::uuid[]) id`,
+    [routeOf(human)!, baseline],
+  );
+  await db.admin.query(
+    `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id) SELECT $1,id,id,'account:manage','(,)',id FROM unnest($2::uuid[]) id`,
+    [routeOf(human)!, baseline],
+  );
+  await db.admin.query(
+    `INSERT INTO core.receipt(partition_no,principal_kind,principal_id,command_kind,idempotency_key,request_digest,epoch,position,transaction_id,response) SELECT $1,'account',id,'old',id::text,decode(repeat('0',64),'hex'),1,1,id,'{}' FROM unnest($2::uuid[]) id`,
+    [routeOf(human)! >>> 4, baseline],
+  );
+  await db.admin.query(
+    `INSERT INTO access.workflow_approval(route,approval_id,actor_id,client_id,scopes,authn_epoch,operation_key,operation,digest,created_at,expires_at,jwt_expires_at,transaction_id) SELECT $1,id,id,'old','{}',1,id::text,'{}',repeat('0',64),'2000-01-01'::timestamptz,'2000-01-01 00:01:00'::timestamptz,'2000-01-01 00:01:00'::timestamptz,id FROM unnest($2::uuid[]) id`,
+    [routeOf(human)!, baseline],
+  );
+  await db.admin.query(
+    `INSERT INTO access.credential_floor_receipt(route,account_id,opening_receipt_id,receipt_id,operation_key,effect_reference,effect_digest,purpose,previous_floor,minimum_authn_epoch,fenced,transaction_id) SELECT $1,id,id,id,id::text,id::text,repeat('0',64),'remove-key',1,2,false,id FROM unnest($2::uuid[]) id`,
+    [routeOf(human)!, baseline],
+  );
+
+  // Independently grow each history dimension; the selected subject, human,
+  // permission neighbourhood and exact fresh opening/approval remain fixed.
+  for (const dimension of ['consumed-openings', 'other-approvals', 'old-auth-effects', 'unrelated-owners']) {
+    const report = await checkGrowth(db, {
+      name: `credential capability ${dimension}`,
+      bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+      repetitions: 3,
+      warmups: 1,
+      grow: async (database, scale, previous) => {
+        const ids = Array.from({ length: (scale - previous) * 512 }, () => newId(routeOf(human)!));
+        if (dimension === 'consumed-openings')
+          await database.admin.query(
+            `
+          INSERT INTO access.operator_opening_receipt
+          SELECT (jsonb_populate_record(NULL::access.operator_opening_receipt,to_jsonb(r)||jsonb_build_object('receipt_id',id))).*
+          FROM access.operator_opening_receipt r CROSS JOIN unnest($4::uuid[]) id
+          WHERE r.route=$1 AND r.operator_account_id=$2 AND r.receipt_id=$3`,
+            [routeOf(human)!, human, template, ids],
+          );
+        if (dimension === 'other-approvals')
+          await database.admin.query(
+            `
+          INSERT INTO access.workflow_approval(route,approval_id,actor_id,client_id,scopes,authn_epoch,operation_key,operation,digest,created_at,expires_at,jwt_expires_at,transaction_id)
+          SELECT $1,id,id,'old','{}',1,id::text,'{}',$3,clock_timestamp()-interval '1 day',clock_timestamp()-interval '1 day'+interval '60 seconds',clock_timestamp()+interval '1 day',id FROM unnest($2::uuid[]) id`,
+            [routeOf(human)!, ids, 'a'.repeat(64)],
+          );
+        if (dimension === 'old-auth-effects')
+          await database.admin.query(
+            `INSERT INTO auth_effect_receipt(receipt_id,account_id,purpose,minimum_authn_epoch) SELECT id,$1,'add-key',1 FROM unnest($2::text[]) id`,
+            [subject, ids],
+          );
+        if (dimension === 'unrelated-owners') {
+          await database.admin.query(
+            `INSERT INTO access.account(route,account_id,kind,state,transaction_id) SELECT $1,id,'actor','active',id FROM unnest($2::uuid[]) id`,
+            [routeOf(human)!, ids],
+          );
+          await database.admin.query(
+            `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id) SELECT $1,id,id,'account:manage','(,)',id FROM unnest($2::uuid[]) id`,
+            [routeOf(human)!, ids],
+          );
+        }
+        for (const table of [
+          'core.receipt',
+          'access.account',
+          'access.resource_grant',
+          'access.operator_opening_receipt',
+          'access.workflow_approval',
+          'access.credential_floor_receipt',
+          'auth_effect_receipt',
+        ])
+          await database.admin.query(`VACUUM (ANALYZE) ${table}`);
+      },
+      operation: async () => {
+        const binding = f.stage(subject, human, 'remove-key');
+        const approval = await f.approve(headers, binding);
+        const { authorization } = await f.consume(approval.reference, binding, headers);
+        expect(authorization.operationKey).toBe(binding.operationKey);
+        await expect(f.consume(approval.reference, binding, headers)).rejects.toThrow();
+        const floor = await f.capability.advanceCredentialFloor({
+          stage: binding,
+          consumedOpening: authorization,
+          expectedPreviousFloor: authorization.subjectEpoch,
+          key: binding.operationKey,
+          purpose: binding.purpose,
+        });
+        expect(floor.minimumAuthnEpoch).toBe(authorization.subjectEpoch + 1);
+        const own = f.stage(human, human);
+        const approved = await f.approve(headers, own);
+        expect((await f.consume(approved.reference, own, headers)).authorization.operatorAccountId).toBeNull();
+        await expect(f.consume(approved.reference, own, headers)).rejects.toThrow();
+      },
+    });
+    expect(report.samples.map((s) => s.scale)).toEqual([1, 8, 64]);
+    for (const sample of report.samples) {
+      expect(sample.cost.relations?.['access.operator_opening_receipt']?.rows).toBeGreaterThan(0);
+      expect(sample.cost.relations?.['access.credential_floor_receipt']?.rows).toBeGreaterThan(0);
+    }
+  }
 }, 60000);

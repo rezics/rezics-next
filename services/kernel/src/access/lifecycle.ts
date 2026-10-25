@@ -706,7 +706,7 @@ export function createLifecycleInternals(
             transaction_id: transactionId,
           });
           requireAllowed(affected(changed));
-          await grants(tx, input.accountId, input.accountId, '', transactionId, ['account:read']);
+          await grants(tx, input.accountId, input.accountId, '', transactionId, ['account:read', 'account:manage']);
           return { accountId: input.accountId };
         },
       );

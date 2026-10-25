@@ -24,6 +24,7 @@ import { createRecoveryCompletion } from './recovery-completion.ts';
 import { createAuthBindings, AuthBindingDeniedError } from './auth-bindings.ts';
 import { createRegistrationProofBindings } from './registration-proof.ts';
 import { createAuthBarrierCapabilities } from './auth-barriers.ts';
+import { createCredentialCapability } from './auth-credential-capability.ts';
 import { createOperatorSessionCapability } from './auth-session-capability.ts';
 import { createWorkflowApprovals, workflowApprovalBinding } from './workflow-approvals.ts';
 import { readAccount } from './account-data.ts';
@@ -104,8 +105,8 @@ export class NativeAccountBindingsUnavailableError extends Error {
  *
  * Only the approved bootstrap CLI establishes the grantor's initial platform
  * role. Subsequent grant/delegation commands apply the exact Global Context
- * formula through native Access. Unsupported recovery or credential capability
- * denies rather than manufacturing receipts. Whole-goal outcomes require their
+ * formula through native Access. Missing Auth-owned proof capabilities
+ * deny rather than manufacturing receipts. Whole-goal outcomes require their
  * actual implementations; this contract supplies no alternative outcome path.
  *
  * The host owns its Auth database, DBOS system schema, staging/signing keys,
@@ -162,6 +163,19 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
     creationBinding: (input: { registrationId: string; operationKey: string }) =>
       workflow.creationBinding?.(input) ?? Promise.resolve(null),
   });
+  // Construction remains independent of the Auth host and database handles.
+  let credential: ReturnType<typeof createCredentialCapability> | undefined;
+  const credentialCapability = () =>
+    (credential ??= createCredentialCapability({
+      pool,
+      access,
+      operators,
+      workflowApprovals: approvals,
+      referenceKeys,
+      accessTokenForProof: (proof) => config.auth().internal.accessTokenForProof(proof),
+      verifyCredentialEffect: (reference, expected) =>
+        config.auth().internal.verifyCredentialEffect(reference, expected),
+    }));
   const boundary = () => ({ pool, deadline: Date.now() + 10000 });
   const trustedAccess: TrustedAccessPorts = {
     ...createAuthBindings({
@@ -173,7 +187,12 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
         ...(config.clock ? { clock: config.clock } : {}),
       }),
       ...registration,
-      ...session,
+      consumeAuthAuthorization: (input) =>
+        input.purpose === 'session'
+          ? session.consumeAuthAuthorization(input)
+          : credentialCapability().consumeAuthAuthorization(
+              input as Parameters<ReturnType<typeof createCredentialCapability>['consumeAuthAuthorization']>[0],
+            ),
       async verifyPendingIdentity(reference) {
         const envelope = unseal(referenceKeys, AUTOMATED_PROVISIONING, reference) as
           | { reference?: unknown; operation?: AccountOperation }
@@ -215,6 +234,7 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
       },
     }),
     ...barriers.trustedAccess,
+    advanceCredentialFloor: (input) => credentialCapability().advanceCredentialFloor(input),
     readAssignment: (requestedBy, assignedActorId) => readAssignment(pool, requestedBy, assignedActorId),
   };
   const workflowPorts: AccountWorkflowPorts<LifecycleRequest> = {
@@ -280,5 +300,13 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
       return { ...outcome, value: { receiptId: session.createOpeningReference(outcome.value) } };
     },
   };
-  return { trustedAccess, workflowPorts, lifecycle, internalLifecycle, operators, grants, delegations };
+  return {
+    trustedAccess,
+    workflowPorts,
+    lifecycle,
+    internalLifecycle,
+    operators,
+    grants,
+    delegations,
+  };
 }

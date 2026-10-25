@@ -208,6 +208,8 @@ export function createAuthBindings(config: { pool: Pool } & AuthBindingCapabilit
       return { accountId: current.accountId, ...('receipt' in current ? { receipt: current.receipt } : {}) };
     },
     async consumeAuthorization(input) {
+      if (input.purpose !== 'session' && (!input.operationKey || !input.effectReference))
+        throw new AuthBindingUnavailableError('consumeAuthAuthorization');
       if (!consumeAuthAuthorization) throw new AuthBindingUnavailableError('consumeAuthAuthorization');
       allowed(
         ['session', 'set-password', 'remove-password', 'add-key', 'remove-key'].includes(input.purpose) &&
@@ -242,6 +244,13 @@ export function createAuthBindings(config: { pool: Pool } & AuthBindingCapabilit
           result.subjectEpoch === subject.authnEpoch &&
           current!.operatorAccountId === result.operatorAccountId,
       );
+      if (input.purpose !== 'session')
+        allowed(
+          result.operationKey === input.operationKey &&
+            result.effectReference === input.effectReference &&
+            typeof result.effectDigest === 'string' &&
+            /^[a-f0-9]{64}$/.test(result.effectDigest),
+        );
       const opening = consumed!.operatorOpening;
       if (subject.automated) {
         allowed(

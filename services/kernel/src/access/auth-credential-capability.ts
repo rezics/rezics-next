@@ -1,3 +1,14 @@
+import { commandAccessContext } from './command-admission.ts';
+import canonicalize from 'canonicalize';
+import { routeOf } from '../route/route.ts';
+import { seal, unseal } from '../tokens/seal.ts';
+import { readAccount, type Account } from './account-data.ts';
+import operatorAccount from './operator-account.sql';
+import consumedOperator from './auth-credential-capability-operator-read.sql';
+import consumedWorkflow from './auth-credential-capability-workflow-read.sql';
+import reservationRead from './operator-reservation.sql';
+import memberRead from './operator-member.sql';
+import { createCredentialFloorHook } from './auth-barriers.ts';
 import type {
   AuthService,
   CredentialAuthorizationInput,
@@ -7,11 +18,11 @@ import type {
   CredentialFloorPort,
 } from '@rezics/auth';
 import type { Pool } from 'pg';
-import type { Access } from '../request/access.ts';
+import type { Access, AccessContext, AccountActor, Resource } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { AuthBindingUnavailableError, type AuthAuthorizationReceipt } from './auth-bindings.ts';
+import { AuthBindingDeniedError, AuthBindingUnavailableError, type AuthAuthorizationReceipt } from './auth-bindings.ts';
 import type { createOperatorCommands } from './operator.ts';
-import type { createWorkflowApprovals } from './workflow-approvals.ts';
+import { credentialWorkflowApprovals, type createWorkflowApprovals } from './workflow-approvals.ts';
 
 /** Nonsecret exact binding plus the native opening's selected-row locator.
  * References are locators only, never proof of current authority. Own-human and
@@ -46,20 +57,17 @@ export type CredentialCapabilityConfig = {
 
 export type CredentialCapability = {
   /** Seal only a verified native exact opening locator; no caller approval minting.
-   * The stub throws AuthBindingUnavailableError without inspecting the locator.
    */
   createOpeningReference(opening: CredentialOpeningLocator): string;
   /** Credential-only consumer. Reject legacy unbound input, session/device approval
    * and broad credential-management alone. Auth verifies the committed stage; the
    * exact purpose/key/reference/digest/subject must match the narrowed native row
    * and returned CredentialEffectAuthorization before Auth writes.
-   * The stub rejects AuthBindingUnavailableError before inspecting input or I/O.
    */
   consumeAuthAuthorization(
     input: CredentialAuthorizationInput,
   ): Promise<AuthAuthorizationReceipt & { authorization: CredentialEffectAuthorization }>;
   /** Credential-only committed floor hook; never consent/recovery relabelling.
-   * The stub rejects AuthBindingUnavailableError before inspecting input or I/O.
    */
   advanceCredentialFloor: CredentialFloorPort;
 };
@@ -68,11 +76,8 @@ function configured(value: unknown): asserts value {
   if (!value) throw new TypeError('Invalid credential capability configuration');
 }
 
-/** Validate configuration synchronously without calling any dependency. Until
- * native implementation EVERY returned method fails closed with
- * AuthBindingUnavailableError before input inspection or any I/O, including seal.
- * This factory adds no HTTP route, SQL, migration or product credential behavior;
- * the existing session capability and its rows/behavior stay unchanged.
+/** Native exact credential capability. Configuration is validated synchronously
+ * without calling a dependency. Legacy unbound inputs fail unavailable before I/O.
  *
  * Native requirements: own-human means current human equals the actor subject;
  * account:manage on that exact account uses actor grant AND consented client scope
@@ -131,15 +136,407 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
   configured(ring.keys.has(ring.current));
   for (const [id, key] of ring.keys)
     configured(Number.isInteger(id) && id >= 0 && id <= 255 && key instanceof Uint8Array && key.byteLength >= 32);
-  return {
-    createOpeningReference() {
-      throw new AuthBindingUnavailableError('consumeAuthAuthorization');
-    },
-    async consumeAuthAuthorization() {
-      throw new AuthBindingUnavailableError('consumeAuthAuthorization');
-    },
-    async advanceCredentialFloor() {
-      throw new AuthBindingUnavailableError('consumeAuthAuthorization');
-    },
+  const { pool, access, operators, workflowApprovals, verifyCredentialEffect, accessTokenForProof } = config;
+  const referenceKeys = {
+    current: ring.current,
+    keys: new Map([...ring.keys].map(([id, key]) => [id, new Uint8Array(key)])),
   };
+  async function stage(reference: CredentialOpeningLocator, actor: AccountActor): Promise<CredentialEffectBinding> {
+    const expected = {
+      operationKey: reference.operationKey,
+      subjectAccountId: reference.subjectAccountId,
+      purpose: reference.purpose,
+      actingHumanId: actor.accountId,
+      clientId: actor.clientId,
+      scopes: [...actor.scopes],
+      effectDigest: reference.effectDigest,
+    };
+    const result = await verifyCredentialEffect(reference.effectReference, expected);
+    allowed(
+      result &&
+        result.effectReference === reference.effectReference &&
+        result.operationKey === expected.operationKey &&
+        result.subjectAccountId === expected.subjectAccountId &&
+        result.purpose === expected.purpose &&
+        result.effectDigest === expected.effectDigest &&
+        result.actingHumanId === expected.actingHumanId &&
+        result.clientId === expected.clientId &&
+        same(result.scopes, expected.scopes) &&
+        ((result.credentialRowId === null && result.credentialRowVersion === null) ||
+          (typeof result.credentialRowId === 'string' &&
+            result.credentialRowId.length > 0 &&
+            typeof result.credentialRowVersion === 'string' &&
+            result.credentialRowVersion.length > 0)),
+    );
+    return structuredClone(result);
+  }
+  const advanceCredentialFloor = createCredentialFloorHook({
+    pool,
+    async validate(input, prior, attempt) {
+      const { stage: binding, consumedOpening: opening, expectedPreviousFloor: previous } = input;
+      allowed(
+        opening &&
+          binding &&
+          binding.subjectAccountId === opening.subjectAccountId &&
+          binding.operationKey === opening.operationKey &&
+          binding.effectReference === opening.effectReference &&
+          binding.effectDigest === opening.effectDigest &&
+          binding.purpose === opening.purpose &&
+          binding.actingHumanId === opening.actingHumanId &&
+          binding.clientId === opening.clientId &&
+          same(binding.scopes, opening.scopes) &&
+          opening.subjectEpoch === previous,
+      );
+      const reference = locator({
+        ...pick(binding),
+        ...(opening.operatorAccountId === null
+          ? { kind: 'workflow-approval', reference: 'floor' }
+          : { kind: 'operator-opening', operatorAccountId: opening.operatorAccountId, receiptId: opening.receiptId }),
+      });
+      // Native rows, not the caller's consumedOpening object, establish provenance.
+      const row =
+        opening.operatorAccountId === null
+          ? await consumedWorkflow.run(pool, { route: routeOf(opening.receiptId)!, receipt_id: opening.receiptId })
+          : await consumedOperator.run(pool, {
+              route: routeOf(opening.operatorAccountId)!,
+              operator_id: opening.operatorAccountId,
+              receipt_id: opening.receiptId,
+            });
+      allowed(row && row.data && typeof row.data === 'object');
+      const native = row.data as unknown as NativeConsumed;
+      const own = opening.operatorAccountId === null;
+      const nativeBinding = own
+        ? native.operation
+        : {
+            operationKey: native.credential_operation_key,
+            effectReference: native.credential_effect_reference,
+            effectDigest: native.credential_effect_digest,
+            purpose: native.credential_purpose,
+            subjectAccountId: native.subject_account_id,
+          };
+      allowed(
+        nativeBinding &&
+          same(pick(nativeBinding), pick(binding)) &&
+          native.client_id === opening.clientId &&
+          same(native.scopes, opening.scopes) &&
+          native.requested_by === null &&
+          (own ? native.actor_id : native.acting_human_id) === opening.actingHumanId &&
+          Number(own ? native.authn_epoch : native.human_authn_epoch) === opening.humanEpoch &&
+          Date.parse(native.expires_at) === Date.parse(opening.expiresAt) &&
+          Date.parse(native.expires_at) > Date.now() &&
+          Number(own ? native.operation?.subjectEpoch : native.subject_epoch_floor) === previous,
+      );
+      if (prior)
+        allowed(
+          prior.accountId === binding.subjectAccountId &&
+            prior.openingReceiptId === opening.receiptId &&
+            prior.operationKey === binding.operationKey &&
+            prior.purpose === binding.purpose &&
+            prior.effectReference === binding.effectReference &&
+            prior.effectDigest === binding.effectDigest &&
+            prior.previousFloor === previous &&
+            prior.minimumAuthnEpoch === previous + 1,
+        );
+      const subject = await operatorAccount.run(pool, {
+        route: routeOf(binding.subjectAccountId)!,
+        account_id: binding.subjectAccountId,
+      });
+      allowed(
+        subject &&
+          subject.kind === 'actor' &&
+          subject.state === 'active' &&
+          !subject.fenced &&
+          subject.operatorAccountId === opening.operatorAccountId &&
+          Number(subject.minimumAuthnEpoch) === (prior ? previous + 1 : previous) &&
+          (!prior || subject.fenced === prior.fenced),
+      );
+      const human = await readAccount(pool, routeOf(opening.actingHumanId)!, opening.actingHumanId);
+      allowed(
+        human &&
+          human.kind === 'actor' &&
+          human.state === 'active' &&
+          !human.fenced &&
+          human.operatorAccountId === null,
+      );
+      // Only the exact committed own-human barrier permits this in-flight floor
+      // continuation to use its next floor; it grants no consume or session authority.
+      const continuation = own && prior !== null;
+      allowed(
+        BigInt(opening.humanEpoch) >= human.minimumAuthnEpoch ||
+          (continuation && human.minimumAuthnEpoch === BigInt(previous + 1)),
+      );
+      const actor: AccountActor = Object.freeze({
+        kind: 'account',
+        accountId: opening.actingHumanId,
+        clientId: opening.clientId,
+        scopes: Object.freeze([...opening.scopes]),
+        requestedBy: null,
+        authnEpoch: continuation ? previous + 1 : opening.humanEpoch,
+      });
+      const verified = await stage(reference, actor);
+      allowed(same(verified, binding));
+      let resource: Resource = { route: routeOf(subject.accountId)!, id: subject.accountId };
+      if (!own) {
+        allowed(
+          native.purpose === 'credential-management' &&
+            native.action === 'account:manage' &&
+            subject.version === String(native.relation_version) &&
+            subject.reservationId === native.reservation_id &&
+            human.minimumAuthnEpoch === BigInt(native.human_epoch_floor),
+        );
+        const operator = await operatorAccount.run(pool, {
+          route: routeOf(opening.operatorAccountId!)!,
+          account_id: opening.operatorAccountId!,
+        });
+        allowed(
+          operator &&
+            operator.state === 'active' &&
+            !operator.fenced &&
+            operator.operatorAccountId === null &&
+            operator.minimumAuthnEpoch === String(native.operator_epoch_floor),
+        );
+        const held = await reservationRead.run(pool, {
+          route: routeOf(operator.accountId)!,
+          operator_id: operator.accountId,
+          reservation_id: subject.reservationId!,
+        });
+        allowed(held?.subjectAccountId === subject.accountId);
+        if (operator.kind === 'organization') {
+          const membership = await memberRead.run(pool, {
+            route: routeOf(operator.accountId)!,
+            organization_id: operator.accountId,
+            human_id: human.accountId,
+          });
+          allowed(membership.length === 1);
+        } else allowed(operator.kind === 'actor' && operator.accountId === human.accountId);
+        resource = { route: routeOf(operator.accountId)!, id: operator.accountId };
+      } else allowed(subject.accountId === human.accountId);
+      const context = commandAccessContext(
+        { pool, deadline: Math.min(Date.now() + 1000, Date.parse(opening.expiresAt)) },
+        attempt,
+      );
+      const proof = Object.freeze({}) as CredentialFloorIdentity;
+      floorIdentities.set(proof, { actor, account: human, pool });
+      try {
+        allowed(await floorBridges.get(access)?.(proof, resource, context));
+      } finally {
+        floorIdentities.delete(proof);
+      }
+    },
+  });
+  return {
+    createOpeningReference(opening) {
+      return seal(referenceKeys, SCOPE, locator(opening));
+    },
+    async consumeAuthAuthorization(input) {
+      // The deprecated variant never reaches a proof, locator or storage reader.
+      if (
+        !input ||
+        !purposes.includes(input.purpose) ||
+        typeof input.operationKey !== 'string' ||
+        !input.operationKey ||
+        typeof input.effectReference !== 'string' ||
+        !input.effectReference
+      )
+        throw new AuthBindingUnavailableError('consumeAuthAuthorization');
+      const reference = locator(unseal(referenceKeys, SCOPE, input.authorization));
+      allowed(
+        reference.subjectAccountId === input.subjectAccountId &&
+          reference.purpose === input.purpose &&
+          reference.operationKey === input.operationKey &&
+          reference.effectReference === input.effectReference,
+      );
+      const deadline = Date.now() + 3000;
+      const actor = await access.authenticate(await accessTokenForProof(input.human), { pool, deadline });
+      allowed(
+        actor.accountId === input.human.account_id &&
+          actor.clientId === input.human.client_id &&
+          actor.authnEpoch === input.human.authn_epoch &&
+          actor.requestedBy === null &&
+          same(actor.scopes, input.human.scope),
+      );
+      const binding = await stage(reference, actor);
+      const subject = await operatorAccount.run(pool, {
+        route: routeOf(input.subjectAccountId)!,
+        account_id: input.subjectAccountId,
+      });
+      allowed(
+        subject &&
+          subject.kind === 'actor' &&
+          subject.state === 'active' &&
+          !subject.fenced &&
+          Number.isSafeInteger(Number(subject.minimumAuthnEpoch)) &&
+          Number(subject.minimumAuthnEpoch) > 0,
+      );
+      let operatorOpening: AuthAuthorizationReceipt['operatorOpening'] = null;
+      let receiptId: string;
+      let expiresAt: string;
+      if (subject.operatorAccountId === null) {
+        allowed(subject.accountId === actor.accountId && reference.kind === 'workflow-approval');
+        const consumed = await credentialWorkflowApprovals(workflowApprovals).consumeCredential(
+          reference.reference,
+          binding,
+          actor,
+          {
+            pool,
+            deadline,
+          },
+        );
+        receiptId = consumed.receiptId;
+        expiresAt = consumed.expiresAt;
+        allowed(consumed.subjectEpoch === Number(subject.minimumAuthnEpoch));
+      } else {
+        allowed(reference.kind === 'operator-opening' && reference.operatorAccountId === subject.operatorAccountId);
+        const account = await readAccount(pool, routeOf(actor.accountId)!, actor.accountId);
+        const consumed = await operators.consumeOpening(
+          { actor, account, deadline },
+          {
+            operatorAccountId: reference.operatorAccountId,
+            subjectAccountId: subject.accountId,
+            receiptId: reference.receiptId,
+            purpose: 'credential-management',
+            credential: binding,
+            key: `auth-credential:${reference.receiptId}`,
+          },
+        );
+        allowed(!consumed.replayed);
+        operatorOpening = consumed.value;
+        receiptId = operatorOpening.receiptId;
+        expiresAt = operatorOpening.expiresAt;
+      }
+      const after = await operatorAccount.run(pool, {
+        route: routeOf(subject.accountId)!,
+        account_id: subject.accountId,
+      });
+      allowed(
+        after &&
+          after.state === 'active' &&
+          after.kind === 'actor' &&
+          !after.fenced &&
+          after.operatorAccountId === subject.operatorAccountId &&
+          after.version === subject.version &&
+          after.reservationId === subject.reservationId &&
+          after.minimumAuthnEpoch === subject.minimumAuthnEpoch &&
+          Date.parse(expiresAt) > Date.now(),
+      );
+      return {
+        operatorOpening,
+        authorization: {
+          ...pick(binding),
+          receiptId,
+          actingHumanId: actor.accountId,
+          operatorAccountId: subject.operatorAccountId,
+          clientId: actor.clientId,
+          scopes: [...actor.scopes],
+          humanEpoch: actor.authnEpoch,
+          subjectEpoch: Number(subject.minimumAuthnEpoch),
+          expiresAt,
+        },
+      };
+    },
+    advanceCredentialFloor,
+  };
+}
+
+const SCOPE = 'access.credential-opening.v1';
+const purposes = ['set-password', 'remove-password', 'add-key', 'remove-key'];
+function allowed(value: unknown): asserts value {
+  if (!value) throw new AuthBindingDeniedError();
+}
+const same = (a: unknown, b: unknown) => canonicalize(a) === canonicalize(b);
+function pick(
+  value: Pick<
+    CredentialEffectBinding,
+    'operationKey' | 'effectReference' | 'effectDigest' | 'subjectAccountId' | 'purpose'
+  >,
+) {
+  return {
+    operationKey: value.operationKey,
+    effectReference: value.effectReference,
+    effectDigest: value.effectDigest,
+    subjectAccountId: value.subjectAccountId,
+    purpose: value.purpose,
+  };
+}
+function locator(value: unknown): CredentialOpeningLocator {
+  allowed(value && typeof value === 'object' && !Array.isArray(value));
+  const row = value as CredentialOpeningLocator;
+  const fields = [
+    'kind',
+    'operationKey',
+    'effectReference',
+    'effectDigest',
+    'subjectAccountId',
+    'purpose',
+    ...(row.kind === 'workflow-approval' ? ['reference'] : ['operatorAccountId', 'receiptId']),
+  ];
+  allowed(
+    same(Object.keys(row).sort(), fields.sort()) &&
+      typeof row.operationKey === 'string' &&
+      row.operationKey.length > 0 &&
+      row.operationKey.length <= 255 &&
+      typeof row.effectReference === 'string' &&
+      row.effectReference.length > 0 &&
+      row.effectReference.length <= 4096 &&
+      /^[a-f0-9]{64}$/.test(row.effectDigest) &&
+      routeOf(row.subjectAccountId) !== null &&
+      purposes.includes(row.purpose),
+  );
+  if (row.kind === 'workflow-approval')
+    allowed(typeof row.reference === 'string' && row.reference.length > 0 && row.reference.length <= 4096);
+  else
+    allowed(
+      row.kind === 'operator-opening' &&
+        routeOf(row.operatorAccountId) !== null &&
+        routeOf(row.receiptId) !== null &&
+        row.operatorAccountId !== row.subjectAccountId,
+    );
+  return structuredClone(row);
+}
+type NativeConsumed = {
+  operation?: Pick<
+    CredentialEffectBinding,
+    'operationKey' | 'effectReference' | 'effectDigest' | 'subjectAccountId' | 'purpose'
+  > & { subjectEpoch: number };
+  credential_operation_key: string;
+  credential_effect_reference: string;
+  credential_effect_digest: string;
+  credential_purpose: CredentialEffectBinding['purpose'];
+  subject_account_id: string;
+  client_id: string;
+  scopes: string[];
+  requested_by: string | null;
+  actor_id: string;
+  acting_human_id: string;
+  authn_epoch: number;
+  human_authn_epoch: number;
+  expires_at: string;
+  subject_epoch_floor: number;
+  human_epoch_floor: number;
+  purpose: string;
+  action: string;
+  relation_version: number;
+  reservation_id: string;
+  operator_epoch_floor: number;
+};
+
+declare const floorIdentity: unique symbol;
+export type CredentialFloorIdentity = { readonly [floorIdentity]: true };
+const floorIdentities = new WeakMap<CredentialFloorIdentity, { actor: AccountActor; account: Account; pool: Pool }>();
+const floorBridges = new WeakMap<
+  Access,
+  (proof: CredentialFloorIdentity, resource: Resource, context: AccessContext) => Promise<boolean>
+>();
+/** Installed once by the ordinary Access factory; no actor JSON registration. */
+export function installCredentialFloorBridge(
+  access: Access,
+  bridge: (proof: CredentialFloorIdentity, resource: Resource, context: AccessContext) => Promise<boolean>,
+) {
+  if (floorBridges.has(access)) throw new Error('Credential floor bridge already installed');
+  floorBridges.set(access, bridge);
+}
+/** Opaque evidence exists only after exact native consumed-row verification. */
+export function credentialFloorIdentityClaims(proof: CredentialFloorIdentity, pool: Pool) {
+  const claims = floorIdentities.get(proof);
+  return claims?.pool === pool ? claims : undefined;
 }

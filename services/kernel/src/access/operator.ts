@@ -1,3 +1,7 @@
+import type { CredentialEffectBinding } from '@rezics/auth';
+import { verifiedBearerExpiry } from './approved-identity.ts';
+import credentialBind from './operator-opening-credential-bind.sql';
+import credentialConsume from './operator-opening-credential-consume.sql';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
@@ -566,10 +570,24 @@ export function createOperatorCommands(config: OperatorConfig) {
     },
     async authorizeOpening(
       context: LifecycleRequest,
-      input: { operatorAccountId: string; subjectAccountId: string; purpose: OperatorPurpose; key: string },
+      input: {
+        operatorAccountId: string;
+        subjectAccountId: string;
+        purpose: OperatorPurpose;
+        key: string;
+        credential?: CredentialEffectBinding;
+      },
     ) {
-      input = { ...input };
+      input = structuredClone(input);
       context = request(context);
+      if (input.credential)
+        requireAllowed(
+          input.purpose === 'credential-management' &&
+            input.credential.subjectAccountId === input.subjectAccountId &&
+            input.credential.actingHumanId === context.actor.accountId &&
+            input.credential.clientId === context.actor.clientId &&
+            canonicalize(input.credential.scopes) === canonicalize(context.actor.scopes),
+        );
       const prepared = openingAuthorization(context, input);
       return execute(
         {
@@ -592,7 +610,24 @@ export function createOperatorCommands(config: OperatorConfig) {
           });
           requireAllowed(inserted[0]);
           await finalOpening(tx, context, input, facts);
-          return openingValue(context, input, facts, receiptId, inserted[0].expiresAt);
+          let expiresAt = inserted[0].expiresAt;
+          if (input.credential) {
+            const bound = await credentialBind.run(tx, {
+              route: route(input.operatorAccountId),
+              operator_id: input.operatorAccountId,
+              receipt_id: receiptId,
+              ...credentialParameters(input.credential),
+              expires_at: new Date(
+                Math.min(
+                  verifiedBearerExpiry(access, context.actor, { pool, deadline: context.deadline }),
+                  Date.parse(facts.databaseDeadline),
+                ),
+              ).toISOString(),
+            });
+            requireAllowed(bound[0]);
+            expiresAt = bound[0].expiresAt;
+          }
+          return openingValue(context, input, facts, receiptId, expiresAt);
         },
       );
     },
@@ -604,9 +639,10 @@ export function createOperatorCommands(config: OperatorConfig) {
         receiptId: string;
         purpose: OperatorPurpose;
         key: string;
+        credential?: CredentialEffectBinding;
       },
     ) {
-      input = { ...input };
+      input = input.credential ? structuredClone(input) : { ...input };
       route(input.receiptId);
       context = request(context);
       const prepared = openingAuthorization(context, input);
@@ -623,7 +659,8 @@ export function createOperatorCommands(config: OperatorConfig) {
         async (tx, transactionId) => {
           const facts = prepared.facts();
           await finalOpening(tx, context, input, facts);
-          const consumed = await openingConsume.run(tx, {
+          const consumed = await (input.credential ? credentialConsume : openingConsume).run(tx, {
+            ...credentialParameters(input.credential),
             ...receiptParameters(tx, context, input, facts),
             receipt_id: input.receiptId,
             transaction_id: transactionId,
@@ -722,4 +759,13 @@ export function createOperatorCommands(config: OperatorConfig) {
       expiresAt: new Date(expiresAt).toISOString(),
     };
   }
+}
+
+function credentialParameters(binding?: CredentialEffectBinding) {
+  return {
+    credential_purpose: binding?.purpose ?? '',
+    operation_key: binding?.operationKey ?? '',
+    effect_reference: binding?.effectReference ?? '',
+    effect_digest: binding?.effectDigest ?? '',
+  };
 }

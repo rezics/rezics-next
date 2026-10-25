@@ -1,3 +1,12 @@
+import type { CredentialFloorPort, CredentialFloorReceipt } from '@rezics/auth';
+import type { Pool } from 'pg';
+import canonicalize from 'canonicalize';
+import { createHash } from 'node:crypto';
+import { runCommand, authoritativeTimeValue, type CommandAttempt } from '../command/command.ts';
+import { partitionOf, routeOf, newId } from '../route/route.ts';
+import { readAccount } from './account-data.ts';
+import credentialRead from './auth-barriers-credential-read.sql';
+import credentialAdvance from './auth-barriers-credential-advance.sql';
 import type { createBarrierProofVerifier, TrustedAccessPorts } from '@rezics/auth';
 import type { AuthBindingCapabilities } from './auth-bindings.ts';
 import { AuthBindingDeniedError } from './auth-bindings.ts';
@@ -120,4 +129,128 @@ export function createAuthBarrierCapabilities({ lifecycle, proofs }: { lifecycle
     authorizeRecovery: async (input) => translate(await capabilities.authorizeRecovery(input)),
   };
   return { ...capabilities, trustedAccess };
+}
+
+/** Dedicated credential barrier. The trusted native reader rechecks the consumed
+ * opening, stage and current formula before every attempt, including exact replay.
+ * Neither consent/recovery purpose nor their proof formats enter this command.
+ */
+export function createCredentialFloorHook(config: {
+  pool: Pool;
+  validate(
+    input: Parameters<CredentialFloorPort>[0],
+    prior: CredentialFloorReceipt | null,
+    attempt: CommandAttempt,
+  ): Promise<void>;
+}): CredentialFloorPort {
+  return async (value) => {
+    const input = structuredClone(value);
+    const { stage, consumedOpening: opening, expectedPreviousFloor: previous } = input;
+    const route = routeOf(stage.subjectAccountId);
+    allowed(
+      route !== null &&
+        Number.isSafeInteger(previous) &&
+        previous > 0 &&
+        previous < 2147483647 &&
+        input.key === stage.operationKey &&
+        input.purpose === stage.purpose &&
+        (stage.purpose === 'remove-password' ||
+          stage.purpose === 'remove-key' ||
+          (stage.purpose === 'set-password' && stage.credentialRowId !== null)),
+    );
+    const parameters = { route, account_id: stage.subjectAccountId, opening_receipt_id: opening.receiptId };
+    async function receipt(): Promise<CredentialFloorReceipt | null> {
+      const row = await credentialRead.run(config.pool, parameters);
+      return row
+        ? {
+            ...row,
+            purpose: row.purpose as CredentialFloorReceipt['purpose'],
+            previousFloor: Number(row.previousFloor),
+            minimumAuthnEpoch: Number(row.minimumAuthnEpoch),
+          }
+        : null;
+    }
+    const digest = createHash('sha256').update(canonicalize(input)!).digest();
+    const deadline = Math.min(Date.now() + 3000, Date.parse(opening.expiresAt));
+    const result = await runCommand(
+      config.pool,
+      {
+        partition: partitionOf(route),
+        deadline,
+        authorization: {
+          action: 'credential-floor',
+          resource: { route, id: stage.subjectAccountId },
+          denied: () => new AuthBindingDeniedError(),
+          async prepare(attempt) {
+            await config.validate(input, await receipt(), attempt);
+            return true;
+          },
+          async authorize(tx, attempt, proof) {
+            allowed(
+              proof === true &&
+                Date.parse(opening.expiresAt) > Date.parse(authoritativeTimeValue(attempt.time)) &&
+                Date.now() < deadline,
+            );
+            const account = await readAccount(tx, route!, stage.subjectAccountId);
+            allowed(account && account.state === 'active' && account.kind === 'actor' && !account.fenced);
+            allowed(
+              account.minimumAuthnEpoch === BigInt(previous) || account.minimumAuthnEpoch === BigInt(previous + 1),
+            );
+            return account.minimumAuthnEpoch === BigInt(previous) ? 'execute' : 'receipt-only';
+          },
+        },
+        receipt: {
+          actorAccountId: stage.actingHumanId,
+          kind: 'access.credential-floor',
+          key: `${route}:${opening.receiptId}`,
+          digest,
+        },
+      },
+      async (tx, command) => {
+        const before = await readAccount(tx, route!, stage.subjectAccountId);
+        allowed(before && before.minimumAuthnEpoch === BigInt(previous));
+        const rows = await credentialAdvance.run(tx, {
+          ...parameters,
+          receipt_id: newId(route!),
+          transaction_id: command.transactionId,
+          operation_key: stage.operationKey,
+          effect_reference: stage.effectReference,
+          effect_digest: stage.effectDigest,
+          purpose: stage.purpose,
+          previous_floor: previous,
+          fenced: before.fenced,
+        });
+        allowed(rows[0]);
+        return {
+          value: rows[0],
+          events: [
+            {
+              type: 'com.rezics.access.credential-floor-advanced.v1',
+              subject: stage.subjectAccountId,
+              data: { openingReceiptId: opening.receiptId },
+            },
+          ],
+        };
+      },
+    );
+    const committed = await receipt();
+    const after = await readAccount(config.pool, route!, stage.subjectAccountId);
+    allowed(
+      committed &&
+        after &&
+        committed.receiptId === result.value.receiptId &&
+        committed.accountId === stage.subjectAccountId &&
+        committed.openingReceiptId === opening.receiptId &&
+        committed.operationKey === stage.operationKey &&
+        committed.purpose === stage.purpose &&
+        committed.effectReference === stage.effectReference &&
+        committed.effectDigest === stage.effectDigest &&
+        committed.previousFloor === previous &&
+        committed.minimumAuthnEpoch === previous + 1 &&
+        after.minimumAuthnEpoch === BigInt(previous + 1) &&
+        after.fenced === committed.fenced &&
+        after.state === 'active',
+    );
+    return committed;
+  };
 }

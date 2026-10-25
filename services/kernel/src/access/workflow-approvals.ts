@@ -1,3 +1,5 @@
+import type { CredentialEffectBinding } from '@rezics/auth';
+import credentialConsume from './workflow-approvals-credential-consume.sql';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { AccountOperation, NativeWorkflowProofPorts } from '@rezics/auth';
@@ -16,6 +18,7 @@ import {
   verifiedBearerExpiry,
 } from './approved-identity.ts';
 import { resourceAuthorization } from './resource-authorization.ts';
+import { permissionEvidenceDeadline } from './permission.ts';
 import type { LifecycleRequest } from './lifecycle.ts';
 import approvalInsert from './workflow-approvals-insert.sql';
 import approvalSweep from './workflow-approvals-sweep.sql';
@@ -24,6 +27,11 @@ export const MAX_WORKFLOW_APPROVAL_LIFETIME_MS = 300_000;
 /** Nonsecret integrity-bound locator only; no actor, credentials or authority. */
 export type WorkflowApproval = { reference: string; expiresAt: string };
 export type WorkflowApprovalConfig = { pool: Pool; access: Access; actions: ActionCatalogue; referenceKeys: KeyRing };
+export type CredentialOperation = Pick<
+  CredentialEffectBinding,
+  'subjectAccountId' | 'purpose' | 'operationKey' | 'effectReference' | 'effectDigest'
+> & { kind: 'credential'; subjectEpoch: number; authorization: string };
+type NativeOperation = AccountOperation | CredentialOperation;
 export type WorkflowApprovalRequest = { operationKey: string; operation: AccountOperation };
 export type WorkflowApprovalBinding = Readonly<{
   operationKey: string;
@@ -66,15 +74,37 @@ const unavailableAdapters = {
   'client-reduction': 'Auth client management',
 } as const satisfies Record<Exclude<AccountOperation['kind'], NativeKind>, string>;
 
-function operationSnapshot(value: AccountOperation): { operation: AccountOperation; descriptor: Descriptor } {
+function operationSnapshot(value: NativeOperation): { operation: NativeOperation; descriptor: Descriptor } {
   requireAllowed(value && typeof value === 'object' && !Array.isArray(value));
   const encoded = canonicalize(value);
   requireAllowed(typeof encoded === 'string' && Buffer.byteLength(encoded) <= 12000);
-  const operation = JSON.parse(encoded) as AccountOperation;
+  const operation = JSON.parse(encoded) as NativeOperation;
   requireAllowed(!Object.hasOwn(unavailableAdapters, operation.kind));
   let descriptor: Descriptor;
   let fields: string[];
   switch (operation.kind) {
+    case 'credential':
+      requireAllowed(
+        id(operation.subjectAccountId) &&
+          text(operation.operationKey) &&
+          text(operation.effectReference, 4096) &&
+          /^[a-f0-9]{64}$/.test(operation.effectDigest) &&
+          ['set-password', 'remove-password', 'add-key', 'remove-key'].includes(operation.purpose) &&
+          Number.isSafeInteger(operation.subjectEpoch) &&
+          operation.subjectEpoch > 0,
+      );
+      fields = [
+        'kind',
+        'subjectAccountId',
+        'purpose',
+        'operationKey',
+        'effectReference',
+        'effectDigest',
+        'subjectEpoch',
+        'authorization',
+      ];
+      descriptor = { action: 'account:manage', target: operation.subjectAccountId, targetKind: 'actor' };
+      break;
     case 'automated':
       requireAllowed(
         id(operation.operatorAccountId) &&
@@ -138,7 +168,7 @@ function operationSnapshot(value: AccountOperation): { operation: AccountOperati
 }
 // The reference is transport metadata, not part of the business operation.
 // Never persist it: a hostile authorization field may itself contain a bearer.
-function businessOperation(operation: AccountOperation): unknown {
+function businessOperation(operation: NativeOperation): unknown {
   const { authorization: _reference, ...complete } = operation as AccountOperation & { authorization?: string };
   return complete;
 }
@@ -153,10 +183,30 @@ function anchor(descriptor: Descriptor) {
         !!account &&
         account.state === 'active' &&
         !account.fenced &&
-        (descriptor.targetKind === 'either' || account.kind === descriptor.targetKind)
+        (descriptor.targetKind === 'either' || account.kind === descriptor.targetKind) &&
+        (descriptor.action !== 'account:manage' ||
+          descriptor.targetKind !== 'actor' ||
+          account.operatorAccountId === null)
       );
     },
   };
+}
+
+type CredentialWorkflowPorts = {
+  approveCredential(token: string, binding: CredentialEffectBinding, context: AccessContext): Promise<WorkflowApproval>;
+  consumeCredential(
+    reference: string,
+    binding: CredentialEffectBinding,
+    caller: AccountActor,
+    context: AccessContext,
+  ): Promise<{ receiptId: string; expiresAt: string; subjectEpoch: number }>;
+};
+const credentialApprovals = new WeakMap<object, CredentialWorkflowPorts>();
+/** Trusted credential capability only. Generic workflow/session APIs stay closed. */
+export function credentialWorkflowApprovals(api: ReturnType<typeof createWorkflowApprovals>): CredentialWorkflowPorts {
+  const native = credentialApprovals.get(api);
+  requireAllowed(native);
+  return native;
 }
 
 /** Native durable approval storage only. Resolve separately in every protected
@@ -174,10 +224,27 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
     requireAllowed(context.pool === config.pool && Number.isFinite(context.deadline) && Date.now() < context.deadline);
     return { pool: config.pool, deadline: context.deadline };
   }
-  function authorization(actor: AccountActor, descriptor: Descriptor, context: AccessContext): CommandAuthorization {
+  function authorization(
+    actor: AccountActor,
+    descriptor: Descriptor,
+    context: AccessContext,
+    observeDeadline?: (deadline: number) => void,
+  ): CommandAuthorization {
     requireAllowed(config.actions.has(descriptor.action));
     return resourceAuthorization({
-      access: config.access,
+      access: observeDeadline
+        ? {
+            ...config.access,
+            async prepare(...args) {
+              requireAllowed(config.access.prepare);
+              const evidence = await config.access.prepare(...args);
+              const deadline = permissionEvidenceDeadline(evidence);
+              requireAllowed(deadline !== undefined);
+              observeDeadline(deadline);
+              return evidence;
+            },
+          }
+        : config.access,
       actor,
       action: descriptor.action,
       anchor: anchor(descriptor),
@@ -246,103 +313,245 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
     );
     return request;
   }
-  return {
-    async approve(token: string, input: WorkflowApprovalRequest, context: AccessContext): Promise<WorkflowApproval> {
-      try {
-        const bounded = boundary(context);
-        requireAllowed(input && text(input.operationKey));
-        const operationKey = input.operationKey;
-        const { operation, descriptor } = operationSnapshot(input.operation);
-        requireAllowed(
-          operation.kind !== 'automated' ||
-            (operation.registrationId === '' && operation.operationKey === operationKey),
-        );
-        const actor = await config.access.authenticate(token, bounded);
-        const expires = verifiedBearerExpiry(config.access, actor, bounded);
-        const deadline = Math.min(bounded.deadline, expires);
-        const route = routeOf(actor.accountId)!;
-        const digest = hash([operationKey, businessOperation(operation)]);
-        const basis = { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy };
-        // A native exact receipt permanently binds this logical key to one complete
-        // operation and original actor/client/principal. Fresh approval may resume
-        // it, but a different digest cannot produce another business effect.
-        await runCommand(
-          config.pool,
-          {
-            partition: partitionOf(route),
-            deadline,
-            basis,
-            authorization: authorization(actor, descriptor, { pool: config.pool, deadline }),
-            receipt: {
-              actorAccountId: actor.accountId,
-              kind: 'access.workflow-approval.binding',
-              key: `${route}:${hash(operationKey)}`,
-              digest: Buffer.from(hash([basis, digest]), 'hex'),
-            },
+  async function approve(
+    token: string,
+    input: { operationKey: string; operation: NativeOperation },
+    context: AccessContext,
+  ): Promise<WorkflowApproval> {
+    try {
+      const bounded = boundary(context);
+      requireAllowed(input && text(input.operationKey));
+      const operationKey = input.operationKey;
+      const { operation, descriptor } = operationSnapshot(input.operation);
+      requireAllowed(
+        operation.kind !== 'automated' || (operation.registrationId === '' && operation.operationKey === operationKey),
+      );
+      const actor = await config.access.authenticate(token, bounded);
+      if (operation.kind === 'credential')
+        requireAllowed(actor.accountId === operation.subjectAccountId && actor.requestedBy === null);
+      const expires = verifiedBearerExpiry(config.access, actor, bounded);
+      const deadline = Math.min(bounded.deadline, expires);
+      const route = routeOf(actor.accountId)!;
+      const digest = hash([operationKey, businessOperation(operation)]);
+      // A fresh credential approval observes a new floor without changing Auth's
+      // immutable effect. The approval row still binds that exact observed floor.
+      const bindingDigest =
+        operation.kind === 'credential'
+          ? hash([
+              operationKey,
+              {
+                kind: operation.kind,
+                subjectAccountId: operation.subjectAccountId,
+                purpose: operation.purpose,
+                operationKey: operation.operationKey,
+                effectReference: operation.effectReference,
+                effectDigest: operation.effectDigest,
+              },
+            ])
+          : digest;
+      const basis = { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy };
+      // A native exact receipt permanently binds this logical key to one complete
+      // operation and original actor/client/principal. Fresh approval may resume
+      // it, but a different digest cannot produce another business effect.
+      await runCommand(
+        config.pool,
+        {
+          partition: partitionOf(route),
+          deadline,
+          basis,
+          authorization: authorization(actor, descriptor, { pool: config.pool, deadline }),
+          receipt: {
+            actorAccountId: actor.accountId,
+            kind: 'access.workflow-approval.binding',
+            key: `${route}:${hash(operationKey)}`,
+            digest: Buffer.from(hash([basis, bindingDigest]), 'hex'),
           },
-          async () => ({
-            value: { operationKey, digest },
-            events: [{ type: 'com.rezics.access.workflow-bound.v1', data: { digest } }],
-          }),
-        );
-        const approvalId = newId(route);
-        const result = await runCommand(
-          config.pool,
-          {
-            partition: partitionOf(route),
-            deadline,
-            basis,
-            authorization: authorization(actor, descriptor, { pool: config.pool, deadline }),
-            receipt: {
-              actorAccountId: actor.accountId,
-              kind: 'access.workflow-approval.create',
-              key: `${route}:${approvalId}`,
-              digest: Buffer.from(digest, 'hex'),
-            },
+        },
+        async () => ({
+          value: { operationKey, digest: bindingDigest },
+          events: [{ type: 'com.rezics.access.workflow-bound.v1', data: { digest: bindingDigest } }],
+        }),
+      );
+      const approvalId = newId(route);
+      let evidenceDeadline = expires;
+      const result = await runCommand(
+        config.pool,
+        {
+          partition: partitionOf(route),
+          deadline,
+          basis,
+          authorization: authorization(
+            actor,
+            descriptor,
+            { pool: config.pool, deadline },
+            operation.kind === 'credential'
+              ? (value) => {
+                  evidenceDeadline = value;
+                }
+              : undefined,
+          ),
+          receipt: {
+            actorAccountId: actor.accountId,
+            kind: 'access.workflow-approval.create',
+            key: `${route}:${approvalId}`,
+            digest: Buffer.from(digest, 'hex'),
           },
-          async (tx, command) => {
-            const rows = await approvalInsert.run(tx, {
+        },
+        async (tx, command) => {
+          const rows = await approvalInsert.run(tx, {
+            route,
+            approval_id: approvalId,
+            actor_id: actor.accountId,
+            client_id: actor.clientId,
+            scopes: [...actor.scopes],
+            requested_by: actor.requestedBy,
+            authn_epoch: actor.authnEpoch,
+            operation_key: operationKey,
+            operation: businessOperation(operation),
+            digest,
+            at: authoritativeTimeValue(command.time),
+            jwt_expires_at: new Date(expires).toISOString(),
+            evidence_expires_at: new Date(evidenceDeadline).toISOString(),
+            transaction_id: command.transactionId,
+          });
+          const row = rows[0];
+          requireAllowed(row);
+          const value = {
+            reference: seal(config.referenceKeys, APPROVAL_REFERENCE_PURPOSE, {
               route,
-              approval_id: approvalId,
-              actor_id: actor.accountId,
-              client_id: actor.clientId,
-              scopes: [...actor.scopes],
-              requested_by: actor.requestedBy,
-              authn_epoch: actor.authnEpoch,
-              operation_key: operationKey,
-              operation: businessOperation(operation),
-              digest,
-              at: authoritativeTimeValue(command.time),
-              jwt_expires_at: new Date(expires).toISOString(),
-              transaction_id: command.transactionId,
-            });
-            const row = rows[0];
-            requireAllowed(row);
-            const value = {
-              reference: seal(config.referenceKeys, APPROVAL_REFERENCE_PURPOSE, {
-                route,
-                id: approvalId,
-                binding: approvalRowDigest(row),
-              }),
-              expiresAt: new Date(row.expiresAt).toISOString(),
-            };
-            return {
-              value,
-              events: [
-                {
-                  type: 'com.rezics.access.workflow-approved.v1',
-                  subject: actor.accountId,
-                  data: { approvalId, digest },
-                },
-              ],
-            };
+              id: approvalId,
+              binding: approvalRowDigest(row),
+            }),
+            expiresAt: new Date(row.expiresAt).toISOString(),
+          };
+          return {
+            value,
+            events: [
+              {
+                type: 'com.rezics.access.workflow-approved.v1',
+                subject: actor.accountId,
+                data: { approvalId, digest },
+              },
+            ],
+          };
+        },
+      );
+      return result.value;
+    } catch {
+      throw denied();
+    }
+  }
+  const native = {
+    async approveCredential(token: string, binding: CredentialEffectBinding, context: AccessContext) {
+      const bounded = boundary(context);
+      const actor = await config.access.authenticate(token, bounded);
+      requireAllowed(
+        actor.accountId === binding.actingHumanId &&
+          actor.accountId === binding.subjectAccountId &&
+          actor.clientId === binding.clientId &&
+          canonicalize(actor.scopes) === canonicalize(binding.scopes) &&
+          actor.requestedBy === null,
+      );
+      const subject = await readAccount(config.pool, routeOf(binding.subjectAccountId)!, binding.subjectAccountId);
+      requireAllowed(
+        subject &&
+          subject.kind === 'actor' &&
+          subject.operatorAccountId === null &&
+          subject.state === 'active' &&
+          !subject.fenced,
+      );
+      return approve(
+        token,
+        {
+          operationKey: binding.operationKey,
+          operation: {
+            kind: 'credential',
+            subjectAccountId: binding.subjectAccountId,
+            purpose: binding.purpose,
+            operationKey: binding.operationKey,
+            effectReference: binding.effectReference,
+            effectDigest: binding.effectDigest,
+            subjectEpoch: Number(subject.minimumAuthnEpoch),
+            authorization: 'credential',
           },
-        );
-        return result.value;
-      } catch {
-        throw denied();
-      }
+        },
+        bounded,
+      );
     },
+    async consumeCredential(
+      reference: string,
+      binding: CredentialEffectBinding,
+      caller: AccountActor,
+      context: AccessContext,
+    ) {
+      const bounded = boundary(context);
+      const { row, actor } = await readApprovedIdentity(config.access, config.referenceKeys, reference, bounded);
+      const { operation, descriptor } = operationSnapshot({
+        ...(row.operation as CredentialOperation),
+        authorization: 'credential',
+      });
+      requireAllowed(
+        operation.kind === 'credential' &&
+          actor.accountId === operation.subjectAccountId &&
+          actor.accountId === caller.accountId &&
+          actor.clientId === caller.clientId &&
+          actor.authnEpoch === caller.authnEpoch &&
+          actor.requestedBy === null &&
+          caller.requestedBy === null &&
+          canonicalize(actor.scopes) === canonicalize(caller.scopes),
+      );
+      requireAllowed(
+        operation.operationKey === binding.operationKey &&
+          operation.subjectAccountId === binding.subjectAccountId &&
+          operation.purpose === binding.purpose &&
+          operation.effectReference === binding.effectReference &&
+          operation.effectDigest === binding.effectDigest,
+      );
+      const result = await runCommand(
+        config.pool,
+        {
+          partition: partitionOf(row.route),
+          deadline: bounded.deadline,
+          basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
+          authorization: authorization(actor, descriptor, bounded),
+          receipt: {
+            actorAccountId: actor.accountId,
+            kind: 'access.workflow-approval.credential-consume',
+            key: `${row.route}:${row.approvalId}`,
+            digest: Buffer.from(row.digest, 'hex'),
+          },
+        },
+        async (tx, command) => {
+          const subject = await readAccount(tx, row.route, operation.subjectAccountId);
+          requireAllowed(
+            subject &&
+              subject.minimumAuthnEpoch === BigInt(operation.subjectEpoch) &&
+              subject.operatorAccountId === null &&
+              subject.state === 'active' &&
+              !subject.fenced,
+          );
+          const consumed = await credentialConsume.run(tx, {
+            route: row.route,
+            approval_id: row.approvalId,
+            digest: row.digest,
+            at: authoritativeTimeValue(command.time),
+            transaction_id: command.transactionId,
+          });
+          requireAllowed(consumed[0]);
+          return {
+            value: { receiptId: row.approvalId, expiresAt: row.expiresAt, subjectEpoch: operation.subjectEpoch },
+            events: [
+              { type: 'com.rezics.access.credential-approved-consumed.v1', data: { approvalId: row.approvalId } },
+            ],
+          };
+        },
+      );
+      requireAllowed(!result.replayed);
+      return result.value;
+    },
+  };
+  const api = {
+    approve: (token: string, input: WorkflowApprovalRequest, context: AccessContext) => approve(token, input, context),
     /** Trusted server workflow port, never an unauthenticated HTTP endpoint. */
     async resolve(reference: string, operation: AccountOperation, context: AccessContext): Promise<LifecycleRequest> {
       try {
@@ -366,6 +575,8 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
       }
     },
   };
+  credentialApprovals.set(api, native);
+  return api;
 }
 
 /** Internal scheduling port; one route/partition and at most 1000 exact expiry

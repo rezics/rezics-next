@@ -1,3 +1,5 @@
+import { credentialFloorIdentityClaims, installCredentialFloorBridge } from './auth-credential-capability.ts';
+import { withConnection } from '../database/pool.ts';
 import {
   accessCommandAttempt,
   commandAccessContext,
@@ -127,6 +129,19 @@ export function createAccess(config: AccessConfig): Access {
       return identity?.pool === context.pool && identity.durableTime === undefined ? identity.expires : undefined;
     },
     restore: authentication.restoreApproval,
+  });
+  installCredentialFloorBridge(access, async (proof, resource, context) => {
+    const claims = credentialFloorIdentityClaims(proof, context.pool);
+    if (!claims || !actions.has('account:manage')) return false;
+    const native = permissionAccess({
+      actions,
+      resourceRoles: config.resourceRoles,
+      accountEvidence: (actor) => (actor === claims.actor ? claims.account : undefined),
+    });
+    const evidence = await native.prepare!(claims.actor, 'account:manage', resource, context);
+    return withConnection(context.pool, (client) =>
+      native.authorize(client, claims.actor, 'account:manage', resource, evidence, accessCommandAttempt(context)?.time),
+    );
   });
   installResourceRoleCatalogue(access, resourceRoleCatalogue(permissions)!);
   return access;
