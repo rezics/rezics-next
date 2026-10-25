@@ -7,6 +7,7 @@ import { readAccount } from '../../src/access/account-data.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { runCommand } from '../../src/command/command.ts';
 import { nullErasedRevisionPage } from '../../src/content/erasure-workflow.ts';
+import { clearErasedPostRevisions } from '../../src/content/erased-post-cleanup.ts';
 import erase from '../../src/content/erase-content.sql';
 import nullRevisions from '../../src/content/null-erased-revisions.sql';
 import readScope from '../../src/content/read-erasure-scope.sql';
@@ -277,14 +278,7 @@ test('an author deletes their own post: removed slots preserve replies and clean
     next: null,
   });
   expect((await request(`/posts/${f.post}/revisions/${f.revision}`, 'GET', author)).status).toBe(404);
-  const sizes: number[] = [];
-  let cursor = { at: '-infinity', id: f.post };
-  for (;;) {
-    const page = await cleanup(f.post, cursor);
-    sizes.push(page.length);
-    if (page.length < 100) break;
-    cursor = { at: page.at(-1)!.at, id: page.at(-1)!.revision_id };
-  }
+  const { pageSizes: sizes } = await clearErasedPostRevisions(db.pool, { postId: f.post }, Date.now() + 10_000);
   expect(sizes).toEqual([100, 100, 5]);
   expect(
     (
@@ -295,6 +289,20 @@ test('an author deletes their own post: removed slots preserve replies and clean
       )
     ).rows[0].n,
   ).toBe(0);
+  const stored = await db.admin.query(
+    'SELECT * FROM content.revision WHERE route=$1 AND post_id=$2 ORDER BY recorded_at,revision_id',
+    [route, f.post],
+  );
+  const replay = await clearErasedPostRevisions(db.pool, { postId: f.post }, Date.now() + 10_000);
+  expect(replay.clearedRevisions).toBe(0);
+  expect(
+    (
+      await db.admin.query(
+        'SELECT * FROM content.revision WHERE route=$1 AND post_id=$2 ORDER BY recorded_at,revision_id',
+        [route, f.post],
+      )
+    ).rows,
+  ).toEqual(stored.rows);
   expect((await request(`/posts/${reply}`)).status).toBe(200);
 });
 
