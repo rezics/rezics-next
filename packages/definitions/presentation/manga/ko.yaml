@@ -1,0 +1,3 @@
+types:
+  schema:ComicSeries: 일본의 만화 시리즈
+  schema:PublicationVolume: 권

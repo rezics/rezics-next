@@ -1,12 +1,73 @@
 id: https://rezics.com/catalogue/manga
 name: manga
 version: 1.0.0
-description: Manga profile terms.
+description: Manga work and published volume profile terms.
 prefixes:
   linkml: https://w3id.org/linkml/
   schema: http://schema.org/
   wd: http://www.wikidata.org/entity/
+  wdt: http://www.wikidata.org/prop/direct/
 default_range: string
 imports:
   - linkml:types
   - core
+  - classification
+  - series
+  - book
+classes:
+  MangaWork:
+    is_a: CreativeWorkSeries
+    class_uri: schema:ComicSeries
+    description: >-
+      A manga work, the comic series a reader refers to, independent of its published volumes
+      (https://schema.org/ComicSeries; https://www.wikidata.org/wiki/Q21198342). Schema.org places
+      ComicSeries under Periodical, and Periodical is a CreativeWorkSeries (https://schema.org/Periodical).
+      A volume names this work with partOfSeries and records its ordinal as position
+      (https://www.wikidata.org/wiki/Property:P179). Browse facets follow Bangumi's book browser at
+      https://bangumi.tv/book/browser. After category and series, which select the type, the filters are
+      public tags, genre, then publication year.
+    exact_mappings:
+      - wd:Q21198342
+    annotations:
+      facets: keywords genre datePublished
+    slots:
+      - abstract
+      - author
+      - illustrator
+      - publisher
+      - contributor
+      - character
+      - genre
+      - keywords
+      - partOfSeries
+      - publishedIn
+      - numberOfParts
+      - bangumiSubjectId
+      - datePublished
+      - inLanguage
+  MangaVolume:
+    is_a: CreativeWork
+    class_uri: schema:PublicationVolume
+    description: >-
+      A published volume of a manga work, referable on its own (https://schema.org/PublicationVolume;
+      https://www.wikidata.org/wiki/Q1238720). It names that work with partOfSeries and its ordinal as
+      position, as Wikidata models a volume in a series (https://www.wikidata.org/wiki/Property:P179).
+      Browse facets follow https://bangumi.tv/book/browser in the same order as the work.
+    exact_mappings:
+      - wd:Q1238720
+    annotations:
+      facets: keywords genre datePublished
+    slots:
+      - author
+      - illustrator
+      - publisher
+      - character
+      - genre
+      - keywords
+      - partOfSeries
+      - isbn
+      - numberOfPages
+      - abstract
+      - bangumiSubjectId
+      - datePublished
+      - inLanguage

@@ -1,0 +1,3 @@
+types:
+  schema:ComicSeries: serie de manga
+  schema:PublicationVolume: volumen

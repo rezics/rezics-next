@@ -1033,13 +1033,11 @@ infobox:
       - &id045
         id: 别名
         mapping:
-          status: proposed
-          term: schema:alternateName
+          status: existing
+          term: schema:name
           'on': schema:Book
           wikidata: wd:P2561
-          meaning: An alternate name or alias, preserving language and source spelling.
-          sources: *id033
-          mappingRelation: close
+          meaning: An alternate name or alias recorded as another name, preserving language and source spelling.
       - &id046
         id: 作者
         mapping:
@@ -1052,13 +1050,9 @@ infobox:
       - &id056
         id: 插图
         mapping:
-          status: proposed
-          term: schema:illustrator
-          'on': schema:Book
-          wikidata: wd:P110
-          meaning: The credited illustrator of this work.
-          sources: *id006
-          qualifiers: *id002
+          status: omitted
+          reason: The illustrator credit belongs on the manga work and volume. A novel or other book work has no
+            illustrator property, and this key does not add one.
       - &id047
         id: 出版社
         mapping:
@@ -1086,13 +1080,9 @@ infobox:
       - &id050
         id: 连载杂志
         mapping:
-          status: proposed
-          term: wdt:P1433
-          'on': schema:Book
-          wikidata: wd:P1433
-          meaning: The periodical in which this work was serialized.
-          sources: &id059
-            - https://www.wikidata.org/wiki/Property:P1433
+          status: omitted
+          reason: The serializing magazine is published-in on the manga work and on a book series. A novel, light novel
+            or other book work has no periodical property.
       - &id051
         id: 发售日
         mapping: *id043
@@ -1115,13 +1105,9 @@ infobox:
       - &id054
         id: 链接
         mapping:
-          status: proposed
-          term: wdt:P973
-          'on': schema:Book
-          wikidata: wd:P973
-          meaning: A link to a descriptive page; other arbitrary links require an explicit omission, never an identity
-            claim.
-          sources: *id037
+          status: omitted
+          reason: A bare link is not the identifying URL and is not an exact match. Arbitrary links are omitted rather
+            than stored as identity.
       - *id038
   - id: PhotoBook
     source: https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/wiki_template.yml
@@ -1131,13 +1117,9 @@ infobox:
       - *id046
       - id: 摄影
         mapping:
-          status: proposed
-          term: schema:illustrator
-          'on': schema:Book
-          wikidata: wd:P110
-          meaning: The photographer credited with the pictures in this book.
-          sources: *id006
-          qualifiers: *id002
+          status: omitted
+          reason: A photographer is not the illustrator, and the book profile has no photographer property. This key
+            does not invent a credit type.
       - *id047
       - *id048
       - *id049
@@ -1150,23 +1132,41 @@ infobox:
   - id: Manga
     source: https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/wiki_template.yml
     fields:
-      - *id044
-      - *id045
-      - *id046
+      - id: 中文名
+        mapping:
+          status: existing
+          term: schema:name
+          'on': schema:ComicSeries
+          wikidata: wd:P2561
+          meaning: The original source name or a language-tagged Chinese name of the manga work.
+      - id: 别名
+        mapping:
+          status: existing
+          term: schema:name
+          'on': schema:ComicSeries
+          wikidata: wd:P2561
+          meaning: An alternate name recorded as another name of the manga work.
+      - id: 作者
+        mapping:
+          status: existing
+          term: schema:author
+          'on': schema:ComicSeries
+          wikidata: wd:P50
+          meaning: The credited author of this manga work.
+          qualifiers: *id002
       - id: 作画
         mapping:
-          status: proposed
+          status: existing
           term: schema:illustrator
-          'on': schema:Book
+          'on': schema:ComicSeries
           wikidata: wd:P110
           meaning: The credited artist drawing the manga.
-          sources: *id006
           qualifiers: *id002
       - id: 脚本
         mapping:
           status: existing
           term: schema:author
-          'on': schema:Book
+          'on': schema:ComicSeries
           wikidata: wd:P50
           meaning: The credited writer of the manga script.
           qualifiers: *id002
@@ -1177,32 +1177,70 @@ infobox:
           reason:
             The free-text original-source key mixes creators and works; a typed reference is required before choosing
             author or isBasedOn.
-      - *id047
-      - *id048
-      - *id049
-      - *id050
-      - *id051
-      - &id057
-        id: 册数
+      - id: 出版社
         mapping:
-          status: proposed
+          status: existing
+          term: schema:publisher
+          'on': schema:PublicationVolume
+          wikidata: wd:P123
+          meaning: The publisher of this manga volume.
+          qualifiers: *id002
+      - *id048
+      - id: 其他出版社
+        mapping:
+          status: existing
+          term: schema:publisher
+          'on': schema:PublicationVolume
+          wikidata: wd:P123
+          meaning: Another explicitly named publisher of this manga volume.
+          qualifiers: *id002
+      - id: 连载杂志
+        mapping:
+          status: existing
+          term: wdt:P1433
+          'on': schema:ComicSeries
+          wikidata: wd:P1433
+          meaning: The periodical in which this manga was serialized.
+          sources: &id059
+            - https://www.wikidata.org/wiki/Property:P1433
+      - id: 发售日
+        mapping:
+          status: existing
+          term: schema:datePublished
+          'on': schema:ComicSeries
+          wikidata: wd:P577
+          meaning: The publication date of the manga work or its volume, with the source precision.
+      - id: 册数
+        mapping:
+          status: existing
           term: wdt:P2635
-          'on': schema:Book
+          'on': schema:ComicSeries
           wikidata: wd:P2635
-          meaning: The stated number of volumes in the series, with the source volume unit.
+          meaning: The stated number of published volumes of this manga work.
           sources: &id055
             - https://www.wikidata.org/wiki/Property:P2635
-      - *id052
-      - &id058
-        id: 话数
+      - id: 页数
         mapping:
-          status: proposed
+          status: existing
+          term: schema:numberOfPages
+          'on': schema:PublicationVolume
+          wikidata: wd:P1104
+          meaning: The page count of this manga volume.
+      - id: 话数
+        mapping:
+          status: existing
           term: wdt:P2635
-          'on': schema:Book
+          'on': schema:ComicSeries
           wikidata: wd:P2635
-          meaning: The stated chapter count of this written work, preserving the chapter unit.
+          meaning: The stated chapter count of this manga work, preserving the chapter unit.
           sources: *id055
-      - *id053
+      - id: ISBN
+        mapping:
+          status: existing
+          term: schema:isbn
+          'on': schema:PublicationVolume
+          wikidata: wd:P212
+          meaning: An ISBN-13 of this manga volume; ISBN-10 must first be validated and converted.
       - *id054
       - *id038
   - id: Novel
@@ -1216,9 +1254,17 @@ infobox:
       - *id048
       - *id050
       - *id051
-      - *id057
+      - id: 册数
+        mapping:
+          status: omitted
+          reason: The stated volume count of a novel series is the book series number of parts. A novel work keeps each
+            published volume as an edition and does not carry a parallel count.
       - *id052
-      - *id058
+      - id: 话数
+        mapping:
+          status: omitted
+          reason: The chapter count of a novel series is the book series number of parts, preserving the chapter unit. A
+            novel work does not carry that property.
       - *id053
       - *id054
       - *id038
@@ -1608,7 +1654,7 @@ enumerations:
           term: schema:Book
           'on': schema:Book
           wikidata: wd:Q47461344
-          meaning: A book work, including manga; select editions and series from their source flags.
+          meaning: A book subject. The comic platform selects a manga work or volume; other platforms select this book work.
       - id: 2
         mapping:
           status: omitted
@@ -1814,10 +1860,33 @@ enumerations:
       - id: 1001
         mapping:
           <<: *id010
+          status: existing
           concept:
             id: https://rezics.com/schemes/bangumi/formats/1-1001
             scheme: https://rezics.com/schemes/bangumi/formats
             label: comic
+          source: https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_platforms.yml
+          profile:
+            status: existing
+            term: schema:ComicSeries
+            'on': schema:ComicSeries
+            wikidata: wd:Q21198342
+            meaning: >-
+              A comic platform record is the manga work. A false series flag selects the volume
+              (schema:PublicationVolume).
+            sources:
+              - https://schema.org/ComicSeries
+              - https://www.wikidata.org/wiki/Q21198342
+              - https://schema.org/PublicationVolume
+              - https://www.wikidata.org/wiki/Q1238720
+      - id: 1002
+        mapping:
+          <<: *id010
+          status: existing
+          concept:
+            id: https://rezics.com/schemes/bangumi/formats/1-1002
+            scheme: https://rezics.com/schemes/bangumi/formats
+            label: novel
           source: https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_platforms.yml
           profile: &id080
             status: existing
@@ -1825,18 +1894,10 @@ enumerations:
             'on': schema:Book
             wikidata: wd:Q47461344
             meaning: A book work; the series flag can instead select BookSeries.
-      - id: 1002
-        mapping:
-          <<: *id010
-          concept:
-            id: https://rezics.com/schemes/bangumi/formats/1-1002
-            scheme: https://rezics.com/schemes/bangumi/formats
-            label: novel
-          source: https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_platforms.yml
-          profile: *id080
       - id: 1003
         mapping:
           <<: *id010
+          status: existing
           concept:
             id: https://rezics.com/schemes/bangumi/formats/1-1003
             scheme: https://rezics.com/schemes/bangumi/formats
@@ -1846,6 +1907,7 @@ enumerations:
       - id: 1004
         mapping:
           <<: *id010
+          status: existing
           concept:
             id: https://rezics.com/schemes/bangumi/formats/1-1004
             scheme: https://rezics.com/schemes/bangumi/formats
@@ -1855,6 +1917,7 @@ enumerations:
       - id: 1005
         mapping:
           <<: *id010
+          status: existing
           concept:
             id: https://rezics.com/schemes/bangumi/formats/1-1005
             scheme: https://rezics.com/schemes/bangumi/formats
@@ -1864,6 +1927,7 @@ enumerations:
       - id: 1006
         mapping:
           <<: *id010
+          status: existing
           concept:
             id: https://rezics.com/schemes/bangumi/formats/1-1006
             scheme: https://rezics.com/schemes/bangumi/formats
