@@ -62,8 +62,9 @@ export interface FieldObservation {
     revisionPath: string;
     lastModifiedPath: string;
   };
-  /** Statement path for relations; original relation key is a real citation/qualifier leaf. */
+  /** Statement path for relations; original relation keys and URLs remain in actual source citations. */
   statementPath?: string;
+  /** Actual relation identifier leaf: canonical wdt:P648 content (OL...A/W/M), never a synthesized path. */
   sourceValuePath?: string;
 }
 export interface OpenLibraryDriver {

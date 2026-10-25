@@ -148,6 +148,22 @@ function values(output: Accepted, kind: FieldObservation['kind']) {
     .filter((field) => field.kind === kind)
     .map((field) => pointer(output.accepted[field.command], field.valuePath));
 }
+function relationshipSource(output: Accepted, kind: 'author' | 'work', key: string, identifier: string) {
+  const fields = output.fields.filter((field) => field.kind === kind);
+  expect(fields.map((field) => pointer(output.accepted[field.command], field.sourceValuePath!))).toEqual([identifier]);
+  for (const field of fields) {
+    const statement = pointer(
+      output.accepted[field.command],
+      field.statementPath!,
+    ) as import('@rezics/definitions/bulk').BatchStatement;
+    expect(
+      statement.references.some((reference) => {
+        const contents = reference.parts.flatMap((part) => (part.value.type === 'value' ? [part.value.content] : []));
+        return contents.includes(key) && contents.includes(`https://openlibrary.org${key}`);
+      }),
+    ).toBe(true);
+  }
+}
 function noProposals(result: Conversion) {
   expect(['skipped', 'rejected']).toContain(result.outcome);
   nonempty(result.converter_revision);
@@ -165,11 +181,7 @@ test('work identity title and author carry exact source key revision timestamp a
   expect(values(output, 'identity')).toEqual(['/works/OL900000001W']);
   expect(values(output, 'title')).toEqual(['The Glass Atlas']);
   expect(values(output, 'author')).toEqual([{ type: 'somevalue' }]);
-  expect(
-    output.fields
-      .filter((f) => f.kind === 'author')
-      .map((f) => pointer(output.accepted[f.command], f.sourceValuePath!)),
-  ).toEqual(['/authors/OL900000001A']);
+  relationshipSource(output, 'author', '/authors/OL900000001A', 'OL900000001A');
   expect(values(output, 'isbn10')).toEqual([]);
   expect(values(output, 'isbn13')).toEqual([]);
   expect(values(output, 'publishDate')).toEqual([]);
@@ -180,16 +192,10 @@ test('edition remains distinct from work and preserves ISBN authors and source d
   const output = converted(driver, await fixture('edition'));
   expect(values(output, 'identity')).toEqual(['/books/OL900000002M']);
   expect(values(output, 'work')).toEqual([{ type: 'somevalue' }]);
-  expect(
-    output.fields.filter((f) => f.kind === 'work').map((f) => pointer(output.accepted[f.command], f.sourceValuePath!)),
-  ).toEqual(['/works/OL900000001W']);
+  relationshipSource(output, 'work', '/works/OL900000001W', 'OL900000001W');
   expect(values(output, 'title')).toEqual(['The Glass Atlas: Pocket Edition']);
   expect(values(output, 'author')).toEqual([{ type: 'somevalue' }]);
-  expect(
-    output.fields
-      .filter((f) => f.kind === 'author')
-      .map((f) => pointer(output.accepted[f.command], f.sourceValuePath!)),
-  ).toEqual(['/authors/OL900000001A']);
+  relationshipSource(output, 'author', '/authors/OL900000001A', 'OL900000001A');
   // Both source ISBN forms identify the same ISBN-13 candidate.
   expect(values(output, 'isbn10')).toEqual([]);
   expect(values(output, 'isbn13')).toEqual(['9780306406157']);
@@ -493,12 +499,11 @@ test('only supplied native resolutions turn author and work external keys into i
   });
   expect(values(output, 'author')).toEqual([{ type: 'value', content: AUTHOR }]);
   expect(values(output, 'work')).toEqual([{ type: 'value', content: WORK }]);
-  for (const [kind, key] of [
-    ['author', '/authors/OL900000001A'],
-    ['work', '/works/OL900000001W'],
+  for (const [kind, key, identifier] of [
+    ['author', '/authors/OL900000001A', 'OL900000001A'],
+    ['work', '/works/OL900000001W', 'OL900000001W'],
   ] as const) {
-    const field = output.fields.find((f) => f.kind === kind)!;
-    expect(pointer(output.accepted[field.command], field.sourceValuePath!)).toBe(key);
+    relationshipSource(output, kind, key, identifier);
   }
 });
 
