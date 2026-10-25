@@ -215,7 +215,9 @@ test('checkGrowth measures actual path at three scales for unrelated A, affected
         expect(cost.relations?.['public.user']?.rows ?? cost.relations?.['user']?.rows ?? 0).toBe(0);
         expect(cost.rows).toBeLessThanOrEqual(20);
       }
-    expect((await db.admin.query('SELECT count(*)::integer AS n FROM growth_floor')).rows[0].n).toBe(8 + 64 + 512);
+    expect((await db.admin.query('SELECT count(*)::integer AS n FROM growth_floor')).rows[0].n).toBe(
+      2 * (8 + 64 + 512),
+    );
     // Each continuation has at most one bounded page of native durable steps.
     const history = (
       await system.query(`SELECT workflow_uuid,count(*)::integer AS n FROM dbos.operation_outputs

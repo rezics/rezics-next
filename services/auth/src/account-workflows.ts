@@ -182,9 +182,17 @@ export function clientAuthority(
       return transaction(input.clientId, async (connection) => {
         const row = await progress(connection, input.clientId, input.operationId);
         if (row.completed || row.after_account !== input.after) deny();
+        // Keep the cursor as a one-row outer input so the page uses a parameterized
+        // seek on auth_consent_client_owner even when a sequential scan looks cheaper.
         const rows = (
           await connection.query<{ account_id: string }>(
-            'SELECT account_id FROM auth_consent WHERE client_id=$1 AND account_id>$2 ORDER BY account_id LIMIT $3',
+            `SELECT page.account_id
+             FROM (SELECT $1::text AS client_id,$2::text AS after_account OFFSET 0) cursor
+             CROSS JOIN LATERAL (
+               SELECT consent.account_id FROM auth_consent consent
+               WHERE consent.client_id=cursor.client_id AND consent.account_id>cursor.after_account
+               ORDER BY consent.account_id LIMIT $3
+             ) page`,
             [input.clientId, input.after, input.limit + 1],
           )
         ).rows;
