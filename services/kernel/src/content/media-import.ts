@@ -15,6 +15,7 @@ import {
   authoritativeTimeValue,
   principalCommandIdentity,
   runCommand,
+  type CommandAttempt,
   type CommandAuthorization,
   type CommandOutcome,
   type CommandTransaction,
@@ -173,6 +174,10 @@ export async function importMediaFromUrl(
     anchor: { resource: platform, validate: validatePlatform },
     context: { ...boundary, partition: partitionOf(route) },
   });
+  const proofs = new WeakMap<
+    object,
+    { attempt: CommandAttempt; sourceProof: unknown; creationProof: unknown; tx?: CommandTransaction }
+  >();
   const authorization: CommandAuthorization = {
     ...base,
     async prepare(attempt) {
@@ -184,16 +189,30 @@ export async function importMediaFromUrl(
       // A later governance change remains effective at every final disclosure.
       const current = await fence(deps, tuple, context.deadline);
       if (current.takenDown || current.securityRevision !== before.securityRevision) throw new GrantDeniedError();
-      return { sourceProof, creationProof };
+      // Keep both native proofs private and bind their composite to this attempt.
+      const proof = Object.freeze({});
+      proofs.set(proof, { attempt, sourceProof, creationProof });
+      return proof;
     },
     async authorize(tx, attempt, evidence) {
-      const proof = evidence as { sourceProof: unknown; creationProof: unknown };
+      const proof = typeof evidence === 'object' && evidence !== null ? proofs.get(evidence) : undefined;
+      if (!proof || proof.attempt !== attempt || proof.tx) throw new GrantDeniedError();
+      proofs.delete(evidence as object);
       await sourceAuthority.authorize(tx, attempt, proof.sourceProof);
       await base.authorize(tx, attempt, proof.creationProof);
       // Placement is an actual resolved subject, checked in its own partition
       // before any receipt can be disclosed. It confers no creation authority.
       if (!(await subjectExists.run(tx, { route, subject_id: body.containerId }))) throw new GrantDeniedError();
+      proofs.set(evidence as object, { ...proof, tx });
       return 'execute';
+    },
+    async finalize(tx, attempt, evidence) {
+      const proof = typeof evidence === 'object' && evidence !== null ? proofs.get(evidence) : undefined;
+      if (!proof || proof.attempt !== attempt || proof.tx !== tx) throw new GrantDeniedError();
+      // Consume before delegating: finalization cannot reuse or replace either proof.
+      proofs.delete(evidence as object);
+      await base.finalize!(tx, attempt, proof.creationProof);
+      await sourceAuthority.finalize?.(tx, attempt, proof.sourceProof);
     },
   };
   const identity = principalCommandIdentity(actor);
