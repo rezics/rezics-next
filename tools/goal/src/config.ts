@@ -50,7 +50,7 @@ export function loadSettings(options: SettingsOptions = {}): Settings {
   const initialMain = resolve(cwd, env.GOAL_MAIN_CHECKOUT || mainCheckout(cwd));
   const localFile = resolve(cwd, options.localFile ?? env.GOAL_LOCAL_CONFIG ?? join(initialMain, '.temp/goal/local.json'));
   const local = existsSync(localFile) ? object(JSON.parse(readFileSync(localFile, 'utf8')), 'local settings') : {};
-  keys(local, ['version', 'mainCheckout', 'stateDirectory', 'worktreeRoot', 'mainBranch', 'branchPrefix',
+  keys(local, ['version', 'mainCheckout', 'stateDirectory', 'worktreeRoot', 'mainBranch', 'integrationBranch', 'promotionParallelism', 'branchPrefix',
     'terminationGraceMs', 'gate', 'codex', 'routingFile', 'riskAreasFile', 'integration', 'pools'], 'settings');
   if (local.version !== undefined && local.version !== 1) throw new Error('unsupported local settings version');
   const main = resolve(dirname(localFile), env.GOAL_MAIN_CHECKOUT ?? String(local.mainCheckout ?? initialMain));
@@ -97,6 +97,8 @@ export function loadSettings(options: SettingsOptions = {}): Settings {
   return {
     version: 1, mainCheckout: main, stateDirectory, worktreeRoot: path(local.worktreeRoot, '.temp/worktrees', env.GOAL_WORKTREE_ROOT), localFile,
     mainBranch: text(local.mainBranch ?? defaults.mainBranch, 'mainBranch'), branchPrefix: text(local.branchPrefix ?? defaults.branchPrefix, 'branchPrefix'),
+    integrationBranch: text(local.integrationBranch ?? 'dev', 'integrationBranch'),
+    promotionParallelism: positive(local.promotionParallelism ?? 4, 'promotionParallelism'),
     routingFile: path(local.routingFile, join(import.meta.dir, '../routing.json')),
     gate: gate as string[], riskAreasFile: path(local.riskAreasFile, join(import.meta.dir, '../risk-areas.json')), pools,
     terminationGraceMs: positive(local.terminationGraceMs ?? defaults.terminationGraceMs, 'terminationGraceMs', true),

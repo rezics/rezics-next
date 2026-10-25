@@ -1,0 +1,204 @@
+import { expect, test } from 'bun:test';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { completionChecker } from './completion.ts';
+import { gateRunner, git } from './merge.ts';
+import { integrationHarness } from './test-support.ts';
+
+const failsWith = (file: string) => ['bun', '-e', `if (require('fs').existsSync(${JSON.stringify(file)})) { console.error('AssertionError: incompatible feature'); process.exit(1); }`];
+const requires = (file: string) => ['bun', '-e', `if (!require('fs').existsSync(${JSON.stringify(file)})) { console.error('AssertionError: missing feature'); process.exit(1); }`];
+const ancestor = (cwd: string, older: string, newer: string) => expect(git(cwd, 'merge-base', older, newer)).toBe(older);
+
+test.failing('a passing worker branch integrates into dev without running the gate and main does not move', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev(); const main = h.head('main');
+    const task = h.dispatch('feature', [], failsWith('feature'));
+    await h.start(task); const worker = h.head(task.branch);
+    let gates = 0;
+    await h.train(async () => { gates++; return { passed: true, output: '', timedOut: false }; });
+    expect(gates).toBe(0);
+    expect(h.head('main')).toBe(main); expect(h.head()).toBe(worker);
+    expect(h.store.task(task.id).state).toBe('integrated');
+    expect(h.head(task.branch)).toBe(worker);
+    expect(git(h.root, 'symbolic-ref', 'HEAD')).toBe('refs/heads/main');
+    expect(existsSync(join(h.root, 'feature'))).toBe(false);
+  } finally { h.dispose(); }
+});
+
+test.failing('integration into dev still refuses a scope violation and reports a rebase conflict against dev', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev(); const main = h.head('main');
+    const scope = h.dispatch('allowed'); await h.start(scope);
+    writeFileSync(join(scope.worktree, 'outside'), 'undeclared');
+    git(scope.worktree, 'add', 'outside'); git(scope.worktree, 'commit', '-qm', 'Outside scope');
+    await h.train(undefined, false);
+    expect(h.outcomes[0]?.stage).toBe('scope'); expect(h.outcomes[0]?.passed).toBe(false);
+    expect(h.head()).toBe(main); expect(h.head('main')).toBe(main);
+    const conflict = h.dispatch('README.md'); await h.start(conflict);
+    const dev = h.advanceDev('README.md', 'Integration change\n');
+    await h.train(undefined, false);
+    expect(h.outcomes[1]?.stage).toBe('rebase'); expect(h.outcomes[1]?.passed).toBe(false);
+    expect(h.outcomes[1]?.conflictedFiles).toContain('README.md');
+    expect(h.head()).toBe(dev); expect(h.head('main')).toBe(main);
+  } finally { h.dispose(); }
+});
+
+test.failing('new tasks and retries branch from dev', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    const retry = h.dispatch('own'); await h.start(retry); await h.tasks.stop(retry.id);
+    const dev = h.advanceDev('dependency');
+    const fresh = h.dispatch('fresh');
+    await h.job.start(retry.id); await h.job.drain();
+    expect(h.store.task(fresh.id).base).toBe(dev);
+    expect(h.head(fresh.branch)).toBe(dev);
+    const resumed = h.store.task(retry.id);
+    expect(resumed.currentAttempt).toBe(2);
+    ancestor(h.root, dev, h.head(resumed.branch));
+    expect(readFileSync(join(resumed.worktree, 'dependency'), 'utf8')).toBe('dependency');
+    expect(readFileSync(join(resumed.worktree, 'own'), 'utf8')).toBe('own');
+  } finally { h.dispose(); }
+});
+
+test.failing('a held task is released when its dependency integrates into dev', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev(); const main = h.head('main');
+    const first = h.dispatch('dependency');
+    const second = h.dispatch('dependent', [first.id]);
+    expect(h.store.task(second.id).state).toBe('held');
+    await h.start(first); await h.train();
+    expect(h.store.task(second.id).currentAttempt).toBe(1);
+    expect(h.store.task(first.id).state).toBe('integrated');
+    expect(h.store.task(second.id).base).toBe(h.head());
+    expect(existsSync(join(second.worktree, 'dependency'))).toBe(true);
+    expect(h.head('main')).toBe(main); expect(h.inbox).toEqual([]);
+  } finally { h.dispose(); }
+});
+
+test.failing('dev is created from main when missing', async () => {
+  const h = integrationHarness();
+  try {
+    const main = h.head('main');
+    expect(git(h.root, 'branch', '--list', 'dev')).toBe('');
+    const task = h.dispatch('feature');
+    // Branch creation precedes any worker commit, so this checks the exact initial base.
+    expect(git(h.root, 'branch', '--list', 'dev').trim()).toBe('dev');
+    expect(h.head()).toBe(main);
+    expect(h.store.task(task.id).base).toBe(main);
+    await h.start(task); await h.train();
+    ancestor(h.root, main, h.head());
+    expect(h.head('main')).toBe(main); expect(h.store.task(task.id).state).toBe('integrated');
+  } finally { h.dispose(); }
+});
+
+test.failing('promotion gates the dev head and fast-forwards main and marks every task in the batch merged', async () => {
+  const h = integrationHarness();
+  try {
+    const first = await h.seed('alpha', [], requires('alpha'));
+    const second = await h.seed('beta', [], requires('beta'));
+    const dev = h.head(), main = h.head('main');
+    h.settings.gate = requires('README.md');
+    const checks: { head: string; command: readonly string[] }[] = [];
+    const run = gateRunner();
+    await h.promote(async (command, cwd, log) => {
+      checks.push({ head: git(cwd, 'rev-parse', 'HEAD'), command });
+      return run(command, cwd, log);
+    });
+    expect(checks).toEqual(expect.arrayContaining([h.settings.gate, first.brief.acceptance.command, second.brief.acceptance.command]
+      .map(command => ({ head: dev, command }))));
+    expect(h.head('main')).toBe(dev); ancestor(h.root, main, dev);
+    expect(h.store.task(first.id).state).toBe('merged'); expect(h.store.task(second.id).state).toBe('merged');
+    expect(readFileSync(join(h.root, 'beta'), 'utf8')).toBe('beta');
+    expect(git(h.root, 'symbolic-ref', 'HEAD')).toBe('refs/heads/main');
+    expect(h.inbox).toEqual([]);
+  } finally { h.dispose(); }
+});
+
+test.failing('a failing promotion reverts the culprit on dev and sends it a fix round and promotes the remaining tasks', async () => {
+  const h = integrationHarness();
+  try {
+    const first = await h.seed('alpha'); const prefix = h.head();
+    const culprit = await h.seed('bad'); const failingPrefix = h.head();
+    const last = await h.seed('omega'); const dev = h.head();
+    h.settings.gate = failsWith('bad'); h.settings.promotionParallelism = 2;
+    let active = 0, peak = 0; const checked = new Set<string>(); const run = gateRunner();
+    await h.promote(async (command, cwd, log) => {
+      checked.add(git(cwd, 'rev-parse', 'HEAD')); peak = Math.max(peak, ++active);
+      try { return await run(command, cwd, log); } finally { active--; }
+    });
+    expect(checked.has(prefix)).toBe(true); expect(checked.has(failingPrefix)).toBe(true);
+    expect(peak).toBeGreaterThan(1); expect(peak).toBeLessThanOrEqual(2);
+    ancestor(h.root, dev, h.head()); expect(git(h.root, 'rev-list', '--count', `${dev}..dev`)).toBe('1');
+    expect(git(h.root, 'diff', '--name-only', dev, 'dev')).toBe('bad');
+    expect(h.head('main')).toBe(h.head()); expect(existsSync(join(h.root, 'bad'))).toBe(false);
+    expect(h.store.task(first.id).state).toBe('merged'); expect(h.store.task(last.id).state).toBe('merged');
+    const retry = h.store.task(culprit.id);
+    expect(retry.currentAttempt).toBe(2);
+    expect(h.store.attempt({ taskId: culprit.id, attempt: 2 }).fixRound).toBe(1);
+    expect(h.inbox).toEqual([]);
+  } finally { h.dispose(); }
+});
+
+test.failing('a reverted culprit takes its after dependents in the batch with it and they are held behind it', async () => {
+  const h = integrationHarness();
+  try {
+    const culprit = await h.seed('bad', [], failsWith('bad'));
+    const direct = await h.seed('direct', [culprit.id]);
+    const transitive = await h.seed('transitive', [direct.id]);
+    const independent = await h.seed('independent'); const dev = h.head();
+    await h.promote();
+    ancestor(h.root, dev, h.head()); expect(git(h.root, 'rev-list', '--count', `${dev}..dev`)).toBe('1');
+    expect(git(h.root, 'diff', '--name-only', dev, 'dev').split('\n')).toEqual(['bad', 'direct', 'transitive']);
+    expect(h.head('main')).toBe(h.head()); expect(existsSync(join(h.root, 'independent'))).toBe(true);
+    for (const dependent of [direct, transitive]) {
+      expect(h.store.task(dependent.id).state).toBe('held');
+      expect(h.store.task(dependent.id).currentAttempt).toBe(1);
+      expect(h.store.task(dependent.id).brief.after).toEqual(dependent.brief.after);
+    }
+    expect(h.store.task(independent.id).state).toBe('merged');
+    expect(h.store.task(culprit.id).currentAttempt).toBe(2);
+  } finally { h.dispose(); }
+});
+
+test.failing('a promotion failure that main shares is an environment failure and reverts nothing', async () => {
+  const h = integrationHarness();
+  try {
+    const first = await h.seed('alpha'); const second = await h.seed('beta');
+    const dev = h.head(), main = h.head('main');
+    h.settings.gate = ['bun', '-e', "console.error('AssertionError: service unavailable'); process.exit(1)"];
+    await h.promote();
+    expect(h.head()).toBe(dev); expect(h.head('main')).toBe(main);
+    for (const task of [first, second]) {
+      expect(h.store.task(task.id).state).toBe('integrated');
+      expect(h.store.task(task.id).currentAttempt).toBe(1);
+    }
+    expect(h.inbox.map(event => event.kind)).toContain('environment');
+    expect(git(h.root, 'log', '--format=%s', `${main}..dev`)).not.toContain('Revert');
+  } finally { h.dispose(); }
+});
+
+test.failing('a goal with integrated tasks is still in flight and completion is judged on main', async () => {
+  const h = integrationHarness();
+  try {
+    const integrated = await h.seed('integrated');
+    const last = h.dispatch('last'); await h.start(last);
+    // A terminal sibling exercises the existing dependency-aware goal-idle notification.
+    h.store.updateTask({ taskId: last.id, attempt: 1 }, task => { task.brief.after = [integrated.id]; });
+    const check = completionChecker({ ...h.settings,
+      condition: () => ({ taskIds: h.tasks.completionScope('fixture'), gate: requires('integrated') }),
+      mergedTasks: async () => new Set(h.store.tasks().filter(task => task.state === 'merged').map(task => task.id)) });
+    expect((await check('fixture')).passed).toBe(false);
+    h.job.onGateOutcome({ taskId: last.id, attempt: 1, passed: true, stage: 'merge', mergedCommit: h.head('main'),
+      logPath: 'fixture', hostMs: 1, changedFiles: ['last'], diffLines: 1 }); await h.job.drain();
+    expect(h.inbox.filter(event => event.kind === 'goal-idle')).toEqual([]);
+    // Even a merged state cannot make a dev-only feature pass the completion gate on main.
+    h.store.updateTask({ taskId: integrated.id, attempt: 1 }, task => { task.state = 'merged'; });
+    expect((await check('fixture')).passed).toBe(false);
+    git(h.root, 'merge', '--ff-only', 'dev');
+    expect((await check('fixture')).passed).toBe(true);
+  } finally { h.dispose(); }
+});
