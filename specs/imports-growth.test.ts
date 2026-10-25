@@ -84,15 +84,21 @@ function integer(value: number) {
   expect(Number.isSafeInteger(value)).toBe(true);
   expect(value).toBeGreaterThanOrEqual(0);
 }
-function common(c: Counters) {
+function common(c: Counters): asserts c is Required<Counters> {
   for (const value of [c.networkRequests, c.workUnits, c.allocatedBytes, c.peakRetainedBytes, c.peakRetainedRecords])
-    integer(value);
+    integer(value!);
 }
-function pure(c: Counters, bytes: number, fields: number, byteCap = RECORD_CAP) {
-  common(c);
+function purity(c: Counters) {
+  integer(c.networkRequests);
   expect(c.partitions).toEqual([]);
   expect(c.statements).toEqual([]);
+  expect(c.postgres.statements).toEqual([]);
+  expect(c.postgres.plans).toEqual([]);
   expect(c.networkRequests).toBe(0);
+}
+function readerCost(c: Counters, bytes: number, fields: number, byteCap = RECORD_CAP) {
+  common(c);
+  purity(c);
   expect(c.workUnits).toBeGreaterThan(0);
   expect(c.workUnits).toBeLessThanOrEqual(64 * (bytes + fields));
   expect(c.allocatedBytes).toBeGreaterThan(0);
@@ -261,6 +267,8 @@ const options = (scenario: Scenario, n = 32, history = 32, fields = 1): Seed =>
 
 async function converters(index: number, oversized?: 'bytes' | 'fields') {
   const inputs = new Map<number, string>();
+  const samples: { input: number; output: number }[] = [];
+  const returns = new Map<number, string>();
   // Vary N, U x t and M independently; never inflate the measured payload with N.
   for (const axis of ['n', 'history', 'fields'] as const)
     for (const scale of axisScales(axis)) {
@@ -326,9 +334,62 @@ async function converters(index: number, oversized?: 'bytes' | 'fields') {
         inputs.set(key, signature);
         const result = await d().measure(() => d().run({ kind: 'convert', exportPath: converter.exportPath, input }));
         expect(result.value.status).toBe(rejected ? 'record-too-large' : 'completed');
-        pure(result.counters, input.byteLength, fields, contract.bytes);
+        purity(result.counters);
+        if (!rejected) {
+          // Frozen pure-cost amendment: serialize the ENTIRE untouched actual return,
+          // including normalizedRecord/hash input, never an output-only projection.
+          const actual = JSON.stringify(result.value.actualReturn);
+          expect(actual).toBe(JSON.stringify(contract.convert(raw)));
+          if (!oversized) {
+            if (returns.has(seed.fields)) expect(actual).toBe(returns.get(seed.fields)!);
+            returns.set(seed.fields, actual);
+            if (axis === 'fields')
+              samples.push({ input: Buffer.byteLength(JSON.stringify(raw.record)), output: Buffer.byteLength(actual) });
+          }
+        }
       }
     }
+  if (!oversized) {
+    // Plain three-sample logical proof; no timing, heap or computed work model.
+    expect(samples).toHaveLength(3);
+    const [a, b, c] = samples as [(typeof samples)[number], (typeof samples)[number], (typeof samples)[number]];
+    expect(b.input).toBeGreaterThan(a.input);
+    expect(c.input).toBeGreaterThan(b.input);
+    expect(b.output).toBeGreaterThanOrEqual(a.output);
+    expect(c.output).toBeGreaterThanOrEqual(b.output);
+    expect((c.output - b.output) * (b.input - a.input)).toBeLessThanOrEqual(
+      (b.output - a.output) * (c.input - b.input),
+    );
+    const fixture = (await d().seed(options('changed'))).converters[index]!;
+    const fixed = await d().measure(() =>
+      d().run({ kind: 'convert', exportPath: fixture.exportPath, input: fixture.input }),
+    );
+    purity(fixed.counters);
+    expect(fixed.value.status).toBe('completed');
+    const expected = JSON.stringify(fixed.value.actualReturn);
+    expect(expected).toBe(returns.get(1)!);
+    const fixedInput = JSON.parse(Buffer.from(fixture.input).toString('utf8')) as ConversionInput;
+    let converted = 0;
+    const ids = new Set<string>();
+    for (const count of [32, 8 * 32, 64 * 32]) {
+      const measured = await d().measure(async () => {
+        while (converted < count) {
+          const input = fixture.unrelatedInput(converted++);
+          const native = JSON.parse(Buffer.from(input).toString('utf8')) as ConversionInput<Record<string, unknown>>;
+          expect(native.external_id).not.toBe(fixedInput.external_id);
+          expect(ids.has(native.external_id)).toBe(false);
+          ids.add(native.external_id);
+          const result = await d().run({ kind: 'convert', exportPath: fixture.exportPath, input });
+          expect(result.status).toBe('completed');
+          expect(JSON.stringify(result.actualReturn)).toBe(JSON.stringify(sourceContracts[index]!.convert(native)));
+        }
+        return d().run({ kind: 'convert', exportPath: fixture.exportPath, input: fixture.input });
+      });
+      purity(measured.counters);
+      expect(measured.value.status).toBe('completed');
+      expect(JSON.stringify(measured.value.actualReturn)).toBe(expected);
+    }
+  }
 }
 test('first independent converter has bounded record work and zero database or network access', async () => {
   await converters(0);
@@ -383,7 +444,8 @@ async function streaming() {
       expect(opened).toBe(1);
       expect(read).toBe(supplied);
       expect(yielded).toBe(supplied);
-      pure(result.counters, supplied * record.byteLength, supplied);
+      common(result.counters);
+      readerCost(result.counters, supplied * record.byteLength, supplied);
       expect(result.counters.peakRetainedRecords).toBeLessThanOrEqual(B);
       expect(result.counters.peakRetainedBytes).toBeLessThanOrEqual((B + 1) * record.byteLength);
     }
@@ -548,7 +610,7 @@ test('private 300 command plans split by both public command and byte caps', asy
   expect(result.value.envelopes!.length).toBeGreaterThan(3);
   database(result.counters, fixture, seed, 300);
 });
-test('platform reader cap accepts exactly 64 KiB and rejects the next content byte independently of source caps', async () => {
+test('configured platform reader cap accepts exactly 64 KiB and rejects the next content byte independently of source caps', async () => {
   const fixture = await d().seed(options('unchanged'));
   for (const [index, record] of [fixture.dumpAtCap, fixture.dumpOverCap].entries()) {
     // A framed NDJSON record has one trailing newline, excluded from the cap.
@@ -574,6 +636,6 @@ test('platform reader cap accepts exactly 64 KiB and rejects the next content by
       return 'completed';
     });
     expect(result.value).toBe(index === 0 ? 'completed' : 'record-too-large');
-    pure(result.counters, record.byteLength, 1);
+    readerCost(result.counters, record.byteLength, 1);
   }
 });

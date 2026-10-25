@@ -1070,8 +1070,10 @@ test('full dump reading scales with supplied bytes and keeps fixed page memory',
   for (const count of [32, 128, 512])
     await scenario(async (d) => {
       const input = await catalogue(count);
+      let run!: Run;
       const measured = await d.measure(async () => {
-        expect((await d.run(input)).outcome).toBe('complete');
+        run = await d.run(input);
+        expect(run.outcome).toBe('complete');
       });
       const reader = measured.reader;
       expect(reader.inputBytes).toBe(input.bytes.byteLength);
@@ -1093,14 +1095,13 @@ test('full dump reading scales with supplied bytes and keeps fixed page memory',
       expect(reader.postgres.statements).toEqual([]);
       expect(reader.postgres.plans).toEqual([]);
       expect(reader.partitions).toBe(0);
-      expect(measured.converter.records).toBe(count);
+      expect(run.conversions).toHaveLength(count);
       expect(measured.converter.statements).toBe(0);
       expect(measured.converter.rowsReturned).toBe(0);
       expect(measured.converter.partitions).toBe(0);
       expect(measured.converter.sqlite.executions).toEqual([]);
       expect(measured.converter.postgres.statements).toEqual([]);
       expect(measured.converter.postgres.plans).toEqual([]);
-      expect(measured.converter.peakBufferedBytes).toBeLessThanOrEqual(65536);
       expect((await d.effects()).subjects).toBe(count);
       const effects = await d.effects();
       const unchanged = await d.measure(async () => {
@@ -1131,7 +1132,8 @@ test('pure conversion scales with bounded fields and rejects the hard field cap 
     }
     const { view } = await launch(d, 'wikidata');
     const context = { subjectId: view.subject!.id };
-    await d.seed({ catalogueRecords: 512, historyRows: 512 });
+    const fixture = await d.seed({ catalogueRecords: 512, historyRows: 512 });
+    const samples: { input: number; output: number }[] = [];
     // The native 64-statement cap includes the preserved P31 type statement.
     for (const fields of [1, 8, 32, 63, 64, 65]) {
       const input = record(fields),
@@ -1141,12 +1143,16 @@ test('pure conversion scales with bounded fields and rejects the hard field cap 
           await expect(d.convert('wikidata', input, 'conversion-v1', context)).rejects.toThrow();
         else {
           const converted = await d.convert('wikidata', input, 'conversion-v1', context);
+          expect(converted.raw).toHaveProperty('normalizedRecord');
+          expect(converted.raw).toHaveProperty('digest');
           const actual = converted.statements.filter((s) => s.property.id === d.properties.externalId);
           expect(actual.length).toBe(fields);
           for (let i = 0; i < fields; i++) {
             expect(actual.some((s) => s.value.type === 'value' && s.value.content === `OL${900000 + i}W`)).toBe(true);
             expect(JSON.stringify(converted.raw)).toContain(`OL${900000 + i}W`);
           }
+          if ([1, 8, 63].includes(fields))
+            samples.push({ input: bytes, output: encoder.encode(JSON.stringify(converted.raw)).length });
         }
       });
       for (const c of Object.values(measured)) {
@@ -1158,10 +1164,47 @@ test('pure conversion scales with bounded fields and rejects the hard field cap 
         expect(c.postgres.statements).toEqual([]);
         expect(c.postgres.plans).toEqual([]);
       }
-      expect(measured.converter.records).toBe(1);
-      expect(measured.converter.workUnits).toBeGreaterThan(0);
-      expect(measured.converter.workUnits).toBeLessThanOrEqual(32 * bytes + 64 * Math.min(fields, 64));
-      expect(measured.converter.peakBufferedBytes).toBeLessThanOrEqual(65536);
+    }
+    // Frozen pure-cost amendment: the complete actual return includes normalized
+    // data/hash input. Plain three-sample byte deltas, no intrinsic work model.
+    expect(samples).toHaveLength(3);
+    const [a, b, c] = samples as [(typeof samples)[number], (typeof samples)[number], (typeof samples)[number]];
+    expect(b.input).toBeGreaterThan(a.input);
+    expect(c.input).toBeGreaterThan(b.input);
+    expect(b.output).toBeGreaterThanOrEqual(a.output);
+    expect(c.output).toBeGreaterThanOrEqual(b.output);
+    expect((c.output - b.output) * (b.input - a.input)).toBeLessThanOrEqual(
+      (b.output - a.output) * (c.input - b.input),
+    );
+    const fixed = record(1);
+    const expected = JSON.stringify((await d.convert('wikidata', fixed, 'conversion-v1', context)).raw);
+    expect(expected).toBeDefined();
+    let converted = 0;
+    const ids = new Set<string>();
+    for (const count of [32, 8 * 32, 64 * 32]) {
+      const measured = await d.measure(async () => {
+        while (converted < count) {
+          const input = fixture.unrelatedRecord('wikidata', converted++) as { id: string };
+          expect(input.id).toMatch(/^Q[1-9][0-9]*$/);
+          expect(input.id).not.toBe(first.id);
+          expect(ids.has(input.id)).toBe(false);
+          ids.add(input.id);
+          const actual = await d.convert('wikidata', input, 'conversion-v1', context);
+          expect(actual.raw).toHaveProperty('normalizedRecord');
+          expect(actual.raw).toHaveProperty('digest');
+          expect(JSON.stringify(actual.raw)).toBeDefined();
+        }
+        expect(JSON.stringify((await d.convert('wikidata', fixed, 'conversion-v1', context)).raw)).toBe(expected);
+      });
+      for (const cost of Object.values(measured)) {
+        expect(cost.statements).toBe(0);
+        expect(cost.rowsReturned).toBe(0);
+        expect(cost.partitions).toBe(0);
+        expect(cost.sqlite.executions).toEqual([]);
+        expect(cost.postgres.statements).toEqual([]);
+        expect(cost.postgres.plans).toEqual([]);
+        expect(costOf(cost.postgres).blocks).toBe(0);
+      }
     }
     const oversized = record(1);
     oversized.labels.en.value = 'x'.repeat(65537);

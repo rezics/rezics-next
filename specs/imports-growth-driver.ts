@@ -30,7 +30,15 @@
  * independent M (supported source collection entries) scales are 1/8/64.
  * The lowest collection cap is 64: bangumi normalize tags, vndbLimits.maxTitles,
  * wikidataLimits.terms, open-library array fieldCap. M is NOT command count.
- * Source projection caps differ from the platform reader's 65536-byte record cap.
+ * The platform source-record bound defaults to 256 KiB with a hard 1 MiB cap.
+ * This fixture configures a tighter 64 KiB reader cap; source mapping guards below
+ * are independent (Bangumi 64 KiB, VNDB 64 KiB, Wikidata 128 KiB, Open Library 2 MiB).
+ * Frozen pure-cost amendment: pure conversion is O(record bytes), retaining the
+ * whole actual return's UTF-8 JSON bounded by record bytes and supported M, never
+ * N/history or unrelated calls. Prove three actual byte samples with at most linear
+ * delta slope and byte-identical fixed returns after N/8N/64N unrelated conversions.
+ * No intrinsic observer, visit/allocation/heap counters or timing for converters.
+ * Reader O(supplied bytes) and all real SQL bounds remain independent and mandatory.
  * Reconciliation/keyset page B = 8; rows <=64 * (items + M) per engine.
  *
  * The former 24 statements/item cannot cover the released two-phase path:
@@ -113,6 +121,12 @@ export interface ConverterFixture {
   limits: { bytes: number; fields: number };
   exportPath: string;
   input: Uint8Array;
+  /**
+   * Private native fixture generator returned by the sole seed method. Distinct
+   * valid source IDs/revisions, same bounded shape, never derived product outcomes.
+   * No database setup or conversion here; callers actually convert every record.
+   */
+  unrelatedInput(ordinal: number): Uint8Array;
   /** Exact normalized projection cap and cap+1; otherwise valid supported data. */
   atByteCap: Uint8Array;
   oversized: Uint8Array;
@@ -159,11 +173,11 @@ export interface Counters {
   };
   statements: readonly Statement[];
   networkRequests: number;
-  /** Instrumented field/byte visits, allocations and peak retained parser data. */
-  workUnits: number;
-  allocatedBytes: number;
-  peakRetainedBytes: number;
-  peakRetainedRecords: number;
+  /** Reader/database phases only; absent for pure conversion, never fabricated. */
+  workUnits?: number;
+  allocatedBytes?: number;
+  peakRetainedBytes?: number;
+  peakRetainedRecords?: number;
 }
 export type Operation =
   /** Submit one actual invalid public envelope, bypassing private-plan splitting. */
@@ -172,6 +186,13 @@ export type Operation =
   | { kind: 'convert'; exportPath: string; input: Uint8Array }
   | { kind: Scenario; source: 'growth-source'; key: 'fixed-record'; fields: number; pageCap: 8; cursor?: string };
 export interface Outcome {
+  /**
+   * Private convert observation: UNTOUCHED actual source-function return, including
+   * normalizedRecord and hash input. Absent only on rejection/non-convert paths.
+   * Invoke the identified export exactly with the supplied native input/context;
+   * never omit normalized data, replace hashes or reconstruct expected outputs.
+   */
+  actualReturn?: unknown;
   status: 'completed' | 'record-too-large' | 'batch-too-large' | 'mass-disappearance-blocked';
   publicWrites: number;
   fenceChecks: number;

@@ -28,6 +28,18 @@ import type { ConversionContext } from '../packages/conversion/src/support';
  * failures; close removes isolated databases/tokens even after scenario failures.
  * restart closes/reopens importer state, retaining durable state and kernel data.
  *
+ * Frozen pure-cost amendment: pure conversion is O(record bytes), with logical
+ * retained whole-return UTF-8 JSON bounded by record bytes and supported M, never
+ * N/history or unrelated calls. Observe the untouched return, including normalized
+ * data/hash input; three actual byte samples prove at most linear delta slope,
+ * and N/8N/64N actual unrelated conversions preserve the entire fixed return.
+ * No intrinsic observer, visit/allocation/heap counters or timing for converters.
+ * Reader O(supplied bytes), SQLite executions/rows/EQP and PostgreSQL nested
+ * auto_explain buffers/rows/statements remain mandatory with unchanged bounds.
+ * Platform source records default to 256 KiB, hard 1 MiB; this fixture deliberately
+ * uses a tighter 64 KiB reader cap. Source mappings retain their independent
+ * guards (Bangumi 64 KiB, VNDB 64 KiB, Wikidata 128 KiB, Open Library 2 MiB).
+ *
  * Evidence below is a test observation, NOT a competing semantic wire contract.
  * Keep HTTP bodies/headers intact. Proposal/field evidence must be extracted from
  * actual retrieved public bodies, with persisted revisions independently observed.
@@ -148,6 +160,10 @@ export interface Counters {
   workUnits: number;
 }
 export type CostPhase = 'reader' | 'converter' | 'reconcile' | 'api';
+/** Pure conversion needs no fictitious byte/visit/heap/record counters. */
+export type PhaseCounters = Record<Exclude<CostPhase, 'converter'>, Counters> & {
+  converter: Pick<Counters, 'statements' | 'rowsReturned' | 'sqlite' | 'postgres' | 'partitions'>;
+};
 export interface ImportApiDriver {
   /** Same migrated/instrumented DB used by real kernel requests, opened via openGrowthDatabase. */
   readonly growthDatabase: GrowthDatabase;
@@ -248,12 +264,18 @@ export interface ImportApiDriver {
    * disclosure independently checks the current tuple-home fence reference.
    */
   takedown(source: Source, externalId: string, fieldGroup: string): Promise<void>;
-  /** Configure real import limit and authoritative test clock; no fake 429s. */
+  /**
+   * Configure the real limit with the kernel's optional authoritative clock
+   * dependency. No Date patch, request-time header or fake 429s. Commands resolve
+   * a fresh actor anchor on every attempt; kernel owns FIFO/serialization retries.
+   */
   rateLimit(input: { requests: number; windowMs: number; nowMs: number }): Promise<void>;
   /**
    * Untouched production converter result plus extracted actual statement inputs;
    * no database/network access. Caller supplies actual resolved subject context.
-   * Never turn bootstrap create commands into fabricated statement inputs.
+   * Invoke the actual source function exactly, preserving source behavior/context.
+   * raw includes the entire normalizedRecord/hash input, never a filtered footprint
+   * or placeholder hash. Never turn bootstrap commands into fabricated statements.
    */
   convert(
     source: Source,
@@ -275,7 +297,14 @@ export interface ImportApiDriver {
    * population, range), Population grows hot partition AND rest. Repeated calls
    * grow to target totals and ANALYZE outside measurement; no approximate counts.
    */
-  seed(input: { catalogueRecords: number; historyRows: number }): Promise<void>;
+  seed(input: { catalogueRecords: number; historyRows: number }): Promise<{
+    /**
+     * Private native-input fixture generator, returned by the sole seed method.
+     * Distinct valid native IDs/revisions, bounded supported fields; no conversion,
+     * derived outcomes, catalogue writes or context changes. Tests convert each.
+     */
+    unrelatedRecord(source: Source, ordinal: number): unknown;
+  }>;
   /**
    * Mandatory shared growth.ts measure on growthDatabase (openGrowthDatabase),
    * retaining auto_explain rows/buffers/statements including Auth/Access/fence/receipts.
@@ -290,9 +319,10 @@ export interface ImportApiDriver {
    * Account every operation in its actual phase, including bootstrap, later proposals,
    * nested journals/authorization/fences/receipts; no hidden setup or adapter work,
    * elapsed time or static proof. Preserve the shared N/U scales and M variation.
-   * Reader/converter counters include all parser/converter invocations and bytes.
+   * Reader counters include all parser invocations and bytes. Converter phase
+   * retains only actual zero-attempt purity evidence, never computed work counters.
    */
-  measure(action: () => Promise<void>): Promise<Record<CostPhase, Counters>>;
+  measure(action: () => Promise<void>): Promise<PhaseCounters>;
   close(): Promise<void>;
 }
 export interface DriverOptions {
