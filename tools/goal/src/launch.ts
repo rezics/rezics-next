@@ -50,6 +50,7 @@ export function workerPrompt(task: Task, evidence: string | undefined, consultat
     task.brief.kind === 'bulk-text' ? 'Write the text yourself. Do not use translation services, translation scripts, or character mapping tables.' : '',
     'The task contract follows:', task.brief.markdown,
     'A failure outside your declared paths is not your blocker: when your acceptance command passes, report success and name any such failure in your summary.',
+    "Never stop or remove containers, databases or processes you did not start in this attempt, and never prune Docker: other workers' checks run beside yours.",
     evidence ? `Continue from this evidence bundle:\n${evidence}` : '',
     consultation ? `Read-only consultation:\n${consultation}` : '',
     resolutionFiles.length ? `The control plane has already started a rebase onto current main in this worktree. Conflicted files: ${resolutionFiles.join(', ')}. Resolve and stage them, then run \`git rebase --continue\` until the rebase completes. Do not start another rebase.` : '',
