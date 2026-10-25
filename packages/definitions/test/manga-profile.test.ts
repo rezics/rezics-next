@@ -45,7 +45,9 @@ test('a manga work and its volumes are catalogue profiles', () => {
   const volume = types['schema:PublicationVolume'];
   expect(work).toMatchObject({ mappings: ['wd:Q21198342'], facets: mangaFacets });
   expect(volume).toMatchObject({ mappings: ['wd:Q1238720'], facets: mangaFacets });
-  expect(types['schema:BookSeries']).toBeUndefined();
+  expect(work!.bases).not.toContain('schema:BookSeries');
+  expect(volume!.bases).not.toContain('schema:BookSeries');
+  expect(work!.bases).toEqual(['schema:CreativeWorkSeries', 'schema:CreativeWork', 'schema:Thing']);
   expect(work!.properties).toEqual(
     expect.arrayContaining([
       'schema:abstract',
@@ -90,7 +92,11 @@ test('a manga work and its volumes are catalogue profiles', () => {
     datatype: 'wikibase-item',
     mappings: ['wd:P1433'],
   });
-  expect(properties['wdt:P2635']).toMatchObject({ datatype: 'quantity', units: ['1'], minimum: 1 });
+  expect(work!.properties).toContain('wdt:P2635');
+  expect(properties['wdt:P2635']!.units).toEqual([
+    'http://www.wikidata.org/entity/Q1238720',
+    'http://www.wikidata.org/entity/Q1980247',
+  ]);
   expect(properties['schema:author']!.qualifiers).toEqual(
     expect.arrayContaining(['schema:position', 'wdt:P1932', 'wdt:P3831']),
   );
@@ -124,7 +130,9 @@ test('Bangumi book and manga fields are bundled or omitted with a reason', () =>
     const fields = data.infobox.find((entry) => entry.id === template)!.fields;
     for (const field of fields) proposed(field.mapping, `${template}/${field.id}`, found);
   }
-  const bookSeries = data.vocabulary.find((entry) => entry.term === 'schema:BookSeries' || entry.reason?.includes('book series'));
+  const bookSeries = data.vocabulary.find(
+    (entry) => entry.term === 'schema:BookSeries' || entry.reason?.includes('book series'),
+  );
   expect(bookSeries?.status).not.toBe('proposed');
   expect(found).toEqual([]);
 });
