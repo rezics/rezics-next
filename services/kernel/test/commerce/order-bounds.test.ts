@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import type { PoolClient } from 'pg';
 import * as model from '../../src/commerce/model.ts';
 import { createStripePort } from '../../src/commerce/stripe.ts';
 import { CheckoutMismatchError } from '../../src/commerce/settlement.ts';
@@ -138,6 +139,99 @@ test('the trusted snapshot command also rejects an over-cap snapshot before any 
     fixture.pool.query = original;
   }
   expect(await contents(order.id)).toEqual(before);
+});
+
+test('stored order transactions stay within the cap across snapshots with different IDs', async () => {
+  transactionCount = 201;
+  const rejectedOrder = await fixture.checkout();
+  fixture.transport.fake.pay(rejectedOrder.session.id);
+  const rawInitial = await stripe.readCheckout(rejectedOrder.session.id);
+  const initial = {
+    ...rawInitial,
+    transactions: rawInitial.transactions.map((transaction) => ({
+      ...transaction,
+      id: `txn_${transaction.id.slice(4)}${rejectedOrder.order.id.replaceAll('-', '')}`,
+    })),
+  };
+  await fixture.commands.applyCheckoutSnapshot(initial, 'bounds:seed-rejected');
+  const extra = (count: number) =>
+    Array.from({ length: count }, (_, n) => ({
+      ...initial.transactions[0]!,
+      id: `txn_boundsnew${rejectedOrder.order.id.replaceAll('-', '')}${n}`,
+    }));
+  const tooMany = {
+    ...initial,
+    observedAt: new Date(Date.parse(initial.observedAt) + 1_000).toISOString(),
+    transactions: extra(57),
+  };
+  const before = await contents(rejectedOrder.order.id);
+  await expect(fixture.commands.applyCheckoutSnapshot(tooMany, 'bounds:stored-over-cap')).rejects.toBeInstanceOf(
+    CheckoutMismatchError,
+  );
+  expect(await contents(rejectedOrder.order.id)).toEqual(before);
+
+  const acceptedOrder = await fixture.checkout();
+  fixture.transport.fake.pay(acceptedOrder.session.id);
+  const rawAcceptedInitial = await stripe.readCheckout(acceptedOrder.session.id);
+  const acceptedInitial = {
+    ...rawAcceptedInitial,
+    transactions: rawAcceptedInitial.transactions.map((transaction) => ({
+      ...transaction,
+      id: `txn_${transaction.id.slice(4)}${acceptedOrder.order.id.replaceAll('-', '')}`,
+    })),
+  };
+  await fixture.commands.applyCheckoutSnapshot(acceptedInitial, 'bounds:seed-accepted');
+  const acceptedSnapshot = {
+    ...acceptedInitial,
+    observedAt: new Date(Date.parse(acceptedInitial.observedAt) + 1_000).toISOString(),
+    transactions: Array.from({ length: 56 }, (_, n) => ({
+      ...acceptedInitial.transactions[0]!,
+      id: `txn_boundsaccepted${acceptedOrder.order.id.replaceAll('-', '')}${n}`,
+    })),
+  };
+  await fixture.commands.applyCheckoutSnapshot(acceptedSnapshot, 'bounds:stored-at-cap');
+  expect(
+    await readOrderTransactions(fixture.pool, routeOf(acceptedOrder.order.id)!, acceptedOrder.order.id),
+  ).toHaveLength(256);
+});
+
+test('fulfilment without new transactions does not add a transaction-count statement', async () => {
+  transactionCount = 2;
+  const { order, session } = await fixture.checkout();
+  fixture.transport.fake.pay(session.id);
+  const rawSnapshot = await stripe.readCheckout(session.id);
+  const snapshot = {
+    ...rawSnapshot,
+    transactions: rawSnapshot.transactions.map((transaction) => ({
+      ...transaction,
+      id: `txn_${transaction.id.slice(4)}${order.id.replaceAll('-', '')}`,
+    })),
+  };
+  await fixture.commands.applyCheckoutSnapshot(snapshot, 'bounds:statement-seed');
+  const later = {
+    ...snapshot,
+    observedAt: new Date(Date.parse(snapshot.observedAt) + 1_000).toISOString(),
+    disputes: [{ ...snapshot.disputes[0]!, status: 'lost' }],
+  };
+  let queries = 0;
+  const tracked = new WeakSet<object>();
+  const onAcquire = (client: PoolClient) => {
+    if (tracked.has(client)) return;
+    tracked.add(client);
+    const originalQuery = client.query.bind(client);
+    client.query = ((...queryArgs: Parameters<typeof originalQuery>) => {
+      queries++;
+      return Reflect.apply(originalQuery, client, queryArgs);
+    }) as typeof client.query;
+  };
+  fixture.pool.on('acquire', onAcquire);
+  try {
+    await fixture.commands.applyCheckoutSnapshot(later, 'bounds:no-new-transaction');
+  } finally {
+    fixture.pool.removeListener('acquire', onAcquire);
+  }
+  expect(queries).toBe(17);
+  expect(await readOrderTransactions(fixture.pool, routeOf(order.id)!, order.id)).toHaveLength(1);
 });
 
 test('grant uses the target captured at order creation when the creator offer is gone', async () => {
