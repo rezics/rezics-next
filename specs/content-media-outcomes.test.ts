@@ -142,7 +142,7 @@ test('media specification uses uploader BFF tokens instead of a separate Worker 
   expect(author.sub).toBe(media.uploaderId);
   expect(worker.sub).toBe(author.sub);
   expect(worker.clientId).toBe(worker.registeredWebsiteClientId);
-  expect(worker.clientId).toBe('website');
+  expect(worker.clientId).toBe('rezics-website');
   expect(worker.scopes).toContain('media:complete');
   expect(author.scopes).not.toContain('media:complete');
   expect(other.sub).toBeTruthy();
