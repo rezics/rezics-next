@@ -21,6 +21,8 @@ Dispatch waits without a model for the child to exit, records its tokens and quo
 enqueues its landing request, and starts the train. Enqueuers wait for the train lease rather than dropping a busy
 wakeup. A request arriving while another train finishes acquires the released lease and drains the remaining queue.
 Failures return to the same profile, trigger one consultation, or reach the owning manager's inbox as appropriate.
+Each process records the Git object id for `main:tools/goal` when it starts. A stale train hands its queue to a detached
+current-code process, while a stale manager host restarts after finishing its active request and recovers persisted sessions.
 
 ## Local settings
 

@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import defaults from '../defaults.json';
@@ -13,6 +13,7 @@ import { SqliteLandingQueue } from './land.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { MergeTrain, type TrainOptions } from './merge-train.ts';
 import { gateRunner, type GateRunner } from './merge.ts';
+import { codeVersion } from './runtime-version.ts';
 import { completionChecker } from './completion.ts';
 import { TermspacesWindows } from './windows.ts';
 import type { IntegrationRuntime } from './integration-cli.ts';
@@ -133,6 +134,11 @@ export type RuntimeOptions = {
 /** The only production composition: every module shares this database connection and worker fence. */
 export function createRuntime(options: RuntimeOptions = {}): Runtime {
   const settings = options.settings ?? options.tasks?.settings ?? loadSettings();
+  // Synthetic runtime fixtures may not contain the control-plane tree in their main checkout.
+  let startedCodeVersion: string | undefined;
+  try { startedCodeVersion = codeVersion(settings.mainCheckout, 'tools/goal'); } catch {}
+  const codeIsCurrent = () => startedCodeVersion === undefined
+    || codeVersion(settings.mainCheckout, 'tools/goal') === startedCodeVersion;
   mkdirSync(dirname(settings.databasePath), { recursive: true });
   const db = options.db ?? options.tasks?.store.db ?? openDb(settings.databasePath);
   if (options.tasks && options.tasks.store.db !== db) throw new Error('Runtime modules must share one database connection');
@@ -149,9 +155,19 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   let train!: MergeTrain;
   const pump = () => train.run(true);
   const job = new WorkerJob(tasks, queue, inbox, undefined, pump);
+  const handOff = () => new Promise<void>((resolve, reject) => {
+    const env = { ...process.env };
+    for (const key of Object.keys(env)) if (key.startsWith('GOAL_')) delete env[key];
+    delete env.CODEX_THREAD_ID;
+    const child = spawn(process.execPath, [join(settings.mainCheckout, 'tools/goal/src/cli.ts'), 'train'], {
+      cwd: settings.mainCheckout, detached: true, stdio: 'ignore', env,
+    });
+    child.once('error', reject);
+    child.once('spawn', () => { child.unref(); resolve(); });
+  });
   train = new MergeTrain({ mainCheckout: settings.mainCheckout, stateDirectory: settings.stateDirectory,
     worktreeRoot: settings.worktreeRoot, mainBranch: settings.mainBranch, queue, fence: store, sink: job,
-    runGate, gateIdentity: JSON.stringify(settings.gate), ...options.train });
+    runGate, gateIdentity: JSON.stringify(settings.gate), codeIsCurrent, handOff, ...options.train });
   const landing: IntegrationRuntime['landing'] = taskId => {
     const task = store.task(taskId), ref = { taskId, attempt: task.currentAttempt };
     store.assertCurrent(ref);
@@ -163,7 +179,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   });
   const command = ['env', `GOAL_MAIN_CHECKOUT=${settings.mainCheckout}`, `GOAL_LOCAL_CONFIG=${settings.localFile}`,
     `GOAL_STATE_DIRECTORY=${settings.stateDirectory}`, `GOAL_DATABASE_PATH=${settings.databasePath}`, `GOAL_WORKTREE_ROOT=${settings.worktreeRoot}`,
-    process.execPath, join(import.meta.dir, 'cli.ts')];
+    process.execPath, join(settings.mainCheckout, 'tools/goal/src/cli.ts')];
   const managerServices: ManagerServices = {
     command, checkCompletion,
     windows: new TermspacesWindows({ socket: settings.integration.tmuxSocket, session: settings.integration.tmuxSession,
@@ -187,5 +203,6 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   };
   return { db, ...settings, settings, store, tasks, job, queue, inbox, train, fence: store, sink: job,
     managerSocket: settings.integration.managerSocket, supermanager: settings.integration.supermanager, managerServices, landing, manager, pump,
+    hostCommand: command, codeIsCurrent,
     async drain() { await pump(); await job.drain(); }, close() { db.close(); } };
 }

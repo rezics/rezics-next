@@ -14,6 +14,7 @@ import { acquireDirectoryLease } from './lease.ts';
 /** Composition belongs to the caller; this module never reads worker configuration or tables. */
 export type IntegrationRuntime = {
   queue?: SqliteLandingQueue; inbox?: SqliteManagerInbox; pump?(): Promise<void>; drain?(): Promise<void>; hostCommand?: string[];
+  codeIsCurrent?(): boolean;
   db: Database; mainCheckout: string; stateDirectory: string; worktreeRoot: string; managerSocket: string;
   supermanager?: string;
   fence: AttemptFence; sink: GateOutcomeSink;
@@ -49,7 +50,7 @@ async function ensureHost(runtime: IntegrationRuntime): Promise<void> {
     });
     return;
   } catch {}
-  const argv = [...(runtime.hostCommand ?? [process.execPath, import.meta.dir + '/cli.ts']), '_manager-host'];
+  const argv = [...(runtime.hostCommand ?? [process.execPath, join(runtime.mainCheckout, 'tools/goal/src/cli.ts')]), '_manager-host'];
   mkdirSync(runtime.stateDirectory, { recursive: true });
   const logPath = join(runtime.stateDirectory, 'manager-host.log');
   const log = openSync(logPath, 'a', 0o600);
@@ -73,9 +74,25 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
   const inbox = runtime.inbox ?? new SqliteManagerInbox(runtime.db, runtime.stateDirectory);
   const managers = new ManagerSessions(runtime.db, inbox, runtime.managerServices);
   rmSync(runtime.managerSocket, { force: true });
+  let activeRequests = 0, restart = false, stopServer: (() => void) | undefined;
+  let stopRequested = false;
+  const stopWhenIdle = () => { if (stopRequested && activeRequests === 0) stopServer?.(); };
+  const requestRestart = () => {
+    restart = true; stopRequested = true;
+    server.close();
+    stopWhenIdle();
+  };
   const server = createServer(socket => {
     const lines = createInterface({ input: socket });
     lines.once('line', async line => {
+      activeRequests++;
+      let completed = false;
+      const completeRequest = () => {
+        if (completed) return;
+        completed = true; activeRequests--; stopWhenIdle();
+      };
+      socket.once('close', completeRequest);
+      if (restart) { socket.end(`${JSON.stringify({ error: 'Manager host is restarting' })}\n`, completeRequest); return; }
       try {
         const request = JSON.parse(line) as HostRequest;
         let result: unknown;
@@ -88,21 +105,40 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
           case 'turn-end': result = await managers.claudeTurn(request.manager!, false); break;
           default: throw new Error('Unknown manager host command');
         }
-        socket.end(`${JSON.stringify({ result: result ?? null })}\n`);
-      } catch (error) { socket.end(`${JSON.stringify({ error: String(error) })}\n`); }
+        socket.end(`${JSON.stringify({ result: result ?? null })}\n`, completeRequest);
+      } catch (error) { socket.end(`${JSON.stringify({ error: String(error) })}\n`, completeRequest); }
     });
     socket.on('error', () => {});
   });
+  let checkTimer: ReturnType<typeof setInterval> | undefined;
   try {
     await managers.recover();
     await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(runtime.managerSocket, resolve); });
     chmodSync(runtime.managerSocket, 0o600);
     console.log('ready');
     await new Promise<void>(resolve => {
-      process.once('SIGTERM', resolve); process.once('SIGINT', resolve);
+      stopServer = resolve;
+      const stop = () => { stopRequested = true; stopWhenIdle(); };
+      process.once('SIGTERM', stop); process.once('SIGINT', stop);
+      if (runtime.codeIsCurrent) {
+        checkTimer = setInterval(() => {
+          try { if (!runtime.codeIsCurrent!()) requestRestart(); } catch {}
+        }, 1000);
+        checkTimer.unref();
+        try { if (!runtime.codeIsCurrent()) requestRestart(); } catch {}
+      }
     });
   } finally {
+    if (checkTimer) clearInterval(checkTimer);
     server.close(); await managers.close(); rmSync(runtime.managerSocket, { force: true }); lease.release();
+  }
+  if (restart) {
+    const argv = [...(runtime.hostCommand ?? [process.execPath, join(runtime.mainCheckout, 'tools/goal/src/cli.ts')]), '_manager-host'];
+    const child = spawn(argv[0]!, argv.slice(1), { cwd: runtime.mainCheckout, env: process.env, detached: true, stdio: 'ignore' });
+    await new Promise<void>((resolve, reject) => {
+      child.once('error', reject);
+      child.once('spawn', () => { child.unref(); resolve(); });
+    });
   }
 }
 

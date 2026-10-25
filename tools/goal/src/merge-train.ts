@@ -54,6 +54,7 @@ export type TrainOptions = {
   mainCheckout: string; stateDirectory: string; worktreeRoot: string;
   queue: SqliteLandingQueue; fence: AttemptFence; sink: GateOutcomeSink;
   runGate?: GateRunner; gateIdentity?: string; mainBranch?: string;
+  codeIsCurrent?: () => boolean; handOff?: () => void | Promise<void>;
   /** Test seams around the final synchronous Git operation and train shutdown. */
   merge?: (cwd: string, candidate: string) => void; beforeRelease?: () => Promise<void>;
 };
@@ -63,11 +64,25 @@ export class MergeTrain {
 
   async run(waitForLease = false): Promise<void> {
     const o = this.options;
+    if (o.codeIsCurrent && !o.codeIsCurrent()) {
+      await o.handOff?.();
+      return;
+    }
     mkdirSync(o.stateDirectory, { recursive: true });
     const leasePath = join(o.stateDirectory, 'train.lease');
     const lease = waitForLease ? await waitForDirectoryLease(leasePath) : acquireDirectoryLease(leasePath);
     try {
-      for (let entry; (entry = o.queue.next());) {
+      if (o.codeIsCurrent && !o.codeIsCurrent()) {
+        await o.handOff?.();
+        return;
+      }
+      for (;;) {
+        if (o.codeIsCurrent && !o.codeIsCurrent()) {
+          await o.handOff?.();
+          return;
+        }
+        const entry = o.queue.next();
+        if (!entry) break;
         try {
           const outcome = entry.outcome ?? await this.integrate(entry);
           if (!entry.outcome) o.queue.finish(entry.id, outcome);
