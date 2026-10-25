@@ -3,6 +3,7 @@ import { Type } from 'typebox';
 import { ACCESS_EVENTS } from '../access/events.ts';
 import { COMMERCE_EVENTS } from '../commerce/events.ts';
 import { CONTENT_EVENTS } from '../content/events.ts';
+import { LIBRARY_EVENTS } from '../library/events.ts';
 import { Value } from 'typebox/value';
 import { withConnection } from '../database/pool.ts';
 import advanceCheckpoint from './advance-checkpoint.sql';
@@ -19,6 +20,7 @@ export const EVENT_TYPES = {
   ...ACCESS_EVENTS,
   ...COMMERCE_EVENTS,
   ...CONTENT_EVENTS,
+  ...LIBRARY_EVENTS,
   'com.rezics.definitions.published.v1': Type.Object({ digest }, { additionalProperties: false }),
   'com.rezics.definitions.activated.v1': Type.Object(
     { digest, head: Type.Integer({ minimum: 1 }) },

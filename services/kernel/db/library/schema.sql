@@ -119,6 +119,44 @@ CREATE TABLE library.follow (
 
 
 --
+-- Name: subject_collection; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.subject_collection (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    collection_id uuid NOT NULL,
+    collection_route integer NOT NULL,
+    multiplicity integer NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT subject_collection_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
+    CONSTRAINT subject_collection_check1 CHECK ((collection_route = ((get_byte(uuid_send(collection_id), 10) * 256) + get_byte(uuid_send(collection_id), 11)))),
+    CONSTRAINT subject_collection_collection_route_check CHECK (((collection_route >= 0) AND (collection_route <= 65535))),
+    CONSTRAINT subject_collection_multiplicity_check CHECK ((multiplicity >= 1)),
+    CONSTRAINT subject_collection_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: subject_listing; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.subject_listing (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    public_collection_count integer NOT NULL,
+    revision integer NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT subject_listing_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
+    CONSTRAINT subject_listing_public_collection_count_check CHECK ((public_collection_count >= 0)),
+    CONSTRAINT subject_listing_revision_check CHECK ((revision >= 1)),
+    CONSTRAINT subject_listing_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
 -- Name: collection_member collection_member_ordinal_key; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -151,10 +189,33 @@ ALTER TABLE ONLY library.follow
 
 
 --
+-- Name: subject_collection subject_collection_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.subject_collection
+    ADD CONSTRAINT subject_collection_pkey PRIMARY KEY (route, subject_id, collection_id);
+
+
+--
+-- Name: subject_listing subject_listing_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.subject_listing
+    ADD CONSTRAINT subject_listing_pkey PRIMARY KEY (route, subject_id);
+
+
+--
 -- Name: collection_curator_listing; Type: INDEX; Schema: library; Owner: -
 --
 
 CREATE INDEX collection_curator_listing ON library.collection USING btree (route, curator_account_id, collection_id);
+
+
+--
+-- Name: collection_member_subject; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_member_subject ON library.collection_member USING btree (route, collection_id, subject_id);
 
 
 --
