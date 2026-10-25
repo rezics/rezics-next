@@ -50,7 +50,8 @@ Configure these variables in the environment of `bun run dev`:
   in production, with no trailing slash. Tests use `https://api.rezics.test`.
 - `WEBSITE_SCOPES`: exactly the space-separated scopes registered for the website client, including `openid offline_access`, never a wildcard.
   Media routes need `media:create`, `media:read_reservation`, `media:read`, `media:complete` and `media:erase`;
-  posting routes need `thread:create` and `post:create`; public reads need no scope. Sign-in requests
+  posting routes need `thread:create` and `post:create`; presentation curation needs `presentation:publish` and
+  `presentation:activate`; public reads need no scope. Sign-in requests
   `openid offline_access` followed by these scopes, each once.
 - `WEBSITE_CLIENT_ID`: the confidential website client id, `rezics-website`.
 - `SITE_ORIGINS`: comma-separated exact origins (scheme, host and optional port, with no trailing slash). Production
@@ -97,7 +98,8 @@ await auth.internal.registerWebsiteClient(registration);
 const websiteScopes = registration.scopes.join(' ');
 ```
 
-The catalogue must include the five media scopes above and the posting scopes `thread:create` and `post:create`.
+The catalogue must include the five media scopes above, the posting scopes `thread:create` and `post:create`,
+and the curation scopes `presentation:publish` and `presentation:activate`.
 Registration and `WEBSITE_SCOPES` must change together
 when more protected site features are mounted. Auth's [website contract](../../services/auth/README.md#website-client)
 defines registration and key rotation.
@@ -125,8 +127,8 @@ For local Auth, migrate a separate PostgreSQL database with Auth's documented `d
 the same trusted bootstrap with `issuer: 'http://127.0.0.1:4200'`, `audience: 'https://api.rezics.test'`,
 Auth's own signing key/secret and the trusted Access ports. Serve `auth.handler` on that exact loopback origin.
 Register the generated website public key with redirect `http://127.0.0.1:3000/auth/callback`, post-logout URI
-`http://127.0.0.1:3000/`, and exactly these scopes for the current media and posting routes:
-`openid offline_access media:create media:read_reservation media:read media:complete media:erase thread:create post:create`.
+`http://127.0.0.1:3000/`, and exactly these scopes for the current media, posting and presentation curation routes:
+`openid offline_access media:create media:read_reservation media:read media:complete media:erase thread:create post:create presentation:publish presentation:activate`.
 From `apps/web`, run:
 
 ```sh
@@ -134,7 +136,7 @@ AUTH_ISSUER=http://127.0.0.1:4200 \
 API_RESOURCE=https://api.rezics.test \
 WEBSITE_CLIENT_ID=rezics-website \
 WEBSITE_CLIENT_KEY="$(cat .temp/website-private.jwk)" \
-WEBSITE_SCOPES='openid offline_access media:create media:read_reservation media:read media:complete media:erase thread:create post:create' \
+WEBSITE_SCOPES='openid offline_access media:create media:read_reservation media:read media:complete media:erase thread:create post:create presentation:publish presentation:activate' \
 KERNEL_ORIGIN=http://127.0.0.1:4300 \
 bun run dev --host 127.0.0.1 --port 3000 --strictPort
 ```
@@ -281,5 +283,6 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 | Download (`GET`/`HEAD /media/<id>/<variant>`)    | Credential prelude → K `:authorizeDownload` every request, including conditional → R `head` → R `get` for GET only → stream body directly                                                       | ≤1 K; ≤1 head + ≤1 get; add credential D/A; 304/denial uses 0 R, HEAD/416 uses no get; constant media buffering, ≤M bytes streamed (0 for HEAD/304), no arrayBuffer/blob read                                                              | `tests/media.test.ts`: `a download asks the kernel on every request and serves ranges, validators and the decided cache policy` asserts one decision for 304 and zero for invalid variant; `tests/request-cost.test.ts`: `download stays within its bound as s grows` for R |
 | Storybook (`bun run storybook`)                  | Static story modules replay committed kernel responses through `createRecordedKernelFetch`; page and shell browser checks use local Chromium                                                    | No request-path work; development tooling only; each recording is one kernel request per listed entry                                                                                                                                      | `tests/page-stories.test.ts`: browser accessibility and replay checks run through the root gate                                                                                                                                                                             |
 | Recording (`bun run record`)                     | Start disposable PostgreSQL and kernel; create the account and subject, then record the subject and missing-subject reads as status and JSON body in `src/kernel/recorded/`                     | One subject create and two listed reads through the kernel; development tooling only; disposable database removed after recording                                                                                                          | `scripts/record.ts`: fixed request list; prerequisites documented above                                                                                                                                                                                                     |
+| Presentation curation (`/<locale>/curate/presentation`) | Credential prelude → K active pointer → K immutable profile; publish → K profile write → K activation at expected head                                                                          | Opening: 2 K reads (immutable profile cacheable forever); publishing: 2 K writes; add credential D/A. Listing and editing are linear in the profile, bounded by `MAX_PROFILE_TEMPLATES` (128 keyed templates) and `MAX_PROFILE_BYTES` (1 MiB); no public-page work | `tests/curate-presentation.test.ts`: template listing, immutable edits, publish/activate order and refusal handling                                                                                                                                                         |
 
 The subject JSON body and rendered data grow with uncapped s, even though related labels arrive in the same response and there are no per-item server calls.
