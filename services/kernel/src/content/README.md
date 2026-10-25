@@ -76,6 +76,12 @@ The `insert-thread.sql`, `insert-post.sql` and `insert-revision.sql` storage hel
 - **Bound:** O(1) rows and statements; O(log M) blocks, where M is total media.
 - **Growth check:** At 2048, 8192 and 32768 media across other accounts with the probe fixed: constant rows and statements, zero sequential scans.
 
+### Reaction count
+
+- **Touches:** One `core.partition` primary-key read in the target partition, then one point update of `content.reaction_count` per changed kind: `-1` on the previous kind and `+1` on the new kind, inserting that contribution when the row is absent. A kind-to-kind change touches two kinds. No read or scan of `content.reaction`. `readReactionCounts` reads that target's primary-key prefix and returns the summed counts with the newest source watermark.
+- **Bound:** Per event, rows O(1), blocks O(log R), statements O(1). A batch of n events is O(n). A watermark that is not newer changes zero rows.
+- **Growth check:** `test/content/reaction-projection.test.ts`: `aggregation cost is O(changes) as reactions and targets grow`. At 2048, 8192 and 32768 prior reactions with a fixed batch: constant rows and statements per event, zero sequential scans.
+
 Author erasure provenance stores `source_digest`, `original_minimum_authn_epoch`, `original_operator_account_id`, `original_delegation_transaction_id`, `original_delegation_issued_valid`, and `creation_command_kind`/`creation_idempotency_key`/`creation_request_digest`/`creation_target_route`/`creation_target_id` alongside the existing actor and transaction columns. The operation ID is its own immutable source; `native_workflow_id` remains the DBOS workflow ID. Accounts captures the original floor/operator from admission at the same attempt T and the original delegation through one point read when requested. The receipt alone includes `durableInitiator`, the SHA-256 commitment of the entire allowlisted record; public callers still receive `{ operationId }`. Historical NULL provenance cannot restore. The initiation growth check uses 256, 2048 and 16384 rows.
 
 Authenticated paths and reserve's creator-grant insertion inherit the bounds derived in [Access Cost](../access/README.md#cost).

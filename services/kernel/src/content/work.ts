@@ -26,6 +26,7 @@ import { createImageJob } from './image-job.ts';
 import { createCollectionJob } from './collection-job.ts';
 import { refreshBoardRankBatch } from './board-rank.ts';
 import { createErasureJob } from './erasure-job.ts';
+import { createReactionCountEffect } from './reaction-projection.ts';
 import type { MediaStorage } from './media-storage.ts';
 import {
   CONTENT_QUEUES,
@@ -287,6 +288,9 @@ async function registerWork(
       },
     },
   ]);
+  // Registered with the board effect by the content work module. The shared
+  // effects relay delivers each change after the source read has been released.
+  context.addEffects([createReactionCountEffect(context.pool)]);
 }
 
 function counters(value: unknown, steps: boolean): OperationProgress {

@@ -257,6 +257,7 @@ test('aggregation cost is O(changes) as reactions and targets grow', async () =>
   const first = report.samples[0]!;
   expect(batch).toBe(2);
   for (const sample of report.samples) {
+    if (!sample.cost.relations) throw new Error('Reaction count growth did not record relation costs');
     expect(sample.cost.statements).toBe(first.cost.statements);
     expect(sample.cost.rows).toBe(first.cost.rows);
     expect(sample.cost.relations['content.reaction']).toBeUndefined();
