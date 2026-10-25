@@ -1,9 +1,11 @@
 import { expect, spyOn, test } from 'bun:test';
+import { checkBatchWrite } from '@rezics/definitions/bulk';
 import { readFileSync } from 'node:fs';
 import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
 import { loadVndbDriver, type Path, type VndbDriver } from './imports-vndb-driver.ts';
 
+const SUBJECT = '00000000-0000-4000-8000-000000000001';
 const fixture = () => JSON.parse(readFileSync(new URL('./fixtures/imports/vndb/record.json', import.meta.url), 'utf8'));
 const hostileUrls: string[] = JSON.parse(
   readFileSync(new URL('./fixtures/imports/vndb/hostile-urls.json', import.meta.url), 'utf8'),
@@ -28,12 +30,23 @@ function consume(driver: VndbDriver, output: unknown) {
   expect(driver.converter_revision.trim().length).toBeGreaterThan(0);
   expect(at(output, located.converterRevision)).toBe(driver.converter_revision);
   expect(located.proposals.length).toBeGreaterThan(0);
+  const actual = located.proposals.map(path => at(output, path));
+  expect(checkBatchWrite({ commands: actual })).toEqual([]);
+  expect(actual.filter(c => (c as { op: string }).op === 'create').length).toBeLessThanOrEqual(1);
+  expect(new Set(located.proposals.map(p => JSON.stringify(p))).size).toBe(actual.length);
+  const rights = located.sourceRights;
+  expect(at(output, rights.databaseLicense)).toBe('ODbL-1.0');
+  expect(at(output, rights.contentsLicense)).toBe('LicenseRef-DbCL-1.0');
+  expect(at(output, rights.attribution)).toBe('VNDB');
   return located.proposals.map((path) => {
     const proposal = at(output, path);
     expect(proposal).not.toBeNull();
     expect(typeof proposal).toBe('object');
     const accepted = driver.parseProposal(proposal);
-    expect(accepted).toEqual(proposal);
+    expect<unknown>(accepted).toEqual(proposal);
+    expect(accepted.source.field_group).toBe('facts');
+    expect(accepted).not.toHaveProperty('rights');
+    expect(accepted.source.digest).toMatch(/^[0-9a-f]{64}$/);
     const facts = driver.observe(accepted);
     expect(facts.length).toBeGreaterThan(0);
     return { proposal: accepted, facts };
@@ -59,15 +72,13 @@ function assertMetadata(driver: VndbDriver, output: unknown, id = 'v123', revisi
       const rawValue = at(proposal, fact.valuePath);
       expect(rawValue).toBeDefined();
       expect(rawValue).not.toBeNull();
+      if (fact.kind === 'type') expect(String(rawValue).replace(/^wd:/, 'http://www.wikidata.org/entity/')).toBe('http://www.wikidata.org/entity/Q689445');
       if (fact.kind !== 'type') expect(rawValue).toEqual(fact.value);
-      expect(at(proposal, fact.fieldGroupPath)).toBe('metadata');
+      expect(at(proposal, fact.fieldGroupPath)).toBe('facts');
       expect(at(proposal, fact.reference.source)).toBe('vndb');
       expect(at(proposal, fact.reference.externalId)).toBe(id);
       expect(at(proposal, fact.reference.revision)).toBe(revision);
       expect(at(proposal, fact.reference.url)).toBe(`https://vndb.org/${id}.${revision}`);
-      expect(at(proposal, fact.rights.databaseLicense)).toBe('ODbL-1.0');
-      expect(at(proposal, fact.rights.contentsLicense)).toBe('LicenseRef-DbCL-1.0');
-      expect(at(proposal, fact.rights.attribution)).toBe('VNDB');
     }
   }
   return facts;
@@ -75,7 +86,10 @@ function assertMetadata(driver: VndbDriver, output: unknown, id = 'v123', revisi
 
 test('VNDB metadata becomes structurally accepted command proposals with exact revision citations and dump rights', async () => {
   const driver = await loadVndbDriver();
-  const facts = assertMetadata(driver, driver.convert(fixture()));
+  const output = driver.convert(fixture(), { subjectId: SUBJECT });
+  const facts = assertMetadata(driver, output);
+  const submitted = consume(driver, output);
+  expect(submitted.every(({ proposal }) => proposal.op === 'create' || proposal.subject === SUBJECT)).toBe(true);
   expect(
     facts
       .filter((fact) => fact.kind === 'title')
@@ -102,6 +116,12 @@ test('VNDB changed source values and revisions change real proposals without inv
   const original = driver.convert(fixture());
   const changed = driver.convert(input);
   expect(changed).not.toEqual(original);
+  const digests = (raw: unknown) => driver.locate(raw).proposals.map(p => (at(raw, p) as import('@rezics/definitions/bulk').BatchCommand).source.digest);
+  expect(digests(changed)).not.toEqual(digests(original));
+  const edited = fixture();
+  edited.vn_titles[0].title = 'Changed title only';
+  expect(digests(driver.convert(edited))).not.toEqual(digests(original));
+  expect(at(changed, driver.locate(changed).converterRevision)).toBe(at(original, driver.locate(original).converterRevision));
   assertMetadata(driver, changed, 'v124', 8, 'Another Harbor');
 });
 
@@ -161,6 +181,8 @@ test('VNDB descriptions covers posts reviews accounts and private lists never re
   const output = driver.convert(dirty);
   assertMetadata(driver, output);
   expect(output).toEqual(driver.convert(clean));
+  expect(driver.convert({ ...dirty, future_extension: { text: 'UNKNOWN_PRIVATE_SENTINEL',
+    rights: { license: 'CC0-1.0' }, converter_revision: 'forged' } })).toEqual(output);
   // Inspect the complete output as well as observations; adapters cannot hide leaks.
   const serialized = JSON.stringify(output);
   for (const marker of [

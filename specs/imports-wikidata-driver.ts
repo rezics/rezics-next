@@ -14,10 +14,13 @@ import { pathToFileURL } from 'node:url';
  * It may capture an actual converter validation exception as raw for observe.
  * observe only projects actual output/errors. Every pointer is an RFC 6901
  * pointer into raw; statement/term pointers point into their command payload.
- * References, rights and field groups must already exist in those proposals;
+ * References and field groups must already exist in those proposals; factual
+ * commands have no rights. Licence pointers may locate actual source metadata
+ * outside commands; this is CC0 source permission, not output database rights;
  * never synthesize these in observe. Enumerate ALL commands and statements.
  *
- * accept is a narrow fake bulk consumer: call the real semantic command/proposal
+ * Forward the supplied native context unchanged. accept is a narrow fake bulk
+ * consumer: call @rezics/definitions/bulk checkBatchWrite, the real command
  * structural validator, without executing any command. Return its accepted
  * command and the citations it retains, or throw on structural rejection.
  * No hand-built competing bulk schema or permissive echo consumer. The semantic
@@ -25,7 +28,6 @@ import { pathToFileURL } from 'node:url';
  */
 export interface CitationPointers {
   reference: string;
-  rights: string;
   source: string;
   externalId: string;
   sourceRevision: string;
@@ -50,9 +52,13 @@ export interface WikidataObservation {
 }
 export interface WikidataDriver {
   readonly converter_revision: string;
-  convert(entity: unknown, resolvedEntities: Readonly<Record<string, string>>): unknown;
+  convert(
+    entity: unknown,
+    resolvedEntities: Readonly<Record<string, string>>,
+    context?: { subjectId: string },
+  ): unknown;
   observe(raw: unknown): WikidataObservation;
-  accept(command: unknown): { command: unknown; citations: unknown[] };
+  accept(command: unknown): { command: import('@rezics/definitions/bulk').BatchCommand; citations: unknown[] };
 }
 
 export async function loadWikidataDriver(): Promise<WikidataDriver> {

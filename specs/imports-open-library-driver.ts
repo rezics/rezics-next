@@ -5,14 +5,19 @@
  * synchronous and pure; it receives the JSON payload, never a TSV row or filename.
  * No product behavior, generated facts, rights decisions or references in adapters.
  *
- * consume is a narrow typed fake bulk consumer: use semantic's actual command
- * proposal types AND structural validator, then collect accepted proposals without
+ * consume is a narrow typed fake bulk consumer: use the actual BatchCommand
+ * type AND @rezics/definitions/bulk checkBatchWrite, then collect proposals without
  * executing them. Do not define another bulk API, accept arbitrary objects, write
  * SQL, call a live API, or replace source citations. Observations describe accepted
  * commands, never an adapter-maintained model. Paths are RFC 6901 pointers relative
  * to the cited accepted command; all values must resolve to its actual leaves.
- * kind and mode are test vocabulary mapped from real properties/rights definitions;
- * path identifies the underlying rights envelope, reference and field group.
+ * kind is test vocabulary mapped from actual catalogue properties;
+ * path identifies the underlying reference and field group. Facts have no rights.
+ * Enumerate ALL actual commands/fields, including unsupported emissions. Metadata
+ * pointers resolve into unchanged production output, including unknown-licensed
+ * descriptions and importFromUrl intents; neither is a second bulk command shape.
+ * Forward context unchanged to production. No resolving IDs, creating media,
+ * constructing documents or licensing decisions in the binding.
  *
  * Fixture shapes and scope (synthetic records, not claims about real books):
  * https://openlibrary.org/developers/dumps
@@ -22,11 +27,17 @@
  * https://openlibrary.org/dev/docs/api/covers
  * Import decision: discussion ADR-0036, Imports and Rights decisions.
  */
+export type CommandProposal = import('@rezics/definitions/bulk').BatchCommand;
+export interface ConversionContext {
+  subjectId: string;
+  resolvedReferences?: Readonly<Record<string, string>>;
+  mediaIds?: Readonly<Record<string, string>>;
+}
 export type RecordPayload = Record<string, unknown>;
 export type Conversion = {
   outcome: 'converted' | 'skipped' | 'rejected';
   converter_revision: string;
-  proposals: unknown[];
+  proposals: CommandProposal[];
   /** Nonempty source-specific diagnostic for skipped/rejected input. */
   reason?: string;
 };
@@ -42,19 +53,30 @@ export interface FieldObservation {
     revisionPath: string;
     lastModifiedPath: string;
   };
-  rights: {
-    path: string;
-    mode: 'fact' | 'verbatim';
-    /** Null is an explicit unknown license, never inferred CC0 for images. */
-    licensePath: string;
-  };
+  /** Statement path for relations; original key/date is a real citation/qualifier leaf. */
+  statementPath?: string;
+  sourceValuePath?: string;
 }
 export interface OpenLibraryDriver {
   readonly converter_revision: string;
-  convert(record: RecordPayload): Conversion;
+  convert(record: RecordPayload, context?: ConversionContext): Conversion;
+  /** Pointers into actual non-command converter metadata, never adapter decisions. */
+  inspectMetadata(output: Conversion): {
+    bibliographyPermission: string;
+    assets: {
+      kind: 'description' | 'cover';
+      value: string;
+      license: string;
+      group: string;
+      credit?: string;
+      provenance?: string;
+      role?: string;
+      takedownEligible?: string;
+    }[];
+  };
   /** Throw on structural rejection; accepted contains the actual parsed commands. */
   consume(proposals: readonly unknown[]): {
-    accepted: unknown[];
+    accepted: CommandProposal[];
     fields: FieldObservation[];
   };
 }

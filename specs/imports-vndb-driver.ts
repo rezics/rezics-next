@@ -5,12 +5,15 @@
  * source rewriting, product behavior, SQL, network or storage belongs here.
  * converter_revision is that module's real explicit export, not a test constant.
  *
- * Bulk command shape belongs to semantic. Opaque proposals below deliberately do
- * not define another public API. parseProposal calls semantic's actual command
- * proposal parser/validator; it throws for structurally invalid proposals. The
+ * Bulk command shape/validator belong to @rezics/definitions/bulk.
+ * parseProposal calls checkBatchWrite on the actual command; it throws for structurally invalid proposals. The
  * suite's fake consumer calls it on every emitted proposal without writing data.
  *
- * observe only reads actual proposals, references, rights and field groups. Paths
+ * locate enumerates ALL actual commands, including unsupported emissions.
+ * sourceRights locates actual converter metadata outside commands, not output
+ * database licensing or invented per-field rights. observe reads actual proposals,
+ * references and field groups. Forward supplied context unchanged to production.
+ * Paths
  * are relative to the actual command proposal, never a synthesized shadow tree.
  * Every fact must be reported, including descriptions, covers and user content.
  * kind/language/type value may normalize production definition terms (type value
@@ -18,6 +21,7 @@
  * values are literal source values. Never manufacture facts or rights. Reference
  * URL is the exact record revision, not the current mutable source page.
  */
+export type CommandProposal = import('@rezics/definitions/bulk').BatchCommand;
 export type Path = readonly (string | number)[];
 export interface FactObservation {
   kind: 'title' | 'external-id' | 'type' | 'description' | 'cover' | 'user-content' | 'other';
@@ -26,14 +30,17 @@ export interface FactObservation {
   language?: string;
   fieldGroupPath: Path;
   reference: { source: Path; externalId: Path; revision: Path; url: Path };
-  rights: { databaseLicense: Path; contentsLicense: Path; attribution: Path };
 }
 export interface VndbDriver {
   readonly converter_revision: string;
-  convert(record: unknown): unknown;
+  convert(record: unknown, context?: { subjectId: string }): unknown;
   /** Paths locate every actual command proposal and the output revision. */
-  locate(output: unknown): { proposals: Path[]; converterRevision: Path };
-  parseProposal(proposal: unknown): unknown;
+  locate(output: unknown): {
+    proposals: Path[];
+    converterRevision: Path;
+    sourceRights: { databaseLicense: Path; contentsLicense: Path; attribution: Path };
+  };
+  parseProposal(proposal: unknown): CommandProposal;
   observe(proposal: unknown): FactObservation[];
 }
 

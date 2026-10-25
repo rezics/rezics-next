@@ -1,4 +1,6 @@
 import { expect, spyOn, test } from 'bun:test';
+import { checkBatchWrite } from '@rezics/definitions/bulk';
+import { documentText, parseDocument } from '@rezics/document';
 import * as childProcess from 'node:child_process';
 import * as fs from 'node:fs';
 import * as promises from 'node:fs/promises';
@@ -11,6 +13,21 @@ import fixture from './fixtures/imports/bangumi/subject.json';
 import type { BangumiDriver, CommandProposal, ConversionInput, ProposedField } from './imports-bangumi-driver';
 
 const SOURCE = 'https://bgm.tv/subject/424242';
+const SUBJECT = '00000000-0000-4000-8000-000000000001';
+const MEDIA = '00000000-0000-4000-8000-000000000002';
+const context = { subjectId: SUBJECT, mediaIds: { [fixture.images.large]: MEDIA } };
+// Explicit catalogue prefix expansion; unknown aliases are never accepted.
+function classMeaning(value: unknown) {
+  expect(typeof value).toBe('string');
+  return (value as string).replace(/^schema:/, 'http://schema.org/').replace(/^https:\/\/schema\.org\//, 'http://schema.org/');
+}
+function summaryText(value: unknown) {
+  const content = value as { language: string; document: unknown };
+  expect(content.language).toMatch(/^[a-z]{2,3}(?:-[A-Za-z0-9]+)*$/);
+  const document = parseDocument(content.document);
+  expect(document.profile).toBe('text');
+  return documentText(document);
+}
 const REVISION = 'archive:2024-04-02:record-17';
 const input = (record: unknown = structuredClone(fixture)): ConversionInput => ({
   externalId: '424242',
@@ -29,6 +46,8 @@ async function scenario(run: (driver: BangumiDriver) => void | Promise<void>) {
   const binding = await import(url.href);
   expect(binding.createBangumiDriver).toBeFunction();
   const driver: BangumiDriver = await binding.createBangumiDriver();
+  const convert = driver.convert.bind(driver);
+  driver.convert = (request, supplied = context) => convert(request, supplied);
   try {
     await run(driver);
   } finally {
@@ -60,7 +79,8 @@ function field(driver: BangumiDriver, output: unknown, role: ProposedField['role
   expect(inspection.commands).toContain(found.command);
   expect(at(output, found.command)).toBeObject();
   expect(found.value.startsWith(`${found.command}/`)).toBe(true);
-  text(output, found.fieldGroup);
+  expect(found.fieldGroup.startsWith(`${found.command}/`)).toBe(true);
+  expect(text(output, found.fieldGroup)).toBe(role === 'summary' ? 'summary' : role === 'cover' ? 'cover' : 'facts');
   expect(found.references.length).toBeGreaterThan(0);
   expect(found.references.map((pointer) => at(output, pointer))).toContain(source);
   at(output, found.value);
@@ -108,12 +128,17 @@ test('source identity and record revision accompany a nonempty converter_revisio
     expect(text(changed, next.externalId)).toBe('424243');
     expect(text(changed, next.recordRevision)).toBe('archive:2024-04-03:record-18');
     expect(text(changed, next.converterRevision)).toBe(revision);
+    const digests = (raw: unknown) => driver.inspect(raw).commands.map(p => (at(raw, p) as CommandProposal).source.digest);
+    expect(digests(changed)).not.toEqual(digests(output));
+    const edited = driver.convert(input({ ...structuredClone(fixture), name: 'Changed title only' }));
+    expect(digests(edited)).not.toEqual(digests(output));
     for (const [role, value] of [
       ['title', record.name],
       ['chinese-label', record.name_cn],
       ['summary', record.summary],
     ] as const) {
-      expect(at(changed, field(driver, changed, role, 'https://bgm.tv/subject/424243').value)).toBe(value);
+      const actual = at(changed, field(driver, changed, role, 'https://bgm.tv/subject/424243').value);
+      expect(role === 'summary' ? summaryText(actual) : actual).toBe(value);
     }
   }));
 
@@ -182,7 +207,7 @@ test('all supported subject types retain title facts Chinese labels and source r
     ] as const) {
       const output = driver.convert(input({ ...structuredClone(fixture), type }));
       expect(at(output, field(driver, output, 'title').value)).toBe(fixture.name);
-      expect(at(output, field(driver, output, 'type').value)).toBe(`https://schema.org/${name}`);
+      expect(classMeaning(at(output, field(driver, output, 'type').value))).toBe(`http://schema.org/${name}`);
       expect(at(output, field(driver, output, 'chinese-label').value)).toBe(fixture.name_cn);
     }
   }));
@@ -203,9 +228,14 @@ test('the full summary retains separate CC-BY-SA-3.0 attribution and ShareAlike 
   scenario((driver) => {
     const output = driver.convert(input());
     const summary = field(driver, output, 'summary');
-    expect(at(output, summary.value)).toBe(fixture.summary);
+    expect(summaryText(at(output, summary.value))).toBe(fixture.summary);
+    expect((at(output, summary.command) as CommandProposal & { statement: { property: { id: string } } }).statement.property.id).toBe('schema:abstract');
     const rights = summary.rights;
     expect(rights).toBeDefined();
+    expect(rights!.envelope).toBe(`${summary.command}/rights`);
+    expect(rights!.license).toBe(`${summary.command}/rights/license`);
+    expect(rights!.credit).toBe(`${summary.command}/rights/attribution`);
+    expect(rights!.obligations).toBe(`${summary.command}/rights/obligations`);
     expect(at(output, rights!.envelope)).toBeObject();
     expect(text(output, rights!.license)).toBe('CC-BY-SA-3.0');
     expect(text(output, rights!.credit)).toMatch(/Bangumi/i);
@@ -220,20 +250,45 @@ test('covers retain original links rights-holder credit and independent takedown
   scenario((driver) => {
     const output = driver.convert(input());
     const cover = field(driver, output, 'cover');
-    expect(at(output, cover.value)).toBe(fixture.images.large);
+    expect(at(output, cover.value)).toBe(MEDIA);
+    const command = at(output, cover.command) as CommandProposal;
+    expect(command).toMatchObject({ op: 'propose', subject: SUBJECT,
+      statement: { property: { id: 'schema:image' }, value: { type: 'value', content: MEDIA } } });
+    expect(command).not.toHaveProperty('rights');
+    const pending = driver.convert(input(), { subjectId: SUBJECT });
+    const intent = driver.inspect(pending).coverIntent;
+    expect(at(pending, intent.sourceUrl)).toBe(fixture.images.large);
+    expect(text(pending, intent.credit)).toMatch(/\(c\)|copyright|©|rights[ -]?holder/i);
+    expect(text(pending, intent.credit)).toMatch(/rights[ -]?holder/i);
+    expect(text(pending, intent.credit)).toMatch(/via.*Bangumi/i);
+    expect(JSON.stringify(at(pending, intent.provenance))).toContain(JSON.stringify(SOURCE));
+    expect(at(pending, intent.role)).toBe('cover');
+    expect(at(pending, intent.takedownEligible)).toBe(true);
+    expect(new Set<unknown>([null, 'NOASSERTION', 'unknown']).has(at(pending, intent.license)) ||
+      /^LicenseRef-/.test(String(at(pending, intent.license)))).toBe(true);
+    expect(driver.inspect(pending).fields.filter(f => f.role === 'cover')).toEqual([]);
+    const pendingCommands = driver.inspect(pending).commands.map(p => at(pending, p));
+    expect(checkBatchWrite({ commands: pendingCommands })).toEqual([]);
+    expect(command.op).toBe('propose');
+    if (command.op !== 'propose') throw new Error('Expected cover proposal');
+    expect(JSON.stringify(command.statement.references)).toContain(JSON.stringify(fixture.images.large));
+    // This proves intent and media-ID binding only; the API suite proves byte processing.
     expect(cover.rights).toBeDefined();
     const rights = cover.rights!;
     expect(at(output, rights.envelope)).toBeObject();
     const license = at(output, rights.license);
     expect(
-      license === null || license === 'NOASSERTION' || (typeof license === 'string' && /^LicenseRef-.+/.test(license)),
+      license === null || license === 'NOASSERTION' || license === 'unknown' || (typeof license === 'string' && /^LicenseRef-.+/.test(license)),
     ).toBe(true);
-    expect(text(output, rights.credit)).toMatch(/copyright|©|rights[ -]?holder/i);
+    expect(text(output, rights.credit)).toMatch(/\(c\)|copyright|©|rights[ -]?holder/i);
+    expect(text(output, rights.credit)).toMatch(/rights[ -]?holder/i);
     expect(text(output, rights.credit)).not.toMatch(/Bangumi contributors/i);
     expect(text(output, rights.originalSource)).toBe(SOURCE);
+    expect(text(output, rights.credit)).toMatch(/via.*Bangumi/i);
     expect(at(output, rights.takedownEligible)).toBe(true);
     const summary = field(driver, output, 'summary');
     expect(at(output, rights.envelope)).not.toEqual(at(output, summary.rights!.envelope));
+    expect(at(output, rights.license)).toEqual(at(pending, intent.license));
     expect(text(output, cover.fieldGroup)).not.toBe(text(output, summary.fieldGroup));
     expect(text(output, cover.fieldGroup)).not.toBe(text(output, field(driver, output, 'title').fieldGroup));
     expect(text(output, cover.fieldGroup)).not.toBe(text(output, field(driver, output, 'type').fieldGroup));
@@ -336,7 +391,7 @@ test('unknown nested fields are ignored without acquiring authority or disclosin
       },
     };
     expect(driver.convert(input(record))).toEqual(baseline);
-    expect(at(baseline, field(driver, baseline, 'summary').value)).toBe(fixture.summary);
+    expect(summaryText(at(baseline, field(driver, baseline, 'summary').value))).toBe(fixture.summary);
   }));
 
 test('the semantic bulk consumer structurally accepts actual proposals and preserves cited sources', () =>
@@ -350,10 +405,18 @@ test('the semantic bulk consumer structurally accepts actual proposals and prese
       accept(proposal) {
         expect(proposal).toBeObject();
         expect(Object.keys(proposal).length).toBeGreaterThan(0);
+        expect(checkBatchWrite({ commands: [proposal] })).toEqual([]);
         received.push(proposal);
       },
     });
     expect<unknown>(received).toEqual(view.commands.map((pointer) => at(output, pointer)));
+    expect(checkBatchWrite({ commands: received })).toEqual([]);
+    expect(received.filter(c => c.op === 'create').length).toBeLessThanOrEqual(1);
+    for (const command of received) {
+      if (command.op !== 'create') expect(command.subject).toBe(SUBJECT);
+      if (command.source.field_group === 'facts') expect(command).not.toHaveProperty('rights');
+      expect(command.source.digest).toMatch(/^[0-9a-f]{64}$/);
+    }
     for (const role of ['title', 'type', 'chinese-label', 'summary', 'cover'] as const) {
       const proposed = field(driver, output, role);
       const index = view.commands.indexOf(proposed.command);
