@@ -1,0 +1,253 @@
+import { afterAll, expect, test } from 'bun:test';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { createServer } from 'node:net';
+import { join } from 'node:path';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+
+const app = join(import.meta.dir, '..');
+const timeout = 300_000;
+const clientId = 'rezics-website';
+const session = '__Host-rezics_session';
+const login = '__Host-rezics_login';
+const resource = 'https://api.rezics.test';
+const scopes = ['media:create', 'media:read_reservation', 'media:read', 'media:complete', 'media:erase'];
+
+const clientKeys = await generateKeyPair('ES256', { extractable: true });
+const clientJwk = { ...(await exportJWK(clientKeys.privateKey)), alg: 'ES256', kid: 'website-1' };
+const issuerKeys = await generateKeyPair('ES256', { extractable: true });
+const issuerJwk = { ...(await exportJWK(issuerKeys.publicKey)), alg: 'ES256', kid: 'issuer-1', use: 'sig' };
+
+const codes = new Map<string, { nonce: string; sub: string }>();
+const tokenRequests: string[] = [];
+const accessTokens: string[] = [];
+const kernelCalls: { path: string; authorization: string | null }[] = [];
+let counter = 0;
+// How Auth answers the next refresh grants; null issues new tokens.
+let refusal: (() => Response) | null = null;
+
+const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
+
+// An OpenID provider as Auth serves the website client. Access tokens live 30 seconds, inside the Worker's one-minute
+// refresh window, so every use of the session's credential asks Auth for a refresh.
+const fake = Bun.serve({
+  port: 0,
+  hostname: '127.0.0.1',
+  async fetch(request) {
+    const url = new URL(request.url);
+    const issuer = `${url.origin}/auth`;
+    const issue = async (sub: string, nonce?: string) => {
+      counter += 1;
+      const access = `access-${counter}`;
+      accessTokens.push(access);
+      const body: Record<string, unknown> = {
+        access_token: access,
+        token_type: 'Bearer',
+        expires_in: 30,
+        refresh_token: `refresh-${counter}`,
+        scope: 'openid offline_access media:read',
+      };
+      if (nonce !== undefined)
+        body.id_token = await new SignJWT({ nonce })
+          .setProtectedHeader({ alg: 'ES256', kid: 'issuer-1' })
+          .setIssuer(issuer)
+          .setSubject(sub)
+          .setAudience(clientId)
+          .setIssuedAt()
+          .setExpirationTime('5m')
+          .sign(issuerKeys.privateKey);
+      return json(body);
+    };
+
+    if (url.pathname === '/auth/.well-known/openid-configuration')
+      return json({
+        issuer,
+        authorization_endpoint: `${issuer}/authorize`,
+        token_endpoint: `${issuer}/token`,
+        jwks_uri: `${issuer}/jwks`,
+        revocation_endpoint: `${issuer}/revoke`,
+        end_session_endpoint: `${issuer}/end-session`,
+        response_types_supported: ['code'],
+        code_challenge_methods_supported: ['S256'],
+        id_token_signing_alg_values_supported: ['ES256'],
+        token_endpoint_auth_methods_supported: ['private_key_jwt'],
+        token_endpoint_auth_signing_alg_values_supported: ['ES256'],
+      });
+    if (url.pathname === '/auth/jwks') return json({ keys: [issuerJwk] });
+    if (url.pathname === '/auth/token' && request.method === 'POST') {
+      const form = new URLSearchParams(await request.text());
+      tokenRequests.push(form.get('grant_type') ?? '');
+      if (form.get('grant_type') === 'authorization_code') {
+        const grant = codes.get(form.get('code') ?? '');
+        if (!grant) return json({ error: 'invalid_grant' }, 400);
+        codes.delete(form.get('code') ?? '');
+        return issue(grant.sub, grant.nonce);
+      }
+      if (form.get('grant_type') === 'refresh_token') return refusal ? refusal() : issue('alice');
+      return json({ error: 'unsupported_grant_type' }, 400);
+    }
+    if (url.pathname.startsWith('/v1/media/')) {
+      kernelCalls.push({ path: url.pathname + url.search, authorization: request.headers.get('authorization') });
+      return Response.json(
+        {
+          type: 'https://rezics.com/problems/not_found',
+          title: 'Not Found',
+          status: 404,
+          code: 'not_found',
+          retryable: false,
+          effect_status: 'not_applicable',
+          request_id: randomUUID(),
+        },
+        { status: 404, headers: { 'content-type': 'application/problem+json' } },
+      );
+    }
+    return json({ error: 'not_found' }, 404);
+  },
+});
+
+function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const probe = createServer();
+    probe.once('error', reject);
+    probe.listen(0, '127.0.0.1', () => {
+      const { port } = probe.address() as { port: number };
+      probe.close(() => resolve(port));
+    });
+  });
+}
+
+let child: ChildProcess | undefined;
+let started: Promise<string> | undefined;
+
+// The documented command, pointed at the fake through the environment it reads in development.
+function site(): Promise<string> {
+  started ??= (async () => {
+    const port = await freePort();
+    let output = '';
+    const keep = (chunk: Buffer) => {
+      output = (output + chunk.toString()).slice(-8000);
+    };
+    child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
+      cwd: app,
+      detached: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        KERNEL_ORIGIN: fake.url.origin,
+        AUTH_ISSUER: `${fake.url.origin}/auth`,
+        WEBSITE_CLIENT_ID: clientId,
+        WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
+        API_RESOURCE: resource,
+        WEBSITE_SCOPES: scopes.join(' '),
+      },
+    });
+    child.stdout!.on('data', keep);
+    child.stderr!.on('data', keep);
+    const origin = `http://127.0.0.1:${port}`;
+    const deadline = Date.now() + 150_000;
+    for (;;) {
+      if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
+      try {
+        const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
+        if (response.status < 500) return origin;
+      } catch {}
+      if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${output}`);
+      await Bun.sleep(500);
+    }
+  })();
+  return started;
+}
+
+afterAll(() => {
+  fake.stop(true);
+  if (child?.pid)
+    try {
+      process.kill(-child.pid, 'SIGTERM');
+    } catch {}
+});
+
+const cookieValue = (response: Response, name: string) =>
+  response.headers
+    .getSetCookie()
+    .find((line) => line.startsWith(`${name}=`))
+    ?.split(';')[0]!
+    .slice(name.length + 1);
+
+// Signs a person in through the Worker, answering at Auth as a signed-in person would, and returns the session id.
+async function signIn(): Promise<string> {
+  refusal = null;
+  const origin = await site();
+  const start = await fetch(`${origin}/auth/sign-in?return_to=%2Fja`, { redirect: 'manual' });
+  const params = new URL(start.headers.get('location')!).searchParams;
+  const code = `code-${randomUUID()}`;
+  codes.set(code, { nonce: params.get('nonce')!, sub: 'alice' });
+  const answer = await fetch(`${params.get('redirect_uri')}?code=${code}&state=${params.get('state')}`, {
+    redirect: 'manual',
+    headers: { cookie: `${login}=${cookieValue(start, login)}` },
+  });
+  expect(answer.status).toBe(303);
+  return cookieValue(answer, session)!;
+}
+
+// A media download with the session: the Worker resolves its credential, refreshing first, then asks the kernel.
+async function download(value: string) {
+  const id = randomUUID();
+  const response = await fetch(`${await site()}/media/${id}/original`, {
+    redirect: 'manual',
+    headers: { cookie: `${session}=${value}` },
+  });
+  const call = kernelCalls.findLast((entry) => entry.path.startsWith(`/v1/media/${id}:`));
+  return { response, call };
+}
+
+const refreshes = () => tokenRequests.filter((grant) => grant === 'refresh_token').length;
+
+test(
+  'a refresh that Auth refuses with invalid_grant ends the session',
+  async () => {
+    const value = await signIn();
+    refusal = () => json({ error: 'invalid_grant', error_description: 'refresh token revoked' }, 400);
+    const before = refreshes();
+    const first = await download(value);
+    // The request continues signed out.
+    expect(refreshes()).toBe(before + 1);
+    expect(first.call).toBeDefined();
+    expect(first.call!.authorization).toBeNull();
+    // The session is gone: no further refresh is attempted for it.
+    const second = await download(value);
+    expect(refreshes()).toBe(before + 1);
+    expect(second.call!.authorization).toBeNull();
+  },
+  timeout,
+);
+
+test(
+  'a refresh that fails for any other reason keeps the session and answers unavailable',
+  async () => {
+    const failures: [string, () => Response][] = [
+      ['invalid_client', () => json({ error: 'invalid_client' }, 401)],
+      ['invalid_request', () => json({ error: 'invalid_request' }, 400)],
+      ['temporarily_unavailable', () => json({ error: 'temporarily_unavailable' }, 503)],
+      ['server error page', () => new Response('<h1>Internal Server Error</h1>', { status: 500 })],
+    ];
+    for (const [name, answer] of failures) {
+      const value = await signIn();
+      refusal = answer;
+      const before = refreshes();
+      const failed = await download(value);
+      expect(refreshes(), name).toBe(before + 1);
+      expect(failed.response.status, name).toBe(502);
+      expect(failed.response.headers.get('content-type'), name).toStartWith('application/problem+json');
+      expect(((await failed.response.json()) as { code: string }).code, name).toBe('dependency_unavailable');
+      // No kernel call is made with a missing or stale credential.
+      expect(failed.call, name).toBeUndefined();
+
+      // Once Auth recovers, the same session refreshes and the kernel sees the person's new token.
+      refusal = null;
+      const recovered = await download(value);
+      expect(refreshes(), name).toBe(before + 2);
+      expect(recovered.call?.authorization, name).toBe(`Bearer ${accessTokens.at(-1)}`);
+    }
+  },
+  timeout,
+);
