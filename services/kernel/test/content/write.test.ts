@@ -1,7 +1,11 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { fromPlainText, serializeDocument } from '@rezics/document';
-import { initializeResourceGrants, parentCreationAuthorization } from '../../src/access/index.ts';
+import {
+  createResourceCreationManifest,
+  initializeResourceGrants,
+  parentCreationAuthorization,
+} from '../../src/access/index.ts';
 import { createThread, createPost, revisePost, threadTarget } from '../../src/content/commands.ts';
 import { runCommand, IdempotencyConflictError } from '../../src/command/command.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
@@ -36,7 +40,7 @@ beforeAll(async () => {
   owner = (await f.context()).actor;
   await f.reader.query(
     `INSERT INTO content.board(route,board_id,subject_id,title,visibility,security_revision,recorded_transaction_id)
-     VALUES ($1,$2,$3,'Books','public',1,$4)`,
+     VALUES ($1,$2,$3,'Books','published',1,$4)`,
     [board.route, board.id, subject, Bun.randomUUIDv7()],
   );
 }, 30000);
@@ -288,6 +292,18 @@ test('shared parent capability initializes thread and first-post roles in one tr
   const thread = { route: 0x4567, id: newId(0x4567) };
   const post = { route: thread.route, id: newId(thread.route) };
   const ctx = await f.context();
+  const creation = {
+    async validate(tx: Parameters<Parameters<typeof runCommand>[2]>[0], resource: { route: number; id: string }) {
+      return (
+        (
+          await tx.query(
+            'SELECT 1 FROM public.standing_resource WHERE route=$1 AND id=$2 AND creation_xid=pg_current_xact_id()',
+            [resource.route, resource.id],
+          )
+        ).rowCount === 1
+      );
+    },
+  };
   const authorization = parentCreationAuthorization({
     access: f.access,
     actor: ctx.actor,
@@ -304,18 +320,11 @@ test('shared parent capability initializes thread and first-post roles in one tr
     context: {
       ...ctx,
       resource: thread,
-      creation: {
-        async validate(tx, resource) {
-          return (
-            (
-              await tx.query(
-                'SELECT 1 FROM public.standing_resource WHERE route=$1 AND id=$2 AND creation_xid=pg_current_xact_id()',
-                [resource.route, resource.id],
-              )
-            ).rowCount === 1
-          );
-        },
-      },
+      creation,
+      manifest: createResourceCreationManifest([
+        { resource: thread, type: 'content.thread', creator: owner.accountId, creation },
+        { resource: post, type: 'content.post', creator: owner.accountId, creation },
+      ]),
     },
   });
   const before = await snapshot();
@@ -355,7 +364,7 @@ test('checkGrowth proves the declared three-scale machine-independent bound', as
       for (const route of [seedRoute, 0x5678]) {
         await database.admin.query(
           `INSERT INTO content.thread(route,thread_id,author_account_id,board_id,title,visibility,security_revision,recorded_transaction_id)
-           VALUES ($1,$2,$3,$4,'Distractor','public',1,$5)`,
+           VALUES ($1,$2,$3,$4,'Distractor','published',1,$5)`,
           [route, newId(route), owner.accountId, board.id, Bun.randomUUIDv7()],
         );
       }
