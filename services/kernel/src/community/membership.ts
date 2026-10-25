@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
 import type { MembershipWorkInput } from '@rezics/auth/membership-workflows';
+import { readAccount } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import type { LifecycleRequest } from '../access/lifecycle.ts';
 import type { MembershipBootstrapStep, MembershipReservation } from '../access/membership-inverse.ts';
@@ -13,7 +14,8 @@ import {
   runCommand,
   type CommandTransaction,
 } from '../command/command.ts';
-import { accessCommandAuthorization, type Access, type AccessClient } from '../request/access.ts';
+import { withConnection } from '../database/pool.ts';
+import { accessCheck, accessCommandAuthorization, type Access, type AccessClient } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import realmActive from './membership-realm.sql';
 import openMembership from './membership-open.sql';
@@ -104,6 +106,26 @@ function realmRoute(realmId: string): number {
 /** Accounts owns the workflow. This adapter publishes and proves the Realm side. */
 export function createRealmMembership(config: RealmMembershipDependencies) {
   const { pool, access } = config;
+
+  async function authorize(reference: string, input: MembershipWorkInput): Promise<LifecycleRequest> {
+    denyUnless(input.kind === 'membership' && input.principal.kind === 'realm');
+    if (input.role === 'owner') throw new RealmMembershipRoleError();
+    denyUnless(input.role === 'member' || input.role === null);
+    const route = realmRoute(input.principal.id);
+    denyUnless(routeOf(input.memberAccountId) !== null);
+    denyUnless(input.reservationId === undefined || routeOf(input.reservationId) === routeOf(input.memberAccountId));
+    const context = { pool, deadline: Date.now() + 30_000 };
+    const actor = await access.authenticate(reference, context);
+    const accountRoute = routeOf(actor.accountId);
+    denyUnless(accountRoute !== null);
+    const account = await withConnection(pool, (client) => readAccount(client, accountRoute, actor.accountId));
+    denyUnless(account);
+    const request = { actor, account, deadline: context.deadline };
+    const action = actor.accountId === input.memberAccountId ? 'realm:join' : 'realm:manage';
+    const check = await accessCheck(access, actor, action, { route, id: input.principal.id }, { ...request, pool });
+    denyUnless(await withConnection(pool, (client) => check(client)));
+    return request;
+  }
 
   async function readTerminal(client: AccessClient, input: MembershipReservation) {
     if (input.principal.kind !== 'realm') return null;
@@ -324,6 +346,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
 
   return {
     authority: { readTerminal, readChange },
+    authorize,
     publish,
     terminalize,
     roleReader,
