@@ -194,6 +194,10 @@ Manager events are committed to SQLite and signaled through filesystem notificat
 Managers receive only decisions requiring judgment; gates, merges and mechanical reruns do not wake them. Completion is
 a proposal: the controller checks all scoped tasks are merged and the main gate passes in an isolated checkout.
 Manager commands are attributed through `GOAL_MANAGER` or a registered Codex thread; workers get fresh session identities.
+Brief front matter can use `after: [task-id, ...]` to hold dispatch until each named task has merged; unknown task ids are
+refused, and already merged dependencies are ready immediately. For a Goal that uses `after`, once a merge leaves no ready,
+running, landing, or held tasks, the control plane delivers one waking `goal-idle` event to its manager; replayed merge
+outcomes do not deliver it again.
 
 A manual smoke test for an authenticated local Codex manager is available without embedding any account name:
 

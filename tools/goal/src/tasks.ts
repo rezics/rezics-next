@@ -26,6 +26,9 @@ export class WorkerTasks {
     const brief = parseBrief(markdown, readRiskOwnership(this.settings.riskAreasFile));
     const taskClass = classifyTask(brief);
     if (taskClass === 'mechanical') throw new Error('run mechanical commands directly without a worker');
+    const existingTasks = this.store.tasks();
+    const known = new Set(existingTasks.map(task => task.id));
+    for (const dependency of brief.after) if (!known.has(dependency)) throw new Error(`unknown dependency task: ${dependency}`);
     const id = crypto.randomUUID();
     const branch = `${this.settings.branchPrefix}${id}`;
     const worktree = join(this.settings.worktreeRoot, id);

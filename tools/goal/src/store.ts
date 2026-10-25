@@ -56,10 +56,15 @@ export class WorkerStore implements AttemptFence {
       if (result instanceof Promise) throw new Error('store transactions must be synchronous');
       return result; }).immediate();
   }
-  createTask(brief: Brief, paths: { briefPath: string; worktree: string; branch: string; base: string }, taskClass: Task['taskClass'], id = crypto.randomUUID()): Task {
+  createTask(brief: Brief, paths: { briefPath: string; worktree: string; branch: string; base: string }, taskClass: Task['taskClass'],
+    id = crypto.randomUUID()): Task {
     return this.db.transaction(() => {
+      const after = brief.after ?? [];
+      const dependencies = new Map(this.tasks().map(task => [task.id, task]));
+      for (const dependency of after) if (!dependencies.has(dependency)) throw new Error(`unknown dependency task: ${dependency}`);
+      const state = after.every(dependency => dependencies.get(dependency)?.state === 'merged') ? 'ready' : 'held';
       const sequence = (this.db.query('SELECT coalesce(max(sequence),0)+1 AS n FROM worker_tasks').get() as { n: number }).n;
-      const task: Task = { id, sequence, brief, ...paths, taskClass, state: 'ready', currentAttempt: 0, createdAt: new Date().toISOString() };
+      const task: Task = { id, sequence, brief, ...paths, taskClass, state, currentAttempt: 0, createdAt: new Date().toISOString() };
       this.db.query('INSERT INTO worker_tasks VALUES (?,?,?,?)').run(id, sequence, 0, JSON.stringify(task));
       return task;
     }).immediate();

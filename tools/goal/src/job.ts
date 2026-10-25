@@ -123,6 +123,7 @@ export class WorkerJob implements GateOutcomeSink {
     const record = store.record(outcome);
     if (!record) throw new Error('attempt must be settled before gate outcomes');
     let action: (() => Promise<void>) | undefined;
+    let released: string[] = [];
     store.write(outcome, () => {
       const duplicate = store.events(task.id).some(e => e.attempt === outcome.attempt && e.kind === 'gate-outcome' && JSON.parse(e.body).stage === outcome.stage);
       if (duplicate) return;
@@ -130,7 +131,22 @@ export class WorkerJob implements GateOutcomeSink {
       record.diffLines = outcome.diffLines; record.changedFiles = [...outcome.changedFiles]; record.hostMs = (record.hostMs ?? 0) + outcome.hostMs;
       record.firstFailure = outcome.firstFailure?.fingerprint ?? null; record.outcome = outcome.passed ? 'passed' : 'gate-failed';
       if (outcome.passed) {
-        if (outcome.mergedCommit) store.updateTask(outcome, t => { t.state = 'merged'; t.mergedCommit = outcome.mergedCommit!; });
+        if (outcome.mergedCommit) {
+          store.updateTask(outcome, t => { t.state = 'merged'; t.mergedCommit = outcome.mergedCommit!; });
+          const tasks = store.tasks(), byId = new Map(tasks.map(candidate => [candidate.id, candidate]));
+          released = tasks.filter(candidate => candidate.state === 'held'
+            && (candidate.brief.after ?? []).every(id => byId.get(id)?.state === 'merged')).map(candidate => candidate.id);
+          for (const taskId of released) store.updateTask({ taskId, attempt: 0 }, candidate => { candidate.state = 'ready'; });
+          const goalTasks = store.tasks().filter(candidate => candidate.brief.goal === task.brief.goal);
+          const goalInFlight = goalTasks.some(candidate => ['ready', 'running', 'landing', 'held'].includes(candidate.state));
+          const goalHasDependencies = goalTasks.some(candidate => (candidate.brief.after ?? []).length > 0);
+          if (goalHasDependencies && !goalInFlight) {
+            const event = { managerId: task.brief.manager, taskId: task.id, kind: 'goal-idle' as const,
+              summary: `Goal ${task.brief.goal} has no tasks in flight.` };
+            store.event(outcome, 'goal-idle', event);
+            this.inbox.deliver(event);
+          }
+        }
         store.putRecord(record); return;
       }
       const limits = readRouting(this.tasks.settings.routingFile).classes[task.taskClass as Exclude<typeof task.taskClass, 'mechanical'>];
@@ -186,6 +202,7 @@ export class WorkerJob implements GateOutcomeSink {
       }
       store.putRecord(record);
     });
+    for (const taskId of released) this.track(this.start(taskId));
     if (action) this.track(action());
   }
   /** Reattach to a persisted running attempt after a controller restart using a kernel exit notification. */

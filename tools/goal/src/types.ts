@@ -3,7 +3,7 @@ import type { AttemptRef, FirstFailure, ManagerEventKind } from './contracts.ts'
 
 export type Cli = 'codex' | 'grok' | 'cursor';
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
-export type TaskState = 'ready' | 'running' | 'landing' | 'merged' | 'stopped' | 'cancelled';
+export type TaskState = 'ready' | 'held' | 'running' | 'landing' | 'merged' | 'stopped' | 'cancelled';
 export type TaskKind = 'implementation' | 'interface' | 'bulk-text' | 'claim' | 'specification' | 'research' | 'mechanical';
 export type TaskClass = TaskKind | 'critical-path';
 export type Profile = { cli: Cli; model: string; effort: Effort; poolClass: string };
@@ -30,7 +30,7 @@ export type Settings = {
 export type Brief = {
   goal: string; manager: string; kind: TaskKind; paths: string[]; riskAreas: string[];
   acceptance: { command: string[]; tests: string[]; failing: boolean };
-  estimate: { lines: number; files: number }; criticalPath: boolean; waiting: string[];
+  estimate: { lines: number; files: number }; criticalPath: boolean; waiting: string[]; after: string[];
   inseparable: boolean; citesSources: boolean; hostileInput: boolean; markdown: string;
 };
 export type PoolReading = {

@@ -46,7 +46,7 @@ export function importRunDirectory(tasks: WorkerTasks, directory: string): Attem
   const brief: import('./types.ts').Brief = {
     goal: start.task, manager: start.task, kind: 'implementation', paths: [], riskAreas: [],
     acceptance: { command: [], tests: [], failing: false }, estimate: { lines: 0, files: 0 },
-    criticalPath: start.criticalPath === true, waiting: [], inseparable: false, citesSources: false, hostileInput: false,
+    criticalPath: start.criticalPath === true, waiting: [], after: [], inseparable: false, citesSources: false, hostileInput: false,
     markdown: '# Imported execution\n\nOnly historical execution metadata is available. Supply a task contract before redispatch.\n',
   };
   const briefPath = join(tasks.settings.stateDirectory, 'briefs', `${crypto.randomUUID()}.md`);

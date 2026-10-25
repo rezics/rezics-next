@@ -8,7 +8,7 @@ import { WorkerJob } from './job.ts';
 import { importAttempt, importRunDirectory } from './import-attempt.ts';
 import { report } from './report.ts';
 import type { LandingQueue, ManagerInbox } from './contracts.ts';
-import type { AttemptRecord, Effort, Settings, Tokens } from './types.ts';
+import type { AttemptRecord, Effort, Settings, Task, Tokens } from './types.ts';
 
 export type WorkerCommandOptions = {
   runtime?: Runtime; settings?: Settings; store?: WorkerStore; tasks?: WorkerTasks; landing?: LandingQueue; inbox?: ManagerInbox;
@@ -32,10 +32,15 @@ export async function runWorkerCommand(command: string, argv: string[], options:
     const [arg] = argv;
     if (command === 'dispatch') {
       if (!arg || argv.length !== 1) throw new Error('usage: dispatch <brief>');
-      const task = tasks.dispatch(arg); print(task.id); await job.start(task.id);
+      const task = tasks.dispatch(arg); print(task.id);
+      if (task.state === 'held') return 0;
+      await job.start(task.id);
     } else if (command === 'status') {
       if (argv.length > 1) throw new Error('usage: status [task]');
-      print(JSON.stringify(arg ? store.task(arg) : store.tasks(), null, 2));
+      const show = (task: Task) => task.state === 'held'
+        ? { ...task, waitingFor: (task.brief.after ?? []).filter(id => store.task(id).state !== 'merged') }
+        : task;
+      print(JSON.stringify(arg ? show(store.task(arg)) : store.tasks().map(show), null, 2));
     } else if (command === 'attempts') {
       if (argv.some(a => a !== '--json')) throw new Error('usage: attempts [--json]');
       print(argv.includes('--json') ? JSON.stringify(store.records(), null, 2) : store.attempts().map(a => `${a.taskId} ${a.attempt} ${a.state} ${a.profile.model}/${a.profile.effort} ${a.pool}`).join('\n'));

@@ -89,7 +89,7 @@ export function parseBrief(markdown: string, ownership: RiskOwnership): Brief {
     acceptance: { command: list(acceptance.command, 'acceptance.command', true), tests: list(acceptance.tests, 'acceptance.tests', true),
       failing: boolean(acceptance.failing, 'acceptance.failing', false) },
     estimate: { lines: estimate.lines as number, files: estimate.files as number },
-    criticalPath: boolean(raw.criticalPath, 'criticalPath'), waiting: list(raw.waiting, 'waiting'),
+    criticalPath: boolean(raw.criticalPath, 'criticalPath'), waiting: list(raw.waiting, 'waiting'), after: list(raw.after ?? [], 'after'),
     inseparable: boolean(raw.inseparable, 'inseparable', false), citesSources: boolean(raw.citesSources, 'citesSources', false),
     hostileInput: boolean(raw.hostileInput, 'hostileInput', false), markdown,
   };

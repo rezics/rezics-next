@@ -6,7 +6,7 @@ import type { ManagerEvent, ManagerEventKind, ManagerInbox } from './contracts.t
 import { migrate } from './db.ts';
 
 const wakingKinds = new Set<ManagerEventKind>(['spec-conflict', 'scope-growth', 'round-limit', 'stalled',
-  'failed-after-consult', 'goal-unmet', 'instruction']);
+  'failed-after-consult', 'goal-unmet', 'goal-idle', 'instruction']);
 export type InboxEntry = { id: number; event: ManagerEvent; readAt: number | null; acknowledgedAt: number | null };
 
 export class SqliteManagerInbox implements ManagerInbox {
