@@ -1,10 +1,12 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { createAuthService } from '@rezics/auth';
+import { fromPlainText, serializeDocument } from '@rezics/document';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createAccess } from '../../src/access/index.ts';
+import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { runCommand } from '../../src/command/command.ts';
 import { nullErasedRevisionPage } from '../../src/content/erasure-workflow.ts';
 import { clearErasedPostRevisions } from '../../src/content/erased-post-cleanup.ts';
@@ -33,13 +35,7 @@ const other = newId(0x7311);
 const moderator = newId(0x7311);
 const suspended = newId(0x7311);
 const actions = ['post:erase', 'post:read', 'thread:read', 'board:read', 'moderation:takedown'];
-const body = Buffer.from(
-  JSON.stringify({
-    version: 'rezics-document-v1',
-    profile: 'text',
-    doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Authored sentinel' }] }] },
-  }),
-);
+const body = Buffer.from(serializeDocument(fromPlainText('Authored sentinel')));
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
 let app: ReturnType<typeof createKernel>;
 let authPool: Pool;
@@ -126,6 +122,7 @@ beforeAll(async () => {
   app = createKernel({
     pool: db.pool,
     routeKey,
+    writeRate: createWriteRateLimiter({ secret: 'author-delete-test-only-rate-secret-at-least-32-bytes' }),
     access: (config) =>
       createAccess({
         ...config,
@@ -201,7 +198,7 @@ function request(path: string, method = 'GET', account: string | null = null, ke
       method,
       headers: {
         ...(account ? { authorization: `Bearer ${bearers.get(account)!}` } : {}),
-        ...(method === 'DELETE' ? { 'Idempotency-Key': key } : {}),
+        ...(method === 'DELETE' ? { 'Idempotency-Key': JSON.stringify(key) } : {}),
       },
     }),
   );
@@ -351,9 +348,19 @@ test('delete is one bounded tombstone and cleanup runs in bounded pages as posts
     name: 'author-delete-neighbours',
     hotPartition: partitionOf(route),
     hotShare: 1,
-    rows: () => {
+    rows: ({ ordinal }) => {
       const post = newId(route),
-        revision = newId(route);
+        revision = newId(route),
+        account = newId(routeOf(author)!),
+        group = newId(routeOf(author)!);
+      const position = 1000 + ordinal * 10;
+      const grant = {
+        route,
+        resource_id: post,
+        subject_id: author,
+        valid: '(,)',
+        transaction_id: revision,
+      };
       return {
         'content.post': [
           {
@@ -383,7 +390,87 @@ test('delete is one bounded tombstone and cleanup runs in bounded pages as posts
             recorded_transaction_id: revision,
           },
         ],
+        // Unrelated native Access rows keep point probes honest at every scale.
+        'access.account': [
+          { route: routeOf(account), account_id: account, kind: 'actor', state: 'active', transaction_id: revision },
+          { route: routeOf(group), account_id: group, kind: 'organization', state: 'active', transaction_id: revision },
+        ],
+        'access.membership_inverse': [
+          {
+            route: routeOf(account),
+            account_id: account,
+            kind: 'organization',
+            group_id: group,
+            reservation_id: revision,
+            transaction_id: revision,
+          },
+        ],
+        'access.organization_member': [
+          {
+            route: routeOf(group),
+            organization_id: group,
+            member_account_id: account,
+            role: 'owner',
+            valid: '(,)',
+            transaction_id: revision,
+          },
+        ],
+        'access.resource_grant': [{ ...grant, action: 'post:erase' }],
+        'access.resource_role_grant': [{ ...grant, grant_role: 'content.post.owner' }],
+        'access.resource_denial': [{ ...grant, action: 'post:erase', reason: 'resource' }],
+        'access.write_rate_counter': [
+          {
+            route: routeOf(account),
+            identity_digest: createHash('sha256').update(account).digest('hex'),
+            family: 'content',
+            count: 1,
+            expires_at: '2099-01-01T00:00:00Z',
+          },
+        ],
+        'core.receipt': [
+          {
+            partition_no: partitionOf(route),
+            principal_kind: 'account',
+            principal_id: author,
+            command_kind: 'content.post:erase',
+            idempotency_key: post,
+            request_digest: Buffer.alloc(32),
+            epoch: 1,
+            position,
+            transaction_id: revision,
+            response: { postId: post },
+          },
+        ],
+        'core.outbox': [
+          {
+            partition_no: partitionOf(route),
+            position,
+            event_seq: 0,
+            event_count: 1,
+            epoch: 1,
+            id: revision,
+            type: 'com.rezics.content.post.created.v1',
+            data: { postId: post },
+          },
+        ],
+        'editorial.write_basis': [
+          {
+            partition_no: partitionOf(route),
+            transaction_id: revision,
+            epoch: 1,
+            position,
+            principal_kind: 'account',
+            principal_id: author,
+            client_id: 'web',
+          },
+        ],
       };
+    },
+    async finish(admin, range) {
+      await admin.query('UPDATE core.partition SET position = GREATEST(position, $2) WHERE partition_no = $1', [
+        partitionOf(route),
+        1000 + range.to * 10,
+      ]);
     },
   };
   let probe: Awaited<ReturnType<typeof fixture>>;
