@@ -4,6 +4,7 @@ import { betterAuth } from 'better-auth';
 import { jwt } from 'better-auth/plugins';
 import { websiteProvider } from './website-provider.ts';
 import { WEBSITE_CLIENT_ID, websiteRoutes } from './website.ts';
+import { pruneExpiredProtocolState } from './protocol-maintenance.ts';
 import { APIError, createAuthEndpoint } from 'better-auth/api';
 import { setSessionCookie } from 'better-auth/cookies';
 import { publicCredential, verifyKeyAssertion } from './key-credentials.ts';
@@ -761,6 +762,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       },
       pruneExpiredVerifications: () => pruneExpiredVerifications(database),
       pruneExpiredSessions: (batch) => pruneExpiredSessions(database, batch),
+      pruneExpiredProtocolState: (batch) => pruneExpiredProtocolState(database, batch),
       trimSessionHistory: (accountId, batch) => trimSessionHistory(database, accountId, batch),
       sessionUpgradePage: (after, limit) => sessionUpgradePage(database, after, limit),
       signing: signer.control,

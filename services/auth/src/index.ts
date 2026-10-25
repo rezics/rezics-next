@@ -223,6 +223,9 @@ export interface AuthService {
     pruneExpiredVerifications(): Promise<number>;
     /** Bounded maintenance; the host registers and schedules these ports. */
     pruneExpiredSessions(batch?: number): Promise<number>;
+    /** One bounded batch per expired native OAuth/OIDC kind (tokens, refresh
+     * families, client assertions, recent OIDC sessions); at most 1000 each. */
+    pruneExpiredProtocolState(batch?: number): Promise<number>;
     trimSessionHistory(accountId: string, batch?: number): Promise<SessionTrim>;
     sessionUpgradePage(after: string, limit?: number): Promise<string[]>;
     signing: SigningControl;
