@@ -12,6 +12,7 @@ import {
 } from '@rezics/definitions/bulk';
 import type { ImportBatchRequest, ImportBatchResult } from './import-contract.ts';
 import type { RecordRow } from './record-store.ts';
+import { MAX_DUMP_RECORD_BYTES } from './dumps-bytes.ts';
 
 export type Run = { source: string; id: string; lease: string };
 /** Callers supply only the pure converter's sanitized normalized record, never raw dump data. */
@@ -524,7 +525,7 @@ export class RunStore<Projection = BatchStatement[]> {
       exact(sourceProjection, ['sourceKind', 'normalizedRecord']);
       if (!['bangumi', 'vndb', 'openlibrary', 'wikidata'].includes(sourceProjection.sourceKind as string)) fail();
       // Only the caller's sanitized converter input is retained; row metadata stays separate.
-      const normalizedRecord = boundedJson(sourceProjection.normalizedRecord);
+      const normalizedRecord = boundedJson(sourceProjection.normalizedRecord, MAX_DUMP_RECORD_BYTES);
       projection = `{"sourceKind":${JSON.stringify(sourceProjection.sourceKind)},"normalizedRecord":${normalizedRecord}}`;
     } else {
       if (!Array.isArray(record.projection)) fail();

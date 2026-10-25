@@ -12,6 +12,16 @@ export interface DumpCounters {
 export const MAX_DUMP_CHUNK_BYTES = 1048576;
 export const DEFAULT_DUMP_CHUNK_BYTES = 262144;
 
+export const DEFAULT_DUMP_RECORD_BYTES = 262144;
+export const MAX_DUMP_RECORD_BYTES = 1048576;
+
+export function dumpRecordLimit(value: number | undefined): number {
+  const cap = value === undefined ? DEFAULT_DUMP_RECORD_BYTES : value;
+  if (!Number.isSafeInteger(cap) || cap <= 0 || cap > MAX_DUMP_RECORD_BYTES)
+    throw new Error('Invalid dump record byte limit');
+  return cap;
+}
+
 export function dumpChunkLimit(value: number | undefined): number {
   const cap = value === undefined ? DEFAULT_DUMP_CHUNK_BYTES : value;
   if (!Number.isSafeInteger(cap) || cap <= 0 || cap > MAX_DUMP_CHUNK_BYTES)

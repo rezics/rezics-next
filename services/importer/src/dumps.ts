@@ -1,5 +1,12 @@
 import type { SourceId, SourceRecord } from '@rezics/conversion';
-import { createDumpCounters, dumpChunkLimit, dumpLines, DumpMemory, type DumpCounters } from './dumps-bytes';
+import {
+  createDumpCounters,
+  dumpChunkLimit,
+  dumpRecordLimit,
+  dumpLines,
+  DumpMemory,
+  type DumpCounters,
+} from './dumps-bytes';
 
 function invalid(): never {
   throw new Error('Invalid dump record or framing');
@@ -66,15 +73,13 @@ export async function* readDump(
   source: SourceId,
   input: AsyncIterable<Uint8Array>,
   options: {
-    maxRecordBytes: number;
+    maxRecordBytes?: number | undefined;
     maxChunkBytes?: number;
     counters?: DumpCounters;
-  },
+  } = {},
 ): AsyncGenerator<SourceRecord> {
   const chunkCap = dumpChunkLimit(options.maxChunkBytes);
-  const cap = options.maxRecordBytes;
-  if (!Number.isSafeInteger(cap) || cap <= 0 || cap > Number.MAX_SAFE_INTEGER - 4)
-    throw new Error('Invalid record byte limit');
+  const cap = dumpRecordLimit(options.maxRecordBytes);
   if (!['bangumi', 'vndb', 'openlibrary', 'wikidata'].includes(source)) return invalid();
   const counters = options.counters ?? createDumpCounters();
   const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });

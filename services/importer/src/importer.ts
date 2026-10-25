@@ -110,7 +110,7 @@ export class Importer {
     return this.runRecords(
       registration,
       readDump(registration.sourceKind, bytes, {
-        maxRecordBytes: options.maxRecordBytes ?? 2 * 1024 * 1024,
+        maxRecordBytes: options.maxRecordBytes,
       }),
       options,
     );
