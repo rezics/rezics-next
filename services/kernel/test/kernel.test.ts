@@ -137,6 +137,7 @@ const typed = [
   'POST /v1/posts/:id/$takeDown',
   'POST /v1/posts/:id/$erase',
   'POST /v1/threads/:id/$erase',
+  'GET /v1/openapi.json',
   'GET /v1/operations/:id',
   'POST /v1/media',
   'GET /v1/media/:id',

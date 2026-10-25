@@ -11,6 +11,17 @@ import { visibleOperations, type VisibleOperation } from './visibility.ts';
 
 type ContractDocument = ReturnType<typeof openApiDocument>;
 
+/** Finite 200 schema. `t.Any()` is an open record; a bare `t.Unknown()` omits this response. */
+const documentSchema = t.Object({
+  openapi: t.String(),
+  info: t.Object({ title: t.String(), version: t.String() }),
+  paths: t.Record(t.String(), t.Record(t.String(), t.Object({ operationId: t.Optional(t.String()) }))),
+  components: t.Object({
+    schemas: t.Record(t.String(), t.Unknown()),
+    securitySchemes: t.Record(t.String(), t.Unknown()),
+  }),
+});
+
 type Catalogue = {
   document: ContractDocument;
   routes: readonly MountedRoute[];
@@ -47,11 +58,13 @@ export function openApiRoutes(
   dependencies: { pool: Pool; clock: () => Date },
 ) {
   let catalogue: Catalogue | undefined;
+  // Read routes from the shared instance. Naming the `get` result here and using it
+  // inside the handler makes the route type circular once the 200 schema is closed.
   const routed = app.get(
     '/v1/openapi.json',
     {
       response: {
-        200: t.Any(),
+        200: documentSchema,
         401: problemSchema('authentication_required', 'invalid_credentials'),
         503: problemSchema('overloaded', 'deadline_exceeded', 'partition_unavailable', 'transaction_retry_exhausted'),
       },
@@ -64,9 +77,9 @@ export function openApiRoutes(
     },
     async ({ actor, job }) => {
       catalogue ??= {
-        document: openApiDocument(routed),
-        routes: [...routed.routes],
-        access: createAccess({ actions: actionCatalogue(routed) }),
+        document: openApiDocument(app),
+        routes: [...app.routes],
+        access: createAccess({ actions: actionCatalogue(app) }),
       };
       const visible = await visibleOperations({
         viewer: actor,

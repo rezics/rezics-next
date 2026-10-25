@@ -17732,7 +17732,20 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     error: [];
 }, "get", "/v1/openapi.json", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
     response: {
-        200: import("typebox").TAny;
+        200: import("typebox").TObject<{
+            openapi: import("typebox").TString;
+            info: import("typebox").TObject<{
+                title: import("typebox").TString;
+                version: import("typebox").TString;
+            }>;
+            paths: import("typebox").TRecord<"^.*$", import("typebox").TRecord<"^.*$", import("typebox").TObject<{
+                operationId: import("typebox").TOptional<import("typebox").TString>;
+            }>>>;
+            components: import("typebox").TObject<{
+                schemas: import("typebox").TRecord<"^.*$", import("typebox").TUnknown>;
+                securitySchemes: import("typebox").TRecord<"^.*$", import("typebox").TUnknown>;
+            }>;
+        }>;
         401: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
@@ -17782,7 +17795,20 @@ export declare function createKernel(dependencies: KernelDependencies): import("
         redirect?: never;
     };
     status: import("elysia").SelectiveStatus<{
-        200: any;
+        200: {
+            openapi: string;
+            info: {
+                title: string;
+                version: string;
+            };
+            paths: Record<string, Record<string, {
+                operationId?: string;
+            }>>;
+            components: {
+                schemas: Record<string, unknown>;
+                securitySchemes: Record<string, unknown>;
+            };
+        };
         401: {
             type: unknown;
             title: unknown;
@@ -17813,7 +17839,20 @@ export declare function createKernel(dependencies: KernelDependencies): import("
         };
     }>;
     problem: import("elysia").SelectiveProblem<{
-        200: any;
+        200: {
+            openapi: string;
+            info: {
+                title: string;
+                version: string;
+            };
+            paths: Record<string, Record<string, {
+                operationId?: string;
+            }>>;
+            components: {
+                schemas: Record<string, unknown>;
+                securitySchemes: Record<string, unknown>;
+            };
+        };
         401: {
             type: unknown;
             title: unknown;
@@ -17845,7 +17884,20 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     }>;
     defer: (fn: import("elysia/types").AfterResponseHandler<NoInfer<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
         response: {
-            200: import("typebox").TAny;
+            200: import("typebox").TObject<{
+                openapi: import("typebox").TString;
+                info: import("typebox").TObject<{
+                    title: import("typebox").TString;
+                    version: import("typebox").TString;
+                }>;
+                paths: import("typebox").TRecord<"^.*$", import("typebox").TRecord<"^.*$", import("typebox").TObject<{
+                    operationId: import("typebox").TOptional<import("typebox").TString>;
+                }>>>;
+                components: import("typebox").TObject<{
+                    schemas: import("typebox").TRecord<"^.*$", import("typebox").TUnknown>;
+                    securitySchemes: import("typebox").TRecord<"^.*$", import("typebox").TUnknown>;
+                }>;
+            }>;
             401: import("typebox").TObject<{
                 type: import("typebox").TSchema;
                 title: import("typebox").TSchema;
@@ -17925,7 +17977,20 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<Response>, {
     response: {
-        200: import("typebox").TAny;
+        200: import("typebox").TObject<{
+            openapi: import("typebox").TString;
+            info: import("typebox").TObject<{
+                title: import("typebox").TString;
+                version: import("typebox").TString;
+            }>;
+            paths: import("typebox").TRecord<"^.*$", import("typebox").TRecord<"^.*$", import("typebox").TObject<{
+                operationId: import("typebox").TOptional<import("typebox").TString>;
+            }>>>;
+            components: import("typebox").TObject<{
+                schemas: import("typebox").TRecord<"^.*$", import("typebox").TUnknown>;
+                securitySchemes: import("typebox").TRecord<"^.*$", import("typebox").TUnknown>;
+            }>;
+        }>;
         401: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
