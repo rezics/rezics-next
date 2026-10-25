@@ -1,7 +1,17 @@
 import type { Pool } from 'pg';
 import { type Access, type Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import type { Anchored, BoardId, BoardView, ItemView, Page, PostId, ReadContext, RevisionId, RevisionView, ThreadId, ThreadView } from './model.ts';
+import type { Anchored, BoardId, BoardView, ItemView as StoredItemView, Page, PostId, ReadContext, RevisionId, RevisionView, ThreadId, ThreadView as StoredThreadView } from './model.ts';
+/** Published erased slots remain readable, but never disclose revision bodies. */
+export type ItemView = StoredItemView & (Readonly<{
+    availability: 'available';
+}> | Readonly<{
+    availability: 'erased';
+    removed: true;
+}>);
+export type ThreadView = Omit<StoredThreadView, 'firstPost'> & Readonly<{
+    firstPost: ItemView;
+}>;
 export type ContentReadDependencies = Readonly<{
     pool: Pool;
     access: Access;

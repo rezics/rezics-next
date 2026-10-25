@@ -16837,24 +16837,56 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                             licence: string;
                             subjectIds: readonly string[];
                             boardId: string;
-                            firstPost: import("../content/model.ts").ItemView;
+                            firstPost: (Readonly<Readonly<{
+                                id: import("../content/model.ts").PostId;
+                                threadId: import("../content/model.ts").ThreadId;
+                                route: import("../content/model.ts").Route;
+                                authorId: import("../content/model.ts").ContentId;
+                                parentId: import("../content/model.ts").PostId | null;
+                                licence: string;
+                                subjectIds: readonly import("../content/model.ts").ContentId[];
+                                boardId: import("../content/model.ts").BoardId;
+                                visibility: import("../content/model.ts").Visibility;
+                                securityRevision: import("../content/model.ts").SecurityRevision;
+                                availability: import("../content/model.ts").Availability;
+                                createdAt: string;
+                                sha256: string;
+                                mediaIds: readonly import("../content/model.ts").MediaId[];
+                            }> & {
+                                revisionId: import("../content/model.ts").RevisionId;
+                            } & {
+                                body: import("@rezics/document").DocumentSnapshot;
+                                availability: 'available';
+                            }> & Readonly<{
+                                availability: 'available';
+                            }>) | (Readonly<Readonly<{
+                                id: import("../content/model.ts").PostId;
+                                threadId: import("../content/model.ts").ThreadId;
+                                route: import("../content/model.ts").Route;
+                                authorId: import("../content/model.ts").ContentId;
+                                parentId: import("../content/model.ts").PostId | null;
+                                licence: string;
+                                subjectIds: readonly import("../content/model.ts").ContentId[];
+                                boardId: import("../content/model.ts").BoardId;
+                                visibility: import("../content/model.ts").Visibility;
+                                securityRevision: import("../content/model.ts").SecurityRevision;
+                                availability: import("../content/model.ts").Availability;
+                                createdAt: string;
+                                sha256: string;
+                                mediaIds: readonly import("../content/model.ts").MediaId[];
+                            }> & {
+                                revisionId: import("../content/model.ts").RevisionId;
+                            } & {
+                                body: null;
+                                availability: 'erased';
+                            }> & Readonly<{
+                                availability: 'erased';
+                                removed: true;
+                            }>);
                         };
                     };
                     201: {
-                        thread: Readonly<{
-                            id: import("../content/model.ts").ThreadId;
-                            route: import("../content/model.ts").Route;
-                            authorId: import("../content/model.ts").ContentId;
-                            title: string | null;
-                            licence: string;
-                            subjectIds: readonly import("../content/model.ts").ContentId[];
-                            boardId: import("../content/model.ts").BoardId;
-                            visibility: import("../content/model.ts").Visibility;
-                            securityRevision: import("../content/model.ts").SecurityRevision;
-                            availability: import("../content/model.ts").Availability;
-                            createdAt: string;
-                            firstPost: import("../content/model.ts").ItemView;
-                        }>;
+                        thread: import("../content/reads.ts").ThreadView;
                     };
                     400: {
                         type: unknown;
@@ -17000,20 +17032,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                     headers: unknown;
                     response: {
                         200: {
-                            thread: Readonly<{
-                                id: import("../content/model.ts").ThreadId;
-                                route: import("../content/model.ts").Route;
-                                authorId: import("../content/model.ts").ContentId;
-                                title: string | null;
-                                licence: string;
-                                subjectIds: readonly import("../content/model.ts").ContentId[];
-                                boardId: import("../content/model.ts").BoardId;
-                                visibility: import("../content/model.ts").Visibility;
-                                securityRevision: import("../content/model.ts").SecurityRevision;
-                                availability: import("../content/model.ts").Availability;
-                                createdAt: string;
-                                firstPost: import("../content/model.ts").ItemView;
-                            }>;
+                            thread: import("../content/reads.ts").ThreadView;
                         };
                         400: {
                             type: unknown;
@@ -17114,10 +17133,100 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                         };
                         response: {
                             200: {
-                                post: import("../content/model.ts").ItemView;
+                                post: (Readonly<Readonly<{
+                                    id: import("../content/model.ts").PostId;
+                                    threadId: import("../content/model.ts").ThreadId;
+                                    route: import("../content/model.ts").Route;
+                                    authorId: import("../content/model.ts").ContentId;
+                                    parentId: import("../content/model.ts").PostId | null;
+                                    licence: string;
+                                    subjectIds: readonly import("../content/model.ts").ContentId[];
+                                    boardId: import("../content/model.ts").BoardId;
+                                    visibility: import("../content/model.ts").Visibility;
+                                    securityRevision: import("../content/model.ts").SecurityRevision;
+                                    availability: import("../content/model.ts").Availability;
+                                    createdAt: string;
+                                    sha256: string;
+                                    mediaIds: readonly import("../content/model.ts").MediaId[];
+                                }> & {
+                                    revisionId: import("../content/model.ts").RevisionId;
+                                } & {
+                                    body: import("@rezics/document").DocumentSnapshot;
+                                    availability: 'available';
+                                }> & Readonly<{
+                                    availability: 'available';
+                                }>) | (Readonly<Readonly<{
+                                    id: import("../content/model.ts").PostId;
+                                    threadId: import("../content/model.ts").ThreadId;
+                                    route: import("../content/model.ts").Route;
+                                    authorId: import("../content/model.ts").ContentId;
+                                    parentId: import("../content/model.ts").PostId | null;
+                                    licence: string;
+                                    subjectIds: readonly import("../content/model.ts").ContentId[];
+                                    boardId: import("../content/model.ts").BoardId;
+                                    visibility: import("../content/model.ts").Visibility;
+                                    securityRevision: import("../content/model.ts").SecurityRevision;
+                                    availability: import("../content/model.ts").Availability;
+                                    createdAt: string;
+                                    sha256: string;
+                                    mediaIds: readonly import("../content/model.ts").MediaId[];
+                                }> & {
+                                    revisionId: import("../content/model.ts").RevisionId;
+                                } & {
+                                    body: null;
+                                    availability: 'erased';
+                                }> & Readonly<{
+                                    availability: 'erased';
+                                    removed: true;
+                                }>);
                             };
                             201: {
-                                post: import("../content/model.ts").ItemView;
+                                post: (Readonly<Readonly<{
+                                    id: import("../content/model.ts").PostId;
+                                    threadId: import("../content/model.ts").ThreadId;
+                                    route: import("../content/model.ts").Route;
+                                    authorId: import("../content/model.ts").ContentId;
+                                    parentId: import("../content/model.ts").PostId | null;
+                                    licence: string;
+                                    subjectIds: readonly import("../content/model.ts").ContentId[];
+                                    boardId: import("../content/model.ts").BoardId;
+                                    visibility: import("../content/model.ts").Visibility;
+                                    securityRevision: import("../content/model.ts").SecurityRevision;
+                                    availability: import("../content/model.ts").Availability;
+                                    createdAt: string;
+                                    sha256: string;
+                                    mediaIds: readonly import("../content/model.ts").MediaId[];
+                                }> & {
+                                    revisionId: import("../content/model.ts").RevisionId;
+                                } & {
+                                    body: import("@rezics/document").DocumentSnapshot;
+                                    availability: 'available';
+                                }> & Readonly<{
+                                    availability: 'available';
+                                }>) | (Readonly<Readonly<{
+                                    id: import("../content/model.ts").PostId;
+                                    threadId: import("../content/model.ts").ThreadId;
+                                    route: import("../content/model.ts").Route;
+                                    authorId: import("../content/model.ts").ContentId;
+                                    parentId: import("../content/model.ts").PostId | null;
+                                    licence: string;
+                                    subjectIds: readonly import("../content/model.ts").ContentId[];
+                                    boardId: import("../content/model.ts").BoardId;
+                                    visibility: import("../content/model.ts").Visibility;
+                                    securityRevision: import("../content/model.ts").SecurityRevision;
+                                    availability: import("../content/model.ts").Availability;
+                                    createdAt: string;
+                                    sha256: string;
+                                    mediaIds: readonly import("../content/model.ts").MediaId[];
+                                }> & {
+                                    revisionId: import("../content/model.ts").RevisionId;
+                                } & {
+                                    body: null;
+                                    availability: 'erased';
+                                }> & Readonly<{
+                                    availability: 'erased';
+                                    removed: true;
+                                }>);
                             };
                             400: {
                                 type: unknown;
@@ -17269,7 +17378,52 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                         headers: unknown;
                         response: {
                             200: {
-                                posts: import("../content/model.ts").ItemView[];
+                                posts: ((Readonly<Readonly<{
+                                    id: import("../content/model.ts").PostId;
+                                    threadId: import("../content/model.ts").ThreadId;
+                                    route: import("../content/model.ts").Route;
+                                    authorId: import("../content/model.ts").ContentId;
+                                    parentId: import("../content/model.ts").PostId | null;
+                                    licence: string;
+                                    subjectIds: readonly import("../content/model.ts").ContentId[];
+                                    boardId: import("../content/model.ts").BoardId;
+                                    visibility: import("../content/model.ts").Visibility;
+                                    securityRevision: import("../content/model.ts").SecurityRevision;
+                                    availability: import("../content/model.ts").Availability;
+                                    createdAt: string;
+                                    sha256: string;
+                                    mediaIds: readonly import("../content/model.ts").MediaId[];
+                                }> & {
+                                    revisionId: import("../content/model.ts").RevisionId;
+                                } & {
+                                    body: import("@rezics/document").DocumentSnapshot;
+                                    availability: 'available';
+                                }> & Readonly<{
+                                    availability: 'available';
+                                }>) | (Readonly<Readonly<{
+                                    id: import("../content/model.ts").PostId;
+                                    threadId: import("../content/model.ts").ThreadId;
+                                    route: import("../content/model.ts").Route;
+                                    authorId: import("../content/model.ts").ContentId;
+                                    parentId: import("../content/model.ts").PostId | null;
+                                    licence: string;
+                                    subjectIds: readonly import("../content/model.ts").ContentId[];
+                                    boardId: import("../content/model.ts").BoardId;
+                                    visibility: import("../content/model.ts").Visibility;
+                                    securityRevision: import("../content/model.ts").SecurityRevision;
+                                    availability: import("../content/model.ts").Availability;
+                                    createdAt: string;
+                                    sha256: string;
+                                    mediaIds: readonly import("../content/model.ts").MediaId[];
+                                }> & {
+                                    revisionId: import("../content/model.ts").RevisionId;
+                                } & {
+                                    body: null;
+                                    availability: 'erased';
+                                }> & Readonly<{
+                                    availability: 'erased';
+                                    removed: true;
+                                }>))[];
                                 next: string | null;
                             };
                             400: {
@@ -17373,7 +17527,52 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                     headers: unknown;
                     response: {
                         200: {
-                            post: import("../content/model.ts").ItemView;
+                            post: (Readonly<Readonly<{
+                                id: import("../content/model.ts").PostId;
+                                threadId: import("../content/model.ts").ThreadId;
+                                route: import("../content/model.ts").Route;
+                                authorId: import("../content/model.ts").ContentId;
+                                parentId: import("../content/model.ts").PostId | null;
+                                licence: string;
+                                subjectIds: readonly import("../content/model.ts").ContentId[];
+                                boardId: import("../content/model.ts").BoardId;
+                                visibility: import("../content/model.ts").Visibility;
+                                securityRevision: import("../content/model.ts").SecurityRevision;
+                                availability: import("../content/model.ts").Availability;
+                                createdAt: string;
+                                sha256: string;
+                                mediaIds: readonly import("../content/model.ts").MediaId[];
+                            }> & {
+                                revisionId: import("../content/model.ts").RevisionId;
+                            } & {
+                                body: import("@rezics/document").DocumentSnapshot;
+                                availability: 'available';
+                            }> & Readonly<{
+                                availability: 'available';
+                            }>) | (Readonly<Readonly<{
+                                id: import("../content/model.ts").PostId;
+                                threadId: import("../content/model.ts").ThreadId;
+                                route: import("../content/model.ts").Route;
+                                authorId: import("../content/model.ts").ContentId;
+                                parentId: import("../content/model.ts").PostId | null;
+                                licence: string;
+                                subjectIds: readonly import("../content/model.ts").ContentId[];
+                                boardId: import("../content/model.ts").BoardId;
+                                visibility: import("../content/model.ts").Visibility;
+                                securityRevision: import("../content/model.ts").SecurityRevision;
+                                availability: import("../content/model.ts").Availability;
+                                createdAt: string;
+                                sha256: string;
+                                mediaIds: readonly import("../content/model.ts").MediaId[];
+                            }> & {
+                                revisionId: import("../content/model.ts").RevisionId;
+                            } & {
+                                body: null;
+                                availability: 'erased';
+                            }> & Readonly<{
+                                availability: 'erased';
+                                removed: true;
+                            }>);
                         };
                         400: {
                             type: unknown;
@@ -17455,6 +17654,153 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     v1: {
         posts: {
             ":id": {
+                delete: {
+                    body: unknown;
+                    params: {
+                        id: string;
+                    };
+                    query: unknown;
+                    headers: {
+                        "idempotency-key": string;
+                    };
+                    response: {
+                        204: void;
+                        400: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        401: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        403: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        404: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        413: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        422: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        429: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        500: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        503: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                    };
+                    error: never;
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        posts: {
+            ":id": {
                 revisions: {
                     post: {
                         body: {
@@ -17473,7 +17819,52 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                         };
                         response: {
                             200: {
-                                post: import("../content/model.ts").ItemView;
+                                post: (Readonly<Readonly<{
+                                    id: import("../content/model.ts").PostId;
+                                    threadId: import("../content/model.ts").ThreadId;
+                                    route: import("../content/model.ts").Route;
+                                    authorId: import("../content/model.ts").ContentId;
+                                    parentId: import("../content/model.ts").PostId | null;
+                                    licence: string;
+                                    subjectIds: readonly import("../content/model.ts").ContentId[];
+                                    boardId: import("../content/model.ts").BoardId;
+                                    visibility: import("../content/model.ts").Visibility;
+                                    securityRevision: import("../content/model.ts").SecurityRevision;
+                                    availability: import("../content/model.ts").Availability;
+                                    createdAt: string;
+                                    sha256: string;
+                                    mediaIds: readonly import("../content/model.ts").MediaId[];
+                                }> & {
+                                    revisionId: import("../content/model.ts").RevisionId;
+                                } & {
+                                    body: import("@rezics/document").DocumentSnapshot;
+                                    availability: 'available';
+                                }> & Readonly<{
+                                    availability: 'available';
+                                }>) | (Readonly<Readonly<{
+                                    id: import("../content/model.ts").PostId;
+                                    threadId: import("../content/model.ts").ThreadId;
+                                    route: import("../content/model.ts").Route;
+                                    authorId: import("../content/model.ts").ContentId;
+                                    parentId: import("../content/model.ts").PostId | null;
+                                    licence: string;
+                                    subjectIds: readonly import("../content/model.ts").ContentId[];
+                                    boardId: import("../content/model.ts").BoardId;
+                                    visibility: import("../content/model.ts").Visibility;
+                                    securityRevision: import("../content/model.ts").SecurityRevision;
+                                    availability: import("../content/model.ts").Availability;
+                                    createdAt: string;
+                                    sha256: string;
+                                    mediaIds: readonly import("../content/model.ts").MediaId[];
+                                }> & {
+                                    revisionId: import("../content/model.ts").RevisionId;
+                                } & {
+                                    body: null;
+                                    availability: 'erased';
+                                }> & Readonly<{
+                                    availability: 'erased';
+                                    removed: true;
+                                }>);
                             };
                             400: {
                                 type: unknown;
@@ -17625,7 +18016,52 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                         headers: unknown;
                         response: {
                             200: {
-                                revisions: import("../content/model.ts").ItemView[];
+                                revisions: ((Readonly<Readonly<{
+                                    id: import("../content/model.ts").PostId;
+                                    threadId: import("../content/model.ts").ThreadId;
+                                    route: import("../content/model.ts").Route;
+                                    authorId: import("../content/model.ts").ContentId;
+                                    parentId: import("../content/model.ts").PostId | null;
+                                    licence: string;
+                                    subjectIds: readonly import("../content/model.ts").ContentId[];
+                                    boardId: import("../content/model.ts").BoardId;
+                                    visibility: import("../content/model.ts").Visibility;
+                                    securityRevision: import("../content/model.ts").SecurityRevision;
+                                    availability: import("../content/model.ts").Availability;
+                                    createdAt: string;
+                                    sha256: string;
+                                    mediaIds: readonly import("../content/model.ts").MediaId[];
+                                }> & {
+                                    revisionId: import("../content/model.ts").RevisionId;
+                                } & {
+                                    body: import("@rezics/document").DocumentSnapshot;
+                                    availability: 'available';
+                                }> & Readonly<{
+                                    availability: 'available';
+                                }>) | (Readonly<Readonly<{
+                                    id: import("../content/model.ts").PostId;
+                                    threadId: import("../content/model.ts").ThreadId;
+                                    route: import("../content/model.ts").Route;
+                                    authorId: import("../content/model.ts").ContentId;
+                                    parentId: import("../content/model.ts").PostId | null;
+                                    licence: string;
+                                    subjectIds: readonly import("../content/model.ts").ContentId[];
+                                    boardId: import("../content/model.ts").BoardId;
+                                    visibility: import("../content/model.ts").Visibility;
+                                    securityRevision: import("../content/model.ts").SecurityRevision;
+                                    availability: import("../content/model.ts").Availability;
+                                    createdAt: string;
+                                    sha256: string;
+                                    mediaIds: readonly import("../content/model.ts").MediaId[];
+                                }> & {
+                                    revisionId: import("../content/model.ts").RevisionId;
+                                } & {
+                                    body: null;
+                                    availability: 'erased';
+                                }> & Readonly<{
+                                    availability: 'erased';
+                                    removed: true;
+                                }>))[];
                                 next: string | null;
                             };
                             400: {
@@ -17732,7 +18168,52 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                             headers: unknown;
                             response: {
                                 200: {
-                                    post: import("../content/model.ts").ItemView;
+                                    post: (Readonly<Readonly<{
+                                        id: import("../content/model.ts").PostId;
+                                        threadId: import("../content/model.ts").ThreadId;
+                                        route: import("../content/model.ts").Route;
+                                        authorId: import("../content/model.ts").ContentId;
+                                        parentId: import("../content/model.ts").PostId | null;
+                                        licence: string;
+                                        subjectIds: readonly import("../content/model.ts").ContentId[];
+                                        boardId: import("../content/model.ts").BoardId;
+                                        visibility: import("../content/model.ts").Visibility;
+                                        securityRevision: import("../content/model.ts").SecurityRevision;
+                                        availability: import("../content/model.ts").Availability;
+                                        createdAt: string;
+                                        sha256: string;
+                                        mediaIds: readonly import("../content/model.ts").MediaId[];
+                                    }> & {
+                                        revisionId: import("../content/model.ts").RevisionId;
+                                    } & {
+                                        body: import("@rezics/document").DocumentSnapshot;
+                                        availability: 'available';
+                                    }> & Readonly<{
+                                        availability: 'available';
+                                    }>) | (Readonly<Readonly<{
+                                        id: import("../content/model.ts").PostId;
+                                        threadId: import("../content/model.ts").ThreadId;
+                                        route: import("../content/model.ts").Route;
+                                        authorId: import("../content/model.ts").ContentId;
+                                        parentId: import("../content/model.ts").PostId | null;
+                                        licence: string;
+                                        subjectIds: readonly import("../content/model.ts").ContentId[];
+                                        boardId: import("../content/model.ts").BoardId;
+                                        visibility: import("../content/model.ts").Visibility;
+                                        securityRevision: import("../content/model.ts").SecurityRevision;
+                                        availability: import("../content/model.ts").Availability;
+                                        createdAt: string;
+                                        sha256: string;
+                                        mediaIds: readonly import("../content/model.ts").MediaId[];
+                                    }> & {
+                                        revisionId: import("../content/model.ts").RevisionId;
+                                    } & {
+                                        body: null;
+                                        availability: 'erased';
+                                    }> & Readonly<{
+                                        availability: 'erased';
+                                        removed: true;
+                                    }>);
                                 };
                                 400: {
                                     type: unknown;
@@ -17831,20 +18312,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                         headers: unknown;
                         response: {
                             200: {
-                                threads: Readonly<{
-                                    id: import("../content/model.ts").ThreadId;
-                                    route: import("../content/model.ts").Route;
-                                    authorId: import("../content/model.ts").ContentId;
-                                    title: string | null;
-                                    licence: string;
-                                    subjectIds: readonly import("../content/model.ts").ContentId[];
-                                    boardId: import("../content/model.ts").BoardId;
-                                    visibility: import("../content/model.ts").Visibility;
-                                    securityRevision: import("../content/model.ts").SecurityRevision;
-                                    availability: import("../content/model.ts").Availability;
-                                    createdAt: string;
-                                    firstPost: import("../content/model.ts").ItemView;
-                                }>[];
+                                threads: import("../content/reads.ts").ThreadView[];
                                 next: string | null;
                             };
                             400: {

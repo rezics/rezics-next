@@ -11,19 +11,24 @@ import type {
   Anchored,
   BoardId,
   BoardView,
-  ItemView,
+  ItemView as StoredItemView,
   Page,
   PostId,
   ReadContext,
   RevisionId,
   RevisionView,
   ThreadId,
-  ThreadView,
+  ThreadView as StoredThreadView,
   Visibility,
 } from './model.ts';
 import { pagePostCandidates } from './post-pages.ts';
 import { pageRevisionCandidates } from './revision-pages.ts';
 import read from './read-chain.sql';
+
+/** Published erased slots remain readable, but never disclose revision bodies. */
+export type ItemView = StoredItemView &
+  (Readonly<{ availability: 'available' }> | Readonly<{ availability: 'erased'; removed: true }>);
+export type ThreadView = Omit<StoredThreadView, 'firstPost'> & Readonly<{ firstPost: ItemView }>;
 
 export type ContentReadDependencies = Readonly<{ pool: Pool; access: Access; tokens: KeyRing; clock?: () => Date }>;
 export type { Actor };
@@ -183,7 +188,7 @@ async function prepare(
           const current = await point(client, row.kind, row.id, row.thread_id ?? row.id);
           if (!current || signature(current) !== signature(row) || !admissible(current, context, tombstone))
             throw new ContentNotFoundError();
-          return !tombstone && current.visibility === 'published' && current.availability === 'available';
+          return current.visibility === 'published' && (current.availability === 'available' || tombstone);
         },
       }),
     },
@@ -246,16 +251,20 @@ async function disclose(
   if (board?.value) {
     for (const row of rows) {
       const erasureRead =
-        erased && (row === initial?.posts[0] || row.visibility === 'taken_down' || row.availability === 'erased');
+        row.availability === 'erased' || (erased && (row === initial?.posts[0] || row.visibility === 'taken_down'));
       checks.push(await prepare(dependencies, row, context, { observed, board }, erasureRead));
     }
   }
   return snapshot(dependencies, threadId, context, async (client) => {
-    if (!initial || !board?.value || checks.length !== rows.length) return null;
+    if (!initial || !board?.value || checks.length !== rows.length || (erased && revisionId)) return null;
     const current = await chain(client, threadId, initial.posts[0]?.id, revisionId);
     if (!current || fingerprint(initial) !== fingerprint(current)) return null;
     for (let index = 0; index < rows.length; index++) {
-      if (!admissible(rows[index]!, context, erased) || !(await checks[index]!(client))) return null;
+      if (
+        !admissible(rows[index]!, context, erased || rows[index]!.availability === 'erased') ||
+        !(await checks[index]!(client))
+      )
+        return null;
     }
     if (!current.revision || !current.posts[0]) return null;
     // Logical erasure suppresses retained bytes for both head and exact reads.
@@ -300,7 +309,7 @@ function itemView(post: Row, revision: Row, erased: boolean): ItemView | null {
     mediaIds: revision.media_ids,
     revisionId: revision.id,
   };
-  if (erased) return { ...metadata, body: null, availability: 'erased' };
+  if (erased) return { ...metadata, removed: true, body: null, availability: 'erased' };
   if (revision.availability !== 'available' || !revision.body) return null;
   return { ...metadata, body: JSON.parse(revision.body.toString('utf8')), availability: 'available' };
 }
@@ -339,6 +348,7 @@ async function list(
     ? await readPost(dependencies, threadId, postId, context)
     : await readThread(dependencies, threadId, context);
   if (!root.value) throw new ContentNotFoundError();
+  if (postId && root.value.availability === 'erased') return { entries: [], anchor: root.anchor, nextCursor: null };
   const binding: CursorBinding = {
     operation: postId ? 'content.revisions' : 'content.posts',
     parameters: {
@@ -395,6 +405,7 @@ async function list(
     ? await readPost(dependencies, threadId, postId, context)
     : await readThread(dependencies, threadId, context);
   if (!final.value) throw new ContentNotFoundError();
+  if (postId && final.value.availability === 'erased') return { entries: [], anchor: final.anchor, nextCursor: null };
   return {
     entries,
     anchor: final.anchor,

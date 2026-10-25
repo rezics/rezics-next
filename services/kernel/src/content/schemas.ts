@@ -9,7 +9,8 @@ import { DocumentSnapshotSchema, type DocumentSnapshot } from '@rezics/document'
 import { t } from 'elysia';
 import type { Static, TSchema } from 'typebox';
 import { Compile } from 'typebox/compile';
-import type { BoardView, ItemView, ThreadView } from './model.ts';
+import type { BoardView } from './model.ts';
+import type { ItemView, ThreadView } from './reads.ts';
 
 /** Validate the published TypeBox shape without Elysia removing unknown input or response fields. */
 export function strictContentSchema<S extends TSchema>(
@@ -81,7 +82,7 @@ const item = {
 export const ItemViewSchema = t.Unsafe<ItemView>(
   t.Union([
     t.Object({ ...item, availability: t.Literal('available'), body: document }, closed),
-    t.Object({ ...item, availability: t.Literal('erased'), body: t.Null() }, closed),
+    t.Object({ ...item, availability: t.Literal('erased'), removed: t.Literal(true), body: t.Null() }, closed),
   ]),
 );
 export const ThreadViewSchema = t.Unsafe<ThreadView>(
