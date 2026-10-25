@@ -5,7 +5,11 @@ const ORIGIN = 'https://kernel.test';
 const ID = '019a1b2c-3d4e-7f00-8a00-000000000001';
 const subject = {
   id: ID,
-  type: 'schema:Book' as const,
+  type: 'schema:Book',
+  revision: 1,
+  release: 'bundled',
+  context: '019a1b2c-3d4e-7f00-8a00-000000000002',
+  resolution: {},
   labels: { en: '1984' },
   descriptions: { en: '2024-01-01' },
   aliases: {},
@@ -88,7 +92,7 @@ test('the client sends back the session token the kernel last gave it', async ()
 test("a create sends its idempotency key and JSON body, as the kernel's route types require", async () => {
   const { sent, fetch } = kernel([() => json(201, { subject }, { location: `/v1/subjects/${ID}` })]);
   const client: KernelClient = createKernelClient(ORIGIN, { fetch });
-  const body = { labels: { en: '1984' } };
+  const body = { type: 'schema:Book', labels: { en: '1984' } };
   const { data, status } = await client.subjects.post(body, { headers: { 'idempotency-key': '"k-1"' } });
   expect(status).toBe(201);
   expect(data?.subject.id).toBe(ID);
