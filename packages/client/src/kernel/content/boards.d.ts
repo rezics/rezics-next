@@ -1,6 +1,6 @@
 import { type BoardCursorSort } from './board-cursor.ts';
-import type { Anchored, AnchoredPosition, BoardView, Page, ReadContext, ThreadView } from './model.ts';
-import { type ContentReadDependencies } from './reads.ts';
+import type { Anchored, AnchoredPosition, BoardView, Page, ReadContext } from './model.ts';
+import { type ContentReadDependencies, type ThreadView } from './reads.ts';
 export type ContentBoardDependencies = ContentReadDependencies & {
     /** Trusted service configuration, independent of authentication's wall clock. */
     cursorNow?: () => number;

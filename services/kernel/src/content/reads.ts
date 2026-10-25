@@ -197,7 +197,7 @@ async function prepare(
           const current = await point(client, row.kind, row.id, row.thread_id ?? row.id);
           if (!current || signature(current) !== signature(row) || !admissible(current, context, tombstone))
             throw new ContentNotFoundError();
-          return current.visibility === 'published' && (current.availability === 'available' || tombstone);
+          return !tombstone && current.visibility === 'published' && current.availability === 'available';
         },
       }),
     },

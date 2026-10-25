@@ -14,8 +14,14 @@ import {
 } from './board-cursor.ts';
 import { pageBoardCandidates, type BoardCandidateKey } from './board-projection.ts';
 import match from './match-thread-text.sql';
-import type { Anchored, AnchoredPosition, BoardView, Page, ReadContext, ThreadView } from './model.ts';
-import { ContentNotFoundError, discloseThreads, readBoard, type ContentReadDependencies } from './reads.ts';
+import type { Anchored, AnchoredPosition, BoardView, Page, ReadContext } from './model.ts';
+import {
+  ContentNotFoundError,
+  discloseThreads,
+  readBoard,
+  type ContentReadDependencies,
+  type ThreadView,
+} from './reads.ts';
 import readBoardRealm from './board-realm-read.sql';
 import pageRealmBoardIds from './board-realm-page.sql';
 

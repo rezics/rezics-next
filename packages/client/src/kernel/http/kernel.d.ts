@@ -38561,7 +38561,18 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                             "idempotency-key": string;
                         };
                         response: {
-                            200: import("../content/operation-contract.ts").Operation;
+                            200: {
+                                name: `operations/${string}`;
+                                done: false;
+                                metadata: {
+                                    type: "content.author_erasure";
+                                    threadId: string;
+                                    authorId: string;
+                                    processedPosts: number;
+                                    erasedRevisions: number;
+                                    steps: number;
+                                };
+                            };
                             202: import("../content/operation-contract.ts").Operation;
                             400: {
                                 type: unknown;
@@ -39121,54 +39132,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                             licence: string;
                             subjectIds: readonly string[];
                             boardId: string;
-                            firstPost: (Readonly<Readonly<{
-                                id: import("../content/model.ts").PostId;
-                                threadId: import("../content/model.ts").ThreadId;
-                                route: import("../content/model.ts").Route;
-                                authorId: import("../content/model.ts").ContentId;
-                                parentId: import("../content/model.ts").PostId | null;
-                                licence: string;
-                                subjectIds: readonly import("../content/model.ts").ContentId[];
-                                boardId: import("../content/model.ts").BoardId;
-                                visibility: import("../content/model.ts").Visibility;
-                                securityRevision: import("../content/model.ts").SecurityRevision;
-                                availability: import("../content/model.ts").Availability;
-                                createdAt: string;
-                                revisedAt: string | null;
-                                sha256: string;
-                                mediaIds: readonly import("../content/model.ts").MediaId[];
-                            }> & {
-                                revisionId: import("../content/model.ts").RevisionId;
-                            } & {
-                                body: import("@rezics/document").DocumentSnapshot;
-                                availability: 'available';
-                            }> & Readonly<{
-                                availability: 'available';
-                            }>) | (Readonly<Readonly<{
-                                id: import("../content/model.ts").PostId;
-                                threadId: import("../content/model.ts").ThreadId;
-                                route: import("../content/model.ts").Route;
-                                authorId: import("../content/model.ts").ContentId;
-                                parentId: import("../content/model.ts").PostId | null;
-                                licence: string;
-                                subjectIds: readonly import("../content/model.ts").ContentId[];
-                                boardId: import("../content/model.ts").BoardId;
-                                visibility: import("../content/model.ts").Visibility;
-                                securityRevision: import("../content/model.ts").SecurityRevision;
-                                availability: import("../content/model.ts").Availability;
-                                createdAt: string;
-                                revisedAt: string | null;
-                                sha256: string;
-                                mediaIds: readonly import("../content/model.ts").MediaId[];
-                            }> & {
-                                revisionId: import("../content/model.ts").RevisionId;
-                            } & {
-                                body: null;
-                                availability: 'erased';
-                            }> & Readonly<{
-                                availability: 'erased';
-                                removed: true;
-                            }>);
+                            firstPost: import("../content/reads.ts").ItemView;
                         };
                     };
                     201: {
@@ -39453,108 +39417,12 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                         };
                         response: {
                             200: {
-                                post: (Readonly<Readonly<{
-                                    id: import("../content/model.ts").PostId;
-                                    threadId: import("../content/model.ts").ThreadId;
-                                    route: import("../content/model.ts").Route;
-                                    authorId: import("../content/model.ts").ContentId;
-                                    parentId: import("../content/model.ts").PostId | null;
-                                    licence: string;
-                                    subjectIds: readonly import("../content/model.ts").ContentId[];
-                                    boardId: import("../content/model.ts").BoardId;
-                                    visibility: import("../content/model.ts").Visibility;
-                                    securityRevision: import("../content/model.ts").SecurityRevision;
-                                    availability: import("../content/model.ts").Availability;
-                                    createdAt: string;
-                                    revisedAt: string | null;
-                                    sha256: string;
-                                    mediaIds: readonly import("../content/model.ts").MediaId[];
-                                }> & {
-                                    revisionId: import("../content/model.ts").RevisionId;
-                                } & {
-                                    body: import("@rezics/document").DocumentSnapshot;
-                                    availability: 'available';
-                                }> & Readonly<{
-                                    availability: 'available';
-                                }>) | (Readonly<Readonly<{
-                                    id: import("../content/model.ts").PostId;
-                                    threadId: import("../content/model.ts").ThreadId;
-                                    route: import("../content/model.ts").Route;
-                                    authorId: import("../content/model.ts").ContentId;
-                                    parentId: import("../content/model.ts").PostId | null;
-                                    licence: string;
-                                    subjectIds: readonly import("../content/model.ts").ContentId[];
-                                    boardId: import("../content/model.ts").BoardId;
-                                    visibility: import("../content/model.ts").Visibility;
-                                    securityRevision: import("../content/model.ts").SecurityRevision;
-                                    availability: import("../content/model.ts").Availability;
-                                    createdAt: string;
-                                    revisedAt: string | null;
-                                    sha256: string;
-                                    mediaIds: readonly import("../content/model.ts").MediaId[];
-                                }> & {
-                                    revisionId: import("../content/model.ts").RevisionId;
-                                } & {
-                                    body: null;
-                                    availability: 'erased';
-                                }> & Readonly<{
-                                    availability: 'erased';
-                                    removed: true;
-                                }>);
+                                post: import("../content/reads.ts").ItemView;
                             };
                             201: {
-                                post: (Readonly<Readonly<{
-                                    id: import("../content/model.ts").PostId;
-                                    threadId: import("../content/model.ts").ThreadId;
-                                    route: import("../content/model.ts").Route;
-                                    authorId: import("../content/model.ts").ContentId;
-                                    parentId: import("../content/model.ts").PostId | null;
-                                    licence: string;
-                                    subjectIds: readonly import("../content/model.ts").ContentId[];
-                                    boardId: import("../content/model.ts").BoardId;
-                                    visibility: import("../content/model.ts").Visibility;
-                                    securityRevision: import("../content/model.ts").SecurityRevision;
-                                    availability: import("../content/model.ts").Availability;
-                                    createdAt: string;
-                                    revisedAt: string | null;
-                                    sha256: string;
-                                    mediaIds: readonly import("../content/model.ts").MediaId[];
-                                }> & {
-                                    revisionId: import("../content/model.ts").RevisionId;
-                                } & {
-                                    body: import("@rezics/document").DocumentSnapshot;
-                                    availability: 'available';
-                                }> & Readonly<{
-                                    availability: 'available';
-                                }> & {
+                                post: import("../content/reads.ts").ItemView & {
                                     readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
-                                }) | (Readonly<Readonly<{
-                                    id: import("../content/model.ts").PostId;
-                                    threadId: import("../content/model.ts").ThreadId;
-                                    route: import("../content/model.ts").Route;
-                                    authorId: import("../content/model.ts").ContentId;
-                                    parentId: import("../content/model.ts").PostId | null;
-                                    licence: string;
-                                    subjectIds: readonly import("../content/model.ts").ContentId[];
-                                    boardId: import("../content/model.ts").BoardId;
-                                    visibility: import("../content/model.ts").Visibility;
-                                    securityRevision: import("../content/model.ts").SecurityRevision;
-                                    availability: import("../content/model.ts").Availability;
-                                    createdAt: string;
-                                    revisedAt: string | null;
-                                    sha256: string;
-                                    mediaIds: readonly import("../content/model.ts").MediaId[];
-                                }> & {
-                                    revisionId: import("../content/model.ts").RevisionId;
-                                } & {
-                                    body: null;
-                                    availability: 'erased';
-                                }> & Readonly<{
-                                    availability: 'erased';
-                                    removed: true;
-                                }> & {
-                                    readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
-                                });
+                                };
                             };
                             400: {
                                 type: unknown;
@@ -39706,58 +39574,9 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                         headers: unknown;
                         response: {
                             200: {
-                                posts: ((Readonly<Readonly<{
-                                    id: import("../content/model.ts").PostId;
-                                    threadId: import("../content/model.ts").ThreadId;
-                                    route: import("../content/model.ts").Route;
-                                    authorId: import("../content/model.ts").ContentId;
-                                    parentId: import("../content/model.ts").PostId | null;
-                                    licence: string;
-                                    subjectIds: readonly import("../content/model.ts").ContentId[];
-                                    boardId: import("../content/model.ts").BoardId;
-                                    visibility: import("../content/model.ts").Visibility;
-                                    securityRevision: import("../content/model.ts").SecurityRevision;
-                                    availability: import("../content/model.ts").Availability;
-                                    createdAt: string;
-                                    revisedAt: string | null;
-                                    sha256: string;
-                                    mediaIds: readonly import("../content/model.ts").MediaId[];
-                                }> & {
-                                    revisionId: import("../content/model.ts").RevisionId;
-                                } & {
-                                    body: import("@rezics/document").DocumentSnapshot;
-                                    availability: 'available';
-                                }> & Readonly<{
-                                    availability: 'available';
-                                }> & {
+                                posts: (import("../content/reads.ts").ItemView & {
                                     readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
-                                }) | (Readonly<Readonly<{
-                                    id: import("../content/model.ts").PostId;
-                                    threadId: import("../content/model.ts").ThreadId;
-                                    route: import("../content/model.ts").Route;
-                                    authorId: import("../content/model.ts").ContentId;
-                                    parentId: import("../content/model.ts").PostId | null;
-                                    licence: string;
-                                    subjectIds: readonly import("../content/model.ts").ContentId[];
-                                    boardId: import("../content/model.ts").BoardId;
-                                    visibility: import("../content/model.ts").Visibility;
-                                    securityRevision: import("../content/model.ts").SecurityRevision;
-                                    availability: import("../content/model.ts").Availability;
-                                    createdAt: string;
-                                    revisedAt: string | null;
-                                    sha256: string;
-                                    mediaIds: readonly import("../content/model.ts").MediaId[];
-                                }> & {
-                                    revisionId: import("../content/model.ts").RevisionId;
-                                } & {
-                                    body: null;
-                                    availability: 'erased';
-                                }> & Readonly<{
-                                    availability: 'erased';
-                                    removed: true;
-                                }> & {
-                                    readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
-                                }))[];
+                                })[];
                                 next: string | null;
                             };
                             400: {
@@ -39861,58 +39680,9 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                     headers: unknown;
                     response: {
                         200: {
-                            post: (Readonly<Readonly<{
-                                id: import("../content/model.ts").PostId;
-                                threadId: import("../content/model.ts").ThreadId;
-                                route: import("../content/model.ts").Route;
-                                authorId: import("../content/model.ts").ContentId;
-                                parentId: import("../content/model.ts").PostId | null;
-                                licence: string;
-                                subjectIds: readonly import("../content/model.ts").ContentId[];
-                                boardId: import("../content/model.ts").BoardId;
-                                visibility: import("../content/model.ts").Visibility;
-                                securityRevision: import("../content/model.ts").SecurityRevision;
-                                availability: import("../content/model.ts").Availability;
-                                createdAt: string;
-                                revisedAt: string | null;
-                                sha256: string;
-                                mediaIds: readonly import("../content/model.ts").MediaId[];
-                            }> & {
-                                revisionId: import("../content/model.ts").RevisionId;
-                            } & {
-                                body: import("@rezics/document").DocumentSnapshot;
-                                availability: 'available';
-                            }> & Readonly<{
-                                availability: 'available';
-                            }> & {
+                            post: import("../content/reads.ts").ItemView & {
                                 readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
-                            }) | (Readonly<Readonly<{
-                                id: import("../content/model.ts").PostId;
-                                threadId: import("../content/model.ts").ThreadId;
-                                route: import("../content/model.ts").Route;
-                                authorId: import("../content/model.ts").ContentId;
-                                parentId: import("../content/model.ts").PostId | null;
-                                licence: string;
-                                subjectIds: readonly import("../content/model.ts").ContentId[];
-                                boardId: import("../content/model.ts").BoardId;
-                                visibility: import("../content/model.ts").Visibility;
-                                securityRevision: import("../content/model.ts").SecurityRevision;
-                                availability: import("../content/model.ts").Availability;
-                                createdAt: string;
-                                revisedAt: string | null;
-                                sha256: string;
-                                mediaIds: readonly import("../content/model.ts").MediaId[];
-                            }> & {
-                                revisionId: import("../content/model.ts").RevisionId;
-                            } & {
-                                body: null;
-                                availability: 'erased';
-                            }> & Readonly<{
-                                availability: 'erased';
-                                removed: true;
-                            }> & {
-                                readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
-                            });
+                            };
                         };
                         400: {
                             type: unknown;
@@ -40160,58 +39930,9 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                         };
                         response: {
                             200: {
-                                post: (Readonly<Readonly<{
-                                    id: import("../content/model.ts").PostId;
-                                    threadId: import("../content/model.ts").ThreadId;
-                                    route: import("../content/model.ts").Route;
-                                    authorId: import("../content/model.ts").ContentId;
-                                    parentId: import("../content/model.ts").PostId | null;
-                                    licence: string;
-                                    subjectIds: readonly import("../content/model.ts").ContentId[];
-                                    boardId: import("../content/model.ts").BoardId;
-                                    visibility: import("../content/model.ts").Visibility;
-                                    securityRevision: import("../content/model.ts").SecurityRevision;
-                                    availability: import("../content/model.ts").Availability;
-                                    createdAt: string;
-                                    revisedAt: string | null;
-                                    sha256: string;
-                                    mediaIds: readonly import("../content/model.ts").MediaId[];
-                                }> & {
-                                    revisionId: import("../content/model.ts").RevisionId;
-                                } & {
-                                    body: import("@rezics/document").DocumentSnapshot;
-                                    availability: 'available';
-                                }> & Readonly<{
-                                    availability: 'available';
-                                }> & {
+                                post: import("../content/reads.ts").ItemView & {
                                     readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
-                                }) | (Readonly<Readonly<{
-                                    id: import("../content/model.ts").PostId;
-                                    threadId: import("../content/model.ts").ThreadId;
-                                    route: import("../content/model.ts").Route;
-                                    authorId: import("../content/model.ts").ContentId;
-                                    parentId: import("../content/model.ts").PostId | null;
-                                    licence: string;
-                                    subjectIds: readonly import("../content/model.ts").ContentId[];
-                                    boardId: import("../content/model.ts").BoardId;
-                                    visibility: import("../content/model.ts").Visibility;
-                                    securityRevision: import("../content/model.ts").SecurityRevision;
-                                    availability: import("../content/model.ts").Availability;
-                                    createdAt: string;
-                                    revisedAt: string | null;
-                                    sha256: string;
-                                    mediaIds: readonly import("../content/model.ts").MediaId[];
-                                }> & {
-                                    revisionId: import("../content/model.ts").RevisionId;
-                                } & {
-                                    body: null;
-                                    availability: 'erased';
-                                }> & Readonly<{
-                                    availability: 'erased';
-                                    removed: true;
-                                }> & {
-                                    readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
-                                });
+                                };
                             };
                             400: {
                                 type: unknown;
@@ -40377,58 +40098,9 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                         headers: unknown;
                         response: {
                             200: {
-                                revisions: ((Readonly<Readonly<{
-                                    id: import("../content/model.ts").PostId;
-                                    threadId: import("../content/model.ts").ThreadId;
-                                    route: import("../content/model.ts").Route;
-                                    authorId: import("../content/model.ts").ContentId;
-                                    parentId: import("../content/model.ts").PostId | null;
-                                    licence: string;
-                                    subjectIds: readonly import("../content/model.ts").ContentId[];
-                                    boardId: import("../content/model.ts").BoardId;
-                                    visibility: import("../content/model.ts").Visibility;
-                                    securityRevision: import("../content/model.ts").SecurityRevision;
-                                    availability: import("../content/model.ts").Availability;
-                                    createdAt: string;
-                                    revisedAt: string | null;
-                                    sha256: string;
-                                    mediaIds: readonly import("../content/model.ts").MediaId[];
-                                }> & {
-                                    revisionId: import("../content/model.ts").RevisionId;
-                                } & {
-                                    body: import("@rezics/document").DocumentSnapshot;
-                                    availability: 'available';
-                                }> & Readonly<{
-                                    availability: 'available';
-                                }> & {
+                                revisions: (import("../content/reads.ts").ItemView & {
                                     readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
-                                }) | (Readonly<Readonly<{
-                                    id: import("../content/model.ts").PostId;
-                                    threadId: import("../content/model.ts").ThreadId;
-                                    route: import("../content/model.ts").Route;
-                                    authorId: import("../content/model.ts").ContentId;
-                                    parentId: import("../content/model.ts").PostId | null;
-                                    licence: string;
-                                    subjectIds: readonly import("../content/model.ts").ContentId[];
-                                    boardId: import("../content/model.ts").BoardId;
-                                    visibility: import("../content/model.ts").Visibility;
-                                    securityRevision: import("../content/model.ts").SecurityRevision;
-                                    availability: import("../content/model.ts").Availability;
-                                    createdAt: string;
-                                    revisedAt: string | null;
-                                    sha256: string;
-                                    mediaIds: readonly import("../content/model.ts").MediaId[];
-                                }> & {
-                                    revisionId: import("../content/model.ts").RevisionId;
-                                } & {
-                                    body: null;
-                                    availability: 'erased';
-                                }> & Readonly<{
-                                    availability: 'erased';
-                                    removed: true;
-                                }> & {
-                                    readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
-                                }))[];
+                                })[];
                                 next: string | null;
                             };
                             400: {
@@ -40535,58 +40207,9 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                             headers: unknown;
                             response: {
                                 200: {
-                                    post: (Readonly<Readonly<{
-                                        id: import("../content/model.ts").PostId;
-                                        threadId: import("../content/model.ts").ThreadId;
-                                        route: import("../content/model.ts").Route;
-                                        authorId: import("../content/model.ts").ContentId;
-                                        parentId: import("../content/model.ts").PostId | null;
-                                        licence: string;
-                                        subjectIds: readonly import("../content/model.ts").ContentId[];
-                                        boardId: import("../content/model.ts").BoardId;
-                                        visibility: import("../content/model.ts").Visibility;
-                                        securityRevision: import("../content/model.ts").SecurityRevision;
-                                        availability: import("../content/model.ts").Availability;
-                                        createdAt: string;
-                                        revisedAt: string | null;
-                                        sha256: string;
-                                        mediaIds: readonly import("../content/model.ts").MediaId[];
-                                    }> & {
-                                        revisionId: import("../content/model.ts").RevisionId;
-                                    } & {
-                                        body: import("@rezics/document").DocumentSnapshot;
-                                        availability: 'available';
-                                    }> & Readonly<{
-                                        availability: 'available';
-                                    }> & {
+                                    post: import("../content/reads.ts").ItemView & {
                                         readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
-                                    }) | (Readonly<Readonly<{
-                                        id: import("../content/model.ts").PostId;
-                                        threadId: import("../content/model.ts").ThreadId;
-                                        route: import("../content/model.ts").Route;
-                                        authorId: import("../content/model.ts").ContentId;
-                                        parentId: import("../content/model.ts").PostId | null;
-                                        licence: string;
-                                        subjectIds: readonly import("../content/model.ts").ContentId[];
-                                        boardId: import("../content/model.ts").BoardId;
-                                        visibility: import("../content/model.ts").Visibility;
-                                        securityRevision: import("../content/model.ts").SecurityRevision;
-                                        availability: import("../content/model.ts").Availability;
-                                        createdAt: string;
-                                        revisedAt: string | null;
-                                        sha256: string;
-                                        mediaIds: readonly import("../content/model.ts").MediaId[];
-                                    }> & {
-                                        revisionId: import("../content/model.ts").RevisionId;
-                                    } & {
-                                        body: null;
-                                        availability: 'erased';
-                                    }> & Readonly<{
-                                        availability: 'erased';
-                                        removed: true;
-                                    }> & {
-                                        readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
-                                    });
+                                    };
                                 };
                                 400: {
                                     type: unknown;

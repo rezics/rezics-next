@@ -1,16 +1,22 @@
 import type { Pool } from 'pg';
 import { type Access, type Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import type { Anchored, BoardId, BoardView, ItemView as StoredItemView, Page, PostId, ReadContext, RevisionId, RevisionView, ThreadId, ThreadView as StoredThreadView } from './model.ts';
+import type { Anchored, BoardId, BoardView, ItemView as StoredItemView, Page, PostId, ReadContext, RevisionId, RevisionView as StoredRevisionView, ThreadId, ThreadView as StoredThreadView } from './model.ts';
 import { REACTION_KINDS } from './events.ts';
 export type ViewerReactionKind = (typeof REACTION_KINDS)[number];
-/** Published erased slots remain readable, but never disclose revision bodies. */
-export type ItemView = StoredItemView & (Readonly<{
+/** Erased slots retain identity without disclosing bytes or a digest of erased text. */
+type ContentPayload = Readonly<{
     availability: 'available';
+    body: NonNullable<StoredItemView['body']>;
+    sha256: string;
 }> | Readonly<{
     availability: 'erased';
     removed: true;
-}>);
+    body: null;
+    sha256: null;
+}>;
+export type ItemView = Omit<StoredItemView, 'availability' | 'body' | 'sha256'> & ContentPayload;
+export type RevisionView = Omit<StoredRevisionView, 'availability' | 'body' | 'sha256'> & ContentPayload;
 export type ThreadView = Omit<StoredThreadView, 'firstPost'> & Readonly<{
     firstPost: ItemView;
 }>;

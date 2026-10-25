@@ -106,7 +106,7 @@ function publishedSignatures(): void {
         context: model.ReadContext,
         cursor?: string,
         limit?: number,
-      ) => Promise<model.Page<model.RevisionView>>
+      ) => Promise<model.Page<reads.RevisionView>>
     >
   >();
   same<
@@ -460,7 +460,11 @@ function publishedModels(): void {
   same<
     Equal<
       reads.ItemView,
-      model.ItemView & (Readonly<{ availability: 'available' }> | Readonly<{ availability: 'erased'; removed: true }>)
+      Omit<model.ItemView, 'availability' | 'body' | 'sha256'> &
+        (
+          | Readonly<{ availability: 'available'; body: DocumentSnapshot; sha256: string }>
+          | Readonly<{ availability: 'erased'; removed: true; body: null; sha256: null }>
+        )
     >
   >();
   same<Equal<reads.ThreadView, Omit<model.ThreadView, 'firstPost'> & Readonly<{ firstPost: reads.ItemView }>>>();

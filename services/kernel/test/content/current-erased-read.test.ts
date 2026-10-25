@@ -181,7 +181,7 @@ test('authorized current and exact erased reads preserve selected immutable iden
   expect(exact).toMatchObject({
     id: f.post,
     revisionId: f.revision,
-    sha256: digest,
+    sha256: null,
     licence: 'CC-BY-4.0',
     subjectIds: [subject],
     mediaIds: [media],
@@ -189,10 +189,10 @@ test('authorized current and exact erased reads preserve selected immutable iden
     body: null,
     availability: 'erased',
   });
-  expect(current).toEqual({
+  expect(current).toEqual<Omit<NonNullable<typeof exact>, 'sha256'> & { sha256: null }>({
     ...exact!,
     revisionId: head,
-    sha256: createHash('sha256').update(retainedHead).digest('hex'),
+    sha256: null,
   });
   expect(decodedBodies).toBe(before);
   const stored = await database.admin.query(
@@ -320,7 +320,7 @@ test('checkGrowth keeps the actual authenticated erased read bounded at three in
   const read = async () => {
     const before = decodedBodies;
     const result = await readPost(deps(), f.thread, f.post, ctx(actor));
-    expect(result.value).toMatchObject({ revisionId: f.revision, sha256: digest, body: null, availability: 'erased' });
+    expect(result.value).toMatchObject({ revisionId: f.revision, sha256: null, body: null, availability: 'erased' });
     expect(decodedBodies).toBe(before);
   };
   const report = await checkGrowth(database, {
