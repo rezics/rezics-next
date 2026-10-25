@@ -5,8 +5,8 @@ WITH input AS NOT MATERIALIZED (
          :evidence_valid::tstzrange AS evidence_valid, :deadline::timestamptz AS deadline
 ), authority AS (
   -- Commands bind their opaque attempt time. Unbound read checks retain their
-  -- existing statement-clock semantics.
-  SELECT COALESCE(NULLIF(:at::text, '')::timestamptz, clock_timestamp()) AS at,
+  -- native transaction-time semantics.
+  SELECT COALESCE(NULLIF(:at::text, '')::timestamptz, transaction_timestamp()) AS at,
          clock_timestamp() AS observed_at
 ), roles AS (
   SELECT r.account_id, r.organization_id, r.role, r.valid

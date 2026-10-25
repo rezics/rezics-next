@@ -64,6 +64,37 @@ $$;
 
 
 --
+-- Name: guard_assignment_identity(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.guard_assignment_identity() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.revoked_at IS NOT NULL OR (NEW.issued_valid IS NOT NULL AND NEW.issued_valid IS DISTINCT FROM NEW.valid) THEN
+      RAISE EXCEPTION 'Assignment must begin with its original validity' USING ERRCODE = '23514';
+    END IF;
+    NEW.issued_valid := NEW.valid;
+  ELSE
+    IF ROW(NEW.route, NEW.principal_id, NEW.request_id, NEW.creator_principal_id, NEW.issued_valid, NEW.transaction_id)
+       IS DISTINCT FROM
+       ROW(OLD.route, OLD.principal_id, OLD.request_id, OLD.creator_principal_id, OLD.issued_valid, OLD.transaction_id)
+       OR (OLD.creator_principal_id IS NOT NULL AND NEW.assigned_actor_id IS DISTINCT FROM OLD.assigned_actor_id)
+       OR (OLD.revoked_at IS NOT NULL AND ROW(NEW.revoked_at, NEW.valid) IS DISTINCT FROM ROW(OLD.revoked_at, OLD.valid))
+       OR (OLD.creator_principal_id IS NOT NULL AND NEW.revoked_at IS NULL AND NEW.valid IS DISTINCT FROM OLD.valid)
+       OR (OLD.revoked_at IS NULL AND NEW.revoked_at IS NOT NULL
+           AND (NEW.revoked_at IS DISTINCT FROM transaction_timestamp()
+                OR NEW.valid IS DISTINCT FROM OLD.valid * tstzrange(NULL, transaction_timestamp(), '[)'))) THEN
+      RAISE EXCEPTION 'Assignment identity and revocation are immutable' USING ERRCODE = '23514';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: guard_lifecycle_responsibility(); Type: FUNCTION; Schema: access; Owner: -
 --
 
@@ -271,9 +302,13 @@ CREATE TABLE access.principal_assignment (
     assigned_actor_id uuid NOT NULL,
     valid tstzrange NOT NULL,
     transaction_id uuid NOT NULL,
+    creator_principal_id uuid,
+    issued_valid tstzrange NOT NULL,
+    revoked_at timestamp with time zone,
     CONSTRAINT principal_assignment_check CHECK ((route = ((get_byte(uuid_send(principal_id), 10) * 256) + get_byte(uuid_send(principal_id), 11)))),
+    CONSTRAINT principal_assignment_check1 CHECK ((creator_principal_id = principal_id)),
     CONSTRAINT principal_assignment_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT principal_assignment_valid_check CHECK (((NOT isempty(valid)) AND (lower_inf(valid) OR lower_inc(valid)) AND (NOT upper_inc(valid))))
+    CONSTRAINT principal_assignment_valid_check CHECK ((((revoked_at IS NOT NULL) AND isempty(valid)) OR ((NOT isempty(valid)) AND (lower_inf(valid) OR lower_inc(valid)) AND (NOT upper_inc(valid)))))
 );
 
 
@@ -412,6 +447,13 @@ ALTER TABLE ONLY access.resource_grant
 --
 
 CREATE TRIGGER account_identity BEFORE UPDATE ON access.account FOR EACH ROW EXECUTE FUNCTION access.guard_account_identity();
+
+
+--
+-- Name: principal_assignment assignment_identity; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER assignment_identity BEFORE INSERT OR UPDATE ON access.principal_assignment FOR EACH ROW EXECUTE FUNCTION access.guard_assignment_identity();
 
 
 --

@@ -218,7 +218,7 @@ test('grant ranges use exact inclusive start and exclusive end at the final data
     await removeGrant(subject);
     await grant(subject, action, resource, '', '[2030-01-01,2030-01-02)');
     const statement = (await import('../../src/access/permission-check.sql')).default;
-    const sql = statement.sql.replace('clock_timestamp()', '$99::timestamptz');
+    const sql = statement.sql.replace('transaction_timestamp()', '$99::timestamptz');
     // Replace the clock expression only; all grant/denial decisions remain the production SQL.
     const parameters = {
       route: resource.route,
