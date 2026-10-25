@@ -120,7 +120,7 @@ CREATE TABLE content.media (
     erased boolean DEFAULT false NOT NULL,
     collection_pending boolean DEFAULT false NOT NULL,
     CONSTRAINT media_actual_byte_count_check CHECK (((actual_byte_count IS NULL) OR (actual_byte_count > 0))),
-    CONSTRAINT media_byte_count_check CHECK ((byte_count > 0)),
+    CONSTRAINT media_byte_count_check CHECK (((byte_count >= 1) AND (byte_count <= 20971520))),
     CONSTRAINT media_check CHECK ((route = ((get_byte(uuid_send(media_id), 10) * 256) + get_byte(uuid_send(media_id), 11)))),
     CONSTRAINT media_check1 CHECK ((route = ((get_byte(uuid_send(container_id), 10) * 256) + get_byte(uuid_send(container_id), 11)))),
     CONSTRAINT media_check2 CHECK ((key = (('m/'::text || (media_id)::text) || '/original'::text))),
@@ -163,7 +163,8 @@ CREATE TABLE content.media_variant (
     CONSTRAINT media_variant_height_check CHECK ((height > 0)),
     CONSTRAINT media_variant_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT media_variant_sha256_check CHECK ((sha256 ~ '^[0-9a-f]{64}$'::text)),
-    CONSTRAINT media_variant_width_check CHECK (((width >= 1) AND (width <= 2560)))
+    CONSTRAINT media_variant_width_check CHECK (((width >= 1) AND (width <= 2560))),
+    CONSTRAINT media_variant_width_ladder_check CHECK (((width < 320) OR (width = ANY (ARRAY[320, 640, 960, 1280, 1920, 2560]))))
 );
 
 
@@ -329,6 +330,13 @@ ALTER TABLE ONLY content.revision
 
 ALTER TABLE ONLY content.thread
     ADD CONSTRAINT thread_pkey PRIMARY KEY (route, thread_id);
+
+
+--
+-- Name: media_collection_eligible_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX media_collection_eligible_idx ON content.media USING btree (route, created_at, media_id) WHERE ((claimed_at IS NULL) AND (NOT erased) AND (NOT collection_pending));
 
 
 --

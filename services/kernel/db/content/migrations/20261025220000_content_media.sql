@@ -12,7 +12,7 @@ CREATE TABLE content.media (
   media_type text NOT NULL CHECK (media_type IN (
     'image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp'
   )),
-  byte_count bigint NOT NULL CHECK (byte_count > 0),
+  byte_count bigint NOT NULL CHECK (byte_count BETWEEN 1 AND 20971520),
   declared_sha256 text CHECK (declared_sha256 ~ '^[0-9a-f]{64}$'),
   actual_byte_count bigint,
   sha256 text CHECK (sha256 ~ '^[0-9a-f]{64}$'),
@@ -55,6 +55,10 @@ CREATE INDEX media_collection_pending_idx
   ON content.media (route, created_at, media_id)
   WHERE collection_pending;
 
+CREATE INDEX media_collection_eligible_idx
+  ON content.media (route, created_at, media_id)
+  WHERE claimed_at IS NULL AND NOT erased AND NOT collection_pending;
+
 CREATE TABLE content.media_variant (
   route integer NOT NULL CHECK (route BETWEEN 0 AND 65535),
   media_id uuid NOT NULL,
@@ -71,6 +75,9 @@ CREATE TABLE content.media_variant (
   transaction_id uuid NOT NULL,
   created_at timestamptz NOT NULL DEFAULT statement_timestamp(),
   PRIMARY KEY (route, media_id, format, width),
+  CONSTRAINT media_variant_width_ladder_check CHECK (
+    width < 320 OR width IN (320, 640, 960, 1280, 1920, 2560)
+  ),
   UNIQUE (route, key),
   FOREIGN KEY (route, media_id) REFERENCES content.media (route, media_id) ON DELETE CASCADE,
   CHECK (
