@@ -9,11 +9,25 @@
  * separate from creation labels. Refresh can retract old source candidates while
  * leaving those initial labels set; pure conversion does not perform persistence.
  * consume is a narrow typed fake bulk consumer: use the actual BatchCommand
- * type AND @rezics/definitions/bulk checkBatchWrite, then collect proposals without
- * executing them. Do not define another bulk API, accept arbitrary objects, write
+ * type AND @rezics/definitions/bulk checkBatchWrite, plus the real checkTyped
+ * against the actual definitions release in product bindings. Collect proposals
+ * without executing them. Do not define another bulk API, accept arbitrary objects, write
  * SQL, call a live API, or replace source citations. Observations describe accepted
  * commands, never an adapter-maintained model. Paths are RFC 6901 pointers relative
  * to the cited accepted command; all values must resolve to its actual leaves.
+ * Each statement cites the imported RECORD in one actual reference with four
+ * parts: schema:url (original record URL), wdt:P648 (canonical OL...W/M ID),
+ * schema:version (String(native revision)), and schema:dateModified (actual time
+ * content: +YYYY-MM-DDT00:00:00Z, precision 11, Gregorian calendarmodel). Native
+ * last_modified is UTC; day precision is the finest released time precision.
+ * Never emit schema:identifier, or version/dateModified as subject statements.
+ * Those terms are reference-only and attached to no type by the catalogue owner;
+ * schema:dateModified is mapped to wd:P5017.
+ * The source envelope retains the full /works/ or /books/ external_id and string
+ * record_revision. A sanitized digest projection may retain the raw timestamp;
+ * it is not an invented public property. Reject malformed ISO timestamps before
+ * emitting output. Relationship qualifiers retain canonical OL...A/W IDs, while
+ * their citation identifies the imported record, not the related author/work.
  * kind is test vocabulary mapped from actual catalogue properties;
  * path identifies the underlying reference and field group. Facts have no rights.
  * Enumerate ALL actual commands/fields, including unsupported emissions. Metadata
@@ -57,12 +71,16 @@ export interface FieldObservation {
   groupPath: string;
   reference: {
     path: string;
+    /** Actual wdt:P648 value.content leaf: canonical record OL...W/M ID. */
     keyPath: string;
+    /** Actual schema:url value.content leaf: original record URL with full key. */
     urlPath: string;
+    /** Actual schema:version value.content leaf: string native revision. */
     revisionPath: string;
+    /** Actual schema:dateModified value.content object: exact source UTC day, precision 11. */
     lastModifiedPath: string;
   };
-  /** Statement path for relations; original relation keys and URLs remain in actual source citations. */
+  /** Statement path for relations; their actual citations identify the imported record. */
   statementPath?: string;
   /** Actual relation identifier leaf: canonical wdt:P648 content (OL...A/W/M), never a synthesized path. */
   sourceValuePath?: string;

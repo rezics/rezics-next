@@ -1,5 +1,5 @@
 import { expect, spyOn, test } from 'bun:test';
-import { checkBatchWrite, type BatchCommand } from '@rezics/definitions/bulk';
+import { checkBatchWrite, type BatchCommand, type BatchReference } from '@rezics/definitions/bulk';
 import type { CoverCredit, CoverProvenance } from '@rezics/definitions/media-import';
 import * as fs from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
@@ -47,6 +47,26 @@ function freeze(record: unknown): void {
     Object.freeze(record);
   }
 }
+function recordIdentifier(key: unknown) {
+  return (key as string).replace(/^\/(?:works|books)\//, '');
+}
+function sourceDay(record: RecordPayload) {
+  return {
+    time: `+${(record.last_modified as { value: string }).value.slice(0, 10)}T00:00:00Z`,
+    precision: 11,
+    calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+  };
+}
+function recordCitation(reference: BatchReference, record: RecordPayload) {
+  const parts = [
+    ['schema:url', `https://openlibrary.org${record.key}`],
+    ['wdt:P648', recordIdentifier(record.key)],
+    ['schema:version', String(record.revision)],
+    ['schema:dateModified', sourceDay(record)],
+  ].map(([id, content]) => ({ property: { id }, value: { type: 'value', content } }));
+  expect(reference.parts).toHaveLength(4);
+  expect(reference.parts).toEqual(expect.arrayContaining(parts));
+}
 function converted(driver: OpenLibraryDriver, record: RecordPayload, supplied: ConversionContext | null = context) {
   const result = supplied === null ? driver.convert(record) : driver.convert(record, supplied);
   expect(result.outcome).toBe('converted');
@@ -68,6 +88,21 @@ function converted(driver: OpenLibraryDriver, record: RecordPayload, supplied: C
       expect(command.subject).toBe(supplied.subjectId);
       for (const key of ['type', 'labels', 'descriptions', 'aliases']) expect(command).not.toHaveProperty(key);
     }
+    expect(command.source.source).toBe('open-library');
+    expect<unknown>(command.source.external_id).toBe(record.key);
+    expect(command.source.record_revision).toBe(String(record.revision));
+    const statements =
+      command.op === 'propose'
+        ? [command.statement]
+        : command.op === 'create'
+          ? Object.values(command.subject.statements ?? {}).flat()
+          : [];
+    for (const statement of statements) {
+      expect(['schema:identifier', 'schema:version', 'schema:dateModified']).not.toContain(statement.property.id);
+      expect(statement.qualifiers?.some((part) => part.property.id === 'schema:identifier') ?? false).toBe(false);
+      expect(statement.references).toHaveLength(1);
+      recordCitation(statement.references[0]!, record);
+    }
     expect(command.source.digest).toMatch(/^[0-9a-f]{64}$/);
     if (command.source.field_group === 'facts') expect(command).not.toHaveProperty('rights');
   }
@@ -87,16 +122,30 @@ function converted(driver: OpenLibraryDriver, record: RecordPayload, supplied: C
       field.kind === 'cover' ? 'cover' : field.kind === 'description' ? 'summary' : 'facts',
     );
     const ref = field.reference;
-    expect(pointer(command, ref.path)).toBeTruthy();
+    const reference = pointer(command, ref.path) as BatchReference;
+    expect(ref.path).toMatch(
+      command.op === 'create'
+        ? /^\/subject\/statements\/[^/]+\/\d+\/references\/\d+$/
+        : /^\/statement\/references\/\d+$/,
+    );
+    recordCitation(reference, record);
+    for (const [path, property] of [
+      [ref.keyPath, 'wdt:P648'],
+      [ref.urlPath, 'schema:url'],
+      [ref.revisionPath, 'schema:version'],
+      [ref.lastModifiedPath, 'schema:dateModified'],
+    ]) {
+      const index = reference.parts.findIndex((part) => part.property.id === property);
+      expect(path).toBe(`${ref.path}/parts/${index}/value/content`);
+    }
     for (const path of [ref.keyPath, ref.urlPath, ref.revisionPath, ref.lastModifiedPath]) {
       expect(path.startsWith(`${ref.path}/`)).toBe(true);
     }
-    expect(pointer(command, ref.keyPath)).toBe(record.key);
+    expect(pointer(command, ref.keyPath)).toBe(recordIdentifier(record.key));
     expect(pointer(command, ref.urlPath)).toBe(`https://openlibrary.org${record.key}`);
     expect(command.source.record_revision).toBe(String(record.revision));
-    const nativeRevision = pointer(command, ref.revisionPath);
-    expect(nativeRevision).toBe(typeof nativeRevision === 'number' ? record.revision : String(record.revision));
-    expect(pointer(command, ref.lastModifiedPath)).toBe((record.last_modified as { value: string }).value);
+    expect(pointer(command, ref.revisionPath)).toBe(String(record.revision));
+    expect(pointer(command, ref.lastModifiedPath)).toEqual(sourceDay(record));
     if (field.sourceValuePath !== undefined) {
       pointer(command, field.sourceValuePath);
       expect(
@@ -148,7 +197,7 @@ function values(output: Accepted, kind: FieldObservation['kind']) {
     .filter((field) => field.kind === kind)
     .map((field) => pointer(output.accepted[field.command], field.valuePath));
 }
-function relationshipSource(output: Accepted, kind: 'author' | 'work', key: string, identifier: string) {
+function relationshipSource(output: Accepted, kind: 'author' | 'work', identifier: string) {
   const fields = output.fields.filter((field) => field.kind === kind);
   expect(fields.map((field) => pointer(output.accepted[field.command], field.sourceValuePath!))).toEqual([identifier]);
   for (const field of fields) {
@@ -156,12 +205,14 @@ function relationshipSource(output: Accepted, kind: 'author' | 'work', key: stri
       output.accepted[field.command],
       field.statementPath!,
     ) as import('@rezics/definitions/bulk').BatchStatement;
-    expect(
-      statement.references.some((reference) => {
-        const contents = reference.parts.flatMap((part) => (part.value.type === 'value' ? [part.value.content] : []));
-        return contents.includes(key) && contents.includes(`https://openlibrary.org${key}`);
-      }),
-    ).toBe(true);
+    const key = output.accepted[field.command]!.source.external_id;
+    expect(statement.references).toHaveLength(1);
+    expect(statement.references[0]!.parts).toEqual(
+      expect.arrayContaining([
+        { property: { id: 'wdt:P648' }, value: { type: 'value', content: recordIdentifier(key) } },
+        { property: { id: 'schema:url' }, value: { type: 'value', content: `https://openlibrary.org${key}` } },
+      ]),
+    );
   }
 }
 function noProposals(result: Conversion) {
@@ -175,13 +226,13 @@ function rejected(result: Conversion) {
   noProposals(result);
 }
 
-test('work identity title and author carry exact source key revision timestamp and reference URL', async () => {
+test('Open Library citations use the released source identifier and reference-only revision/date terms', async () => {
   const driver = await loadOpenLibraryDriver();
   const output = converted(driver, await fixture('work'));
   expect(values(output, 'identity')).toEqual(['/works/OL900000001W']);
   expect(values(output, 'title')).toEqual(['The Glass Atlas']);
   expect(values(output, 'author')).toEqual([{ type: 'somevalue' }]);
-  relationshipSource(output, 'author', '/authors/OL900000001A', 'OL900000001A');
+  relationshipSource(output, 'author', 'OL900000001A');
   expect(values(output, 'isbn10')).toEqual([]);
   expect(values(output, 'isbn13')).toEqual([]);
   expect(values(output, 'publishDate')).toEqual([]);
@@ -192,10 +243,10 @@ test('edition remains distinct from work and preserves ISBN authors and source d
   const output = converted(driver, await fixture('edition'));
   expect(values(output, 'identity')).toEqual(['/books/OL900000002M']);
   expect(values(output, 'work')).toEqual([{ type: 'somevalue' }]);
-  relationshipSource(output, 'work', '/works/OL900000001W', 'OL900000001W');
+  relationshipSource(output, 'work', 'OL900000001W');
   expect(values(output, 'title')).toEqual(['The Glass Atlas: Pocket Edition']);
   expect(values(output, 'author')).toEqual([{ type: 'somevalue' }]);
-  relationshipSource(output, 'author', '/authors/OL900000001A', 'OL900000001A');
+  relationshipSource(output, 'author', 'OL900000001A');
   // Both source ISBN forms identify the same ISBN-13 candidate.
   expect(values(output, 'isbn10')).toEqual([]);
   expect(values(output, 'isbn13')).toEqual(['9780306406157']);
@@ -203,7 +254,7 @@ test('edition remains distinct from work and preserves ISBN authors and source d
     { time: '+1980-05-00T00:00:00Z', precision: 10, calendarmodel: 'http://www.wikidata.org/entity/Q1985727' },
   ]);
   const date = output.fields.find((f) => f.kind === 'publishDate')!;
-  expect(pointer(output.accepted[date.command], date.reference.keyPath)).toBe('/books/OL900000002M');
+  expect(pointer(output.accepted[date.command], date.reference.keyPath)).toBe('OL900000002M');
   expect(JSON.stringify(output.accepted)).not.toContain('May 1980');
 });
 
@@ -237,16 +288,8 @@ test('Open Library distinguishes edition bootstrap and actual independent unknow
   expect(credit.obligations).toEqual([]);
   const provenance = pointer(output.result, cover.provenance!) as CoverProvenance;
   expect(provenance).toMatchObject({ ...output.accepted[0]!.source, field_group: 'cover' });
-  const referenceValues = provenance.references.flatMap((ref) =>
-    ref.parts.flatMap((part) => (part.value.type === 'value' ? [part.value.content] : [])),
-  );
-  for (const value of [
-    record.key,
-    `https://openlibrary.org${record.key}`,
-    (record.last_modified as { value: string }).value,
-  ])
-    expect(referenceValues).toContain(value);
-  expect(referenceValues.some((value) => value === record.revision || value === String(record.revision))).toBe(true);
+  expect(provenance.references).toHaveLength(1);
+  recordCitation(provenance.references[0]!, record);
   expect(pointer(output.result, cover.role!)).toBe('cover');
   expect(pointer(output.result, cover.takedownEligible!)).toBe(true);
   expect(values(output, 'cover')).toEqual([]);
@@ -371,6 +414,9 @@ test('missing or malformed required source metadata and title reject rather than
     { revision: -1 },
     { revision: '7' },
     { last_modified: { value: 'not-a-date' } },
+    { last_modified: { value: '2025-02-30T03:04:05.123456' } },
+    { last_modified: { value: '2025-01-02T25:04:05.123456' } },
+    { last_modified: { value: '2025-01-02T03:04:05.123456garbage' } },
   ]) {
     rejected(driver.convert({ ...record, ...patch }));
   }
@@ -499,11 +545,11 @@ test('only supplied native resolutions turn author and work external keys into i
   });
   expect(values(output, 'author')).toEqual([{ type: 'value', content: AUTHOR }]);
   expect(values(output, 'work')).toEqual([{ type: 'value', content: WORK }]);
-  for (const [kind, key, identifier] of [
-    ['author', '/authors/OL900000001A', 'OL900000001A'],
-    ['work', '/works/OL900000001W', 'OL900000001W'],
+  for (const [kind, identifier] of [
+    ['author', 'OL900000001A'],
+    ['work', 'OL900000001W'],
   ] as const) {
-    relationshipSource(output, kind, key, identifier);
+    relationshipSource(output, kind, identifier);
   }
 });
 
