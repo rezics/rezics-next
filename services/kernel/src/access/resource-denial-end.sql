@@ -1,5 +1,5 @@
--- Probe and close the single open interval through the partial key index.
--- T is checked on that row; no open row at T is a no-op.
+-- Probe and close the interval at T. The partial key index sees only open
+-- rows; a GiST plan uses valid @> T to skip this key's closed history.
 WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route, :resource_id::uuid AS resource_id,
          :subject_id::uuid AS subject_id, :subject_role::text AS subject_role,
@@ -11,9 +11,9 @@ WITH input AS NOT MATERIALIZED (
     ON d.route = i.route AND d.resource_id = i.resource_id
    AND d.subject_id = i.subject_id AND d.subject_role = i.subject_role
    AND d.action = i.action AND d.reason = i.reason
-   AND upper_inf(d.valid)
+   AND upper_inf(d.valid) AND d.valid @> i.at
 ), open_row AS (
-  SELECT c.valid FROM candidate c, input i WHERE c.valid @> i.at
+  SELECT c.valid FROM candidate c
 ), updated AS (
   UPDATE access.resource_denial d
   SET valid = tstzrange(lower(d.valid), i.at, '[)')
@@ -22,6 +22,7 @@ WITH input AS NOT MATERIALIZED (
     AND d.subject_id = i.subject_id AND d.subject_role = i.subject_role
     AND d.action = i.action AND d.reason = i.reason
     AND upper_inf(d.valid) AND d.valid = o.valid
+    AND d.valid @> i.at
     AND (lower_inf(d.valid) OR lower(d.valid) < i.at)
   RETURNING d.subject_id
 )

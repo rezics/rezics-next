@@ -1,5 +1,5 @@
--- Probe one open identity role grant through the partial key index, then check T.
--- An interval already open at T is kept.
+-- Probe the identity role grant at T. The partial key index sees only open
+-- rows; a GiST plan uses valid @> T to skip this key's closed history.
 WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route, :resource_id::uuid AS resource_id,
          :subject_id::uuid AS subject_id, :subject_role::text AS subject_role,
@@ -12,9 +12,9 @@ WITH input AS NOT MATERIALIZED (
     ON g.route = i.route AND g.resource_id = i.resource_id
    AND g.subject_kind = 'identity' AND g.subject_id = i.subject_id
    AND g.subject_role = i.subject_role AND g.grant_role = i.grant_role
-   AND upper_inf(g.valid)
+   AND upper_inf(g.valid) AND g.valid @> i.at
 ), open_row AS (
-  SELECT c.valid FROM candidate c, input i WHERE c.valid @> i.at
+  SELECT c.valid FROM candidate c
 ), inserted AS (
   INSERT INTO access.resource_role_grant
     (route, resource_id, subject_kind, subject_id, subject_role, grant_role, valid, transaction_id)

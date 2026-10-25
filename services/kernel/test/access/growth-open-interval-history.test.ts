@@ -21,10 +21,12 @@ const key = {
   transaction_id: Bun.randomUUIDv7(),
 };
 const groupKey = { ...key, subject_role: 'member' };
-const at = '2030-01-01T00:00:00Z';
-const later = '2031-01-01T00:00:00Z';
+const scaleValues = [1, 8, 64] as const;
+const historyStart = Date.parse('2029-12-31T22:00:00Z');
+const unrelatedAt = '2030-01-01T00:00:00Z';
 const tables = ['resource_denial', 'resource_role_grant'] as const;
 type Table = (typeof tables)[number];
+type Statistics = 'analyze after growth' | 'leave growth unanalyzed';
 
 beforeAll(async () => {
   db = await openGrowthDatabase();
@@ -32,30 +34,25 @@ beforeAll(async () => {
 });
 afterAll(async () => db?.close());
 
-async function seed(table: Table, history: boolean, count: number, offset = 0) {
-  // Bulk equivalents of record/end and grant/revoke cycles: disjoint closed
-  // intervals for this exact key, or open intervals for unrelated subjects.
+function at(milliseconds: number): string {
+  return new Date(milliseconds).toISOString();
+}
+
+async function seedUnrelated(table: Table, count: number) {
   const columns = table === 'resource_denial' ? 'action, reason' : 'subject_kind, grant_role';
   const values = table === 'resource_denial' ? "'realm:participate', 'realm_ban'" : "'identity', 'realm.member'";
   await db.admin.query(
     `INSERT INTO access.${table}
       (route, resource_id, subject_id, subject_role, ${columns}, valid, transaction_id)
-     SELECT $1, $2, CASE WHEN $7::boolean THEN $3::uuid ELSE gen_random_uuid() END, $8, ${values},
-       CASE WHEN $7 THEN tstzrange('1990-01-01'::timestamptz + (n+$6)*interval '2 seconds',
-         '1990-01-01'::timestamptz + (n+$6)*interval '2 seconds' + interval '1 second', '[)')
-         ELSE '(,)'::tstzrange END, $4
+     SELECT $1, $2, gen_random_uuid(), $3, ${values}, '(,)'::tstzrange, $4
      FROM generate_series(1, $5::integer) n`,
-    [
-      route,
-      key.resource_id,
-      key.subject_id,
-      key.transaction_id,
-      count,
-      offset,
-      history,
-      table === 'resource_denial' ? '' : 'member',
-    ],
+    [route, key.resource_id, table === 'resource_denial' ? '' : 'member', key.transaction_id, count],
   );
+}
+
+async function addDenialCycle(start: number) {
+  expect((await record.run(db.admin, { ...key, at: at(start) })).outcome).toBe('inserted');
+  expect((await end.run(db.admin, { ...key, at: at(start + 1000) })).outcome).toBe('closed');
 }
 
 async function rolledBack(operation: (client: PoolClient) => Promise<void>) {
@@ -69,76 +66,187 @@ async function rolledBack(operation: (client: PoolClient) => Promise<void>) {
   }
 }
 
-for (const command of ['record', 'end', 'grant'] as const) {
-  for (const series of ['closed history', 'unrelated keys'] as const) {
-    test(`${command}: open interval lookup stays bounded as ${series} grow`, async () => {
-      const table = command === 'grant' ? 'resource_role_grant' : 'resource_denial';
-      await db.admin.query(`TRUNCATE access.${table}`);
-      await seed(table, false, 4096);
-      if (series === 'unrelated keys') await seed(table, true, 512);
-      // The measured key always has one open row, beyond its closed history.
-      if (command === 'grant') await grant.run(db.admin, { ...groupKey, at });
-      else await record.run(db.admin, { ...key, at });
-
-      const operation = () =>
-        rolledBack(async (client) => {
-          if (command === 'grant') {
-            expect((await grant.run(client, { ...groupKey, at })).outcome).toBe('open');
-          } else if (command === 'end') {
-            expect((await end.run(client, { ...key, at: later })).outcome).toBe('closed');
-            expect((await end.run(client, { ...key, at: later })).outcome).toBe('absent');
-          } else {
-            expect((await record.run(client, { ...key, at })).outcome).toBe('open');
-            expect((await end.run(client, { ...key, at: later })).outcome).toBe('closed');
-            expect((await record.run(client, { ...key, at: later })).outcome).toBe('inserted');
-            expect((await record.run(client, { ...key, at: later })).outcome).toBe('open');
-          }
-        });
-      const report = await checkGrowth(db, {
-        name: `${command}: ${series}`,
-        scales: [1, 8, 64],
-        bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
-        slack: { rows: { absolute: 0, relative: 0 } },
-        async grow(_database, scale, previous) {
-          await seed(table, series === 'closed history', (scale - previous) * 512, previous * 512);
-          await db.admin.query(`VACUUM (ANALYZE) access.${table}`);
-        },
-        operation,
-      });
-      for (const { cost } of report.samples) {
-        expect(cost.rows).toBe(command === 'record' ? 4 : command === 'end' ? 2 : 1);
-        expect(cost.statements).toBe(command === 'record' ? 4 : command === 'end' ? 2 : 1);
-      }
-      console.info(
-        report.name,
-        report.samples.map(({ scale, cost }) => ({
-          scale,
-          rows: cost.rows,
-          statements: cost.statements,
-          blocks: cost.blocks,
-        })),
-      );
-      const observed = await capture(db, operation);
-      // Both the open-row read and the denial update must use the partial index.
-      for (const plan of observed.capture.plans) {
-        const json = JSON.stringify(plan);
-        expect(json).toContain(`"Index Name":"${table}_open"`);
-        for (const [, index] of json.matchAll(/"Index Name":"([^"]+)"/g)) expect(index).toBe(`${table}_open`);
-        expect(json).not.toContain('"Node Type":"Seq Scan"');
-      }
-    }, 60000);
+function planNodes(value: unknown, nodes: Record<string, unknown>[] = []): Record<string, unknown>[] {
+  if (Array.isArray(value)) {
+    for (const child of value) planNodes(child, nodes);
+  } else if (typeof value === 'object' && value !== null) {
+    const object = value as Record<string, unknown>;
+    if (typeof object['Node Type'] === 'string') nodes.push(object);
+    for (const child of Object.values(object)) planNodes(child, nodes);
   }
+  return nodes;
+}
+
+function expectIndexedOpenLookup(plans: readonly unknown[], table: Table) {
+  const nodes = planNodes(plans);
+  const relationScans = nodes.filter(
+    (node) =>
+      node['Relation Name'] === table &&
+      ['Seq Scan', 'Index Scan', 'Index Only Scan', 'Bitmap Heap Scan'].includes(String(node['Node Type'])),
+  );
+  expect(relationScans.length).toBeGreaterThan(0);
+  expect(relationScans.every((node) => node['Node Type'] !== 'Seq Scan')).toBe(true);
+
+  const indexes = nodes.filter(
+    (node) => typeof node['Index Name'] === 'string' && String(node['Index Name']).startsWith(`${table}_`),
+  );
+  expect(indexes.length).toBeGreaterThan(0);
+  for (const node of indexes) {
+    const index = String(node['Index Name']);
+    const allowed = [
+      `${table}_open`,
+      `${table}_pkey`,
+      ...(table === 'resource_denial' ? ['resource_denial_permission'] : []),
+    ];
+    expect(allowed).toContain(index);
+    if (index !== `${table}_open`) {
+      const condition = String(node['Index Cond'] ?? '');
+      expect(condition).toContain('valid');
+      expect(condition).toContain('@>');
+    }
+  }
+}
+
+async function checkDenialHistory(statistics: Statistics) {
+  const table = 'resource_denial';
+  await db.admin.query(`TRUNCATE access.${table}`);
+  await seedUnrelated(table, 4096);
+  await db.admin.query(`VACUUM (ANALYZE) access.${table}`);
+
+  let cursor = historyStart;
+  let openAt: number | undefined;
+  const times = new Map<number, string>();
+  const operation = (scale: number) =>
+    rolledBack(async (client) => {
+      const measuredAt = times.get(scale)!;
+      expect((await record.run(client, { ...key, at: measuredAt })).outcome).toBe('open');
+      expect((await end.run(client, { ...key, at: at(Date.parse(measuredAt) + 1000) })).outcome).toBe('closed');
+      const nextAt = at(Date.parse(measuredAt) + 2000);
+      expect((await record.run(client, { ...key, at: nextAt })).outcome).toBe('inserted');
+      expect((await record.run(client, { ...key, at: nextAt })).outcome).toBe('open');
+    });
+
+  const report = await checkGrowth(db, {
+    name: `denial closed history (${statistics})`,
+    scales: scaleValues,
+    bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+    slack: { rows: { absolute: 0, relative: 0 } },
+    async grow(_database, scale, previous) {
+      if (openAt !== undefined) {
+        const closeAt = openAt + 1000;
+        expect((await end.run(db.admin, { ...key, at: at(closeAt) })).outcome).toBe('closed');
+        cursor = closeAt + 1000;
+      }
+      for (let count = previous; count < scale; count++) {
+        await addDenialCycle(cursor);
+        cursor += 2000;
+      }
+      openAt = cursor + 1000;
+      times.set(scale, at(openAt));
+      expect((await record.run(db.admin, { ...key, at: at(openAt) })).outcome).toBe('inserted');
+      cursor = openAt;
+      if (statistics === 'analyze after growth') await db.admin.query(`VACUUM (ANALYZE) access.${table}`);
+    },
+    operation: (_database, scale) => operation(scale),
+  });
+
+  for (const { cost } of report.samples) {
+    expect(cost.rows).toBe(4);
+    expect(cost.statements).toBe(4);
+  }
+  const observed = await capture(db, () => operation(64));
+  expectIndexedOpenLookup(observed.capture.plans, table);
+}
+
+async function checkDenialUnrelated(statistics: Statistics) {
+  const table = 'resource_denial';
+  await db.admin.query(`TRUNCATE access.${table}`);
+  await seedUnrelated(table, 4096);
+  await addDenialCycle(historyStart);
+  await record.run(db.admin, { ...key, at: unrelatedAt });
+  await db.admin.query(`VACUUM (ANALYZE) access.${table}`);
+
+  const operation = () =>
+    rolledBack(async (client) => {
+      expect((await record.run(client, { ...key, at: unrelatedAt })).outcome).toBe('open');
+      expect((await end.run(client, { ...key, at: at(Date.parse(unrelatedAt) + 1000) })).outcome).toBe('closed');
+      const nextAt = at(Date.parse(unrelatedAt) + 2000);
+      expect((await record.run(client, { ...key, at: nextAt })).outcome).toBe('inserted');
+      expect((await record.run(client, { ...key, at: nextAt })).outcome).toBe('open');
+    });
+
+  const report = await checkGrowth(db, {
+    name: `denial unrelated keys (${statistics})`,
+    scales: scaleValues,
+    bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+    slack: { rows: { absolute: 0, relative: 0 } },
+    async grow(_database, scale, previous) {
+      await seedUnrelated(table, (scale - previous) * 512);
+      if (statistics === 'analyze after growth') await db.admin.query(`VACUUM (ANALYZE) access.${table}`);
+    },
+    operation: () => operation(),
+  });
+
+  for (const { cost } of report.samples) {
+    expect(cost.rows).toBe(4);
+    expect(cost.statements).toBe(4);
+  }
+  const observed = await capture(db, operation);
+  expectIndexedOpenLookup(observed.capture.plans, table);
+}
+
+async function checkGroupUnrelated(statistics: Statistics) {
+  const table = 'resource_role_grant';
+  await db.admin.query(`TRUNCATE access.${table}`);
+  await seedUnrelated(table, 4096);
+  await grant.run(db.admin, { ...groupKey, at: unrelatedAt });
+  await db.admin.query(`VACUUM (ANALYZE) access.${table}`);
+
+  const operation = (scale: number) =>
+    rolledBack(async (client) => {
+      const measuredAt = at(Date.parse(unrelatedAt) + scale * 1000);
+      expect((await grant.run(client, { ...groupKey, at: measuredAt })).outcome).toBe('open');
+    });
+  const report = await checkGrowth(db, {
+    name: `group role grant unrelated keys (${statistics})`,
+    scales: scaleValues,
+    bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+    slack: { rows: { absolute: 0, relative: 0 } },
+    async grow(_database, scale, previous) {
+      await seedUnrelated(table, (scale - previous) * 512);
+      if (statistics === 'analyze after growth') await db.admin.query(`VACUUM (ANALYZE) access.${table}`);
+    },
+    operation: (_database, scale) => operation(scale),
+  });
+
+  for (const { cost } of report.samples) {
+    expect(cost.rows).toBe(1);
+    expect(cost.statements).toBe(1);
+  }
+  const observed = await capture(db, () => operation(64));
+  expectIndexedOpenLookup(observed.capture.plans, table);
+}
+
+for (const statistics of ['analyze after growth', 'leave growth unanalyzed'] as const) {
+  test(`denial lookup stays bounded as recent closed history grows (${statistics})`, async () => {
+    await checkDenialHistory(statistics);
+  }, 60000);
+
+  test(`denial lookup stays bounded as unrelated keys grow (${statistics})`, async () => {
+    await checkDenialUnrelated(statistics);
+  }, 60000);
+
+  test(`repeated group role grants stay bounded as unrelated keys grow (${statistics})`, async () => {
+    await checkGroupUnrelated(statistics);
+  }, 60000);
 }
 
 test('partial unique indexes enforce one open interval per complete key', async () => {
   for (const table of tables) {
     await db.admin.query(`TRUNCATE access.${table}`);
-    await seed(table, true, 2);
-    if (table === 'resource_denial') await record.run(db.admin, { ...key, at });
-    else await grant.run(db.admin, { ...groupKey, at });
+    if (table === 'resource_denial') await record.run(db.admin, { ...key, at: unrelatedAt });
+    else await grant.run(db.admin, { ...groupKey, at: unrelatedAt });
     const columns = table === 'resource_denial' ? 'action, reason' : 'subject_kind, grant_role';
-    // The temporal primary key also rejects this overlap. Remove it only in
-    // this rolled-back transaction to prove the partial index enforces uniqueness.
     const client = await db.admin.connect();
     try {
       await client.query('BEGIN');
@@ -150,7 +258,7 @@ test('partial unique indexes enforce one open interval per complete key', async 
            SELECT route, resource_id, subject_id, subject_role, ${columns},
              tstzrange($1::timestamptz, NULL, '[)'), transaction_id
            FROM access.${table} WHERE upper_inf(valid)`,
-          [later],
+          [at(Date.parse(unrelatedAt) + 1000)],
         ),
       ).rejects.toMatchObject({ code: '23505', constraint: `${table}_open` });
     } finally {
@@ -162,11 +270,11 @@ test('partial unique indexes enforce one open interval per complete key', async 
 
 test('T still filters future open rows and preserves denial close outcomes', async () => {
   await db.admin.query('TRUNCATE access.resource_denial, access.resource_role_grant');
+  const later = at(Date.parse(unrelatedAt) + 1000);
   await record.run(db.admin, { ...key, at: later });
-  expect((await end.run(db.admin, { ...key, at })).outcome).toBe('absent');
+  expect((await end.run(db.admin, { ...key, at: unrelatedAt })).outcome).toBe('absent');
   expect((await end.run(db.admin, { ...key, at: later })).outcome).toBe('unclosable');
-  // Recording before a future interval still refuses overlapping history.
-  await expect(record.run(db.admin, { ...key, at })).rejects.toThrow();
+  await expect(record.run(db.admin, { ...key, at: unrelatedAt })).rejects.toThrow();
   await grant.run(db.admin, { ...groupKey, at: later });
-  await expect(grant.run(db.admin, { ...groupKey, at })).rejects.toThrow();
+  await expect(grant.run(db.admin, { ...groupKey, at: unrelatedAt })).rejects.toThrow();
 });
