@@ -18,6 +18,7 @@ export const MEDIA_EVENTS = {
     { additionalProperties: false },
   ),
   'com.rezics.content.media.erased.v1': Type.Object(mediaContainer, { additionalProperties: false }),
+  'com.rezics.content.media.collection-pending.v1': Type.Object(mediaContainer, { additionalProperties: false }),
   'com.rezics.content.media.collected.v1': Type.Object(mediaContainer, { additionalProperties: false }),
 } as const;
 
