@@ -4,7 +4,7 @@ import { OpenSearchError, type OpenSearch } from './opensearch.ts';
 import retire from './retire.sql';
 import { createSubjectIndex, subjectGenerations, subjectIndexName, subjectAlias } from './indices.ts';
 import { createSubjectIndexer } from './indexer.ts';
-import type { SubjectSource } from './source.ts';
+import type { SubjectListingSource, SubjectSource } from './source.ts';
 
 export function subjectConsumer(prefix: string, generation: number): string {
   const consumer = `search_${prefix.replaceAll('-', '_')}subjects_g${generation}`;
@@ -16,6 +16,7 @@ export async function startSearchIndexing(options: {
   pool: Pool;
   search: OpenSearch;
   source: SubjectSource;
+  listing: SubjectListingSource;
   prefix: string;
   intervalMs?: number;
   discoverMs?: number;
@@ -84,6 +85,7 @@ export async function startSearchIndexing(options: {
             pool: options.pool,
             search: options.search,
             source: options.source,
+            listing: options.listing,
             index: subjectIndexName(options.prefix, generation),
             consumer: subjectConsumer(options.prefix, generation),
           }),

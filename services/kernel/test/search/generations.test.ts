@@ -15,6 +15,11 @@ if (!databaseUrl || !searchUrl)
 const pool = createPool(databaseUrl);
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
 const search = createOpenSearch(searchUrl);
+const emptyListing = {
+  async read() {
+    return new Map<string, number>();
+  },
+};
 const prefixes: string[] = [];
 afterAll(async () => {
   for (const prefix of prefixes) {
@@ -78,7 +83,15 @@ async function deployment(subjects: readonly IndexedSubject[]) {
   const prefix = `test-${crypto.randomUUID().slice(0, 8)}-`;
   prefixes.push(prefix);
   const fake = createFakeSource();
-  const runner = await startSearchIndexing({ pool, search, source: fake, prefix, intervalMs: 20, discoverMs: 50 });
+  const runner = await startSearchIndexing({
+    pool,
+    search,
+    source: fake,
+    listing: emptyListing,
+    prefix,
+    intervalMs: 20,
+    discoverMs: 50,
+  });
   for (const subject of subjects) {
     fake.put(subject);
     await append(subject.id);

@@ -14,6 +14,11 @@ if (!databaseUrl || !searchUrl)
 const pool = createPool(databaseUrl);
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
 const search = createOpenSearch(searchUrl);
+const emptyListing = {
+  async read() {
+    return new Map<string, number>();
+  },
+};
 const prefixes: string[] = [];
 afterAll(async () => {
   for (const prefix of prefixes) {
@@ -111,6 +116,7 @@ async function deployment(subject: IndexedSubject, retireAfterMs: number) {
     pool,
     search,
     source: fake,
+    listing: emptyListing,
     prefix,
     intervalMs: 20,
     discoverMs: 50,
@@ -177,7 +183,15 @@ test('a runner started after the grace period retires at its first discovery', a
   await Bun.sleep(200);
   await runner.stop();
   expect(await generationsOf(prefix)).toEqual([1, 2]);
-  const restarted = await startSearchIndexing({ pool, search, source: fake, prefix, intervalMs: 20, discoverMs: 50 });
+  const restarted = await startSearchIndexing({
+    pool,
+    search,
+    source: fake,
+    listing: emptyListing,
+    prefix,
+    intervalMs: 20,
+    discoverMs: 50,
+  });
   try {
     await eventually(async () => (await generationsOf(prefix)).join() === '2');
     expect(await checkpoints(subjectConsumer(prefix, 1))).toBe(0);

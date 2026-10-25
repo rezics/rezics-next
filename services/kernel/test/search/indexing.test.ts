@@ -16,6 +16,11 @@ if (!databaseUrl || !searchUrl)
 const pool = createPool(databaseUrl);
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
 const search = createOpenSearch(searchUrl);
+const emptyListing = {
+  async read() {
+    return new Map<string, number>();
+  },
+};
 const prefixes: string[] = [];
 afterAll(async () => {
   for (const prefix of prefixes) {
@@ -140,6 +145,7 @@ test('a batch indexes each named subject once from one snapshot at the partition
     pool,
     search: writes.search,
     source: reads.source,
+    listing: emptyListing,
     index,
     consumer: 'search_one',
   });
@@ -150,7 +156,9 @@ test('a batch indexes each named subject once from one snapshot at the partition
   const snapshot = await fake.read(101, [a.id]);
   const stored = await search.request<{ _version: number; _source: unknown }>('GET', `/${index}/_doc/${a.id}`);
   expect(stored.body._version).toBe(Number(snapshot.position));
-  expect(stored.body._source).toEqual((documentActions(snapshot, [a.id])[0] as { document: unknown }).document);
+  expect(stored.body._source).toEqual(
+    (documentActions(snapshot, [a.id], new Map())[0] as { document: unknown }).document,
+  );
   expect(await checkpoint('search_one', 101)).toBe('3');
   expect(await relay.run(101)).toMatchObject({ status: 'read', envelopes: 0 });
   expect(reads.reads).toHaveLength(1);
@@ -162,7 +170,14 @@ test('a later takedown deletes the document and replays are harmless', async () 
   const a = book(102, 1);
   fake.put(a);
   await append(102, a.id);
-  const relay = createSubjectIndexer({ pool, search, source: fake, index, consumer: 'search_two' });
+  const relay = createSubjectIndexer({
+    pool,
+    search,
+    source: fake,
+    listing: emptyListing,
+    index,
+    consumer: 'search_two',
+  });
   await relay.run(102);
   expect(await exists(index, a.id)).toBe(true);
   fake.put({ ...a, visibility: 'taken_down', securityRevision: 2 });
@@ -186,7 +201,14 @@ test('write and read failures leave the checkpoint where it was', async () => {
   const a = book(103, 1);
   fake.put(a);
   await append(103, a.id);
-  const relay = createSubjectIndexer({ pool, search, source: fake, index, consumer: 'search_three' });
+  const relay = createSubjectIndexer({
+    pool,
+    search,
+    source: fake,
+    listing: emptyListing,
+    index,
+    consumer: 'search_three',
+  });
   await search.request('POST', `/${index}/_close`);
   await expect(relay.run(103)).rejects.toThrow();
   expect(await checkpoint('search_three', 103)).toBe('0');
@@ -195,7 +217,14 @@ test('write and read failures leave the checkpoint where it was', async () => {
     read: () => Promise.reject(new Error('partition unavailable')),
     count: (partition) => fake.count(partition),
   };
-  const broken = createSubjectIndexer({ pool, search, source: failing, index, consumer: 'search_three' });
+  const broken = createSubjectIndexer({
+    pool,
+    search,
+    source: failing,
+    listing: emptyListing,
+    index,
+    consumer: 'search_three',
+  });
   await expect(broken.run(103)).rejects.toThrow('partition unavailable');
   expect(await checkpoint('search_three', 103)).toBe('0');
   expect(await relay.run(103)).toMatchObject({ status: 'read', envelopes: 1 });
@@ -215,6 +244,7 @@ test('subjects named from another partition are skipped', async () => {
     pool,
     search: writes.search,
     source: reads.source,
+    listing: emptyListing,
     index,
     consumer: 'search_four',
   });
@@ -243,6 +273,7 @@ test('cost per batch is one snapshot read and one bulk request at every batch si
       pool,
       search: writes.search,
       source: reads.source,
+      listing: emptyListing,
       index,
       consumer: 'search_cost',
     });
@@ -254,7 +285,15 @@ test('cost per batch is one snapshot read and one bulk request at every batch si
 test('the runner creates the first generation, feeds every generation and follows pause and new generations', async () => {
   const prefix = freshPrefix();
   const fake = createFakeSource();
-  const runner = await startSearchIndexing({ pool, search, source: fake, prefix, intervalMs: 20, discoverMs: 50 });
+  const runner = await startSearchIndexing({
+    pool,
+    search,
+    source: fake,
+    listing: emptyListing,
+    prefix,
+    intervalMs: 20,
+    discoverMs: 50,
+  });
   try {
     expect(await subjectGenerations(search, prefix)).toEqual({ generations: [1], active: 1 });
     expect(subjectConsumer('rezics-', 1)).toBe('search_rezics_subjects_g1');
