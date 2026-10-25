@@ -24,9 +24,14 @@ let instant = Date.now();
 let sequence = 0;
 const key = () => `handle-command-${++sequence}`;
 const clock = () => new Date(instant);
-const proofs = new Map<string, { accountId: string; registrationId: string; authIdentityId: string; authnEpoch: number }>();
+const proofs = new Map<
+  string,
+  { accountId: string; registrationId: string; authIdentityId: string; authnEpoch: number }
+>();
 const internal = createLifecycleInternals({
-  pool, clock, routeKey: new Uint8Array(32).fill(83),
+  pool,
+  clock,
+  routeKey: new Uint8Array(32).fill(83),
   provisioningEvidence: async (proof) => proofs.get(String(proof)) ?? null,
   recoveryEvidence: async () => null,
 });
@@ -35,9 +40,18 @@ const commands = createLifecycleCommands({ pool, clock, access });
 const row = (id: string) => withConnection(reader, (client) => readAccount(client, routeOf(id)!, id));
 async function context(id: string, scopes = ['account:update']) {
   return {
-    actor: { kind: 'account', accountId: id, clientId: 'verified-client', requestedBy: null, authnEpoch: 1, scopes } as AccountActor,
-    account: await row(id), deadline: Date.now() + 5000,
+    actor: {
+      kind: 'account',
+      accountId: id,
+      clientId: 'verified-client',
+      requestedBy: null,
+      authnEpoch: 1,
+      scopes,
+    } as AccountActor,
+    account: await row(id),
+    deadline: Date.now() + 5000,
   };
+}
 async function pending(handle: string) {
   const registrationKey = key();
   const accountId = internal.registrationTarget(registrationKey);
@@ -55,21 +69,41 @@ async function person(handle: string) {
 }
 async function prepare(accountId: string, handle: string, expectedHandle: string | null) {
   const reservation = (await internal.reserveHandle({ handle, accountId, key: key() })).value;
-  const input = { accountId, handle: reservation.handle, reservationId: reservation.reservationId, expectedHandle, operationId: key(), key: key() };
+  const input = {
+    accountId,
+    handle: reservation.handle,
+    reservationId: reservation.reservationId,
+    expectedHandle,
+    operationId: key(),
+    key: key(),
+  };
   await internal.holdHandle(input);
   return input;
 }
 async function finish(input: Awaited<ReturnType<typeof prepare>>) {
   await internal.finalizeHandleTransition({ ...input, key: `${input.key}:claim` });
-  if (input.expectedHandle !== null) await internal.redirectTransitionHandle({ ...input, key: `${input.key}:redirect` });
+  if (input.expectedHandle !== null)
+    await internal.redirectTransitionHandle({ ...input, key: `${input.key}:redirect` });
   return internal.completeHandleTransition({ ...input, key: `${input.key}:complete` });
 }
 
 test('organization first handle and both kinds of rename use real authorized account-anchor commands', async () => {
   const owner = await person('handle_owner');
   const organizationId = newId(0x3394);
-  const hold = (await internal.reserveCoordination({ accountId: owner, relatedAccountId: organizationId, purpose: 'membership', key: key() })).value;
-  await internal.createOrganization({ organizationId, ownerAccountId: owner, ownerReservationId: hold.reservationId, key: key() });
+  const hold = (
+    await internal.reserveCoordination({
+      accountId: owner,
+      relatedAccountId: organizationId,
+      purpose: 'membership',
+      key: key(),
+    })
+  ).value;
+  await internal.createOrganization({
+    organizationId,
+    ownerAccountId: owner,
+    ownerReservationId: hold.reservationId,
+    key: key(),
+  });
   expect((await row(organizationId))!.handle).toBeNull();
   const first = await prepare(organizationId, 'First_Organization', null);
   await commands.transitionAccountHandle(await context(owner), first);
@@ -92,20 +126,30 @@ test('holds survive pending TTL before and after publication, recovery finishes 
   const id = await person('crash_old');
   const input = await prepare(id, 'crash_new', 'crash_old');
   instant += REGISTRATION_TTL_MS + 1;
-  await expect(internal.expireHandle({ handle: input.handle, key: key() })).rejects.toBeInstanceOf(LifecycleDeniedError);
-  await expect(internal.reserveHandle({ handle: input.handle, accountId: newId(0x1234), key: key() })).rejects.toBeInstanceOf(LifecycleDeniedError);
+  await expect(internal.expireHandle({ handle: input.handle, key: key() })).rejects.toBeInstanceOf(
+    LifecycleDeniedError,
+  );
+  await expect(
+    internal.reserveHandle({ handle: input.handle, accountId: newId(0x1234), key: key() }),
+  ).rejects.toBeInstanceOf(LifecycleDeniedError);
   const published = await commands.transitionAccountHandle(await context(id), input);
   instant += REGISTRATION_TTL_MS + 1;
   expect(await row(id)).toMatchObject({ handle: input.handle });
-  await expect(internal.reserveHandle({ handle: input.handle, accountId: newId(0x1234), key: key() })).rejects.toBeInstanceOf(LifecycleDeniedError);
-  expect((await commands.transitionAccountHandle(await context(id), input)).transactionId).toBe(published.transactionId);
+  await expect(
+    internal.reserveHandle({ handle: input.handle, accountId: newId(0x1234), key: key() }),
+  ).rejects.toBeInstanceOf(LifecycleDeniedError);
+  expect((await commands.transitionAccountHandle(await context(id), input)).transactionId).toBe(
+    published.transactionId,
+  );
   await internal.finalizeHandleTransition({ ...input, key: `${input.key}:claim` });
   instant += REGISTRATION_TTL_MS + 1;
   await internal.redirectTransitionHandle({ ...input, key: `${input.key}:redirect` });
   await finish(input);
   expect(await internal.resolveHandle('crash_old')).toEqual({ accountId: id, redirect: true });
   instant += HANDLE_REDIRECT_TTL_MS - 1;
-  await expect(internal.reserveHandle({ handle: 'crash_old', accountId: newId(0x1234), key: key() })).rejects.toBeInstanceOf(LifecycleDeniedError);
+  await expect(
+    internal.reserveHandle({ handle: 'crash_old', accountId: newId(0x1234), key: key() }),
+  ).rejects.toBeInstanceOf(LifecycleDeniedError);
   instant += 1;
   const newer = newId(0x1234);
   await internal.reserveHandle({ handle: 'crash_old', accountId: newer, key: key() });
@@ -117,12 +161,22 @@ test('public rename binds actor, scopes, expected handle, reservation and digest
   const id = await person('authorization_old');
   const stranger = await person('authorization_stranger');
   const input = await prepare(id, 'authorization_new', 'authorization_old');
-  await expect(commands.updateAccount(await context(id), { accountId: id, key: key(), patch: { handle: input.handle } })).rejects.toBeInstanceOf(LifecycleDeniedError);
-  await expect(commands.transitionAccountHandle(await context(stranger), input)).rejects.toBeInstanceOf(LifecycleDeniedError);
-  await expect(commands.transitionAccountHandle(await context(id), { ...input, reservationId: newId(0x1234) })).rejects.toBeInstanceOf(LifecycleDeniedError);
+  await expect(
+    commands.updateAccount(await context(id), { accountId: id, key: key(), patch: { handle: input.handle } }),
+  ).rejects.toBeInstanceOf(LifecycleDeniedError);
+  await expect(commands.transitionAccountHandle(await context(stranger), input)).rejects.toBeInstanceOf(
+    LifecycleDeniedError,
+  );
+  await expect(
+    commands.transitionAccountHandle(await context(id), { ...input, reservationId: newId(0x1234) }),
+  ).rejects.toBeInstanceOf(LifecycleDeniedError);
   await commands.transitionAccountHandle(await context(id), input);
-  await expect(commands.transitionAccountHandle(await context(id, []), input)).rejects.toBeInstanceOf(LifecycleDeniedError);
-  await expect(commands.transitionAccountHandle(await context(id), { ...input, expectedHandle: 'different' })).rejects.toBeInstanceOf(IdempotencyConflictError);
+  await expect(commands.transitionAccountHandle(await context(id, []), input)).rejects.toBeInstanceOf(
+    LifecycleDeniedError,
+  );
+  await expect(
+    commands.transitionAccountHandle(await context(id), { ...input, expectedHandle: 'different' }),
+  ).rejects.toBeInstanceOf(IdempotencyConflictError);
   await internal.raiseFence({ accountId: id, key: key() });
   await expect(commands.transitionAccountHandle(await context(id), input)).rejects.toBeInstanceOf(LifecycleDeniedError);
 });
@@ -131,13 +185,18 @@ test('concurrent renames serialize and terminal cancellation cannot release or r
   const id = await person('competing_old');
   const a = await prepare(id, 'competing_a', 'competing_old');
   const b = await prepare(id, 'competing_b', 'competing_old');
-  const results = await Promise.allSettled([commands.transitionAccountHandle(await context(id), a), commands.transitionAccountHandle(await context(id), b)]);
+  const results = await Promise.allSettled([
+    commands.transitionAccountHandle(await context(id), a),
+    commands.transitionAccountHandle(await context(id), b),
+  ]);
   expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
   const winner = results[0]!.status === 'fulfilled' ? a : b;
   const loser = winner === a ? b : a;
   await internal.cancelHandleTransition({ ...loser, key: `${loser.key}:cancel` });
   await internal.releaseHandleTransition({ ...loser, key: `${loser.key}:release` });
-  await expect(commands.transitionAccountHandle(await context(id), { ...loser, key: key() })).rejects.toBeInstanceOf(LifecycleDeniedError);
+  await expect(commands.transitionAccountHandle(await context(id), { ...loser, key: key() })).rejects.toBeInstanceOf(
+    LifecycleDeniedError,
+  );
   await expect(internal.cancelHandleTransition({ ...winner, key: key() })).rejects.toBeInstanceOf(LifecycleDeniedError);
   await finish(winner);
   const other = newId(0x1234);
@@ -153,14 +212,18 @@ test('expired registration after active handle barrier terminalizes account befo
   instant += REGISTRATION_TTL_MS + 1;
   await expect(internal.activate({ ...p, key: key() })).rejects.toBeInstanceOf(LifecycleDeniedError);
   await expect(internal.expireHandle({ handle: p.handle, key: key() })).rejects.toBeInstanceOf(LifecycleDeniedError);
-  await expect(internal.releaseExpiredRegistrationHandle({ ...p, key: key() })).rejects.toBeInstanceOf(LifecycleDeniedError);
+  await expect(internal.releaseExpiredRegistrationHandle({ ...p, key: key() })).rejects.toBeInstanceOf(
+    LifecycleDeniedError,
+  );
   await internal.expireRegistration({ ...p, key: key() });
   expect(await row(p.accountId)).toMatchObject({ state: 'deleted', fenced: true });
   await internal.releaseExpiredRegistrationHandle({ ...p, key: key() });
   expect(await internal.resolveHandle(p.handle)).toBeNull();
   const next = await pending(p.handle);
   expect(next.accountId).not.toBe(p.accountId);
-  await expect(internal.releaseExpiredRegistrationHandle({ ...p, key: key() })).rejects.toBeInstanceOf(LifecycleDeniedError);
+  await expect(internal.releaseExpiredRegistrationHandle({ ...p, key: key() })).rejects.toBeInstanceOf(
+    LifecycleDeniedError,
+  );
   expect(await internal.resolveHandle(p.handle)).toMatchObject({ accountId: next.accountId });
   await expect(internal.activate({ ...p, key: key() })).rejects.toBeInstanceOf(LifecycleDeniedError);
 });
