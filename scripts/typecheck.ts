@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
-// Typecheck every workspace from the repository root. One throwaway database is migrated and shared, then removed.
+// Typecheck every workspace from the repository root. One throwaway database receives the kernel and Auth
+// schemas, is shared, then removed.
 import { dirname, join, relative, resolve } from 'node:path';
 
 export type StartedDatabase = {
@@ -10,7 +11,7 @@ export type StartedDatabase = {
 export type TypecheckOptions = {
   /** Repository root. Defaults to TYPECHECK_ROOT or the current working directory. */
   root?: string;
-  /** Tests inject this so they do not start Docker. The real run uses the kernel throwaway database. */
+  /** Tests inject this so they do not start Docker. The real run prepares a throwaway database with the kernel and Auth schemas. */
   startDatabase?: () => Promise<StartedDatabase>;
   stdout?: { write(chunk: string): unknown };
 };
@@ -146,8 +147,8 @@ export async function typecheck(options: TypecheckOptions = {}): Promise<number>
   };
   const run = (env: NodeJS.ProcessEnv): Promise<number> => runWorkspaces(root, env, write);
   if (options.startDatabase) return withStartedDatabase(options.startDatabase, run);
-  const { withThrowawayDatabase } = await import('../services/kernel/scripts/derived.ts');
-  return withThrowawayDatabase(run);
+  const { prepareCompilerDatabase } = await import('./compiler-database.ts');
+  return withStartedDatabase(prepareCompilerDatabase, run);
 }
 
 if (import.meta.main) {

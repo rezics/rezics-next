@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import { getMigrations } from 'better-auth/db/migration';
 import { Pool } from 'pg';
-import { migrate as migrateKernel } from '../../kernel/scripts/database.ts';
+import { prepareCompilerDatabase } from '../../../scripts/compiler-database.ts';
 import { betterAuthSchemaOptions } from '../src/better-auth.ts';
 import { migrate, run, schemaDump, testDatabase } from './database.ts';
 
@@ -29,15 +29,14 @@ try {
     await pool.end();
   }
   const env = { ...process.env, AUTH_TEST_DATABASE_URL: database.url };
-  const compilerDatabase = testDatabase();
+  const compilerDatabase = await prepareCompilerDatabase();
   try {
-    migrateKernel(compilerDatabase.url);
     run(resolve('../../node_modules/.bin/tsc'), ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json'], {
       ...env,
       DATABASE_URL: compilerDatabase.url,
     });
   } finally {
-    compilerDatabase.close();
+    await compilerDatabase.remove();
   }
   run(resolve('../../node_modules/.bin/oxlint'), ['--config', '../../.oxlintrc.json', '.'], env);
   run(resolve('../../node_modules/.bin/oxfmt'), ['--check', '.'], env);

@@ -1,7 +1,10 @@
 import { expect, test } from 'bun:test';
+import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { POSTGRES_IMAGE } from '../services/auth/scripts/database.ts';
+import { prepareCompilerDatabase } from './compiler-database.ts';
 import { typecheck, type StartedDatabase } from './typecheck.ts';
 
 function fixture(): { root: string; remove: () => void } {
@@ -201,6 +204,50 @@ await Bun.write('database-url', url);
     remove();
   }
 });
+
+test('the prepared compiler database holds a kernel table and the Auth relations for credential-effects-stage, rate-limit, session-limits and verification-maintenance', async () => {
+  const database = await prepareCompilerDatabase();
+  try {
+    const relations = relationNames(database.url);
+    expect(relations['core.partition']).toBe('core.partition');
+    expect(relations.auth_effect_receipt).toBe('auth_effect_receipt');
+    expect(relations.auth_attempt_counter).toBe('auth_attempt_counter');
+    expect(relations.session).toBe('session');
+    expect(relations.verification).toBe('verification');
+  } finally {
+    await database.remove();
+  }
+}, 180_000);
+
+function relationNames(url: string): Record<string, string | null> {
+  const result = spawnSync(
+    'docker',
+    [
+      'run',
+      '--rm',
+      '--network',
+      'host',
+      POSTGRES_IMAGE,
+      'psql',
+      url,
+      '-v',
+      'ON_ERROR_STOP=1',
+      '-At',
+      '-c',
+      `SELECT json_build_object(
+        'core.partition', to_regclass('core.partition'),
+        'auth_effect_receipt', to_regclass('public.auth_effect_receipt'),
+        'auth_attempt_counter', to_regclass('public.auth_attempt_counter'),
+        'session', to_regclass('public.session'),
+        'verification', to_regclass('public.verification')
+      )`,
+    ],
+    { encoding: 'utf8' },
+  );
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error(result.stderr);
+  return JSON.parse(result.stdout) as Record<string, string | null>;
+}
 
 function installTsc(root: string, record: string, gone?: string): void {
   const bin = join(root, 'node_modules/.bin');
