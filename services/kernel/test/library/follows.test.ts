@@ -6,7 +6,6 @@ import type pg from 'pg';
 import { readAccount, type Account } from '../../src/access/account-data.ts';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { createAccess } from '../../src/access/permission.ts';
-import { createPool } from '../../src/database/pool.ts';
 import { EVENT_TYPES, readBatch } from '../../src/events/log.ts';
 import type { CollectionVisibility } from '../../src/library/collection-model.ts';
 import * as collections from '../../src/library/collection-store.ts';
@@ -26,6 +25,7 @@ if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test data
 const FOLLOW_EVENT = 'com.rezics.library.follow.updated.v1';
 const ownerRoute = 0x21a0;
 const collectionRoute = 0x31c0;
+const foreignCurator = newId(collectionRoute);
 const routeKey = new Uint8Array(32).fill(47);
 const scopes = ['follow:create', 'follow:delete', 'subject:read'] as const;
 
@@ -116,20 +116,22 @@ async function denyOwnerRead(subjectId: string): Promise<void> {
 }
 
 async function insertCollection(visibility: CollectionVisibility, curatorAccountId: string) {
+  const route = routeOf(curatorAccountId);
+  if (route === null) throw new Error('Curator must carry a route');
   const client = await admin.connect();
   try {
     await client.query('BEGIN');
     const row = await collections.insertCollection(
       client,
-      collectionRoute,
+      route,
       {
-        id: newId(collectionRoute),
+        id: newId(route),
         curatorAccountId,
         title: 'Shelf',
         description: null,
         visibility,
       },
-      { time: clock().toISOString(), transactionId: newId(collectionRoute) },
+      { time: clock().toISOString(), transactionId: newId(route) },
     );
     await client.query('COMMIT');
     return row;
@@ -142,13 +144,15 @@ async function insertCollection(visibility: CollectionVisibility, curatorAccount
 }
 
 async function tombstone(collectionId: string): Promise<void> {
+  const route = routeOf(collectionId);
+  if (route === null) throw new Error('Collection must carry a route');
   const client = await admin.connect();
   try {
     await client.query('BEGIN');
     expect(
-      await collections.tombstoneCollection(client, collectionRoute, collectionId, {
+      await collections.tombstoneCollection(client, route, collectionId, {
         time: clock().toISOString(),
-        transactionId: newId(collectionRoute),
+        transactionId: newId(route),
       }),
     ).not.toBeNull();
     await client.query('COMMIT');
@@ -357,10 +361,11 @@ test('an account follows, unfollows and refollows a readable subject in its own 
 });
 
 test('a collection follow is limited to an active public, unlisted, or curated shelf', async () => {
-  const visible = await insertCollection('public', other.accountId);
-  const unlisted = await insertCollection('unlisted', other.accountId);
+  const visible = await insertCollection('public', foreignCurator);
+  const unlisted = await insertCollection('unlisted', foreignCurator);
   const curated = await insertCollection('private', owner.accountId);
-  const removed = await insertCollection('public', other.accountId);
+  const removed = await insertCollection('public', foreignCurator);
+  expect(partitionOf(routeOf(visible.id)!)).not.toBe(partitionOf(ownerRoute));
   await tombstone(removed.id);
   tick();
   for (const shelf of [visible, unlisted, curated]) {
@@ -493,8 +498,8 @@ test('unknown, unreadable and private targets are refused alike and change nothi
   const readableId = await createReadableSubject('Visible book');
   const unreadableId = await createReadableSubject('Denied book');
   await denyOwnerRead(unreadableId);
-  const privateShelf = await insertCollection('private', other.accountId);
-  const deleted = await insertCollection('public', owner.accountId);
+  const privateShelf = await insertCollection('private', foreignCurator);
+  const deleted = await insertCollection('public', foreignCurator);
   await tombstone(deleted.id);
   const unknownSubjectId = newId(collectionRoute);
   const unknownCollectionId = newId(collectionRoute);
@@ -522,7 +527,7 @@ test('unknown, unreadable and private targets are refused alike and change nothi
 
 test('suspended, anonymous and unauthorized personas change nothing and cannot be told apart', async () => {
   const subjectId = await createReadableSubject('Persona book');
-  const privateShelf = await insertCollection('private', other.accountId);
+  const privateShelf = await insertCollection('private', foreignCurator);
   const before = await activity();
   const people: Actor[] = [suspended, anonymous, noScope];
   const targets = [
@@ -556,7 +561,7 @@ test('suspended, anonymous and unauthorized personas change nothing and cannot b
 
 test("another account reads none of the owner's follows", async () => {
   const subjectId = await createReadableSubject('Private follow');
-  const shelf = await insertCollection('public', other.accountId);
+  const shelf = await insertCollection('public', foreignCurator);
   tick();
   await followCommands.follow(owner, { targetId: subjectId, targetType: 'subject' }, requestKey());
   tick();
@@ -622,10 +627,13 @@ test('statements per follow, membership step and page stay equal as unrelated fo
     membershipStatements.push(stepped.cost.statements);
     pageStatements.push(page.cost.statements);
   }
-  expect(followStatements[0]).toBeGreaterThan(0);
-  expect(membershipStatements[0]).toBeGreaterThan(0);
-  expect(pageStatements[0]).toBeGreaterThan(0);
-  expect(followStatements).toEqual([followStatements[0], followStatements[0], followStatements[0]]);
-  expect(membershipStatements).toEqual([membershipStatements[0], membershipStatements[0], membershipStatements[0]]);
-  expect(pageStatements).toEqual([pageStatements[0], pageStatements[0], pageStatements[0]]);
+  const followCost = followStatements[0]!;
+  const membershipCost = membershipStatements[0]!;
+  const pageCost = pageStatements[0]!;
+  expect(followCost).toBeGreaterThan(0);
+  expect(membershipCost).toBeGreaterThan(0);
+  expect(pageCost).toBeGreaterThan(0);
+  expect(followStatements).toEqual([followCost, followCost, followCost]);
+  expect(membershipStatements).toEqual([membershipCost, membershipCost, membershipCost]);
+  expect(pageStatements).toEqual([pageCost, pageCost, pageCost]);
 }, 120_000);
