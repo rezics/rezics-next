@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { fromPlainText, serializeDocument } from '@rezics/document';
+import { fromPlainText, serializeDocument, type DocumentSnapshot } from '@rezics/document';
+import type { Pool } from 'pg';
 import {
   createResourceCreationManifest,
   initializeResourceGrants,
@@ -37,7 +38,6 @@ const dependencies = () => ({ pool: f.pool, access: f.access, routeKey });
 
 beforeAll(async () => {
   f = await standingFixture();
-  owner = (await f.context()).actor;
   await f.reader.query(
     `INSERT INTO content.board(route,board_id,subject_id,title,visibility,security_revision,recorded_transaction_id)
      VALUES ($1,$2,$3,'Books','published',1,$4)`,
@@ -46,6 +46,7 @@ beforeAll(async () => {
 }, 30000);
 beforeEach(async () => {
   await f.reset();
+  owner = (await f.context()).actor;
   await f.grant(owner.accountId, 'thread:create', board);
 });
 afterAll(() => f?.close());
@@ -65,14 +66,28 @@ async function revision(id: string) {
   return (await f.reader.query('SELECT * FROM content.revision WHERE route=$1 AND revision_id=$2', [routeOf(id), id]))
     .rows[0];
 }
-async function create(key = Bun.randomUUIDv7()) {
-  return createThread(dependencies(), owner, input(), context(key));
+async function create(key = Bun.randomUUIDv7(), original = input()) {
+  return createThread(dependencies(), owner, original, context(key));
+}
+
+// Expose only the fixture's genuine Auth issuance boundary. Production Access
+// authenticates the issued token directly against the observed command pool.
+async function observedActor(pool: Pool) {
+  const authenticate = f.access.authenticate;
+  f.access.authenticate = (token, boundary) =>
+    authenticate(token, { ...boundary, pool, deadline: Date.now() + 120000 });
+  try {
+    return (await f.context()).actor;
+  } finally {
+    f.access.authenticate = authenticate;
+  }
 }
 
 test('thread first post and revisions commit atomically in one partition', async () => {
   const key = Bun.randomUUIDv7();
   const before = await snapshot();
-  const result = await create(key);
+  const original = input();
+  const result = await create(key, original);
   const { threadId, itemId, revisionId } = result.value;
   expect(Object.keys(result.value).sort()).toEqual(['itemId', 'revisionId', 'threadId']);
   expect(result.replayed).toBe(false);
@@ -83,7 +98,7 @@ test('thread first post and revisions commit atomically in one partition', async
   expect(routeOf(revisionId)).toBe(target.route);
   expect(result.partition).toBe(partitionOf(target.route));
   const stored = await revision(revisionId);
-  const bytes = Buffer.from(serializeDocument(fromPlainText('First exact authored body')));
+  const bytes = Buffer.from(serializeDocument(original.body as DocumentSnapshot));
   expect(stored).toMatchObject({
     body: bytes,
     body_sha256: createHash('sha256').update(bytes).digest(),
@@ -134,7 +149,7 @@ test('thread first post and revisions commit atomically in one partition', async
   expect(Number(after.revisions) - Number(before.revisions)).toBe(1);
   expect(Number(after.receipts) - Number(before.receipts)).toBe(1);
   expect(Number(after.events) - Number(before.events)).toBe(1);
-  const replay = await create(key);
+  const replay = await create(key, original);
   expect(replay).toEqual({ ...result, replayed: true });
   expect(await snapshot()).toEqual(after);
   await expect(
@@ -167,34 +182,36 @@ test('thread first post and revisions commit atomically in one partition', async
 
 test('parent authorization precedes receipt and denied replay has no disclosure or effect', async () => {
   const key = Bun.randomUUIDv7();
-  await create(key);
-  await f.reader.query('DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND subject_id=$3', [
-    board.route,
-    board.id,
-    owner.accountId,
-  ]);
-  const before = await snapshot();
-  // Observing the actual shared formula preserves production semantics.
-  const stages: string[] = [];
-  const access = {
-    ...f.access,
-    async authorize(...args: Parameters<typeof f.access.authorize>) {
-      stages.push('authorize');
-      expect(args[3]).toMatchObject(board);
-      expect(args[5]).toBeDefined();
-      return f.access.authorize(...args);
-    },
-  };
   const db = await openGrowthDatabase();
   try {
+    const actor = await observedActor(db.pool);
+    const original = input();
+    await createThread({ ...dependencies(), pool: db.pool }, actor, original, context(key));
+    await db.admin.query('DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND subject_id=$3', [
+      board.route,
+      board.id,
+      actor.accountId,
+    ]);
+    const before = await snapshot();
+    // Observing the actual shared formula preserves production semantics.
+    const stages: string[] = [];
+    const access = {
+      ...f.access,
+      async authorize(...args: Parameters<typeof f.access.authorize>) {
+        stages.push('authorize');
+        expect(args[3]).toMatchObject(board);
+        expect(args[5]).toBeDefined();
+        return f.access.authorize(...args);
+      },
+    };
     const { capture } = await import('../support/growth.ts');
     const observed = await capture(db, async () => {
       const denied = await Promise.resolve()
         .then(() =>
           createThread(
             { ...dependencies(), access, pool: db.pool },
-            owner,
-            { ...input(), body: { invalid: true } },
+            actor,
+            { ...original, body: { invalid: true } },
             context(key),
           ),
         )
@@ -372,7 +389,8 @@ test('checkGrowth proves the declared three-scale machine-independent bound', as
     await database.admin.query('ANALYZE content.thread');
   }
   try {
-    const thread = await create();
+    const actor = await observedActor(db.pool);
+    const thread = await createThread({ ...dependencies(), pool: db.pool }, actor, input(), context());
     seedRoute = routeOf(thread.value.threadId)!;
     const report = await checkGrowth(db, {
       name: 'content write with fixed body, references and changed rows',
@@ -382,7 +400,7 @@ test('checkGrowth proves the declared three-scale machine-independent bound', as
       async operation(database, _scale, repetition) {
         await createPost(
           { ...dependencies(), pool: database.pool },
-          owner,
+          actor,
           {
             threadId: thread.value.threadId,
             body: fromPlainText('Fixed measured body'),
