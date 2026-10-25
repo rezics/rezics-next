@@ -12,6 +12,7 @@ import type {
 import offerInsert from './store-offer-insert.sql';
 import offerRead from './store-offer-read.sql';
 import offerState from './store-offer-state.sql';
+import offerPrice from './store-offer-price.sql';
 import orderInsert from './store-order-insert.sql';
 import orderRead from './store-order-read.sql';
 import orderSessionRead from './store-order-session-read.sql';
@@ -102,6 +103,21 @@ export async function setOfferState(
   context: WriteContext,
 ): Promise<Offer> {
   return asOffer(required(await offerState.run(queryClient(client), { route, id, state, ...write(context) })));
+}
+export async function reviseOfferPrice(
+  client: Client,
+  route: number,
+  id: string,
+  unitAmountMinor: number,
+  context: WriteContext,
+): Promise<Offer | null> {
+  const row = await offerPrice.run(queryClient(client), {
+    route,
+    id,
+    unit_amount_minor: unitAmountMinor,
+    ...write(context),
+  });
+  return row ? asOffer(row) : null;
 }
 export async function insertOrder(
   client: Client,

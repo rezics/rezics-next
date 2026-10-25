@@ -193,6 +193,36 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
       },
     );
   }
+  async function reviseOffer(actor: Actor, id: string, body: Pick<Offer, 'unitAmountMinor'>, requestKey: string) {
+    const r = route(id);
+    const authorization = await accessCommandAuthorization(
+      access,
+      actor,
+      'offer:manage',
+      { route: r, id },
+      context(),
+      () => new GrantDeniedError(),
+    );
+    const input = { unitAmountMinor: body.unitAmountMinor };
+    if (!Number.isSafeInteger(input.unitAmountMinor) || input.unitAmountMinor <= 0)
+      throw new TypeError('Invalid offer');
+    return runCommand(
+      pool,
+      { ...options(actor, r, 'commerce.offer.revise', requestKey, input), authorization },
+      async (tx, command) => {
+        const value = await store.reviseOfferPrice(tx, r, id, input.unitAmountMinor, {
+          transactionId: command.transactionId,
+          time: authoritativeTimeValue(command.time),
+        });
+        if (!value) throw new GrantDeniedError();
+        if (value.state !== 'active') throw new OfferUnavailableError();
+        return {
+          value,
+          events: [{ type: 'com.rezics.commerce.offer.revised.v1', subject: id, data: { offerId: id } }],
+        };
+      },
+    );
+  }
   async function createOrder(actor: Actor, offerId: string, requestKey: string) {
     const buyer = account(actor),
       r = route(buyer.accountId),
@@ -399,6 +429,7 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
   return {
     createOffer,
     delistOffer,
+    reviseOffer,
     createOrder,
     recordCheckout,
     applyCheckoutSnapshot,

@@ -1,11 +1,12 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { Value } from 'typebox/value';
 import { createAccess } from '../../src/access/index.ts';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { IdempotencyConflictError } from '../../src/command/command.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { type Actor } from '../../src/request/access.ts';
-import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { newId, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { COMMERCE_EVENTS } from '../../src/commerce/events.ts';
 import { createCommerceCommands, OfferUnavailableError } from '../../src/commerce/commands.ts';
@@ -94,10 +95,10 @@ async function eventRows(transactionId: string) {
   const receipt = (
     await pool.query('SELECT partition_no,position FROM core.receipt WHERE transaction_id=$1', [transactionId])
   ).rows[0];
-  return pool.query(
-    'SELECT type,data FROM core.outbox WHERE partition_no=$1 AND position=$2 ORDER BY event_seq',
-    [receipt.partition_no, receipt.position],
-  );
+  return pool.query('SELECT type,data FROM core.outbox WHERE partition_no=$1 AND position=$2 ORDER BY event_seq', [
+    receipt.partition_no,
+    receipt.position,
+  ]);
 }
 
 test('offer owner revises active price, preserving order snapshots and idempotent receipts', async () => {
@@ -117,48 +118,59 @@ test('offer owner revises active price, preserving order snapshots and idempoten
   expect(after).toMatchObject({ offerRevision: revised.value.revision, unitAmountMinor: 2400 });
 
   const replay = await commands.reviseOffer(await actor(seller), created.id, { unitAmountMinor: 2400 }, requestKey);
-  expect(replay).toEqual(revised);
+  expect(replay).toMatchObject({
+    value: revised.value,
+    transactionId: revised.transactionId,
+    position: revised.position,
+    replayed: true,
+  });
   await expect(
     commands.reviseOffer(await actor(seller), created.id, { unitAmountMinor: 2500 }, requestKey),
   ).rejects.toBeInstanceOf(IdempotencyConflictError);
 
   const rows = await eventRows(revised.transactionId);
   expect(rows.rows).toEqual([{ type: 'com.rezics.commerce.offer.revised.v1', data: { offerId: created.id } }]);
-  expect(COMMERCE_EVENTS['com.rezics.commerce.offer.revised.v1'].additionalProperties).toBe(false);
+  const schema = COMMERCE_EVENTS['com.rezics.commerce.offer.revised.v1'];
+  expect(Value.Check(schema, { offerId: created.id })).toBe(true);
+  expect(Value.Check(schema, { offerId: created.id, state: 'active' })).toBe(false);
 });
 
 test('non-owner and delisted offers cannot be revised', async () => {
   const created = await offer();
   const before = await pool.query(
     'SELECT revision, unit_amount_minor, updated_at, transaction_id FROM commerce.offer WHERE route=$1 AND offer_id=$2',
-    [partitionOf(routeOf(created.id)!), created.id],
+    [routeOf(created.id)!, created.id],
   );
   const counts = await pool.query('SELECT count(*)::int AS count FROM core.outbox');
   await expect(
     commands.reviseOffer(await actor(other), created.id, { unitAmountMinor: 2400 }, key()),
   ).rejects.toBeInstanceOf(GrantDeniedError);
   expect(
-    (await pool.query(
-      'SELECT revision, unit_amount_minor, updated_at, transaction_id FROM commerce.offer WHERE route=$1 AND offer_id=$2',
-      [partitionOf(routeOf(created.id)!), created.id],
-    )).rows,
+    (
+      await pool.query(
+        'SELECT revision, unit_amount_minor, updated_at, transaction_id FROM commerce.offer WHERE route=$1 AND offer_id=$2',
+        [routeOf(created.id)!, created.id],
+      )
+    ).rows,
   ).toEqual(before.rows);
   expect((await pool.query('SELECT count(*)::int AS count FROM core.outbox')).rows).toEqual(counts.rows);
 
   await commands.delistOffer(await actor(seller), created.id, key());
   const delisted = await pool.query(
     'SELECT revision, unit_amount_minor, updated_at, transaction_id FROM commerce.offer WHERE route=$1 AND offer_id=$2',
-    [partitionOf(routeOf(created.id)!), created.id],
+    [routeOf(created.id)!, created.id],
   );
   const outbox = await pool.query('SELECT count(*)::int AS count FROM core.outbox');
   await expect(
     commands.reviseOffer(await actor(seller), created.id, { unitAmountMinor: 2400 }, key()),
   ).rejects.toBeInstanceOf(OfferUnavailableError);
   expect(
-    (await pool.query(
-      'SELECT revision, unit_amount_minor, updated_at, transaction_id FROM commerce.offer WHERE route=$1 AND offer_id=$2',
-      [partitionOf(routeOf(created.id)!), created.id],
-    )).rows,
+    (
+      await pool.query(
+        'SELECT revision, unit_amount_minor, updated_at, transaction_id FROM commerce.offer WHERE route=$1 AND offer_id=$2',
+        [routeOf(created.id)!, created.id],
+      )
+    ).rows,
   ).toEqual(delisted.rows);
   expect((await pool.query('SELECT count(*)::int AS count FROM core.outbox')).rows).toEqual(outbox.rows);
 });
@@ -173,6 +185,14 @@ test('same price is a new revision with exactly one revised event', async () => 
   );
   expect(revised.value.revision).toBe(created.revision + 1);
   expect(revised.value.unitAmountMinor).toBe(created.unitAmountMinor);
+  const stored = (
+    await pool.query('SELECT updated_at, transaction_id FROM commerce.offer WHERE route=$1 AND offer_id=$2', [
+      routeOf(created.id)!,
+      created.id,
+    ])
+  ).rows[0];
+  expect(stored.updated_at).toBeInstanceOf(Date);
+  expect(stored.transaction_id).toBe(revised.transactionId);
   expect((await eventRows(revised.transactionId)).rows).toEqual([
     { type: 'com.rezics.commerce.offer.revised.v1', data: { offerId: created.id } },
   ]);
