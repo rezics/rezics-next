@@ -227,6 +227,7 @@ test('initiation commits one identity and ID-only native source before any worke
   expect(outcome.replayed).toBe(false);
   expect(await beginAuthorErasure(deps, actor, input, ctx)).toEqual({ ...outcome, replayed: true });
   const row = await identity(outcome.value.operationId);
+  expect(outcome.value).toEqual({ operationId: row.operation_id });
   expect(row).toMatchObject({
     initiator_account_id: authorId,
     actor_account_id: authorId,
@@ -249,7 +250,14 @@ test('initiation commits one identity and ID-only native source before any worke
         ctx.idempotencyKey,
       ])
     ).rows,
-  ).toEqual([{ response: outcome.value }]);
+  ).toEqual([
+    {
+      response: {
+        operationId: outcome.value.operationId,
+        durableInitiator: expect.stringMatching(/^[0-9a-f]{64}$/),
+      },
+    },
+  ]);
   expect(await readOperation(deps, actor, outcome.value.operationId, context())).toEqual({
     name: `operations/${outcome.value.operationId}`,
     metadata: { type: 'content.author_erasure', ...input, processedPosts: 0, erasedRevisions: 0, steps: 0 },
