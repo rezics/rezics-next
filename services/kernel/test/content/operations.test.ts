@@ -1,0 +1,297 @@
+import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { readAccount } from '../../src/access/account-data.ts';
+import { createAccess } from '../../src/access/permission.ts';
+import { beginAuthorErasure, readOperation } from '../../src/content/operations.ts';
+import type { AuthorErasureDependencies, NativeWorkflowStatus } from '../../src/content/operation-contract.ts';
+import { bindAuthorErasureWorkflow } from '../../src/content/erasure-workflow-identity.ts';
+import { readBatch, type Envelope } from '../../src/events/log.ts';
+import { derivedId, newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import type { AccountActor } from '../../src/request/access.ts';
+import { checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
+
+const db = await openGrowthDatabase();
+afterAll(() => db.close());
+const route = 0x6a31;
+const id = (name: string, home = route) => derivedId('00000000-0000-8000-8000-000000000043', name, home);
+const threadId = id('thread');
+const authorId = id('author', 0x7921);
+const postId = id('first');
+const upperId = id('upper');
+const requested = 'com.rezics.content.author-erasure.requested.v1';
+const actor: AccountActor = {
+  kind: 'account',
+  accountId: authorId,
+  clientId: 'operations-test',
+  scopes: ['post:erase', 'account:read'],
+  requestedBy: null,
+  authnEpoch: 1,
+};
+const other: AccountActor = { ...actor, accountId: id('other', 0x8131) };
+const context = (key = crypto.randomUUID()) => ({
+  deadline: Date.now() + 10_000,
+  idempotencyKey: key,
+  requestId: newId(route),
+});
+const input = { threadId, authorId };
+let native: NativeWorkflowStatus | null = null;
+const statusIds: string[] = [];
+async function dependencies(): Promise<AuthorErasureDependencies> {
+  const account = await readAccount(db.pool, routeOf(actor.accountId)!, actor.accountId);
+  return {
+    pool: db.pool,
+    access: createAccess({
+      actions: new Map([
+        ['post:erase', { anonymous: false }],
+        ['account:read', { anonymous: false }],
+      ]),
+      accountEvidence: () => account,
+    }),
+    clock: () => new Date(),
+    workflows: {
+      async enqueue() {
+        throw new Error('Initiation must publish through the durable outbox');
+      },
+      async status(workflowId) {
+        statusIds.push(workflowId);
+        return native;
+      },
+    },
+  };
+}
+async function grant(resource: string, action: string, subject = authorId) {
+  await db.admin.query(
+    `INSERT INTO access.resource_grant
+    (route,resource_id,subject_id,action,valid,transaction_id) VALUES ($1,$2,$3,$4,'(,)',$5) ON CONFLICT DO NOTHING`,
+    [routeOf(resource), resource, subject, action, id('transaction')],
+  );
+}
+async function post(name: string, author = authorId, at = '2020-01-01T00:00:00Z') {
+  const post = id(name);
+  const revision = id(`${name}-revision`);
+  const client = await db.admin.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `INSERT INTO content.post
+      (route,thread_id,post_id,author_account_id,head_revision_id,visibility,security_revision,recorded_transaction_id,created_at)
+      VALUES ($1,$2,$3,$4,$5,'published',1,$6,$7)`,
+      [route, threadId, post, author, revision, id('transaction'), at],
+    );
+    await client.query(
+      `INSERT INTO content.revision
+      (route,thread_id,post_id,revision_id,body,body_sha256,search_text,licence,subject_ids,board_id,availability,recorded_transaction_id)
+      VALUES ($1,$2,$3,$4,$5,sha256($5),'private','CC0-1.0','{}',$6,'available',$7)`,
+      [route, threadId, post, revision, Buffer.from('private'), id('board'), id('transaction')],
+    );
+    await client.query('COMMIT');
+  } finally {
+    await client.query('ROLLBACK');
+    client.release();
+  }
+  return post;
+}
+beforeAll(async () => {
+  for (const identity of [actor, other]) {
+    await db.admin.query(
+      `INSERT INTO access.account (route,account_id,kind,state,transaction_id)
+      VALUES ($1,$2,'actor','active',$3)`,
+      [routeOf(identity.accountId), identity.accountId, id('transaction')],
+    );
+    await grant(identity.accountId, 'account:read', identity.accountId);
+  }
+  await db.admin.query(
+    `INSERT INTO content.thread
+    (route,thread_id,author_account_id,board_id,title,visibility,security_revision,recorded_transaction_id)
+    VALUES ($1,$2,$3,$4,'thread','published',1,$5)`,
+    [route, threadId, authorId, id('board'), id('transaction')],
+  );
+  await post('first');
+  await post('upper', authorId, '2021-01-01T00:00:00Z');
+  await grant(postId, 'post:erase');
+});
+
+async function identity(operationId: string) {
+  return (
+    await db.admin.query('SELECT * FROM content.operation WHERE route=$1 AND operation_id=$2', [
+      routeOf(operationId),
+      operationId,
+    ])
+  ).rows[0];
+}
+async function source(outcome: Awaited<ReturnType<typeof beginAuthorErasure>>) {
+  const consumer = `operations_${crypto.randomUUID()}`;
+  await db.admin.query(
+    'INSERT INTO core.consumer_checkpoint (partition_no,consumer,epoch,position) VALUES ($1,$2,$3,$4)',
+    [outcome.partition, consumer, outcome.position === 1n ? null : outcome.epoch, outcome.position - 1n],
+  );
+  let result: Envelope | undefined;
+  await readBatch(db.pool, {
+    partition: outcome.partition,
+    consumer,
+    apply: async (envelopes) => {
+      result = envelopes[0];
+    },
+  });
+  if (!result) throw new Error('Requested event missing from durable log');
+  return result;
+}
+
+test('initiation commits one identity and ID-only native source before any worker starts; replay is authorized first', async () => {
+  const deps = await dependencies();
+  const ctx = context();
+  const outcome = await beginAuthorErasure(deps, actor, input, ctx);
+  expect(outcome.partition).toBe(partitionOf(route));
+  expect(outcome.replayed).toBe(false);
+  expect(await beginAuthorErasure(deps, actor, input, ctx)).toEqual({ ...outcome, replayed: true });
+  const row = await identity(outcome.value.operationId);
+  expect(row).toMatchObject({
+    initiator_account_id: authorId,
+    actor_account_id: authorId,
+    actor_client_id: actor.clientId,
+    actor_scopes: actor.scopes,
+    thread_id: threadId,
+    author_account_id: authorId,
+    upper_post_id: upperId,
+    upper_created_at: new Date('2021-01-01T00:00:00Z'),
+    native_workflow_id: null,
+  });
+  const envelope = await source(outcome);
+  expect(envelope.events.map(({ type, data }) => ({ type, data }))).toEqual([
+    { type: requested, data: { operationId: outcome.value.operationId, ...input } },
+  ]);
+  expect(
+    (
+      await db.admin.query('SELECT response FROM core.receipt WHERE partition_no=$1 AND idempotency_key=$2', [
+        outcome.partition,
+        ctx.idempotencyKey,
+      ])
+    ).rows,
+  ).toEqual([{ response: outcome.value }]);
+  expect(await readOperation(deps, actor, outcome.value.operationId, context())).toEqual({
+    name: `operations/${outcome.value.operationId}`,
+    metadata: { type: 'content.author_erasure', ...input, processedPosts: 0, erasedRevisions: 0 },
+    done: false,
+  });
+  expect(statusIds).toEqual([]);
+  await db.admin.query('DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND action=$3', [
+    route,
+    postId,
+    'post:erase',
+  ]);
+  await expect(beginAuthorErasure(deps, actor, input, ctx)).rejects.toThrow();
+  await grant(postId, 'post:erase');
+  const future = await post('future', authorId, '2099-01-01T00:00:00Z');
+  expect(future).not.toBe(row.upper_post_id);
+  expect((await identity(outcome.value.operationId)).upper_post_id).toBe(upperId);
+});
+
+test('selection is never authority: anonymous, unrelated, scope loss and named denials cannot initiate', async () => {
+  const deps = await dependencies();
+  for (const denied of [{ kind: 'anonymous' } as const, other, { ...actor, scopes: ['account:read'] }])
+    await expect(beginAuthorErasure(deps, denied, input, context())).rejects.toThrow();
+  await db.admin.query(
+    `INSERT INTO access.resource_denial (route,resource_id,subject_id,action,reason,valid,transaction_id)
+    VALUES ($1,$2,$3,'post:erase','resource','(,)',$4)`,
+    [route, postId, authorId, id('transaction')],
+  );
+  await expect(beginAuthorErasure(deps, actor, input, context())).rejects.toThrow();
+  await db.admin.query('DELETE FROM access.resource_denial WHERE route=$1 AND resource_id=$2', [route, postId]);
+});
+
+test('status conceals noninitiators and current account denials before exact native workflow access', async () => {
+  const deps = await dependencies();
+  const outcome = await beginAuthorErasure(deps, actor, input, context());
+  const envelope = await source(outcome);
+  const workflowId = await bindAuthorErasureWorkflow(db.pool, outcome.value.operationId, envelope, 0);
+  native = null;
+  statusIds.length = 0;
+  expect((await readOperation(deps, actor, outcome.value.operationId, context()))?.done).toBe(false);
+  expect(statusIds).toEqual([workflowId]);
+  statusIds.length = 0;
+  for (const denied of [{ kind: 'anonymous' } as const, other, { ...actor, scopes: ['post:erase'] }])
+    expect(await readOperation(deps, denied, outcome.value.operationId, context())).toBeNull();
+  expect(await readOperation(deps, actor, newId(route), context())).toBeNull();
+  await db.admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
+    routeOf(authorId),
+    authorId,
+  ]);
+  expect(await readOperation(deps, actor, outcome.value.operationId, context())).toBeNull();
+  await db.admin.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
+    routeOf(authorId),
+    authorId,
+  ]);
+  await db.admin.query('DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND action=$3', [
+    routeOf(authorId),
+    authorId,
+    'account:read',
+  ]);
+  expect(await readOperation(deps, actor, outcome.value.operationId, context())).toBeNull();
+  await grant(authorId, 'account:read');
+  expect(statusIds).toEqual([]);
+  native = {
+    done: true,
+    progress: { processedPosts: 3, erasedRevisions: 12 },
+    response: { processedPosts: 3, erasedRevisions: 12 },
+  };
+  expect(await readOperation(deps, actor, outcome.value.operationId, context())).toMatchObject({
+    done: true,
+    response: native.response,
+    metadata: native.progress,
+  });
+  native = {
+    done: true,
+    progress: { processedPosts: 1, erasedRevisions: 2 },
+    error: { type: 'about:blank', title: 'Denied', status: 403, detail: 'SQL secret stack' },
+  };
+  const failed = await readOperation(deps, actor, outcome.value.operationId, context());
+  expect(failed).toMatchObject({ done: true, error: { status: 403 } });
+  expect(JSON.stringify(failed)).not.toContain('SQL secret');
+  native = { done: false, progress: { processedPosts: Number.MAX_SAFE_INTEGER + 1, erasedRevisions: 0 } };
+  await expect(readOperation(deps, actor, outcome.value.operationId, context())).rejects.toThrow();
+  native = null;
+});
+
+test('checkGrowth measures production initiation and status with fixed Access through same-partition history', async () => {
+  const population: Population = {
+    name: 'operation-history',
+    hotPartition: partitionOf(route),
+    hotShare: 1,
+    rows: ({ ordinal }) => ({
+      'content.operation': [
+        {
+          route,
+          operation_id: id(`noise-${ordinal}`),
+          initiator_account_id: authorId,
+          author_account_id: other.accountId,
+          thread_id: threadId,
+          actor_kind: 'account',
+          actor_account_id: authorId,
+          actor_client_id: actor.clientId,
+          actor_scopes: actor.scopes,
+          actor_requested_by: null,
+          actor_authn_epoch: 1,
+          empty_scope: true,
+          upper_created_at: null,
+          upper_post_id: null,
+          requested_at: new Date(),
+          recorded_transaction_id: id('transaction'),
+        },
+      ],
+    }),
+  };
+  const deps = await dependencies();
+  const report = await checkGrowth(db, {
+    name: 'author erasure initiation and status',
+    scales: [32, 256, 2048],
+    bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+    grow: async (_db, scale, previous) => {
+      await seed(db, population, { from: previous, to: scale });
+    },
+    operation: async () => {
+      const outcome = await beginAuthorErasure(deps, actor, input, context());
+      expect((await readOperation(deps, actor, outcome.value.operationId, context()))?.done).toBe(false);
+    },
+  });
+  expect(report.samples.map(({ scale }) => scale)).toEqual([32, 256, 2048]);
+  expect(report.samples.every(({ cost }) => cost.rows > 0 && cost.statements > 0)).toBe(true);
+}, 90_000);
