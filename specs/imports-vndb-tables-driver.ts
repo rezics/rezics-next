@@ -22,8 +22,14 @@
  * entry_meta also contains other entry types: skip those, not orphan v IDs.
  * No auxiliary table is needed for the current metadata-only converter. Use the
  * actual VNDB @rezics/conversion module and its converter_revision by reference.
- * converter below has the frozen binding's structural observation interface;
- * observation paths point into actual semantic proposals, never a shadow model.
+ * converter below forwards the real converter call by reference, with only the
+ * native input envelope framing allowed by imports-vndb-driver.ts. A table page
+ * has no API-resolved subject: never fabricate or supply target context. Its
+ * unresolved output is one create containing type/labels/aliases/descriptions,
+ * with no statements or citations. Native identity and string revision belong
+ * in Source.external_id/record_revision; entry_meta.revision remains numeric.
+ * Bootstrap metadata is checked directly, without inventing observed facts.
+ * locate paths point into actual output, including non-command license metadata.
  * parseProposal uses the real semantic validator, not a test schema. Proposals
  * remain opaque: this file defines no competing public bulk API.
  *

@@ -72,38 +72,56 @@ function converted(d: VndbTablesDriver, row: Awaited<ReturnType<VndbTablesDriver
   const located = d.converter.locate(row.output);
   expect(d.converter.converter_revision.trim()).not.toBe('');
   expect(at(row.output, located.converterRevision)).toBe(d.converter.converter_revision);
-  expect(located.proposals.length).toBeGreaterThan(0);
+  // Table materialization has no API-resolved subject. Observe the actual
+  // bootstrap create directly; statement/citation checks use explicit targets
+  // in the pure VNDB suite.
+  expect(located.proposals).toHaveLength(1);
   expect(checkBatchWrite({ commands: located.proposals.map((path) => at(row.output, path)) })).toEqual([]);
+  for (const path of Object.values(located.sourceRights)) {
+    for (const proposalPath of located.proposals) {
+      expect(proposalPath.every((part, i) => path[i] === part)).toBe(false);
+    }
+  }
   expect(at(row.output, located.sourceRights.databaseLicense)).toBe('ODbL-1.0');
   expect(at(row.output, located.sourceRights.contentsLicense)).toBe('LicenseRef-DbCL-1.0');
   expect(at(row.output, located.sourceRights.attribution)).toBe('VNDB');
-  const titles: unknown[] = [];
-  const kinds: string[] = [];
-  for (const path of located.proposals) {
-    const proposal = at(row.output, path);
-    const accepted = d.converter.parseProposal(proposal);
-    expect<unknown>(accepted).toEqual(proposal);
-    expect(accepted).not.toHaveProperty('rights');
-    expect(accepted.source.record_revision).toBe(String(row.revision));
-    const facts = d.converter.observe(proposal);
-    expect(facts.length).toBeGreaterThan(0);
-    for (const fact of facts) {
-      kinds.push(fact.kind);
-      expect(['description', 'cover', 'user-content']).not.toContain(fact.kind);
-      expect(at(proposal, fact.fieldGroupPath)).toBe('facts');
-      if (fact.kind !== 'type') expect(at(proposal, fact.valuePath)).toEqual(fact.value);
-      if (fact.kind === 'title') titles.push([fact.language, fact.value]);
-      if (fact.kind === 'external-id') expect(fact.value).toBe(row.key);
-      if (fact.kind === 'type') expect(fact.value).toBe('visual-novel');
-      expect(at(proposal, fact.reference.source)).toBe('vndb');
-      expect(at(proposal, fact.reference.externalId)).toBe(row.key);
-      expect(at(proposal, fact.reference.revision)).toBe(row.revision);
-      expect(at(proposal, fact.reference.url)).toBe(`https://vndb.org/${row.key}.${row.revision}`);
-    }
+  const proposal = at(row.output, located.proposals[0]!);
+  const accepted = d.converter.parseProposal(proposal);
+  expect<unknown>(accepted).toEqual(proposal);
+  expect(accepted.op).toBe('create');
+  if (accepted.op !== 'create') throw new Error('Expected unresolved bootstrap create');
+  expect(accepted).not.toHaveProperty('rights');
+  expect<unknown>(accepted.source).toEqual({
+    source: 'vndb',
+    external_id: row.key,
+    record_revision: String(row.revision),
+    field_group: 'facts',
+    digest: at(row.output, ['digest']),
+    converter_revision: d.converter.converter_revision,
+  });
+  expect(accepted.source.digest).toMatch(/^[0-9a-f]{64}$/);
+  expect(accepted.subject.type).toBe('wd:Q689445');
+  expect(Object.keys(accepted.subject.labels).length).toBeGreaterThan(0);
+  expect(accepted.subject).not.toHaveProperty('statements');
+  expect(
+    Object.keys(accepted.subject).every((key) => ['type', 'labels', 'aliases', 'descriptions'].includes(key)),
+  ).toBe(true);
+  expect(accepted.subject.descriptions ?? {}).toEqual({});
+  // Compare allowed values without prescribing which title becomes the label.
+  // Native VN aliases and descriptions are outside the converter's allowlist.
+  const titles = new Set<string>();
+  for (const title of row.record.vn_titles) {
+    titles.add(JSON.stringify([title.lang, title.title]));
+    if (title.latin !== null) titles.add(JSON.stringify([`${title.lang}-Latn`, title.latin]));
   }
-  expect(kinds).toContain('external-id');
-  expect(kinds).toContain('type');
-  expect(titles.sort()).toEqual(row.record.vn_titles.map((t) => [t.lang, t.title]).sort());
+  const initialTitles = new Set<string>();
+  for (const [language, value] of Object.entries(accepted.subject.labels)) {
+    initialTitles.add(JSON.stringify([language, value]));
+  }
+  for (const [language, values] of Object.entries(accepted.subject.aliases ?? {})) {
+    for (const value of values) initialTitles.add(JSON.stringify([language, value]));
+  }
+  expect(initialTitles).toEqual(titles);
   for (const marker of ['UNLICENSED_DESCRIPTION_SENTINEL', 'cv123', 'PRIVATE_SENTINEL']) {
     expect(JSON.stringify(row.output)).not.toContain(marker);
   }
