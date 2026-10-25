@@ -78,7 +78,7 @@ export class SessionStore extends DurableObject<SessionEnv> {
         // refresh token and cannot race a write that would restore deleted state.
         await this.ctx.storage.put('record', record);
       } catch (error) {
-        if (error instanceof oidc.ResponseBodyError) {
+        if (error instanceof oidc.ResponseBodyError && error.error === 'invalid_grant') {
           await this.ctx.storage.deleteAll();
           await this.ctx.storage.deleteAlarm();
           return { status: 'absent' };
