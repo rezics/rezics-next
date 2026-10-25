@@ -27,9 +27,9 @@ const offer = `INSERT INTO commerce.offer
    royalty_basis_points, state, revision, created_at, updated_at, transaction_id)
   VALUES ($1, $2, $3, $4, 'Book', 'usd', 1200, 'txcd_10302000', 9000, 'active', 1, now(), now(), $4)`;
 const order = `INSERT INTO commerce.purchase_order
-  (route, order_id, buyer_account_id, offer_id, offer_revision, creator_account_id, title, currency,
+  (route, order_id, buyer_account_id, offer_id, offer_revision, target_subject_id, creator_account_id, title, currency,
    unit_amount_minor, tax_code, royalty_basis_points, settlement, revision, created_at, updated_at, transaction_id)
-  VALUES ($1, $2, $3, $4, 1, $4, 'Book', 'usd', 1200, 'txcd_10302000', 9000, 'pending', 1, now(), now(), $4)`;
+  VALUES ($1, $2, $3, $4, 1, $4, $4, 'Book', 'usd', 1200, 'txcd_10302000', 9000, 'pending', 1, now(), now(), $4)`;
 const entitlement = `INSERT INTO commerce.entitlement
   (route, entitlement_id, account_id, order_id, offer_id, target_subject_id, granted_at, revision, transaction_id)
   VALUES ($1, $2, $3, $4, $3, $3, now(), 1, $3)`;

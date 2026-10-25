@@ -61,16 +61,29 @@ test('settlement and royalty read only named keys with equal statements and rows
       if (originals.has(connection)) return;
       const original = connection.query;
       originals.set(connection, original);
-      connection.query = (async (sql: string | QueryConfig, ...args: unknown[]) => {
-        const result = await Reflect.apply(original, connection, [sql, ...args]);
+      connection.query = ((sql: string | QueryConfig, ...args: unknown[]) => {
         const text = typeof sql === 'string' ? sql : sql.text;
-        if (/commerce\./.test(text))
-          captured?.push({
-            sql: text,
-            rows: result.rowCount ?? 0,
-            values: typeof sql === 'string' ? args[0] : sql.values,
-          });
-        return result;
+        function record(result: { rowCount: number | null }) {
+          if (/commerce\./.test(text))
+            captured?.push({
+              sql: text,
+              rows: result.rowCount ?? 0,
+              values: typeof sql === 'string' ? args[0] : sql.values,
+            });
+        }
+        // Pool.query uses callbacks; the SQL adapters also call promise-style Client.query.
+        const callback = args.at(-1);
+        if (typeof callback === 'function') {
+          args[args.length - 1] = (error: Error | null, result: { rowCount: number | null }) => {
+            if (!error) record(result);
+            callback(error, result);
+          };
+          return Reflect.apply(original, connection, [sql, ...args]);
+        }
+        return Reflect.apply(original, connection, [sql, ...args]).then((result: { rowCount: number | null }) => {
+          record(result);
+          return result;
+        });
       }) as typeof original;
     }
     // Include idle clients established before instrumentation was registered.

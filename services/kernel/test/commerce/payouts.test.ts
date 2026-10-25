@@ -306,14 +306,14 @@ test('redelivered effects, command receipts, and a delayed command replay change
   const applyKey = key();
   await settle(o, [charge], 200, applyKey);
   const commandKey = key();
-  await payouts.recordOrder(o.id, commandKey);
+  await payouts.recordTransactions(o.id, [charge.id], commandKey);
   await effect(o.id);
   const before = await pool.query(
     'SELECT (SELECT jsonb_agg(s ORDER BY statement_id) FROM commerce.payout_statement s) statements, (SELECT count(*)::int FROM commerce.royalty_line) lines, (SELECT count(*)::int FROM core.outbox) events, (SELECT count(*)::int FROM core.receipt) receipts',
   );
   now = new Date('2026-02-20T12:00:00Z');
   await effect(o.id);
-  await payouts.recordOrder(o.id, commandKey);
+  await payouts.recordTransactions(o.id, [charge.id], commandKey);
   await settle(o, [charge], 200, applyKey);
   const after = await pool.query(
     'SELECT (SELECT jsonb_agg(s ORDER BY statement_id) FROM commerce.payout_statement s) statements, (SELECT count(*)::int FROM commerce.royalty_line) lines, (SELECT count(*)::int FROM core.outbox) events, (SELECT count(*)::int FROM core.receipt) receipts',

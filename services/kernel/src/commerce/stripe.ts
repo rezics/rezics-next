@@ -1,4 +1,5 @@
 import Stripe from 'stripe';
+import { assertTransactionBound, CheckoutMismatchError } from './settlement.ts';
 import {
   StripeRejectedError,
   StripeUnavailableError,
@@ -98,7 +99,7 @@ export function createStripePort(config: StripePortConfig): StripePort {
       ) {
         throw new StripeRejectedError('Stripe rejected the request');
       }
-      if (error instanceof StripeUnavailableError) throw error;
+      if (error instanceof StripeUnavailableError || error instanceof CheckoutMismatchError) throw error;
       throw new StripeUnavailableError('Stripe request outcome is unavailable');
     }
   }
@@ -186,6 +187,7 @@ export function createStripePort(config: StripePortConfig): StripePort {
             transactions.push(transaction(balance, balance.amount < 0 ? 'dispute' : 'dispute_reversal', dispute.id));
           }
         }
+        assertTransactionBound(transactions);
         const snapshot: CheckoutSnapshot = {
           sessionId: session.id,
           clientReferenceId: session.client_reference_id,

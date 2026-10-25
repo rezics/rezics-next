@@ -16,6 +16,7 @@ function initial(): SettlementState {
       buyerAccountId: 'buyer',
       offerId: 'offer',
       offerRevision: 1,
+      targetSubjectId: 'subject',
       creatorAccountId: 'creator',
       title: 'Book',
       currency: 'usd',

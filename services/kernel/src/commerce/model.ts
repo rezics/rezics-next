@@ -3,6 +3,9 @@
  * entitlements live in the buyer account's partition. Amounts are integers in the currency's minor unit.
  */
 
+/** Maximum balance transactions in one complete provider snapshot. */
+export const MAX_ORDER_TRANSACTIONS = 256;
+
 /** As in legacy: `pending` until Stripe settles the payment, `unknown` after a lost provider call or a mismatch. */
 export type Settlement = 'pending' | 'paid' | 'failed' | 'unknown';
 export type RevokeReason = 'refund' | 'dispute';
@@ -28,6 +31,7 @@ export type Order = {
   buyerAccountId: string;
   offerId: string;
   offerRevision: number;
+  targetSubjectId: string;
   creatorAccountId: string;
   title: string;
   currency: string;
@@ -110,7 +114,7 @@ export type CheckoutSnapshot = {
 export type SettlementState = {
   order: Order;
   entitlement: Entitlement | null;
-  /** Balance transaction IDs already recorded for the order. */
+  /** Snapshot balance transaction IDs already recorded for the order. */
   transactionIds: readonly string[];
 };
 

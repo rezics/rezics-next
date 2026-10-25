@@ -17,7 +17,7 @@ import type { Access } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { offerParentAnchor, platformRootAnchor } from './catalogue.ts';
 import type { CheckoutSession, CheckoutSnapshot, Offer } from './model.ts';
-import { decideCheckout } from './settlement.ts';
+import { assertTransactionBound, decideCheckout } from './settlement.ts';
 import * as store from './store.ts';
 import offerCreated from './command-offer-created.sql';
 import checkoutCount from './command-checkout-count.sql';
@@ -343,6 +343,7 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
     throw new Error('Checkout outcome recording deadline exceeded');
   }
   async function applyCheckoutSnapshot(body: CheckoutSnapshot, workflowId: string) {
+    assertTransactionBound(body.transactions);
     const snapshot = structuredClone(body),
       id = snapshot.clientReferenceId;
     const r = id === null ? null : routeOf(id);
@@ -362,7 +363,12 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
           },
         },
         async (tx, command) => {
-          const state = await store.readSettlementState(tx, r, id);
+          const state = await store.readSettlementState(
+            tx,
+            r,
+            id,
+            snapshot.transactions.map((t) => t.id),
+          );
           if (!state || state.order.checkoutSessionId !== snapshot.sessionId) throw new Unchanged();
           const decision = decideCheckout(state, snapshot);
           if (!decision.changed) throw new Unchanged();

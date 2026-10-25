@@ -17,8 +17,9 @@ import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor
 import type { KeyRing } from '../tokens/seal.ts';
 import type { TransactionKind } from './model.ts';
 import { statementPeriod, royaltyLines, type RoyaltyLine, type StatementTotal } from './royalty.ts';
-import { readOrder, readOrderTransactions } from './store.ts';
+import { readOrder, readNamedOrderTransactions } from './store.ts';
 import record from './payout-record.sql';
+import { assertTransactionBound } from './settlement.ts';
 import statementRead from './payout-statement-read.sql';
 import statementList from './payout-statement-list.sql';
 import linesRead from './payout-lines.sql';
@@ -208,13 +209,16 @@ export async function listPayoutLines(
 
 /** Trusted command ports. No Stripe payout is initiated: paidReference identifies an external payment. */
 export function createPayouts({ pool, clock }: { pool: Pool; clock?: (() => Date) | undefined }) {
-  async function recordOrder(orderId: string, key: string) {
+  async function recordTransactions(orderId: string, transactionIds: readonly string[], key: string) {
+    assertTransactionBound(transactionIds);
+    const ids = [...new Set(transactionIds)].sort();
+    if (!ids.length) return { changed: false };
     const buyerRoute = routeOf(orderId);
     if (buyerRoute === null) return { changed: false };
-    // Exactly one order anchor and its bounded, immutable transaction history in the buyer's partition.
+    // One order anchor and only the event's immutable transaction keys in the buyer's partition.
     const order = await readOrder(pool, buyerRoute, orderId);
     if (!order || order.settlement !== 'paid') return { changed: false };
-    const transactions = await readOrderTransactions(pool, buyerRoute, orderId);
+    const transactions = await readNamedOrderTransactions(pool, buyerRoute, orderId, ids);
     const lines = royaltyLines(order, order.amountTaxMinor ?? null, transactions);
     if (!lines.length) return { changed: false };
     const route = routeOf(order.creatorAccountId)!;
@@ -228,7 +232,7 @@ export function createPayouts({ pool, clock }: { pool: Pool; clock?: (() => Date
             actorAccountId: order.creatorAccountId,
             kind: 'commerce.royalty.record',
             key: requestKey(key),
-            digest: digest({ orderId }),
+            digest: digest({ orderId, transactionIds: ids }),
           },
         },
         async (tx, command) => {
@@ -349,5 +353,5 @@ export function createPayouts({ pool, clock }: { pool: Pool; clock?: (() => Date
       },
     );
   }
-  return { recordOrder, markPaid };
+  return { recordTransactions, markPaid };
 }

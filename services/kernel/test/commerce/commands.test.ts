@@ -404,7 +404,7 @@ async function seed(count: number) {
     await pool.query(
       `WITH ids AS (SELECT ('10000000-0000-7000-8000-' || lpad(to_hex($1::int),4,'0') || lpad(to_hex(n),8,'0'))::uuid id FROM generate_series(1,$2::int) n),
       offers AS (INSERT INTO commerce.offer SELECT $1,id,id,id,'Other','usd',100,'txcd_10302000',9000,'active',1,now(),now(),id FROM ids),
-      orders AS (INSERT INTO commerce.purchase_order(route,order_id,buyer_account_id,offer_id,offer_revision,creator_account_id,title,currency,unit_amount_minor,tax_code,royalty_basis_points,settlement,created_at,updated_at,revision,transaction_id) SELECT $1,id,id,id,1,id,'Other','usd',100,'txcd_10302000',9000,'pending',now(),now(),1,id FROM ids)
+      orders AS (INSERT INTO commerce.purchase_order(route,order_id,buyer_account_id,offer_id,offer_revision,target_subject_id,creator_account_id,title,currency,unit_amount_minor,tax_code,royalty_basis_points,settlement,created_at,updated_at,revision,transaction_id) SELECT $1,id,id,id,1,id,id,'Other','usd',100,'txcd_10302000',9000,'pending',now(),now(),1,id FROM ids)
       INSERT INTO commerce.entitlement SELECT $1,id,id,id,id,id,now(),NULL,NULL,1,id FROM ids ON CONFLICT DO NOTHING`,
       [route, count],
     );

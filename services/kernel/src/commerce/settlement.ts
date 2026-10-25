@@ -1,10 +1,24 @@
-import type { CheckoutDecision, CheckoutSnapshot, EntitlementAction, Settlement, SettlementState } from './model.ts';
+import {
+  MAX_ORDER_TRANSACTIONS,
+  type CheckoutDecision,
+  type CheckoutSnapshot,
+  type EntitlementAction,
+  type Settlement,
+  type SettlementState,
+} from './model.ts';
 
 /** A snapshot belongs to another session or contradicts an already paid order. */
 export class CheckoutMismatchError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'CheckoutMismatchError';
+  }
+}
+
+/** Reject before opening a command, including when a trusted port supplies a snapshot directly. */
+export function assertTransactionBound(transactions: readonly unknown[]): void {
+  if (transactions.length > MAX_ORDER_TRANSACTIONS) {
+    throw new CheckoutMismatchError('Checkout exceeds the order transaction limit');
   }
 }
 
@@ -46,6 +60,7 @@ const nonRevokingDisputeStatuses = new Set([
 
 /** Decide from the current provider snapshot without performing effects or mutating the input. */
 export function decideCheckout(state: SettlementState, snapshot: CheckoutSnapshot): CheckoutDecision {
+  assertTransactionBound(snapshot.transactions);
   if (snapshot.sessionId !== state.order.checkoutSessionId) {
     throw new CheckoutMismatchError('Checkout Session differs from the recorded session');
   }

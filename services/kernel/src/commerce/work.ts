@@ -164,8 +164,8 @@ export function createCommerceWork(deps: CommerceWorkDependencies): WorkModule {
           name: 'commerce_royalty',
           types: ['com.rezics.commerce.transactions.recorded.v1'],
           async run(event) {
-            const { orderId } = event.data as { orderId: string };
-            await payouts.recordOrder(orderId, `effect:${event.id}:royalty`);
+            const { orderId, transactionIds } = event.data as { orderId: string; transactionIds: string[] };
+            await payouts.recordTransactions(orderId, transactionIds, `effect:${event.id}:royalty`);
           },
         },
         {

@@ -1,5 +1,4 @@
 import type { PoolClient } from 'pg';
-import { routeOf } from '../route/route.ts';
 import type {
   CheckoutDecision,
   CheckoutSession,
@@ -28,6 +27,9 @@ import entitlementInsert from './store-entitlement-insert.sql';
 import entitlementChange from './store-entitlement-change.sql';
 import transactionsRead from './store-transactions-read.sql';
 import transactionsInsert from './store-transactions-insert.sql';
+import transactionsProbe from './store-transactions-probe.sql';
+import transactionsNamed from './store-transactions-named.sql';
+import { assertTransactionBound } from './settlement.ts';
 
 type Client = Pick<PoolClient, 'query'>;
 // All projections normalize PostgreSQL scalars explicitly, so the minimal pg interface
@@ -134,6 +136,7 @@ export async function insertOrder(
         buyer_account_id: input.buyerAccountId,
         offer_id: offer.id,
         offer_revision: offer.revision,
+        target_subject_id: offer.targetSubjectId,
         creator_account_id: offer.creatorAccountId,
         title: offer.title,
         currency: offer.currency,
@@ -204,13 +207,8 @@ export async function listEntitlements(
   });
   return rows.map(asEntitlement);
 }
-export async function readOrderTransactions(
-  client: Client,
-  route: number,
-  orderId: string,
-): Promise<StripeTransaction[]> {
-  const rows = await transactionsRead.run(queryClient(client), { route, order_id: orderId });
-  return rows.map((row) => ({
+function asTransaction(row: Awaited<ReturnType<typeof transactionsRead.run>>[number]): StripeTransaction {
+  return {
     ...row,
     amountMinor: Number(row.amountMinor),
     feeMinor: Number(row.feeMinor),
@@ -218,17 +216,40 @@ export async function readOrderTransactions(
     feeDetails: JSON.parse(row.feeDetails) as StripeTransaction['feeDetails'],
     exchangeRate: row.exchangeRate === null ? null : Number(row.exchangeRate),
     created: iso(row.created),
-  }));
+  };
+}
+
+/** Immutable source transactions named by one royalty effect, on the buyer's route. */
+export async function readNamedOrderTransactions(
+  client: Client,
+  route: number,
+  orderId: string,
+  ids: readonly string[],
+): Promise<StripeTransaction[]> {
+  assertTransactionBound(ids);
+  const rows = await transactionsNamed.run(queryClient(client), { route, order_id: orderId, ids: [...ids] });
+  return rows.map(asTransaction);
+}
+
+export async function readOrderTransactions(
+  client: Client,
+  route: number,
+  orderId: string,
+): Promise<StripeTransaction[]> {
+  const rows = await transactionsRead.run(queryClient(client), { route, order_id: orderId });
+  return rows.map(asTransaction);
 }
 export async function readSettlementState(
   client: Client,
   route: number,
   orderId: string,
+  ids: readonly string[],
 ): Promise<SettlementState | null> {
+  assertTransactionBound(ids);
   const order = await readOrder(client, route, orderId);
   if (!order) return null;
   const entitlement = await entitlementOrder.run(queryClient(client), { route, order_id: orderId });
-  const transactions = await readOrderTransactions(client, route, orderId);
+  const transactions = await transactionsProbe.run(queryClient(client), { route, order_id: orderId, ids: [...ids] });
   return {
     order,
     entitlement: entitlement ? asEntitlement(entitlement) : null,
@@ -271,11 +292,6 @@ export async function applyCheckoutDecision(
     (action.kind !== 'grant' && action.kind !== 'none' && !currentEntitlement)
   )
     throw new Error('Checkout entitlement action conflicts with current state');
-  // The frozen order model carries only an offer reference. Resolve its benefit by a point read on the creator route.
-  const offer =
-    action.kind === 'grant'
-      ? required(await readOffer(client, required(routeOf(state.order.offerId)), state.order.offerId))
-      : null;
   const order = asOrder(
     required(
       await orderDecision.run(queryClient(client), {
@@ -319,7 +335,7 @@ export async function applyCheckoutDecision(
           account_id: order.buyerAccountId,
           order_id: order.id,
           offer_id: order.offerId,
-          target_subject_id: required(offer).targetSubjectId,
+          target_subject_id: order.targetSubjectId,
           ...write(context),
         }),
       ),
