@@ -13,6 +13,9 @@ import { readBatch, type Envelope } from '../../src/events/log.ts';
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import { readMediaImportStatus, type MediaImportDependencies } from '../../src/content/media-import.ts';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
+import { purgeObject } from '../../src/content/erasure-job.ts';
+import type { MediaStorage } from '../../src/content/media-storage.ts';
+import rejectImportedMedia from '../../src/content/reject-import-media.sql';
 import { takedownSourceFence, type SourceFenceDependencies } from '../../src/content/source-fence-command.ts';
 import { createTurnstileVerifier } from '../../src/content/turnstile.ts';
 import {
@@ -721,6 +724,28 @@ async function grantMediaOwner(route: number, mediaId: string, actorId: string):
   );
 }
 
+async function rejectMediaAnchor(route: number, mediaId: string, containerId: string): Promise<void> {
+  await runCommand(db.pool, { partition: partitionOf(route), deadline: Date.now() + 15_000 }, async (tx, command) => {
+    const changed = await rejectImportedMedia.run(tx, {
+      route,
+      media_id: mediaId,
+      decision: `source-url:${command.transactionId}`,
+      transaction_id: command.transactionId,
+    });
+    if (!changed) throw new Error('Growth media rejection did not commit its terminal anchor');
+    return {
+      value: mediaId,
+      events: [
+        {
+          type: 'com.rezics.content.media.rejected.v1',
+          subject: mediaId,
+          data: { mediaId, containerId, decisionId: command.transactionId },
+        },
+      ],
+    };
+  });
+}
+
 async function createMediaDependencies() {
   const { actor, access } = await createActor(mediaRoute, mediaActions);
   await addGrant(0, mediaRoot.id, actor.accountId, 'media:import_from_url');
@@ -949,4 +974,53 @@ test('Source fence takedown stays within its bound as T grows', async () => {
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
   expectNoContentSequentialScans(report);
+}, 90_000);
+
+test('Committed media purge stays within its bound as T grows', async () => {
+  const route = 42_064;
+  const { actor } = await createActor(route, []);
+  const containerId = newId(route);
+  await db.admin.query(
+    `INSERT INTO semantic.subject (route, subject_id, type, recorded_transaction_id)
+     VALUES ($1, $2, 'schema:Book', $2)`,
+    [route, containerId],
+  );
+  const request = coverRequest(containerId, `growth-purge-${randomUUID()}`);
+  const mediaId = await reserveMediaAnchor(route, actor.accountId, request);
+  await rejectMediaAnchor(route, mediaId, containerId);
+  const deletedPrefixes: string[] = [];
+  const storage: MediaStorage = {
+    async get() {
+      return null;
+    },
+    async put() {},
+    async deletePrefix(prefix) {
+      deletedPrefixes.push(prefix);
+    },
+  };
+  expect((await purgeObject(db.pool, storage, mediaId)).outcome).toBe('purged');
+
+  // This population matches cover reservations with fixed keys while the anchor carries a committed rejection.
+  const population: Population = {
+    name: `growth-media-purge-${randomUUID()}`,
+    hotPartition: partitionOf(route),
+    hotShare: 1,
+    rows: ({ ordinal }) => ({
+      'content.media': mediaPopulationRows(route, route, actor.accountId, request, ordinal)['content.media'],
+    }),
+  };
+  const report = await checkGrowth(db, {
+    name: 'Committed media purge',
+    scales,
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    grow: async (_database, scale, previous) =>
+      seedScale(population, scale, previous, [{ table: 'content.media', partition: partitionOf(route) }]),
+    operation: async () => {
+      const result = await purgeObject(db.pool, storage, mediaId);
+      expect(result.outcome).toBe('purged');
+    },
+  });
+  expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
+  expectNoContentSequentialScans(report);
+  expect(deletedPrefixes.every((prefix) => prefix === `m/${mediaId}/`)).toBe(true);
 }, 90_000);
