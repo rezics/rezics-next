@@ -7,6 +7,7 @@ export const PROBLEM_TYPE_BASE = 'https://rezics.com/problems/';
 
 export const PROBLEMS = {
   invalid_request: { status: 400, title: 'Invalid Request', retryable: false },
+  invalid_signature: { status: 400, title: 'Invalid Signature', retryable: false },
   idempotency_conflict: { status: 422, title: 'Idempotency Key Reused', retryable: false },
   authentication_required: { status: 401, title: 'Authentication Required', retryable: false },
   invalid_credentials: { status: 401, title: 'Invalid Credentials', retryable: false },
