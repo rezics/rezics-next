@@ -16,18 +16,18 @@ function unmergedFiles(cwd: string): string[] {
   return git(cwd, 'diff', '--name-only', '--diff-filter=U', '-z').split('\0').filter(Boolean);
 }
 
-export function rebaseOnto(cwd: string, base: string, originalBase: string, logPath: string): void {
+function rebaseWithDerivedFiles(cwd: string, base: string, originalBase: string, logPath: string,
+  derivedByPath: ReadonlyMap<string, DerivedFile>): unknown | undefined {
   try {
     git(cwd, '-c', 'rebase.updateRefs=false', 'rebase', '--onto', base, originalBase);
-    return;
+    return undefined;
   } catch (initialError) {
     let rebaseError: unknown = initialError;
-    const derivedByPath = new Map(derivedFiles.map(file => [file.path, file]));
     for (;;) {
       const conflicts = unmergedFiles(cwd);
       if (!conflicts.length) throw rebaseError;
       const derivedConflicts = conflicts.filter(path => derivedByPath.has(path));
-      if (!derivedConflicts.length) throw rebaseError;
+      if (!derivedConflicts.length) return rebaseError;
 
       for (const path of derivedConflicts) git(cwd, 'checkout', '--ours', '--', path);
       for (const path of derivedConflicts) {
@@ -40,17 +40,34 @@ export function rebaseOnto(cwd: string, base: string, originalBase: string, logP
         if (result.status !== 0) throw new Error(`Failed to regenerate ${path}: ${output || result.error?.message || 'command failed'}`);
       }
       git(cwd, 'add', '--', ...derivedConflicts);
-      if (derivedConflicts.length !== conflicts.length) throw rebaseError;
+      if (derivedConflicts.length !== conflicts.length) return rebaseError;
       try {
         git(cwd, '-c', 'core.editor=true', 'rebase', '--continue');
-        return;
+        return undefined;
       } catch (continueError) {
         const nextConflicts = unmergedFiles(cwd);
-        if (!nextConflicts.length || nextConflicts.some(path => !derivedByPath.has(path))) throw continueError;
+        if (!nextConflicts.length) throw continueError;
+        if (nextConflicts.some(path => !derivedByPath.has(path))) return continueError;
         rebaseError = continueError;
       }
     }
   }
+}
+
+export function rebaseOnto(cwd: string, base: string, originalBase: string, logPath: string): void {
+  const derivedByPath = new Map(derivedFiles.map(file => [file.path, file]));
+  const originalSubjects = git(cwd, 'log', '--format=%s', '--reverse', `${originalBase}..HEAD`)
+    .split('\n').filter(Boolean);
+  const initialConflict = rebaseWithDerivedFiles(cwd, base, originalBase, logPath, derivedByPath);
+  if (initialConflict === undefined) return;
+
+  git(cwd, 'rebase', '--abort');
+  git(cwd, 'reset', '--soft', originalBase);
+  const message = ['Squash worker branch changes', '', 'Original commits:', ...originalSubjects.map(subject => `- ${subject}`)].join('\n');
+  git(cwd, 'commit', '--allow-empty', '-m', message);
+
+  const squashedConflict = rebaseWithDerivedFiles(cwd, base, originalBase, logPath, derivedByPath);
+  if (squashedConflict !== undefined) throw squashedConflict;
 }
 
 export type TrainOptions = {
