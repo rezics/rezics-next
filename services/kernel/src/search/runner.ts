@@ -1,8 +1,9 @@
 import type { Pool } from 'pg';
 import { startRelays } from '../events/relays.ts';
+import { OpenSearchError, type OpenSearch } from './opensearch.ts';
+import retire from './retire.sql';
 import { createSubjectIndex, subjectGenerations, subjectIndexName, subjectAlias } from './indices.ts';
 import { createSubjectIndexer } from './indexer.ts';
-import type { OpenSearch } from './opensearch.ts';
 import type { SubjectSource } from './source.ts';
 
 export function subjectConsumer(prefix: string, generation: number): string {
@@ -19,11 +20,16 @@ export async function startSearchIndexing(options: {
   intervalMs?: number;
   discoverMs?: number;
   concurrency?: number;
+  retireAfterMs?: number;
 }): Promise<{ pause(): Promise<void>; resume(): void; stop(): Promise<void>; refresh(): Promise<void> }> {
   const discoverMs = options.discoverMs ?? 5000;
   if (!Number.isInteger(discoverMs) || discoverMs < 1) throw new RangeError('discoverMs must be a positive integer');
+  const retireAfterMs = options.retireAfterMs ?? 15 * 60_000;
+  if (!Number.isFinite(retireAfterMs) || retireAfterMs < 0)
+    throw new RangeError('retireAfterMs must be a non-negative finite number');
   let current: ReturnType<typeof startRelays> | undefined;
   let currentGenerations: number[] | undefined;
+  const pendingRetirements = new Set<number>();
   let paused = false;
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -35,16 +41,45 @@ export async function startSearchIndexing(options: {
       let state = await subjectGenerations(options.search, options.prefix);
       if (state.generations.length === 0) {
         await createSubjectIndex(options.search, options.prefix, 1);
+        await options.search.request('PUT', `/${subjectIndexName(options.prefix, 1)}/_mapping`, {
+          _meta: { activated_at: new Date().toISOString() },
+        });
         await options.search.request('POST', '/_aliases', {
           actions: [{ add: { index: subjectIndexName(options.prefix, 1), alias: subjectAlias(options.prefix) } }],
         });
-        state = await subjectGenerations(options.search, options.prefix);
+        state = { generations: [1], active: 1 };
       }
-      if (!currentGenerations || state.generations.join(',') !== currentGenerations.join(',')) {
+
+      let activatedAt: number | undefined;
+      if (state.active !== null) {
+        const index = subjectIndexName(options.prefix, state.active);
+        const { body } = await options.search.request<
+          Record<string, { mappings?: { _meta?: { activated_at?: unknown } } }>
+        >('GET', `/${index}/_mapping`);
+        const value = body[index]?.mappings?._meta?.activated_at;
+        if (typeof value === 'string') {
+          const parsed = Date.parse(value);
+          if (Number.isFinite(parsed)) activatedAt = parsed;
+        }
+      }
+
+      const liveGenerations = state.generations.filter((generation) => {
+        if (state.active === null) return true;
+        if (generation >= state.active) return true;
+        if (activatedAt === undefined) return true;
+        return Date.now() < activatedAt + retireAfterMs;
+      });
+      for (const generation of liveGenerations) pendingRetirements.delete(generation);
+      for (const generation of state.generations) {
+        if (!liveGenerations.includes(generation)) pendingRetirements.add(generation);
+      }
+
+      if (!currentGenerations || liveGenerations.join(',') !== currentGenerations.join(',')) {
         const previous = current;
         current = undefined;
+        currentGenerations = undefined;
         if (previous) await previous.stop();
-        const relays = state.generations.map((generation) =>
+        const relays = liveGenerations.map((generation) =>
           createSubjectIndexer({
             pool: options.pool,
             search: options.search,
@@ -53,12 +88,27 @@ export async function startSearchIndexing(options: {
             consumer: subjectConsumer(options.prefix, generation),
           }),
         );
-        currentGenerations = state.generations;
-        current = startRelays(options.pool, relays, {
+        const next = startRelays(options.pool, relays, {
           ...(options.intervalMs === undefined ? {} : { intervalMs: options.intervalMs }),
           ...(options.concurrency === undefined ? {} : { concurrency: options.concurrency }),
         });
-        if (paused) await current.pause();
+        current = next;
+        currentGenerations = liveGenerations;
+        if (paused) await next.pause();
+      }
+
+      for (const generation of pendingRetirements) {
+        try {
+          try {
+            await options.search.request('DELETE', `/${subjectIndexName(options.prefix, generation)}`);
+          } catch (error) {
+            if (!(error instanceof OpenSearchError && error.status === 404)) throw error;
+          }
+          await retire.run(options.pool, { consumer: subjectConsumer(options.prefix, generation) });
+          pendingRetirements.delete(generation);
+        } catch (error) {
+          console.error(`Search generation retirement failed for ${options.prefix} generation ${generation}`, error);
+        }
       }
     } catch (error) {
       console.error(`Search index discovery failed for ${options.prefix}`, error);
