@@ -985,10 +985,24 @@ CREATE INDEX organization_member_owner_probe ON access.organization_member USING
 
 
 --
+-- Name: resource_denial_open; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE UNIQUE INDEX resource_denial_open ON access.resource_denial USING btree (route, resource_id, subject_id, subject_role, action, reason) WHERE upper_inf(valid);
+
+
+--
 -- Name: resource_denial_permission; Type: INDEX; Schema: access; Owner: -
 --
 
 CREATE INDEX resource_denial_permission ON access.resource_denial USING gist (route, resource_id, action, subject_id, subject_role, valid);
+
+
+--
+-- Name: resource_role_grant_open; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE UNIQUE INDEX resource_role_grant_open ON access.resource_role_grant USING btree (route, resource_id, subject_kind, subject_id, subject_role, grant_role) WHERE upper_inf(valid);
 
 
 --
