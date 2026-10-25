@@ -204,3 +204,76 @@ most 16 keys.
 `bun scripts/schema.ts --check` fails when that file is stale. The schema covers the closed
 shape and the safety patterns. Runtime validation also enforces size, node count, depth,
 unique ids, the distinct read limit and the total read cost.
+
+## Presentation profile
+
+A presentation profile holds the composition documents that decide how every page reads.
+It has one generic page, then templates by structural base, by type and by explicit route.
+A type's default read layout is its type template. A launch vertical needs no page code of
+its own.
+
+```json
+{
+  "format": "https://rezics.com/presentation/profile/1",
+  "generic": { "root": { "props": {} }, "content": [] },
+  "bases": [{ "base": "schema:Thing", "document": { "root": { "props": {} }, "content": [] } }],
+  "types": [{ "type": "schema:Book", "document": { "root": { "props": {} }, "content": [] } }],
+  "routes": [{ "route": "/", "document": { "root": { "props": {} }, "content": [] } }]
+}
+```
+
+The profile has exactly `format`, `generic`, `bases`, `types` and `routes`. `format` is
+`https://rezics.com/presentation/profile/1`. A base entry has exactly `base` and `document`.
+A type entry has exactly `type` and `document`. A route entry has exactly `route` and
+`document`. `generic` and every `document` are composition documents.
+
+`base` and `type` pass the `curie()` rule: its pattern and at most 128 characters. `route`
+matches `^/(?:[a-z0-9]+(?:-[a-z0-9]+)*(?:/[a-z0-9]+(?:-[a-z0-9]+)*)*)?$` and has at most 256
+characters. Within each list, keys are strictly increasing in code-unit order.
+
+## Profile validation
+
+`validateProfile` is pure. It does not mutate its input, and it does not throw on parsed
+JSON. It runs once per publish, never on a read. Work is linear in the profile's RFC 8785
+canonical UTF-8 bytes: at most 1 MiB, at most 128 templates, and each template stays inside
+`validateComposition`'s limits.
+
+| Limit                                    | Maximum         | Pointer |
+| ---------------------------------------- | --------------- | ------- |
+| RFC 8785 canonical UTF-8 JSON            | 1,048,576 bytes | `""`    |
+| Entries in `bases`, `types` and `routes` | 128             | `""`    |
+
+`generic` is outside the template count. Size is checked first. A profile over the byte
+budget returns only `{ "pointer": "", "code": "limit" }`. A profile inside that budget and
+past the template limit returns only that same limit, and validation stops. The pointer is
+`""` whatever the size of the templates.
+
+Below both limits, violations use the codes of `validateComposition`. A value that is not an
+object, a wrong or missing envelope key, a wrong `format`, or a key that fails its rule is
+`invalid`. Inside a list, each key is compared with the entry just before it. An equal key
+is `duplicate` and a smaller key is `invalid`, both at the later key. Each document is
+checked with `validateComposition`, and its violations are reported under that document
+(`/generic/...`, `/types/3/document/...`). One violation is kept per pointer, with the same
+precedence as `validateComposition`. Results are sorted by pointer in code-unit order and
+capped at 64.
+
+`profileDigest` is `sha256:` and the lowercase hex SHA-256 of the RFC 8785 canonical UTF-8
+JSON, the same way a definition release is digested. Key order in the object does not change
+the digest.
+
+## Template resolution
+
+`resolveTemplate` chooses one document for a subject `{ route?, type?, bases? }`. The profile
+is valid. Templates resolve in this order:
+
+1. The route template whose `route` equals the target route.
+2. The type template for the target type.
+3. The first structural base, nearest first, that has a base template.
+4. The generic page.
+
+The result is `{ scope, key, document }`. `scope` is `route`, `type`, `base` or `generic`.
+`key` is the matched route, type or base. The generic page uses `null`.
+
+Lookups are binary searches over the sorted lists. Resolution is O(log T) for T ≤ 128
+templates, plus at most one lookup for each structural base. Bases come from the definition
+release, nearest first, bounded by its class depth. A page read never scans the profile.
