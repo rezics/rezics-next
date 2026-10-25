@@ -73,3 +73,25 @@ test('a culprit whose failing prefix fails again with the same first failure is 
     expect(h.store.task(culprit.id).currentAttempt).toBe(2);
   } finally { h.dispose(); }
 });
+
+test('the culprit search costs a logarithmic number of probes in the batch size', async () => {
+  // Growth check: a root-gate failure introduced at a fixed relative position is found in O(log n) probes of one command.
+  const probesFor = async (size: number) => {
+    const h = integrationHarness();
+    try {
+      for (let index = 0; index < size; index++) await h.seed(index === Math.floor(size * 0.7) ? 'bad' : `task-${index}`);
+      const dev = h.head(), main = h.head('main');
+      let probes = 0;
+      await h.promote(async (command, cwd) => {
+        const commit = git(cwd, 'rev-parse', 'HEAD');
+        const broken = existsSync(`${cwd}/bad`);
+        if (commit !== dev && commit !== main) probes++;
+        return broken && command[0] !== 'true' ? failure : broken && command.join(' ') === h.settings.gate.join(' ') ? failure : success;
+      });
+      return probes;
+    } finally { h.dispose(); }
+  };
+  const small = await probesFor(8), large = await probesFor(64);
+  expect(large).toBeLessThanOrEqual(small + 12);
+  expect(large).toBeLessThan(32);
+}, 120_000);
