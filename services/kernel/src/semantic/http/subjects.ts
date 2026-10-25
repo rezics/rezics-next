@@ -363,6 +363,7 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
         },
         detail: {
           operationId: 'subject.merge',
+          'x-exposure': 'public',
           'x-action': 'subject:merge',
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
           security: [{ bearerAuth: [] }],
