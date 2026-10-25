@@ -272,9 +272,19 @@ async function resolveCulprit(options: PromotionOptions, run: PromotionRun): Pro
       else { high = index; break; }
     }
   }
+  const culpritResult = results.get(high);
+  // Every prefix before the culprit passed the root gate, so main takes it now; a flake or a second breakage later in
+  // this run cannot hold back work that is already proven.
+  if (high > 0 && results.get(high - 1)?.passed && JSON.stringify(command) === JSON.stringify(run.rootGate)) {
+    publishPrefix(options, run, run.boundaries[high - 1]!.commit, run.taskIds.slice(0, high));
+    run.mainBase = run.boundaries[high - 1]!.commit;
+    run.taskIds = run.taskIds.slice(high); run.boundaries = run.boundaries.slice(high);
+    high = 0;
+    store.savePromotion(run);
+  }
   const failedBoundaryIndex = high;
   const failed = run.boundaries[failedBoundaryIndex]!;
-  const initial = results.get(failedBoundaryIndex)
+  const initial = culpritResult
     ?? run.headResults.find(result => !result.passed && JSON.stringify(result.command) === JSON.stringify(command))!;
   const commandIndex = 0;
   const confirmationLabel = 'confirm-culprit';
@@ -328,6 +338,18 @@ function prepareCulpritOutcome(options: PromotionOptions, run: PromotionRun): vo
   options.job.onGateOutcome({ taskId: task.id, attempt, passed: false, stage: 'gate', firstFailure: failure,
     failsOnMain: false, logPath: join(options.settings.stateDirectory, `promotion-${run.id}.log`), hostMs: 0,
     changedFiles: [], diffLines: 0 });
+}
+
+function publishPrefix(options: PromotionOptions, run: PromotionRun, target: string, taskIds: readonly string[]): void {
+  const settings = options.settings, store = options.job.tasks.store, checkout = settings.mainCheckout;
+  if (git(checkout, 'symbolic-ref', 'HEAD') !== ref(settings.mainBranch))
+    throw new Error(`The main checkout must have ${settings.mainBranch} checked out`);
+  store.publishPromotion(taskIds, target, () => {
+    if (head(checkout, settings.mainBranch) !== run.mainBase) throw new Error('Main moved to a different history during promotion');
+    options.beforeAdvance?.();
+    git(checkout, 'merge', '--ff-only', '--no-edit', target);
+  });
+  options.job.onPromotionComplete(taskIds, run.id);
 }
 
 async function publishMain(options: PromotionOptions, run: PromotionRun): Promise<void> {
