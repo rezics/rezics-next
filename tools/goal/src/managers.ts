@@ -1,8 +1,8 @@
 import type { Database } from 'bun:sqlite';
 import { randomUUID } from 'node:crypto';
-import { watch, type FSWatcher } from 'node:fs';
+import { mkdirSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import type { AppServer, CodexPool, Notification } from './app-server.ts';
 import { connectPool, textInput } from './app-server.ts';
 import { migrate } from './db.ts';
@@ -142,6 +142,34 @@ export class ManagerSessions {
         : `When no decision is pending, run ${this.services.command.join(' ')} inbox wait ${spec.id} as a background command and end the turn. `) +
       'Read and acknowledge inbox events. Do not perform mechanical gates, retries or merges yourself.';
   }
+  private claudeArgv(spec: ManagerSpec, session: string[], prompt: string): string[] {
+    const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+    const hook = (command: string) => [...this.services.command, 'manager', command, spec.id].map(quote).join(' ');
+    const settings = { skipDangerousModePermissionPrompt: true, hooks: {
+      UserPromptSubmit: [{ hooks: [{ type: 'command', command: hook('turn-start') }] }],
+      Stop: [{ hooks: [{ type: 'command', command: hook('turn-end') }] }],
+    } };
+    // Claude keeps its account state in ~/.claude.json, not in its default configuration directory; pointing
+    // CLAUDE_CONFIG_DIR at that directory would start an unauthenticated, untrusted session.
+    const configDirectory = resolve(spec.pool.codexHome) === join(homedir(), '.claude') ? [] : [`CLAUDE_CONFIG_DIR=${spec.pool.codexHome}`];
+    return ['env', `GOAL_MANAGER=${spec.id}`, ...configDirectory, spec.pool.executable ?? 'claude', ...session, '--model', 'claude-opus-5-5',
+      '--permission-mode', 'bypassPermissions', '--name', `${spec.goal} manager`,
+      '--autocompact', String(spec.compactTokens ?? 300000), '--settings', JSON.stringify(settings), prompt];
+  }
+  // The opening goes to a file, not argv: the CLI process would otherwise match a `pgrep -f` for any command the
+  // opening names, and a manager that stopped its inbox watcher by pattern once killed its own session that way.
+  private openingPointer(spec: ManagerSpec): string {
+    const path = join(this.inbox.stateDirectory, 'managers', `${spec.id}.opening.md`);
+    mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, this.opening(spec));
+    return `Read ${path} completely and follow it.`;
+  }
+  // A Claude manager hears its inbox through its own background watcher, so a session that exited never sees new
+  // events; the next event resumes it in its window.
+  private reviveClaude(state: ManagerState): void {
+    if (!state.threadId || !this.inbox.pending(state.id).length || this.services.windows.alive?.(state.id) !== false) return;
+    this.services.windows.respawn?.(state.id, this.claudeArgv(state, ['--resume', state.threadId],
+      'Your session exited and the control plane resumed it. Read and acknowledge your inbox, then continue.'), state.cwd);
+  }
   private registerCodexViewer(state: ManagerState, client: AppServer): void {
     const viewer = [state.pool.executable ?? 'codex', 'resume', state.threadId!];
     if (client.endpoint) viewer.push('--remote', client.endpoint);
@@ -171,18 +199,8 @@ export class ManagerSessions {
         const turn = await client.request('turn/start', { threadId: state.threadId, effort: spec.effort, input: textInput(this.opening(spec)) });
         this.turnStarted(state, turn.turn.id);
       } else {
-        const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
-        const hook = (command: string) => [...this.services.command, 'manager', command, spec.id].map(quote).join(' ');
-        const settings = { skipDangerousModePermissionPrompt: true, hooks: {
-          UserPromptSubmit: [{ hooks: [{ type: 'command', command: hook('turn-start') }] }],
-          Stop: [{ hooks: [{ type: 'command', command: hook('turn-end') }] }],
-        } };
-        // Claude keeps its account state in ~/.claude.json, not in its default configuration directory; pointing
-        // CLAUDE_CONFIG_DIR at that directory would start an unauthenticated, untrusted session.
-        const configDirectory = resolve(spec.pool.codexHome) === join(homedir(), '.claude') ? [] : [`CLAUDE_CONFIG_DIR=${spec.pool.codexHome}`];
-        this.services.windows.register(spec.id, ['env', `GOAL_MANAGER=${spec.id}`, ...configDirectory, spec.pool.executable ?? 'claude', '--model', 'claude-opus-5-5',
-          '--permission-mode', 'bypassPermissions', '--name', `${spec.goal} manager`,
-          '--autocompact', String(spec.compactTokens ?? 300000), '--settings', JSON.stringify(settings), this.opening(spec)], spec.cwd);
+        state.threadId = randomUUID();
+        this.services.windows.register(spec.id, this.claudeArgv(spec, ['--session-id', state.threadId], this.openingPointer(spec)), spec.cwd);
         state.status = 'running';
       }
       this.save(state); this.armDeadline(state);
@@ -285,7 +303,8 @@ export class ManagerSessions {
 
   private async dispatch(id: string): Promise<void> {
     let state = this.get(id);
-    if (state.status !== 'running' || state.engine !== 'codex') return;
+    if (state.status !== 'running') return;
+    if (state.engine === 'claude') return this.reviveClaude(state);
     const client = await this.client(state.pool);
     for (const event of this.inbox.notifications(id)) {
       state = this.get(id);

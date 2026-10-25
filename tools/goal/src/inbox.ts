@@ -11,7 +11,7 @@ export type InboxEntry = { id: number; event: ManagerEvent; readAt: number | nul
 
 export class SqliteManagerInbox implements ManagerInbox {
   readonly signalDirectory: string;
-  constructor(readonly db: Database, stateDirectory: string) {
+  constructor(readonly db: Database, readonly stateDirectory: string) {
     this.signalDirectory = join(stateDirectory, 'manager-signals');
     mkdirSync(this.signalDirectory, { recursive: true });
     migrate(db, [{ module: 'inbox', version: 1, sql: `

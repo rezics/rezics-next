@@ -177,10 +177,11 @@ test('renewing a paused Claude manager opens a new session under the same id', a
       id: first.id,
       engine: 'claude',
       status: 'running',
-      threadId: null,
+      threadId: expect.any(String),
       turns: 0,
       turnsWithoutDecision: 0,
     });
+    expect(renewed.threadId).not.toBe(first.threadId);
     expect(renewed.history).toHaveLength(1);
     expect(renewed.history?.[0]).toMatchObject({ engine: 'claude', status: 'paused' });
     expect(s.windows).toHaveLength(2);

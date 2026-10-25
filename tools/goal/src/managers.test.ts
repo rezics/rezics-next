@@ -166,7 +166,9 @@ test('Claude manager opens the requested CLI and counts turns through hooks', as
     const manager = await s.managers.start({ ...s.spec, engine: 'claude' });
     const argv = s.windows[0]!.argv;
     expect(argv).toContain('claude-opus-5-5'); expect(argv).toContain('--autocompact'); expect(argv).toContain('300000');
-    expect(argv.at(-1)).toContain('inbox wait manager'); expect(argv).toContain('--settings');
+    expect(argv.join(' ')).not.toContain('inbox wait'); expect(argv).toContain('--settings');
+    expect(readFileSync(argv.at(-1)!.split(' ')[1]!, 'utf8')).toContain('inbox wait manager');
+    expect(argv.slice(argv.indexOf('--session-id'), argv.indexOf('--session-id') + 2)).toEqual(['--session-id', manager.threadId!]);
     expect(argv.slice(argv.indexOf('--permission-mode'), argv.indexOf('--permission-mode') + 2)).toEqual(['--permission-mode', 'bypassPermissions']);
     expect(argv.some(arg => arg.startsWith('CLAUDE_CONFIG_DIR='))).toBe(true);
     const defaults = await setup();
@@ -179,6 +181,21 @@ test('Claude manager opens the requested CLI and counts turns through hooks', as
     expect(s.managers.get(manager.id).turns).toBe(1); expect(s.managers.get(manager.id).turnsWithoutDecision).toBe(0);
     s.inbox.deliver({ managerId: manager.id, kind: 'instruction', summary: 'Wake Claude' }); await s.managers.wake(manager.id);
     expect(s.inbox.pending(manager.id)).toHaveLength(1); expect(s.connections).toBe(0);
+  } finally { await s.close(); }
+});
+
+test('a Claude manager whose session exited is resumed in its window when an event arrives', async () => {
+  const s = await setup();
+  try {
+    const manager = await s.managers.start({ ...s.spec, engine: 'claude' });
+    const resumed: string[][] = []; let alive = true;
+    Object.assign(s.services.windows, { alive: () => alive, respawn: (_id: string, argv: string[]) => { resumed.push(argv); } });
+    s.inbox.deliver({ managerId: manager.id, kind: 'instruction', summary: 'Wake Claude' }); await s.managers.wake(manager.id);
+    expect(resumed).toHaveLength(0);
+    alive = false; await s.managers.wake(manager.id);
+    const argv = resumed[0]!;
+    expect(argv.slice(argv.indexOf('--resume'), argv.indexOf('--resume') + 2)).toEqual(['--resume', manager.threadId!]);
+    expect(argv).toContain('--settings');
   } finally { await s.close(); }
 });
 
