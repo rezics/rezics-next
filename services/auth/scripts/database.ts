@@ -50,14 +50,28 @@ export function schemaDump(url: string, fixture?: TestDatabase): string {
 
 export function testDatabase(): TestDatabase {
   const label = 'rezics.auth.check.pid';
-  for (const id of run('docker', ['ps', '-aq', '--filter', `label=${label}`])
+  // Capture owners with IDs so concurrent cleanup cannot race a separate inspect.
+  for (const row of run('docker', [
+    'ps',
+    '-a',
+    '--filter',
+    `label=${label}`,
+    '--format',
+    `{{.ID}} {{.Label "${label}"}}`,
+  ])
     .split('\n')
     .filter(Boolean)) {
-    const owner = run('docker', ['inspect', '-f', `{{ index .Config.Labels "${label}" }}`, id]);
+    const [id, owner, ...extra] = row.split(' ');
+    if (!id || !owner || extra.length || !/^[1-9]\d*$/.test(owner)) continue;
+    const pid = Number(owner);
+    if (!Number.isSafeInteger(pid) || pid > 2_147_483_647) continue;
     try {
-      process.kill(Number(owner), 0);
-    } catch {
-      run('docker', ['rm', '-f', id]);
+      process.kill(pid, 0);
+    } catch (error) {
+      // An inaccessible owner may still be alive; only a missing process is stale.
+      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') continue;
+      // Removing a container that another checker already removed is success.
+      spawnSync('docker', ['rm', '-f', id], { cwd: directory, encoding: 'utf8', timeout: 30_000 });
     }
   }
   const container = run('docker', [
