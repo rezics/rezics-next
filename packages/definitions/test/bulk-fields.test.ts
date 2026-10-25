@@ -26,7 +26,7 @@ const summary = (
     type: 'value',
     content: { language: 'ja', document: fromPlainText('吾輩は猫である。名前はまだ無い。') },
   },
-  extra: Record<string, unknown> = { rights },
+  extra: { rights?: unknown } = { rights },
 ) => ({
   op: 'propose',
   key: 'summary',
@@ -70,7 +70,7 @@ test('summary, cover and unresolved references each have one portable shape', ()
 });
 
 test('each field group refuses the shapes of the others', () => {
-  const { rights: _rights, ...unlicensed } = summary();
+  const unlicensed = summary(undefined, {});
   const cases: [unknown, string, string][] = [
     [unlicensed, '/commands/0/rights', 'required'],
     [{ ...unresolved, rights }, '/commands/0/rights', 'unsupported'],
