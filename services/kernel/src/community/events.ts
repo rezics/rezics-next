@@ -40,6 +40,14 @@ export const COMMUNITY_EVENTS = {
   'com.rezics.community.space.address-reserved.v1': addressOnly,
   'com.rezics.community.realm.created.v1': realmRevision,
   'com.rezics.community.realm.updated.v1': realmRevision,
+  'com.rezics.community.realm.ban.v1': Type.Object(
+    { realmId: id, accountId: id, reason: Type.String({ maxLength: 1024 }), actor: id, at: instant, transactionId: id },
+    { additionalProperties: false },
+  ),
+  'com.rezics.community.realm.unban.v1': Type.Object(
+    { realmId: id, accountId: id, at: instant, transactionId: id },
+    { additionalProperties: false },
+  ),
   'com.rezics.community.realm.membership.v1': Type.Object(
     {
       realmId: id,

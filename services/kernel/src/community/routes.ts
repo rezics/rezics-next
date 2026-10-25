@@ -31,6 +31,7 @@ import { createRealm, RealmConflictError, RealmInputError, updateRealm, type Rea
 import { readRealm, setBoardScheme, type Realm } from './board-scheme.ts';
 import { createRealmParticipationCheck } from './participation.ts';
 import { enqueueRealmJoin, enqueueRealmLeave, readOwnRealmMembership, RealmMembershipConflictError } from './join.ts';
+import { banAccount, unbanAccount, listBans, RealmBanInputError } from './ban.ts';
 import { readRealmMembershipInterval } from './membership.ts';
 import {
   listPublications,
@@ -162,6 +163,18 @@ function strict<S extends TSchema>(schema: S) {
   };
 }
 
+const banParams = t.Object({ realmId: t.String(), accountId: id }, closed);
+const banRecord = t.Object({ accountId: id, reason: t.String({ maxLength: 1024 }), actor: id, at: t.String() }, closed);
+const banResponse = t.Object(
+  { ban: t.Object({ ...banRecord.properties, realmId: id, workflowId: t.Union([t.String(), t.Null()]) }, closed) },
+  closed,
+);
+const banPage = t.Object({ items: t.Array(banRecord), next: t.Union([t.String(), t.Null()]) }, closed);
+const banQuery = t.Object(
+  { limit: t.Optional(t.Integer({ minimum: 1, maximum: 100 })), cursor: t.Optional(t.String()) },
+  closed,
+);
+
 const readFailures = {
   400: problemSchema('invalid_request'),
   401: problemSchema('authentication_required', 'invalid_credentials'),
@@ -213,6 +226,7 @@ export type CommunityRouteDependencies = {
 };
 
 function communityProblem(error: unknown): never {
+  if (error instanceof RealmBanInputError) throw new ProblemError('invalid_request');
   if (error instanceof SpaceInputError) throw new ProblemError('invalid_request');
   if (error instanceof SpaceAddressConflictError) throw new ProblemError('conflict');
   if (error instanceof RealmInputError || error instanceof PublicationInputError)
@@ -298,6 +312,11 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
     routeKey: dependencies.routeKey,
     ...(dependencies.clock === undefined ? {} : { clock: dependencies.clock }),
     access: dependencies.access(),
+  });
+  const banDependencies = () => ({
+    ...realmDependencies(),
+    tokens: dependencies.tokens,
+    workClient: dependencies.workClient,
   });
   const observedAt = () => (dependencies.clock ?? (() => new Date()))().toISOString();
 
@@ -1071,6 +1090,102 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         );
         if (!current) throw new ProblemError('not_found');
         return readOwnRealmMembership(dependencies.pool, realmId, actor.accountId, observedAt());
+      },
+    )
+    .put(
+      '/v1/realms/:realmId/bans/:accountId',
+      {
+        params: banParams,
+        headers: commandHeaders,
+        body: strict(t.Object({ reason: t.String({ maxLength: 1024 }) }, closed)),
+        response: { 200: withHeaders(strict(banResponse), sessionHeader), ...writeFailures },
+        detail: {
+          operationId: 'realm.ban',
+          'x-exposure': 'public',
+          'x-action': 'realm:ban',
+          'x-rate-limit': writeRate,
+          security: writeSecurity,
+        },
+      },
+      async ({ params, body, headers, actor, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        try {
+          return await admission.run('normal', job, async () => {
+            const result = await banAccount(
+              banDependencies(),
+              actor,
+              { ...params, reason: body.reason },
+              { idempotencyKey: key, deadline: job.deadline },
+            );
+            session.record(result);
+            return { ban: result.value };
+          });
+        } catch (error) {
+          communityProblem(error);
+        }
+      },
+    )
+    .delete(
+      '/v1/realms/:realmId/bans/:accountId',
+      {
+        params: banParams,
+        headers: commandHeaders,
+        response: { 204: t.Void(), ...writeFailures },
+        detail: {
+          operationId: 'realm.unban',
+          'x-exposure': 'public',
+          'x-action': 'realm:ban',
+          'x-rate-limit': writeRate,
+          security: writeSecurity,
+        },
+      },
+      async ({ params, headers, actor, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        try {
+          await admission.run('normal', job, async () => {
+            const result = await unbanAccount(banDependencies(), actor, params, {
+              idempotencyKey: key,
+              deadline: job.deadline,
+            });
+            session.record(result);
+          });
+          set.status = 204;
+        } catch (error) {
+          communityProblem(error);
+        }
+      },
+    )
+    .get(
+      '/v1/realms/:realmId/bans',
+      {
+        params: realmParams,
+        query: banQuery,
+        response: {
+          200: strict(banPage),
+          ...readFailures,
+          403: problemSchema('forbidden'),
+          429: problemSchema('rate_limited'),
+          503: writeFailures[503],
+        },
+        detail: {
+          operationId: 'realm.bans',
+          'x-exposure': 'public',
+          'x-action': 'realm:ban',
+          'x-rate-limit': writeRate,
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { realmId }, query, actor, admission, job }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        try {
+          return await admission.run('normal', job, () =>
+            listBans(banDependencies(), actor, realmId, { deadline: job.deadline }, query),
+          );
+        } catch (error) {
+          communityProblem(error);
+        }
       },
     );
 }

@@ -72,6 +72,22 @@ be read. A `realm_ban` denial applies to `realm:participate` even when the Realm
 current command to target that exact Realm. `updateRealm` calls it after moving the head
 when the new visibility is protected, in the same transaction as `realm.updated`.
 
+`PUT /v1/realms/{realmId}/bans/{accountId}` opens a Realm-owned ban record and
+`realm_ban` identity denials for `realm:join` and `realm:participate` at the command's T.
+`banAccount` requires `realm:ban` on that Realm. Owners and moderators carry that action.
+An existing member is removed by Accounts' native leave workflow: publish closes the
+Realm interval before release clears the account's inverse slot. The workflow is keyed
+by the ban and carries a sealed authorization restricted to `realm:ban` on that exact
+Realm, member and reservation. A non-member starts no workflow. Retrying a receipted
+ban resumes enqueueing with the same durable key.
+
+`DELETE /v1/realms/{realmId}/bans/{accountId}` requires the same action and ends both
+denials in the record's transaction. Both mutations use `Idempotency-Key`. Unban never
+restores membership. `GET /v1/realms/{realmId}/bans` requires `realm:ban` and returns
+current records ordered by account ID, with an opaque cursor bound to the Realm,
+viewer, limit and partition epoch. Denials stay on the Realm; content writes must check
+Realm participation directly, and public reads remain open.
+
 ## Cost
 
 A is Access's bounded admission and permission evaluation; C is a partition-local `runCommand`
@@ -207,3 +223,21 @@ A missing Realm, or one that is not yet active at T, has no proof.
 - Touches: one primary-key read of community.realm per given Realm, one statement per partition.
 - Bound: O(n log R) for n Realms.
 - Growth check: a fixed set of Realms read with constant rows and statements at 2048, 8192 and 32768 Realms.
+
+### Ban an account
+
+- Touches: One admission and Realm authorization; one Realm record write and two identity denial writes in the Realm partition, plus a member interval point read and, when present, one native leave workflow keyed by the ban.
+- Bound: O(1) rows and statements in the ban command, plus Access and one leave workflow; O(log R) blocks. No scan of members, bans or content.
+- Growth check: `test/community/growth-ban.test.ts`, "ban, unban and the ban list stay within their bound as Realms, bans and members grow", at 2048, 8192 and 32768 bans and members in other Realms around a fixed probe; zero sequential scans.
+
+### Unban an account
+
+- Touches: One admission and Realm authorization; one Realm record close and two identity denial closes in the Realm partition.
+- Bound: O(1) rows and statements, plus Access; O(log R) blocks. Membership is not restored.
+- Growth check: `test/community/growth-ban.test.ts`, "ban, unban and the ban list stay within their bound as Realms, bans and members grow", at 2048, 8192 and 32768 bans and members in other Realms around a fixed probe; zero sequential scans.
+
+### List current bans
+
+- Touches: One admission and Realm authorization; one current-ban keyset seek of L rows, with one lookahead row for the next cursor.
+- Bound: O(L) rows and O(1) statements, plus Access; O(log R + L) blocks. Historical intervals and other Realms do not widen the window.
+- Growth check: `test/community/growth-ban.test.ts`, "ban, unban and the ban list stay within their bound as Realms, bans and members grow", at 2048, 8192 and 32768 bans and members in other Realms around a fixed probe; zero sequential scans.

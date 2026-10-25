@@ -274,6 +274,25 @@ CREATE TABLE community.realm (
 
 
 --
+-- Name: realm_ban; Type: TABLE; Schema: community; Owner: -
+--
+
+CREATE TABLE community.realm_ban (
+    route integer NOT NULL,
+    realm_id uuid NOT NULL,
+    account_id uuid NOT NULL,
+    valid tstzrange NOT NULL,
+    reason text NOT NULL,
+    actor uuid NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT realm_ban_check CHECK ((route = ((get_byte(uuid_send(realm_id), 10) * 256) + get_byte(uuid_send(realm_id), 11)))),
+    CONSTRAINT realm_ban_reason_check CHECK ((char_length(reason) <= 1024)),
+    CONSTRAINT realm_ban_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT realm_ban_valid_check CHECK ((NOT isempty(valid)))
+);
+
+
+--
 -- Name: realm_member; Type: TABLE; Schema: community; Owner: -
 --
 
@@ -427,6 +446,14 @@ ALTER TABLE ONLY community.publication
 
 
 --
+-- Name: realm_ban realm_ban_pkey; Type: CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.realm_ban
+    ADD CONSTRAINT realm_ban_pkey PRIMARY KEY (route, realm_id, account_id, valid WITHOUT OVERLAPS);
+
+
+--
 -- Name: realm_member realm_member_pkey; Type: CONSTRAINT; Schema: community; Owner: -
 --
 
@@ -519,6 +546,13 @@ ALTER TABLE ONLY community.space_revision
 --
 
 CREATE INDEX publication_head_adopted_page ON community.publication_head USING btree (route, realm_id, published_at DESC, subject_id DESC) WHERE (verdict = 'adopt'::text);
+
+
+--
+-- Name: realm_ban_current; Type: INDEX; Schema: community; Owner: -
+--
+
+CREATE UNIQUE INDEX realm_ban_current ON community.realm_ban USING btree (route, realm_id, account_id) INCLUDE (valid) WHERE upper_inf(valid);
 
 
 --

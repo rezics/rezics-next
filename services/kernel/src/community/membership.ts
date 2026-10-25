@@ -38,12 +38,14 @@ const CLIENT_ID = 'realm-membership';
 export const REALM_MEMBERSHIP_SEAL_SCOPE = 'community.realm.membership';
 const AUTHORIZE_DEADLINE_MS = 30_000;
 
-/** Least privilege for the sealed workflow actor. Join and leave carry realm:join; adding another account carries realm:manage. */
+/** Least privilege for sealed actors: self join/leave, owner add, or a Realm-bound ban removal. */
 export function realmMembershipActorScopes(input: {
   actorAccountId: string;
   memberAccountId: string;
   role: MembershipInput['role'];
-}): readonly ['realm:join'] | readonly ['realm:manage'] {
+  removal?: boolean;
+}): readonly ['realm:join'] | readonly ['realm:manage'] | readonly ['realm:ban'] {
+  if (input.removal) return ['realm:ban'];
   if (input.role !== null && input.actorAccountId !== input.memberAccountId) return ['realm:manage'];
   return ['realm:join'];
 }
@@ -125,6 +127,7 @@ function realmRoute(realmId: string): number {
 /** Accounts owns the workflow. This adapter publishes and proves the Realm side. */
 export function createRealmMembership(config: RealmMembershipDependencies) {
   const { pool, access } = config;
+  const removals = new WeakMap<LifecycleRequest, { realmId: string; accountId: string; reservationId: string }>();
 
   async function authorize(reference: string, input: MembershipWorkInput): Promise<LifecycleRequest> {
     denyUnless(input.kind === 'membership' && input.principal.kind === 'realm');
@@ -143,6 +146,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
     const account = await withConnection(pool, (client) => readAccount(client, accountRoute, actor.accountId));
     denyUnless(account);
     const request = { actor, account, deadline: context.deadline };
+    denyUnless(input.role !== null || actor.accountId === input.memberAccountId);
     const action = actor.accountId === input.memberAccountId ? 'realm:join' : 'realm:manage';
     const check = await accessCheck(access, actor, action, { route, id: input.principal.id }, { ...request, pool });
     denyUnless(await withConnection(pool, (client) => check(client)));
@@ -235,6 +239,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
       actorAccountId: seal.accountId,
       memberAccountId: input.memberAccountId,
       role: input.role,
+      removal: seal.removal !== undefined,
     });
     if (
       seal.realmId !== input.principal.id ||
@@ -269,8 +274,11 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
       throw new GrantDeniedError();
     if (input.role === 'member' && seal.accountId === input.memberAccountId && visibility !== 'public')
       throw new GrantDeniedError();
-    if (input.role === null && seal.accountId !== input.memberAccountId) throw new GrantDeniedError();
-    return {
+    const removal = seal.removal !== undefined;
+    if (removal && (input.role !== null || input.reservationId === undefined || routeOf(seal.removal!) === null))
+      throw new GrantDeniedError();
+    if (input.role === null && seal.accountId !== input.memberAccountId && !removal) throw new GrantDeniedError();
+    const request: LifecycleRequest = {
       actor: {
         kind: 'account',
         accountId: seal.accountId,
@@ -282,6 +290,13 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
       account,
       deadline: Math.min(seal.expiresAt, Date.now() + AUTHORIZE_DEADLINE_MS),
     };
+    if (removal)
+      removals.set(request, {
+        realmId: seal.realmId,
+        accountId: seal.memberAccountId,
+        reservationId: input.reservationId!,
+      });
+    return request;
   }
 
   async function publish(
@@ -310,7 +325,16 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
     denyUnless(routeOf(input.memberAccountId) !== null);
     denyUnless(routeOf(reservation.reservationId) === routeOf(input.memberAccountId));
     denyUnless(Number.isFinite(request.deadline) && Date.now() < request.deadline);
-    const action = actor.accountId === input.memberAccountId ? 'realm:join' : 'realm:manage';
+    const removal = removals.get(request);
+    if (removal)
+      denyUnless(
+        role === null &&
+          removal.realmId === realmId &&
+          removal.accountId === input.memberAccountId &&
+          removal.reservationId === reservation.reservationId,
+      );
+    else denyUnless(role !== null || actor.accountId === input.memberAccountId);
+    const action = removal ? 'realm:ban' : actor.accountId === input.memberAccountId ? 'realm:join' : 'realm:manage';
     const commandContext = { ...request, actor, pool };
     const authorization = await accessCommandAuthorization(
       access,
@@ -443,6 +467,7 @@ type MembershipSeal = {
   memberAccountId: string;
   role: 'member' | null;
   reservationId: string | undefined;
+  removal: string | undefined;
   expiresAt: number;
 };
 
@@ -460,6 +485,7 @@ function membershipSeal(value: unknown): MembershipSeal | null {
     'memberAccountId',
     'role',
     'reservationId',
+    'removal',
     'expiresAt',
   ]);
   if (Object.keys(row).some((key) => !allowed.has(key))) return null;
@@ -494,6 +520,8 @@ function membershipSeal(value: unknown): MembershipSeal | null {
   const reservationId = row.reservationId;
   if (reservationId !== undefined && (typeof reservationId !== 'string' || routeOf(reservationId) === null))
     return null;
+  const removal = row.removal;
+  if (removal !== undefined && (typeof removal !== 'string' || routeOf(removal) === null)) return null;
   return {
     accountId,
     clientId,
@@ -505,6 +533,7 @@ function membershipSeal(value: unknown): MembershipSeal | null {
     memberAccountId,
     role: row.role,
     reservationId,
+    removal,
     expiresAt: row.expiresAt,
   };
 }

@@ -5,6 +5,7 @@ import { GrantDeniedError } from '../access/grant-commands.ts';
 import type { AccountActor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { seal, type KeyRing } from '../tokens/seal.ts';
+import { enqueueMembership } from '../access/membership-work.ts';
 import type { WorkClient } from '../work/client.ts';
 import { REALM_MEMBERSHIP_SEAL_SCOPE, readRealmMembershipInterval, realmMembershipActorScopes } from './membership.ts';
 
@@ -37,6 +38,7 @@ type JoinIntent = {
   memberAccountId: string;
   role: 'member' | null;
   reservationId?: string;
+  removal?: string;
 };
 
 function workflowId(operation: string, parts: readonly string[]): string {
@@ -63,6 +65,7 @@ function referenceFor(tokens: KeyRing, actor: AccountActor, intent: JoinIntent):
     actorAccountId: actor.accountId,
     memberAccountId: intent.memberAccountId,
     role: intent.role,
+    removal: intent.removal !== undefined,
   });
   return seal(tokens, REALM_MEMBERSHIP_SEAL_SCOPE, {
     accountId: actor.accountId,
@@ -75,6 +78,7 @@ function referenceFor(tokens: KeyRing, actor: AccountActor, intent: JoinIntent):
     memberAccountId: intent.memberAccountId,
     role: intent.role,
     ...(intent.reservationId === undefined ? {} : { reservationId: intent.reservationId }),
+    ...(intent.removal === undefined ? {} : { removal: intent.removal }),
     expiresAt: Date.now() + MEMBERSHIP_REFERENCE_TTL_MS,
   });
 }
@@ -171,6 +175,66 @@ export async function enqueueRealmLeave(
     input.tokens,
     intent,
   );
+}
+
+/** Ban removal uses the same native leave steps, with a distinct durable key for each ban.
+ * Its seal grants only realm:ban on the exact Realm, account and reservation.
+ */
+export async function enqueueRealmRemoval(
+  client: WorkClient,
+  input: {
+    tokens: KeyRing;
+    actor: AccountActor;
+    realmId: string;
+    spaceId: string;
+    memberAccountId: string;
+    reservationId: string;
+    banId: string;
+  },
+): Promise<{ workflowId: string }> {
+  if (
+    routeOf(input.realmId) === null ||
+    routeOf(input.spaceId) === null ||
+    routeOf(input.memberAccountId) === null ||
+    !input.actor.scopes.includes('realm:ban') ||
+    routeOf(input.banId) === null ||
+    routeOf(input.reservationId) !== routeOf(input.memberAccountId)
+  )
+    throw new GrantDeniedError();
+  const id = workflowId('realm:ban', [input.realmId, input.memberAccountId, input.banId]);
+  const stored = await client.getWorkflow(id);
+  if (stored) {
+    const body = Array.isArray(stored.input) ? (stored.input[0] as Record<string, unknown> | undefined) : undefined;
+    const principal = body?.principal as Record<string, unknown> | undefined;
+    if (
+      stored.workflowName !== 'accounts.membership' ||
+      body?.kind !== 'membership' ||
+      principal?.kind !== 'realm' ||
+      principal.id !== input.realmId ||
+      body.memberAccountId !== input.memberAccountId ||
+      body.role !== null ||
+      body.reservationId !== input.reservationId
+    )
+      throw new RealmMembershipConflictError();
+    return { workflowId: id };
+  }
+  const intent: JoinIntent = {
+    realmId: input.realmId,
+    spaceId: input.spaceId,
+    memberAccountId: input.memberAccountId,
+    role: null,
+    reservationId: input.reservationId,
+    removal: input.banId,
+  };
+  await enqueueMembership(client, id, {
+    kind: 'membership',
+    principal: { kind: 'realm', id: input.realmId },
+    memberAccountId: input.memberAccountId,
+    role: null,
+    reservationId: input.reservationId,
+    authorization: referenceFor(input.tokens, input.actor, intent),
+  });
+  return { workflowId: id };
 }
 
 export async function readOwnRealmMembership(
