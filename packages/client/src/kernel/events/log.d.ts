@@ -11,6 +11,10 @@ export declare const EVENT_TYPES: {
         survivor: Type.TString;
         cursor: Type.TArray<Type.TUnion<[Type.TString, Type.TInteger]>>;
     }>;
+    readonly 'com.rezics.statement.retracted.v1': Type.TObject<{
+        candidate: Type.TString;
+        revision: Type.TInteger;
+    }>;
     readonly 'com.rezics.statement.proposed.v1': Type.TObject<{
         candidate: Type.TString;
         revision: Type.TInteger;
@@ -37,6 +41,7 @@ export declare const EVENT_TYPES: {
     readonly 'com.rezics.semantic.links.changed.v1': Type.TObject<{
         subject: Type.TString;
         revision: Type.TInteger;
+        security_revision: Type.TInteger;
         changes: Type.TArray<Type.TObject<{
             property: Type.TString;
             statement: Type.TString;
@@ -349,6 +354,12 @@ export declare const EVENT_TYPES: {
     readonly 'com.rezics.library.follow.updated.v1': Type.TObject<{
         targetId: Type.TString;
     }>;
+    readonly 'com.rezics.library.entry.updated.v1': Type.TObject<{
+        subjectId: Type.TString;
+    }>;
+    readonly 'com.rezics.library.entry.deleted.v1': Type.TObject<{
+        subjectId: Type.TString;
+    }>;
     readonly 'com.rezics.library.progress_session.updated.v1': Type.TObject<{
         sessionId: Type.TString;
     }>;
@@ -357,6 +368,12 @@ export declare const EVENT_TYPES: {
     }>;
     readonly 'com.rezics.library.copy.deleted.v1': Type.TObject<{
         copyId: Type.TString;
+    }>;
+    readonly 'com.rezics.library.published_log.updated.v1': Type.TObject<{
+        logId: Type.TString;
+    }>;
+    readonly 'com.rezics.library.published_log.deleted.v1': Type.TObject<{
+        logId: Type.TString;
     }>;
     readonly 'com.rezics.definitions.published.v1': Type.TObject<{
         digest: Type.TString;
@@ -377,6 +394,12 @@ export declare const EVENT_TYPES: {
     }>;
     readonly 'com.rezics.subject.visibility_changed.v1': Type.TObject<{
         id: Type.TString;
+        visibility: Type.TUnion<[Type.TLiteral<"visible">, Type.TLiteral<"hidden">, Type.TLiteral<"taken_down">]>;
+        security_revision: Type.TInteger;
+    }>;
+    readonly 'com.rezics.subject.statement_visibility_changed.v1': Type.TObject<{
+        id: Type.TString;
+        candidate: Type.TString;
         visibility: Type.TUnion<[Type.TLiteral<"visible">, Type.TLiteral<"hidden">, Type.TLiteral<"taken_down">]>;
         security_revision: Type.TInteger;
     }>;
