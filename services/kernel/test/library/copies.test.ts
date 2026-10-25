@@ -1,0 +1,579 @@
+import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { createHash, randomUUID } from 'node:crypto';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { Value } from 'typebox/value';
+import { readAccount, type Account } from '../../src/access/account-data.ts';
+import { GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { createAccess } from '../../src/access/permission.ts';
+import { IdempotencyConflictError } from '../../src/command/command.ts';
+import { EVENT_TYPES, readBatch } from '../../src/events/log.ts';
+import { LibraryNotFoundError } from '../../src/library/command-support.ts';
+import { CopyConflictError, CopyInvalidError, createCopyCommands } from '../../src/library/copies.ts';
+import type { Copy } from '../../src/library/entry-model.ts';
+import type { AccountActor, Actor } from '../../src/request/access.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { bootstrapRelease } from '../../src/semantic/definitions.ts';
+import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
+import {
+  assertGrowth,
+  measure,
+  openGrowthDatabase,
+  type GrowthDatabase,
+  type GrowthSample,
+} from '../support/growth.ts';
+
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
+
+const route = 0x22c0;
+const updatedEvent = 'com.rezics.library.copy.updated.v1';
+const deletedEvent = 'com.rezics.library.copy.deleted.v1';
+const scopes = ['subject:read', 'copy:create', 'copy:update', 'copy:delete', 'copy:read', 'copy:list'];
+const persona = (accountId: string, permissions = scopes): AccountActor => ({
+  kind: 'account',
+  accountId,
+  scopes: permissions,
+  clientId: 'copies-test',
+  requestedBy: null,
+  authnEpoch: 1,
+});
+const owner = persona(newId(route));
+const other = persona(newId(route));
+const suspended = persona(newId(route));
+const noScope = persona(owner.accountId, ['subject:read']);
+const anonymous: Actor = { kind: 'anonymous' };
+const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(61)]]) };
+const routeKey = new Uint8Array(32).fill(67);
+let database: GrowthDatabase;
+let commands: ReturnType<typeof createCopyCommands>;
+let edition: string;
+let now = Date.parse('2026-10-26T12:00:00.000Z');
+const clock = () => new Date(now);
+const tick = () => {
+  now += 1000;
+};
+const key = () => randomUUID();
+
+type Counts = { copies: number; updated: number; deleted: number };
+
+async function subject(label: string): Promise<string> {
+  const request = key();
+  const result = await createSubject(database.pool, {
+    actor: owner,
+    target: subjectTarget(routeKey, owner.accountId, request),
+    idempotencyKey: request,
+    digest: createHash('sha256').update(request).digest(),
+    item: { type: 'schema:Book', labels: { en: label } },
+    release: { digest: bundledDigest, release: bundledRelease },
+    authorize: async () => true,
+  });
+  return result.subject.id;
+}
+
+async function snapshot(): Promise<Counts> {
+  const result = await database.admin.query<Counts>(
+    `SELECT
+       (SELECT count(*)::int FROM library.copy) AS copies,
+       (SELECT count(*)::int FROM core.outbox WHERE type = $1) AS updated,
+       (SELECT count(*)::int FROM core.outbox WHERE type = $2) AS deleted`,
+    [updatedEvent, deletedEvent],
+  );
+  return result.rows[0]!;
+}
+
+async function refusal(run: () => Promise<unknown>): Promise<Error> {
+  try {
+    await run();
+  } catch (error) {
+    expect(error).toBeInstanceOf(Error);
+    return error as Error;
+  }
+  throw new Error('expected a refusal');
+}
+
+async function denyRead(subjectId: string): Promise<void> {
+  const subjectRoute = routeOf(subjectId);
+  if (subjectRoute === null) throw new Error('Test subject must have a route');
+  await database.admin.query(
+    `INSERT INTO access.resource_denial
+       (route, resource_id, subject_id, subject_role, action, reason, valid, transaction_id)
+     VALUES ($1, $2, $3, '', 'subject:read', 'resource', '(,)'::tstzrange, $4)`,
+    [subjectRoute, subjectId, owner.accountId, randomUUID()],
+  );
+}
+
+beforeAll(async () => {
+  database = await openGrowthDatabase(databaseUrl);
+  await bootstrapRelease(database.pool, bundledRelease);
+  const accounts = new Map<string, Account>();
+  for (const actor of [owner, other, suspended]) {
+    await database.admin.query(
+      `INSERT INTO access.account
+         (route, account_id, kind, state, transaction_id, authn_fenced, minimum_authn_epoch)
+       VALUES ($1, $2, 'actor', $3, $4, false, 1)`,
+      [route, actor.accountId, actor === suspended ? 'suspended' : 'active', newId(route)],
+    );
+    accounts.set(actor.accountId, (await readAccount(database.admin, route, actor.accountId))!);
+  }
+  const access = createAccess({
+    actions: new Map([['subject:read', { anonymous: true }]]),
+    accountEvidence: (actor) => accounts.get(actor.accountId) ?? null,
+  });
+  commands = createCopyCommands({ pool: database.pool, access, tokens, clock });
+  edition = await subject('Owned edition');
+});
+
+afterAll(async () => {
+  if (database) await database.close();
+});
+
+test('an account records two private copies of one edition and changes each by revision', async () => {
+  tick();
+  const firstAt = clock().toISOString();
+  const first = await commands.createCopy(
+    owner,
+    {
+      subjectId: edition,
+      status: 'owned',
+      location: 'Study',
+      source: 'Bookshop',
+      acquiredOn: '2030-01-01',
+      note: 'First copy',
+    },
+    key(),
+  );
+  tick();
+  const secondAt = clock().toISOString();
+  const second = await commands.createCopy(owner, { subjectId: edition, status: 'ordered' }, key());
+  expect(second.value.id).not.toBe(first.value.id);
+  expect(first.replayed).toBe(false);
+  expect(first.partition).toBe(partitionOf(route));
+  expect(routeOf(first.value.id)).toBe(route);
+  expect(first.value).toMatchObject({
+    accountId: owner.accountId,
+    subjectId: edition,
+    status: 'owned',
+    location: 'Study',
+    source: 'Bookshop',
+    acquiredOn: '2030-01-01',
+    disposedOn: null,
+    note: 'First copy',
+    revision: 1,
+    createdAt: firstAt,
+    updatedAt: firstAt,
+  });
+  expect(second.value).toMatchObject({
+    accountId: owner.accountId,
+    subjectId: edition,
+    status: 'ordered',
+    location: null,
+    source: null,
+    acquiredOn: null,
+    disposedOn: null,
+    note: null,
+    revision: 1,
+    createdAt: secondAt,
+    updatedAt: secondAt,
+  });
+  expect(await commands.readCopy(owner, first.value.id)).toEqual(first.value);
+  const stored = await database.admin.query<{ route: number; account_id: string; subject_id: string }>(
+    'SELECT route, account_id, subject_id FROM library.copy WHERE copy_id = $1',
+    [first.value.id],
+  );
+  expect(stored.rows).toEqual([{ route, account_id: owner.accountId, subject_id: edition }]);
+
+  tick();
+  const changed = await commands.updateCopy(
+    owner,
+    first.value.id,
+    { revision: 1, status: 'lent', location: 'Friend', note: 'Loan' },
+    key(),
+  );
+  expect(changed.value).toMatchObject({
+    id: first.value.id,
+    subjectId: edition,
+    status: 'lent',
+    location: 'Friend',
+    source: 'Bookshop',
+    acquiredOn: '2030-01-01',
+    disposedOn: null,
+    note: 'Loan',
+    revision: 2,
+    createdAt: first.value.createdAt,
+    updatedAt: clock().toISOString(),
+  });
+  expect(await commands.readCopy(owner, second.value.id)).toEqual(second.value);
+  const before = await snapshot();
+  await expect(
+    commands.updateCopy(owner, first.value.id, { revision: 1, status: 'disposed' }, key()),
+  ).rejects.toBeInstanceOf(CopyConflictError);
+  expect(await snapshot()).toEqual(before);
+  expect(await commands.readCopy(owner, first.value.id)).toEqual(changed.value);
+
+  const removed = await commands.deleteCopy(owner, first.value.id, changed.value.revision, key());
+  expect(removed.value).toEqual(changed.value);
+  expect(removed.replayed).toBe(false);
+  await expect(commands.readCopy(owner, first.value.id)).rejects.toBeInstanceOf(LibraryNotFoundError);
+  expect(await commands.readCopy(owner, second.value.id)).toEqual(second.value);
+  const page = await commands.listCopies(owner, { limit: 100 });
+  expect(page.copies.some((copy) => copy.id === first.value.id)).toBe(false);
+  expect(page.copies.some((copy) => copy.id === second.value.id)).toBe(true);
+});
+
+test('invalid fields, unknown subjects and unreadable subjects change nothing', async () => {
+  const denied = await subject('Unreadable edition');
+  await denyRead(denied);
+  const valid = {
+    subjectId: edition,
+    status: 'owned' as const,
+    location: 'L'.repeat(200),
+    source: 'S'.repeat(200),
+    acquiredOn: '2024-02-29',
+    disposedOn: '2024-03-01',
+    note: 'n'.repeat(1000),
+  };
+  tick();
+  const created = await commands.createCopy(owner, valid, key());
+  expect(created.value).toMatchObject({
+    status: 'owned',
+    location: valid.location,
+    source: valid.source,
+    acquiredOn: '2024-02-29',
+    disposedOn: '2024-03-01',
+    note: valid.note,
+    revision: 1,
+  });
+  const before = await snapshot();
+  const rejected: unknown[] = [
+    null,
+    { status: 'owned' },
+    { ...valid, status: 'borrowed' },
+    { ...valid, status: 'Owned' },
+    { ...valid, location: 'x'.repeat(201) },
+    { ...valid, source: 's'.repeat(201) },
+    { ...valid, note: 'n'.repeat(1001) },
+    { ...valid, acquiredOn: '2030-02-29' },
+    { ...valid, acquiredOn: '2030-01-01T00:00:00.000Z' },
+    { ...valid, disposedOn: '2030-13-01' },
+    { ...valid, disposedOn: '2030-04-31' },
+    { ...valid, subjectId: 'not-a-subject' },
+    { ...valid, location: 4 },
+    { ...valid, extra: true },
+  ];
+  for (const input of rejected) {
+    await expect(commands.createCopy(owner, input, key())).rejects.toBeInstanceOf(CopyInvalidError);
+  }
+  await expect(commands.createCopy(owner, { subjectId: newId(route), status: 'owned' }, key())).rejects.toBeInstanceOf(
+    LibraryNotFoundError,
+  );
+  await expect(commands.createCopy(owner, { subjectId: denied, status: 'owned' }, key())).rejects.toBeInstanceOf(
+    LibraryNotFoundError,
+  );
+  await expect(
+    commands.updateCopy(owner, created.value.id, { revision: 1, location: 'x'.repeat(201) }, key()),
+  ).rejects.toMatchObject({ name: 'CopyInvalidError', field: 'location' });
+  await expect(
+    commands.updateCopy(owner, created.value.id, { revision: 0, status: 'lent' }, key()),
+  ).rejects.toMatchObject({ name: 'CopyInvalidError', field: 'revision' });
+  await expect(
+    commands.updateCopy(owner, created.value.id, { revision: 1, subjectId: edition }, key()),
+  ).rejects.toBeInstanceOf(CopyInvalidError);
+  await expect(commands.deleteCopy(owner, created.value.id, 1.5, key())).rejects.toMatchObject({
+    name: 'CopyInvalidError',
+    field: 'revision',
+  });
+  expect(await snapshot()).toEqual(before);
+  expect(await commands.readCopy(owner, created.value.id)).toEqual(created.value);
+});
+
+test('replays return the original copy and a reused key with a different body conflicts', async () => {
+  const request = key();
+  const input = { subjectId: edition, status: 'lent' as const, note: 'Shelf' };
+  tick();
+  const created = await commands.createCopy(owner, input, request);
+  const before = await snapshot();
+  expect(
+    await commands.createCopy(owner, { note: 'Shelf', status: 'lent', subjectId: edition }, request),
+  ).toMatchObject({
+    value: created.value,
+    replayed: true,
+  });
+  expect(await snapshot()).toEqual(before);
+  await expect(commands.createCopy(owner, { ...input, note: 'Other' }, request)).rejects.toBeInstanceOf(
+    IdempotencyConflictError,
+  );
+  expect(await commands.readCopy(owner, created.value.id)).toEqual(created.value);
+
+  const updateKey = key();
+  tick();
+  const updated = await commands.updateCopy(owner, created.value.id, { revision: 1, status: 'owned' }, updateKey);
+  const afterUpdate = await snapshot();
+  expect(await commands.updateCopy(owner, created.value.id, { status: 'owned', revision: 1 }, updateKey)).toMatchObject(
+    { value: updated.value, replayed: true },
+  );
+  expect(await snapshot()).toEqual(afterUpdate);
+  await expect(
+    commands.updateCopy(owner, created.value.id, { revision: 1, status: 'disposed' }, updateKey),
+  ).rejects.toBeInstanceOf(IdempotencyConflictError);
+  expect((await commands.readCopy(owner, created.value.id)).revision).toBe(2);
+
+  const deleteKey = key();
+  const removed = await commands.deleteCopy(owner, created.value.id, 2, deleteKey);
+  const afterDelete = await snapshot();
+  expect(await commands.deleteCopy(owner, created.value.id, 2, deleteKey)).toMatchObject({
+    value: removed.value,
+    replayed: true,
+  });
+  expect(await snapshot()).toEqual(afterDelete);
+  await expect(commands.readCopy(owner, created.value.id)).rejects.toBeInstanceOf(LibraryNotFoundError);
+});
+
+test('a stale or concurrent revision does not change the copy', async () => {
+  tick();
+  const created = await commands.createCopy(owner, { subjectId: edition, status: 'owned', note: 'Race' }, key());
+  const results = await Promise.allSettled([
+    commands.updateCopy(owner, created.value.id, { revision: 1, note: 'A' }, key()),
+    commands.updateCopy(owner, created.value.id, { revision: 1, note: 'B' }, key()),
+  ]);
+  expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+  expect(results.find((result) => result.status === 'rejected')).toMatchObject({
+    reason: { name: 'CopyConflictError' },
+  });
+  const current = await commands.readCopy(owner, created.value.id);
+  expect(current.revision).toBe(2);
+  expect(['A', 'B']).toContain(current.note);
+  const before = await snapshot();
+  await expect(commands.updateCopy(owner, created.value.id, { revision: 1, note: 'C' }, key())).rejects.toBeInstanceOf(
+    CopyConflictError,
+  );
+  await expect(commands.deleteCopy(owner, created.value.id, 1, key())).rejects.toBeInstanceOf(CopyConflictError);
+  expect(await snapshot()).toEqual(before);
+  expect(await commands.readCopy(owner, created.value.id)).toEqual(current);
+
+  tick();
+  const touched = await commands.updateCopy(owner, created.value.id, { revision: 2 }, key());
+  expect(touched.value).toMatchObject({
+    note: current.note,
+    status: 'owned',
+    revision: 3,
+    updatedAt: clock().toISOString(),
+  });
+  const cleared = await commands.updateCopy(
+    owner,
+    created.value.id,
+    { revision: 3, location: null, note: null },
+    key(),
+  );
+  expect(cleared.value.location).toBeNull();
+  expect(cleared.value.note).toBeNull();
+});
+
+test('another account, anonymous and suspended personas never read or change a copy', async () => {
+  tick();
+  const owned = await commands.createCopy(owner, { subjectId: edition, status: 'owned', note: 'Private' }, key());
+  const before = await snapshot();
+  const people: Actor[] = [anonymous, suspended, noScope];
+  const errors: Error[] = [];
+  for (const person of people) {
+    errors.push(await refusal(() => commands.createCopy(person, { subjectId: edition, status: 'owned' }, key())));
+    errors.push(await refusal(() => commands.readCopy(person, owned.value.id)));
+    errors.push(await refusal(() => commands.listCopies(person)));
+    errors.push(
+      await refusal(() => commands.updateCopy(person, owned.value.id, { revision: 1, status: 'disposed' }, key())),
+    );
+    errors.push(await refusal(() => commands.deleteCopy(person, owned.value.id, 1, key())));
+    errors.push(await refusal(() => commands.readCopy(person, 'malformed')));
+    errors.push(await refusal(() => commands.readCopy(person, newId(route))));
+  }
+  expect(errors.every((error) => error instanceof GrantDeniedError)).toBe(true);
+  expect(new Set(errors.map((error) => error.message)).size).toBe(1);
+  expect(await snapshot()).toEqual(before);
+  expect(await commands.readCopy(owner, owned.value.id)).toEqual(owned.value);
+
+  const missing = await refusal(() => commands.readCopy(other, newId(route)));
+  const foreign = await refusal(() => commands.readCopy(other, owned.value.id));
+  const malformed = await refusal(() => commands.readCopy(owner, 'not-a-copy'));
+  const foreignRoute = await refusal(() => commands.readCopy(owner, newId(0x3000)));
+  for (const error of [missing, foreign, malformed, foreignRoute]) {
+    expect(error).toBeInstanceOf(LibraryNotFoundError);
+    expect(error.message).toBe(missing.message);
+  }
+  await expect(
+    commands.updateCopy(other, owned.value.id, { revision: 1, note: 'Stolen' }, key()),
+  ).rejects.toBeInstanceOf(LibraryNotFoundError);
+  await expect(commands.deleteCopy(other, owned.value.id, 1, key())).rejects.toBeInstanceOf(LibraryNotFoundError);
+  expect(await snapshot()).toEqual(before);
+
+  tick();
+  const theirs = await commands.createCopy(other, { subjectId: edition, status: 'lent', note: 'Other' }, key());
+  expect(theirs.value.id).not.toBe(owned.value.id);
+  expect(theirs.value.accountId).toBe(other.accountId);
+  expect(await commands.readCopy(other, theirs.value.id)).toEqual(theirs.value);
+  await expect(commands.readCopy(owner, theirs.value.id)).rejects.toBeInstanceOf(LibraryNotFoundError);
+  await expect(
+    commands.updateCopy(owner, theirs.value.id, { revision: 1, note: 'Stolen' }, key()),
+  ).rejects.toBeInstanceOf(LibraryNotFoundError);
+  const ownerPage = await commands.listCopies(owner, { limit: 100 });
+  const otherPage = await commands.listCopies(other, { limit: 100 });
+  expect(ownerPage.copies.every((copy) => copy.accountId === owner.accountId)).toBe(true);
+  expect(ownerPage.copies.some((copy) => copy.id === theirs.value.id)).toBe(false);
+  expect(otherPage.copies.map((copy) => copy.id)).toEqual([theirs.value.id]);
+  expect(await commands.readCopy(other, theirs.value.id)).toEqual(theirs.value);
+});
+
+test('signed cursors page one account and stay bound to that account', async () => {
+  const trio: Copy[] = [];
+  for (const note of ['Cursor A', 'Cursor B', 'Cursor C']) {
+    tick();
+    trio.push((await commands.createCopy(owner, { subjectId: edition, status: 'owned', note }, key())).value);
+  }
+  tick();
+  const hidden = (await commands.createCopy(other, { subjectId: edition, status: 'owned', note: 'Hidden' }, key()))
+    .value;
+  const seen: string[] = [];
+  let cursor: string | null = null;
+  let finished = false;
+  for (let pageNumber = 0; pageNumber < 200; pageNumber += 1) {
+    const page = await commands.listCopies(owner, cursor === null ? { limit: 1 } : { limit: 1, cursor });
+    expect(page.copies).toHaveLength(1);
+    expect(page.copies[0]!.accountId).toBe(owner.accountId);
+    seen.push(page.copies[0]!.id);
+    if (page.next === null) {
+      finished = true;
+      break;
+    }
+    cursor = page.next;
+  }
+  expect(finished).toBe(true);
+  expect(new Set(seen).size).toBe(seen.length);
+  expect(seen.filter((id) => trio.some((copy) => copy.id === id))).toEqual(trio.map((copy) => copy.id));
+  expect(seen.includes(hidden.id)).toBe(false);
+
+  const first = await commands.listCopies(owner, { limit: 1 });
+  expect(first.next).toBeString();
+  const rest = await commands.listCopies(owner, { limit: 100, cursor: first.next! });
+  expect(rest.copies.some((copy) => copy.id === first.copies[0]!.id)).toBe(false);
+  expect(rest.copies.length + 1).toBe(seen.length);
+  await expect(commands.listCopies(other, { cursor: first.next! })).rejects.toMatchObject({ code: 'invalid_cursor' });
+  await expect(commands.listCopies(owner, { cursor: `${first.next!}x` })).rejects.toMatchObject({
+    code: 'invalid_cursor',
+  });
+  for (const limit of [0, 101, -1, 1.5]) {
+    await expect(commands.listCopies(owner, { limit })).rejects.toMatchObject({
+      name: 'CopyInvalidError',
+      field: 'limit',
+    });
+  }
+  const wide = await commands.listCopies(owner, { limit: 100 });
+  expect(wide.copies.length).toBeLessThanOrEqual(100);
+  expect(wide.copies.length).toBe(seen.length);
+});
+
+test('events are closed, ID-only, and use the account as their subject in its partition', async () => {
+  const updated = EVENT_TYPES[updatedEvent];
+  const deleted = EVENT_TYPES[deletedEvent];
+  expect(Value.Check(updated, { copyId: newId(route) })).toBe(true);
+  expect(Value.Check(deleted, { copyId: newId(route) })).toBe(true);
+  expect(Value.Check(updated, { copyId: newId(route), note: 'Shelf' })).toBe(false);
+  expect(Value.Check(deleted, { copyId: newId(route), subjectId: edition })).toBe(false);
+  expect(Value.Check(updated, { subjectId: edition })).toBe(false);
+
+  tick();
+  const created = await commands.createCopy(owner, { subjectId: edition, status: 'disposed', note: 'Secret' }, key());
+  tick();
+  await commands.updateCopy(owner, created.value.id, { revision: 1, disposedOn: '2030-02-02' }, key());
+  await commands.deleteCopy(owner, created.value.id, 2, key());
+  const rows = await database.admin.query<{
+    partition_no: number;
+    type: string;
+    subject: string;
+    data: Record<string, unknown>;
+  }>(
+    `SELECT partition_no, type, subject, data
+     FROM core.outbox
+     WHERE data->>'copyId' = $1
+     ORDER BY position, event_seq`,
+    [created.value.id],
+  );
+  expect(rows.rows.map((row) => row.type)).toEqual([updatedEvent, updatedEvent, deletedEvent]);
+  for (const row of rows.rows) {
+    expect(row.partition_no).toBe(partitionOf(route));
+    expect(row.subject).toBe(owner.accountId);
+    expect(Object.keys(row.data)).toEqual(['copyId']);
+    expect(JSON.stringify(row.data)).not.toContain('Secret');
+  }
+  const batch = await readBatch(database.pool, {
+    consumer: 'copy_commands',
+    partition: partitionOf(route),
+    apply: async () => {},
+  });
+  expect(batch.status).toBe('read');
+});
+
+test('statement counts stay equal at three scales of unrelated copies', async () => {
+  tick();
+  const stable = (await commands.createCopy(owner, { subjectId: edition, status: 'owned', note: 'Stable' }, key()))
+    .value;
+  const scales = [1, 8, 64] as const;
+  const createSamples: GrowthSample[] = [];
+  const updateSamples: GrowthSample[] = [];
+  const pageSamples: GrowthSample[] = [];
+  let previous = 0;
+  let revision = stable.revision;
+  for (const scale of scales) {
+    await database.admin.query(
+      `INSERT INTO library.copy
+         (route, copy_id, account_id, subject_id, status, location, source, acquired_on, disposed_on, note, revision,
+          created_at, updated_at, transaction_id)
+       SELECT $1, copy_id, $2, $3, 'owned', NULL, NULL, NULL, NULL, NULL, 1, $4, $4, $5
+       FROM unnest($6::uuid[]) AS copy_id`,
+      [
+        route,
+        other.accountId,
+        edition,
+        '2020-01-01T00:00:00.000Z',
+        newId(route),
+        Array.from({ length: scale - previous }, () => newId(route)),
+      ],
+    );
+    const created = await measure(database, () =>
+      commands.createCopy(owner, { subjectId: edition, status: 'ordered' }, key()),
+    );
+    const updated = await measure(database, () =>
+      commands.updateCopy(owner, stable.id, { revision, note: `Scale ${scale}` }, key()),
+    );
+    const page = await measure(database, () => commands.listCopies(owner, { limit: 1 }));
+    expect(created.value.value.accountId).toBe(owner.accountId);
+    expect(created.value.replayed).toBe(false);
+    expect(updated.value.value.revision).toBe(revision + 1);
+    expect(page.value.copies).toHaveLength(1);
+    expect(page.value.copies[0]!.accountId).toBe(owner.accountId);
+    for (const sample of [created, updated, page]) {
+      expect(sample.cost.statements).toBeGreaterThan(0);
+      expect(sample.cost.relations?.['library.copy']?.sequentialScans ?? 0).toBe(0);
+    }
+    createSamples.push({ scale, cost: created.cost });
+    updateSamples.push({ scale, cost: updated.cost });
+    pageSamples.push({ scale, cost: page.cost });
+    previous = scale;
+    revision = updated.value.value.revision;
+  }
+  expect(createSamples.map((sample) => sample.cost.statements)).toEqual([
+    createSamples[0]!.cost.statements,
+    createSamples[0]!.cost.statements,
+    createSamples[0]!.cost.statements,
+  ]);
+  expect(updateSamples.map((sample) => sample.cost.statements)).toEqual([
+    updateSamples[0]!.cost.statements,
+    updateSamples[0]!.cost.statements,
+    updateSamples[0]!.cost.statements,
+  ]);
+  expect(pageSamples.map((sample) => sample.cost.statements)).toEqual([
+    pageSamples[0]!.cost.statements,
+    pageSamples[0]!.cost.statements,
+    pageSamples[0]!.cost.statements,
+  ]);
+  for (const samples of [createSamples, updateSamples, pageSamples]) {
+    assertGrowth(samples, { statements: 'constant', rows: 'constant', blocks: 'logarithmic' });
+  }
+}, 120_000);
