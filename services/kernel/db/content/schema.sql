@@ -302,7 +302,9 @@ CREATE TABLE content.board (
     security_revision bigint NOT NULL,
     recorded_transaction_id uuid NOT NULL,
     created_at timestamp with time zone DEFAULT transaction_timestamp() NOT NULL,
+    realm_id uuid,
     CONSTRAINT board_check CHECK ((route = ((get_byte(uuid_send(board_id), 10) * 256) + get_byte(uuid_send(board_id), 11)))),
+    CONSTRAINT board_realm_id_routed_check CHECK (((realm_id IS NULL) OR (((realm_id)::text ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text) AND (route = ((get_byte(uuid_send(realm_id), 10) * 256) + get_byte(uuid_send(realm_id), 11)))))),
     CONSTRAINT board_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT board_security_revision_check CHECK ((security_revision > 0)),
     CONSTRAINT board_title_size CHECK (((char_length(title) >= 1) AND (char_length(title) <= 1024))),
@@ -651,6 +653,14 @@ ALTER TABLE ONLY content.board
 
 
 --
+-- Name: board board_realm_subject_unique; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.board
+    ADD CONSTRAINT board_realm_subject_unique UNIQUE (route, realm_id, subject_id);
+
+
+--
 -- Name: board_thread board_thread_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -771,6 +781,13 @@ ALTER TABLE ONLY content.thread
 
 
 --
+-- Name: board_realm_page; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX board_realm_page ON content.board USING btree (route, realm_id, board_id DESC) WHERE (realm_id IS NOT NULL);
+
+
+--
 -- Name: board_thread_page_idx; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -838,7 +855,7 @@ CREATE INDEX revision_post_page_idx ON content.revision USING btree (route, post
 -- Name: board board_identity; Type: TRIGGER; Schema: content; Owner: -
 --
 
-CREATE TRIGGER board_identity BEFORE UPDATE ON content.board FOR EACH ROW EXECUTE FUNCTION content.guard_identity('route', 'board_id', 'subject_id', 'created_at');
+CREATE TRIGGER board_identity BEFORE UPDATE ON content.board FOR EACH ROW EXECUTE FUNCTION content.guard_identity('route', 'board_id', 'realm_id', 'subject_id', 'created_at');
 
 
 --
@@ -909,6 +926,14 @@ CREATE TRIGGER source_fence_identity BEFORE DELETE OR UPDATE ON content.source_f
 --
 
 CREATE TRIGGER thread_identity BEFORE UPDATE ON content.thread FOR EACH ROW EXECUTE FUNCTION content.guard_identity('route', 'thread_id', 'author_account_id', 'created_at');
+
+
+--
+-- Name: board board_realm_fk; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.board
+    ADD CONSTRAINT board_realm_fk FOREIGN KEY (route, realm_id) REFERENCES community.realm(route, realm_id);
 
 
 --

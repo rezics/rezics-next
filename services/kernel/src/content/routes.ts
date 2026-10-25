@@ -1,4 +1,4 @@
-import { listBoardThreads, type ContentBoardDependencies } from './boards.ts';
+import { listBoardThreads, listRealmBoards, readRealmBoard, type ContentBoardDependencies } from './boards.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import { GrantDeniedError } from '../access/grant-commands.ts';
@@ -11,6 +11,8 @@ import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
 import { AuthenticationError, type Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
+import { createBoard, BoardCreationConflictError, BoardCreationInputError } from './board-create.ts';
+import { applyBoardCandidate } from './board-projection.ts';
 import { sourceFenceRoutes } from './source-fence-routes.ts';
 import { mediaModerationRoutes } from './media-moderation-routes.ts';
 import {
@@ -32,7 +34,6 @@ import {
   ContentNotFoundError as ReadNotFoundError,
   listPostRevisions,
   listThreadPosts,
-  readBoard,
   readPost,
   readThread,
   type ThreadView,
@@ -40,6 +41,7 @@ import {
 } from './reads.ts';
 import {
   BoardResponseSchema,
+  BoardViewSchema,
   BoardThreadsQuerySchema,
   BoardThreadsResponseSchema,
   ContentPageQuerySchema,
@@ -98,6 +100,26 @@ const revisionInput = strictContentSchema(RevisionInputSchema);
 const threadResponse = strictContentSchema(ThreadResponseSchema);
 const postResponse = strictContentSchema(PostResponseSchema);
 const boardResponse = strictContentSchema(BoardResponseSchema);
+const realmBoardsQuery = t.Object(
+  {
+    cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
+    limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1 })),
+  },
+  { additionalProperties: false },
+);
+const realmBoardsResponse = t.Object(
+  { items: t.Array(BoardViewSchema, { maxItems: 100 }), next: t.Union([t.String(), t.Null()]) },
+  { additionalProperties: false },
+);
+const boardCreateInput = t.Object(
+  {
+    conceptId: t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' }),
+    title: t.String({ minLength: 1, maxLength: 1024 }),
+    visibility: t.Union([t.Literal('published'), t.Literal('protected'), t.Literal('draft')]),
+  },
+  { additionalProperties: false },
+);
+const boardCreateBody = strictContentSchema(boardCreateInput);
 const boardThreadsQuery = strictContentSchema(BoardThreadsQuerySchema);
 const boardThreadsResponse = strictContentSchema(BoardThreadsResponseSchema);
 const postPageResponse = strictContentSchema(PostPageResponseSchema);
@@ -151,6 +173,8 @@ async function contentOperation<T>(operation: () => Promise<T>): Promise<T> {
       throw new ProblemError('not_found');
     if (error instanceof ContentForbiddenError || error instanceof GrantDeniedError)
       throw new ProblemError('forbidden');
+    if (error instanceof BoardCreationInputError) throw new ProblemError('invalid_request');
+    if (error instanceof BoardCreationConflictError) throw new ProblemError('conflict');
     if (
       error instanceof TypeError &&
       (error.message === 'Invalid content cursor' || error.message === 'Invalid reaction kind')
@@ -226,6 +250,72 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
     dependencies,
   )
     .post(
+      '/v1/realms/:realmId/boards',
+      {
+        params: t.Object({ realmId: t.String() }, { additionalProperties: false }),
+        parse: [parseBody, 'json'],
+        transform: rejectOversized,
+        headers: commandHeaders,
+        body: boardCreateBody,
+        response: {
+          201: withHeaders(boardResponse, { ...sessionHeader, location: t.String() }),
+          ...writeFailures,
+          409: problemSchema('conflict'),
+        },
+        detail: {
+          operationId: 'board.create',
+          'x-exposure': 'public',
+          'x-action': 'board:create',
+          'x-rate-limit': writeRate,
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { realmId }, actor, body, request, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        existingId(realmId);
+        const context = requestContext(request, job.deadline);
+        return contentOperation(() =>
+          admission.run('normal', job, async () => {
+            const result = await createBoard(dependencies, actor, { realmId, ...body }, context);
+            const board = await readRealmBoard(dependencies, result.value.boardId, {
+              actor,
+              deadline: job.deadline,
+            });
+            if (!board.value) throw new ProblemError('not_found');
+            session.record(result);
+            session.record(sessionComponent(board.anchor));
+            set.status = 201;
+            set.headers.location = `/v1/boards/${result.value.boardId}`;
+            return { board: board.value };
+          }),
+        );
+      },
+    )
+    .get(
+      '/v1/realms/:realmId/boards',
+      {
+        params: t.Object({ realmId: t.String() }, { additionalProperties: false }),
+        query: realmBoardsQuery,
+        response: { 200: withHeaders(realmBoardsResponse, sessionHeader), ...readFailures },
+        detail: {
+          operationId: 'board.list',
+          'x-exposure': 'public',
+          'x-action': 'realm:read',
+          security: readSecurity,
+        },
+      },
+      async ({ params: { realmId }, query, actor, admission, job, session }) => {
+        existingId(realmId);
+        return contentOperation(() =>
+          admission.run('normal', job, async () => {
+            const page = await listRealmBoards(dependencies, realmId, { actor, deadline: job.deadline }, query);
+            for (const anchor of page.anchors) session.record(sessionComponent(anchor));
+            return { items: [...page.items], next: page.next };
+          }),
+        );
+      },
+    )
+    .post(
       '/v1/threads',
       {
         parse: [parseBody, 'json'],
@@ -253,6 +343,13 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             const readContext = { actor, deadline: job.deadline };
             const thread = await readThread(dependencies, result.value.threadId, readContext);
             if (!thread.value) throw new ProblemError('not_found');
+            await applyBoardCandidate(dependencies.pool, {
+              id: thread.value.id,
+              boardId: thread.value.boardId,
+              createdAt: thread.value.createdAt,
+              epoch: thread.anchor.epoch,
+              position: thread.anchor.position,
+            });
             const post = await exactPost(
               result.value.threadId,
               result.value.itemId,
@@ -541,7 +638,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         existingId(id);
         return contentOperation(() =>
           admission.run('normal', job, async () => {
-            const result = await readBoard(dependencies, id, { actor, deadline: job.deadline });
+            const result = await readRealmBoard(dependencies, id, { actor, deadline: job.deadline });
             if (!result.value) throw new ProblemError('not_found');
             session.record(sessionComponent(result.anchor));
             return { board: result.value };

@@ -1,11 +1,11 @@
 {
   "roles": {
-    "community.realm.owner": ["realm:read", "realm:manage", "realm:publish", "access:grant"],
-    "community.realm.moderator": ["realm:read", "realm:publish"],
+    "community.realm.owner": ["realm:read", "realm:manage", "realm:publish", "board:create", "access:grant"],
+    "community.realm.moderator": ["realm:read", "realm:publish", "board:create"],
     "community.space.owner": ["space:read", "space:manage"],
     "community.space.standing": ["space:read"],
-    "content.board.owner": ["board:read", "board:manage", "thread:create"],
-    "content.board.standing": ["thread:create", "report:create"],
+    "content.board.owner": ["board:read", "thread:create"],
+    "content.board.standing": ["thread:create"],
     "content.thread.owner": ["thread:read", "post:create", "media:create"],
     "content.thread.standing": ["post:create", "media:create", "report:create", "reaction:set"],
     "content.post.owner": ["post:read", "post:revise", "post:erase", "media:create"],
@@ -36,7 +36,7 @@
     },
     "content.post": {
       "owner": "content.post.owner",
-      "standing": ["content.post.standing"]
+      "standing": []
     },
     "content.media": {
       "owner": "content.media.owner",
