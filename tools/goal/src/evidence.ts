@@ -19,7 +19,7 @@ export function evidenceBundle(task: Task, attempt: Attempt, failure: FirstFailu
     diff += `\n${patch.stdout}`;
   }
   writeFileSync(join(directory, 'diff.patch'), diff);
-  writeFileSync(join(directory, 'failure.json'), JSON.stringify(failure, null, 2));
+  writeFileSync(join(directory, 'failure.json'), JSON.stringify(failure ?? (attempt.failureKind ? { kind: attempt.failureKind, detail: (attempt.blocker ?? attempt.result).slice(0, 4000) } : null), null, 2));
   writeFileSync(join(directory, 'approaches.json'), JSON.stringify(attempt.approaches, null, 2));
   return directory;
 }

@@ -1,8 +1,22 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { existsSync, readFileSync, mkdirSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import defaults from '../defaults.json';
 import type { Pool, Settings } from './types.ts';
+
+import type { Database } from 'bun:sqlite';
+import { openDb } from './db.ts';
+import { WorkerStore } from './store.ts';
+import { WorkerTasks } from './tasks.ts';
+import { WorkerJob } from './job.ts';
+import { SqliteLandingQueue } from './land.ts';
+import { SqliteManagerInbox } from './inbox.ts';
+import { MergeTrain, type TrainOptions } from './merge-train.ts';
+import { gateRunner, type GateRunner } from './merge.ts';
+import { completionChecker } from './completion.ts';
+import { TermspacesWindows } from './windows.ts';
+import type { IntegrationRuntime } from './integration-cli.ts';
+import type { ManagerServices, ManagerSpec } from './managers.ts';
 
 export type SettingsOptions = { cwd?: string; env?: NodeJS.ProcessEnv; localFile?: string };
 function object(value: unknown, label: string): Record<string, unknown> {
@@ -36,7 +50,7 @@ export function loadSettings(options: SettingsOptions = {}): Settings {
   const localFile = resolve(cwd, options.localFile ?? env.GOAL_LOCAL_CONFIG ?? join(initialMain, '.temp/goal/local.json'));
   const local = existsSync(localFile) ? object(JSON.parse(readFileSync(localFile, 'utf8')), 'local settings') : {};
   keys(local, ['version', 'mainCheckout', 'stateDirectory', 'worktreeRoot', 'databasePath', 'mainBranch', 'branchPrefix',
-    'terminationGraceMs', 'codex', 'routingFile', 'riskAreasFile', 'integration', 'pools'], 'settings');
+    'terminationGraceMs', 'gate', 'codex', 'routingFile', 'riskAreasFile', 'integration', 'pools'], 'settings');
   if (local.version !== undefined && local.version !== 1) throw new Error('unsupported local settings version');
   const main = resolve(dirname(localFile), env.GOAL_MAIN_CHECKOUT ?? String(local.mainCheckout ?? initialMain));
   // Keeping credentials and account policy untracked is checked even for an explicitly selected file.
@@ -45,7 +59,11 @@ export function loadSettings(options: SettingsOptions = {}): Settings {
   const path = (value: unknown, fallback: string, variable?: string) => resolve(main, variable ?? (value === undefined ? fallback : text(value, 'path')));
   const stateDirectory = path(local.stateDirectory, '.temp/goal', env.GOAL_STATE_DIRECTORY);
   const integration: Record<string, unknown> = { ...defaults.integration, ...object(local.integration ?? {}, 'integration') };
-  keys(integration, [...Object.keys(defaults.integration), 'managerDirectory', 'inboxDirectory'], 'integration');
+  keys(integration, [...Object.keys(defaults.integration), 'managerDirectory', 'inboxDirectory', 'managerSocket', 'tmuxSocket'], 'integration');
+  const managerLimits = { ...defaults.integration.managerLimits, ...object(integration.managerLimits, 'managerLimits') };
+  keys(managerLimits, Object.keys(defaults.integration.managerLimits), 'managerLimits');
+  const gate = local.gate ?? defaults.gate;
+  if (!Array.isArray(gate) || !gate.length || gate.some(item => typeof item !== 'string' || !item)) throw new Error('gate must be a command array');
   const codex: Record<string, unknown> = { ...defaults.codex, ...object(local.codex ?? {}, 'codex') };
   keys(codex, Object.keys(defaults.codex), 'codex');
   const compact = { ...defaults.codex.compactTokens, ...object(codex.compactTokens, 'compactTokens') };
@@ -80,12 +98,17 @@ export function loadSettings(options: SettingsOptions = {}): Settings {
     databasePath: path(local.databasePath, join(stateDirectory, 'goal.sqlite'), env.GOAL_DATABASE_PATH), localFile,
     mainBranch: text(local.mainBranch ?? defaults.mainBranch, 'mainBranch'), branchPrefix: text(local.branchPrefix ?? defaults.branchPrefix, 'branchPrefix'),
     routingFile: path(local.routingFile, join(import.meta.dir, '../routing.json')),
-    riskAreasFile: path(local.riskAreasFile, join(import.meta.dir, '../risk-areas.json')), pools,
+    gate: gate as string[], riskAreasFile: path(local.riskAreasFile, join(import.meta.dir, '../risk-areas.json')), pools,
     terminationGraceMs: positive(local.terminationGraceMs ?? defaults.terminationGraceMs, 'terminationGraceMs', true),
     codex: { serviceTier: text(env.GOAL_CODEX_SERVICE_TIER ?? codex.serviceTier, 'serviceTier'),
       compactTokens: { sol: positive(compact.sol, 'compactTokens.sol'), luna: positive(compact.luna, 'compactTokens.luna') },
       solContextWindow: positive(codex.solContextWindow, 'solContextWindow'), toolOutputTokens: positive(codex.toolOutputTokens, 'toolOutputTokens') },
     integration: {
+      managerSocket: path(integration.managerSocket, join(stateDirectory, 'manager.sock')),
+      tmuxSocket: path(integration.tmuxSocket, join(stateDirectory, 'tmux.sock')),
+      termspacesCommand: text(integration.termspacesCommand, 'termspacesCommand'),
+      supermanager: text(integration.supermanager, 'supermanager'),
+      managerLimits: { turns: positive(managerLimits.turns, 'managerLimits.turns'), turnsWithoutDecision: positive(managerLimits.turnsWithoutDecision, 'managerLimits.turnsWithoutDecision'), wallMs: positive(managerLimits.wallMs, 'managerLimits.wallMs') },
       gateConcurrency: positive(integration.gateConcurrency, 'gateConcurrency'), gateTimeoutMs: positive(integration.gateTimeoutMs, 'gateTimeoutMs'),
       managerDirectory: path(integration.managerDirectory, join(stateDirectory, 'managers')),
       inboxDirectory: path(integration.inboxDirectory, join(stateDirectory, 'inboxes')),
@@ -93,4 +116,76 @@ export function loadSettings(options: SettingsOptions = {}): Settings {
       managerCompactTokens: positive(integration.managerCompactTokens, 'managerCompactTokens'),
     },
   };
+}
+
+
+export type Runtime = IntegrationRuntime & {
+  settings: Settings; store: WorkerStore; tasks: WorkerTasks; job: WorkerJob;
+  queue: SqliteLandingQueue; inbox: SqliteManagerInbox; train: MergeTrain;
+  pump(): Promise<void>; drain(): Promise<void>; close(): void;
+};
+export type RuntimeOptions = {
+  settings?: Settings; db?: Database; tasks?: WorkerTasks; runGate?: GateRunner;
+  managerServices?: Partial<ManagerServices>;
+  train?: Pick<TrainOptions, 'merge' | 'beforeRelease'>;
+};
+
+/** The only production composition: every module shares this database connection and worker fence. */
+export function createRuntime(options: RuntimeOptions = {}): Runtime {
+  const settings = options.settings ?? options.tasks?.settings ?? loadSettings();
+  mkdirSync(dirname(settings.databasePath), { recursive: true });
+  const db = options.db ?? options.tasks?.store.db ?? openDb(settings.databasePath);
+  if (options.tasks && options.tasks.store.db !== db) throw new Error('Runtime modules must share one database connection');
+  const store = options.tasks?.store ?? new WorkerStore(db);
+  const tasks = options.tasks ?? new WorkerTasks(settings, store);
+  const queue = new SqliteLandingQueue(db, store);
+  const inbox = new SqliteManagerInbox(db, settings.integration.inboxDirectory);
+  const execute = gateRunner(settings.integration.gateTimeoutMs);
+  const runGate: GateRunner = options.runGate ?? (async (argv, cwd, log) => {
+    const baseline = await execute(settings.gate, cwd, log);
+    if (!baseline.passed || JSON.stringify(argv) === JSON.stringify(settings.gate)) return baseline;
+    return execute(argv, cwd, log);
+  });
+  let train!: MergeTrain;
+  const pump = () => train.run(true);
+  const job = new WorkerJob(tasks, queue, inbox, undefined, pump);
+  train = new MergeTrain({ mainCheckout: settings.mainCheckout, stateDirectory: settings.stateDirectory,
+    worktreeRoot: settings.worktreeRoot, mainBranch: settings.mainBranch, queue, fence: store, sink: job,
+    runGate, gateIdentity: JSON.stringify(settings.gate), ...options.train });
+  const landing: IntegrationRuntime['landing'] = taskId => {
+    const task = store.task(taskId), ref = { taskId, attempt: task.currentAttempt };
+    store.assertCurrent(ref);
+    return { ...ref, branch: task.branch, worktree: task.worktree, declaredPaths: task.brief.paths, gate: task.brief.acceptance.command };
+  };
+  const checkCompletion = completionChecker({ ...settings, runGate,
+    condition(goal) { return { taskIds: store.tasks().filter(task => task.brief.goal === goal).map(task => task.id), gate: settings.gate }; },
+    async mergedTasks(goal) { return new Set(store.tasks().filter(task => task.brief.goal === goal && task.state === 'merged').map(task => task.id)); },
+  });
+  const command = ['env', `GOAL_MAIN_CHECKOUT=${settings.mainCheckout}`, `GOAL_LOCAL_CONFIG=${settings.localFile}`,
+    `GOAL_STATE_DIRECTORY=${settings.stateDirectory}`, `GOAL_DATABASE_PATH=${settings.databasePath}`, `GOAL_WORKTREE_ROOT=${settings.worktreeRoot}`,
+    process.execPath, join(import.meta.dir, 'cli.ts')];
+  const managerServices: ManagerServices = {
+    command, checkCompletion,
+    windows: new TermspacesWindows({ socket: settings.integration.tmuxSocket, session: settings.integration.tmuxSession,
+      tmuxCommand: settings.integration.tmuxCommand, termspacesCommand: settings.integration.termspacesCommand }),
+    ...options.managerServices,
+  };
+  const manager = (goal: string, engine: 'codex' | 'claude', budget: number): ManagerSpec => {
+    const file = join(settings.integration.managerDirectory, `${encodeURIComponent(goal)}.json`);
+    const local = existsSync(file) ? object(JSON.parse(readFileSync(file, 'utf8')), 'manager') : {};
+    const pool = settings.pools.find(p => p.cli === engine && (local.pool ? p.name === local.pool : p.classes.includes('manager')));
+    if (!pool) throw new Error(`Configure a local ${engine} manager pool`);
+    const scoped = store.tasks().filter(task => task.brief.goal === goal);
+    const limits = { ...settings.integration.managerLimits, ...object(local.limits ?? {}, 'manager limits') };
+    return { id: goal, goal, engine, budget, cwd: settings.mainCheckout,
+      pool: { id: pool.name, codexHome: pool.configDirectory, executable: pool.command },
+      objective: text(local.objective ?? `Complete Goal ${goal}`, 'manager objective'),
+      brief: text(local.brief ?? scoped.map(task => task.brief.markdown).join('\n\n'), 'manager brief'),
+      compactTokens: settings.integration.managerCompactTokens, effort: (local.effort ?? 'high') as ManagerSpec['effort'], supermanager: text(local.supermanager ?? settings.integration.supermanager, 'supermanager'),
+      limits: { turns: positive(limits.turns, 'turns'), turnsWithoutDecision: positive(limits.turnsWithoutDecision, 'turnsWithoutDecision'), wallMs: positive(limits.wallMs, 'wallMs') },
+    };
+  };
+  return { db, ...settings, settings, store, tasks, job, queue, inbox, train, fence: store, sink: job,
+    managerSocket: settings.integration.managerSocket, managerServices, landing, manager, pump,
+    async drain() { await pump(); await job.drain(); }, close() { db.close(); } };
 }

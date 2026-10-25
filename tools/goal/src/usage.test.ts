@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { choosePool, burnPerHour } from './allowance.ts';
 import { parseCodexUsage } from './usage.ts';
-import { fixturePool, reading } from './worker-test-support.ts';
+import { fixturePool, reading } from './test-support.ts';
 const profile = { cli: 'codex', model: 'gpt-6-luna', effort: 'high', poolClass: 'codex' } as const;
 test('quota readings normalize reset windows and pool selection respects local reserves, freshness and shared allowance', () => {
   const pool = fixturePool();

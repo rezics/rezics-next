@@ -3,21 +3,21 @@ import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { GateOutcome, ManagerEvent } from './contracts.ts';
 import { WorkerJob } from './job.ts';
-import { harness } from './worker-test-support.ts';
+import { harness } from './test-support.ts';
 import { launchCommand, workerEnvironment } from './launch.ts';
-import { fixturePool } from './worker-test-support.ts';
+import { fixturePool } from './test-support.ts';
 
 const noCommit = `#!/usr/bin/env bun
 console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'BLOCKER: fixing the declared assertion'}}));
 console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_tokens:2}}));
 `;
-const cases: { name: string; expected: string; change?: Partial<GateOutcome>; prepare?: 'repeated' | 'round' | 'stall' | 'consulted' | 'early'; manager?: boolean }[] = [
+const cases: { name: string; expected: string; fact?: 'spec-conflict'; change?: Partial<GateOutcome>; prepare?: 'repeated' | 'round' | 'stall' | 'consulted' | 'early'; manager?: boolean }[] = [
   { name: 'setup failure', expected: 'environment', change: { stage: 'setup' } },
   { name: 'test also fails on main', expected: 'environment', change: { failsOnMain: true } },
   { name: 'timeout', expected: 'environment', change: { timedOut: true } },
   { name: 'new assertion', expected: 'new-failure' },
   { name: 'same first assertion', expected: 'repeated-assertion', prepare: 'repeated' },
-  { name: 'specification conflict', expected: 'spec-conflict', change: { firstFailure: { fingerprint: 'conflict', assertion: 'SPEC_CONFLICT: acceptance contradicts contract', excerpt: 'proof' } }, manager: true },
+  { name: 'specification conflict', expected: 'spec-conflict', fact: 'spec-conflict', manager: true },
   { name: 'scope stage', expected: 'scope-growth', change: { stage: 'scope' }, manager: true },
   { name: 'undeclared file', expected: 'scope-growth', change: { changedFiles: ['outside.ts'] }, manager: true },
   { name: 'estimate exceeded', expected: 'scope-growth', change: { diffLines: 101 }, manager: true },
@@ -35,6 +35,7 @@ for (const item of cases) test(`recorded gate outcome: ${item.name}`, async () =
     });
     await job.start(task.id);
     const ref = { taskId: task.id, attempt: 1 };
+    if (item.fact) h.store.updateAttempt(ref, a => { a.failureKind = item.fact!; });
     if (item.prepare === 'repeated') h.store.updateAttempt(ref, a => { a.previousFailure = 'assertion'; a.fixRound = 1; });
     if (item.prepare === 'round') h.store.updateAttempt(ref, a => { a.fixRound = 2; });
     if (item.prepare === 'consulted') h.store.updateAttempt(ref, a => { a.consulted = true; });
@@ -66,8 +67,9 @@ test('pool exhaustion retries on another locally allowed pool without changing m
     const pool = h.settings.pools[0]!; h.settings.pools.push({ ...pool, name: 'other', allowanceKey: 'other' });
     const task = h.tasks.dispatch(h.briefFile), job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
     await job.start(task.id);
+    h.store.updateAttempt({ taskId: task.id, attempt: 1 }, a => { a.failureKind = 'pool-exhausted'; });
     job.onGateOutcome({ taskId: task.id, attempt: 1, passed: false, stage: 'gate', logPath: 'fixture', hostMs: 0, changedFiles: [], diffLines: 0,
-      firstFailure: { fingerprint: 'quota_exhausted', assertion: 'quota unavailable', excerpt: 'retry elsewhere' } });
+      firstFailure: { fingerprint: 'provider-failure', assertion: 'quota unavailable', excerpt: 'retry elsewhere' } });
     await job.drain();
     const first = h.store.attempt({ taskId: task.id, attempt: 1 }), next = h.store.attempt({ taskId: task.id, attempt: 2 });
     expect(next.pool).not.toBe(first.pool); expect(next.profile).toEqual(first.profile); expect(next.fixRound).toBe(0);

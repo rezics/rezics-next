@@ -49,3 +49,17 @@ test('wait cancellation closes the watcher and never consumes future events', as
     expect(s.inbox.pending('manager')).toHaveLength(1);
   } finally { s.close(); }
 });
+
+test('delivery inside a shared write transaction signals only after commit', async () => {
+  const t = temporaryDirectory(); const db = openDb(join(t.path, 'state.sqlite'));
+  const inbox = new SqliteManagerInbox(db, t.path);
+  try {
+    const { existsSync } = await import('node:fs');
+    db.transaction(() => {
+      inbox.deliver({ managerId: 'manager', kind: 'instruction', summary: 'A committed decision' });
+      expect(existsSync(inbox.signalPath('manager'))).toBe(false);
+    }).immediate();
+    await Promise.resolve();
+    expect(existsSync(inbox.signalPath('manager'))).toBe(true); expect(inbox.pending('manager')).toHaveLength(1);
+  } finally { db.close(); t.close(); }
+});

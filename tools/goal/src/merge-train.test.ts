@@ -13,7 +13,7 @@ function setup() {
   const repo = repository();
   const db = openDb(join(repo.path, 'state.sqlite'));
   let current = 1;
-  const fence: AttemptFence = { assertCurrent(ref) { if (current !== ref.attempt) throw new StaleAttemptError(ref, current); } };
+  const fence: AttemptFence = { assertCurrent(ref) { if (current !== ref.attempt) throw new StaleAttemptError(ref, current); }, commitMerge(ref, merge) { return db.transaction(() => { fence.assertCurrent(ref); return merge(); }).immediate(); } };
   const queue = new SqliteLandingQueue(db, fence);
   const outcomes: GateOutcome[] = [];
   return { ...repo, db, queue, fence, outcomes, stale() { current++; },
@@ -83,8 +83,7 @@ describe('sequential integration', () => {
         await new MergeTrain({ ...s.options, runGate: async () => {
           s.stale(); return { passed: true, output: '', timedOut: false };
         } }).run();
-        expect(s.outcomes[0]?.passed).toBe(false);
-        expect(s.outcomes[0]?.firstFailure?.assertion).toContain('stale');
+        expect(s.outcomes).toEqual([]);
         expect(existsSync(join(s.main, 'a'))).toBe(false);
       } finally { s.close(); }
     }
@@ -96,7 +95,7 @@ describe('sequential integration', () => {
       const candidate = s.queue.candidate.bind(s.queue);
       s.queue.candidate = (id, commit) => { candidate(id, commit); s.stale(); };
       await new MergeTrain(s.options).run();
-      expect(s.outcomes[0]?.stage).toBe('merge'); expect(s.outcomes[0]?.passed).toBe(false);
+      expect(s.outcomes).toEqual([]);
       expect(existsSync(join(s.main, 'a'))).toBe(false);
     } finally { s.close(); }
   });
@@ -216,5 +215,22 @@ test('a gate cannot validate uncommitted tracked changes instead of the candidat
     } }).run();
     expect(s.outcomes[0]?.stage).toBe('gate'); expect(s.outcomes[0]?.passed).toBe(false);
     expect(existsSync(join(s.main, 'a'))).toBe(false);
+  } finally { s.close(); }
+});
+
+test('main baseline is cached durably per main commit and gate command', async () => {
+  const s = setup();
+  try {
+    s.queue.enqueue(s.branch('alpha', 'a')); s.queue.enqueue(s.branch('beta', 'b'));
+    let baselines = 0;
+    const runGate = async (_argv: readonly string[], cwd: string) => {
+      if (!existsSync(join(cwd, 'a')) && !existsSync(join(cwd, 'b')) && !existsSync(join(cwd, 'c')) && !existsSync(join(cwd, 'd'))) baselines++;
+      return { passed: false, output: 'AssertionError: unhealthy baseline', timedOut: false };
+    };
+    await new MergeTrain({ ...s.options, runGate }).run(); expect(baselines).toBe(1);
+    s.commit('main-change'); s.queue.enqueue(s.branch('gamma', 'c'));
+    await new MergeTrain({ ...s.options, runGate }).run(); expect(baselines).toBe(2);
+    s.queue.enqueue({ ...s.branch('delta', 'd'), gate: ['another-command'] });
+    await new MergeTrain({ ...s.options, runGate }).run(); expect(baselines).toBe(3);
   } finally { s.close(); }
 });

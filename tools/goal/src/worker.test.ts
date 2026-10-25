@@ -8,7 +8,7 @@ import { WorkerJob } from './job.ts';
 import { settle } from './settle.ts';
 import { sameProcess } from './process.ts';
 import { git } from './tasks.ts';
-import { harness } from './worker-test-support.ts';
+import { harness } from './test-support.ts';
 import { runWorkerCommand } from './worker-commands.ts';
 
 function waitForFile(path: string): Promise<void> {

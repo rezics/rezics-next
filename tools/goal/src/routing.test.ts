@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { parseBrief, pathsOverlap, readRiskOwnership } from './briefs.ts';
 import { classifyTask, readRouting, routeTask } from './routing.ts';
-import { brief, markdown } from './worker-test-support.ts';
+import { brief, markdown } from './test-support.ts';
 
 const ownership = readRiskOwnership(join(import.meta.dir, '../risk-areas.json'));
 const table = readRouting(join(import.meta.dir, '../routing.json'));

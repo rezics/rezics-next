@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 
-export type WindowSettings = { socket: string; session: string };
+export type WindowSettings = { socket: string; session: string; tmuxCommand?: string; termspacesCommand?: string };
 export type WindowRunner = (executable: string, argv: string[]) => string;
 const run: WindowRunner = (executable, argv) => {
   const result = spawnSync(executable, argv, { encoding: 'utf8', timeout: 15_000 });
@@ -17,7 +17,7 @@ export interface ManagerWindows {
 /** Resolve termspaces' stable session option; do not inspect or kill unrelated windows. */
 export class TermspacesWindows implements ManagerWindows {
   constructor(private readonly settings: WindowSettings, private readonly execute: WindowRunner = run) {}
-  private tmux(argv: string[]): string { return this.execute('tmux', ['-S', this.settings.socket, ...argv]); }
+  private tmux(argv: string[]): string { return this.execute(this.settings.tmuxCommand ?? 'tmux', ['-S', this.settings.socket, ...argv]); }
   private lookupSession(): string | undefined {
     try {
       return this.tmux(['list-sessions', '-F', '#{session_id}\t#{session_name}\t#{@ts-session-id}'])
@@ -26,7 +26,7 @@ export class TermspacesWindows implements ManagerWindows {
   }
   private session(): string {
     let session = this.lookupSession();
-    if (!session) { this.execute('termspaces', ['--socket-path', this.settings.socket, 'apply']); session = this.lookupSession(); }
+    if (!session) { this.execute(this.settings.termspacesCommand ?? 'termspaces', ['--socket-path', this.settings.socket, 'apply']); session = this.lookupSession(); }
     if (!session) throw new Error(`Missing termspaces session: ${this.settings.session}`);
     return session;
   }

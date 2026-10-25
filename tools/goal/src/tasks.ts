@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { parseBrief, readRiskOwnership } from './briefs.ts';
-import { acquireDirectoryLease } from './worker-lease.ts';
+import { acquireDirectoryLease } from './lease.ts';
 import { classifyTask, readRouting, routeTask } from './routing.ts';
 import { choosePool } from './allowance.ts';
 import { readPool, type PoolReader } from './usage.ts';
@@ -44,6 +44,7 @@ export class WorkerTasks {
     const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
     try {
       const task = this.store.task(taskId);
+      if (!task.branch || !task.base || !task.brief.acceptance.command.length) throw new Error('Imported attempts need a dispatchable contract before retry');
       if (!['ready', 'running', 'landing', 'stopped'].includes(task.state)) throw new Error(`cannot retry ${task.state} task`);
       const old = task.currentAttempt ? this.store.attempt({ taskId, attempt: task.currentAttempt }) : null;
       const route = old ? { profile: old.profile, tableVersion: old.tableVersion, experiment: old.experiment }
@@ -67,7 +68,7 @@ export class WorkerTasks {
       const next = task.state === 'stopped' && task.currentAttempt > 0 ? this.store.retryStopped(taskId, make)
         : this.store.nextAttempt({ taskId, attempt: task.currentAttempt }, make);
       // Include older groups after a controller crash between superseding and termination.
-      for (const previous of this.store.attempts(taskId).filter(a => a.attempt < next.attempt)) {
+      for (const previous of this.store.attempts(taskId).filter(a => a.attempt < next.attempt && !a.supersededFinalized)) {
         await terminateProcessGroup(previous.process, this.settings.terminationGraceMs);
         for (const process of previous.auxiliaryProcesses) await terminateProcessGroup(process, this.settings.terminationGraceMs);
       }
@@ -79,7 +80,7 @@ export class WorkerTasks {
       try { return await this.launcher(this.store, this.store.task(taskId), next, pool, workerPrompt(task, options.evidence, options.consultation), this.settings.codex); }
       catch (error) {
         const failed = this.store.updateAttempt(next, a => {
-          a.state = 'exited'; a.endedAt = new Date().toISOString(); a.result = String(error); a.exitCode = -1; a.after = this.reader(pool);
+          a.state = 'exited'; a.endedAt = new Date().toISOString(); a.result = String(error); a.exitCode = -1; a.failureKind = 'tool'; a.after = this.reader(pool);
         });
         this.store.putRecord(makeRecord(this.store.task(taskId), failed, readMeasurement(failed), 'stopped'));
         this.store.event(next, 'launch-failed', { error: String(error) });
@@ -96,13 +97,16 @@ export class WorkerTasks {
       if (task.state === 'merged' || task.state === 'cancelled') throw new Error(`cannot stop ${task.state} task`);
       if (!task.currentAttempt) { this.store.updateTask(ref, t => { t.state = cancelled ? 'cancelled' : 'stopped'; }); return; }
       const attempt = this.store.attempt(ref);
-      if (attempt.state !== 'stopped' && attempt.state !== 'cancelled') {
-        const pool = this.settings.pools.find(p => p.name === attempt.pool);
-        const ended = this.store.updateAttempt(ref, a => { a.endedAt = new Date().toISOString(); a.after = pool ? this.reader(pool) : null; });
-        this.store.putRecord(makeRecord(task, ended, readMeasurement(ended), cancelled ? 'cancelled' : 'stopped'));
-        this.store.event(ref, cancelled ? 'cancelled' : 'stopped', {});
-        this.store.close(ref, cancelled ? 'cancelled' : 'stopped');
-      }
+      this.store.write(ref, () => {
+        if (this.store.task(taskId).state === 'merged') throw new Error('cannot stop merged task');
+        if (attempt.state !== 'stopped' && attempt.state !== 'cancelled') {
+          const pool = this.settings.pools.find(p => p.name === attempt.pool);
+          const ended = this.store.updateAttempt(ref, a => { a.endedAt = new Date().toISOString(); a.after = pool ? this.reader(pool) : null; });
+          this.store.putRecord(makeRecord(task, ended, readMeasurement(ended), cancelled ? 'cancelled' : 'stopped'));
+          this.store.event(ref, cancelled ? 'cancelled' : 'stopped', {});
+          this.store.close(ref, cancelled ? 'cancelled' : 'stopped');
+        }
+      });
       await terminateProcessGroup(attempt.process, this.settings.terminationGraceMs);
       for (const process of attempt.auxiliaryProcesses) await terminateProcessGroup(process, this.settings.terminationGraceMs);
     } finally { lease.release(); }

@@ -1,198 +1,218 @@
 # goal
 
-The control plane for the rewrite's multi-agent work. Its SQLite store is independent of the product database.
-The worker side owns configuration, tasks, attempts, routing, launch, usage, failure classification and evidence bundles.
-The integration side owns the landing train, manager sessions, completion checks and manager inboxes. They meet through
-`src/contracts.ts`; neither side reads the other's tables.
+One Bun control plane owns worker dispatch, attempt records, the landing train and manager sessions. Every module uses
+one local SQLite file, independent of the product database. `config.ts` composes the real worker fence, outcome sink,
+landing queue, manager inbox, train and completion checker. Production commands need no runtime module or plugin.
 
 ```sh
-bun install
-bun run check
+bun install --cwd tools/goal --frozen-lockfile
+bun run --cwd tools/goal check
+bun tools/goal/src/cli.ts dispatch .temp/goal/brief.md
+bun tools/goal/src/cli.ts status
+bun tools/goal/src/cli.ts attempts --json
 ```
 
-## Integration commands
+Run dispatch from a checkout of this repository after configuring local pools and writing a brief. The main checkout
+must have main checked out and be clean enough for Git to fast-forward. Workers commit on separate branches and do not
+rebase, merge or change acceptance tests. The controller rebases detached candidates, checks scope, runs gates on the
+merged result, then fast-forwards main. A passing attempt record is finalized through the real gate outcome sink.
+
+Dispatch waits without a model for the child to exit, records its tokens and quota observations, saves its evidence,
+enqueues its landing request, and starts the train. Enqueuers wait for the train lease rather than dropping a busy
+wakeup. A request arriving while another train finishes acquires the released lease and drains the remaining queue.
+Failures return to the same profile, trigger one consultation, or reach the owning manager's inbox as appropriate.
+
+## Local settings
+
+Tracked package defaults are in `defaults.json`. Routing profiles and experiments are in `routing.json`; path ownership
+is in `risk-areas.json`. Account names, pool mapping, executable/configuration paths and admission policy belong only
+in the untracked `<main checkout>/.temp/goal/local.json`. The loader refuses a tracked local file. There is no implicit
+account or pool policy.
+
+The following illustrates the local schema. Replace placeholders with local values and supply the required policy
+fields listed below; the empty policy object deliberately provides no account policy.
+
+```json
+{
+  "version": 1,
+  "pools": [
+    {
+      "name": "<worker-pool>",
+      "cli": "codex",
+      "classes": ["codex"],
+      "command": "codex",
+      "configDirectory": "/absolute/path/to/<cli-config-directory>",
+      "allowanceKey": "<shared-allowance>",
+      "policy": {}
+    }
+  ]
+}
+```
+
+| Pool field | Meaning |
+| --- | --- |
+| `name` | Local pool name; appears only in local state and configuration. |
+| `cli` | `codex`, `grok` or `cursor` for workers; `claude` is available only for managers. |
+| `classes` | Routing pool classes it permits, such as `codex`; add `manager` for manager admission. |
+| `command` | Official CLI executable or an absolute local launcher path. |
+| `configDirectory` | Becomes `CODEX_HOME`, `GROK_HOME`, `CURSOR_CONFIG_DIR` or `CLAUDE_CONFIG_DIR`. |
+| `allowanceKey` | Pools and CLI aliases sharing quota must use the same local key. |
+| `usageFile` | Optional normalized `PoolReading` JSON for providers without Codex rollout quota events. |
+| `policy.weight` | Required positive number for relative pool preference. |
+| `policy.reservePercent` | Required number from zero up to, but excluding, 100. |
+| `policy.allowUnknown` | Required boolean: whether dispatch may proceed without fresh quota observations. |
+| `policy.maxAgeMs` | Required positive observation lifetime in milliseconds. |
+| `policy.maxBurnPerHour` | Optional positive limit on recent same-window percentage consumption per hour. |
+
+Only local policy determines unknown-quota admission, reserves and pacing. A retry prefers its current pool; a native
+quota failure excludes all aliases of that allowance before selecting another permitted pool. There is no credit
+purchase or reset-card redemption path.
+
+`mainCheckout`, `stateDirectory`, `worktreeRoot`, `databasePath`, `mainBranch`, `branchPrefix`, `terminationGraceMs`,
+`gate`, `routingFile` and `riskAreasFile` can be set locally. Git's common directory identifies the main checkout even
+when invoked from a linked worktree. Repository paths resolve against that main checkout. Pool configuration paths,
+usage files and executable paths containing a slash resolve against the local file's directory.
+
+| Environment variable | Override |
+| --- | --- |
+| `GOAL_LOCAL_CONFIG` | Local JSON file. |
+| `GOAL_MAIN_CHECKOUT` | Main checkout. |
+| `GOAL_STATE_DIRECTORY` | State directory; defaults to `<main checkout>/.temp/goal`. |
+| `GOAL_DATABASE_PATH` | Shared database; defaults to `<state directory>/goal.sqlite`. |
+| `GOAL_WORKTREE_ROOT` | Worktree parent; defaults to `<main checkout>/.temp/worktrees`. |
+| `GOAL_CODEX_SERVICE_TIER` | Codex service tier for the invocation. |
+
+The `codex` settings layer exposes `serviceTier`, `compactTokens` by family, `solContextWindow` and `toolOutputTokens`.
+The `integration` layer exposes `gateTimeoutMs`, `gateConcurrency` (the first train remains sequential),
+`managerDirectory`, `inboxDirectory`, `managerSocket`, `tmuxSocket`, `tmuxCommand`, `termspacesCommand`, `tmuxSession`,
+`managerCompactTokens`, `supermanager` and `managerLimits` (`turns`, `turnsWithoutDecision`, `wallMs`). State, manager
+configuration, inbox signals and leases stay outside tracked source files. Unix manager sockets must fit the platform's
+socket-path length limit; use a short local override when needed.
+
+## Briefs and routing
+
+Write the brief in the state directory, for example `.temp/goal/brief.md`:
+
+```markdown
+---
+goal: example
+manager: example
+kind: implementation
+paths: [tools/goal/src/example.ts]
+riskAreas: []
+acceptance:
+  command: [bun, test, tools/goal/src/example.test.ts]
+  tests: [rejects invalid input]
+  failing: true
+estimate:
+  lines: 100
+  files: 2
+criticalPath: false
+waiting: []
+---
+Implement the behavior described by the failing acceptance test.
+```
+
+Use the actual declared files and machine acceptance tests for the task. `manager` defaults to `goal`. Additional
+observable features are `inseparable`, `citesSources` and `hostileInput`. Kinds are `implementation`, `interface`,
+`bulk-text`, `claim`, `specification`, `research` and `mechanical`. A specified implementation must declare failing
+acceptance tests and fit within 400 lines and eight files. Mechanical work is refused by model dispatch. Risk paths,
+source citations and hostile input take precedence over cheaper classes. Critical-path classification additionally
+requires waiting tasks and `inseparable`.
+
+Declared paths support literals, `*`, `?` and whole-segment `**`. Absolute paths, traversal and unsupported glob syntax
+are refused. Risk ownership is checked by intersecting the path patterns, including broad claims such as `src/**`.
+Every intersected risk area must be declared. Extend the ownership data when adding product modules.
+
+Routing records the table version on each attempt. The open implementation experiment alternates Luna `high` and `max`
+by durable task sequence, starting with `high`; retries retain the original profile and version. Research is read-only.
+Bulk text prompts prohibit translation services, scripts and character mappings. Workers return a structured result
+using `worker-result.schema.json`, including any concrete blocker and the approaches tried.
+
+## Landing, gates and attempt fencing
+
+The tracked repository gate is `bun tools/goal/scripts/gate.ts`. It runs `bun install --frozen-lockfile` followed by
+`bun run check` from the clean train checkout's `tools/goal` directory. Task acceptance commands also run there, from
+the repository root, after the repository gate passes. Other repositories can override the local `gate` command.
+Neither gates nor dependency installation run in the main checkout or the worker's checkout.
+
+The train invalidates a gate when main moves, rebases again, and reruns it. A failing gate is compared with main at the
+same commit. Baseline results are cached durably by main commit and gate command, including the repository gate's
+identity. A changed main commit or command gets a new baseline. Main-only failures, setup problems and timeouts rerun
+the original profile without consuming a fix round.
+
+Specification conflicts and exhausted quota are attempt facts, parsed from a structured worker exit or native CLI
+failure, and stored on the attempt. Gate outcomes remain gate-only; assertion and fingerprint text have no special
+classification markers. A specification conflict reaches the manager inbox directly. Quota exhaustion chooses another
+allowed pool. Repeating the same first assertion after a fix round triggers one read-only Sol `medium` consultation;
+the original profile receives its answer in a fresh session. Scope growth, stalls, failure after consultation and the
+two-fix-round limit reach the owning manager. An early success claim followed by a failed gate is recorded and continued.
+
+Each attempt's evidence directory contains `contract.md`, `diff.patch`, `failure.json` and `approaches.json`. Diffs
+include commits, tracked edits and untracked files. Raw session logs stay in the runs directory and never enter the
+consultation bundle. Consultation input uses only these four artifacts, with project-instruction loading and web search
+disabled, a read-only sandbox and a bounded host deadline.
+
+Retry supersedes the old attempt and publishes the next sequence in `BEGIN IMMEDIATE`. The train's final fence check,
+`git merge --ff-only` and merged task-state publication run inside the same kind of transaction on the shared store.
+A concurrent retry therefore either invalidates the attempt before the merge check or observes an already merged
+attempt afterwards. Only after old worker and consultation process groups are identified, terminated and confirmed
+gone may a replacement launch. Linux `/proc` and Python 3's `os.pidfd_open` provide process identity and kernel exit
+notifications without a polling model or sleep loop. One lease module protects both lifecycle changes and the train.
+
+## Commands and managers
 
 ```sh
-goal land <task>
-goal train
-goal manager start <goal> --engine codex --budget 20000
-goal manager start <goal> --engine claude --budget 20000
-goal manager stop <manager>
-goal inbox wait <manager>
-goal inbox read <manager>
-goal inbox ack <manager> [event numbers...]
+bun tools/goal/src/cli.ts status [task]
+bun tools/goal/src/cli.ts retry <task>
+bun tools/goal/src/cli.ts stop <task>
+bun tools/goal/src/cli.ts consult <task>
+bun tools/goal/src/cli.ts attempts --json
+bun tools/goal/src/cli.ts land <task>
+bun tools/goal/src/cli.ts train
+bun tools/goal/src/cli.ts manager start <goal> --engine codex --budget 20000
+bun tools/goal/src/cli.ts manager stop <manager>
+bun tools/goal/src/cli.ts manager complete <manager>
+bun tools/goal/src/cli.ts inbox wait <manager>
+bun tools/goal/src/cli.ts inbox read <manager>
+bun tools/goal/src/cli.ts inbox ack <manager>
 ```
 
-`land` queues the current worker-owned landing request. `train` drains requests in insertion order, under a directory
-lease identified by Linux pid, start ticks and boot id. It rebases detached candidates in its own worktrees, checks the
-declared path globs, runs the gate, and fast-forwards main in the main checkout. Moving main invalidates a gate result
-and causes another rebase and gate run. The worker's checkout and branch remain untouched. Git refusal is a merge
-failure. The main checkout must already have main checked out.
+`land` and `train` use the same queue and sink as dispatch. The manager host starts automatically and persists until
+stopped. An untracked `<managerDirectory>/<goal>.json` can select a local `pool`, `objective`, `brief`, `effort`,
+`supermanager` and `limits`; otherwise scoped task briefs and a matching local manager pool supply the defaults.
+Termspaces owns the tmux windows. Codex uses a per-pool managed app-server, a goal budget and an interactive viewer.
+Claude uses its configured executable and configuration directory, interactive window and turn-accounting hooks.
 
-Gate outcomes include stage, normalized failure fingerprint, log path, changed paths, diff size and host time. A failing
-gate also runs against the same main commit to distinguish an existing failure. Requests and outcomes are durable;
-outcome delivery to the worker sink is at least once. The sink must tolerate duplicate outcomes and obsolete attempt
-references. A sink error leaves the outcome pending and stops the train for retry.
+Manager events are committed to SQLite and signaled through filesystem notifications. Inbox waiting has no sleep loop.
+Managers receive only decisions requiring judgment; gates, merges and mechanical reruns do not wake them. Completion is
+a proposal: the controller checks all scoped tasks are merged and the main gate passes in an isolated checkout.
+Manager commands are attributed through `GOAL_MANAGER` or a registered Codex thread; workers get fresh session identities.
 
-Inbox delivery commits the event before writing its per-manager signal file. `wait` subscribes to filesystem events and
-checks SQLite after subscribing, then returns the unread events as JSON. It has no sleep loop. Reading marks events
-read; acknowledgement removes them from subsequent reads. Recorded-only outcomes never write a signal or wake a
-manager. Failed wake delivery remains pending for host recovery or a later signal.
-
-## Runtime composition
-
-Set `GOAL_RUNTIME` to the absolute path of a local TypeScript module exporting:
-
-```ts
-export function createIntegrationRuntime(): IntegrationRuntime | Promise<IntegrationRuntime>;
-```
-
-Import `IntegrationRuntime` from `src/integration-cli.ts`. This factory supplies all paths and settings, the opened
-SQLite connection, the worker-owned fence and outcome sink, a task-to-`LandingRequest` adapter, and a Goal-to-`ManagerSpec`
-adapter. It also supplies manager services: termspaces window settings, the command prefix, and a completion checker.
-There is no second configuration reader in the integration modules.
-
-Use `TermspacesWindows` for the window adapter and `completionChecker` for completion validation. The latter takes a
-Goal condition (scoped task names and gate argv) and a read adapter returning merged task names. It checks all declared
-tasks and runs the main gate in an isolated worktree. Changed conditions or a moving main invalidate the proposal;
-`goal-unmet` includes the check log. The worker adapter remains responsible for interpreting its own task state.
-
-Keep state and train worktrees in configured local directories under `.temp/`. Give `managerSocket` a short Unix socket
-path under `.temp/` that fits the platform's socket path limit. The runtime factory runs in each command and in the
-manager host; return the same database and socket locations in all processes.
-
-The manager command prefix must be usable from the manager's cwd. For example, include `env`, an absolute
-`GOAL_RUNTIME=...` assignment, the Bun executable, and the absolute `src/cli.ts` path. Public commands call
-`recordManagerCommand` to count a manager's control-plane activity; worker-side command modules should call that same
-helper. It attributes commands using `GOAL_MANAGER`, or a registered Codex thread's `CODEX_THREAD_ID`. Worker launches
-must use their own session identity.
-
-`manager start` starts a detached host if necessary and returns the manager state as JSON. The host has a directory
-lease, stores errors in `manager-host.log`, and handles filesystem signals and deadlines. It rejoins persisted Codex
-threads on restart. A committed event can be delivered again if the host exits after steering and before recording the
-wake; inbox acknowledgement is independent of wake delivery.
-
-## Manager sessions
-
-Codex pools use dedicated `CODEX_HOME` directories. Each pool uses one managed `codex app-server` daemon and a stdio
-JSON-RPC proxy, so the tmux `codex resume` viewer joins the same server. Startup sends `thread/start` with cwd,
-`gpt-6.1-sol`, effort and a 300,000-token compaction limit; then `thread/goal/set` with objective, active status and
-`tokenBudget`; then `turn/start` with the opening brief. Notifications persist the active turn, goal status and usage.
-Active turns receive `turn/steer` with `expectedTurnId`; idle threads receive `turn/start`. A raced steer rejoins the
-thread before retrying. The opening brief instructs an idle manager to wait inside `clock.sleep`.
-
-Claude windows run `claude --model claude-opus-5-5 --autocompact 300000` with the brief and turn-accounting hooks. The
-brief instructs the manager to run `goal inbox wait` in the background when it has no decisions pending. The watcher
-returns when an event is committed. Claude's budget is stored in its manager specification; the Codex token-budget RPC
-applies to Codex sessions.
-
-Both engines have configured limits on turns, turns without a control-plane command, and elapsed wall time. Exceeding a
-limit pauses the manager and delivers a `round-limit` event to the supermanager. Explicit stop pauses the Codex goal,
-interrupts its active turn, and unregisters the window. Claude stop unregisters its interactive window. A completion
-proposal (`goal manager complete <manager>`, or a Codex goal completion notification) runs deterministic validation.
-Only successful validation closes the manager; failed validation returns evidence through the inbox. Claude hooks use
-`manager turn-start` and `manager turn-end`; these hooks do not count as decisions.
-
-The integration path contains no model review, review rounds, mail, old coordinator, QA-slot scheduling, or legacy
-product-specific gates. Gate argv and manager briefs are supplied by the caller.
-
-## Protocol checks and live smoke
-
-The protocol names and fields were checked against installed codex-cli 0.163.0:
+A manual smoke test for an authenticated local Codex manager is available without embedding any account name:
 
 ```sh
-# From the repository root:
-codex app-server generate-ts --out .temp/protocol
-codex queue --help
+CODEX_HOME="/absolute/path/to/<cli-config-directory>" bun tools/goal/scripts/smoke-codex-manager.ts
 ```
 
-The fake stdio app-server tests record actual JSON-RPC requests. Temporary Git repositories exercise rebasing, moving
-main, cumulative failures, scope, fencing, Git refusal and recovery. Separate-process tests exercise inbox waiting,
-lease exclusion and the manager host.
+## Measurements and historical imports
 
-The live smoke runs separately from `bun test`:
+Records contain task/class/profile/pool, routing version and experiment, timing, steps, critical-path flag, input,
+cached and output tokens, before/after quota, outcome, first failure, escalation, consultation, fix round, diff size,
+changed files, host gate time and the fixed classifier version. Step classes are decision, read, edit, wait, check and
+commit. Cumulative snapshots are differenced; repeated or older totals add no tokens. A resumed log requires its
+preceding token baseline, or a rollout containing the pre-window observation.
 
 ```sh
-# From tools/goal:
-CODEX_HOME="$HOME/.codex-1" bun scripts/smoke-codex-manager.ts
+bun tools/goal/src/cli.ts import-attempt /absolute/path/to/<capture-directory>
 ```
 
-It starts a real stdio app-server, creates a tiny objective with a 20,000-token budget, starts and steers a turn, reads
-the goal, then pauses, interrupts and clears it. The run on 2026-10-25 accepted the steer, read active status with the
-20,000-token budget and zero tokens consumed at that instant, and confirmed that the cleared goal was null.
+A capture directory contains `events.jsonl`, `meta.start.json` and `meta.end.json`. The importer records its original
+CLI, model, effort, pool, critical-path flag, timestamps, exit code and available quota observation without starting a
+model, creating a source worktree or requiring a current account mapping. Imported tasks are stopped for inspection;
+missing contracts and unmeasured diff/gate data are explicit. Capture source names and account names remain local state.
 
-## Worker side
-
-
-The controller saves the contract under the state directory and starts a fresh branch and worktree from main.
-`manager` defaults to `goal`. Additional observable features are `inseparable`, `citesSources` and `hostileInput`.
-Kinds are `implementation`, `interface`, `bulk-text`, `claim`, `specification`, `research` and `mechanical`. Mechanical
-steps are refused by model dispatch. A specified implementation must declare failing machine acceptance tests and
-fit within 400 lines and eight files. Critical-path classification requires both waiting tasks and `inseparable`.
-Risk paths, source citations and hostile input take precedence over cheaper classes.
-
-Declared paths use literals, `*`, `?` and whole-segment `**`; absolute paths, traversal and unsupported glob syntax are
-refused. Risk ownership is checked by intersecting path patterns, including broad claims such as `src/**`. Every risk
-area intersected by a declared path must be named. Extend the tracked ownership data when adding product modules.
-Acceptance tests are part of the contract; workers must not change them or expand scope.
-
-`routing.json` contains the version, first profile and step/time limits for every model class, plus open experiments.
-The implementation experiment alternates Luna `high` and `max` by durable task sequence, starting with `high`.
-Retries retain the original profile and table version. Research is read-only. Bulk text prompts prohibit translation
-services, scripts and character mappings. Workers finish with approach/result lines and commit on their branch.
-
-## Gate outcomes and evidence
-
-The deterministic failure classifier handles setup/tool failures, timeouts, failure on main, quota exhaustion,
-repeated assertions, new failures, specification conflicts, scope growth, stalls and the two-fix-round limit.
-Environment reruns retain the profile and do not consume a fix round. Repeating the first assertion triggers one
-read-only Sol `medium` consultation; the original profile receives its answer in a fresh session. An exit claiming
-success or naming no blocker followed by a failed gate is measured as an early stop and continued from evidence.
-Manager events are reserved for specification conflict, scope growth, stall, round limit and failure after consultation.
-
-The current gate contract has no typed failure reason. Until it gains one, a gate proving a specification conflict
-starts its first assertion with `SPEC_CONFLICT`; quota failures use a fingerprint such as `quota_exhausted`.
-Worker claims of specification conflict do not establish that classification. Setup stage, timeout and baseline
-failure fields already identify environment problems without text conventions.
-
-Each attempt has an evidence directory with `contract.md`, `diff.patch`, `failure.json` and `approaches.json`.
-The diff includes commits, tracked edits and untracked files. Only explicit approach/result fields and gate evidence
-enter it; session transcripts stay in raw run logs. A consultation adds its answer as `consultation.md`; its raw log
-stays in the runs directory. Consultation input is assembled solely from the four evidence artifacts, with project
-instruction loading and web search disabled, a read-only sandbox and a bounded host deadline.
-
-Retry atomically revokes the current attempt and creates the next sequence. It then identifies and terminates every
-old worker and consultation process group, waits for exit and finalizes revoked attempts' accounting under the new
-fence before launching. A termination failure leaves the replacement pending; it never launches alongside the old
-writer. `stop` revokes writes on the current sequence; explicit retry publishes a new sequence. The internal `event`
-command takes `<task> <attempt> <kind> [json]` and exercises the same fence as direct store writes. All mutating CLI
-commands also check an invoking worker's inherited `GOAL_TASK_ID` and `GOAL_ATTEMPT`.
-
-## Attempt measurements and import
-
-Attempt records contain the task/class/profile/pool, routing version and experiment, timing, step counts, critical-path
-flag, input/cached/output tokens, before/after quota, result, first-failure fingerprint, escalation, consultation flag,
-fix round, diff size, changed files, host gate time and fixed step classifier version. Classes are decision, read,
-edit, wait, check and commit. Consultation tokens and pool observations are also stored in consultation events.
-Cumulative usage snapshots are differenced against the session baseline; repeated and older snapshots add no tokens.
-A rollout's pre-window observation establishes the baseline for a resumed attempt. A separately captured resumed
-`codex exec --json` log needs its preceding token baseline supplied explicitly.
-
-Existing logs can be imported without launching a worker:
-
-```sh
-bun src/cli.ts import-attempt /path/to/exec.jsonl \
-  --brief /path/to/brief.md \
-  --start 2026-10-25T00:01:00Z --end 2026-10-25T00:02:00Z \
-  --pool '<local pool>' --model gpt-6-luna --effort high \
-  --baseline '{"input":1000,"cached":500,"output":100}'
-```
-
-Use `--task` instead of `--brief` to associate an existing task. `--table-version` preserves a known historical table;
-otherwise the record explicitly identifies a pre-control-plane import. `--outcome` supplies a known historical result;
-otherwise it remains pending gate verification. Unknown quota, diff and gate-time measurements remain null. Imported
-tasks are stopped for inspection and are never automatically submitted to landing.
-
-The worker slice deliberately excludes mail, review rounds, QA slots, product gates, Claude workers, in-tree briefs,
-manager sessions, inbox implementations, tmux window management and merging. Each belongs to a removed legacy flow or
-to the separate integration slice.
+For a standalone JSONL file, supply `--brief` or `--task`, `--start`, `--end`, `--pool`, `--model` and `--effort`.
+Optional `--baseline` accepts `{"input":0,"cached":0,"output":0}` with the actual preceding totals; `--table-version`
+and `--outcome` preserve known historical facts. Use both `GOAL_STATE_DIRECTORY` and `GOAL_DATABASE_PATH` under a scratch
+`.temp/` directory when testing imports so an explicit local database setting cannot select the real store.

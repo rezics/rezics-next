@@ -13,6 +13,7 @@ import { acquireDirectoryLease } from './lease.ts';
 
 /** Composition belongs to the caller; this module never reads worker configuration or tables. */
 export type IntegrationRuntime = {
+  queue?: SqliteLandingQueue; inbox?: SqliteManagerInbox; pump?(): Promise<void>; drain?(): Promise<void>; hostCommand?: string[];
   db: Database; mainCheckout: string; stateDirectory: string; worktreeRoot: string; managerSocket: string;
   fence: AttemptFence; sink: GateOutcomeSink;
   landing(task: string): LandingRequest;
@@ -47,7 +48,7 @@ async function ensureHost(runtime: IntegrationRuntime): Promise<void> {
     });
     return;
   } catch {}
-  const argv = [process.execPath, import.meta.dir + '/cli.ts', '_manager-host'];
+  const argv = [...(runtime.hostCommand ?? [process.execPath, import.meta.dir + '/cli.ts']), '_manager-host'];
   mkdirSync(runtime.stateDirectory, { recursive: true });
   const logPath = join(runtime.stateDirectory, 'manager-host.log');
   const log = openSync(logPath, 'a', 0o600);
@@ -68,7 +69,7 @@ async function ensureHost(runtime: IntegrationRuntime): Promise<void> {
 
 export async function serveManagers(runtime: IntegrationRuntime): Promise<void> {
   const lease = acquireDirectoryLease(`${runtime.managerSocket}.lease`);
-  const inbox = new SqliteManagerInbox(runtime.db, runtime.stateDirectory);
+  const inbox = runtime.inbox ?? new SqliteManagerInbox(runtime.db, runtime.stateDirectory);
   const managers = new ManagerSessions(runtime.db, inbox, runtime.managerServices);
   rmSync(runtime.managerSocket, { force: true });
   const server = createServer(socket => {
@@ -106,13 +107,16 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
 
 export async function runIntegration(argv: string[], runtime: IntegrationRuntime): Promise<number> {
   const [command, subcommand, id, ...flags] = argv;
-  const inbox = new SqliteManagerInbox(runtime.db, runtime.stateDirectory);
-  const queue = new SqliteLandingQueue(runtime.db, runtime.fence);
+  const inbox = runtime.inbox ?? new SqliteManagerInbox(runtime.db, runtime.stateDirectory);
+  const queue = runtime.queue ?? new SqliteLandingQueue(runtime.db, runtime.fence);
   if (command === 'land' && subcommand) {
     await recordManagerCommand(runtime);
-    queue.enqueue(runtime.landing(subcommand)); return 0;
+    queue.enqueue(runtime.landing(subcommand));
+    if (runtime.pump) { await runtime.pump(); await runtime.drain?.(); }
+    return 0;
   }
-  if (command === 'train') { await recordManagerCommand(runtime); await new MergeTrain({ ...runtime, queue }).run(); return 0; }
+  if (command === 'train') { await recordManagerCommand(runtime); if (runtime.pump) { await runtime.pump(); await runtime.drain?.(); }
+    else await new MergeTrain({ ...runtime, queue }).run(); return 0; }
   if (command === '_manager-host') { await serveManagers(runtime); return 0; }
   if (command === 'inbox' && id) {
     await recordManagerCommand(runtime);

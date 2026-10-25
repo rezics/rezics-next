@@ -1,5 +1,6 @@
 import type { Database } from 'bun:sqlite';
 import type { AttemptFence, LandingQueue, LandingRequest, GateOutcome } from './contracts.ts';
+import type { GateResult } from './merge.ts';
 import { migrate } from './db.ts';
 
 export type LandingEntry = { id: number; request: LandingRequest; outcome: GateOutcome | null; delivered: number; candidate: string | null };
@@ -12,12 +13,23 @@ export class SqliteLandingQueue implements LandingQueue {
         id INTEGER PRIMARY KEY AUTOINCREMENT, task TEXT NOT NULL, attempt INTEGER NOT NULL,
         request TEXT NOT NULL, outcome TEXT, delivered INTEGER NOT NULL DEFAULT 0, candidate TEXT,
         UNIQUE(task, attempt)
-      );` }]);
+      );` }, { module: 'landing', version: 2, sql: `
+      CREATE TABLE landing_baselines (main_commit TEXT NOT NULL, gate_command TEXT NOT NULL, result TEXT NOT NULL,
+        PRIMARY KEY(main_commit, gate_command));` }]);
   }
   enqueue(request: LandingRequest): void {
-    this.fence.assertCurrent(request);
-    this.db.query('INSERT INTO landing_queue(task, attempt, request) VALUES (?, ?, ?) ON CONFLICT(task, attempt) DO NOTHING')
-      .run(request.taskId, request.attempt, JSON.stringify(request));
+    this.db.transaction(() => {
+      this.fence.assertCurrent(request);
+      this.db.query('INSERT INTO landing_queue(task, attempt, request) VALUES (?, ?, ?) ON CONFLICT(task, attempt) DO NOTHING')
+        .run(request.taskId, request.attempt, JSON.stringify(request));
+    }).immediate();
+  }
+  baseline(commit: string, command: string): GateResult | undefined {
+    const row = this.db.query('SELECT result FROM landing_baselines WHERE main_commit=? AND gate_command=?').get(commit, command) as { result: string } | null;
+    return row ? JSON.parse(row.result) : undefined;
+  }
+  saveBaseline(commit: string, command: string, result: GateResult): void {
+    this.db.query('INSERT OR REPLACE INTO landing_baselines VALUES (?,?,?)').run(commit, command, JSON.stringify(result));
   }
   next(): LandingEntry | undefined {
     const row = this.db.query('SELECT * FROM landing_queue WHERE delivered = 0 ORDER BY id LIMIT 1').get() as

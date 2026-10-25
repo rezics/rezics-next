@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadSettings } from './config.ts';
 import { git } from './tasks.ts';
-import { harness } from './worker-test-support.ts';
+import { harness } from './test-support.ts';
 
 test('settings anchor to the main checkout from a linked worktree; local settings and environment override defaults', () => {
   const h = harness();

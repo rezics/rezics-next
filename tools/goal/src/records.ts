@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import type { Attempt, AttemptRecord, StepClass, Task, Tokens } from './types.ts';
+import type { Attempt, AttemptFailure, AttemptRecord, StepClass, Task, Tokens } from './types.ts';
 
 export const CLASSIFIER_VERSION = '1';
 export const emptyTokens = (): Tokens => ({ input: 0, cached: 0, output: 0 });
@@ -18,7 +18,7 @@ function tokens(value: Record<string, unknown>): Tokens {
   const num = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0;
   return { input: num(value.input_tokens ?? value.inputTokens), cached: num(value.cached_input_tokens ?? value.cachedInputTokens ?? value.cache_read_input_tokens), output: num(value.output_tokens ?? value.outputTokens) };
 }
-export type LogMeasurement = { tokens: Tokens; total: Tokens; steps: Record<StepClass, number>; session: string | null; result: string; blocker: string | null };
+export type LogMeasurement = { tokens: Tokens; total: Tokens; steps: Record<StepClass, number>; session: string | null; result: string; blocker: string | null; failureKind: AttemptFailure | null };
 /** Cumulative totals are differenced, duplicate snapshots contribute zero, and pre-window totals establish a baseline. */
 export function measureLog(text: string, options: { startedAt?: string; endedAt?: string; baseline?: Tokens } = {}): LogMeasurement {
   const start = options.startedAt ? Date.parse(options.startedAt) : -Infinity;
@@ -27,13 +27,19 @@ export function measureLog(text: string, options: { startedAt?: string; endedAt?
   const events = text.split('\n').flatMap(line => { try { return [JSON.parse(line)]; } catch { return []; } });
   const hasRollout = events.some(e => e.payload?.type === 'token_count' && e.payload.info?.total_token_usage);
   let previous = options.baseline ?? emptyTokens();
-  const result: LogMeasurement = { tokens: emptyTokens(), total: previous, steps: emptySteps(), session: null, result: '', blocker: null };
+  const result: LogMeasurement = { tokens: emptyTokens(), total: previous, steps: emptySteps(), session: null, result: '', blocker: null, failureKind: null };
   const seen = new Set<string>();
   for (const event of events) {
     const at = event.timestamp ? Date.parse(event.timestamp) : start;
     const inside = at >= start && at <= end;
     if (at > end) continue;
-    if (inside && (event.type === 'turn.failed' || event.type === 'error')) result.result = event.error?.message ?? event.message ?? result.result;
+    if (inside && (event.type === 'turn.failed' || event.type === 'error')) {
+      result.result = event.error?.message ?? event.message ?? result.result;
+      const code = event.error?.code ?? event.code;
+      result.failureKind = ['usage_limit_exceeded', 'rate_limit_exceeded', 'insufficient_quota'].includes(code)
+        || /usage limit|quota exhausted|rate limit reached/i.test(result.result) ? 'pool-exhausted' : 'tool';
+    }
+    if (inside && event.type === 'turn.completed') result.failureKind = null;
     if (event.type === 'thread.started') result.session = event.thread_id ?? result.session;
     if (event.type === 'session_meta') result.session = event.payload?.id ?? event.payload?.session_id ?? result.session;
     const payload = event.payload ?? event;
@@ -69,6 +75,12 @@ export function measureLog(text: string, options: { startedAt?: string; endedAt?
   }
   const blocker = /^BLOCKER:\s*(.+)$/im.exec(result.result)?.[1]?.trim();
   result.blocker = blocker && !/^(none|no(?: blockers?)?|n\/a|not blocked)\.?$/i.test(blocker) ? blocker : null;
+  try {
+    const exit = JSON.parse(result.result);
+    if (exit.status === 'blocked' && exit.blocker && ['spec-conflict', 'scope-growth', 'tool'].includes(exit.blocker.kind) && typeof exit.blocker.detail === 'string') {
+      result.failureKind = exit.blocker.kind; result.blocker = exit.blocker.detail;
+    }
+  } catch { /* Historical human-readable handoffs remain importable. */ }
   return result;
 }
 export function makeRecord(task: Task, attempt: Attempt, measurement: LogMeasurement, outcome: AttemptRecord['outcome'] = 'pending-gate'): AttemptRecord {
@@ -87,6 +99,10 @@ export function readMeasurement(attempt: Attempt, baseline?: Tokens): LogMeasure
 
 /** Only the bounded approach/result fields enter evidence; the rest of the session stays in its raw log. */
 export function reportedApproaches(result: string): { approach: string; result: string }[] {
+  try {
+    const value = JSON.parse(result);
+    if (Array.isArray(value.approaches)) return value.approaches.filter((item: { approach?: unknown; result?: unknown }) => typeof item.approach === 'string' && typeof item.result === 'string');
+  } catch { /* Legacy handoffs use two bounded lines. */ }
   return [...result.matchAll(/^APPROACH:[ \t]*(.+)\r?\nOUTCOME:[ \t]*(.+)$/gim)]
     .map(match => ({ approach: match[1]!.trim().slice(0, 1000), result: match[2]!.trim().slice(0, 2000) }));
 }

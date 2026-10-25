@@ -1,0 +1,20 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "summary", "blocker", "approaches"],
+  "properties": {
+    "status": { "type": "string", "enum": ["success", "blocked"] },
+    "summary": { "type": "string" },
+    "blocker": {
+      "anyOf": [
+        { "type": "null" },
+        { "type": "object", "additionalProperties": false, "required": ["kind", "detail"], "properties": {
+          "kind": { "type": "string", "enum": ["spec-conflict", "scope-growth", "tool"] },
+          "detail": { "type": "string" }
+        } }
+      ]
+    },
+    "approaches": { "type": "array", "items": { "type": "object", "additionalProperties": false,
+      "required": ["approach", "result"], "properties": { "approach": { "type": "string" }, "result": { "type": "string" } } } }
+  }
+}

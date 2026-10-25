@@ -29,7 +29,9 @@ export class SqliteManagerInbox implements ManagerInbox {
     if (/[\r\n]/.test(event.summary)) throw new Error('Manager event summary must be one line');
     this.insert(event.managerId, event, true);
     // The committed row is authoritative. A signal is only a wakeup hint.
-    writeFileSync(this.signalPath(event.managerId), String(Date.now()));
+    const signal = () => writeFileSync(this.signalPath(event.managerId), String(Date.now()));
+    // Worker decisions may call us inside their shared synchronous transaction. Signal after its commit.
+    if (this.db.inTransaction) queueMicrotask(signal); else signal();
   }
   record(manager: string, event: unknown): void { this.insert(manager, event, false); }
   private insert(manager: string, event: unknown, wakeable: boolean): void {

@@ -39,6 +39,16 @@ export class WorkerStore implements AttemptFence {
     if (task.currentAttempt !== ref.attempt) throw new StaleAttemptError(ref, task.currentAttempt);
     if (ref.attempt > 0 && ['superseded', 'stopped', 'cancelled'].includes(this.attempt(ref).state)) throw new StaleAttemptError(ref, task.currentAttempt);
   }
+  commitMerge(ref: AttemptRef, merge: () => string): string {
+    return this.write(ref, () => {
+      const task = this.task(ref.taskId);
+      if (task.state === 'merged') throw new Error('attempt already merged');
+      const commit = merge();
+      if (!commit) return '';
+      task.state = 'merged'; task.mergedCommit = commit; this.saveTask(task);
+      return commit;
+    });
+  }
   /** Keep the check and every associated write under BEGIN IMMEDIATE. */
   write<T>(ref: AttemptRef, action: () => T): T {
     return this.db.transaction(() => { this.assertCurrent(ref);

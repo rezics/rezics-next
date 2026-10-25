@@ -8,7 +8,14 @@
     "gateTimeoutMs": 1800000,
     "tmuxCommand": "tmux",
     "tmuxSession": "goal",
-    "managerCompactTokens": 300000
+    "managerCompactTokens": 300000,
+    "supermanager": "supermanager",
+    "managerLimits": {
+      "turns": 100,
+      "turnsWithoutDecision": 10,
+      "wallMs": 43200000
+    },
+    "termspacesCommand": "termspaces"
   },
   "codex": {
     "serviceTier": "fast",
@@ -18,5 +25,9 @@
     },
     "solContextWindow": 500000,
     "toolOutputTokens": 4000
-  }
+  },
+  "gate": [
+    "bun",
+    "tools/goal/scripts/gate.ts"
+  ]
 }

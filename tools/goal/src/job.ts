@@ -15,7 +15,7 @@ import type { RunningWorker } from './launch.ts';
 export class WorkerJob implements GateOutcomeSink {
   private readonly pending = new Set<Promise<void>>();
   constructor(readonly tasks: WorkerTasks, readonly landing: LandingQueue, readonly inbox: ManagerInbox,
-    readonly consultation: typeof consult = consult) {}
+    readonly consultation: typeof consult = consult, readonly afterSettle: () => Promise<void> = async () => {}) {}
   private track(work: Promise<void>): void {
     const handled = work.catch(error => { if (!(error instanceof StaleAttemptError)) throw error; });
     this.pending.add(handled);
@@ -62,10 +62,45 @@ export class WorkerJob implements GateOutcomeSink {
     const timer = setTimeout(() => stopIfStalled(true), Math.max(0, limits.maxMs - (Date.now() - Date.parse(ref.startedAt))));
     try {
       watcher = watch(ref.logPath, () => stopIfStalled(false));
-      try { await settle(this.tasks, worker, this.landing); }
+      try { await settle(this.tasks, worker, this.landing, async () => {
+        clearTimeout(timer); watcher?.close(); await this.afterSettle();
+      }); }
       catch (error) { if (!stopping || !(error instanceof StaleAttemptError)) throw error; }
       if (stopping) await stopping;
     } finally { clearTimeout(timer); watcher?.close(); }
+    if (!stopping) {
+      const fact = store.attempt(ref).failureKind;
+      if (fact) this.onAttemptExit(ref);
+    }
+  }
+  /** Launch/exit facts do not fabricate a gate outcome. */
+  onAttemptExit(ref: AttemptRef): void {
+    const store = this.tasks.store;
+    let retry: RetryOptions | undefined;
+    store.write(ref, () => {
+      const task = store.task(ref.taskId), attempt = store.attempt(ref), kind = attempt.failureKind;
+      if (!kind) return;
+      if (store.events(task.id).some(event => event.attempt === ref.attempt && event.kind === 'attempt-exit-classified')) return;
+      const failureClass = kind === 'tool' ? 'environment' : kind;
+      const record = store.record(ref)!;
+      record.outcome = 'stopped'; record.escalation = failureClass; store.putRecord(record);
+      store.event(ref, 'attempt-exit-classified', { kind: failureClass, detail: attempt.blocker ?? attempt.result });
+      store.updateAttempt(ref, a => { a.escalation = failureClass; });
+      const evidencePath = evidenceBundle(task, store.attempt(ref));
+      if (kind === 'spec-conflict' || kind === 'scope-growth') {
+        store.updateTask(ref, t => { t.state = 'stopped'; });
+        const event = { managerId: task.brief.manager, taskId: task.id, kind,
+          summary: `${kind}: ${attempt.blocker ?? attempt.result}`.replace(/[\r\n]+/g, ' '), evidencePath };
+        store.event(ref, 'manager-event', event); this.inbox.deliver(event);
+      } else {
+        retry = { evidence: evidencePath, escalation: failureClass, fixRound: attempt.fixRound };
+        if (kind === 'pool-exhausted') {
+          const key = this.tasks.settings.pools.find(pool => pool.name === attempt.pool)?.allowanceKey;
+          retry.excludePools = this.tasks.settings.pools.filter(pool => pool.allowanceKey === key).map(pool => pool.name);
+        }
+      }
+    });
+    if (retry) this.track(this.start(ref.taskId, retry));
   }
   onGateOutcome(outcome: GateOutcome): void {
     const store = this.tasks.store;
@@ -98,7 +133,7 @@ export class WorkerJob implements GateOutcomeSink {
       if (!automatic) {
         store.updateTask(outcome, t => { t.state = 'stopped'; });
         const event = { managerId: task.brief.manager, taskId: task.id, kind: failureClass as ManagerEventKind,
-          summary: `${failureClass}: ${outcome.firstFailure?.assertion ?? outcome.stage}`, evidencePath };
+          summary: `${failureClass}: ${outcome.firstFailure?.assertion ?? outcome.stage}`.replace(/[\r\n]+/g, ' '), evidencePath };
         store.event(outcome, 'manager-event', event); this.inbox.deliver(event);
       } else {
         const options: RetryOptions = { evidence: evidencePath, escalation: failureClass,
@@ -133,7 +168,7 @@ export class WorkerJob implements GateOutcomeSink {
     const task = this.tasks.store.task(taskId);
     const ref = { taskId, attempt: task.currentAttempt };
     this.tasks.store.assertCurrent(ref);
-    if (this.tasks.store.events(taskId).some(event => event.attempt === ref.attempt && event.kind === 'landing-requested')) return;
+    if (this.tasks.store.events(taskId).some(event => event.attempt === ref.attempt && event.kind === 'landing-requested')) { await this.afterSettle(); return; }
     const attempt = this.tasks.store.attempt(ref);
     if (!['running', 'exited'].includes(attempt.state)) throw new Error('only a running or exited attempt can be recovered');
     const exited = attempt.process ? waitForProcess(attempt.process).then(() => ({ code: null, signal: null }))

@@ -1,31 +1,24 @@
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, rmdirSync, unlinkSync, writeFileSync } from 'node:fs';
+import { watch, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, rmdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-export type ProcessIdentity = { pid: number; start: string; boot: string };
-
-/** Linux start ticks and boot id prevent pid reuse from inheriting a lease. */
-export function processIdentity(pid = process.pid, procRoot = '/proc'): ProcessIdentity | undefined {
-  try {
-    const stat = readFileSync(join(procRoot, String(pid), 'stat'), 'utf8');
-    const fields = stat.slice(stat.lastIndexOf(')') + 2).trim().split(/\s+/);
-    if (!fields[19] || fields[0] === 'Z' || fields[0] === 'X') return undefined;
-    return { pid, start: fields[19], boot: readFileSync(join(procRoot, 'sys/kernel/random/boot_id'), 'utf8').trim() };
-  } catch { return undefined; }
-}
-
-export function sameProcess(owner: ProcessIdentity): boolean {
-  const current = processIdentity(owner.pid);
-  return current?.start === owner.start && current.boot === owner.boot;
-}
+import { processIdentity, sameProcess, waitForProcess } from './process.ts';
+import type { ProcessIdentity } from './process.ts';
 
 type Owner = ProcessIdentity & { token: string };
 function readOwner(directory: string): Owner | undefined {
   try {
     const file = readdirSync(directory).find(file => file.endsWith('.json'));
-    return file ? JSON.parse(readFileSync(join(directory, file), 'utf8')) as Owner : undefined;
+    if (!file) return undefined;
+    const value = JSON.parse(readFileSync(join(directory, file), 'utf8')) as Owner;
+    if (!Number.isSafeInteger(value.pid) || value.pid < 1 || typeof value.start !== 'string' || typeof value.boot !== 'string'
+      || typeof value.token !== 'string' || !/^[a-zA-Z0-9-]+$/.test(value.token)) return undefined;
+    // Earlier integration leases recorded start/boot identity without the process group.
+    return { ...value, group: value.group ?? processIdentity(value.pid)?.group ?? 0 };
   } catch { return undefined; }
 }
+
+export class LeaseHeldError extends Error {}
 
 export type DirectoryLease = { release(): void };
 
@@ -54,7 +47,7 @@ export function acquireDirectoryLease(directory: string): DirectoryLease {
       }
       const owner = readOwner(directory);
       if (!owner) throw new Error(`Unrecognised lease owner: ${directory}`);
-      if (sameProcess(owner)) throw new Error(`Lease held: ${directory}`);
+      if (sameProcess(owner)) throw new LeaseHeldError(`Lease held: ${directory}`);
       // Delete only the dead incarnation's file. Concurrent reapers cannot erase a new token.
       try { unlinkSync(join(directory, `${owner.token}.json`)); } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
@@ -63,6 +56,25 @@ export function acquireDirectoryLease(directory: string): DirectoryLease {
         if (!['ENOENT', 'ENOTEMPTY'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error;
       }
     }
-    throw new Error(`Lease held: ${directory}`);
+    throw new LeaseHeldError(`Lease held: ${directory}`);
   } finally { rmSync(prepared, { recursive: true, force: true }); }
+}
+
+/** Subscribe before checking ownership; a release or owner exit cannot be missed between those operations. */
+export async function waitForDirectoryLease(directory: string): Promise<DirectoryLease> {
+  mkdirSync(dirname(directory), { recursive: true });
+  for (;;) {
+    const abort = new AbortController();
+    let wake!: () => void;
+    const changed = new Promise<void>(resolve => { wake = resolve; });
+    const watcher = watch(dirname(directory), (_, name) => { if (name === directory.split('/').at(-1)) wake(); });
+    let ownerExit: Promise<void> | undefined;
+    try {
+      try { return acquireDirectoryLease(directory); }
+      catch (error) { if (!(error instanceof LeaseHeldError)) throw error; }
+      const owner = readOwner(directory);
+      ownerExit = owner ? waitForProcess(owner, abort.signal) : Promise.resolve();
+      await Promise.race([changed, ownerExit]);
+    } finally { watcher.close(); abort.abort(); await ownerExit; }
+  }
 }

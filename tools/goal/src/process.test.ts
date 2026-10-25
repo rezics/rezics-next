@@ -1,22 +1,22 @@
 import { expect, test } from 'bun:test';
 import { spawn } from 'node:child_process';
-import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdirSync, writeFileSync, rmSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { acquireDirectoryLease } from './worker-lease.ts';
+import { acquireDirectoryLease } from './lease.ts';
 import { processIdentity, sameProcess, terminateProcessGroup, waitForProcess } from './process.ts';
-import { tempDirectory } from './worker-test-support.ts';
+import { tempDirectory } from './test-support.ts';
 
 test('directory leases refuse a live owner, reclaim a dead identity and never let old cleanup drop a successor', () => {
   const root = tempDirectory(), directory = join(root, 'lease');
   try {
     const first = acquireDirectoryLease(directory);
-    expect(() => acquireDirectoryLease(directory)).toThrow('held');
+    expect(() => acquireDirectoryLease(directory)).toThrow('Lease held');
     first.release();
     const second = acquireDirectoryLease(directory); first.release();
-    expect(() => acquireDirectoryLease(directory)).toThrow('held'); second.release();
+    expect(() => acquireDirectoryLease(directory)).toThrow('Lease held'); second.release();
     mkdirSync(directory);
     const identity = processIdentity(process.pid)!;
-    writeFileSync(join(directory, 'owner.json'), JSON.stringify({ token: 'stale', process: { ...identity, start: '0' } }));
+    writeFileSync(join(directory, 'stale.json'), JSON.stringify({ ...identity, token: 'stale', start: '0' }));
     const reclaimed = acquireDirectoryLease(directory); expect(reclaimed).toBeDefined(); reclaimed.release();
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
@@ -33,15 +33,4 @@ test('PID start time and boot identity fence PID reuse; SIGKILL removes an uncoo
     await terminateProcessGroup(identity, 30); await gone;
     expect(sameProcess(identity)).toBe(false);
   } finally { await terminateProcessGroup(identity, 20); }
-});
-
-test('stale reclamation leases are themselves recoverable after a controller crash', () => {
-  const root = tempDirectory(), directory = join(root, 'lease');
-  try {
-    const identity = { ...processIdentity(process.pid)!, start: '0' };
-    for (const path of [directory, `${directory}.reclaim`]) {
-      mkdirSync(path); writeFileSync(join(path, 'owner.json'), JSON.stringify({ token: 'dead', process: identity }));
-    }
-    acquireDirectoryLease(directory).release();
-  } finally { rmSync(root, { recursive: true, force: true }); }
 });

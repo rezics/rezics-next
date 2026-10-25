@@ -6,7 +6,7 @@ import type { CompletionEvidence } from './managers.ts';
 
 export type GoalCondition = { taskIds: readonly string[]; gate: readonly string[] };
 export type CompletionOptions = {
-  mainCheckout: string; stateDirectory: string; worktreeRoot: string;
+  mainCheckout: string; stateDirectory: string; worktreeRoot: string; mainBranch?: string;
   condition(goal: string): GoalCondition;
   /** Worker-owned state is read only through this adapter. Missing tasks are unmet. */
   mergedTasks(goal: string): Promise<ReadonlySet<string>>;
@@ -34,19 +34,19 @@ export function completionChecker(options: CompletionOptions): (goal: string) =>
       };
       const unmet = await missing();
       if (unmet.length) return fail(`Unmerged tasks: ${unmet.join(', ')}`);
-      const base = git(options.mainCheckout, 'rev-parse', 'refs/heads/main');
+      const base = git(options.mainCheckout, 'rev-parse', `refs/heads/${options.mainBranch ?? 'main'}`);
       mkdirSync(options.worktreeRoot, { recursive: true });
       git(options.mainCheckout, 'worktree', 'add', '--detach', tree, base); added = true;
       const gated = await (options.runGate ?? gateRunner())(condition.gate, tree, evidencePath);
       if (!gated.passed) return fail(`Main gate failed${gated.timedOut ? ' (timed out)' : ''}: ${gated.output.slice(0, 1000).replace(/[\r\n]+/g, ' ')}`);
       if (git(tree, 'rev-parse', 'HEAD') !== base) return fail('Main gate changed the commit being checked');
-      if (git(options.mainCheckout, 'rev-parse', 'refs/heads/main') !== base) return fail('Main moved during the completion gate; propose completion again');
+      if (git(options.mainCheckout, 'rev-parse', `refs/heads/${options.mainBranch ?? 'main'}`) !== base) return fail('Main moved during the completion gate; propose completion again');
       const remaining = await missing();
       if (remaining.length) return fail(`Unmerged tasks: ${remaining.join(', ')}`);
       const latest = options.condition(goal);
       if (JSON.stringify([...latest.taskIds].sort()) !== JSON.stringify([...condition.taskIds].sort())
         || JSON.stringify(latest.gate) !== JSON.stringify(condition.gate)) return fail('Goal condition changed during the completion gate');
-      if (git(options.mainCheckout, 'rev-parse', 'refs/heads/main') !== base) return fail('Main moved during the completion check; propose completion again');
+      if (git(options.mainCheckout, 'rev-parse', `refs/heads/${options.mainBranch ?? 'main'}`) !== base) return fail('Main moved during the completion check; propose completion again');
       const summary = `All scoped tasks are merged and the gate passes on main ${base}.`;
       writeFileSync(evidencePath, `${summary}\n`, { flag: 'a' });
       return { passed: true, summary, evidencePath };

@@ -1,8 +1,8 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
-import type { ProcessIdentity } from './types.ts';
+export type ProcessIdentity = { pid: number; start: string; boot: string; group: number };
 
-export function processIdentity(pid: number, procRoot = '/proc'): ProcessIdentity | null {
+export function processIdentity(pid = process.pid, procRoot = '/proc'): ProcessIdentity | null {
   if (!Number.isSafeInteger(pid) || pid < 1) return null;
   try {
     const stat = readFileSync(`${procRoot}/${pid}/stat`, 'utf8');
@@ -20,8 +20,8 @@ export function groupMembers(group: number): ProcessIdentity[] {
     .filter((p): p is ProcessIdentity => p !== null && p.group === group);
 }
 /** Linux pidfds let a restarted controller wait for non-children without polling or a model. */
-export async function waitForProcess(identity: ProcessIdentity): Promise<void> {
-  if (!sameProcess(identity)) return;
+export async function waitForProcess(identity: ProcessIdentity, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted || !sameProcess(identity)) return;
   const source = `import os,sys,select
 pid,start,boot=sys.argv[1:]
 try:
@@ -36,8 +36,14 @@ except FileNotFoundError: pass
 `;
   const waiter = spawn('python3', ['-c', source, String(identity.pid), identity.start, identity.boot], { stdio: 'ignore' });
   await new Promise<void>((resolve, reject) => {
+    const abort = () => waiter.kill('SIGTERM');
+    signal?.addEventListener('abort', abort, { once: true });
+    if (signal?.aborted) abort();
     waiter.once('error', reject);
-    waiter.once('exit', code => code === 0 ? resolve() : reject(new Error('pidfd waiter failed')));
+    waiter.once('exit', code => {
+      signal?.removeEventListener('abort', abort);
+      if (code === 0 || signal?.aborted) resolve(); else reject(new Error('pidfd waiter failed'));
+    });
   });
 }
 /** Signal only an identified detached group, then verify every surviving member before allowing launch. */
@@ -53,7 +59,7 @@ export async function terminateProcessGroup(identity: ProcessIdentity | null, gr
   for (const member of members) {
     if (sameProcess(member)) { try { process.kill(member.pid, 'SIGTERM'); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; } }
   }
-  const gone = Promise.all(members.map(waitForProcess));
+  const gone = Promise.all(members.map(identity => waitForProcess(identity)));
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([gone, new Promise<void>(resolve => { timer = setTimeout(resolve, graceMs); })]);
@@ -63,7 +69,7 @@ export async function terminateProcessGroup(identity: ProcessIdentity | null, gr
     if (member.boot !== identity.boot || BigInt(member.start) < BigInt(identity.start)) throw new Error('process group identity changed');
     if (sameProcess(member)) { try { process.kill(member.pid, 'SIGKILL'); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; } }
   }
-  await Promise.all(remaining.map(waitForProcess));
+  await Promise.all(remaining.map(identity => waitForProcess(identity)));
   await gone;
   if (groupMembers(identity.group).length) throw new Error('worker process group is still alive');
 }

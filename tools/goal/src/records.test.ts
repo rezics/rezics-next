@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CLASSIFIER_VERSION, classifyStep, measureLog } from './records.ts';
-import { harness } from './worker-test-support.ts';
+import { harness } from './test-support.ts';
 import { importAttempt } from './import-attempt.ts';
 
 const fixture = join(import.meta.dir, 'fixtures/resumed.jsonl');
@@ -43,4 +43,29 @@ test('CLI imports a preexisting log from a brief without starting a model or lan
     expect(h.store.attempts()[0]!.process).toBeNull(); expect(h.store.tasks()[0]!.state).toBe('stopped');
     expect(h.store.events().filter(e => e.kind === 'landing-requested')).toEqual([]);
   } finally { h.dispose(); }
+});
+
+test('capture-directory import uses historical metadata without launching a CLI or changing its source checkout', async () => {
+  const { mkdirSync, writeFileSync } = await import('node:fs');
+  const { runWorkerCommand } = await import('./worker-commands.ts');
+  const h = harness(), output: string[] = [];
+  try {
+    const capture = join(h.settings.stateDirectory, 'capture'); mkdirSync(capture);
+    writeFileSync(join(capture, 'events.jsonl'), JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 100, cached_input_tokens: 80, output_tokens: 10 } }));
+    writeFileSync(join(capture, 'meta.start.json'), JSON.stringify({ task: 'historical', worktree: h.root, cli: 'codex', model: 'gpt-6.1-sol', effort: 'high', pool: 'historical-pool', start: '2026-10-25T00:00:00Z', criticalPath: true, poolReadingBefore: '0% weekly' }));
+    writeFileSync(join(capture, 'meta.end.json'), JSON.stringify({ end: '2026-10-25T00:01:00Z', exit: 0 }));
+    await runWorkerCommand('import-attempt', [capture], { tasks: h.tasks, env: {}, print: value => output.push(value) });
+    const record = JSON.parse(output[0]!);
+    expect(record.tokens).toEqual({ input: 100, cached: 80, output: 10 }); expect(record.criticalPath).toBe(true);
+    expect(record.before.windows[0].usedPercent).toBe(0); expect(record.tableVersion).toBe('pre-control-plane');
+    expect(h.store.tasks()[0]!.branch).toBe(''); expect(h.store.attempts()[0]!.exitCode).toBe(0);
+  } finally { h.dispose(); }
+});
+
+test('a recovered CLI transport error is not an attempt failure after a completed turn', () => {
+  const log = [
+    { type: 'error', message: 'Reconnecting' },
+    { type: 'turn.completed', usage: { input_tokens: 10 } },
+  ].map(value => JSON.stringify(value)).join('\n');
+  expect(measureLog(log).failureKind).toBeNull();
 });

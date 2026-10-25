@@ -18,6 +18,8 @@ export class StaleAttemptError extends Error {
 /** Implemented by the worker side. Every state-changing step checks it, including the merge itself. */
 export interface AttemptFence {
   assertCurrent(ref: AttemptRef): void;
+  /** Hold the shared store write lock through Git advancement and publication of merged task state. */
+  commitMerge(ref: AttemptRef, merge: () => string): string;
 }
 
 export type LandingRequest = AttemptRef & {

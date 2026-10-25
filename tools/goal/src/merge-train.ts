@@ -1,37 +1,49 @@
 import { randomUUID } from 'node:crypto';
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { StaleAttemptError } from './contracts.ts';
 import type { AttemptFence, GateOutcome, GateOutcomeSink, GateStage } from './contracts.ts';
 import { SqliteLandingQueue, type LandingEntry } from './land.ts';
-import { acquireDirectoryLease } from './lease.ts';
+import { acquireDirectoryLease, waitForDirectoryLease } from './lease.ts';
 import { changedFiles, firstFailure, gateRunner, git, outsideScope, type GateRunner } from './merge.ts';
 
 export type TrainOptions = {
   mainCheckout: string; stateDirectory: string; worktreeRoot: string;
   queue: SqliteLandingQueue; fence: AttemptFence; sink: GateOutcomeSink;
-  runGate?: GateRunner;
+  runGate?: GateRunner; gateIdentity?: string; mainBranch?: string;
+  /** Test seams around the final synchronous Git operation and train shutdown. */
+  merge?: (cwd: string, candidate: string) => void; beforeRelease?: () => Promise<void>;
 };
 
 export class MergeTrain {
   constructor(private readonly options: TrainOptions) {}
 
-  async run(): Promise<void> {
+  async run(waitForLease = false): Promise<void> {
     const o = this.options;
     mkdirSync(o.stateDirectory, { recursive: true });
-    const lease = acquireDirectoryLease(join(o.stateDirectory, 'train.lease'));
+    const leasePath = join(o.stateDirectory, 'train.lease');
+    const lease = waitForLease ? await waitForDirectoryLease(leasePath) : acquireDirectoryLease(leasePath);
     try {
       for (let entry; (entry = o.queue.next());) {
-        if (!entry.outcome) o.queue.finish(entry.id, await this.integrate(entry));
-        // A crash between sink delivery and acknowledgement may redeliver the same immutable outcome.
-        o.sink.onGateOutcome(o.queue.next()!.outcome!);
-        o.queue.acknowledge(entry.id);
+        try {
+          const outcome = entry.outcome ?? await this.integrate(entry);
+          if (!entry.outcome) o.queue.finish(entry.id, outcome);
+          // Sink delivery is at least once; obsolete entries must never block the current attempt.
+          o.sink.onGateOutcome(outcome);
+          o.queue.acknowledge(entry.id);
+        } catch (error) {
+          if (!(error instanceof StaleAttemptError)) throw error;
+          o.queue.acknowledge(entry.id);
+        }
       }
+      await o.beforeRelease?.();
     } finally { lease.release(); }
   }
 
   private async integrate(entry: LandingEntry): Promise<GateOutcome> {
     const o = this.options;
     const request = entry.request;
+    const mainBranch = o.mainBranch ?? 'main';
     const started = Date.now();
     const logPath = join(o.stateDirectory, `landing-${entry.id}.log`);
     writeFileSync(logPath, '');
@@ -43,13 +55,13 @@ export class MergeTrain {
     const runGate = o.runGate ?? gateRunner();
     try {
       o.fence.assertCurrent(request);
-      if (git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== 'refs/heads/main')
+      if (git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${mainBranch}`)
         throw new Error('The main checkout must already have main checked out');
-      const main = () => git(o.mainCheckout, 'rev-parse', 'refs/heads/main');
+      const main = () => git(o.mainCheckout, 'rev-parse', `refs/heads/${mainBranch}`);
       // Recover an advance that committed before its outcome was saved.
       let alreadyMerged = false;
       if (entry.candidate) {
-        try { git(o.mainCheckout, 'merge-base', '--is-ancestor', entry.candidate, 'main'); alreadyMerged = true; } catch {}
+        try { git(o.mainCheckout, 'merge-base', '--is-ancestor', entry.candidate, mainBranch); alreadyMerged = true; } catch {}
       }
       if (alreadyMerged && entry.candidate) {
         result.passed = true; result.stage = 'merge'; result.mergedCommit = entry.candidate;
@@ -85,9 +97,14 @@ export class MergeTrain {
         if (!gated.passed) {
           result.timedOut = gated.timedOut;
           result.firstFailure = firstFailure(gated.output);
-          git(trainTree, 'reset', '--hard', base);
-          git(trainTree, 'clean', '-fdx');
-          const baseline = await runGate(request.gate, trainTree, logPath);
+          const key = JSON.stringify([o.gateIdentity ?? '', request.gate]);
+          let baseline = o.queue.baseline(base, key);
+          if (!baseline) {
+            git(trainTree, 'reset', '--hard', base);
+            git(trainTree, 'clean', '-fdx');
+            baseline = await runGate(request.gate, trainTree, logPath);
+            o.queue.saveBaseline(base, key, baseline);
+          }
           o.fence.assertCurrent(request);
           if (main() !== base) continue;
           result.failsOnMain = !baseline.passed && firstFailure(baseline.output).fingerprint === result.firstFailure.fingerprint;
@@ -100,15 +117,22 @@ export class MergeTrain {
         stage = 'merge';
         o.queue.candidate(entry.id, candidate);
         if (main() !== base) continue;
-        if (git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== 'refs/heads/main')
+        if (git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${mainBranch}`)
           throw new Error('Main checkout HEAD changed while the gate ran');
-        o.fence.assertCurrent(request);
-        // Keep this synchronous: no await between fencing and Git's locked ref update.
-        git(o.mainCheckout, 'merge', '--ff-only', '--no-edit', candidate);
+        const advanced = o.fence.commitMerge(request, () => {
+          // Retry uses the same BEGIN IMMEDIATE lock through this check, Git and merged-state publication.
+          if (main() !== base) return '';
+          if (git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${mainBranch}`) throw new Error('Main checkout HEAD changed');
+          if (o.merge) o.merge(o.mainCheckout, candidate);
+          else git(o.mainCheckout, 'merge', '--ff-only', '--no-edit', candidate);
+          return candidate;
+        });
+        if (!advanced) continue;
         result.passed = true; result.stage = 'merge'; result.mergedCommit = candidate;
         return result;
       }
     } catch (error) {
+      if (error instanceof StaleAttemptError) throw error;
       const message = String(error);
       appendFileSync(logPath, `${message}\n`);
       result.stage = stage;

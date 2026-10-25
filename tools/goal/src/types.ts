@@ -1,3 +1,4 @@
+import type { ProcessIdentity } from './process.ts';
 import type { AttemptRef, FirstFailure, ManagerEventKind } from './contracts.ts';
 
 export type Cli = 'codex' | 'grok' | 'cursor';
@@ -16,11 +17,13 @@ export type Pool = {
 export type Settings = {
   version: 1; mainCheckout: string; stateDirectory: string; worktreeRoot: string; databasePath: string;
   mainBranch: string; branchPrefix: string; localFile: string; pools: Pool[];
-  routingFile: string; riskAreasFile: string;
+  routingFile: string; riskAreasFile: string; gate: string[];
   terminationGraceMs: number;
   codex: { serviceTier: string; compactTokens: { sol: number; luna: number }; solContextWindow: number; toolOutputTokens: number };
   integration: {
     gateConcurrency: number; gateTimeoutMs: number; managerDirectory: string; inboxDirectory: string;
+    managerSocket: string; tmuxSocket: string; termspacesCommand: string; supermanager: string;
+    managerLimits: { turns: number; turnsWithoutDecision: number; wallMs: number };
     tmuxCommand: string; tmuxSession: string; managerCompactTokens: number;
   };
 };
@@ -30,7 +33,6 @@ export type Brief = {
   estimate: { lines: number; files: number }; criticalPath: boolean; waiting: string[];
   inseparable: boolean; citesSources: boolean; hostileInput: boolean; markdown: string;
 };
-export type ProcessIdentity = { pid: number; start: string; boot: string; group: number };
 export type PoolReading = {
   pool: string; allowanceKey: string; at: string; observedAt: string | null;
   windows: { usedPercent: number; resetsAt: number | null; minutes: number | null }[];
@@ -41,9 +43,10 @@ export type Task = {
   worktree: string; branch: string; base: string; taskClass: TaskClass; currentAttempt: number;
   createdAt: string; mergedCommit?: string;
 };
+export type AttemptFailure = 'spec-conflict' | 'scope-growth' | 'pool-exhausted' | 'tool';
 export type Attempt = AttemptRef & {
   state: 'pending' | 'running' | 'exited' | 'superseded' | 'stopped' | 'cancelled';
-  supersededFinalized?: boolean;
+  supersededFinalized?: boolean; failureKind?: AttemptFailure | null;
   profile: Profile; pool: string; tableVersion: string; experiment: string | null;
   startedAt: string; endedAt: string | null; process: ProcessIdentity | null;
   logPath: string; evidencePath: string; auxiliaryProcesses: ProcessIdentity[]; session: string | null; fixRound: number; consulted: boolean;

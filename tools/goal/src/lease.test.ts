@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
 import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { acquireDirectoryLease, processIdentity, sameProcess } from './lease.ts';
+import { acquireDirectoryLease } from './lease.ts';
+import { processIdentity, sameProcess } from './process.ts';
 import { temporaryDirectory } from './test-support.ts';
 
 test('identity rejects pid reuse, reboot and zombies', () => {
@@ -11,9 +12,9 @@ test('identity rejects pid reuse, reboot and zombies', () => {
     writeFileSync(join(t.path, 'sys/kernel/random/boot_id'), 'boot');
     const fields = ['S', '1', '1', ...Array(16).fill('0'), '123'];
     writeFileSync(join(t.path, '7/stat'), `7 (name with (parentheses)) ${fields.join(' ')}`);
-    expect(processIdentity(7, t.path)).toEqual({ pid: 7, start: '123', boot: 'boot' });
+    expect(processIdentity(7, t.path)).toEqual({ pid: 7, start: '123', boot: 'boot', group: 1 });
     fields[0] = 'Z'; writeFileSync(join(t.path, '7/stat'), `7 (zombie) ${fields.join(' ')}`);
-    expect(processIdentity(7, t.path)).toBeUndefined();
+    expect(processIdentity(7, t.path)).toBeNull();
     expect(sameProcess({ ...processIdentity()!, start: 'other' })).toBe(false);
     expect(sameProcess({ ...processIdentity()!, boot: 'other' })).toBe(false);
   } finally { t.close(); }

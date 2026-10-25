@@ -28,11 +28,11 @@ export function launchCommand(options: LaunchOptions): [string, string[]] {
     ...(profile.model.includes('sol') ? ['-c', `model_context_window=${codex.solContextWindow}`] : []),
     '-c', 'features.multi_agent=false', '-c', 'features.multi_agent_v2=false', ...mcp,
     ...(options.readOnly ? ['-s', 'read-only', '-c', 'approval_policy="never"'] : ['--dangerously-bypass-approvals-and-sandbox']),
-    ...(options.research ? ['-c', 'web_search="live"'] : []), '-C', worktree, '--', prompt]];
+    ...(options.research ? ['-c', 'web_search="live"'] : []), ...(!options.readOnly ? ['--output-schema', join(import.meta.dir, '../worker-result.schema.json')] : []), '-C', worktree, '--', prompt]];
 }
 export function workerEnvironment(pool: Pool, extra: NodeJS.ProcessEnv = {}, parent: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   const env = { ...parent };
-  for (const key of ['CODEX_SESSION_ID', 'CODEX_THREAD_ID', 'CLAUDE_CODE_SESSION_ID', 'CODEX_HOME', 'GROK_HOME', 'GROK_CONFIG_DIR', 'CURSOR_CONFIG_DIR', 'CLAUDE_CONFIG_DIR']) delete env[key];
+  for (const key of ['GOAL_MANAGER', 'CODEX_SESSION_ID', 'CODEX_THREAD_ID', 'CLAUDE_CODE_SESSION_ID', 'CODEX_HOME', 'GROK_HOME', 'GROK_CONFIG_DIR', 'CURSOR_CONFIG_DIR', 'CLAUDE_CONFIG_DIR']) delete env[key];
   const key = pool.cli === 'codex' ? 'CODEX_HOME' : pool.cli === 'grok' ? 'GROK_HOME' : pool.cli === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CURSOR_CONFIG_DIR';
   return { ...env, ...extra, [key]: pool.configDirectory };
 }
@@ -40,8 +40,9 @@ export function workerPrompt(task: Task, evidence?: string, consultation?: strin
   return [
     `Work only in ${task.worktree}, on branch ${task.branch}. Read and follow its AGENTS.md.`,
     'Work until every acceptance condition holds. Do not send progress reports. Commit the completed changes on this branch.',
-    'In your final answer, give concise APPROACH: and OUTCOME: lines for each approach tried and its verification result.',
-    'Do not rebase, merge, change acceptance tests, or expand the declared scope. If blocked, finish with BLOCKER: followed by the concrete blocker; otherwise finish with RESULT: success.',
+    'Do not rebase, merge, change acceptance tests, or expand the declared scope.',
+    'Finish with one JSON object matching this exit schema. A blocker is a fact about your attempt; explain the concrete conflict or tool failure in its detail.',
+    readFileSync(join(import.meta.dir, '../worker-result.schema.json'), 'utf8'),
     task.brief.kind === 'bulk-text' ? 'Write the text yourself. Do not use translation services, translation scripts, or character mapping tables.' : '',
     'The task contract follows:', task.brief.markdown,
     evidence ? `Continue from this evidence bundle:\n${evidence}` : '',

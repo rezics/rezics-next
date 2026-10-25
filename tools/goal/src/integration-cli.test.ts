@@ -7,7 +7,7 @@ import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { temporaryDirectory, repository } from './test-support.ts';
 
-const cli = join(import.meta.dir, 'cli.ts');
+const cli = join(import.meta.dir, 'fixtures/cli-runtime.ts');
 const runtime = join(import.meta.dir, 'fixtures/cli-runtime.ts');
 
 // Unix socket paths must fit sockaddr_un; use a short relative path under the repository's .temp.
@@ -16,7 +16,7 @@ function shortDirectory(absolute: string): string { return relative(process.cwd(
 test('goal inbox wait blocks in a separate process and exits promptly on another process delivery', async () => {
   const t = temporaryDirectory(); const db = openDb(join(t.path, 'state.sqlite'));
   const inbox = new SqliteManagerInbox(db, t.path);
-  const env = { ...process.env, GOAL_RUNTIME: runtime, FAKE_GOAL_STATE: t.path, FAKE_GOAL_MAIN: t.path };
+  const env = { ...process.env, FAKE_GOAL_STATE: t.path, FAKE_GOAL_MAIN: t.path };
   const child = Bun.spawn([process.execPath, cli, 'inbox', 'wait', 'manager'], { env, stdout: 'pipe', stderr: 'pipe' });
   try {
     let exited = false; const exit = child.exited.then(code => { exited = true; return code; });
@@ -33,7 +33,7 @@ test('registered CLI commands enqueue, train and start and stop a manager throug
   const repo = repository();
   const stateAbsolute = join(repo.path, 'state'); mkdirSync(stateAbsolute);
   const state = shortDirectory(stateAbsolute);
-  const env = { ...process.env, GOAL_RUNTIME: runtime, FAKE_GOAL_STATE: state, FAKE_GOAL_MAIN: repo.main };
+  const env = { ...process.env, FAKE_GOAL_STATE: state, FAKE_GOAL_MAIN: repo.main };
   const host = spawn(process.execPath, [cli, '_manager-host'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   let hostError = ''; host.stderr.on('data', chunk => { hostError += chunk.toString(); });
   const exited = new Promise<void>(resolve => host.once('exit', () => resolve()));
@@ -60,7 +60,7 @@ test('registered CLI commands enqueue, train and start and stop a manager throug
 test('manager start creates its host and returns while the host stays alive', async () => {
   const t = temporaryDirectory();
   const state = shortDirectory(t.path);
-  const env = { ...process.env, GOAL_RUNTIME: runtime, FAKE_GOAL_STATE: state, FAKE_GOAL_MAIN: t.path };
+  const env = { ...process.env, FAKE_GOAL_STATE: state, FAKE_GOAL_MAIN: t.path };
   const child = Bun.spawn([process.execPath, cli, 'manager', 'start', 'manager', '--engine', 'codex', '--budget', '20000'],
     { env, stdout: 'pipe', stderr: 'pipe' });
   let hostPid: number | undefined;

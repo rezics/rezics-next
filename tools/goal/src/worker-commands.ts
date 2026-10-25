@@ -1,26 +1,27 @@
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, statSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { loadSettings } from './config.ts';
+import { loadSettings, createRuntime, type Runtime } from './config.ts';
 import { openDb } from './db.ts';
 import { WorkerStore } from './store.ts';
 import { WorkerTasks } from './tasks.ts';
 import { WorkerJob } from './job.ts';
-import { importAttempt } from './import-attempt.ts';
+import { importAttempt, importRunDirectory } from './import-attempt.ts';
 import type { LandingQueue, ManagerInbox } from './contracts.ts';
 import type { AttemptRecord, Effort, Settings, Tokens } from './types.ts';
 
 export type WorkerCommandOptions = {
-  settings?: Settings; store?: WorkerStore; tasks?: WorkerTasks; landing?: LandingQueue; inbox?: ManagerInbox;
+  runtime?: Runtime; settings?: Settings; store?: WorkerStore; tasks?: WorkerTasks; landing?: LandingQueue; inbox?: ManagerInbox;
   print?: (value: string) => void; env?: NodeJS.ProcessEnv;
 };
-/** Integration can inject its queue and inbox here. Without adapters, outbound requests remain durable worker events. */
+/** Tests may inject individual services. Production commands always use the shared runtime. */
 export async function runWorkerCommand(command: string, argv: string[], options: WorkerCommandOptions = {}): Promise<number> {
-  const settings = options.settings ?? options.tasks?.settings ?? loadSettings({ ...(options.env ? { env: options.env } : {}) });
+  const settings = options.runtime?.settings ?? options.settings ?? options.tasks?.settings ?? loadSettings({ ...(options.env ? { env: options.env } : {}) });
   mkdirSync(dirname(settings.databasePath), { recursive: true });
-  const store = options.store ?? options.tasks?.store ?? new WorkerStore(openDb(settings.databasePath));
-  const tasks = options.tasks ?? new WorkerTasks(settings, store);
+  const runtime = options.runtime ?? (!options.store && !options.tasks && !options.landing && !options.inbox ? createRuntime({ settings }) : undefined);
+  const store = runtime?.store ?? options.store ?? options.tasks?.store ?? new WorkerStore(openDb(settings.databasePath));
+  const tasks = runtime?.tasks ?? options.tasks ?? new WorkerTasks(settings, store);
   const print = options.print ?? console.log;
-  const job = new WorkerJob(tasks, options.landing ?? { enqueue() {} }, options.inbox ?? { deliver() {} });
+  const job = runtime?.job ?? new WorkerJob(tasks, options.landing ?? { enqueue() {} }, options.inbox ?? { deliver() {} });
   const env = options.env ?? process.env;
   try {
     // A worker's inherited sequence fences every mutating command before it can dispatch another task or retry itself.
@@ -48,6 +49,11 @@ export async function runWorkerCommand(command: string, argv: string[], options:
       store.event({ taskId, attempt: Number(n) }, kind, JSON.parse(body));
     } else if (command === 'import-attempt') {
       if (!arg) throw new Error('usage: import-attempt <log> (--task <task> | --brief <brief>) --start <ISO> --end <ISO> --pool <pool> --model <model> --effort <effort>');
+      if (statSync(arg).isDirectory()) {
+        if (argv.length !== 1) throw new Error('capture directories take their metadata from meta.start.json and meta.end.json');
+        print(JSON.stringify(importRunDirectory(tasks, arg), null, 2));
+        return 0;
+      }
       const flags: Record<string, string> = {};
       for (let i = 1; i < argv.length; i += 2) {
         const name = argv[i], value = argv[i + 1];
@@ -67,6 +73,7 @@ export async function runWorkerCommand(command: string, argv: string[], options:
         ...(flags.baseline ? { baseline: JSON.parse(flags.baseline) as Tokens } : {}), ...(flags['table-version'] ? { tableVersion: flags['table-version'] } : {}) }), null, 2));
     } else throw new Error(`unknown worker command: ${command}`);
     await job.drain();
+    if (runtime && ['dispatch', 'retry', 'consult'].includes(command)) await runtime.drain();
     return 0;
-  } finally { if (!options.store && !options.tasks) store.db.close(); }
+  } finally { if (!options.runtime && runtime) runtime.close(); else if (!options.store && !options.tasks && !runtime) store.db.close(); }
 }

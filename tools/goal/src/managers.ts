@@ -11,7 +11,7 @@ export type ManagerLimits = { turns: number; turnsWithoutDecision: number; wallM
 export type ManagerSpec = {
   id: string; goal: string; objective: string; brief: string; cwd: string;
   engine: 'codex' | 'claude'; pool: CodexPool; budget: number; effort: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
-  supermanager: string; limits: ManagerLimits;
+  supermanager: string; compactTokens?: number; limits: ManagerLimits;
 };
 export type GoalState = { status: 'active' | 'paused' | 'complete' | 'blocked' | 'usageLimited' | 'budgetLimited';
   tokensUsed: number; timeUsedSeconds: number; tokenBudget: number | null };
@@ -129,7 +129,7 @@ export class ManagerSessions {
         if (spec.engine === 'codex') {
           const client = await this.client(spec.pool);
           const started = await client.request('thread/start', { cwd: spec.cwd, model: 'gpt-6.1-sol',
-            config: { model_reasoning_effort: spec.effort, model_auto_compact_token_limit: 300000 } });
+            config: { model_reasoning_effort: spec.effort, model_auto_compact_token_limit: spec.compactTokens ?? 300000 } });
           state.threadId = started.thread.id;
           this.save(state);
           const goal = await client.request('thread/goal/set', { threadId: state.threadId, objective: spec.objective,
@@ -146,8 +146,8 @@ export class ManagerSessions {
             UserPromptSubmit: [{ hooks: [{ type: 'command', command: hook('turn-start') }] }],
             Stop: [{ hooks: [{ type: 'command', command: hook('turn-end') }] }],
           } };
-          this.services.windows.register(spec.id, ['env', `GOAL_MANAGER=${spec.id}`, 'claude', '--model', 'claude-opus-5-5',
-            '--autocompact', '300000', '--settings', JSON.stringify(settings), this.opening(spec)], spec.cwd);
+          this.services.windows.register(spec.id, ['env', `GOAL_MANAGER=${spec.id}`, `CLAUDE_CONFIG_DIR=${spec.pool.codexHome}`, spec.pool.executable ?? 'claude', '--model', 'claude-opus-5-5',
+            '--autocompact', String(spec.compactTokens ?? 300000), '--settings', JSON.stringify(settings), this.opening(spec)], spec.cwd);
           state.status = 'running';
         }
         this.save(state); this.armDeadline(state);
