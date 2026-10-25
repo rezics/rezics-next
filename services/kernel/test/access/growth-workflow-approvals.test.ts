@@ -132,8 +132,8 @@ for (const population of ['same-actor history', 'unrelated accounts and resource
           );
           await database.admin.query(
             `INSERT INTO core.receipt
-            (partition_no,actor_account_id,command_kind,idempotency_key,request_digest,epoch,position,transaction_id,response)
-            SELECT $1,CASE WHEN $4 THEN $3::uuid ELSE id END,'access.workflow-approval.create',$5||':'||id::text,
+            (partition_no,principal_kind,principal_id,command_kind,idempotency_key,request_digest,epoch,position,transaction_id,response)
+            SELECT $1,'account',CASE WHEN $4 THEN $3::uuid ELSE id END,'access.workflow-approval.create',$5||':'||id::text,
               decode(repeat('0',64),'hex'),1,1,id,'{}' FROM unnest($2::uuid[]) id`,
             [partitionOf(route), ids, f.actor, population === 'same-actor history', route],
           );
