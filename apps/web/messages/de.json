@@ -23,5 +23,13 @@
   "subject_value_unlabelled": "Unbeschriftetes Thema",
   "subject_aliases": "Auch bekannt als",
   "subject_sources": "Quellen",
-  "subject_qualifiers": "Qualifikatoren"
+  "subject_qualifiers": "Qualifikatoren",
+  "search_heading": "Themen suchen",
+  "search_label": "Themen suchen",
+  "search_placeholder": "Suchen…",
+  "search_submit": "Suchen",
+  "search_results": "Passende Themen",
+  "search_no_results": "Keine Ergebnisse gefunden.",
+  "search_no_suggestions": "Keine Vorschläge gefunden.",
+  "search_more": "Weitere Ergebnisse"
 }

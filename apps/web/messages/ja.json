@@ -23,5 +23,13 @@
   "subject_value_unlabelled": "ラベルのない項目",
   "subject_aliases": "別名",
   "subject_sources": "出典",
-  "subject_qualifiers": "修飾子"
+  "subject_qualifiers": "修飾子",
+  "search_heading": "項目を検索",
+  "search_label": "項目を検索",
+  "search_placeholder": "検索…",
+  "search_submit": "検索",
+  "search_results": "一致する項目",
+  "search_no_results": "検索結果がありません。",
+  "search_no_suggestions": "候補がありません。",
+  "search_more": "さらに表示"
 }

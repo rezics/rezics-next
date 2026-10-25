@@ -23,5 +23,13 @@
   "subject_value_unlabelled": "未标记的主题",
   "subject_aliases": "又名",
   "subject_sources": "来源",
-  "subject_qualifiers": "限定条件"
+  "subject_qualifiers": "限定条件",
+  "search_heading": "搜索主题",
+  "search_label": "搜索主题",
+  "search_placeholder": "搜索…",
+  "search_submit": "搜索",
+  "search_results": "匹配的主题",
+  "search_no_results": "没有找到结果。",
+  "search_no_suggestions": "没有找到建议。",
+  "search_more": "更多结果"
 }

@@ -25,6 +25,7 @@ import { Link, useLocation, useRouter } from '@tanstack/react-router';
 import { getLocale, locales, setLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { useEffect, useRef, useState } from 'react';
+import { ShellSearch } from '../search/search.tsx';
 import { House, LogIn, LogOut, Menu as MenuIcon, Monitor, Moon, Sun, X } from 'lucide-react';
 import type { SessionState } from '../session/state.ts';
 
@@ -296,6 +297,7 @@ export function AppShell({
             <NavigationToggle collapsed={railCollapsed} onToggle={() => setCollapsed(!railCollapsed)} />
             <Logo locale={locale} />
             <div className="ms-auto flex items-center gap-2">
+              <ShellSearch />
               <LanguageControl />
               <ThemeControl />
               <SessionControl session={session} />

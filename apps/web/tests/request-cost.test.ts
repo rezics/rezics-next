@@ -18,6 +18,7 @@ const fakeKernel = createFakeKernelFetch(fixtures);
 const kernelCalls: string[] = [];
 const authCalls: string[] = [];
 let subjectSize = 1;
+let searchSize = 1;
 const kernel = Bun.serve({
   port: 0,
   hostname: '127.0.0.1',
@@ -46,6 +47,31 @@ const kernel = Bun.serve({
     if (url.pathname.startsWith('/auth/')) {
       authCalls.push(url.pathname);
       return new Response(null, { status: 200 });
+    }
+    if (url.pathname === '/v1/subjects:search' && request.method === 'POST') {
+      const body = (await request.json()) as { limit: number };
+      kernelCalls.push(`${request.method} ${url.pathname}`);
+      return Response.json({
+        subjects: Array.from({ length: Math.min(searchSize, body.limit) }, (_, i) => ({
+          id: `${subjectId}-${i}`,
+          type: 'book',
+          labels: { en: `Result ${i}` },
+        })),
+        total: { value: searchSize, relation: 'exact' },
+        next: null,
+        as_of: new Date(0).toISOString(),
+      });
+    }
+    if (url.pathname === '/v1/subjects:suggest' && request.method === 'GET') {
+      kernelCalls.push(`${request.method} ${url.pathname}`);
+      return Response.json({
+        subjects: Array.from({ length: Math.min(searchSize, Number(url.searchParams.get('limit')) || 8) }, (_, i) => ({
+          id: `${subjectId}-${i}`,
+          type: 'book',
+          labels: { en: `Result ${i}` },
+        })),
+        as_of: new Date(0).toISOString(),
+      });
     }
     if (url.pathname === `/v1/subjects/${subjectId}`) {
       kernelCalls.push(`${request.method} ${url.pathname}${url.search}`);
@@ -171,6 +197,28 @@ test('subject page stays within its bound as s grows', async () => {
     const response = await fetch(`${origin}/en/subjects/${subjectId}`);
     expect(response.status).toBe(200);
     expect(kernelCalls).toEqual([`GET /v1/subjects/${subjectId}`]);
+  }
+}, 300_000);
+test('search page stays within its bound as s grows', async () => {
+  const origin = await site();
+  for (const s of [1, 8, 64]) {
+    searchSize = s;
+    kernelCalls.length = 0;
+    const response = await fetch(`${origin}/en/search?q=results`);
+    expect(response.status).toBe(200);
+    expect(kernelCalls).toEqual(['POST /v1/subjects:search']);
+    expect((await response.text()).length).toBeLessThan(100_000);
+  }
+}, 300_000);
+test('suggestions stay within their bound as s grows', async () => {
+  const origin = await site();
+  for (const s of [1, 8, 64]) {
+    searchSize = s;
+    kernelCalls.length = 0;
+    const response = await fetch(`${origin}/api/search/suggestions?q=results`);
+    expect(response.status).toBe(200);
+    expect(kernelCalls).toEqual(['GET /v1/subjects:suggest']);
+    expect(((await response.json()) as { subjects: unknown[] }).subjects.length).toBeLessThanOrEqual(8);
   }
 }, 300_000);
 

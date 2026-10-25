@@ -5,6 +5,7 @@ import { cookie, clearCookie, SESSION_COOKIE } from './session/cookies.ts';
 import type { SessionEnv } from './session/client.ts';
 import { problem, problemResponse } from './media/kernel.ts';
 import { mediaRequest, type MediaEnv } from './media/index.ts';
+import { suggestSubjects } from './search/suggestions.ts';
 import { createStartHandler, defaultStreamHandler } from '@tanstack/react-start/server';
 import { paraglideMiddleware } from './paraglide/server.js';
 import {
@@ -40,6 +41,23 @@ export default {
     )
       return problemResponse(problem(403, 'forbidden', 'Forbidden'));
     if (url.pathname.startsWith('/auth/')) return authRequest(request, env as Partial<SessionEnv>);
+    if (url.pathname === '/api/search/suggestions') {
+      if (request.method !== 'GET') return new Response(null, { status: 405, headers: { allow: 'GET' } });
+      const query = url.searchParams.get('q')?.trim() ?? '';
+      if (!query || query.length > 256)
+        return Response.json(
+          { subjects: [], as_of: new Date().toISOString() },
+          { headers: { 'cache-control': 'no-store' } },
+        );
+      try {
+        return Response.json(await suggestSubjects(query), { headers: { 'cache-control': 'no-store' } });
+      } catch {
+        return Response.json(
+          { error: 'Suggestions unavailable' },
+          { status: 503, headers: { 'cache-control': 'no-store' } },
+        );
+      }
+    }
     if (url.pathname !== '/media' && !url.pathname.startsWith('/media/')) return siteRequest(request);
     try {
       const clear = await prepareSession(request, env as Partial<SessionEnv>);

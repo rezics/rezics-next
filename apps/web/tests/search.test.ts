@@ -184,7 +184,7 @@ const searches = (since: number) => kernelCalls.slice(since).filter((call) => ca
 const suggestions = (since: number) => kernelCalls.slice(since).filter((call) => call.path === '/v1/subjects:suggest');
 
 // Implement the search route, render its subject links, and forward the cursor to enable test(...).
-test.failing(
+test(
   'the search page lists matching subjects and pages with the cursor',
   async () => {
     const before = kernelCalls.length;
@@ -223,7 +223,7 @@ test.failing(
 );
 
 // Render the empty-query search form without fetching results to enable test(...).
-test.failing(
+test(
   'an empty query shows the search form without calling the kernel',
   async () => {
     for (const suffix of ['', '?q=']) {
@@ -246,7 +246,7 @@ test.failing(
 );
 
 // Render an explicit no-results message for an empty search response to enable test(...).
-test.failing(
+test(
   'a query with no matches says so',
   async () => {
     const before = kernelCalls.length;
@@ -265,7 +265,7 @@ test.failing(
 );
 
 // Add the shell combobox, suggestion results, and keyboard selection navigation to enable test(...).
-test.failing(
+test(
   'the shell search box suggests subjects as you type and opens the one chosen',
   async () => {
     const page = await open('/ja');
@@ -298,7 +298,7 @@ test.failing(
 );
 
 // Debounce suggestion reads until typing has paused for 200 ms to enable test(...).
-test.failing(
+test(
   'typing quickly sends one suggestion request per pause, not one per keystroke',
   async () => {
     const page = await open('/en');
@@ -344,7 +344,7 @@ test.failing(
 );
 
 // Submit unselected combobox text to the locale's search page on Enter to enable test(...).
-test.failing(
+test(
   'pressing Enter in the search box opens the search page for the query',
   async () => {
     const page = await open('/ja');

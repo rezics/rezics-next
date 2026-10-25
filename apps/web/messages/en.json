@@ -23,5 +23,13 @@
   "subject_value_unlabelled": "Unlabelled subject",
   "subject_aliases": "Also known as",
   "subject_sources": "Sources",
-  "subject_qualifiers": "Qualifiers"
+  "subject_qualifiers": "Qualifiers",
+  "search_heading": "Search subjects",
+  "search_label": "Search subjects",
+  "search_placeholder": "Search…",
+  "search_submit": "Search",
+  "search_results": "Matching subjects",
+  "search_no_results": "No results found.",
+  "search_no_suggestions": "No suggestions found.",
+  "search_more": "More results"
 }

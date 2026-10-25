@@ -23,5 +23,13 @@
   "subject_value_unlabelled": "Tema sin etiqueta",
   "subject_aliases": "También conocido como",
   "subject_sources": "Fuentes",
-  "subject_qualifiers": "Calificadores"
+  "subject_qualifiers": "Calificadores",
+  "search_heading": "Buscar temas",
+  "search_label": "Buscar temas",
+  "search_placeholder": "Buscar…",
+  "search_submit": "Buscar",
+  "search_results": "Temas coincidentes",
+  "search_no_results": "No se encontraron resultados.",
+  "search_no_suggestions": "No se encontraron sugerencias.",
+  "search_more": "Más resultados"
 }

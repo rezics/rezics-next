@@ -23,5 +23,13 @@
   "subject_value_unlabelled": "未標示的主題",
   "subject_aliases": "又名",
   "subject_sources": "來源",
-  "subject_qualifiers": "限定條件"
+  "subject_qualifiers": "限定條件",
+  "search_heading": "搜尋主題",
+  "search_label": "搜尋主題",
+  "search_placeholder": "搜尋…",
+  "search_submit": "搜尋",
+  "search_results": "符合的主題",
+  "search_no_results": "找不到搜尋結果。",
+  "search_no_suggestions": "找不到建議項目。",
+  "search_more": "更多結果"
 }

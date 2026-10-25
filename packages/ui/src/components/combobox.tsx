@@ -1,6 +1,7 @@
 import {
   Combobox as ArkCombobox,
   type ComboboxList as ArkComboboxList,
+  useListCollection,
   useComboboxContext as useArkComboboxContext,
 } from '@ark-ui/react/combobox';
 import { Portal } from '@ark-ui/react/portal';
@@ -14,6 +15,7 @@ import type { inputVariants } from './input.tsx';
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from './input-group.tsx';
 
 export const useCombobox = useArkComboboxContext;
+export { useListCollection };
 
 export const ComboboxContext = ArkCombobox.Context;
 

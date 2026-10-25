@@ -23,5 +23,13 @@
   "subject_value_unlabelled": "Sujet sans libellé",
   "subject_aliases": "Aussi connu sous le nom de",
   "subject_sources": "Sources",
-  "subject_qualifiers": "Qualificatifs"
+  "subject_qualifiers": "Qualificatifs",
+  "search_heading": "Rechercher des sujets",
+  "search_label": "Rechercher des sujets",
+  "search_placeholder": "Rechercher…",
+  "search_submit": "Rechercher",
+  "search_results": "Sujets correspondants",
+  "search_no_results": "Aucun résultat trouvé.",
+  "search_no_suggestions": "Aucune suggestion trouvée.",
+  "search_more": "Plus de résultats"
 }
