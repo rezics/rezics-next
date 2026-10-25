@@ -9,7 +9,10 @@ import {
   type CommandOutcome,
   type CommandTransaction,
 } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
+import { discardConnection, withConnection } from '../database/pool.ts';
+import { readPartition } from '../partition/partition.ts';
+import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
+import type { KeyRing } from '../tokens/seal.ts';
 import {
   accessCheck,
   type Access,
@@ -91,6 +94,8 @@ export type OperatorConfig = {
   actions: ActionCatalogue;
   /** Registered colon-form account/access permission protecting the operator resource. */
   managementAction: string;
+  /** Trusted shared cursor signing keys; required only for responsibilityPage. */
+  cursorKeys?: KeyRing;
 };
 type Mutation = {
   anchor: string;
@@ -481,20 +486,63 @@ export function createOperatorCommands(config: OperatorConfig) {
     /** Bounded operator-local page for the later durable suspension fanout. It
      * includes pending reservations conservatively. It is not relation authority.
      */
-    async responsibilityPage(input: { operatorAccountId: string; limit: number; after?: string }) {
+    async responsibilityPage(input: { operatorAccountId: string; limit?: number; cursor?: string }) {
       input = { ...input };
-      requireAllowed(Number.isInteger(input.limit) && input.limit >= 1 && input.limit <= 100);
-      if (input.after !== undefined) route(input.after);
-      const rows = await withConnection(pool, (client) =>
-        pageRead.run(client, {
-          route: route(input.operatorAccountId),
-          operator_id: input.operatorAccountId,
-          after: input.after ?? '',
-          limit: input.limit + 1,
-        }),
+      const limit = input.limit === undefined ? 20 : input.limit;
+      requireAllowed(Number.isInteger(limit) && limit >= 1 && limit <= 100);
+      const operatorRoute = route(input.operatorAccountId);
+      const ring = config.cursorKeys;
+      requireAllowed(ring);
+      // Even an empty page fails closed if the active signing key is unavailable.
+      const signingKey = ring.keys.get(ring.current);
+      requireAllowed(
+        Number.isInteger(ring.current) &&
+          ring.current >= 0 &&
+          ring.current <= 255 &&
+          signingKey &&
+          signingKey.byteLength >= 32,
       );
-      const items = rows.slice(0, input.limit);
-      return { items, next: rows.length > input.limit ? items.at(-1)!.reservationId : null };
+      const binding: CursorBinding = {
+        operation: 'access.operator.responsibility.list',
+        parameters: { operatorAccountId: input.operatorAccountId, purpose: 'operator', sort: 'reservationId:asc' },
+      };
+      let after = '';
+      let cursorEpoch: number | undefined;
+      if (input.cursor !== undefined) {
+        const decoded = decodeCursor(ring, binding, input.cursor);
+        requireAllowed(decoded.ok);
+        requireAllowed(decoded.after.length === 1 && typeof decoded.after[0] === 'string');
+        after = decoded.after[0];
+        route(after);
+        cursorEpoch = decoded.epoch;
+      }
+      return withConnection(pool, async (client) => {
+        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+        try {
+          const partition = await readPartition(client, partitionOf(operatorRoute));
+          requireAllowed(partition && (cursorEpoch === undefined || cursorEpoch === partition.epoch));
+          const rows = await pageRead.run(client, {
+            route: operatorRoute,
+            operator_id: input.operatorAccountId,
+            after,
+            limit: limit + 1,
+          });
+          const operators = rows.slice(0, limit);
+          const next =
+            rows.length > limit
+              ? encodeCursor(ring, binding, { epoch: partition.epoch, after: [operators.at(-1)!.reservationId] })
+              : null;
+          await client.query('COMMIT');
+          return { operators, next };
+        } catch (error) {
+          try {
+            await client.query('ROLLBACK');
+          } catch (rollbackError) {
+            discardConnection(client, rollbackError as Error);
+          }
+          throw error;
+        }
+      });
     },
     /** Advisory local eligibility. The actual lifecycle tombstone rechecks holds
      * with the locked account and database guard, atomically with deletion.

@@ -797,6 +797,13 @@ ALTER TABLE ONLY access.write_rate_counter
 
 
 --
+-- Name: lifecycle_coordination_purpose_page; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX lifecycle_coordination_purpose_page ON access.lifecycle_coordination USING btree (route, account_id, purpose, reservation_id);
+
+
+--
 -- Name: lifecycle_membership_live; Type: INDEX; Schema: access; Owner: -
 --
 

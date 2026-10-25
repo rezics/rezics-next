@@ -1,4 +1,5 @@
 import { afterAll, expect, test } from 'bun:test';
+import { randomBytes } from 'node:crypto';
 import { createPool, withConnection } from '../../src/database/pool.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { readAccount } from '../../src/access/account-data.ts';
@@ -17,7 +18,13 @@ const actions: ActionCatalogue = new Map([
   ['subject:read', { anonymous: false }],
 ]);
 const access = createAccess({ actions, accountEvidence: (_actor, context) => context.account });
-const operators = createOperatorCommands({ pool, access, actions, managementAction: 'account:manage' });
+const operators = createOperatorCommands({
+  pool,
+  access,
+  actions,
+  managementAction: 'account:manage',
+  cursorKeys: { current: 1, keys: new Map([[1, randomBytes(32)]]) },
+});
 const lifecycle = createLifecycleCommands({ pool, access });
 const proofs = new Map<
   object,
@@ -268,7 +275,7 @@ test('operator responsibility reservations prevent chains and unsafe deletion', 
   expect(await operators.reserveResponsibility(input)).toEqual({ ...reserved, replayed: true });
   expect((await operators.deletionEligibility(human)).safe).toBe(false);
   const page = await operators.responsibilityPage({ operatorAccountId: human, limit: 1 });
-  expect(page.items).toContainEqual({ reservationId: reserved.value.reservationId, subjectAccountId: subject });
+  expect(page.operators).toContainEqual({ reservationId: reserved.value.reservationId, subjectAccountId: subject });
   await expect(lifecycle.tombstone(await ctx(human), { accountId: human, key: key() })).rejects.toThrow();
   await deny(operators.releaseResponsibility({ ...input, reservationId: reserved.value.reservationId, key: key() }));
   const incoming = await operators.reserveResponsibility({
@@ -348,7 +355,7 @@ test('reservation and deletion or automation cannot both succeed concurrently', 
     expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
     const state = await row(operatorId);
     const held = await operators.responsibilityPage({ operatorAccountId: operatorId, limit: 10 });
-    expect(held.items.length > 0 && (state!.state === 'deleted' || state!.operatorAccountId !== null)).toBe(false);
+    expect(held.operators.length > 0 && (state!.state === 'deleted' || state!.operatorAccountId !== null)).toBe(false);
   }
 });
 

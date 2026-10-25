@@ -5,6 +5,7 @@ import { exportJWK, generateKeyPair } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
 import { createAuthService, type AuthService, type AccessAccount } from '../src/index.ts';
 import { createAccountWorkflows, type AccountWorkflowPorts } from '../src/workflows.ts';
+import { encodeCursor } from '../../kernel/src/tokens/cursor.ts';
 
 // Boundary evidence only: these journaled responses are not an Access policy
 // implementation. workflow-handle.test.ts binds real Access handle commands.
@@ -23,6 +24,20 @@ let failRevoke = false;
 let beforeRevoke: (() => Promise<void>) | undefined;
 const accounts = new Map<string, AccessAccount>();
 const calls: string[] = [];
+const pageCalls: { operatorAccountId: string; limit?: number; cursor?: string }[] = [];
+const fanoutRows = Array.from({ length: 65 }, (_, i) => ({
+  subjectAccountId: `workflow-fanout-${i}`,
+  reservationId: `fixture-reservation-${i}`,
+}));
+const cursorKeys = { current: 1, keys: new Map([[1, randomBytes(32)]]) };
+const fanoutCursor = encodeCursor(
+  cursorKeys,
+  {
+    operation: 'access.operator.responsibility.list',
+    parameters: { operatorAccountId: 'workflow-fanout-operator', purpose: 'operator', sort: 'reservationId:asc' },
+  },
+  { epoch: 1, after: [fanoutRows[63]!.reservationId] },
+);
 const value = async <T>(kind: string, key: string, data: T) => {
   calls.push(kind);
   const result = await pool.query<{ value: T }>(
@@ -32,6 +47,19 @@ const value = async <T>(kind: string, key: string, data: T) => {
   return { value: result.rows[0]!.value, partition: 1, epoch: '1', position: '1', transactionId: key, replayed: false };
 };
 const ports: AccountWorkflowPorts = {
+  async authorizeOperation(reference) {
+    if (reference !== 'approved-fanout') throw new Error('Operation denied');
+    return { actor: { accountId: 'approved-human' } };
+  },
+  async responsibilityPage(input) {
+    pageCalls.push(input);
+    expect(input.limit).toBe(64);
+    expect(input.operatorAccountId).toBe('workflow-fanout-operator');
+    expect(Object.hasOwn(input, 'after')).toBe(false);
+    if (input.cursor === undefined) return { operators: fanoutRows.slice(0, 64), next: fanoutCursor };
+    expect(input.cursor).toBe(fanoutCursor);
+    return { operators: fanoutRows.slice(64), next: null };
+  },
   registrationTarget: (key) => `workflow-account-${key}`,
   async reserveHandle(input) {
     return value('reserve-handle', input.key, {
@@ -324,4 +352,37 @@ test('public signup binds credentials atomically and cannot take over a trusted 
   expect(serialized).not.toContain(password);
   expect(serialized).not.toContain(competing.password);
   expect(serialized).not.toContain(payload.email);
+}, 30000);
+
+test('operator fanout passes opaque cursors across bounded pages and resumes effects once after restart', async () => {
+  const operator = 'workflow-fanout-operator';
+  for (const id of [operator, ...fanoutRows.map((row) => row.subjectAccountId)]) {
+    accounts.set(id, { accountId: id, kind: 'actor', state: 'active', automated: false, authnEpoch: 1 });
+  }
+  // A cursor is no operation authorization: denial happens before any page read.
+  await expect(
+    workflows.fenceOperator({ key: 'denied-fanout', accountId: operator, authorization: fanoutCursor }),
+  ).rejects.toThrow();
+  expect(pageCalls).toHaveLength(0);
+  const start = calls.length;
+  beforeRevoke = async () => {
+    if (accounts.get(fanoutRows[1]!.subjectAccountId)!.fenced) throw new Error('Injected mid-page outage');
+  };
+  await expect(
+    workflows.fenceOperator({ key: 'cursor-fanout', accountId: operator, authorization: 'approved-fanout' }),
+  ).rejects.toThrow();
+  expect(pageCalls).toEqual([{ operatorAccountId: operator, limit: 64 }]);
+  expect(accounts.get(fanoutRows[64]!.subjectAccountId)!.fenced).not.toBe(true);
+  beforeRevoke = undefined;
+  await restart();
+  await workflows.resumeOperation('cursor-fanout');
+  expect(pageCalls).toEqual([
+    { operatorAccountId: operator, limit: 64 },
+    { operatorAccountId: operator, limit: 64, cursor: fanoutCursor },
+  ]);
+  expect(fanoutRows.every((row) => accounts.get(row.subjectAccountId)!.fenced)).toBe(true);
+  expect(calls.slice(start).filter((kind) => kind === 'fence')).toHaveLength(66);
+  const completed = calls.length;
+  await workflows.resumeOperation('cursor-fanout');
+  expect(calls).toHaveLength(completed);
 }, 30000);

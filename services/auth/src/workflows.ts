@@ -105,9 +105,9 @@ export interface AccountWorkflowPorts<Context = WorkflowContext> {
   releaseResponsibility?(input: WorkflowResponsibility & { key: string }): Result<unknown>;
   responsibilityPage?(input: {
     operatorAccountId: string;
-    limit: number;
-    after?: string;
-  }): Promise<{ items: { reservationId: string; subjectAccountId: string }[]; next: string | null }>;
+    limit?: number;
+    cursor?: string;
+  }): Promise<{ operators: { reservationId: string; subjectAccountId: string }[]; next: string | null }>;
   tombstone?(context: Context, input: Command): Result<WorkflowFence>;
   redirectHandle?(input: Command & { handle: string }): Result<unknown>;
   authorizeOpening?(
@@ -602,8 +602,8 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     const redirectDeleted = step('redirect-deleted-handle', async (accountId: string, handle: string) => {
       await required(access.redirectHandle)({ accountId, handle, key: commandKey('redirect-deleted') });
     });
-    const page = step('operator-responsibility-page', async (operatorAccountId: string, after?: string) =>
-      required(access.responsibilityPage)({ operatorAccountId, limit: 64, ...(after ? { after } : {}) }),
+    const page = step('operator-responsibility-page', async (operatorAccountId: string, cursor?: string) =>
+      required(access.responsibilityPage)({ operatorAccountId, limit: 64, ...(cursor ? { cursor } : {}) }),
     );
     const authorize = step('authorize-account-operation', async (input: AccountOperation) => {
       await approved(input);
@@ -721,15 +721,15 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
           await authorize(input);
           await fence(input.accountId);
           await revoke(input.accountId);
-          let after: string | undefined;
+          let cursor: string | undefined;
           while (true) {
-            const batch = await page(input.accountId, after);
-            for (const item of batch.items) {
+            const batch = await page(input.accountId, cursor);
+            for (const item of batch.operators) {
               await fence(item.subjectAccountId);
               await revoke(item.subjectAccountId);
             }
             if (batch.next === null) break;
-            after = batch.next;
+            cursor = batch.next;
           }
           return { accountId: input.accountId };
         }
