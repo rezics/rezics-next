@@ -9,7 +9,7 @@ import { derivedId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding, type CursorKey } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { GLOBAL_CONTEXT, readRelease } from './definitions.ts';
-import { itemFacts, resolveItem, SubjectInputError, type Violation } from './item.ts';
+import { factDataTypes, itemFacts, resolveItem, SubjectInputError, type Violation } from './item.ts';
 import { PageCursorError } from './page.ts';
 import { rejectContent } from './rules.ts';
 import {
@@ -639,10 +639,9 @@ export async function listCandidates(
         ]),
       );
       const candidates = shown.map((row) => {
-        const dataTypes = Object.fromEntries(
-          Object.entries(releases.get(row.release)!.properties).map(([id, property]) => [id, property.datatype]),
-        );
-        const statement = resolveItem(options.subject, [candidateFact(options.property, row)], '', dataTypes, {
+        const fact = candidateFact(options.property, row);
+        const dataTypes = factDataTypes(releases.get(row.release)!, [fact]);
+        const statement = resolveItem(options.subject, [fact], '', dataTypes, {
           revision: row.revision,
           release: row.release,
           context: options.context,

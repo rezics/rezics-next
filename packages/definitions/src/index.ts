@@ -7,6 +7,16 @@ import { Compile } from 'typebox/schema';
 import schema from '../schema/release.json';
 
 export const RELEASE_FORMAT = 'https://rezics.com/definitions/release/1';
+// Headroom over the bundled catalogue plus 100 launch-grain verticals (3 types and 12 properties each).
+export const RELEASE_LIMITS = {
+  types: 1024,
+  properties: 4096,
+  propertiesPerType: 64,
+  facetsPerType: 16,
+  contexts: 256,
+  defaultsPerContext: 64,
+  bytes: 4 * 1024 * 1024,
+} as const;
 export const DATA_TYPES = [
   'wikibase-item',
   'string',
@@ -156,21 +166,26 @@ const at = (pointer: string, key: string | number) =>
 function collectionLimits(value: unknown, add: (pointer: string, code: ReleaseViolation['code']) => void) {
   if (!record(value)) return;
   if (record(value.types)) {
-    if (Object.keys(value.types).length > 256) add('/types', 'limit');
+    if (Object.keys(value.types).length > RELEASE_LIMITS.types) add('/types', 'limit');
     else
       for (const [key, type] of Object.entries(value.types)) {
-        if (record(type) && Array.isArray(type.properties) && type.properties.length > 64)
+        if (record(type) && Array.isArray(type.properties) && type.properties.length > RELEASE_LIMITS.propertiesPerType)
           add(at(at('/types', key), 'properties'), 'limit');
-        if (record(type) && Array.isArray(type.facets) && type.facets.length > 16)
+        if (record(type) && Array.isArray(type.facets) && type.facets.length > RELEASE_LIMITS.facetsPerType)
           add(at(at('/types', key), 'facets'), 'limit');
       }
   }
-  if (record(value.properties) && Object.keys(value.properties).length > 1024) add('/properties', 'limit');
+  if (record(value.properties) && Object.keys(value.properties).length > RELEASE_LIMITS.properties)
+    add('/properties', 'limit');
   if (record(value.contexts)) {
-    if (Object.keys(value.contexts).length > 256) add('/contexts', 'limit');
+    if (Object.keys(value.contexts).length > RELEASE_LIMITS.contexts) add('/contexts', 'limit');
     else
       for (const [key, settings] of Object.entries(value.contexts))
-        if (record(settings) && record(settings.defaults) && Object.keys(settings.defaults).length > 64)
+        if (
+          record(settings) &&
+          record(settings.defaults) &&
+          Object.keys(settings.defaults).length > RELEASE_LIMITS.defaultsPerContext
+        )
           add(at(at('/contexts', key), 'defaults'), 'limit');
   }
   if (record(value.filters)) {
@@ -209,7 +224,7 @@ function exceedsSize(value: unknown): boolean {
         throw new TypeError('Expected JSON');
       bytes += Buffer.byteLength(json);
     }
-    if (bytes > 1024 * 1024) return true;
+    if (bytes > RELEASE_LIMITS.bytes) return true;
   }
   return false;
 }

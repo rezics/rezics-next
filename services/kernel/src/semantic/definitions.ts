@@ -4,6 +4,7 @@ import { runCommand, type CommandAuthorization, type CommandTransaction } from '
 import type { AccessCheck, AccountActor } from '../request/access.ts';
 import activate from './definitions-activate.sql';
 import pointer from './definitions-active.sql';
+import exists from './definitions-exists.sql';
 import publish from './definitions-publish.sql';
 import read from './definitions-read.sql';
 
@@ -33,18 +34,17 @@ function freeze(value: unknown): void {
   Object.freeze(value);
 }
 
-/** Read existence from this database; only immutable, validated bodies are shared across pools. */
+/** A cache hit reads the digest only. The cache stores validated, digest-checked bodies, and a release is immutable. */
 export async function readRelease(pool: Pool | CommandTransaction, digest: string): Promise<Release | null> {
   if (DIGEST.exec(digest)?.[0] !== digest) return null;
+  const cached = releases.get(digest);
+  if (cached) return (await exists.run(pool, { route: resource.route, digest })) ? cached : null;
   const row = await read.run(pool, { route: resource.route, digest });
   if (!row) return null;
-  let release = releases.get(digest);
-  if (!release) {
-    release = validated(row.body);
-    if (releaseDigest(release) !== digest) throw new Error('Stored definition release digest mismatch');
-    freeze(release);
-    releases.set(digest, release);
-  }
+  const release = validated(row.body);
+  if (releaseDigest(release) !== digest) throw new Error('Stored definition release digest mismatch');
+  freeze(release);
+  releases.set(digest, release);
   return release;
 }
 

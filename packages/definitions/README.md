@@ -13,10 +13,27 @@ filters, and regular-expression safety. Pattern checks use recheck's in-process 
 entry point, with a three-second timeout per distinct pattern; inconclusive
 results fail validation.
 
-Releases allow at most 256 types, 1,024 properties, 64 properties and 16 facets per
+Releases allow at most 1,024 types, 4,096 properties, 64 properties and 16 facets per
 type, 256 context settings, 64 defaults per settings, 1,024 saved filters, 64 per
-group, and 1 MiB of canonical UTF-8 JSON. Collection and size limits precede schema
+group, and 4 MiB of canonical UTF-8 JSON. Collection and size limits precede schema
 and pattern checks.
+A property may name at most 1,024 targets. Compilation allows at most 256 schema files.
+
+The launch grain is three types and twelve properties in one schema file. The bundled
+catalogue has 13 types, 45 properties and 12 schema files. One hundred such verticals
+add 300 types, 1,200 properties and 100 schema files: 313 types, 1,245 properties and
+112 schema files, 853,011 canonical bytes. `foaf:focus` ranges over Thing, so the new
+concrete classes are targets too (313). `schema:exampleOfWork` gains the creative-work
+descendants (207). The previous caps (256 types, 1,024 properties, 1 MiB, 64 schema
+files, 16 targets) do not fit that grain. The new caps are those limits times four,
+except targets: every target is a type, so the target cap equals the type cap. That is
+about three times the measured grain. Per-type caps stay 64 properties and 16 facets,
+because a request touches one type.
+
+A release is validated once per digest per process. Later requests read the subject's
+type and the properties on its facts from that cached release. The limits bound
+publishing and the cold read. A cold read is linear in the release's canonical bytes
+and happens once per digest per process. It does not bound request cost after that.
 Inputs are parsed JSON, without cycles. Validation does not mutate them.
 
 `valueSchema(datatype, options)` builds the fixed Wikibase value-content schema.
@@ -168,7 +185,7 @@ const release = await compileCatalogue({
 
 Source conventions:
 
-- Supply at most 64 schema files, each at most 256 KiB of UTF-8. YAML is parsed
+- Supply at most 256 schema files, each at most 256 KiB of UTF-8. YAML is parsed
   with `Bun.YAML.parse`. Imports may reference `linkml:types` or supplied files,
   using LinkML's relative paths and optional `.yaml` or `.yml` extensions.
 - Schema keys are limited to `id`, `name`, `title`, `description`, `version`,
@@ -231,7 +248,7 @@ labels, then context settings, then saved filters. A `wikibase-item` range inclu
 its concrete class and every concrete descendant reachable through `is_a`, including when the range
 or an intermediate class is abstract. Descendants are resolved across all supplied schemas; an
 abstract range with no concrete descendants is invalid. Emitted targets are
-sorted and unique. Compilation stops at the first stage with violations. LinkML
+sorted and unique, and a property may name at most 1,024. Compilation stops at the first stage with violations. LinkML
 warnings are permitted; errors are refused. Derived JSON with derivation enabled supplies
 classes and induced attributes. An auxiliary abstract class induces all global
 slots through LinkML, preserving unused qualifier properties without resolving

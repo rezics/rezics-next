@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { DataType } from '@rezics/definitions';
+import type { DataType, Release } from '@rezics/definitions';
 import { checkSubjectStructure, type Violation } from '@rezics/definitions/validate';
 export type { Violation } from '@rezics/definitions/validate';
 import { derivedId, routeOf } from '../route/route.ts';
@@ -48,6 +48,30 @@ export type FactRow = {
   fact_revision?: number | null;
   fact_release?: string | null;
 };
+/** Datatypes for the properties named by these facts, without walking the rest of the release. */
+export function factDataTypes(release: Release, facts: readonly FactRow[]): Record<string, DataType> {
+  const dataTypes: Record<string, DataType> = {};
+  const add = (id: unknown) => {
+    if (typeof id !== 'string' || Object.hasOwn(dataTypes, id)) return;
+    const datatype = release.properties[id]?.datatype;
+    if (datatype !== undefined) dataTypes[id] = datatype;
+  };
+  for (const fact of facts) {
+    add(fact.property);
+    if (fact.kind !== 'statement' || !isObject(fact.body)) continue;
+    const body = fact.body;
+    if (Array.isArray(body.qualifiers))
+      for (const qualifier of body.qualifiers) if (isObject(qualifier)) add(qualifier.property);
+    if (Array.isArray(body.references)) {
+      for (const reference of body.references) {
+        if (!isObject(reference) || !Array.isArray(reference.parts)) continue;
+        for (const part of reference.parts) if (isObject(part)) add(part.property);
+      }
+    }
+  }
+  return dataTypes;
+}
+
 export class SubjectInputError extends Error {
   readonly violations: Violation[];
   constructor(violations: Violation[]) {

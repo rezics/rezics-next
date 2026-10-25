@@ -6,7 +6,7 @@ import { withConnection, discardConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccessCheck, AccountActor, Resource } from '../request/access.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../route/route.ts';
-import { itemFacts, resolveItem, type FactRow, type Item } from './item.ts';
+import { factDataTypes, itemFacts, resolveItem, type FactRow, type Item } from './item.ts';
 import { SubjectInputError } from './item.ts';
 import { rejectContent } from './rules.ts';
 import { GLOBAL_CONTEXT } from './definitions.ts';
@@ -60,9 +60,7 @@ export async function createSubject(
   const checked = checkSubjectInput(options.item, options.release.release, rejectContent);
   if (checked.violations.length) throw new SubjectInputError(checked.violations);
   const facts = itemFacts(subjectId, options.item, typeof input?.type === 'string' ? input.type : undefined);
-  const dataTypes = Object.fromEntries(
-    Object.entries(options.release.release.properties).map(([id, property]) => [id, property.datatype]),
-  );
+  const dataTypes = factDataTypes(options.release.release, facts);
   const partition = partitionOf(route);
   const command = await runCommand(
     pool,
@@ -249,9 +247,7 @@ export async function readSubject(
   });
   if (!snapshot) return null;
   const { rows, component, release, statementFacts, resolution } = snapshot;
-  const dataTypes = Object.fromEntries(
-    Object.entries(release.properties).map(([property, definition]) => [property, definition.datatype]),
-  );
+  const dataTypes = factDataTypes(release, [...asFacts(rows), ...statementFacts]);
   return {
     subject: resolveItem(id, [...asFacts(rows), ...statementFacts], rows[0]!.type, dataTypes, {
       revision: rows[0]!.revision,

@@ -7,6 +7,7 @@ import releaseSchema from '../schema/release.json';
 import {
   DATA_TYPES,
   RELEASE_FORMAT,
+  RELEASE_LIMITS,
   validateRelease,
   valueSchema,
   type ContextSettings,
@@ -108,8 +109,10 @@ export async function compileCatalogue(input: {
   };
   const parsed = dictionary<Node>();
   const files = Object.keys(input.schemas).sort(compare);
-  if (files.length > 64) add({ file: input.root, pointer: '' }, 'limit', 'At most 64 schema files are allowed');
-  for (const file of files.slice(0, 64)) {
+  const maxSchemaFiles = 256;
+  if (files.length > maxSchemaFiles)
+    add({ file: input.root, pointer: '' }, 'limit', `At most ${maxSchemaFiles} schema files are allowed`);
+  for (const file of files.slice(0, maxSchemaFiles)) {
     if (Buffer.byteLength(input.schemas[file]!, 'utf8') > 256 * 1024)
       add({ file, pointer: '' }, 'limit', 'Schema exceeds 256 KiB');
     else parsed[file] = parse(input.schemas[file]!, file);
@@ -388,7 +391,8 @@ export async function compileCatalogue(input: {
     const properties = unique(
       Object.keys(object(term.value.attributes)).flatMap((name) => slotKeysByName.get(name) ?? []),
     );
-    if (properties.length > 64) add(term.location, 'limit', 'A type may have at most 64 properties');
+    if (properties.length > RELEASE_LIMITS.propertiesPerType)
+      add(term.location, 'limit', `A type may have at most ${RELEASE_LIMITS.propertiesPerType} properties`);
     const bases: string[] = [];
     const seenBases = new Set<string>();
     for (const ancestor of classChain(term.name).slice(1)) {
@@ -425,8 +429,8 @@ export async function compileCatalogue(input: {
         }
         facetNames.add(property);
         origins.set(property, { name, location });
-        if (facets.length === 16) {
-          add(location, 'limit', `Facet slot ${name} exceeds the limit of 16 facets`);
+        if (facets.length === RELEASE_LIMITS.facetsPerType) {
+          add(location, 'limit', `Facet slot ${name} exceeds the limit of ${RELEASE_LIMITS.facetsPerType} facets`);
           continue;
         }
         facets.push(property);
@@ -516,8 +520,8 @@ export async function compileCatalogue(input: {
     }
     if (property.minimum !== undefined && property.maximum !== undefined && property.minimum > property.maximum)
       add(field('maximum_value'), 'invalid', 'Maximum is below minimum');
-    if (property.targets && property.targets.length > 16)
-      add(field('any_of'), 'limit', 'At most 16 targets are allowed');
+    if (property.targets && property.targets.length > RELEASE_LIMITS.types)
+      add(field('any_of'), 'limit', `At most ${RELEASE_LIMITS.types} targets are allowed`);
     property.value = valueSchema(datatype, {
       ...(typeof slot.pattern === 'string' && ['string', 'external-id', 'monolingualtext'].includes(datatype)
         ? { pattern: slot.pattern }
@@ -538,7 +542,7 @@ export async function compileCatalogue(input: {
         );
       }
     }
-  if (classes.length > 256 || slots.length > 1024)
+  if (classes.length > RELEASE_LIMITS.types || slots.length > RELEASE_LIMITS.properties)
     add({ file: input.root, pointer: '' }, 'limit', 'Release collection limit exceeded');
   if (typeof release.catalogue.id !== 'string' || !iri.test(release.catalogue.id))
     add({ file: input.root, pointer: '/id' }, 'invalid', 'Catalogue id must be an IRI');

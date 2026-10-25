@@ -48,13 +48,13 @@ test('every fixed value schema validates, including nested pattern schemas', () 
 
 test('collections and canonical UTF-8 size are bounded before validation', () => {
   const properties = fixture();
-  for (let i = 0; i < 1025; i++) properties.properties[`ex:p${i}`] = properties.properties['ex:p']!;
+  for (let i = 0; i < 4097; i++) properties.properties[`ex:p${i}`] = properties.properties['ex:p']!;
   expect(validateRelease(properties)).toEqual([{ pointer: '/properties', code: 'limit' }]);
   const type = fixture();
   type.types['ex:T']!.properties = Array.from({ length: 65 }, (_, i) => `ex:p${i}`);
   expect(validateRelease(type)).toEqual([{ pointer: '/types/ex:T/properties', code: 'limit' }]);
   const size = fixture();
-  size.generator.name = '界'.repeat(350000);
+  size.generator.name = '界'.repeat(1_400_000);
   expect(validateRelease(size)).toEqual([{ pointer: '', code: 'limit' }]);
 });
 

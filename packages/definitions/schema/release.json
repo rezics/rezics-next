@@ -214,7 +214,7 @@
             "$ref": "#/$defs/curie"
           },
           "minItems": 1,
-          "maxItems": 16
+          "maxItems": 1024
         },
         "units": {
           "type": "array",
