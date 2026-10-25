@@ -46,7 +46,9 @@ export class WorkerJob implements GateOutcomeSink {
     const stopIfStalled = (timeLimit: boolean) => {
       try {
         store.assertCurrent(ref);
-        const measurement = readMeasurement(store.attempt(ref));
+        const attempt = store.attempt(ref);
+        const pool = this.tasks.settings.pools.find(candidate => candidate.name === attempt.pool);
+        const measurement = readMeasurement(attempt, { configDirectory: pool?.configDirectory });
         const steps = Object.values(measurement.steps).reduce((a, b) => a + b, 0);
         if ((timeLimit || steps > limits.maxSteps) && !this.hasCommit(ref) && !stopping) {
           const evidencePath = evidenceBundle(task, store.attempt(ref));

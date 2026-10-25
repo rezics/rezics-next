@@ -24,7 +24,7 @@ export async function settle(tasks: WorkerTasks, worker: Pick<RunningWorker, 'at
     const attempt = store.updateAttempt(ref, a => {
       a.state = 'exited'; a.endedAt = new Date().toISOString(); a.exitCode = code; a.after = pool ? tasks.reader(pool) : null;
     });
-    const measurement = readMeasurement(attempt);
+    const measurement = readMeasurement(attempt, { configDirectory: pool?.configDirectory });
     // A CLI can fail before opening a session, so there is no structured event in its JSONL log.
     // Preserve that launch failure on the attempt and keep it out of the landing queue.
     if (!measurement.session && code !== null && code !== 0 && !measurement.failureKind

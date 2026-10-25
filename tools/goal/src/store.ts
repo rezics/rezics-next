@@ -81,13 +81,13 @@ export class WorkerStore implements AttemptFence {
     });
   }
   /** Superseding and publishing the next sequence are atomic, before stopping any external process. */
-  nextAttempt(ref: AttemptRef, make: (n: number) => Attempt): Attempt {
+  nextAttempt(ref: AttemptRef, make: (n: number) => Attempt, configDirectory?: string): Attempt {
     return this.write(ref, () => {
       const task = this.task(ref.taskId);
       if (task.state === 'merged' || task.state === 'cancelled') throw new Error(`cannot retry ${task.state} task`);
       if (ref.attempt) {
         const old = this.attempt(ref); old.state = 'superseded'; this.saveAttempt(old);
-        const record = this.record(ref) ?? makeRecord(task, old, readMeasurement(old), 'superseded');
+        const record = this.record(ref) ?? makeRecord(task, old, readMeasurement(old, { configDirectory }), 'superseded');
         if (record && record.outcome === 'pending-gate') { record.outcome = 'superseded'; }
         this.saveRecord(record);
       }
@@ -98,14 +98,15 @@ export class WorkerStore implements AttemptFence {
     });
   }
   /** The replacement's fence authorizes accounting for revoked writers only after their groups are gone. */
-  finalizeSuperseded(current: AttemptRef, after: (attempt: Attempt) => PoolReading | null): void {
+  finalizeSuperseded(current: AttemptRef, after: (attempt: Attempt) => PoolReading | null,
+    configDirectory: (attempt: Attempt) => string | undefined): void {
     this.write(current, () => {
       const task = this.task(current.taskId);
       for (const old of this.attempts(current.taskId).filter(a => a.state === 'superseded' && !a.supersededFinalized)) {
         if ([old.process, ...old.auxiliaryProcesses].some(p => p && groupMembers(p.group).length)) throw new Error('superseded process group is still alive');
         old.endedAt ??= new Date().toISOString(); old.after ??= after(old); old.supersededFinalized = true;
         const previous = this.record(old);
-        const record = makeRecord(task, old, readMeasurement(old), previous?.outcome ?? 'superseded');
+        const record = makeRecord(task, old, readMeasurement(old, { configDirectory: configDirectory(old) }), previous?.outcome ?? 'superseded');
         if (previous) {
           record.diffLines = previous.diffLines; record.changedFiles = previous.changedFiles; record.hostMs = previous.hostMs;
           record.earlyStop = previous.earlyStop;
@@ -140,13 +141,13 @@ export class WorkerStore implements AttemptFence {
     });
   }
   /** A stopped task may be explicitly retried; it remains fenced until the replacement is published. */
-  retryStopped(taskId: string, make: (n: number) => Attempt): Attempt {
+  retryStopped(taskId: string, make: (n: number) => Attempt, configDirectory?: string): Attempt {
     return this.db.transaction(() => {
       const task = this.task(taskId);
       if (task.state !== 'stopped') throw new Error('task is not stopped');
       const old = this.attempt({ taskId, attempt: task.currentAttempt });
       old.state = 'exited'; this.saveAttempt(old);
-      return this.nextAttempt(old, make);
+      return this.nextAttempt(old, make, configDirectory);
     }).immediate();
   }
 }

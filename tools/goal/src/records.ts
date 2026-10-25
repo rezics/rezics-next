@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { basename, join } from 'node:path';
 import type { Attempt, AttemptFailure, AttemptRecord, StepClass, Task, Tokens } from './types.ts';
 
 export const CLASSIFIER_VERSION = '1';
@@ -91,10 +92,43 @@ export function makeRecord(task: Task, attempt: Attempt, measurement: LogMeasure
     escalation: attempt.escalation, consulted: attempt.consulted, fixRound: attempt.fixRound,
     diffLines: 0, changedFiles: [], hostMs: 0, classifierVersion: CLASSIFIER_VERSION, stepClasses: measurement.steps, earlyStop: false };
 }
-export function readMeasurement(attempt: Attempt, baseline?: Tokens): LogMeasurement {
+export type MeasurementOptions = { baseline?: Tokens; configDirectory?: string | undefined };
+function rolloutFor(configDirectory: string, session: string): string | null {
+  const root = join(configDirectory, 'sessions');
+  const suffix = `-${session}.jsonl`;
+  const pending = [root];
+  const matches: string[] = [];
+  while (pending.length) {
+    const directory = pending.pop()!;
+    let entries;
+    try { entries = readdirSync(directory, { withFileTypes: true }); } catch { continue; }
+    for (const entry of entries) {
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) pending.push(path);
+      else if (entry.isFile() && entry.name.startsWith('rollout-') && entry.name.endsWith(suffix)) matches.push(path);
+    }
+  }
+  matches.sort((a, b) => basename(a).localeCompare(basename(a)) || a.localeCompare(b));
+  for (const path of matches) {
+    try { return readFileSync(path, 'utf8'); } catch { /* A rollout may disappear during cleanup. */ }
+  }
+  return null;
+}
+export function readMeasurement(attempt: Attempt, options: MeasurementOptions = {}): LogMeasurement {
   let text = '';
   try { text = readFileSync(attempt.logPath, 'utf8'); } catch { /* A failed spawn has no stream. */ }
-  return measureLog(text, { startedAt: attempt.startedAt, ...(attempt.endedAt ? { endedAt: attempt.endedAt } : {}), ...(baseline ? { baseline } : {}) });
+  const interval = { startedAt: attempt.startedAt, ...(attempt.endedAt ? { endedAt: attempt.endedAt } : {}) };
+  const measurement = measureLog(text, { ...interval, ...(options.baseline ? { baseline: options.baseline } : {}) });
+  const completed = text.split('\n').some(line => {
+    try { return JSON.parse(line).type === 'turn.completed'; } catch { return false; }
+  });
+  if (!options.configDirectory || completed) return measurement;
+  const session = measurement.session ?? attempt.session;
+  if (!session) return measurement;
+  const rollout = rolloutFor(options.configDirectory, session);
+  if (rollout === null) return measurement;
+  const usage = measureLog(rollout, { ...interval, ...(options.baseline ? { baseline: options.baseline } : {}) });
+  return { ...measurement, tokens: usage.tokens, total: usage.total, session };
 }
 
 /** Only the bounded approach/result fields enter evidence; the rest of the session stays in its raw log. */

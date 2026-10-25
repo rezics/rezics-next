@@ -17,6 +17,8 @@ export function importAttempt(tasks: WorkerTasks, log: string, options: ImportOp
   const measured = measureLog(readFileSync(log, 'utf8'), { startedAt: options.startedAt, endedAt: options.endedAt,
     ...(options.baseline ? { baseline: options.baseline } : {}) });
   const table = readRouting(tasks.settings.routingFile);
+  const previous = task.currentAttempt ? store.attempt({ taskId: task.id, attempt: task.currentAttempt }) : null;
+  const previousConfigDirectory = previous ? tasks.settings.pools.find(pool => pool.name === previous.pool)?.configDirectory : undefined;
   const attempt = store.nextAttempt({ taskId: task.id, attempt: task.currentAttempt }, n => ({
     taskId: task.id, attempt: n, state: 'exited', profile: options.profile, pool: options.pool,
     tableVersion: options.tableVersion ?? `imported-before-${table.version}`, experiment: null,
@@ -24,7 +26,7 @@ export function importAttempt(tasks: WorkerTasks, log: string, options: ImportOp
     logPath: join(tasks.settings.stateDirectory, 'runs', task.id, `${n}.jsonl`), evidencePath: join(tasks.settings.stateDirectory, 'evidence', task.id, String(n)),
     session: measured.session, fixRound: 0, consulted: false, previousFailure: null, failure: null, escalation: 'import',
     before: null, after: null, exitCode: null, result: measured.result, blocker: measured.blocker, approaches: [],
-  }));
+  }), previousConfigDirectory);
   mkdirSync(dirname(attempt.logPath), { recursive: true }); copyFileSync(log, attempt.logPath);
   const record = makeRecord(task, attempt, measured, options.outcome ?? 'pending-gate');
   record.diffLines = options.diffLines ?? null; record.changedFiles = options.changedFiles ?? null; record.hostMs = options.hostMs ?? null;

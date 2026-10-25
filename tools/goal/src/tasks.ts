@@ -47,6 +47,7 @@ export class WorkerTasks {
       if (!task.branch || !task.base || !task.brief.acceptance.command.length) throw new Error('Imported attempts need a dispatchable contract before retry');
       if (!['ready', 'running', 'landing', 'stopped'].includes(task.state)) throw new Error(`cannot retry ${task.state} task`);
       const old = task.currentAttempt ? this.store.attempt({ taskId, attempt: task.currentAttempt }) : null;
+      const oldConfigDirectory = old ? this.settings.pools.find(candidate => candidate.name === old.pool)?.configDirectory : undefined;
       const route = old ? { profile: old.profile, tableVersion: old.tableVersion, experiment: old.experiment }
         : routeTask(task.brief, task.sequence, readRouting(this.settings.routingFile));
       const profile = options.profile ?? route.profile;
@@ -65,8 +66,8 @@ export class WorkerTasks {
         escalation: options.escalation ?? null, before: readings.find(r => r.pool === pool.name) ?? null, after: null,
         exitCode: null, result: '', blocker: null, approaches: old?.approaches ?? [],
       });
-      const next = task.state === 'stopped' && task.currentAttempt > 0 ? this.store.retryStopped(taskId, make)
-        : this.store.nextAttempt({ taskId, attempt: task.currentAttempt }, make);
+      const next = task.state === 'stopped' && task.currentAttempt > 0 ? this.store.retryStopped(taskId, make, oldConfigDirectory)
+        : this.store.nextAttempt({ taskId, attempt: task.currentAttempt }, make, oldConfigDirectory);
       // Include older groups after a controller crash between superseding and termination.
       for (const previous of this.store.attempts(taskId).filter(a => a.attempt < next.attempt && !a.supersededFinalized)) {
         await terminateProcessGroup(previous.process, this.settings.terminationGraceMs);
@@ -76,13 +77,13 @@ export class WorkerTasks {
       this.store.finalizeSuperseded(next, previous => {
         const previousPool = this.settings.pools.find(p => p.name === previous.pool);
         return previousPool ? this.reader(previousPool) : null;
-      });
+      }, previous => this.settings.pools.find(p => p.name === previous.pool)?.configDirectory);
       try { return await this.launcher(this.store, this.store.task(taskId), next, pool, workerPrompt(task, options.evidence, options.consultation), this.settings.codex); }
       catch (error) {
         const failed = this.store.updateAttempt(next, a => {
           a.state = 'exited'; a.endedAt = new Date().toISOString(); a.result = String(error); a.exitCode = -1; a.failureKind = 'tool'; a.after = this.reader(pool);
         });
-        this.store.putRecord(makeRecord(this.store.task(taskId), failed, readMeasurement(failed), 'stopped'));
+        this.store.putRecord(makeRecord(this.store.task(taskId), failed, readMeasurement(failed, { configDirectory: pool.configDirectory }), 'stopped'));
         this.store.event(next, 'launch-failed', { error: String(error) });
         this.store.updateTask(next, t => { t.state = 'stopped'; });
         throw error;
@@ -102,7 +103,7 @@ export class WorkerTasks {
         if (attempt.state !== 'stopped' && attempt.state !== 'cancelled') {
           const pool = this.settings.pools.find(p => p.name === attempt.pool);
           const ended = this.store.updateAttempt(ref, a => { a.endedAt = new Date().toISOString(); a.after = pool ? this.reader(pool) : null; });
-          this.store.putRecord(makeRecord(task, ended, readMeasurement(ended), cancelled ? 'cancelled' : 'stopped'));
+          this.store.putRecord(makeRecord(task, ended, readMeasurement(ended, { configDirectory: pool?.configDirectory }), cancelled ? 'cancelled' : 'stopped'));
           this.store.event(ref, cancelled ? 'cancelled' : 'stopped', {});
           this.store.close(ref, cancelled ? 'cancelled' : 'stopped');
         }
