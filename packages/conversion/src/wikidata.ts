@@ -40,8 +40,6 @@ export type WikidataConversion = ConvertedRecord<BatchCommand> & {
   normalizedRecord: NormalizedEntity;
   assets: readonly [];
   sourceMetadata: { license: 'CC0-1.0'; attribution: string; url: string };
-  /** Work on the allowlisted source input, excluding unknown/private extensions. */
-  metrics: { inputBytes: number; fieldVisits: number };
 };
 
 // Mapping and value validation both come from the shipped catalogue, never from source extensions.
@@ -116,12 +114,10 @@ export function convertWikidata(
   options: { readonly converterRevision?: string } = {},
 ): WikidataConversion {
   const diagnostics: ConversionDiagnostic[] = [];
-  let fieldVisits = 0;
   let scalarBytes = 0;
   let statementCount = 0;
   let termCount = 0;
   const read = (value: ObjectValue, key: string, pointer: string) => {
-    fieldVisits++;
     const field = get(value, key, pointer);
     if (typeof field === 'string') {
       scalarBytes += Buffer.byteLength(field, 'utf8');
@@ -551,6 +547,5 @@ export function convertWikidata(
     diagnostics,
     assets: [],
     sourceMetadata,
-    metrics: { inputBytes, fieldVisits },
   };
 }
