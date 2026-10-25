@@ -98,8 +98,19 @@ async function committed(d: CommandAdmissionDriver, f: Fixture, fact: 'suspended
   const before = await d.account(f);
   await d.transition(f, fact); // COMMIT completes before observation or next attempt.
   const current = await d.account(f);
-  if (fact === 'suspended') expect(current).toEqual({ ...before, state: 'suspended' });
-  if (fact === 'fence') expect(current).toEqual({ ...before, fenced: true });
+  if (fact === 'suspended') {
+    expect(current).toEqual({
+      ...before,
+      state: 'suspended',
+      fenced: true,
+      minimumAuthnEpoch: current.minimumAuthnEpoch,
+    });
+    expect(BigInt(current.minimumAuthnEpoch)).toBeGreaterThan(BigInt(before.minimumAuthnEpoch));
+  }
+  if (fact === 'fence') {
+    expect(current).toEqual({ ...before, fenced: true, minimumAuthnEpoch: current.minimumAuthnEpoch });
+    expect(BigInt(current.minimumAuthnEpoch)).toBeGreaterThan(BigInt(before.minimumAuthnEpoch));
+  }
   if (fact === 'floor') {
     expect(current).toEqual({ ...before, minimumAuthnEpoch: current.minimumAuthnEpoch });
     expect(BigInt(current.minimumAuthnEpoch)).toBeGreaterThan(BigInt(f.actor.authnEpoch));
