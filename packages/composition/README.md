@@ -319,7 +319,14 @@ each, then `MoreStatements`.
 `schema:author`, `schema:illustrator`, `schema:director`, `schema:musicBy` and `wdt:P725`,
 limit 12. `schema:Organization` lists `schema:publisher`, `schema:productionCompany` and
 `wdt:P178`, limit 12. `skos:Concept` lists `schema:genre`, limit 24. `wd:Q95074` lists
-`schema:character`, limit 24. There are no route templates. Resolution is route, then type,
-then base, then generic, so a person, organisation, concept or fictional character uses its
-type template, a series uses `schema:CreativeWorkSeries`, another bundled work uses
-`schema:CreativeWork`, and every other bundled type uses `generic`.
+`schema:character`, limit 24. Route `/` is the site home template: a `SearchBox` whose
+placeholder invites searching books, anime, visual novels and recipes, then a `LinkGrid` of
+Books (`schema:Book`), Anime (`schema:TVSeries` and `schema:Movie`), Visual novels
+(`wd:Q689445`) and Recipes (`schema:Recipe`), then one `TypeList` per vertical in that order
+and with the same types, sorted by `collections` with limit 12 and titled with the vertical's
+name. Each link is `/search?type=` plus that vertical's type CURIE, percent-encoded; Anime
+names its first type. Every text is written in the eight UI locales. Resolution is route,
+then type, then base, then generic, so `/` uses the home template, a person, organisation,
+concept or fictional character uses its type template, a series uses
+`schema:CreativeWorkSeries`, another bundled work uses `schema:CreativeWork`, and every other
+bundled type uses `generic`.

@@ -35,7 +35,7 @@ test('the platform profile is valid and gives every bundled type a default page'
     'skos:Concept',
     'wd:Q95074',
   ]);
-  expect(platformProfile.routes).toEqual([]);
+  expect(platformProfile.routes.map(({ route }) => route)).toEqual(['/']);
   for (const [type, definition] of Object.entries(bundledRelease.types)) {
     const { scope, key } = resolveTemplate(platformProfile, { type, bases: definition.bases });
     const typeKey =
