@@ -1,0 +1,21 @@
+{
+  "name": "@rezics/definitions",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema/release.json": "./schema/release.json"
+  },
+  "scripts": {
+    "check": "tsc --noEmit -p tsconfig.json && bun test"
+  },
+  "dependencies": {
+    "typebox": "1.4.3",
+    "canonicalize": "5.1.0",
+    "recheck": "4.5.0"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.4"
+  }
+}
