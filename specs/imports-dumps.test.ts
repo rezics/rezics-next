@@ -141,6 +141,15 @@ test('all readers use incoming keys revisions and payloads rather than canned fi
   });
 });
 
+test('Wikidata records without a native revision stay unversioned and preserve their raw payload', async () => {
+  await scenario(async driver => {
+    const payload = { id: 'Q818', type: 'item', labels: { en: { language: 'en', value: 'Unversioned' } }, claims: {} };
+    expect(await collect(driver, 'wikidata', `${JSON.stringify(payload)}\n`)).toEqual([
+      { source: 'wikidata', key: 'Q818', revision: null, payload },
+    ]);
+  });
+});
+
 test('malformed rows after valid records abort every source instead of becoming missing records', async () => {
   await scenario(async driver => {
     for (const source of sources) {
@@ -189,7 +198,7 @@ test('missing identities and invalid explicit source revisions abort instead of 
     await aborts(driver, 'bangumi', '{"type":2,"name":"No identity"}\n');
     await aborts(driver, 'vndb', dump('vndb', ['\\N\tNo identity\t\\N']));
     await aborts(driver, 'openlibrary', dump('openlibrary', [row('openlibrary').replace('\t7\t', '\tnot-a-revision\t')]));
-    for (const lastrevid of [undefined, null, -1, 'not-a-revision']) {
+    for (const lastrevid of [null, 0, -1, 0.5, 'not-a-revision']) {
       await aborts(driver, 'wikidata', JSON.stringify({ id: 'Q41', type: 'item', lastrevid }) + '\n');
     }
   });

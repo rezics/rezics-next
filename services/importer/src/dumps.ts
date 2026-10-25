@@ -129,8 +129,11 @@ export async function* readDump(source: SourceId, input: AsyncIterable<Uint8Arra
         if (!positive(payload.id) || ![1, 2, 3, 4, 6].includes(payload.type as number)) return invalid();
         key = String(payload.id);
       } else {
-        if (payload.type !== 'item' || typeof payload.id !== 'string' || !/^Q[1-9]\d*$/.test(payload.id) || !positive(payload.lastrevid)) return invalid();
-        key = payload.id; revision = String(payload.lastrevid);
+        const hasRevision = Object.prototype.hasOwnProperty.call(payload, 'lastrevid');
+        if (payload.type !== 'item' || typeof payload.id !== 'string' || !/^Q[1-9]\d*$/.test(payload.id) ||
+          (hasRevision && !positive(payload.lastrevid))) return invalid();
+        key = payload.id;
+        if (hasRevision) revision = String(payload.lastrevid);
       }
     }
     if (keys.has(key)) throw new Error('Duplicate dump record key');
