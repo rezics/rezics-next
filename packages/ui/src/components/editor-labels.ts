@@ -1,0 +1,30 @@
+/** English defaults for the editor's selection and link controls. */
+export const richTextEditorLabels = {
+  formatting: 'Format text',
+  turnInto: 'Turn into',
+  paragraph: 'Paragraph',
+  heading1: 'Heading 1',
+  heading2: 'Heading 2',
+  heading3: 'Heading 3',
+  bulletList: 'Bullet list',
+  orderedList: 'Numbered list',
+  taskList: 'Checklist',
+  quote: 'Quote',
+  codeBlock: 'Code block',
+  bold: 'Bold',
+  italic: 'Italic',
+  strike: 'Strikethrough',
+  inlineCode: 'Inline code',
+  link: 'Link',
+  clearFormatting: 'Clear formatting',
+  url: 'URL',
+  apply: 'Apply',
+  cancel: 'Cancel',
+  unlink: 'Remove link',
+  editLink: 'Edit link',
+  openLink: 'Open link',
+  invalidUrl: 'Enter an http:, https: or mailto: address.',
+  documentError: 'This document could not be saved.',
+};
+
+export type RichTextEditorLabels = { readonly [K in keyof typeof richTextEditorLabels]: string };

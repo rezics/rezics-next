@@ -14,7 +14,11 @@ import { cn } from '../utils.ts';
 import { EditorSurface, editorAttributes, editorExtensions, sanitizePastedHTML } from './editor-surface.ts';
 import { assertSnapshotSize, editorSnapshot } from './rich-text-editor-snapshot.ts';
 
-export type RichTextEditorLabels = Readonly<Record<string, string>>;
+import { richTextEditorLabels, type RichTextEditorLabels } from './editor-labels.ts';
+import { SelectionMenu } from './editor-selection-menu.tsx';
+import { LinkMenu, type LinkRange } from './editor-link.tsx';
+
+export type { RichTextEditorLabels } from './editor-labels.ts';
 
 export interface RichTextEditorProps {
   value: DocumentSnapshot;
@@ -83,6 +87,9 @@ export function RichTextEditor({
   const publishRef = useRef<(editor: TiptapEditor) => void>(() => undefined);
   const [snapshotError, setSnapshotError] = useState(false);
   const editable = !disabled && !readOnly;
+  const menuContainer = useRef<HTMLDivElement>(null);
+  const [linkRange, setLinkRange] = useState<LinkRange | null>(null);
+  const resolvedLabels = useMemo(() => ({ ...richTextEditorLabels, ...labels }), [labels]);
 
   const publish = useCallback(
     (editor: TiptapEditor) => {
@@ -198,6 +205,22 @@ export function RichTextEditor({
     [],
   );
 
+  const openLink = useCallback(() => {
+    if (!editor?.isEditable || !editor.schema.marks.link) return;
+    const { from, to } = editor.state.selection;
+    setLinkRange({ from, to });
+  }, [editor]);
+  const closeLink = useCallback(() => setLinkRange(null), []);
+
+  useEffect(() => {
+    if (!editor) return;
+    const close = () => setLinkRange(null);
+    editor.on('selectionUpdate', close);
+    return () => {
+      editor.off('selectionUpdate', close);
+    };
+  }, [editor]);
+
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
       if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
@@ -205,6 +228,16 @@ export function RichTextEditor({
       if (event.defaultPrevented) return;
 
       const modifier = (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey;
+      if (editable && editor && modifier && event.key.toLowerCase() === 'k' && editor.schema.marks.link) {
+        event.preventDefault();
+        openLink();
+        return;
+      }
+      if (editable && editor && event.altKey && event.key === 'F10' && !editor.state.selection.empty) {
+        event.preventDefault();
+        menuContainer.current?.querySelector<HTMLButtonElement>('[role="toolbar"] button[tabindex="0"]')?.focus();
+        return;
+      }
       if (modifier && event.key.toLowerCase() === 's' && latest.current.onSave) {
         event.preventDefault();
         const current = editor;
@@ -212,7 +245,7 @@ export function RichTextEditor({
         latest.current.onSave();
       }
     },
-    [editor],
+    [editor, editable, openLink],
   );
 
   const handleCompositionEnd = useCallback(() => {
@@ -224,7 +257,7 @@ export function RichTextEditor({
   }, [editor]);
 
   return (
-    <div className={cn('min-w-0', className)}>
+    <div ref={menuContainer} className={cn('relative min-w-0', className)}>
       <EditorSurface
         editor={editor}
         label={label}
@@ -235,9 +268,29 @@ export function RichTextEditor({
         onKeyDown={handleKeyDown}
         onCompositionEnd={handleCompositionEnd}
       />
+      {editor && editable ? (
+        <>
+          <SelectionMenu
+            editor={editor}
+            labels={resolvedLabels}
+            linkRange={linkRange}
+            onLink={openLink}
+            onLinkClose={closeLink}
+            container={menuContainer}
+          />
+          <LinkMenu
+            editor={editor}
+            labels={resolvedLabels}
+            range={linkRange}
+            onEdit={openLink}
+            onClose={closeLink}
+            container={menuContainer}
+          />
+        </>
+      ) : null}
       {snapshotError ? (
-        <p role="alert" className="mt-2 text-sm text-destructive-foreground">
-          {labels?.documentError ?? 'This document could not be saved.'}
+        <p role="alert" className="mt-2 text-sm text-foreground">
+          {resolvedLabels.documentError}
         </p>
       ) : null}
     </div>
