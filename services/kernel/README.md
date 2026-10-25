@@ -15,6 +15,11 @@ Run `bun run db up`, then `bun run dev` from this workspace to serve the API loc
 `KERNEL_HOSTNAME` defaults to `127.0.0.1` and `KERNEL_PORT` defaults to `4100`. `db up` generates the development
 secrets once and keeps them in `.env` across restarts.
 
+Bearer tokens are verified against the Auth service. The first request that carries one reads `AUTH_ISSUER`
+(the Auth service's HTTPS origin), `AUTH_AUDIENCE` (the API's HTTPS URL) and `AUTH_JWKS_URL` (the Auth
+service's HTTPS JWKS URL, on the issuer's origin). Without them the kernel still starts and serves anonymous
+requests, and refuses every bearer token.
+
 ## Check
 
 Run `bun run check` from this workspace. It starts a disposable PostgreSQL database, applies migrations and checks the
