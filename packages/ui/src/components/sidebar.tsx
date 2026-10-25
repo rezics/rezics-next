@@ -68,15 +68,14 @@ export const SidebarProvider = (props: SidebarProviderProps) => {
   const setOpen = React.useCallback(
     (value: boolean | ((value: boolean) => boolean)) => {
       const openState = typeof value === 'function' ? value(open) : value;
-      if (setOpenProp) {
-        setOpenProp(openState);
+      if (openProp !== undefined) {
+        setOpenProp?.(openState);
       } else {
         _setOpen(openState);
+        document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
       }
-
-      document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
     },
-    [setOpenProp, open],
+    [openProp, setOpenProp, open],
   );
 
   const toggleSidebar = React.useCallback(() => {
@@ -90,6 +89,9 @@ export const SidebarProvider = (props: SidebarProviderProps) => {
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === SIDEBAR_KEYBOARD_SHORTCUT && (event.metaKey || event.ctrlKey)) {
+        const target = event.target;
+        if (target instanceof HTMLElement && (target.isContentEditable
+          || target.closest('[contenteditable="true"], input, textarea, [role="textbox"]'))) return;
         event.preventDefault();
         toggleSidebar();
       }
@@ -141,6 +143,7 @@ export const SidebarProvider = (props: SidebarProviderProps) => {
 
 interface SidebarProps extends React.ComponentProps<typeof Sheet> {
   className?: string;
+  style?: React.CSSProperties;
   collapsible?: 'offcanvas' | 'icon' | 'none';
   placement?: 'left' | 'right';
   variant?: 'sidebar' | 'floating' | 'inset';
