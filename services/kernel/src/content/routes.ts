@@ -19,6 +19,7 @@ import {
 import { DocumentTooLargeError, InvalidDocumentError, MAX_DOCUMENT_BYTES } from './document.ts';
 import type { AnchoredPosition, ReadContext } from './model.ts';
 import type { ContentRuntime } from './runtime.ts';
+import { sourceFenceGovernanceRoutes } from './source-fence-governance-routes.ts';
 import {
   ContentNotFoundError as ReadNotFoundError,
   listPostRevisions,
@@ -185,7 +186,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
     return { value: result.value, anchor: result.anchor };
   }
 
-  return sourceFenceRoutes(app, dependencies)
+  return sourceFenceGovernanceRoutes(sourceFenceRoutes(app, dependencies), dependencies)
     .post(
       '/v1/threads',
       {
