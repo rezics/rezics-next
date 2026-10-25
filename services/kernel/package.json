@@ -12,7 +12,8 @@
     "client": "bun scripts/client.ts",
     "derived": "bun scripts/derived.ts",
     "construct": "bun scripts/construct.ts",
-    "check": "bun scripts/check.ts"
+    "check": "bun scripts/check.ts",
+    "typecheck": "tsc --noEmit --runExternalCode -p tsconfig.json && bun run construct"
   },
   "dependencies": {
     "@dbos-inc/dbos-sdk": "5.4.6-preview",
