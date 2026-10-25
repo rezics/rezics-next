@@ -10,6 +10,7 @@ type CommandResult<T> = {
     value: T;
     events: CommandEvent[];
 };
+export declare const MAX_COMMAND_EVENTS = 1000;
 /** Principal kind marker only; never an account ID. */
 export declare const ANONYMOUS_PRINCIPAL_ID = "00000000-0000-0000-0000-000000000000";
 export type CommandPrincipal = {
@@ -120,6 +121,11 @@ export declare function commandTime(tx: CommandTransaction): AuthoritativeTime |
 export declare class IdempotencyConflictError extends Error {
     readonly partition: number;
     constructor(partition: number);
+}
+export declare class TooManyEventsError extends Error {
+    readonly partition: number;
+    readonly count: number;
+    constructor(partition: number, count: number);
 }
 export declare class CommandUnavailableError extends Error {
     readonly reason: 'fenced' | 'moved' | 'contention' | 'deadline' | 'overloaded' | 'anonymous-receipts';

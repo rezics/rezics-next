@@ -3,6 +3,12 @@ import { createKernel } from './http/kernel.ts';
 import type { KeyRing } from './tokens/seal.ts';
 import { startRelays } from './events/relays.ts';
 import { effectsRelay, launchWork, registerEffects, shutdownWork, type Effect } from './events/effects.ts';
+import { ConfigError, readCommerceConfig, type CommerceConfig } from './commerce/config.ts';
+import { createStripePort } from './commerce/stripe.ts';
+import { createCommerceWork } from './commerce/enqueue.ts';
+import { createWorkClient } from './work/client.ts';
+
+export { ConfigError } from './commerce/config.ts';
 
 export type ServerConfig = {
   databaseUrl: string;
@@ -10,14 +16,8 @@ export type ServerConfig = {
   port: number;
   routeKey: Uint8Array;
   tokens: KeyRing;
+  commerce: CommerceConfig;
 };
-
-export class ConfigError extends Error {
-  constructor(variable: string) {
-    super(`Invalid or missing ${variable}`);
-    this.name = 'ConfigError';
-  }
-}
 
 function required(env: NodeJS.ProcessEnv, variable: string): string {
   const value = env[variable];
@@ -58,16 +58,34 @@ export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
   const port = Number(portValue);
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new ConfigError('KERNEL_PORT');
 
-  return { databaseUrl, hostname, port, routeKey, tokens: { current, keys } };
+  return { databaseUrl, hostname, port, routeKey, tokens: { current, keys }, commerce: readCommerceConfig(env) };
 }
 
 export function startServer(config: ServerConfig, options: { effects?: Effect[] } = {}) {
   const pool = createPool(config.databaseUrl);
-  const app = createKernel({ pool, routeKey: config.routeKey, tokens: config.tokens });
   const registeredEffects = registerEffects(options.effects ?? []);
   let relays: ReturnType<typeof startRelays> | undefined;
   const work = launchWork({ databaseUrl: config.databaseUrl }).then(() => {
     relays = startRelays(pool, [effectsRelay(pool, registeredEffects)]);
+  });
+  const workClient = createWorkClient(config.databaseUrl);
+  // Observe startup rejection immediately; the webhook and stop still receive it.
+  void workClient.catch(() => {});
+  const app = createKernel({
+    pool,
+    routeKey: config.routeKey,
+    tokens: config.tokens,
+    commerce: {
+      stripe: createStripePort({ ...config.commerce.stripe, clock: () => new Date() }),
+      successUrl: config.commerce.successUrl,
+      cancelUrl: config.commerce.cancelUrl,
+      webhookSecrets: config.commerce.webhookSecrets,
+      work: {
+        async enqueueStripeEvent(ref) {
+          await createCommerceWork(await workClient).enqueueStripeEvent(ref);
+        },
+      },
+    },
   });
   const server = Bun.serve({
     hostname: config.hostname,
@@ -89,7 +107,11 @@ export function startServer(config: ServerConfig, options: { effects?: Effect[] 
             try {
               await shutdownWork();
             } finally {
-              await pool.end();
+              try {
+                await (await workClient).close();
+              } finally {
+                await pool.end();
+              }
             }
           }
         }

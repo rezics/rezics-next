@@ -1,6 +1,8 @@
+import { type CommerceDependencies } from '../commerce/routes.ts';
 import { createApp } from './app.ts';
 export type KernelDependencies = Parameters<typeof createApp>[0] & {
     routeKey: Uint8Array;
+    commerce?: CommerceDependencies;
 };
 /** The route key must stay the same across restarts, or retries lose their receipts. */
 export declare function createKernel(dependencies: KernelDependencies): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
@@ -527,6 +529,724 @@ export declare function createKernel(dependencies: KernelDependencies): import("
             };
         };
     };
+} & {
+    v1: {
+        definitions: {
+            releases: {
+                ":digest": {
+                    $activate: {
+                        post: {
+                            body: {
+                                expected_head: number | null;
+                            };
+                            params: {
+                                digest: string;
+                            };
+                            query: unknown;
+                            headers: {
+                                "idempotency-key": string;
+                            };
+                            response: {
+                                200: {
+                                    digest: string;
+                                    head: number;
+                                };
+                                400: {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail?: string;
+                                    errors?: {
+                                        pointer: string;
+                                        code: never;
+                                    }[];
+                                };
+                                401: {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail?: string;
+                                    errors?: {
+                                        pointer: string;
+                                        code: never;
+                                    }[];
+                                };
+                                403: {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail?: string;
+                                    errors?: {
+                                        pointer: string;
+                                        code: never;
+                                    }[];
+                                };
+                                404: {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail?: string;
+                                    errors?: {
+                                        pointer: string;
+                                        code: never;
+                                    }[];
+                                };
+                                409: {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail?: string;
+                                    errors?: {
+                                        pointer: string;
+                                        code: never;
+                                    }[];
+                                };
+                                422: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail?: string;
+                                    errors?: {
+                                        pointer: string;
+                                        code: never;
+                                    }[];
+                                };
+                                503: {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail?: string;
+                                    errors?: {
+                                        pointer: string;
+                                        code: never;
+                                    }[];
+                                };
+                            };
+                            error: never;
+                        };
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        offers: {
+            ":offerId": {
+                get: {
+                    body: unknown;
+                    params: {
+                        offerId: string;
+                    };
+                    query: unknown;
+                    headers: unknown;
+                    response: {
+                        200: {
+                            offer: {
+                                id: string;
+                                targetSubjectId: string;
+                                title: string;
+                                currency: string;
+                                unitAmountMinor: number;
+                                state: "active" | "delisted";
+                            };
+                        };
+                        401: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        404: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        503: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                    };
+                    error: never;
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        offers: {
+            post: {
+                body: {
+                    targetSubjectId: string;
+                    title: string;
+                    currency: string;
+                    unitAmountMinor: number;
+                    taxCode: string;
+                };
+                params: {};
+                query: unknown;
+                headers: {
+                    "idempotency-key": string;
+                };
+                response: {
+                    200: {
+                        offer: {
+                            id: string;
+                            targetSubjectId: string;
+                            title: string;
+                            currency: string;
+                            unitAmountMinor: number;
+                            state: "active" | "delisted";
+                        };
+                    };
+                    201: {
+                        offer: {
+                            id: string;
+                            targetSubjectId: string;
+                            title: string;
+                            currency: string;
+                            unitAmountMinor: number;
+                            state: "active" | "delisted";
+                        };
+                    };
+                    400: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    401: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    403: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    422: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    503: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                };
+                error: never;
+            };
+        };
+    };
+} & {
+    v1: {
+        offers: {
+            ":offerId": {
+                $delist: {
+                    post: {
+                        body: unknown;
+                        params: {
+                            offerId: string;
+                        };
+                        query: unknown;
+                        headers: {
+                            "idempotency-key": string;
+                        };
+                        response: {
+                            200: {
+                                offer: {
+                                    id: string;
+                                    targetSubjectId: string;
+                                    title: string;
+                                    currency: string;
+                                    unitAmountMinor: number;
+                                    state: "active" | "delisted";
+                                };
+                            };
+                            400: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            401: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            503: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        orders: {
+            post: {
+                body: {
+                    offerId: string;
+                };
+                params: {};
+                query: unknown;
+                headers: {
+                    "idempotency-key": string;
+                };
+                response: {
+                    200: {
+                        order: {
+                            id: string;
+                            offerId: string;
+                            settlement: import("../commerce/model.ts").Settlement;
+                            checkoutUrl: string | null;
+                            checkoutExpiresAt: string | null;
+                            entitlementId: string | null;
+                            createdAt: string;
+                        };
+                    };
+                    201: {
+                        order: {
+                            id: string;
+                            offerId: string;
+                            settlement: "failed" | "paid" | "pending" | "unknown";
+                            checkoutUrl: string | null;
+                            checkoutExpiresAt: string | null;
+                            entitlementId: string | null;
+                            createdAt: string;
+                        };
+                    };
+                    400: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    401: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    404: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    409: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    422: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    503: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                };
+                error: never;
+            };
+        };
+    };
+} & {
+    v1: {
+        orders: {
+            ":orderId": {
+                get: {
+                    body: unknown;
+                    params: {
+                        orderId: string;
+                    };
+                    query: unknown;
+                    headers: unknown;
+                    response: {
+                        200: {
+                            order: {
+                                id: string;
+                                offerId: string;
+                                settlement: "failed" | "paid" | "pending" | "unknown";
+                                checkoutUrl: string | null;
+                                checkoutExpiresAt: string | null;
+                                entitlementId: string | null;
+                                createdAt: string;
+                            };
+                        };
+                        401: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        404: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        503: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                    };
+                    error: never;
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        entitlements: {
+            get: {
+                body: unknown;
+                params: {};
+                query: {
+                    pageSize?: number;
+                    cursor?: string;
+                };
+                headers: unknown;
+                response: {
+                    200: {
+                        entitlements: {
+                            id: string;
+                            offerId: string;
+                            orderId: string;
+                            targetSubjectId: string;
+                            grantedAt: string;
+                            revokedAt: string | null;
+                            revokeReason: "dispute" | "refund" | null;
+                            active: boolean;
+                        }[];
+                        next: string | null;
+                    };
+                    400: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    401: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    403: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    409: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    422: Response | {
+                        type: 'validation';
+                        code: 'validation';
+                        title: 'Validation Error';
+                        status: 422;
+                        detail?: string;
+                        on: string;
+                        found?: unknown;
+                        property?: string;
+                        expected?: string;
+                    };
+                    503: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                };
+                error: never;
+            };
+        };
+    };
 }, import("elysia").DefaultEphemeral, {
     derive: {
         readonly admission: import("./admission.ts").Admission;
@@ -546,38 +1266,22 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     schemas: {};
     response: {};
     error: [];
-}, "post", "/v1/definitions/releases/:digest/$activate", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
+}, "get", "/v1/entitlements/:entitlementId", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
     params: import("typebox").TObject<{
-        digest: import("typebox").TString;
-    }>;
-    headers: import("typebox").TObject<{
-        "idempotency-key": import("typebox").TString;
-    }>;
-    body: import("typebox").TObject<{
-        expected_head: import("typebox").TUnion<[import("typebox").TInteger, import("typebox").TNull]>;
+        entitlementId: import("typebox").TString;
     }>;
     response: {
         200: import("typebox").TObject<{
-            digest: import("typebox").TString;
-            head: import("typebox").TInteger;
-        }> & {
-            headers: {
-                "rezics-session-token": import("typebox").TString;
-            };
-        };
-        400: import("typebox").TObject<{
-            type: import("typebox").TSchema;
-            title: import("typebox").TSchema;
-            status: import("typebox").TLiteral<number>;
-            code: import("typebox").TSchema;
-            retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-            request_id: import("typebox").TString;
-            detail: import("typebox").TOptional<import("typebox").TString>;
-            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-            }>>>;
+            entitlement: import("typebox").TObject<{
+                id: import("typebox").TString;
+                offerId: import("typebox").TString;
+                orderId: import("typebox").TString;
+                targetSubjectId: import("typebox").TString;
+                grantedAt: import("typebox").TString;
+                revokedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                revokeReason: import("typebox").TUnion<[import("typebox").TLiteral<"refund">, import("typebox").TLiteral<"dispute">, import("typebox").TNull]>;
+                active: import("typebox").TBoolean;
+            }>;
         }>;
         401: import("typebox").TObject<{
             type: import("typebox").TSchema;
@@ -593,49 +1297,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
-        403: import("typebox").TObject<{
-            type: import("typebox").TSchema;
-            title: import("typebox").TSchema;
-            status: import("typebox").TLiteral<number>;
-            code: import("typebox").TSchema;
-            retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-            request_id: import("typebox").TString;
-            detail: import("typebox").TOptional<import("typebox").TString>;
-            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-            }>>>;
-        }>;
         404: import("typebox").TObject<{
-            type: import("typebox").TSchema;
-            title: import("typebox").TSchema;
-            status: import("typebox").TLiteral<number>;
-            code: import("typebox").TSchema;
-            retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-            request_id: import("typebox").TString;
-            detail: import("typebox").TOptional<import("typebox").TString>;
-            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-            }>>>;
-        }>;
-        409: import("typebox").TObject<{
-            type: import("typebox").TSchema;
-            title: import("typebox").TSchema;
-            status: import("typebox").TLiteral<number>;
-            code: import("typebox").TSchema;
-            retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-            request_id: import("typebox").TString;
-            detail: import("typebox").TOptional<import("typebox").TString>;
-            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-            }>>>;
-        }>;
-        422: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
@@ -667,11 +1329,9 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     detail: {
         operationId: string;
         'x-action': string;
-        security: {
-            bearerAuth: never[];
-        }[];
+        security: {}[];
     };
-}, {}, "/v1/definitions/releases/:digest/$activate">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params, body, headers, actor, authorizeCommand, admission, job, session }: {
+}, {}, "/v1/entitlements/:entitlementId">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params, actor, admission, job }: {
     server: import("elysia").Server | null;
     redirect: import("elysia").redirect;
     set: {
@@ -682,22 +1342,16 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     };
     status: import("elysia").SelectiveStatus<{
         200: {
-            digest: string;
-            head: number;
-        };
-        400: {
-            type: unknown;
-            title: unknown;
-            status: number;
-            code: unknown;
-            retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
-            request_id: string;
-            detail?: string;
-            errors?: {
-                pointer: string;
-                code: never;
-            }[];
+            entitlement: {
+                id: string;
+                offerId: string;
+                orderId: string;
+                targetSubjectId: string;
+                grantedAt: string;
+                revokedAt: string | null;
+                revokeReason: "dispute" | "refund" | null;
+                active: boolean;
+            };
         };
         401: {
             type: unknown;
@@ -713,49 +1367,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 code: never;
             }[];
         };
-        403: {
-            type: unknown;
-            title: unknown;
-            status: number;
-            code: unknown;
-            retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
-            request_id: string;
-            detail?: string;
-            errors?: {
-                pointer: string;
-                code: never;
-            }[];
-        };
         404: {
-            type: unknown;
-            title: unknown;
-            status: number;
-            code: unknown;
-            retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
-            request_id: string;
-            detail?: string;
-            errors?: {
-                pointer: string;
-                code: never;
-            }[];
-        };
-        409: {
-            type: unknown;
-            title: unknown;
-            status: number;
-            code: unknown;
-            retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
-            request_id: string;
-            detail?: string;
-            errors?: {
-                pointer: string;
-                code: never;
-            }[];
-        };
-        422: {
             type: unknown;
             title: unknown;
             status: number;
@@ -786,22 +1398,16 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     }>;
     problem: import("elysia").SelectiveProblem<{
         200: {
-            digest: string;
-            head: number;
-        };
-        400: {
-            type: unknown;
-            title: unknown;
-            status: number;
-            code: unknown;
-            retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
-            request_id: string;
-            detail?: string;
-            errors?: {
-                pointer: string;
-                code: never;
-            }[];
+            entitlement: {
+                id: string;
+                offerId: string;
+                orderId: string;
+                targetSubjectId: string;
+                grantedAt: string;
+                revokedAt: string | null;
+                revokeReason: "dispute" | "refund" | null;
+                active: boolean;
+            };
         };
         401: {
             type: unknown;
@@ -817,49 +1423,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 code: never;
             }[];
         };
-        403: {
-            type: unknown;
-            title: unknown;
-            status: number;
-            code: unknown;
-            retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
-            request_id: string;
-            detail?: string;
-            errors?: {
-                pointer: string;
-                code: never;
-            }[];
-        };
         404: {
-            type: unknown;
-            title: unknown;
-            status: number;
-            code: unknown;
-            retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
-            request_id: string;
-            detail?: string;
-            errors?: {
-                pointer: string;
-                code: never;
-            }[];
-        };
-        409: {
-            type: unknown;
-            title: unknown;
-            status: number;
-            code: unknown;
-            retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
-            request_id: string;
-            detail?: string;
-            errors?: {
-                pointer: string;
-                code: never;
-            }[];
-        };
-        422: {
             type: unknown;
             title: unknown;
             status: number;
@@ -890,36 +1454,20 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     }>;
     defer: (fn: import("elysia/types").AfterResponseHandler<NoInfer<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
         params: import("typebox").TObject<{
-            digest: import("typebox").TString;
-        }>;
-        headers: import("typebox").TObject<{
-            "idempotency-key": import("typebox").TString;
-        }>;
-        body: import("typebox").TObject<{
-            expected_head: import("typebox").TUnion<[import("typebox").TInteger, import("typebox").TNull]>;
+            entitlementId: import("typebox").TString;
         }>;
         response: {
             200: import("typebox").TObject<{
-                digest: import("typebox").TString;
-                head: import("typebox").TInteger;
-            }> & {
-                headers: {
-                    "rezics-session-token": import("typebox").TString;
-                };
-            };
-            400: import("typebox").TObject<{
-                type: import("typebox").TSchema;
-                title: import("typebox").TSchema;
-                status: import("typebox").TLiteral<number>;
-                code: import("typebox").TSchema;
-                retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                request_id: import("typebox").TString;
-                detail: import("typebox").TOptional<import("typebox").TString>;
-                errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                    pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                }>>>;
+                entitlement: import("typebox").TObject<{
+                    id: import("typebox").TString;
+                    offerId: import("typebox").TString;
+                    orderId: import("typebox").TString;
+                    targetSubjectId: import("typebox").TString;
+                    grantedAt: import("typebox").TString;
+                    revokedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    revokeReason: import("typebox").TUnion<[import("typebox").TLiteral<"refund">, import("typebox").TLiteral<"dispute">, import("typebox").TNull]>;
+                    active: import("typebox").TBoolean;
+                }>;
             }>;
             401: import("typebox").TObject<{
                 type: import("typebox").TSchema;
@@ -935,49 +1483,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                     code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
                 }>>>;
             }>;
-            403: import("typebox").TObject<{
-                type: import("typebox").TSchema;
-                title: import("typebox").TSchema;
-                status: import("typebox").TLiteral<number>;
-                code: import("typebox").TSchema;
-                retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                request_id: import("typebox").TString;
-                detail: import("typebox").TOptional<import("typebox").TString>;
-                errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                    pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                }>>>;
-            }>;
             404: import("typebox").TObject<{
-                type: import("typebox").TSchema;
-                title: import("typebox").TSchema;
-                status: import("typebox").TLiteral<number>;
-                code: import("typebox").TSchema;
-                retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                request_id: import("typebox").TString;
-                detail: import("typebox").TOptional<import("typebox").TString>;
-                errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                    pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                }>>>;
-            }>;
-            409: import("typebox").TObject<{
-                type: import("typebox").TSchema;
-                title: import("typebox").TSchema;
-                status: import("typebox").TLiteral<number>;
-                code: import("typebox").TSchema;
-                retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                request_id: import("typebox").TString;
-                detail: import("typebox").TOptional<import("typebox").TString>;
-                errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                    pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                }>>>;
-            }>;
-            422: import("typebox").TObject<{
                 type: import("typebox").TSchema;
                 title: import("typebox").TSchema;
                 status: import("typebox").TLiteral<number>;
@@ -1009,11 +1515,9 @@ export declare function createKernel(dependencies: KernelDependencies): import("
         detail: {
             operationId: string;
             'x-action': string;
-            security: {
-                bearerAuth: never[];
-            }[];
+            security: {}[];
         };
-    }, {}, "/v1/definitions/releases/:digest/$activate">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
+    }, {}, "/v1/entitlements/:entitlementId">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
         derive: {
             readonly admission: import("./admission.ts").Admission;
             readonly job: {
@@ -1034,16 +1538,12 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     rid?: string;
     request: Request;
     store: {};
-    body: {
-        expected_head: number | null;
-    };
+    body: unknown;
     query: Record<string, string | undefined>;
     params: {
-        digest: string;
+        entitlementId: string;
     };
-    headers: {
-        "idempotency-key": string;
-    };
+    headers: Record<string, string | undefined>;
     cookie: Record<string, import("elysia").Cookie<unknown>>;
     readonly admission: import("./admission.ts").Admission;
     readonly job: {
@@ -1058,40 +1558,32 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
     readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
-    digest: string;
-    head: number;
+    entitlement: {
+        id: string;
+        offerId: string;
+        orderId: string;
+        targetSubjectId: string;
+        grantedAt: string;
+        revokedAt: string | null;
+        revokeReason: import("../commerce/model.ts").RevokeReason | null;
+        active: boolean;
+    };
 }>, {
     params: import("typebox").TObject<{
-        digest: import("typebox").TString;
-    }>;
-    headers: import("typebox").TObject<{
-        "idempotency-key": import("typebox").TString;
-    }>;
-    body: import("typebox").TObject<{
-        expected_head: import("typebox").TUnion<[import("typebox").TInteger, import("typebox").TNull]>;
+        entitlementId: import("typebox").TString;
     }>;
     response: {
         200: import("typebox").TObject<{
-            digest: import("typebox").TString;
-            head: import("typebox").TInteger;
-        }> & {
-            headers: {
-                "rezics-session-token": import("typebox").TString;
-            };
-        };
-        400: import("typebox").TObject<{
-            type: import("typebox").TSchema;
-            title: import("typebox").TSchema;
-            status: import("typebox").TLiteral<number>;
-            code: import("typebox").TSchema;
-            retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-            request_id: import("typebox").TString;
-            detail: import("typebox").TOptional<import("typebox").TString>;
-            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-            }>>>;
+            entitlement: import("typebox").TObject<{
+                id: import("typebox").TString;
+                offerId: import("typebox").TString;
+                orderId: import("typebox").TString;
+                targetSubjectId: import("typebox").TString;
+                grantedAt: import("typebox").TString;
+                revokedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                revokeReason: import("typebox").TUnion<[import("typebox").TLiteral<"refund">, import("typebox").TLiteral<"dispute">, import("typebox").TNull]>;
+                active: import("typebox").TBoolean;
+            }>;
         }>;
         401: import("typebox").TObject<{
             type: import("typebox").TSchema;
@@ -1107,49 +1599,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
-        403: import("typebox").TObject<{
-            type: import("typebox").TSchema;
-            title: import("typebox").TSchema;
-            status: import("typebox").TLiteral<number>;
-            code: import("typebox").TSchema;
-            retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-            request_id: import("typebox").TString;
-            detail: import("typebox").TOptional<import("typebox").TString>;
-            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-            }>>>;
-        }>;
         404: import("typebox").TObject<{
-            type: import("typebox").TSchema;
-            title: import("typebox").TSchema;
-            status: import("typebox").TLiteral<number>;
-            code: import("typebox").TSchema;
-            retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-            request_id: import("typebox").TString;
-            detail: import("typebox").TOptional<import("typebox").TString>;
-            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-            }>>>;
-        }>;
-        409: import("typebox").TObject<{
-            type: import("typebox").TSchema;
-            title: import("typebox").TSchema;
-            status: import("typebox").TLiteral<number>;
-            code: import("typebox").TSchema;
-            retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-            request_id: import("typebox").TString;
-            detail: import("typebox").TOptional<import("typebox").TString>;
-            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-            }>>>;
-        }>;
-        422: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
@@ -1181,9 +1631,286 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     detail: {
         operationId: string;
         'x-action': string;
-        security: {
-            bearerAuth: never[];
-        }[];
+        security: {}[];
+    };
+}> & import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
+    typebox: {};
+    error: [{
+        error: Error;
+        response: {};
+        passes: false;
+        '~return': Response;
+        '~catchAll': true;
+    }];
+}, {
+    schema: {};
+    schemas: {};
+    macro: {};
+    macroFn: {};
+    parser: {};
+    response: import("elysia/types").ExtractErrorFromHandle<Response>;
+}, {
+    health: {
+        get: {
+            body: unknown;
+            params: {};
+            query: unknown;
+            headers: unknown;
+            response: {
+                200: {
+                    status: 'ok';
+                };
+            };
+            error: never;
+        };
+    };
+}, import("elysia").DefaultEphemeral, {
+    derive: {
+        readonly admission: import("./admission.ts").Admission;
+        readonly job: {
+            deadline: number;
+            signal: AbortSignal;
+        };
+        readonly actor: import("../request/access.ts").Actor;
+        readonly session: {
+            readonly components: import("../tokens/session.ts").SessionComponent[];
+            record(component: import("../tokens/session.ts").SessionComponent): void;
+        };
+        readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
+        readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+    };
+    schema: {};
+    schemas: {};
+    response: {};
+    error: [];
+}, "post", "/v1/webhooks/stripe", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
+    parse: "none";
+    detail: {
+        hide: true;
+    };
+    response: {
+        200: import("typebox").TObject<{
+            received: import("typebox").TLiteral<true>;
+        }>;
+        400: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail: import("typebox").TOptional<import("typebox").TString>;
+            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
+        503: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail: import("typebox").TOptional<import("typebox").TString>;
+            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
+    };
+}, {}, "/v1/webhooks/stripe">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ request }: {
+    server: import("elysia").Server | null;
+    redirect: import("elysia").redirect;
+    set: {
+        headers: import("elysia").HTTPHeaders;
+        status?: number | keyof import("elysia").StatusMap;
+        cookie?: Record<string, import("elysia").BaseCookie>;
+        redirect?: never;
+    };
+    status: import("elysia").SelectiveStatus<{
+        200: {
+            received: true;
+        };
+        400: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail?: string;
+            errors?: {
+                pointer: string;
+                code: never;
+            }[];
+        };
+        503: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail?: string;
+            errors?: {
+                pointer: string;
+                code: never;
+            }[];
+        };
+    }>;
+    problem: import("elysia").SelectiveProblem<{
+        200: {
+            received: true;
+        };
+        400: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail?: string;
+            errors?: {
+                pointer: string;
+                code: never;
+            }[];
+        };
+        503: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail?: string;
+            errors?: {
+                pointer: string;
+                code: never;
+            }[];
+        };
+    }>;
+    defer: (fn: import("elysia/types").AfterResponseHandler<NoInfer<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
+        parse: "none";
+        detail: {
+            hide: true;
+        };
+        response: {
+            200: import("typebox").TObject<{
+                received: import("typebox").TLiteral<true>;
+            }>;
+            400: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail: import("typebox").TOptional<import("typebox").TString>;
+                errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                }>>>;
+            }>;
+            503: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail: import("typebox").TOptional<import("typebox").TString>;
+                errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                }>>>;
+            }>;
+        };
+    }, {}, "/v1/webhooks/stripe">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
+        derive: {
+            readonly admission: import("./admission.ts").Admission;
+            readonly job: {
+                deadline: number;
+                signal: AbortSignal;
+            };
+            readonly actor: import("../request/access.ts").Actor;
+            readonly session: {
+                readonly components: import("../tokens/session.ts").SessionComponent[];
+                record(component: import("../tokens/session.ts").SessionComponent): void;
+            };
+            readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
+            readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+        };
+    }>>) => import("elysia/types").MaybePromise<void>;
+    readonly path: string;
+    route?: string;
+    rid?: string;
+    request: Request;
+    store: {};
+    body: unknown;
+    query: Record<string, string | undefined>;
+    params: {};
+    headers: Record<string, string | undefined>;
+    cookie: Record<string, import("elysia").Cookie<unknown>>;
+    readonly admission: import("./admission.ts").Admission;
+    readonly job: {
+        deadline: number;
+        signal: AbortSignal;
+    };
+    readonly actor: import("../request/access.ts").Actor;
+    readonly session: {
+        readonly components: import("../tokens/session.ts").SessionComponent[];
+        record(component: import("../tokens/session.ts").SessionComponent): void;
+    };
+    readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
+    readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+}) => Promise<{
+    received: true;
+}>, {
+    parse: "none";
+    detail: {
+        hide: true;
+    };
+    response: {
+        200: import("typebox").TObject<{
+            received: import("typebox").TLiteral<true>;
+        }>;
+        400: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail: import("typebox").TOptional<import("typebox").TString>;
+            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
+        503: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail: import("typebox").TOptional<import("typebox").TString>;
+            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
     };
 }>;
 /** The app's type is the Eden contract. */

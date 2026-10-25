@@ -144,7 +144,7 @@ beforeAll(async () => {
         .setAudience('https://api.rezics.test')
         .setSubject(id)
         .setIssuedAt()
-        .setExpirationTime('1h')
+        .setExpirationTime('5m')
         .sign(signing.privateKey),
     );
   }
@@ -296,7 +296,7 @@ test('single reads hide unknown, malformed UUID, other-account and anonymous IDs
       expect(response.headers.get('content-type')).toBe('application/problem+json');
       problems.push(stableProblem(await response.json()));
     }
-    for (const problem of problems) expect(problem).toEqual(problems[0]);
+    for (const problem of problems) expect(problem).toEqual(problems[0]!);
   }
   expect((await (await request(`/v1/orders/${entitlement.orderId}`)).json()).order.entitlementId).toBe(entitlement.id);
   const read = (await (await request(`/v1/entitlements/${entitlement.id}`)).json()).entitlement;
@@ -368,7 +368,7 @@ test('commerce request statement counts stay constant as total and buyer history
             tx,
           );
           await target.admin.query(
-            'INSERT INTO commerce.entitlement(route,entitlement_id,account_id,order_id,offer_id,target_subject_id,transaction_id) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+            'INSERT INTO commerce.entitlement(route,entitlement_id,account_id,order_id,offer_id,target_subject_id,transaction_id,granted_at,revision) VALUES ($1,$2,$3,$4,$5,$6,$7,now(),1)',
             [r, newId(r), accountId, seededOrder.id, selling.id, selling.targetSubjectId, tx.transactionId],
           );
         },
