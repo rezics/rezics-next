@@ -1,6 +1,12 @@
 import { Database } from 'bun:sqlite';
 import { createDumpCounters, DEFAULT_DUMP_CHUNK_BYTES, dumpChunkLimit, DumpMemory } from './dumps-bytes.ts';
 
+// Decompressed native entry content only; the reader's tar framing cap is independent.
+export const DEFAULT_VNDB_ARCHIVE_BYTES = 16 * 1024 ** 3;
+export const MAX_VNDB_ARCHIVE_BYTES = 64 * 1024 ** 3;
+export const DEFAULT_VNDB_ARCHIVE_ENTRIES = 512;
+export const MAX_VNDB_ARCHIVE_ENTRIES = 2048;
+
 /** Raw importer archive input, after tar/zstd framing has been checked by its reader. */
 interface ArchiveEntry {
   path: string;
@@ -30,6 +36,8 @@ type Options = {
   maxRows?: number;
   maxSourceRecords?: number;
   maxChunkBytes?: number;
+  maxArchiveBytes?: number;
+  maxArchiveEntries?: number;
 };
 
 // COPY TO STDOUT, not executable SQL. Official generator/dump evidence and hashes:
@@ -161,6 +169,8 @@ export class VndbTablesStore {
   private readonly maxRows: number;
   private readonly maxSourceRecords: number;
   private readonly chunkBytes: number;
+  private readonly archiveBytes: number;
+  private readonly archiveEntries: number;
 
   /** Caller owns the real handle and may attach SQL evidence before construction. */
   constructor(
@@ -168,6 +178,14 @@ export class VndbTablesStore {
     options: Options = {},
   ) {
     check(db instanceof Database);
+    this.archiveBytes = bounded(
+      options.maxArchiveBytes === undefined ? DEFAULT_VNDB_ARCHIVE_BYTES : options.maxArchiveBytes,
+      MAX_VNDB_ARCHIVE_BYTES,
+    );
+    this.archiveEntries = bounded(
+      options.maxArchiveEntries === undefined ? DEFAULT_VNDB_ARCHIVE_ENTRIES : options.maxArchiveEntries,
+      MAX_VNDB_ARCHIVE_ENTRIES,
+    );
     this.children = bounded(options.childRowsPerVn ?? 64, 64);
     this.pageSize = bounded(options.pageSize ?? 16, 16);
     this.maxRows = bounded(options.maxRows ?? 2_000_000, 10_000_000);
@@ -229,16 +247,25 @@ export class VndbTablesStore {
     const headers = new Map<Table, string[]>();
     let inputRows = 0;
     let sourceRecords = 0;
+    let entryCount = 0;
+    let declaredBytes = 0;
+    let actualBytes = 0;
     try {
       for await (const entry of entries) {
+        // Admit every raw entry before touching its body, including ignored and
+        // empty members. Subtraction avoids unsafe aggregate arithmetic.
+        check(++entryCount <= this.archiveEntries);
+        const entryBytes = entry.declaredBytes;
+        check(Number.isSafeInteger(entryBytes) && entryBytes >= 0);
+        check(entryBytes <= this.archiveBytes - declaredBytes);
+        declaredBytes += entryBytes;
         check(typeof entry.path === 'string' && entry.path.length > 0 && entry.path.length <= 512);
         check(!/[\\\x00-\x1f\x7f:]/.test(entry.path) && !entry.path.startsWith('/'));
         const path = entry.kind === 'directory' && entry.path.endsWith('/') ? entry.path.slice(0, -1) : entry.path;
         check(path.split('/').every((part) => part !== '' && part !== '.' && part !== '..'));
         check(entry.kind === 'file' || entry.kind === 'directory');
         check(entry.linkTarget === undefined);
-        check(Number.isSafeInteger(entry.declaredBytes) && entry.declaredBytes >= 0);
-        if (entry.kind === 'directory') check(entry.declaredBytes === 0);
+        if (entry.kind === 'directory') check(entryBytes === 0);
         const table = TABLES.find((table) => path === `db/${table}` || path === `db/${table}.header`);
         if (table) {
           check(entry.kind === 'file' && !seen.has(path));
@@ -246,7 +273,9 @@ export class VndbTablesStore {
         }
         const isHeader = table !== undefined && path.endsWith('.header');
         let lines = 0;
-        await this.readEntry(entry, table !== undefined, (raw) => {
+        // readEntry checks actual <= declared before scanning each chunk, so an
+        // underreported body cannot consume the remaining archive allowance.
+        actualBytes += await this.readEntry(entry, entryBytes, table !== undefined, (raw) => {
           lines++;
           if (!table) return;
           if (isHeader) {
@@ -268,6 +297,7 @@ export class VndbTablesStore {
             check(sourceRecords <= this.maxSourceRecords);
           }
         });
+        check(Number.isSafeInteger(actualBytes) && actualBytes === declaredBytes);
         if (isHeader && table) {
           check(lines === 1);
           let after = 0;
@@ -307,7 +337,12 @@ export class VndbTablesStore {
     }
   }
 
-  private async readEntry(entry: ArchiveEntry, supported: boolean, row: (raw: Uint8Array) => void) {
+  private async readEntry(
+    entry: ArchiveEntry,
+    declaredBytes: number,
+    supported: boolean,
+    row: (raw: Uint8Array) => void,
+  ) {
     // Ignored entries have no row buffer and never reach a decoder, SQL or logs.
     const buffer = supported ? new Uint8Array(ROW_BYTES) : null;
     const memory = new DumpMemory(createDumpCounters());
@@ -322,7 +357,7 @@ export class VndbTablesStore {
         memory.hold(0, chunk, 'input');
         try {
           bytes += chunk.byteLength;
-          check(Number.isSafeInteger(bytes) && bytes <= entry.declaredBytes);
+          check(Number.isSafeInteger(bytes) && bytes <= declaredBytes);
           if (!buffer) continue;
           for (const byte of chunk) {
             if (byte === 10) {
@@ -338,7 +373,8 @@ export class VndbTablesStore {
           memory.hold(0, null);
         }
       }
-      check(bytes === entry.declaredBytes && used === 0);
+      check(bytes === declaredBytes && used === 0);
+      return bytes;
     } finally {
       memory.close();
     }
