@@ -7,6 +7,10 @@ import { ConfigError, readCommerceConfig, type CommerceConfig } from './commerce
 import { createStripePort } from './commerce/stripe.ts';
 import { createCommerceWork } from './commerce/enqueue.ts';
 import { createWorkClient } from './work/client.ts';
+import { readContentConfig } from './content/config.ts';
+import type { ContentRuntime } from './content/runtime.ts';
+import type { NativeAuthorErasureWorkflows } from './content/operation-contract.ts';
+import { systemClock } from './clock.ts';
 
 export { ConfigError } from './commerce/config.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
@@ -24,6 +28,7 @@ export type ServerConfig = {
   routeKey: Uint8Array;
   tokens: KeyRing;
   commerce: CommerceConfig | null;
+  content: ContentRuntime;
   search?: SearchConfig;
   writeRate?: WriteRateLimiter;
   rateAttribution?: WriteRateStageOptions;
@@ -88,6 +93,7 @@ export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
     writeRate,
     rateAttribution,
     commerce,
+    content: readContentConfig(env),
     ...(search === undefined ? {} : { search }),
   };
 }
@@ -106,6 +112,23 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
   const openSearch = searchConfig === undefined ? undefined : createOpenSearch(searchConfig.url);
   let app: ReturnType<typeof createKernel> | undefined;
   let workClient: ReturnType<typeof createWorkClient> | undefined;
+  let contentWorkflows: Promise<NativeAuthorErasureWorkflows> | undefined;
+  const workflows = (): Promise<NativeAuthorErasureWorkflows> =>
+    (contentWorkflows ??= (async () => {
+      // Keep Sharp and the worker implementation out of API startup. This
+      // status/enqueue adapter is loaded only if an operation route uses it.
+      const [{ createContentOperationClient }, client] = await Promise.all([import('./content/work.ts'), workClient!]);
+      return createContentOperationClient({ pool, client, clock: systemClock });
+    })());
+  const operationWorkflows: NativeAuthorErasureWorkflows = {
+    async enqueue(input, context) {
+      await (await workflows()).enqueue(input, context);
+    },
+    async status(operationId, context) {
+      return (await workflows()).status(operationId, context);
+    },
+  };
+  const activeRequests = new Set<Promise<void>>();
   const boot = (async () => {
     await setupSemantic(pool, bundledRelease);
     await setupPresentation(pool);
@@ -113,10 +136,13 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
     // Observe startup rejection immediately; the webhook and stop still receive it.
     void workClient.catch(() => {});
     const client = workClient;
+    await client;
     app = createKernel({
       pool,
       routeKey: config.routeKey,
       tokens: config.tokens,
+      clock: systemClock,
+      content: { ...config.content, workflows: operationWorkflows },
       ...(config.writeRate === undefined ? {} : { writeRate: config.writeRate }),
       ...(config.rateAttribution === undefined ? {} : { rateAttribution: config.rateAttribution }),
       ratePeer: (request) => peers.get(request),
@@ -153,11 +179,19 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
     hostname: config.hostname,
     port: config.port,
     async fetch(request, transport) {
-      await boot;
-      if (!app) throw new Error('Kernel server is not ready');
-      const address = transport.requestIP(request)?.address;
-      if (address) peers.set(request, address);
-      return app.fetch(request);
+      let finish!: () => void;
+      const active = new Promise<void>((resolve) => (finish = resolve));
+      activeRequests.add(active);
+      try {
+        await boot;
+        if (!app) throw new Error('Kernel server is not ready');
+        const address = transport.requestIP(request)?.address;
+        if (address) peers.set(request, address);
+        return await app.fetch(request);
+      } finally {
+        activeRequests.delete(active);
+        finish();
+      }
     },
   });
   let stopping: Promise<void> | undefined;
@@ -167,6 +201,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
       return (stopping ??= (async () => {
         try {
           await server.stop(true);
+          await Promise.all([...activeRequests]);
         } finally {
           try {
             await boot.catch(() => {});

@@ -109,11 +109,12 @@ export function createKernel(dependencies: KernelDependencies) {
   });
   const searched = searchRoutes(contextual, dependencies);
   const anonymousVerifier = dependencies.reports?.anonymousVerifier ?? dependencies.content?.anonymousVerifier;
+  const cursorNow = dependencies.content?.cursorNow ?? (() => clock().getTime());
   const content = contentRoutes(searched as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
     clock,
-    ...(dependencies.content?.cursorNow === undefined ? {} : { cursorNow: dependencies.content.cursorNow }),
+    cursorNow,
     tokens,
     ...(dependencies.content?.fetchConfig === undefined ? {} : { fetchConfig: dependencies.content.fetchConfig }),
     ...(dependencies.content?.workflows === undefined ? {} : { workflows: dependencies.content.workflows }),

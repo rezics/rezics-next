@@ -430,6 +430,13 @@ include this Auth probe as well.
 
 ## Content work configuration
 
+The HTTP service reads `CONTENT_TURNSTILE_SECRET` and `CONTENT_TURNSTILE_HOSTNAME` to verify anonymous report proofs
+with Cloudflare Siteverify. Set both together; partial or malformed configuration fails startup without echoing the
+secret. If both are absent, public reads and authenticated reports continue, while anonymous reports fail closed with
+the same not-found response used for ineligible targets. `CONTENT_SOURCE_HOSTS` is an optional comma-separated list
+of exact lowercase DNS hosts for URL-import requests. The API uses its existing `KERNEL_SESSION_KEYS` ring for content
+cursors and does not need media storage credentials. The native worker still needs the R2 and source-host settings below.
+
 The content registration in `src/content/register.ts` uses the shared kernel worker and its
 queues, database pool, enqueue client and shutdown. It does not start a separate process or relay.
 Set all of the following in the worker environment; missing or partial configuration fails closed.
