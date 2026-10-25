@@ -230,8 +230,16 @@ afterAll(async () => {
 });
 
 const signInLink = (page: Page, own: Messages) => page.getByRole('link', { name: own.account_sign_in!, exact: true });
-const signOutButton = (page: Page, own: Messages) =>
-  page.getByRole('button', { name: own.account_sign_out!, exact: true });
+const accountMenuButton = (page: Page, own: Messages) =>
+  page.getByRole('button', { name: own.account_menu!, exact: true });
+async function signOutButton(page: Page, own: Messages) {
+  if (own.account_menu) {
+    const account = accountMenuButton(page, own);
+    const menu = page.getByRole('menu', { name: own.account_menu, exact: true });
+    if ((await account.count()) && !(await menu.isVisible())) await account.click();
+  }
+  return page.getByRole('button', { name: own.account_sign_out!, exact: true });
+}
 const homeLink = (page: Page, own: Messages) =>
   page
     .getByRole('navigation', { name: own.shell_navigation!, exact: true })
@@ -277,7 +285,7 @@ test(
       return target.searchParams.get('return_to');
     };
     expect(await signInLink(page, de).count()).toBe(1);
-    expect(await signOutButton(page, de).count()).toBe(0);
+    expect(await (await signOutButton(page, de)).count()).toBe(0);
     expect(await returnTo()).toBe('/de/no-such-page?from=test');
     // After a client-side navigation the link returns to the new page.
     await homeLink(page, de).click();
@@ -306,7 +314,7 @@ test(
     const refreshToken = signInRefreshTokens.at(-1)!;
     const idToken = idTokens.at(-1)!;
     expect(new URL(page.url()).pathname).toBe('/ja/no-such-page');
-    expect(await signOutButton(page, ja).count()).toBe(1);
+    expect(await (await signOutButton(page, ja)).count()).toBe(1);
     expect(await signInLink(page, ja).count()).toBe(0);
     const cookies = await page.context().cookies();
     const session = cookies.find((cookie) => cookie.name === sessionCookie);
@@ -314,11 +322,11 @@ test(
     expect(cookies.some((cookie) => cookie.name === loginCookie)).toBe(false);
     // Every server-rendered page knows the session, not only the one the callback returned to.
     await page.goto(`${origin}/ja`, { waitUntil: 'networkidle' });
-    expect(await signOutButton(page, ja).count()).toBe(1);
+    expect(await (await signOutButton(page, ja)).count()).toBe(1);
 
     await Promise.all([
       page.waitForResponse((response) => response.url().startsWith(`${fake.url.origin}/auth/logout`)),
-      signOutButton(page, ja).click(),
+      (await signOutButton(page, ja)).click(),
     ]);
     await page.waitForURL(`${origin}/ja`);
     await page.waitForLoadState('networkidle');
@@ -327,15 +335,65 @@ test(
     expect(ended.get('post_logout_redirect_uri')).toBe(`${origin}/`);
     expect(ended.get('id_token_hint')).toBe(idToken);
     expect(await signInLink(page, ja).count()).toBe(1);
-    expect(await signOutButton(page, ja).count()).toBe(0);
+    expect(await (await signOutButton(page, ja)).count()).toBe(0);
     expect((await page.context().cookies()).some((cookie) => cookie.name === sessionCookie)).toBe(false);
 
     // The ended session's id, sent again, reads as signed out.
     await page.context().addCookies([session!]);
     await page.goto(`${origin}/ja`, { waitUntil: 'networkidle' });
     expect(await signInLink(page, ja).count()).toBe(1);
-    expect(await signOutButton(page, ja).count()).toBe(0);
+    expect(await (await signOutButton(page, ja)).count()).toBe(0);
     await page.context().close();
+  },
+  timeout,
+);
+
+test(
+  'the signed-in header keeps sign-out and security settings in an account menu that opens without JavaScript',
+  async () => {
+    for (const locale of locales) {
+      const own = await messages(locale);
+      for (const key of ['account_menu', 'account_security_settings'])
+        expect(own[key]?.trim(), `${locale} ${key}`).toBeTruthy();
+    }
+
+    const origin = await site();
+    const en = await messages('en');
+    for (const javaScriptEnabled of [true, false]) {
+      const page = await open('/en', { javaScriptEnabled });
+      await signIn(page, en, javaScriptEnabled);
+
+      const account = accountMenuButton(page, en);
+      expect(await account.count()).toBe(1);
+      await account.click();
+      const menu = page.getByRole('menu', { name: en.account_menu!, exact: true });
+      expect(await menu.isVisible()).toBe(true);
+      expect(await menu.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+      expect(await account.getAttribute('aria-expanded')).toBe('true');
+
+      const securitySettings = menu.getByRole('menuitem', {
+        name: en.account_security_settings!,
+        exact: true,
+      });
+      expect(await securitySettings.getAttribute('href')).toBe(`${fake.url.origin}/security`);
+      const signOut = menu.getByRole('button', { name: en.account_sign_out!, exact: true });
+      expect(await signOut.count()).toBe(1);
+      expect(await signOut.evaluate((element) => element.closest('form')?.getAttribute('method'))).toBe('post');
+      expect(await signOut.evaluate((element) => element.closest('form')?.getAttribute('action'))).toBe(
+        '/auth/sign-out',
+      );
+
+      if (!javaScriptEnabled) {
+        await Promise.all([
+          page.waitForResponse((response) => response.url().startsWith(`${fake.url.origin}/auth/logout`)),
+          signOut.click(),
+        ]);
+        await page.waitForURL(`${origin}/en`);
+        await page.waitForLoadState('networkidle');
+        expect(await signInLink(page, en).count()).toBe(1);
+      }
+      await page.context().close();
+    }
   },
   timeout,
 );
@@ -359,11 +417,11 @@ test(
     try {
       await page.goto(`${origin}/en/no-such-page`, { waitUntil: 'networkidle', timeout: 20_000 });
       await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
-      expect(await signOutButton(page, en).count()).toBe(1);
+      expect(await (await signOutButton(page, en)).count()).toBe(1);
       await homeLink(page, en).click();
       await page.waitForURL(`${origin}/en`, { timeout: 20_000 });
       await page.waitForLoadState('networkidle', { timeout: 20_000 });
-      expect(await signOutButton(page, en).count()).toBe(1);
+      expect(await (await signOutButton(page, en)).count()).toBe(1);
       expect(authRequests).toBe(before);
     } finally {
       stalled = false;
@@ -408,7 +466,7 @@ test(
             },
           });
           const label = `${signedIn ? 'signed in' : 'signed out'} ${theme} ${viewport.width}px`;
-          expect(await (signedIn ? signOutButton(view, en) : signInLink(view, en)).count(), label).toBe(1);
+          expect(await (signedIn ? await signOutButton(view, en) : signInLink(view, en)).count(), label).toBe(1);
           const result = await new AxeBuilder({ page: view })
             .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'])
             .analyze();
