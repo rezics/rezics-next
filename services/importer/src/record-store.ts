@@ -12,6 +12,8 @@ export type RecordRow = {
 };
 
 export type RecordStoreOptions = {
+  /** Install database instrumentation before any statements are prepared. */
+  instrumentDatabase?: (database: Database) => Database;
   onStatement?: (sql: string) => void;
 };
 
@@ -136,7 +138,13 @@ export class RecordStore {
 
   constructor(path: string, options: RecordStoreOptions = {}) {
     this.onStatement = options.onStatement;
-    this.database = new Database(path, { create: true, strict: true });
+    const database = new Database(path, { create: true, strict: true });
+    try {
+      this.database = options.instrumentDatabase?.(database) ?? database;
+    } catch (error) {
+      database.close();
+      throw error;
+    }
 
     try {
       this.execute('PRAGMA journal_mode = WAL');
