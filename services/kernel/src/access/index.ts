@@ -137,6 +137,11 @@ export const access: Access = createAccess({ actions: new Map() });
 
 export { ACTIVE_ACCOUNTS, type GrantSubject } from './grant-subject.ts';
 export {
+  captureDurableInitiator,
+  durableInitiatorCommitment,
+  DurableInitiatorCaptureUnavailableError,
+} from './durable-initiator-capture.ts';
+export {
   MAX_CREATION_RESOURCES,
   createResourceCreationManifest,
   CreationManifestUnavailableError,

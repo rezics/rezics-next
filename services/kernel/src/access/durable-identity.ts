@@ -1,5 +1,5 @@
-import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
+import { durableInitiatorCommitment } from './durable-initiator-capture.ts';
 import type { Access, AccessContext, AccountActor } from '../request/access.ts';
 import { authoritativeTimeValue, type AuthoritativeTime } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -172,7 +172,7 @@ export async function restoreOperationIdentity(
     command_kind: creation.commandKind,
     idempotency_key: creation.idempotencyKey,
   });
-  const binding = createHash('sha256').update(canonicalize(record)!).digest('hex');
+  const binding = durableInitiatorCommitment(record);
   const response = receipt?.response as { durableInitiator?: unknown } | undefined;
   if (
     !receipt ||

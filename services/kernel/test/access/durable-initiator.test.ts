@@ -5,7 +5,7 @@ import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createAuthService } from '@rezics/auth';
 import { createInternalConsentHandler } from '../../../auth/src/internal-consent.ts';
 import { migrate } from '../../../auth/scripts/database.ts';
-import { createAccess } from '../../src/access/index.ts';
+import { createAccess, captureDurableInitiator, durableInitiatorCommitment } from '../../src/access/index.ts';
 import { createAuthConsentReader } from '../../src/access/auth-consent.ts';
 import { verifiedBearerExpiry } from '../../src/access/approved-identity.ts';
 import { readAccount } from '../../src/access/account-data.ts';
@@ -285,25 +285,11 @@ export async function nativeModule() {
       .setProtectedHeader({ alg: 'ES256', kid: jwk.kid, typ: 'at+jwt' })
       .sign(key.privateKey);
     const creator = await native.authenticate(bearer, context());
-    const account = (await readAccount(db.pool, routeOf(p.id)!, p.id))!;
-    const originalAccount = {
-      minimumAuthnEpoch: account.minimumAuthnEpoch.toString(),
-      operatorAccountId: account.operatorAccountId,
-    };
-    const originalDelegation =
-      requestedBy === null
-        ? null
-        : ((
-            await db.pool.query(
-              `SELECT transaction_id::text AS "transactionId",issued_valid::text AS "issuedValid" FROM access.principal_assignment WHERE route=$1 AND principal_id=$2 AND request_id=$3`,
-              [routeOf(principal!.id), principal!.id, requestedBy.split(':').at(-1)],
-            )
-          ).rows[0] as { transactionId: string; issuedValid: string } | null);
     const sourceDigest = hash({ operation, target, payload: 'immutable original source' });
     const creation = {
       commandKind: 'durable-test.create',
       idempotencyKey: operation.id,
-      requestDigest: hash({ operation, target, creator, sourceDigest, originalAccount }),
+      requestDigest: hash({ operation, target, creator, sourceDigest }),
       target,
     };
     const anchor = {
@@ -319,6 +305,14 @@ export async function nativeModule() {
         );
       },
     };
+    const authorization = resourceAuthorization({
+      access: native,
+      actor: creator,
+      action,
+      anchor,
+      context: { ...context(), partition: partitionOf(operation.route) },
+    });
+    let original: Awaited<ReturnType<typeof captureDurableInitiator>>;
     const created = await runCommand(
       db.pool,
       {
@@ -331,13 +325,14 @@ export async function nativeModule() {
           key: creation.idempotencyKey,
           digest: Buffer.from(creation.requestDigest, 'hex'),
         },
-        authorization: resourceAuthorization({
-          access: native,
-          actor: creator,
-          action,
-          anchor,
-          context: { ...context(), partition: partitionOf(operation.route) },
-        }),
+        authorization: {
+          ...authorization,
+          async prepare(attempt) {
+            const proof = await authorization.prepare!(attempt);
+            original = await captureDurableInitiator(commandAccessContext(context(), attempt), creator);
+            return proof;
+          },
+        },
       },
       async (tx, { transactionId }) => {
         const record = {
@@ -345,8 +340,7 @@ export async function nativeModule() {
           initiatorAccountId: creator.accountId,
           actor: creator,
           recordedTransactionId: transactionId,
-          originalAccount,
-          originalDelegation,
+          ...original,
           sourceDigest,
           creation,
         };
@@ -359,7 +353,7 @@ export async function nativeModule() {
         ]);
         await tx.query('INSERT INTO durable_test.operation VALUES ($1,$2,$3)', [operation.route, operation.id, record]);
         return {
-          value: { durableInitiator: hash(record) },
+          value: { durableInitiator: durableInitiatorCommitment(record) },
           events: [{ type: 'durable-test.created', data: operation }],
         };
       },

@@ -26,6 +26,27 @@ type Snapshot = Readonly<{
   expires: number;
   durableTime?: import('../command/command.ts').AuthoritativeTime;
 }>;
+type CapturedAccount = Readonly<{ minimumAuthnEpoch: string; operatorAccountId: string | null }>;
+const admitted = new WeakMap<
+  object,
+  WeakMap<AccountActor, { pool: AccessContext['pool']; deadline: number; account: CapturedAccount }>
+>();
+
+/** Internal capture port: consumes only a successful observation of this actor at this live T. */
+export function admittedCommandAccount(context: AccessContext, actor: AccountActor): CapturedAccount | null {
+  const attempt = accessCommandAttempt(context);
+  const observation = attempt && admitted.get(attempt.time)?.get(actor);
+  return observation &&
+    observation.pool === context.pool &&
+    Number.isFinite(context.deadline) &&
+    Date.now() < Math.min(context.deadline, observation.deadline) &&
+    attempt?.basis?.actorAccountId === actor.accountId &&
+    attempt.basis.clientId === actor.clientId &&
+    attempt.basis.requestedBy === actor.requestedBy
+    ? observation.account
+    : null;
+}
+
 type Admission = (actor: Actor, context: AccessContext) => Promise<Account | null>;
 const admissions = new WeakMap<Access, Admission>();
 export function installCommandAdmission(access: Access, admission: Admission): void {
@@ -71,6 +92,7 @@ export function createCommandAdmission(identity: (actor: AccountActor) => Snapsh
   return async (actor, context) => {
     const attempt = accessCommandAttempt(context);
     if (!attempt || actor.kind !== 'account') return null;
+    admitted.get(attempt.time)?.delete(actor);
     const snapshot = identity(actor);
     const deadline = Math.min(context.deadline, snapshot?.deadline ?? -Infinity, snapshot?.expires ?? -Infinity);
     if (
@@ -86,7 +108,25 @@ export function createCommandAdmission(identity: (actor: AccountActor) => Snapsh
       return null;
     // Restoration already made this independently anchored observation at the
     // same live step T, comparing the immutable creation floor/operator snapshot.
-    if (snapshot.durableTime === attempt.time) return snapshot.account;
+    const remember = (account: Account | null): Account | null => {
+      authoritativeTimeValue(attempt.time);
+      if (!account || Date.now() >= deadline) return null;
+      let actors = admitted.get(attempt.time);
+      if (!actors) {
+        actors = new WeakMap();
+        admitted.set(attempt.time, actors);
+      }
+      actors.set(actor, {
+        pool: context.pool,
+        deadline,
+        account: Object.freeze({
+          minimumAuthnEpoch: account.minimumAuthnEpoch.toString(),
+          operatorAccountId: account.operatorAccountId,
+        }),
+      });
+      return account;
+    };
+    if (snapshot.durableTime === attempt.time) return remember(snapshot.account);
     let actors = observations.get(attempt.time);
     if (!actors) {
       actors = new WeakMap();
@@ -113,6 +153,6 @@ export function createCommandAdmission(identity: (actor: AccountActor) => Snapsh
     }
     const account = await observation.account;
     authoritativeTimeValue(attempt.time);
-    return Date.now() < Math.min(deadline, observation.deadline) ? account : null;
+    return remember(Date.now() < observation.deadline ? account : null);
   };
 }
