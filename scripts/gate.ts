@@ -12,7 +12,7 @@ async function run(command: string[], cwd: string): Promise<void> {
 }
 
 type Workspace = { name: string; directory: string };
-type WorkspaceResult = { block: string; code: number };
+type WorkspaceResult = { block: string; code: number; directory: string };
 
 async function checkWorkspace(workspace: Workspace): Promise<WorkspaceResult> {
   const command = ['bun', 'run', 'check'];
@@ -35,8 +35,10 @@ async function checkWorkspace(workspace: Workspace): Promise<WorkspaceResult> {
     `Workspace ${workspace.name} finished in ${(durationMs / 1000).toFixed(2)}s`,
     `$ ${command.join(' ')}  (${relativeDirectory})`,
     output,
-  ].filter(Boolean).join('\n');
-  return { block: `${block}\n\n`, code };
+  ]
+    .filter(Boolean)
+    .join('\n');
+  return { block: `${block}\n\n`, code, directory: relativeDirectory };
 }
 
 await run(['bun', 'install', '--frozen-lockfile'], root);
@@ -58,20 +60,22 @@ if (workspaces.length > 0 && (!Number.isSafeInteger(concurrency) || concurrency 
 }
 
 let nextWorkspace = 0;
-const failures: string[] = [];
+const failures: WorkspaceResult[] = [];
 const worker = async (): Promise<void> => {
   while (nextWorkspace < workspaces.length) {
     const index = nextWorkspace++;
     const result = await checkWorkspace(workspaces[index]);
     if (result.code === 0) process.stdout.write(result.block);
-    else failures.push(result.block);
+    else failures.push(result);
   }
 };
 
 await Promise.all(Array.from({ length: Math.min(concurrency, workspaces.length) }, () => worker()));
 
 if (failures.length > 0) {
-  for (const block of failures) process.stdout.write(block);
+  for (const failure of failures) process.stdout.write(failure.block);
+  // Promotion bisects on the first named workspace's check instead of the whole gate.
+  process.stdout.write(`Failed workspaces: ${failures.map((failure) => failure.directory).join(' ')}\n`);
   process.exitCode = 1;
 } else {
   await run(['bun', 'tools/goal/scripts/gate.ts'], root);
