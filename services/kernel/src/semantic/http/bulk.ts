@@ -13,6 +13,7 @@ import type { Pool } from 'pg';
 import type { OpenAPIV3 } from 'openapi-types';
 import { GrantDeniedError } from '../../access/grant-commands.ts';
 import { CommandUnavailableError } from '../../command/command.ts';
+import { resourceAuthorization } from '../../access/resource-authorization.ts';
 import { checkMediaObject } from '../../content/cover-reference.ts';
 import { discardConnection, withConnection } from '../../database/pool.ts';
 import { customMethod } from '../../http/custom-method.ts';
@@ -44,6 +45,7 @@ import {
 import { SubjectInputError } from '../item.ts';
 import { SubjectRedirectError } from '../merges.ts';
 import { SubjectAccessDeniedError, type SubjectComponent } from '../subject.ts';
+import { globalContextAnchor } from '../context.ts';
 import type { subjectRoutes } from './subjects.ts';
 
 // A malformed command key still needs its own result. Keep the portable success
@@ -249,15 +251,24 @@ export function bulkRoutes(
               if (fatal.has(pending.index)) throw fatal.get(pending.index);
               if (pending.errors.length) throw new ProblemError('invalid_request', { errors: pending.errors });
               if (pending.route === null) throw new ProblemError('not_found');
+              const action = pending.command.op === 'create' ? 'subject:create' : 'statement:propose';
               const authorization = guardBatchAuthorization(
-                await accessCommandAuthorization(
-                  access(),
-                  actor,
-                  pending.command.op === 'create' ? 'subject:create' : 'statement:propose',
-                  global,
-                  { pool, deadline: job.deadline },
-                  () => new SubjectAccessDeniedError(),
-                ),
+                partitionOf(global.route) === partition
+                  ? await accessCommandAuthorization(
+                      access(),
+                      actor,
+                      action,
+                      global,
+                      { pool, deadline: job.deadline },
+                      () => new SubjectAccessDeniedError(),
+                    )
+                  : resourceAuthorization({
+                      access: access(),
+                      actor,
+                      action,
+                      anchor: globalContextAnchor,
+                      context: { pool, deadline: job.deadline, partition },
+                    }),
                 pending.command,
                 pending.route,
                 (tx) =>

@@ -73,13 +73,17 @@ export function createKernel(dependencies: KernelDependencies) {
   const subjects = subjectRoutes(createApp({ ...dependencies, access: resolveAccess, tokens, clock }), {
     ...dependencies,
     tokens,
+    access: () => resolveAccess({ actions: actionCatalogue(subjects), realmRoleReader }),
   });
   const batched = bulkRoutes(subjects, {
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
     access: () => resolveAccess({ actions: actionCatalogue(batched), realmRoleReader }),
   });
-  const app = definitionRoutes(batched as unknown as ReturnType<typeof subjectRoutes>, dependencies);
+  const app = definitionRoutes(batched as unknown as ReturnType<typeof subjectRoutes>, {
+    pool: dependencies.pool,
+    access: () => resolveAccess({ actions: actionCatalogue(app), realmRoleReader }),
+  });
   const presentation = profileRoutes(app, { ...dependencies, tokens });
   const payouts = payoutRoutes(app, {
     ...dependencies,

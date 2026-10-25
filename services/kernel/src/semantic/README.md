@@ -2,6 +2,30 @@
 
 This module owns subject facts and their item projections, partition paging, and immutable definition releases with editorial activation history.
 
+## Authorization
+
+Semantic writes use the route action and authority below. When the authority and target are in different partitions, the route binds a server-owned anchor, validates it, and evaluates Access before checking out the target command partition. Same-partition checks stay on `authorizeCommand`. Community Context anchors are looked up by `(route, context_id)` at command time; the Global Context anchor verifies the seeded global row. Context creation uses the parent creation authorization path.
+
+| Semantic write                     | Action                 | Authority anchor                           |
+| ---------------------------------- | ---------------------- | ------------------------------------------ |
+| Subject creation                   | `subject:create`       | Global Context                             |
+| Subject merge                      | `subject:merge`        | Global Context                             |
+| Subject moderation: hide           | `moderation:hide`      | Global Context                             |
+| Subject moderation: take down      | `moderation:takedown`  | Global Context                             |
+| Subject moderation: restore        | `moderation:takedown`  | Global Context                             |
+| Statement proposal                 | `statement:propose`    | Global Context                             |
+| Candidate acceptance and rejection | `context:accept`       | Selected Global or community Context       |
+| Candidate adoption                 | `context:adopt`        | Selected Global or community Context       |
+| Statement moderation: hide         | `moderation:hide`      | Global Context                             |
+| Statement moderation: take down    | `moderation:takedown`  | Global Context                             |
+| Statement moderation: restore      | `moderation:takedown`  | Global Context                             |
+| Bulk write request                 | `subject:batch_write`  | Global Context                             |
+| Each bulk create command           | `subject:create`       | Global Context                             |
+| Each bulk proposal command         | `statement:propose`    | Global Context                             |
+| Definition publication             | `definitions:publish`  | Global Context                             |
+| Definition activation              | `definitions:activate` | Global Context                             |
+| Community Context creation         | `context:create`       | Global Context parent, with creation proof |
+
 ## Cost
 
 These bounds follow `subject.ts`, `page.ts`, `item.ts`, `definitions.ts`, `bulk.ts`, `fences.ts`, their SQL, `http/subjects.ts`, `http/bulk.ts`, `semantic/http/definitions.ts`, and the subject/definition migrations and schema dumps; they are derivations, not measurements.

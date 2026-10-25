@@ -55,7 +55,7 @@ export async function createSubject(
     digest: Uint8Array;
     item: unknown;
     release: { digest: string; release: Release };
-    authorize: AccessCheck;
+    authorize?: AccessCheck;
     authorization?: CommandAuthorization;
     deadline?: number;
   },
@@ -86,7 +86,7 @@ export async function createSubject(
         resource: options.target,
         denied: () => new SubjectAccessDeniedError(),
         async authorize(tx, attempt) {
-          if (!(await options.authorize(tx, attempt.time))) throw new SubjectAccessDeniedError();
+          if (!options.authorize || !(await options.authorize(tx, attempt.time))) throw new SubjectAccessDeniedError();
           return 'execute';
         },
       },

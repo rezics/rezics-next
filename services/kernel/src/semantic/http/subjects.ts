@@ -19,9 +19,10 @@ import { SubjectInputError, type Item, type Snak } from '../item.ts';
 import { createSubject, readRelated, readSubject, SubjectAccessDeniedError, subjectTarget } from '../subject.ts';
 import { DATA_TYPES, type DataType } from '@rezics/definitions';
 import { GrantDeniedError } from '../../access/grant-commands.ts';
+import { resourceAuthorization, type AuthorizationAnchor } from '../../access/resource-authorization.ts';
 import { activeRelease, GLOBAL_CONTEXT, readRelease, StaleEditorialHeadError } from '../definitions.ts';
-import { routeOf } from '../../route/route.ts';
-import type { AccountActor } from '../../request/access.ts';
+import { partitionOf, routeOf } from '../../route/route.ts';
+import type { Access, AccountActor, Resource } from '../../request/access.ts';
 import { AuthenticationError } from '../../request/access.ts';
 import { createApp } from '../../http/app.ts';
 import { defineRateLimit } from '../../http/rate-limit.ts';
@@ -38,6 +39,8 @@ import {
   readStatementCandidate,
   readSubjectVisibility,
 } from '../moderation.ts';
+import { ContextNotFoundError, editorialContextAnchor, globalContextAnchor } from '../context.ts';
+import type { CommandAuthorization } from '../../command/command.ts';
 
 const DataTypeSchema = t.Unsafe<DataType>(t.Union(DATA_TYPES.map((dataType) => t.Literal(dataType))));
 const ValueSchema = t.Union([
@@ -101,6 +104,7 @@ function candidateError(error: unknown): never {
   if (error instanceof SubjectInputError) throw invalidSubjectInput(error);
   if (error instanceof SubjectRedirectError) throw new ProblemError('conflict');
   if (error instanceof SubjectNotFoundError) throw new ProblemError('not_found');
+  if (error instanceof ContextNotFoundError) throw new ProblemError('not_found');
   if (error instanceof EditorialConflictError) throw new ProblemError('conflict');
   if (error instanceof StaleEditorialHeadError) throw new ProblemError('stale_editorial_head');
   if (error instanceof PageCursorError) throw new ProblemError('invalid_request');
@@ -232,9 +236,33 @@ const statementVisibilityResponse = t.Object(
   { additionalProperties: false },
 );
 const cacheControl = { 'cache-control': t.Literal('no-cache') };
-type SubjectRouteDependencies = { pool: Pool; routeKey: Uint8Array; tokens: KeyRing };
+type SubjectRouteDependencies = { pool: Pool; routeKey: Uint8Array; tokens: KeyRing; access: () => Access };
 function invalidSubjectInput(error: SubjectInputError): ProblemError {
   return new ProblemError('invalid_request', { errors: error.violations });
+}
+
+type CommandAuthorizer = (resource: Resource, denied: () => Error) => Promise<CommandAuthorization>;
+
+async function authorizeSemanticWrite(input: {
+  access: Access;
+  actor: AccountActor;
+  action: string;
+  anchor: AuthorizationAnchor;
+  pool: Pool;
+  deadline: number;
+  targetPartition: number;
+  authorizeCommand: CommandAuthorizer;
+  denied: () => Error;
+}): Promise<CommandAuthorization> {
+  if (partitionOf(input.anchor.resource.route) === input.targetPartition)
+    return input.authorizeCommand(input.anchor.resource, input.denied);
+  return resourceAuthorization({
+    access: input.access,
+    actor: input.actor,
+    action: input.action,
+    anchor: input.anchor,
+    context: { pool: input.pool, deadline: input.deadline, partition: input.targetPartition },
+  });
 }
 
 function moderationError(error: unknown): never {
@@ -274,7 +302,10 @@ function relatedIds(subject: Item): { propertyIds: Set<string>; subjectIds: Set<
   return { propertyIds, subjectIds };
 }
 
-function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, tokens }: SubjectRouteDependencies) {
+function subjectRoutes(
+  app: ReturnType<typeof createApp>,
+  { pool, routeKey, tokens, access }: SubjectRouteDependencies,
+) {
   return app
     .post(
       '/v1/subjects',
@@ -310,10 +341,17 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
         if (!active) throw new ProblemError('semantic_not_ready');
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const target = subjectTarget(routeKey, account.accountId, key);
-        const authorization = await authorizeCommand(
-          { route: 0, id: GLOBAL_CONTEXT },
-          () => new SubjectAccessDeniedError(),
-        );
+        const authorization = await authorizeSemanticWrite({
+          access: access(),
+          actor: account,
+          action: 'subject:create',
+          anchor: globalContextAnchor,
+          pool,
+          deadline: job.deadline,
+          targetPartition: partitionOf(target.route),
+          authorizeCommand,
+          denied: () => new SubjectAccessDeniedError(),
+        });
         try {
           const result = await admission.run('normal', job, () =>
             createSubject(pool, {
@@ -323,7 +361,6 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
               digest: requestDigest('subject.create', account, body),
               item: body,
               release: { digest: active.digest, release: active.release },
-              authorize: authorization.check,
               authorization,
               deadline: job.deadline,
             }),
@@ -387,10 +424,19 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         const active = await activeRelease(pool);
         if (!active) throw new ProblemError('semantic_not_ready');
-        const authorization = await authorizeCommand(
-          { route: 0, id: GLOBAL_CONTEXT },
-          () => new SubjectAccessDeniedError(),
-        );
+        const [, redirected] = [...body.subjects].sort();
+        const commandRoute = routeOf(redirected!);
+        const authorization = await authorizeSemanticWrite({
+          access: access(),
+          actor,
+          action: 'subject:merge',
+          anchor: globalContextAnchor,
+          pool,
+          deadline: job.deadline,
+          targetPartition: commandRoute === null ? 0 : partitionOf(commandRoute),
+          authorizeCommand,
+          denied: () => new SubjectAccessDeniedError(),
+        });
         try {
           const { component, ...result } = await admission.run('normal', job, () =>
             mergeSubjects(pool, {
@@ -514,10 +560,17 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
         if (route === null) throw new ProblemError('not_found');
         const target = await admission.run('normal', job, () => readSubjectVisibility(pool, params.id));
         if (!target) throw new ProblemError('not_found');
-        const authorization = await authorizeCommand(
-          { route: 0, id: GLOBAL_CONTEXT },
-          () => new SubjectAccessDeniedError(),
-        );
+        const authorization = await authorizeSemanticWrite({
+          access: access(),
+          actor,
+          action: 'moderation:hide',
+          anchor: globalContextAnchor,
+          pool,
+          deadline: job.deadline,
+          targetPartition: partitionOf(route),
+          authorizeCommand,
+          denied: () => new SubjectAccessDeniedError(),
+        });
         try {
           const result = await admission.run('normal', job, () =>
             moderateSubject(pool, {
@@ -572,10 +625,17 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
         if (route === null) throw new ProblemError('not_found');
         const target = await admission.run('normal', job, () => readSubjectVisibility(pool, params.id));
         if (!target) throw new ProblemError('not_found');
-        const authorization = await authorizeCommand(
-          { route: 0, id: GLOBAL_CONTEXT },
-          () => new SubjectAccessDeniedError(),
-        );
+        const authorization = await authorizeSemanticWrite({
+          access: access(),
+          actor,
+          action: 'moderation:takedown',
+          anchor: globalContextAnchor,
+          pool,
+          deadline: job.deadline,
+          targetPartition: partitionOf(route),
+          authorizeCommand,
+          denied: () => new SubjectAccessDeniedError(),
+        });
         try {
           const result = await admission.run('normal', job, () =>
             moderateSubject(pool, {
@@ -629,10 +689,17 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
         if (routeOf(params.id) === null) throw new ProblemError('not_found');
         const target = await admission.run('normal', job, () => readSubjectVisibility(pool, params.id));
         if (!target) throw new ProblemError('not_found');
-        const authorization = await authorizeCommand(
-          { route: 0, id: GLOBAL_CONTEXT },
-          () => new SubjectAccessDeniedError(),
-        );
+        const authorization = await authorizeSemanticWrite({
+          access: access(),
+          actor,
+          action: 'moderation:takedown',
+          anchor: globalContextAnchor,
+          pool,
+          deadline: job.deadline,
+          targetPartition: partitionOf(routeOf(params.id)!),
+          authorizeCommand,
+          denied: () => new SubjectAccessDeniedError(),
+        });
         try {
           const result = await admission.run('normal', job, () =>
             moderateSubject(pool, {
@@ -690,13 +757,21 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
       },
       async ({ params, body, headers, actor, authorizeCommand, admission, job, session, set }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
-        if (routeOf(params.id) === null) throw new ProblemError('not_found');
+        const subjectRoute = routeOf(params.id);
+        if (subjectRoute === null) throw new ProblemError('not_found');
         const active = await activeRelease(pool);
         if (!active) throw new ProblemError('semantic_not_ready');
-        const authorization = await authorizeCommand(
-          { route: 0, id: GLOBAL_CONTEXT },
-          () => new SubjectAccessDeniedError(),
-        );
+        const authorization = await authorizeSemanticWrite({
+          access: access(),
+          actor,
+          action: 'statement:propose',
+          anchor: globalContextAnchor,
+          pool,
+          deadline: job.deadline,
+          targetPartition: partitionOf(subjectRoute),
+          authorizeCommand,
+          denied: () => new SubjectAccessDeniedError(),
+        });
         try {
           const result = await admission.run('normal', job, () =>
             proposeStatement(pool, {
@@ -750,13 +825,21 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
       },
       async ({ params, body, headers, actor, authorizeCommand, admission, job, session }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
-        if (routeOf(params.id) === null) throw new ProblemError('not_found');
+        const subjectRoute = routeOf(params.id);
+        if (subjectRoute === null) throw new ProblemError('not_found');
         const contextRoute = routeOf(body.context);
         if (contextRoute === null) throw new ProblemError('invalid_request');
-        const authorization = await authorizeCommand(
-          { route: contextRoute, id: body.context },
-          () => new SubjectAccessDeniedError(),
-        );
+        const authorization = await authorizeSemanticWrite({
+          access: access(),
+          actor,
+          action: 'context:accept',
+          anchor: editorialContextAnchor(body.context),
+          pool,
+          deadline: job.deadline,
+          targetPartition: partitionOf(subjectRoute),
+          authorizeCommand,
+          denied: () => new SubjectAccessDeniedError(),
+        });
         try {
           const { component, acceptance, revision } = await admission.run('normal', job, () =>
             decideCandidate(pool, {
@@ -816,13 +899,21 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
       },
       async ({ params, body, headers, actor, authorizeCommand, admission, job, session }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
-        if (routeOf(params.id) === null) throw new ProblemError('not_found');
+        const subjectRoute = routeOf(params.id);
+        if (subjectRoute === null) throw new ProblemError('not_found');
         const contextRoute = routeOf(body.context);
         if (contextRoute === null) throw new ProblemError('invalid_request');
-        const authorization = await authorizeCommand(
-          { route: contextRoute, id: body.context },
-          () => new SubjectAccessDeniedError(),
-        );
+        const authorization = await authorizeSemanticWrite({
+          access: access(),
+          actor,
+          action: 'context:accept',
+          anchor: editorialContextAnchor(body.context),
+          pool,
+          deadline: job.deadline,
+          targetPartition: partitionOf(subjectRoute),
+          authorizeCommand,
+          denied: () => new SubjectAccessDeniedError(),
+        });
         try {
           const { component, acceptance, revision } = await admission.run('normal', job, () =>
             decideCandidate(pool, {
@@ -882,10 +973,17 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
           readStatementCandidate(pool, params.id, params.candidate),
         );
         if (!target) throw new ProblemError('not_found');
-        const authorization = await authorizeCommand(
-          { route: 0, id: GLOBAL_CONTEXT },
-          () => new SubjectAccessDeniedError(),
-        );
+        const authorization = await authorizeSemanticWrite({
+          access: access(),
+          actor,
+          action: 'moderation:hide',
+          anchor: globalContextAnchor,
+          pool,
+          deadline: job.deadline,
+          targetPartition: partitionOf(routeOf(params.id)!),
+          authorizeCommand,
+          denied: () => new SubjectAccessDeniedError(),
+        });
         try {
           const result = await admission.run('normal', job, () =>
             moderateStatement(pool, {
@@ -948,10 +1046,17 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
           readStatementCandidate(pool, params.id, params.candidate),
         );
         if (!target) throw new ProblemError('not_found');
-        const authorization = await authorizeCommand(
-          { route: 0, id: GLOBAL_CONTEXT },
-          () => new SubjectAccessDeniedError(),
-        );
+        const authorization = await authorizeSemanticWrite({
+          access: access(),
+          actor,
+          action: 'moderation:takedown',
+          anchor: globalContextAnchor,
+          pool,
+          deadline: job.deadline,
+          targetPartition: partitionOf(routeOf(params.id)!),
+          authorizeCommand,
+          denied: () => new SubjectAccessDeniedError(),
+        });
         try {
           const result = await admission.run('normal', job, () =>
             moderateStatement(pool, {
@@ -1014,10 +1119,17 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
           readStatementCandidate(pool, params.id, params.candidate),
         );
         if (!target) throw new ProblemError('not_found');
-        const authorization = await authorizeCommand(
-          { route: 0, id: GLOBAL_CONTEXT },
-          () => new SubjectAccessDeniedError(),
-        );
+        const authorization = await authorizeSemanticWrite({
+          access: access(),
+          actor,
+          action: 'moderation:takedown',
+          anchor: globalContextAnchor,
+          pool,
+          deadline: job.deadline,
+          targetPartition: partitionOf(routeOf(params.id)!),
+          authorizeCommand,
+          denied: () => new SubjectAccessDeniedError(),
+        });
         try {
           const result = await admission.run('normal', job, () =>
             moderateStatement(pool, {
@@ -1085,10 +1197,17 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
         if (contextRoute === null) throw new ProblemError('invalid_request');
         const active = await activeRelease(pool);
         if (!active) throw new ProblemError('semantic_not_ready');
-        const authorization = await authorizeCommand(
-          { route: contextRoute, id: body.context },
-          () => new SubjectAccessDeniedError(),
-        );
+        const authorization = await authorizeSemanticWrite({
+          access: access(),
+          actor,
+          action: 'context:adopt',
+          anchor: editorialContextAnchor(body.context),
+          pool,
+          deadline: job.deadline,
+          targetPartition: partitionOf(routeOf(params.id)!),
+          authorizeCommand,
+          denied: () => new SubjectAccessDeniedError(),
+        });
         try {
           const { component, adoption, revision } = await admission.run('normal', job, () =>
             adoptCandidates(pool, {

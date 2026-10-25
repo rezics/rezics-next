@@ -26,6 +26,29 @@ export const globalContextAnchor: ParentAnchor = Object.freeze({
   },
 });
 
+/** A server-bound editorial Context anchor. The caller chooses a Context id;
+ * this binding fixes its route and verifies the community row on the released
+ * authorization connection before Access evaluates the grant at command T.
+ */
+export function editorialContextAnchor(id: string): ParentAnchor {
+  if (id === GLOBAL_CONTEXT) return globalContextAnchor;
+  const route = routeOf(id);
+  if (route === null) throw new RangeError('Context anchor id must carry a route');
+  return Object.freeze({
+    resource: Object.freeze({ route, id }),
+    async validate(client, time) {
+      authoritativeTimeValue(time);
+      const result = await client.query(
+        `SELECT 1 FROM semantic.context
+         WHERE route = $1 AND context_id = $2 AND kind = 'community'`,
+        [route, id],
+      );
+      if (result.rowCount !== 1) throw new ContextNotFoundError();
+      return true;
+    },
+  });
+}
+
 export function contextTarget(routeKey: Uint8Array, accountId: string, idempotencyKey: string): Resource {
   const route = anchorRoute(routeKey, `${accountId}\n${CREATE_CONTEXT}\n${idempotencyKey}`);
   return { route, id: newId(route) };
