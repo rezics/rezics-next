@@ -147,7 +147,9 @@ export async function downloadMedia(
               if (!(await subjectExists.run(client, { route: r, subject_id: initial.container_id })))
                 throw new GrantDeniedError();
               if (!(await subject(client))) throw new GrantDeniedError();
-              publiclyVisible = publicSubject !== null && (await publicSubject(client));
+              // Anonymous viewing and public visibility use the same prepared
+              // check on this snapshot; evaluate that formula only once.
+              publiclyVisible = publicSubject !== null && (publicSubject === subject || (await publicSubject(client)));
               return publiclyVisible;
             },
           }),
