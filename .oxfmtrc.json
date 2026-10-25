@@ -2,5 +2,5 @@
   "printWidth": 120,
   "singleQuote": true,
   "sortPackageJson": false,
-  "ignorePatterns": ["contracts/**", "packages/client/src/kernel/**"]
+  "ignorePatterns": ["contracts/**", "packages/client/src/kernel/**", "packages/document/schema/**"]
 }
