@@ -953,3 +953,64 @@ uses native `checkGrowth` at 1/8/64 × 500, grows unrelated owners/clients and t
 selected person's other-client/history rows, and retains full SQL/auto_explain
 provenance in `.temp/current-consent-growth.json`. No planner overrides or
 wall-clock growth gate are used.
+## Native website provider integration blocker
+
+The confidential website provider is not mounted. The frozen website tests
+remain unchanged and fail until that integration exists. The local HTTP issuer
+support is already present; it is not the remaining dependency.
+
+The required `@better-auth/oauth-provider` version `1.7.12` and its exact compatible
+peers are pinned for a reproducible native-provider diagnostic:
+
+```sh
+bun run --cwd services/auth scripts/probe-native-refresh.ts
+```
+
+This script owns a disposable PostgreSQL database through `testDatabase`. It
+applies the installed provider's native schema only in that database, provisions
+and authenticates a person through the existing Auth service, and exercises the
+native provider over a real loopback HTTP socket with an ES256 registered client
+assertion, authorization code, S256 and API resource. Its native assertion uses
+the provider's endpoint audience; it does not implement or change the website's
+required issuer-audience adaptation. The diagnostic prints only statuses and
+counts. Credentials, signing keys, cookies, codes and tokens remain in memory.
+The fixture is not a deployment/bootstrap implementation.
+
+The diagnostic deterministically pauses one native rotation immediately before
+its replacement refresh row is inserted. A concurrent replay detects the revoked
+parent, returns HTTP 400 and finishes deleting all refresh rows. Resuming the
+first request returns HTTP 200, and the child refresh token subsequently returns
+HTTP 200 too. Native replay cleanup therefore does not prevent a concurrent
+rotation from recreating usable refresh authority. Both custom issuance hooks
+are skipped during replay, as the diagnostic also asserts.
+
+The installed package's `dist/introspect-DeWu79D4.mjs` contains the concrete
+conflicting operations:
+
+- `createRefreshToken` conditionally updates the parent using `incrementOne`,
+  then separately calls `adapter.create` for the child, without a surrounding
+  transaction. A failed conditional update returns `invalid_grant` without
+  invalidating the family.
+- `invalidateRefreshFamily` reads refresh history with `findMany` by client and
+  user, builds an array of row IDs, deletes corresponding access rows, then
+  deletes refresh rows. It has no family tombstone or atomic barrier against a
+  concurrent child insert. Its own source comment documents this race and the
+  missing transactional adapter contract.
+- `handleRefreshTokenGrant` invokes that history cleanup directly for replay,
+  before `createUserTokens` and its `customAccessTokenClaims` and
+  `customTokenResponseFields` hooks. The published `OAuthOptions` and extension
+  interfaces expose no replacement or transaction hook for this cleanup or
+  the parent-update/child-insert pair.
+
+The history read/delete path also conflicts with the required bounded token
+request operations independent of same-account history. No growth measurement
+is claimed here; the executable diagnostic establishes the concurrency failure.
+
+These are native provider constraints, separate from Access floor checks and
+claim signing. Resolving them requires a corrected native rotation/invalidation
+facility, or explicitly permitting an additional storage/serialization adaptation.
+A second grant/family engine would exceed the allowed adaptations. The existing
+production routes, registry, consent authority, session identity and migrations
+are therefore unchanged. `bun run --cwd services/auth check` still reports the
+unimplemented website acceptance failures; this diagnostic is not acceptance
+success.
