@@ -14,6 +14,7 @@ import { AuthenticationError, type Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { createBoard, BoardCreationConflictError, BoardCreationInputError } from './board-create.ts';
 import { applyBoardCandidate } from './board-projection.ts';
+import { documentRoutes } from './document-routes.ts';
 import { sourceFenceRoutes } from './source-fence-routes.ts';
 import { mediaModerationRoutes } from './media-moderation-routes.ts';
 import {
@@ -261,9 +262,12 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       throw new AuthenticationError(401, 'Bearer');
   });
 
-  return mediaImportRoutes(
-    mediaModerationRoutes(
-      sourceFenceGovernanceRoutes(sourceFenceRoutes(app, dependencies), dependencies),
+  return documentRoutes(
+    mediaImportRoutes(
+      mediaModerationRoutes(
+        sourceFenceGovernanceRoutes(sourceFenceRoutes(app, dependencies), dependencies),
+        dependencies,
+      ),
       dependencies,
     ),
     dependencies,

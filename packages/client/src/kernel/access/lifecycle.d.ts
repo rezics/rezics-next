@@ -9,6 +9,7 @@ import type { PermissionContext } from './permission.ts';
 export declare const REGISTRATION_TTL_MS: number;
 export declare const HANDLE_REDIRECT_TTL_MS: number;
 export declare const LIFECYCLE_ACTIONS: ActionCatalogue;
+export declare function normalizeHandle(handle: string): string;
 type Boundary = {
     pool: Pool;
     clock?: () => Date;

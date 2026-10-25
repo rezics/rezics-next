@@ -9,6 +9,10 @@ export type GrantSubject = typeof ACTIVE_ACCOUNTS | Readonly<{
     kind: 'organization';
     id: string;
     role: 'owner' | 'member';
+}> | Readonly<{
+    kind: 'realm';
+    id: string;
+    role: 'owner' | 'member';
 }>;
 export type StoredGrantSubject = {
     kind: 'identity' | 'active_accounts';

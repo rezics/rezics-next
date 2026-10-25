@@ -375,6 +375,20 @@ export declare const EVENT_TYPES: {
     readonly 'com.rezics.library.published_log.deleted.v1': Type.TObject<{
         logId: Type.TString;
     }>;
+    readonly 'com.rezics.library.collection.updated.v1': Type.TObject<{
+        collectionId: Type.TString;
+    }>;
+    readonly 'com.rezics.library.collection.deleted.v1': Type.TObject<{
+        collectionId: Type.TString;
+    }>;
+    readonly 'com.rezics.library.collection.member.changed.v1': Type.TObject<{
+        collectionId: Type.TString;
+        memberId: Type.TString;
+        subjectId: Type.TString;
+    }>;
+    readonly 'com.rezics.library.collection.listing.changed.v1': Type.TObject<{
+        collectionId: Type.TString;
+    }>;
     readonly 'com.rezics.definitions.published.v1': Type.TObject<{
         digest: Type.TString;
     }>;

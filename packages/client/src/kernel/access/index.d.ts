@@ -20,6 +20,8 @@ export { MAX_CREATION_RESOURCES, createResourceCreationManifest, CreationManifes
 export { resourceAuthorization, ResourceAuthorizationUnavailableError, type AnonymousResourceAuthorizationInput, type AuthorizationAnchor, type ResourceAuthorizationContext, type ResourceAuthorizationInput, } from './resource-authorization.ts';
 export { parentCreationAuthorization, type ParentAnchor, type ParentCreationContext, type ResourceCreationPort, } from './parent-creation.ts';
 export { initializeResourceGrants } from './resource-initialization.ts';
+export { endResourceDenial, recordResourceDenial } from './resource-denials.ts';
+export { grantGroupRole } from './resource-group-grant.ts';
 export { installStandingParentGrant } from './standing-parent.ts';
 export type { ResourceRoleCatalogue } from './resource-roles.ts';
 export { createWorkflowApprovals, sweepWorkflowApprovals, workflowApprovalBinding, MAX_WORKFLOW_APPROVAL_LIFETIME_MS, WorkflowApprovalUnavailableError, type WorkflowApproval, type WorkflowApprovalConfig, type WorkflowApprovalRequest, type WorkflowApprovalBinding, } from './workflow-approvals.ts';
