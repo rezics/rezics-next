@@ -185,8 +185,7 @@ test('Reconcile stays within its bound as P grows', async () => {
   });
 }, 90_000);
 
-// Skip: PostgreSQL sequentially scans all checkpoint rows for the consumer-only predicate.
-test.skip('Retire stays within its bound as P grows', async () => {
+test('Retire stays within its bound as P grows', async () => {
   const database = db!;
   const population = checkpointGrowth('search-growth-retire', retireAnchor, retireOthers, retireAnchorOthers);
   await checkGrowth(database, {
