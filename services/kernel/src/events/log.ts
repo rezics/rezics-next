@@ -23,6 +23,10 @@ export const EVENT_TYPES = {
     { additionalProperties: false },
   ),
   'com.rezics.subject.created.v1': Type.Object({ id: Type.String({ pattern: UUID }) }, { additionalProperties: false }),
+  'com.rezics.semantic.context.created.v1': Type.Object(
+    { id: Type.String({ pattern: UUID }) },
+    { additionalProperties: false },
+  ),
 } as const;
 
 export type CloudEvent = {

@@ -33,6 +33,7 @@ export declare function createApp({ pool, admission, access, tokens, }: {
             signal: AbortSignal;
         };
         readonly actor: import("../request/access.ts").Actor;
+        readonly access: () => Access;
         readonly session: {
             readonly components: SessionComponent[];
             record(component: SessionComponent): void;
@@ -71,6 +72,7 @@ export declare function createApp({ pool, admission, access, tokens, }: {
                 signal: AbortSignal;
             };
             readonly actor: import("../request/access.ts").Actor;
+            readonly access: () => Access;
             readonly session: {
                 readonly components: SessionComponent[];
                 record(component: SessionComponent): void;
@@ -95,6 +97,7 @@ export declare function createApp({ pool, admission, access, tokens, }: {
         signal: AbortSignal;
     };
     readonly actor: import("../request/access.ts").Actor;
+    readonly access: () => Access;
     readonly session: {
         readonly components: SessionComponent[];
         record(component: SessionComponent): void;

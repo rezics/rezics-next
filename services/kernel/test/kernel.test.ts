@@ -30,6 +30,8 @@ const typed = [
   'GET /health',
   'POST /v1/subjects',
   'GET /v1/subjects/:id',
+  'POST /v1/contexts',
+  'GET /v1/contexts/:id',
   'POST /v1/definitions/releases',
   'GET /v1/definitions/releases/:digest',
   'GET /v1/definitions/active',
