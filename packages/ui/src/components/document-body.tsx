@@ -5,10 +5,18 @@ import { documentExtensions } from './document-extensions.ts';
 import { safeDocumentUrl } from './document-url.ts';
 
 const rel = 'noopener noreferrer nofollow ugc';
-type Props = { document: DocumentSnapshot; className?: string };
+
+export const documentBodyLabels = {
+  revealSpoiler: 'Reveal spoiler',
+} as const;
+
+export type DocumentBodyLabels = { readonly [K in keyof typeof documentBodyLabels]: string };
+
+type Props = { document: DocumentSnapshot; className?: string; labels?: Partial<DocumentBodyLabels> };
 
 /** Render a document snapshot without creating an editor or requiring a browser DOM. */
-export function DocumentBody({ document, className }: Props) {
+export function DocumentBody({ document, className, labels }: Props) {
+  const resolved = { ...documentBodyLabels, ...labels };
   const content = renderToReactElement({
     extensions: documentExtensions,
     content: document.doc,
@@ -71,7 +79,7 @@ export function DocumentBody({ document, className }: Props) {
             <>{children}</>
           );
         },
-        spoiler: ({ children }: any) => <DocumentSpoiler>{children}</DocumentSpoiler>,
+        spoiler: ({ children }: any) => <DocumentSpoiler label={resolved.revealSpoiler}>{children}</DocumentSpoiler>,
       },
     },
   });

@@ -34,10 +34,13 @@ test('document bodies render every profile node and mark, safe links, spoilers a
       .sort();
     expect(outcomes).toEqual([
       'Blocks Profile: passed',
+      'Inline Spoiler: passed',
+      'Localized Label: passed',
       'Media Images: passed',
       'Safe Links: passed',
       'Spoilers: passed',
       'Text Profile: passed',
+      'Two Spoilers: passed',
     ]);
   } finally {
     rmSync(output, { recursive: true, force: true });

@@ -59,7 +59,7 @@ function ThreadPage() {
                     {m.thread_post_erased()}
                   </p>
                 ) : (
-                  <DocumentBody document={post.body} />
+                  <DocumentBody document={post.body} labels={{ revealSpoiler: m.thread_reveal_spoiler() }} />
                 )}
               </li>
             ))}

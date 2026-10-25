@@ -740,6 +740,49 @@
   color: var(--accent-foreground);
   border-radius: var(--radius-sm);
 }
+.rezics-document .document-spoiler {
+  display: inline;
+  appearance: none;
+  margin: 0;
+  padding: 0 0.12em;
+  border: 0;
+  border-radius: 0.25em;
+  background: var(--muted-foreground);
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  vertical-align: baseline;
+  cursor: pointer;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.rezics-document .document-spoiler,
+.rezics-document .document-spoiler :where(*) {
+  color: transparent !important;
+  -webkit-text-fill-color: transparent;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+.rezics-document .document-spoiler:hover {
+  background: color-mix(in oklab, var(--foreground) 72%, var(--muted-foreground));
+}
+.rezics-document .document-spoiler:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.rezics-document .document-spoiler::selection,
+.rezics-document .document-spoiler *::selection {
+  background: transparent;
+  color: transparent;
+}
+.rezics-document .document-spoiler-revealed {
+  background: color-mix(in oklab, var(--primary) 16%, transparent);
+  border-radius: 0.2em;
+  color: inherit;
+  outline: none;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
 .rezics-document .tiptap .is-empty[data-placeholder]::before {
   content: attr(data-placeholder);
   float: inline-start;
