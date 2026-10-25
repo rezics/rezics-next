@@ -300,14 +300,14 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
     try {
       const report = await checkGrowth(db, {
         name: 'Content partition collection fixed K and Delta',
-        scales: [32, 256, 2048],
+        scales: [2048, 8192, 32768],
         bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
         async grow(db, scale, previous) {
-          // Setup is excluded from capture. A fixed 32-row population unit makes
-          // even the smallest scale large enough to observe native index plans.
+          // Setup is excluded from capture. Every relation the job reads has at
+          // least 2048 rows at the first scale (core.partition already has 4096).
           // Half the unrelated rows share the target partition; none are aged.
-          for (let start = previous * 32; start < scale * 32; start += 1024) {
-            const rows = Array.from({ length: Math.min(1024, scale * 32 - start) }, (_, offset) => {
+          for (let start = previous; start < scale; start += 1024) {
+            const rows = Array.from({ length: Math.min(1024, scale - start) }, (_, offset) => {
               const targetRoute = (start + offset) % 2 ? route : route + 32;
               const mediaId = newId(targetRoute);
               return {
@@ -318,16 +318,43 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
                 reservation_request_id: randomUUID(),
                 key: `m/${mediaId}/original`,
                 transaction_id: randomUUID(),
+                position: (start + offset + 1) * 1000,
               };
             });
             await db.admin.query(
-              `INSERT INTO content.media (route,media_id,container_id,uploader_id,reservation_request_id,purpose,media_type,byte_count,actual_byte_count,sha256,state,key,transaction_id)
+              `WITH population AS (
+                SELECT * FROM jsonb_to_recordset($1::jsonb) AS x(route integer,media_id uuid,container_id uuid,uploader_id uuid,reservation_request_id uuid,key text,transaction_id uuid,position bigint)
+              ), media AS (INSERT INTO content.media (route,media_id,container_id,uploader_id,reservation_request_id,purpose,media_type,byte_count,actual_byte_count,sha256,state,key,transaction_id)
               SELECT route,media_id,container_id,uploader_id,reservation_request_id,'post-image','image/png',1,1,$2,'uploaded',key,transaction_id
-              FROM jsonb_to_recordset($1::jsonb) AS x(route integer,media_id uuid,container_id uuid,uploader_id uuid,reservation_request_id uuid,key text,transaction_id uuid)`,
+              FROM population RETURNING route,media_id,transaction_id
+              ), variants AS (
+                INSERT INTO content.media_variant (route,media_id,format,width,height,media_type,byte_count,sha256,key,transaction_id)
+                SELECT route,media_id,'webp',1,1,'image/webp',1,$2,'m/'||media_id||'/webp-1',transaction_id FROM media
+              ), receipts AS (
+                INSERT INTO core.receipt (partition_no,principal_kind,principal_id,command_kind,idempotency_key,request_digest,epoch,position,transaction_id,response)
+                SELECT route>>4,'account',uploader_id,'content.media.collection.fence',media_id::text,decode($2,'hex'),1,position,transaction_id,'{}'::jsonb FROM population
+              ), events AS (
+                INSERT INTO core.outbox (partition_no,position,event_seq,event_count,epoch,id,type,subject,data)
+                SELECT route>>4,position,0,1,1,media_id,'com.rezics.content.media.uploaded.v1',media_id::text,
+                  jsonb_build_object('mediaId',media_id,'containerId',container_id,'actorId',uploader_id) FROM population
+              )
+              INSERT INTO editorial.write_basis (partition_no,transaction_id,epoch,position,principal_kind,principal_id,client_id)
+              SELECT route>>4,transaction_id,1,position,'account',uploader_id,'content-growth-fixture' FROM population`,
               [JSON.stringify(rows), sha(new Uint8Array([1]))],
             );
           }
-          await db.admin.query('ANALYZE content.media');
+          await db.admin.query(
+            'UPDATE core.partition SET position=GREATEST(position,$1::bigint) WHERE partition_no=ANY($2::integer[])',
+            [scale * 1000, [partition, partition + 2]],
+          );
+          for (const relation of [
+            'content.media',
+            'content.media_variant',
+            'core.receipt',
+            'core.outbox',
+            'editorial.write_basis',
+          ])
+            await db.admin.query(`ANALYZE ${relation}`);
         },
         async operation(db, _scale, repetition) {
           const fixture = await uploaded(db.admin, store, new Uint8Array([repetition % 256]));
