@@ -7,7 +7,7 @@ import { StaleAttemptError } from './contracts.ts';
 import type { AttemptFence, GateOutcome, GateOutcomeSink, GateStage } from './contracts.ts';
 import { SqliteLandingQueue, type LandingEntry } from './land.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
-import { changedFiles, firstFailure, gateRunner, git, outsideScope, type GateRunner } from './merge.ts';
+import { changedFiles, diffLineCount, firstFailure, gateRunner, git, nonGeneratedFiles, outsideScope, type GateRunner } from './merge.ts';
 
 type DerivedFile = { path: string; command: string[] };
 const derivedFiles = defaults.derivedFiles as DerivedFile[];
@@ -167,9 +167,9 @@ export class MergeTrain {
         rebaseOnto(trainTree, base, originalBase, logPath);
         stage = 'scope';
         result.changedFiles = changedFiles(trainTree, base);
-        result.diffLines = git(trainTree, 'diff', '--numstat', base, 'HEAD').split('\n').reduce((sum, line) => {
-          const [a, b] = line.split('\t'); return sum + (Number(a) || 0) + (Number(b) || 0);
-        }, 0);
+        result.diffLines = diffLineCount(trainTree, base);
+        result.nonGeneratedChangedFiles = nonGeneratedFiles(trainTree, result.changedFiles);
+        result.nonGeneratedDiffLines = diffLineCount(trainTree, base, result.nonGeneratedChangedFiles);
         const outside = outsideScope(result.changedFiles, request.declaredPaths);
         if (outside.length) throw new Error(`Changes outside declared paths: ${outside.join(', ')}`);
         stage = 'gate';

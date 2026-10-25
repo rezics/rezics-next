@@ -65,6 +65,31 @@ export function changedFiles(cwd: string, base: string): string[] {
   return result.stdout.split('\0').filter(Boolean);
 }
 
+/** Paths marked linguist-generated are excluded from estimates, using attributes in this checkout. */
+export function nonGeneratedFiles(cwd: string, files: readonly string[]): string[] {
+  if (!files.length) return [];
+  const result = spawnSync('git', ['check-attr', '-z', '--stdin', 'linguist-generated'], {
+    cwd, encoding: 'utf8', input: `${files.join('\0')}\0`, maxBuffer: 32 * 1024 * 1024,
+  });
+  if (result.status !== 0) throw new Error(result.stderr || 'Cannot read linguist-generated attributes');
+  const values = result.stdout.split('\0');
+  const generated = new Set<string>();
+  for (let i = 0; i + 2 < values.length; i += 3)
+    if (values[i + 1] === 'linguist-generated' && values[i + 2] === 'true') generated.add(values[i]!);
+  return files.filter(file => !generated.has(file));
+}
+
+export function diffLineCount(cwd: string, base: string, files?: readonly string[]): number {
+  const args = ['diff', '--numstat', base, 'HEAD'];
+  if (files) {
+    args.push('--', ...files);
+    if (!files.length) return 0;
+  }
+  return git(cwd, ...args).split('\n').reduce((sum, line) => {
+    const [added, removed] = line.split('\t'); return sum + (Number(added) || 0) + (Number(removed) || 0);
+  }, 0);
+}
+
 export function outsideScope(files: readonly string[], patterns: readonly string[]): string[] {
   const globs = patterns.map(pattern => new Bun.Glob(pattern));
   return files.filter(file => !globs.some(glob => glob.match(file)));

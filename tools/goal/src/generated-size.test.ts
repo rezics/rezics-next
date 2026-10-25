@@ -7,10 +7,11 @@ import { MergeTrain } from './merge-train.ts';
 import type { GateOutcome } from './contracts.ts';
 import { git } from './merge.ts';
 import { repository } from './test-support.ts';
+import { classifyFailure } from './failures.ts';
 
 function setup() {
   const repo = repository();
-  writeFileSync(join(repo.main, '.gitattributes'), 'generated.txt linguist-generated=true\n');
+  writeFileSync(join(repo.main, '.gitattributes'), 'generated*.txt linguist-generated=true\n');
   git(repo.main, 'add', '.gitattributes'); git(repo.main, 'commit', '-m', 'Mark generated files');
   const outcomes: GateOutcome[] = [];
   const db = openDb(join(repo.path, 'state.sqlite'));
@@ -25,15 +26,21 @@ describe('generated file size accounting', () => {
   test('files marked linguist-generated do not count toward the estimate', async () => {
     const s = setup();
     try {
-      const request = s.branch('alpha', 'source.txt', 'one\ntwo\nthree\n');
-      writeFileSync(join(request.worktree, 'generated.txt'), 'one\ntwo\nthree\nfour\nfive\n');
+      const request = s.branch('alpha', 'source.txt', 'one\n');
+      writeFileSync(join(request.worktree, 'generated.txt'), 'one\ntwo\nthree\n');
+      writeFileSync(join(request.worktree, 'generated-extra.txt'), 'one\ntwo\nthree\n');
       git(request.worktree, 'add', '.'); git(request.worktree, 'commit', '-m', 'Add source and generated output');
+      request.declaredPaths = ['source.txt', 'generated*.txt'];
       s.queue.enqueue(request);
       await new MergeTrain({ ...s.options, runGate: async () => ({ passed: true, output: '', timedOut: false }) }).run();
       const outcome = s.outcomes[0] as GateOutcome & { nonGeneratedChangedFiles?: string[]; nonGeneratedDiffLines?: number };
       expect(outcome.nonGeneratedChangedFiles).toEqual(['source.txt']);
-      expect(outcome.nonGeneratedDiffLines).toBe(4);
+      expect(outcome.nonGeneratedDiffLines).toBe(1);
       expect(outcome.changedFiles).toContain('generated.txt');
+      expect(classifyFailure({ ...outcome, passed: false },
+        { brief: { paths: ['source.txt', 'generated*.txt'], estimate: { lines: 1, files: 1 } } } as never,
+        { failureKind: null, exitCode: 0, fixRound: 0, consulted: false, previousFailure: null, blocker: 'working', result: '' } as never,
+        {} as never, { maxSteps: 100, maxMs: 60_000 } as never, true)).toBe('new-failure');
     } finally { s.close(); }
   });
 

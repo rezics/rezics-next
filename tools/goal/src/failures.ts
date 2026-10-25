@@ -12,8 +12,8 @@ export function classifyFailure(outcome: GateOutcome, task: Task, attempt: Attem
   if (attempt.failureKind === 'tool' || outcome.stage === 'setup' || outcome.failsOnMain || outcome.timedOut) return 'environment';
   if (attempt.exitCode !== null && attempt.exitCode !== 0) return 'environment';
   if (outcome.stage === 'scope' || outcome.changedFiles.some(path => !matchesPath(path, task.brief.paths))
-    || outcome.diffLines > ESTIMATE_TOLERANCE * task.brief.estimate.lines
-    || outcome.changedFiles.length > ESTIMATE_TOLERANCE * task.brief.estimate.files) return 'scope-growth';
+    || (outcome.nonGeneratedDiffLines ?? outcome.diffLines) > ESTIMATE_TOLERANCE * task.brief.estimate.lines
+    || (outcome.nonGeneratedChangedFiles ?? outcome.changedFiles).length > ESTIMATE_TOLERANCE * task.brief.estimate.files) return 'scope-growth';
   if (!hasCommit && (record.steps > limits.maxSteps || Date.parse(record.endedAt) - Date.parse(record.startedAt) > limits.maxMs)) return 'stalled';
   if (attempt.fixRound >= 2) return 'round-limit';
   if (attempt.consulted) return 'failed-after-consult';
