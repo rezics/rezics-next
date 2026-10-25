@@ -1,7 +1,8 @@
 import { APPEARANCE, platformRegistry } from '@rezics/composition';
 import { isValidElement, type ReactNode } from 'react';
+import { pageText, usePageLocale } from './data';
 
-/** `{ type, slots }` for every platform component. Data components stay listed until they have a renderer. */
+/** `{ type, slots }` for every platform component, shared by layout and data renderers. */
 export const pageDefinitions = platformRegistry.components.map((component) => ({
   type: component.type,
   slots: [...component.slots],
@@ -91,11 +92,15 @@ function Columns(props: Record<string, unknown>) {
 }
 
 function Heading(props: Record<string, unknown>) {
+  const text = pageText(props.text, usePageLocale());
   const level = props.level === 3 || props.level === 4 ? props.level : 2;
   const Tag = headingTag[level];
   return (
-    <Tag className={`m-0 font-semibold tracking-tight text-balance text-foreground ${headingClass[level]}`}>
-      {typeof props.text === 'string' ? props.text : null}
+    <Tag
+      lang={text.lang}
+      className={`m-0 font-semibold tracking-tight text-balance text-foreground ${headingClass[level]}`}
+    >
+      {text.text}
     </Tag>
   );
 }
@@ -110,11 +115,11 @@ function paragraphs(text: string): string[][] {
 }
 
 function Text(props: Record<string, unknown>) {
-  if (typeof props.text !== 'string') return null;
-  const blocks = paragraphs(props.text);
+  const text = pageText(props.text, usePageLocale());
+  const blocks = paragraphs(text.text);
   if (blocks.length === 0) return null;
   return (
-    <div className={textClass}>
+    <div lang={text.lang} className={textClass}>
       {blocks.map((lines, index) => (
         <p className="text-pretty" key={index}>
           {lines.reduce<ReactNode[]>((nodes, line, lineIndex) => {
