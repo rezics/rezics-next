@@ -6,7 +6,7 @@ export type WorkQueueOptions = NonNullable<Parameters<typeof DBOS.registerQueue>
 export const WORK_QUEUES = Object.freeze({
   governance: Object.freeze({ workerConcurrency: 2 }),
   effects: Object.freeze({ workerConcurrency: 8, partitionConcurrency: 1 }),
-  workflows: Object.freeze({}),
+  workflows: Object.freeze({ workerConcurrency: 8 }),
   delivery: Object.freeze({ workerConcurrency: 4 }),
   import: Object.freeze({ workerConcurrency: 2, partitionConcurrency: 1 }),
   maintenance: Object.freeze({ workerConcurrency: 2 }),

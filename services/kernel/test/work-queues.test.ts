@@ -7,7 +7,7 @@ test('every work queue except workflows bounds its per-process concurrency', () 
   const entries = Object.entries(WORK_QUEUES) as [string, Readonly<WorkQueueOptions>][];
   const unbounded = entries.filter(([, options]) => options.workerConcurrency === undefined).map(([name]) => name);
 
-  expect(unbounded).toEqual(['workflows']);
+  expect(unbounded).toEqual([]);
   for (const [name, options] of entries) {
     if (name === 'workflows') continue;
     expect(

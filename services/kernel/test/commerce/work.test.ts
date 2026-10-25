@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { createCommerceWork } from '../../src/commerce/work.ts';
 import { createCommerceWork as createEnqueue } from '../../src/commerce/enqueue.ts';
+import { orderExpiryWorkflowId } from '../../src/commerce/work-contract.ts';
 import { WORK_QUEUES } from '../../src/work/queues.ts';
 import { routeOf, partitionOf } from '../../src/route/route.ts';
 import { until, workFixture } from './support/work-fixture.ts';
@@ -224,9 +225,11 @@ for (const lost of [false, true])
     expect(delayed!.delayUntilEpochMS! - Date.now()).toBeGreaterThan(890_000);
     expect(delayed!.delayUntilEpochMS! - Date.now()).toBeLessThanOrEqual(900_000);
     await fixture.client.setWorkflowDelay(id, { delayUntilEpochMS: Date.now() });
+    await fixture.finish(id);
+    const expiryID = orderExpiryWorkflowId(order.id);
     await until(
-      () => fixture.client.listWorkflowSteps(id),
-      (steps) => !!steps?.some((step) => step.name === 'DBOS.sleep'),
+      () => fixture.client.getWorkflow(expiryID),
+      (workflow) => workflow?.status === 'DELAYED',
     );
     const saved = (
       await fixture.pool.query(
@@ -246,7 +249,7 @@ for (const lost of [false, true])
     fixture.transport.fake.pay(saved);
     await fixture.stop();
     await fixture.start(4_300_000);
-    await fixture.finish(id);
+    await fixture.finish(expiryID);
     expect(await fixture.state(order.id)).toMatchObject({ settlement: 'paid' });
     expect(await fixture.entitlements(order.id)).toHaveLength(1);
     expect(
@@ -260,15 +263,17 @@ test('reconciliation sleeps durably through expiry and repairs a missed expired 
   const { order, session } = await fixture.checkout();
   const id = await fixture.schedule(order.id);
   await fixture.client.setWorkflowDelay(id, { delayUntilEpochMS: Date.now() });
+  await fixture.finish(id);
+  const expiryID = orderExpiryWorkflowId(order.id);
   await until(
-    () => fixture.client.listWorkflowSteps(id),
-    (steps) => !!steps?.some((step) => step.name === 'DBOS.sleep'),
+    () => fixture.client.getWorkflow(expiryID),
+    (workflow) => workflow?.status === 'DELAYED',
   );
   expect(await fixture.state(order.id)).toMatchObject({ settlement: 'pending' });
   fixture.transport.fake.expire(session.id);
   await fixture.stop();
   await fixture.start(4_300_000);
-  await fixture.finish(id);
+  await fixture.finish(expiryID);
   expect(await fixture.state(order.id)).toMatchObject({ settlement: 'failed' });
   expect(await fixture.entitlements(order.id)).toHaveLength(0);
   expect(

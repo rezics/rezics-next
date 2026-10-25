@@ -9,6 +9,8 @@ export const STRIPE_EVENT_WORKFLOW = 'commerce.stripeEvent';
 export const CHECKOUT_SYNC_WORKFLOW = 'commerce.checkoutSync';
 /** Settles an order whose Checkout Session was never recorded or whose creation outcome is unknown. */
 export const ORDER_RECONCILE_WORKFLOW = 'commerce.reconcileOrder';
+/** Rechecks a pending order once its Checkout Session has expired. */
+export const EXPIRY_SYNC_WORKFLOW = 'commerce.expirySync';
 
 /** The workflow ID is the event deduplication: a redelivered event finds its existing workflow. */
 export function stripeEventWorkflowId(eventId: string): string {
@@ -21,6 +23,10 @@ export function checkoutWorkflowId(sessionId: string, eventId: string): string {
 
 export function orderReconcileWorkflowId(orderId: string): string {
   return `order:${orderId}:reconcile`;
+}
+
+export function orderExpiryWorkflowId(orderId: string): string {
+  return `order:${orderId}:expiry`;
 }
 
 /** Idempotency key of a workflow step's command, as ADR-0033 fixes it. */

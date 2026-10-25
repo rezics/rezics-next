@@ -3,6 +3,7 @@ import { createAccess } from '../access/index.ts';
 import { routeOf } from '../route/route.ts';
 import type { WorkModule } from '../work/registry.ts';
 import { createCommerceCommands, type CheckoutOutcome } from './commands.ts';
+import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import {
   StripeRejectedError,
   StripeUnavailableError,
@@ -16,7 +17,9 @@ import { createPayouts } from './payouts.ts';
 import {
   CHECKOUT_SYNC_WORKFLOW,
   checkoutWorkflowId,
+  EXPIRY_SYNC_WORKFLOW,
   ORDER_RECONCILE_WORKFLOW,
+  orderExpiryWorkflowId,
   orderReconcileWorkflowId,
   STRIPE_EVENT_WORKFLOW,
   WORKFLOWS_QUEUE,
@@ -60,6 +63,15 @@ export function createCommerceWork(deps: CommerceWorkDependencies): WorkModule {
         },
         { name: 'commerce.clock' },
       );
+      const expiryDelay = DBOS.registerStep(
+        async (checkoutExpiresAt: string) => {
+          const row = await clockQuery.run({ query: pool.query.bind(pool) });
+          if (!row) throw new Error('PostgreSQL clock is unavailable');
+          const remaining = Date.parse(checkoutExpiresAt) + 600_000 - Date.parse(row.observedAt);
+          return remaining <= 0 ? 0 : Math.ceil(remaining / 1000);
+        },
+        { name: 'commerce.expiryDelay' },
+      );
       const readCheckout = DBOS.registerStep(
         async (sessionId: string, observedAt: string): Promise<CheckoutSnapshot> => ({
           ...(await stripe.readCheckout(sessionId)),
@@ -72,7 +84,7 @@ export function createCommerceWork(deps: CommerceWorkDependencies): WorkModule {
           // The command appends ':apply'; supplying this prefix preserves ADR-0033's wf:{id}:{step} key.
           await commands.applyCheckoutSnapshot(snapshot, `wf:${workflowId}`);
         },
-        { name: 'commerce.applyCheckout' },
+        { name: 'commerce.applyCheckout', ...COMMAND_STEP_RETRIES },
       );
       async function sync(sessionId: string, workflowId: string) {
         // Persist the database observation before contacting Stripe. A delayed old response cannot outrank
@@ -138,7 +150,22 @@ export function createCommerceWork(deps: CommerceWorkDependencies): WorkModule {
         async (orderId: string, outcome: CheckoutOutcome) => {
           await commands.recordCheckout(orderId, outcome);
         },
-        { name: 'commerce.recordCheckout' },
+        { name: 'commerce.recordCheckout', ...COMMAND_STEP_RETRIES },
+      );
+      const expirySync = DBOS.registerWorkflow(
+        async (orderId: string) => {
+          const order = await getOrder(orderId);
+          if (
+            !order ||
+            order.settlement === 'paid' ||
+            order.settlement === 'failed' ||
+            !order.checkoutSessionId ||
+            !order.checkoutExpiresAt
+          )
+            return;
+          await sync(order.checkoutSessionId, DBOS.workflowID!);
+        },
+        { name: EXPIRY_SYNC_WORKFLOW },
       );
       DBOS.registerWorkflow(
         async (orderId: string) => {
@@ -153,8 +180,22 @@ export function createCommerceWork(deps: CommerceWorkDependencies): WorkModule {
           if (!order.checkoutSessionId || !order.checkoutExpiresAt) return;
           const workflowId = DBOS.workflowID!;
           await sync(order.checkoutSessionId, `${workflowId}:initial`);
-          await DBOS.sleep(Math.max(0, Date.parse(order.checkoutExpiresAt) + 600_000 - Date.now()));
-          await sync(order.checkoutSessionId, `${workflowId}:expiry`);
+          order = await getOrder(orderId);
+          if (
+            !order ||
+            order.settlement === 'paid' ||
+            order.settlement === 'failed' ||
+            !order.checkoutSessionId ||
+            !order.checkoutExpiresAt
+          )
+            return;
+          const delaySeconds = await expiryDelay(order.checkoutExpiresAt);
+          await DBOS.startWorkflow(expirySync, {
+            workflowID: orderExpiryWorkflowId(orderId),
+            workflowIDReusePolicy: 'return-existing',
+            queueName: WORKFLOWS_QUEUE,
+            enqueueOptions: { delaySeconds },
+          })(orderId);
         },
         { name: ORDER_RECONCILE_WORKFLOW },
       );
