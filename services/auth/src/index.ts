@@ -136,6 +136,8 @@ export interface AuthService {
   handler(request: Request): Promise<Response>;
   verifier: VerifierConfiguration;
   internal: {
+    /** One native expiry batch, at most 1000 rows; schedule through the shared worker. */
+    pruneExpiredVerifications(): Promise<number>;
     provisionPassword(input: {
       authorization: string;
       email: string;

@@ -8,6 +8,7 @@ import { betterAuthOptions, credentialOwnerSchema } from './better-auth.ts';
 import { createSigner } from './signing.ts';
 import { issuerOrigin } from './issuer.ts';
 import { nativeAttemptRequest } from './rate-limit.ts';
+import { nativeVerificationPlugin, pruneExpiredVerifications } from './verification-maintenance.ts';
 import type {
   AccessAccount,
   AuthService,
@@ -167,6 +168,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     },
     plugins: [
       credentialOwnerSchema,
+      nativeVerificationPlugin,
       {
         id: 'trusted-establishment',
         async onRequest() {
@@ -416,6 +418,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       accessTokenLifetimeSeconds: 300,
     },
     internal: {
+      pruneExpiredVerifications: () => pruneExpiredVerifications(database),
       async provisionPassword(input) {
         // Authorization resolves an approved Access command; HTTP cannot supply this result.
         const approval = await trustedAccess.authorizeProvisioning(input.authorization);

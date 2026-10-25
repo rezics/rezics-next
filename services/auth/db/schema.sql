@@ -504,10 +504,24 @@ CREATE INDEX "session_userId_idx" ON public.session USING btree ("userId");
 
 
 --
+-- Name: verification_expiry_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX verification_expiry_idx ON public.verification USING btree ("expiresAt", id);
+
+
+--
 -- Name: verification_identifier_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX verification_identifier_idx ON public.verification USING btree (identifier);
+
+
+--
+-- Name: verification_latest_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX verification_latest_idx ON public.verification USING btree (identifier, "createdAt" DESC, id DESC);
 
 
 --
