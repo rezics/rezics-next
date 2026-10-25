@@ -82,7 +82,7 @@ export class WorkerStore implements AttemptFence {
   updateHeldRetryTask(ref: AttemptRef, update: (task: Task) => void): Task {
     return this.db.transaction(() => {
       const task = this.task(ref.taskId);
-      if (task.currentAttempt !== ref.attempt || (ref.attempt > 0 && this.attempt(ref).state !== 'stopped')
+      if (task.currentAttempt !== ref.attempt || (ref.attempt > 0 && !['stopped', 'exited'].includes(this.attempt(ref).state))
         || !['ready', 'stopped', 'held'].includes(task.state)) throw new Error('task cannot be held for retry');
       update(task);
       if (task.id !== ref.taskId || task.currentAttempt !== ref.attempt) throw new Error('task identity cannot be updated');

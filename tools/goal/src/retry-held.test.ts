@@ -40,3 +40,21 @@ test('a retry whose reshaped brief waits for an unmerged task holds, keeps its c
     expect(git(resumed.worktree, 'log', '--format=%s', `${main}..HEAD`)).toContain('Complete fixture');
   } finally { h.dispose(); }
 });
+
+test('a task stopped after its worker exited can be held behind an unmerged task', async () => {
+  const h = harness();
+  try {
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    const task = h.tasks.dispatch(h.briefFile);
+    await job.start(task.id); await job.drain();
+    // A worker that reports itself blocked leaves its attempt exited and the task stopped.
+    h.store.updateTask({ taskId: task.id, attempt: 1 }, t => { t.state = 'stopped'; });
+    expect(h.store.attempt({ taskId: task.id, attempt: 1 }).state).toBe('exited');
+    const dependency = h.tasks.dispatch(h.briefFile);
+    const reshaped = join(h.root, '.temp/goal/reshaped.md');
+    writeFileSync(reshaped, markdown.replace('waiting: []', `waiting: []\nafter: [${dependency.id}]`));
+    await job.start(task.id, { brief: reshaped }); await job.drain();
+    expect(h.store.task(task.id).state).toBe('held');
+    expect(h.store.task(task.id).currentAttempt).toBe(1);
+  } finally { h.dispose(); }
+});
