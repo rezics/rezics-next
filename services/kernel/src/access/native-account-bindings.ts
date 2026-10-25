@@ -1,6 +1,8 @@
 import type {
   AccountWorkflowPorts,
+  AccountOperation,
   AuthService,
+  NativeWorkflowProofPorts as AuthWorkflowProofPorts,
   TrustedAccessPorts,
   createBarrierProofVerifier,
   createProvisioningEvidenceVerifier,
@@ -8,15 +10,24 @@ import type {
 import type { Pool } from 'pg';
 import type { Access, ActionCatalogue } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import type { createDelegationCommands } from './delegation-commands.ts';
-import type { createGrantCommands } from './grant-commands.ts';
-import type {
-  LifecycleRequest,
-  RecoveryEvidence,
+import { createDelegationCommands, readAssignment } from './delegation-commands.ts';
+import { createGrantCommands } from './grant-commands.ts';
+import {
+  type LifecycleRequest,
+  type RecoveryEvidence,
   createLifecycleCommands,
   createLifecycleInternals,
 } from './lifecycle.ts';
-import type { createOperatorCommands } from './operator.ts';
+import { createOperatorCommands } from './operator.ts';
+
+import { createAuthBindings, AuthBindingDeniedError } from './auth-bindings.ts';
+import { createRegistrationProofBindings } from './registration-proof.ts';
+import { createAuthBarrierCapabilities } from './auth-barriers.ts';
+import { createOperatorSessionCapability } from './auth-session-capability.ts';
+import { createWorkflowApprovals, workflowApprovalBinding } from './workflow-approvals.ts';
+import { readAccount } from './account-data.ts';
+import { routeOf } from '../route/route.ts';
+import { seal, unseal } from '../tokens/seal.ts';
 
 /** Auth-host-owned receipt/staging point-read closures, never request fields or
  * fixture maps. Persist the real createPending command reference under the exact
@@ -30,7 +41,6 @@ export type NativeWorkflowProofPorts = {
   pendingReference(input: { accountId: string; reservationId: string }): Promise<string | null>;
   provisioningEvidence(input: { accountId: string; reservationId: string }): Promise<unknown>;
 };
-
 /** The Auth host composes the actual verifier factories with its private storage
  * and keys. Kernel receives verification capabilities only. Missing recovery
  * evidence must fail closed; it cannot be replaced by a synthetic receipt.
@@ -66,12 +76,12 @@ export type NativeAccountBindings = {
 
 export class NativeAccountBindingsUnavailableError extends Error {
   constructor() {
-    super('Native account bindings are unavailable until production composition is implemented');
+    super('Native account binding capability is unavailable');
     this.name = 'NativeAccountBindingsUnavailableError';
   }
 }
 
-/** Production composition contract; this stub proves no product behavior.
+/** Ordinary production composition with independently anchored native commands.
  *
  * The Auth host consumes trustedAccess and supplies workflowPorts to durable
  * createAccountWorkflows registration. Registration records the real pending
@@ -102,6 +112,161 @@ export class NativeAccountBindingsUnavailableError extends Error {
  * actor-side formula O((1+K)log G), K<=1000. No hidden enumeration or scan to find
  * a receipt/reference or the whole lifecycle history is permitted.
  */
-export function createNativeAccountBindings(_config: NativeAccountBindingsConfig): NativeAccountBindings {
-  throw new NativeAccountBindingsUnavailableError();
+const AUTOMATED_PROVISIONING = 'access.workflow-automated-provisioning.v1';
+function required<T>(value: T | null | undefined): T {
+  if (value == null) throw new AuthBindingDeniedError();
+  return value;
+}
+
+/** Pure assembly: all I/O occurs in returned capabilities. The Auth getter is
+ * retained only by the live session capability and is never called here. */
+export function createNativeAccountBindings(config: NativeAccountBindingsConfig): NativeAccountBindings {
+  const { pool, access, actions, referenceKeys, proofs } = config;
+  const workflow = proofs.workflow as AuthWorkflowProofPorts;
+  const internalLifecycle = createLifecycleInternals({
+    pool,
+    routeKey: config.routeKey,
+    provisioningEvidence: (evidence) => proofs.provisioning.resolve(evidence),
+    recoveryEvidence: (evidence) => proofs.recoveryEvidence?.(evidence) ?? Promise.resolve(null),
+  });
+  const lifecycle = createLifecycleCommands({ pool, access });
+  const operators = createOperatorCommands({
+    pool,
+    access,
+    actions,
+    managementAction: 'account:manage',
+    cursorKeys: referenceKeys,
+  });
+  const grants = createGrantCommands({ pool, access, managementAction: 'access:grant' });
+  const delegations = createDelegationCommands({ pool, access, action: 'access:delegate' });
+  const registration = createRegistrationProofBindings({ pool, referenceKeys });
+  const barriers = createAuthBarrierCapabilities({ lifecycle: internalLifecycle, proofs: proofs.barriers });
+  const session = createOperatorSessionCapability({
+    pool,
+    access,
+    operators,
+    referenceKeys,
+    accessTokenForProof: (proof) => config.auth().internal.accessTokenForProof(proof),
+  });
+  const approvals = createWorkflowApprovals({
+    pool,
+    access,
+    actions,
+    referenceKeys,
+    creationBinding: (input: { registrationId: string; operationKey: string }) =>
+      workflow.creationBinding?.(input) ?? Promise.resolve(null),
+  });
+  const boundary = () => ({ pool, deadline: Date.now() + 10000 });
+  const trustedAccess: TrustedAccessPorts = {
+    ...createAuthBindings({
+      pool,
+      ...registration,
+      ...session,
+      async verifyPendingIdentity(reference) {
+        const envelope = unseal(referenceKeys, AUTOMATED_PROVISIONING, reference) as
+          | { reference?: unknown; operation?: AccountOperation }
+          | undefined;
+        if (!envelope) {
+          const identity = await registration.verifyNativePendingIdentity(reference);
+          return identity?.automated ? null : identity;
+        }
+        if (
+          Object.keys(envelope).sort().join(',') !== 'operation,reference' ||
+          typeof envelope.reference !== 'string' ||
+          envelope.operation?.kind !== 'automated'
+        )
+          return null;
+        const operation = envelope.operation;
+        await approvals.resolve(operation.authorization, operation, boundary());
+        const identity = await registration.verifyNativePendingIdentity(envelope.reference);
+        if (
+          !identity?.automated ||
+          identity.operatorAccountId !== operation.operatorAccountId ||
+          operation.registrationId === '' ||
+          !operation.operationKey
+        )
+          return null;
+        const stage = await workflow.creationBinding?.({
+          registrationId: operation.registrationId,
+          operationKey: operation.operationKey,
+          accountId: identity.accountId,
+          reservationId: identity.registrationId,
+        });
+        if (!stage) return null;
+        // Auth's immutable stage reader bound this registration to the approved
+        // descriptor above; the same stage must own this pending account pair.
+        const exact = await workflow.automatedReference?.({
+          accountId: identity.accountId,
+          reservationId: identity.registrationId,
+        });
+        return exact === envelope.reference ? identity : null;
+      },
+    }),
+    ...barriers.trustedAccess,
+    readAssignment: (requestedBy, assignedActorId) => readAssignment(pool, requestedBy, assignedActorId),
+  };
+  const workflowPorts: AccountWorkflowPorts<LifecycleRequest> = {
+    ...internalLifecycle,
+    ...operators,
+    ...lifecycle,
+    async createPending(input) {
+      const outcome = await internalLifecycle.createPending(input);
+      // Await the native command's COMMIT first. On interruption replay uses the
+      // same native input/key and persists its original reference exactly once.
+      const pair = { accountId: input.accountId, reservationId: input.reservationId };
+      if (!(await workflow.pendingReference(pair))) {
+        const reference = required(await registration.createProvisioningReference({ input, outcome }));
+        await workflow.recordPending({ ...pair, reference });
+      }
+      return outcome;
+    },
+    async recordOperatorRelation(input, pending) {
+      if (
+        pending &&
+        (pending.operation.kind !== 'automated' || pending.operation.operatorAccountId !== input.operatorAccountId)
+      )
+        throw new AuthBindingDeniedError();
+      const outcome = await operators.recordOperatorRelation(input);
+      if (pending) {
+        const pair = { accountId: input.subjectAccountId, reservationId: pending.reservationId };
+        if (!(await workflow.automatedReference?.(pair))) {
+          const reference = required(
+            await registration.createAutomatedProvisioningReference({
+              input,
+              outcome,
+              pendingReference: required(await workflow.pendingReference(pair)),
+            }),
+          );
+          await required(workflow.recordAutomatedPending)({ ...pair, reference });
+        }
+      }
+      return outcome;
+    },
+    async provisioningReference(input) {
+      if (input.operation?.kind === 'automated') {
+        await approvals.resolve(input.operation.authorization, input.operation, boundary());
+        const reference = required(await workflow.automatedReference?.(input));
+        return seal(referenceKeys, AUTOMATED_PROVISIONING, { reference, operation: input.operation });
+      }
+      return required(await workflow.pendingReference(input));
+    },
+    provisioningEvidence: (input) => workflow.provisioningEvidence(input),
+    authorizeOperation: (reference, operation) => approvals.resolve(reference, operation, boundary()),
+    authorizeUnprotectedOperation: async (operation) => {
+      await approvals.resolve('', operation, boundary());
+    },
+    actorAccountId: (context) => context.actor.accountId,
+    stableCommandKey: (context, phase) => `${required(workflowApprovalBinding(context)).commandKeyPrefix}:${phase}`,
+    readAccount: async (accountId) => {
+      const route = routeOf(accountId);
+      return route === null ? null : readAccount(pool, route, accountId);
+    },
+    async authorizeOpening(context, input) {
+      const actor = context.actor;
+      const account = await readAccount(pool, required(routeOf(actor.accountId)), actor.accountId);
+      const outcome = await operators.authorizeOpening({ ...context, account }, input);
+      return { ...outcome, value: { receiptId: session.createOpeningReference(outcome.value) } };
+    },
+  };
+  return { trustedAccess, workflowPorts, lifecycle, internalLifecycle, operators, grants, delegations };
 }

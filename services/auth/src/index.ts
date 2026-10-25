@@ -1,3 +1,8 @@
+export {
+  createNativeWorkflowProofPorts,
+  type NativeWorkflowProofPorts,
+  type AutomatedCreationBinding,
+} from './native-workflow-proofs.ts';
 export { createBarrierProofVerifier, type BarrierProof } from './barrier-proofs.ts';
 export { createRecoveryEstablishmentVerifier, type RecoveryEstablishmentEvidence } from './recovery-establishment.ts';
 export { createProvisioningEvidenceVerifier } from './provisioning-evidence.ts';

@@ -1,4 +1,10 @@
-import type { AccessAccount, EffectAuthorization, InvalidationReceipt, TrustedAccessPorts } from '@rezics/auth';
+import type {
+  AccessAccount,
+  ProvisioningReceiptMetadata,
+  EffectAuthorization,
+  InvalidationReceipt,
+  TrustedAccessPorts,
+} from '@rezics/auth';
 import type { Pool } from 'pg';
 import { routeOf } from '../route/route.ts';
 import { readAccount, type Account } from './account-data.ts';
@@ -23,6 +29,17 @@ export type AuthAuthorizationReceipt = {
  * Workflow/provider implementations can bind here without another account or policy authority.
  */
 export type AuthBindingCapabilities = {
+  /** Native pending reader, including verified original receipt metadata. The
+   * composition must also verify current workflow approval for automated chains. */
+  verifyPendingIdentity?: (reference: string) => Promise<
+    | (AccessAccount & {
+        operatorAccountId: string | null;
+        registrationId: string;
+        expiresAt: string;
+        receipt: ProvisioningReceiptMetadata;
+      })
+    | null
+  >;
   verifyProvisioningReceipt?: (commandReference: string) => Promise<AuthProvisioningReceipt | null>;
   consumeAuthAuthorization?: (input: ConsumeInput) => Promise<AuthAuthorizationReceipt | null>;
   invalidateAccount?: (input: InvalidateInput) => Promise<LifecycleFenceReceipt | null>;
@@ -84,7 +101,14 @@ function translate(account: Account | null, recovery = false): AccessAccount | n
  * Callback fixtures establish this structural contract only, not product authorization.
  */
 export function createAuthBindings(config: { pool: Pool } & AuthBindingCapabilities): TrustedAccessPorts {
-  const { pool, verifyProvisioningReceipt, consumeAuthAuthorization, invalidateAccount, authorizeRecovery } = config;
+  const {
+    pool,
+    verifyPendingIdentity,
+    verifyProvisioningReceipt,
+    consumeAuthAuthorization,
+    invalidateAccount,
+    authorizeRecovery,
+  } = config;
   async function account(id: string): Promise<Account | null> {
     const route = routeOf(id);
     if (route === null) return null;
@@ -102,6 +126,11 @@ export function createAuthBindings(config: { pool: Pool } & AuthBindingCapabilit
     }
   }
   async function provisioning(id: string | null, reference: string) {
+    if (verifyPendingIdentity) {
+      const pending = await verifyPendingIdentity(reference);
+      allowed(pending && (id === null || pending.accountId === id) && live(pending.expiresAt));
+      return pending;
+    }
     if (!verifyProvisioningReceipt || typeof reference !== 'string' || reference.length === 0) return null;
     const receipt = await verifyProvisioningReceipt(reference);
     allowed(receipt && (id === null || receipt.accountId === id) && live(receipt.expiresAt));
@@ -169,11 +198,12 @@ export function createAuthBindings(config: { pool: Pool } & AuthBindingCapabilit
     },
     readRecoveryAccount: (id) => read(id, true),
     async authorizeProvisioning(reference) {
-      if (!verifyProvisioningReceipt) throw new AuthBindingUnavailableError('verifyProvisioningReceipt');
+      if (!verifyProvisioningReceipt && !verifyPendingIdentity)
+        throw new AuthBindingUnavailableError('verifyProvisioningReceipt');
       allowed(typeof reference === 'string' && reference.length > 0);
       const current = await provisioning(null, reference);
-      allowed(current && !current.automated);
-      return { accountId: current.accountId };
+      allowed(current && (!current.automated || verifyPendingIdentity));
+      return { accountId: current.accountId, ...('receipt' in current ? { receipt: current.receipt } : {}) };
     },
     async consumeAuthorization(input) {
       if (!consumeAuthAuthorization) throw new AuthBindingUnavailableError('consumeAuthAuthorization');

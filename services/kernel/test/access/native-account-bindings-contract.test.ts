@@ -9,7 +9,6 @@ import type {
 } from '@rezics/auth';
 import type { Pool } from 'pg';
 import {
-  NativeAccountBindingsUnavailableError,
   createNativeAccountBindings,
   type NativeAccountBindings,
   type NativeAccountBindingsConfig,
@@ -65,30 +64,54 @@ test('ordinary durable composition requires actual native factories and Auth-hos
   >();
 });
 
-test('construction throws named unavailable before reading configuration or invoking any capability', () => {
-  const config = new Proxy({} as NativeAccountBindingsConfig, {
-    get() {
-      throw new Error('Construction must not read pools, keys, Auth, or proof callbacks');
+test('pure construction never invokes Auth, proof capabilities or database I/O', () => {
+  const untouched = new Proxy(
+    {},
+    {
+      get() {
+        throw new Error('Construction performed I/O');
+      },
     },
-    ownKeys() {
-      throw new Error('Construction must not enumerate configuration');
+  );
+  const config: NativeAccountBindingsConfig = {
+    pool: untouched as Pool,
+    access: untouched as Access,
+    actions: new Map([['account:manage', { anonymous: false }]]),
+    routeKey: new Uint8Array(32).fill(3),
+    referenceKeys: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(4)]]) },
+    auth() {
+      throw new Error('Auth is not constructed yet');
     },
-  });
-  expect(() => createNativeAccountBindings(config)).toThrow(NativeAccountBindingsUnavailableError);
-  try {
-    createNativeAccountBindings(config);
-    throw new Error('Unavailable construction returned bindings');
-  } catch (error) {
-    expect(error).toBeInstanceOf(NativeAccountBindingsUnavailableError);
-    expect(error).toHaveProperty('name', 'NativeAccountBindingsUnavailableError');
-    expect(String(error)).not.toContain('Construction must not');
-  }
+    proofs: {
+      provisioning: untouched as NativeAccountBindingProofs['provisioning'],
+      barriers: untouched as NativeAccountBindingProofs['barriers'],
+      workflow: untouched as NativeWorkflowProofPorts,
+    },
+  };
+  const bindings = createNativeAccountBindings(config);
+  expect(Object.keys(bindings).sort()).toEqual([
+    'delegations',
+    'grants',
+    'internalLifecycle',
+    'lifecycle',
+    'operators',
+    'trustedAccess',
+    'workflowPorts',
+  ]);
 });
 
-test('the production seam has no runtime imports, website provider, Auth host launch, or pool ownership', async () => {
+test('the production seam imports native capabilities without an Auth host, DBOS runtime or pool ownership', async () => {
   const source = await Bun.file(new URL('../../src/access/native-account-bindings.ts', import.meta.url)).text();
   const transpiler = new Bun.Transpiler({ loader: 'ts', target: 'bun' });
-  expect(transpiler.scanImports(source)).toEqual([]);
+  const imports = transpiler.scanImports(source).map((entry) => entry.path);
+  expect(imports).toContain('./auth-bindings.ts');
+  expect(imports).toContain('./registration-proof.ts');
+  expect(imports).toContain('./auth-barriers.ts');
+  expect(imports).toContain('./auth-session-capability.ts');
+  expect(imports).toContain('./workflow-approvals.ts');
+  expect(imports).not.toContain('@rezics/auth');
+  expect(imports).not.toContain('pg');
+  expect(imports.some((path) => /dbos|host|website|provider/.test(path))).toBe(false);
   const compiled = transpiler.transformSync(source);
   expect(transpiler.scan(compiled).exports.sort()).toEqual([
     'NativeAccountBindingsUnavailableError',

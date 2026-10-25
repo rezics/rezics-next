@@ -743,3 +743,162 @@ Account erasure leaves effect/provisioning receipts and workflow staging/request
 Signing and JWKS read the durable generation/slots on every call, so replicas follow committed rotation; the bounded import cache refreshes immediately on a generation change.
 Native verification's consume lock is process-local; recovery completion uses a PostgreSQL proof lock, exact DELETE RETURNING and durable consumed binding/barrier proof for cross-instance replay control.
 The installed native production HTTP rate limiter uses atomic PostgreSQL counters shared across replicas; each charge is one indexed upsert without a request-time retention sweep.
+
+## Ordinary native host assembly
+
+The Auth application owns this assembly. Neither the membership worker nor the
+pure `createNativeAccountBindings` factory constructs an Auth host or launches
+DBOS. Migrate two separate databases first. Supply persistent reference, routing,
+staging and signing keys from host configuration; keep Auth database credentials
+and private keys out of the kernel worker. The host owns its Auth pools and
+`auth_dbos` system schema; the caller retains the kernel pool.
+
+This minimal assembly uses the production factories directly. Import paths are
+relative to an application at the repository root. `actions` is the application's
+existing action catalogue, including the actions its ordinary client requests.
+
+```ts
+import {
+  createAuthHost,
+  createBarrierProofVerifier,
+  createNativeWorkflowProofPorts,
+  createProvisioningEvidenceVerifier,
+  type AuthHostOptions,
+  type AuthService,
+} from '@rezics/auth';
+import type { Pool } from 'pg';
+import { createAccess } from './services/kernel/src/access/index.ts';
+import { createNativeAccountBindings } from './services/kernel/src/access/native-account-bindings.ts';
+import { createWorkflowApprovals } from './services/kernel/src/access/workflow-approvals.ts';
+import type { LifecycleRequest } from './services/kernel/src/access/lifecycle.ts';
+import type { ActionCatalogue } from './services/kernel/src/request/access.ts';
+import type { KeyRing } from './services/kernel/src/tokens/seal.ts';
+
+type Options = Omit<AuthHostOptions<LifecycleRequest>, 'database' | 'trustedAccess' | 'access'> & {
+  kernelPool: Pool;
+  authPool: Pool;
+  actions: ActionCatalogue;
+  routeKey: Uint8Array;
+  referenceKeys: KeyRing;
+};
+export async function ordinaryHost(options: Options) {
+  const { kernelPool, authPool, actions, routeKey, referenceKeys, ...auth } = options;
+  let service: AuthService;
+  const access = createAccess({
+    actions,
+    auth: {
+      issuer: auth.issuer,
+      audience: auth.audience,
+      jwksUrl: `${auth.issuer}/.well-known/jwks.json`,
+      fetch: async () => service.handler(new Request(`${auth.issuer}/.well-known/jwks.json`)),
+    },
+  });
+  const proofs = createNativeWorkflowProofPorts({ database: authPool });
+  const approvals = createWorkflowApprovals({
+    pool: kernelPool,
+    access,
+    actions,
+    referenceKeys,
+    creationBinding: proofs.creationBinding,
+  });
+  const bindings = createNativeAccountBindings({
+    pool: kernelPool,
+    access,
+    actions,
+    routeKey,
+    referenceKeys,
+    auth: () => service,
+    proofs: {
+      workflow: proofs,
+      provisioning: createProvisioningEvidenceVerifier({ database: authPool }),
+      barriers: createBarrierProofVerifier({ database: authPool }),
+    },
+  });
+  const host = await createAuthHost({
+    ...auth,
+    database: authPool,
+    trustedAccess: bindings.trustedAccess,
+    access: bindings.workflowPorts,
+  });
+  service = host.service;
+  const COMMANDS = {
+    lifecycle: bindings.lifecycle,
+    internalLifecycle: bindings.internalLifecycle,
+    operators: bindings.operators,
+    grants: bindings.grants,
+    delegations: bindings.delegations,
+  };
+  await service.internal.registerClient({
+    clientId: 'ordinary-import-client',
+    firstParty: true,
+    scopes: [
+      'subject:create',
+      'subject:batch_write',
+      'source_fence:read',
+      'media:import_from_url',
+      'account:manage',
+      'access:grant',
+    ],
+  });
+  await host.start();
+  return { host, access, approvals, COMMANDS };
+}
+```
+
+Call `host.workflows.register({ key, handle, email, password })`, then use real
+`POST /signin` and `POST /token` with that registered client. Access verifies the
+ordinary API bearer with Auth's public JWKS. To create automation, obtain a native
+`approvals.approve` reference for the exact initial descriptor
+`{ kind: 'automated', registrationId: '', operatorAccountId, handle, operationKey,
+authorization: 'approval-request' }`. Pass the same logical key, normalized handle,
+operator and returned reference to `host.workflows.createAutomated`. Compose the
+approval factory's optional `creationBinding` reader with the same Auth-owned
+`createNativeWorkflowProofPorts` instance. A generated registration is admitted
+only when that indexed reader proves its original descriptor and logical key.
+Opening an operator session similarly requires an exact native `opening` approval;
+`host.workflows.openOperatorSession` consumes the real opening capability, after
+which `/token` issues a bearer whose subject is the automated account. Its public
+operator marker comes from the actual native relation command.
+
+`COMMANDS` exposes the composed native lifecycle, operator, grant and delegation
+commands for private fixtures. Use these commands for setup and subsequent grants;
+initial Global governance authority comes only from the bootstrap CLI. Ordinary
+issuance itself needs no seeded Global grant. Client scopes confer no resource
+grants. This assembly neither registers a website client nor grants its exclusive
+`media:complete` scope.
+
+Pending references are written only after the actual native command commits. A
+crash before the Auth staging write replays that same command and stores its exact
+receipt locator. The unique staging owner binds account and reservation immutably;
+its deletion removes both pending references. Automated provisioning additionally
+checks the original pending receipt, one exact relation receipt, current operator
+and version, the immutable Auth stage and the current operator-management approval.
+Ordinary person references keep their original transaction/provenance denials.
+Auth's native provisioning receipt and owner/credential rows supply activation
+evidence through exact unique-key reads; staging or user existence alone is never
+a witness. The dedicated pending reader verifies the original epoch, registration,
+reservation and expiry before forwarding receipt metadata to Auth. Public account
+reads remain active-only.
+
+Each protected step resolves a persisted native approval again, including cached
+operation returns. Logical native command keys survive fresh approvals and process
+restarts. DBOS stores nonsecret locators and outcomes; only encrypted Auth staging
+contains registration credentials. Stop with `await host.stop()` before closing
+the caller's kernel pool. Reuse the executor identity and persistent keys when
+restarting the same host. An optional injected `systemDatabasePool` must belong to
+the same Auth database and is also closed by the host.
+
+The native suites use separate migrated databases, actual Auth routes and native
+Access verification. Process-death tests interrupt pending-reference persistence,
+credential provisioning, activation and operator-reference persistence. Growth
+checks capture Auth, DBOS and kernel statements at 1x/8x/64x, including the bounded
+receipt chain. Registration uses a fixed number of indexed independently anchored
+steps, O(log R) per point operation, plus the existing bounded authorization formula
+O((1+K)log G), K<=1000. No history search or cross-anchor held connection locates
+proofs.
+
+Recovery/credential workflow approvals, organization creation, responsibility
+transfer, session revocation, operator fencing, consent and client management
+remain separate adapter work and fail closed in the native approval adapter.
+Ordinary native issuance does not establish the remaining whole-lifecycle,
+permission or website/provider outcomes.

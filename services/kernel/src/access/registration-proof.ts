@@ -10,6 +10,8 @@ import { seal, unseal, type KeyRing } from '../tokens/seal.ts';
 import type { AuthBindingCapabilities, AuthProvisioningReceipt } from './auth-bindings.ts';
 import type { createLifecycleInternals } from './lifecycle.ts';
 import registrationRead from './registration-proof-account.sql';
+import pendingRead from './registration-proof-pending.sql';
+import type { createOperatorCommands } from './operator.ts';
 
 type Pending = ReturnType<typeof createLifecycleInternals>['createPending'];
 export type RegistrationProofInput = {
@@ -19,6 +21,12 @@ export type RegistrationProofInput = {
 };
 export type RegistrationProofBindings = {
   createProvisioningReference(input: RegistrationProofInput): Promise<string | null>;
+  createAutomatedProvisioningReference(input: {
+    pendingReference: string;
+    input: Parameters<ReturnType<typeof createOperatorCommands>['recordOperatorRelation']>[0];
+    outcome: Awaited<ReturnType<ReturnType<typeof createOperatorCommands>['recordOperatorRelation']>>;
+  }): Promise<string | null>;
+  verifyNativePendingIdentity: NonNullable<AuthBindingCapabilities['verifyPendingIdentity']>;
   verifyProvisioningReceipt: NonNullable<AuthBindingCapabilities['verifyProvisioningReceipt']>;
 };
 type Reference = {
@@ -31,6 +39,16 @@ type Reference = {
   epoch: number;
   position: string;
 };
+type RelationInput = Parameters<ReturnType<typeof createOperatorCommands>['recordOperatorRelation']>[0];
+type RelationReference = {
+  input: RelationInput;
+  transactionId: string;
+  epoch: number;
+  position: string;
+  version: string;
+};
+type AutomatedReference = { pending: Reference; relation: RelationReference };
+const AUTOMATED_SCOPE = 'access.automated-registration-proof.v1';
 const SCOPE = 'access.registration-proof.v1';
 const MAX_REFERENCE_LENGTH = 4096;
 function record(value: unknown): value is Record<string, unknown> {
@@ -105,7 +123,11 @@ function responseMatches(value: unknown, reference: Reference): value is AuthPro
     value.expiresAt === reference.expiresAt
   );
 }
-async function verifySnapshot(client: PoolClient, reference: Reference): Promise<AuthProvisioningReceipt | null> {
+async function verifySnapshot(
+  client: PoolClient,
+  reference: Reference,
+  relation?: RelationReference,
+): Promise<AuthProvisioningReceipt | null> {
   const native = nativeReceipt(reference);
   const partition = await readPartition(client, native.partition);
   if (
@@ -134,6 +156,55 @@ async function verifySnapshot(client: PoolClient, reference: Reference): Promise
     return null;
   // PostgreSQL supplies this read's authoritative time. Current private facts and
   // creation transaction must still agree, regardless of registration cleanup lag.
+  if (relation) {
+    const input = relation.input;
+    const basis = {
+      actorAccountId: '00000000-0000-8000-8000-000000000001',
+      clientId: 'internal-access',
+      requestedBy: null,
+    };
+    const committed = await readReceipt.run(client, {
+      partition_no: native.partition,
+      principal_kind: 'account',
+      principal_id: basis.actorAccountId,
+      command_kind: 'access.operator.relation-recorded',
+      idempotency_key: `${routeOf(reference.accountId)!}:${input.key}`,
+    });
+    const expected = {
+      subjectAccountId: reference.accountId,
+      operatorAccountId: input.operatorAccountId,
+      reservationId: input.reservationId,
+      version: relation.version,
+    };
+    const digest = createHash('sha256')
+      .update(canonicalize([reference.accountId, 'relation-recorded', basis, null, input])!)
+      .digest();
+    if (
+      !committed ||
+      !Buffer.from(committed.requestDigest).equals(digest) ||
+      committed.transactionId !== relation.transactionId ||
+      committed.epoch !== relation.epoch ||
+      BigInt(committed.position) !== BigInt(relation.position) ||
+      canonicalize(committed.response) !== canonicalize(expected) ||
+      partition.epoch < relation.epoch ||
+      partition.position < BigInt(relation.position)
+    )
+      return null;
+    const current = await pendingRead.run(client, {
+      route: routeOf(reference.accountId)!,
+      account_id: reference.accountId,
+      handle: reference.handle,
+      reservation_id: reference.reservationId,
+      expires_at: reference.expiresAt,
+      transaction_id: relation.transactionId,
+      operator_id: input.operatorAccountId,
+      operator_reservation_id: input.reservationId,
+      operator_version: relation.version,
+    });
+    return current
+      ? { accountId: reference.accountId, registrationId: reference.reservationId, expiresAt: reference.expiresAt }
+      : null;
+  }
   const current = await registrationRead.run(client, {
     route: routeOf(reference.accountId)!,
     account_id: reference.accountId,
@@ -149,6 +220,46 @@ async function verifySnapshot(client: PoolClient, reference: Reference): Promise
         expiresAt: reference.expiresAt,
       }
     : null;
+}
+
+function decodeAutomated(value: unknown): AutomatedReference | null {
+  if (!record(value) || Object.keys(value).sort().join(',') !== 'pending,relation') return null;
+  const pending = decode(value.pending);
+  const relation = value.relation;
+  if (
+    !pending ||
+    !record(relation) ||
+    Object.keys(relation).sort().join(',') !== 'epoch,input,position,transactionId,version' ||
+    !record(relation.input)
+  )
+    return null;
+  const input = relation.input;
+  if (
+    Object.keys(input).sort().join(',') !==
+      'expectedOperatorAccountId,expectedVersion,key,operatorAccountId,reservationId,subjectAccountId' ||
+    input.subjectAccountId !== pending.accountId ||
+    input.expectedOperatorAccountId !== null ||
+    input.expectedVersion !== '0' ||
+    typeof input.operatorAccountId !== 'string' ||
+    routeOf(input.operatorAccountId) === null ||
+    input.operatorAccountId === pending.accountId ||
+    typeof input.reservationId !== 'string' ||
+    routeOf(input.reservationId) === null ||
+    typeof input.key !== 'string' ||
+    !input.key ||
+    [...`${routeOf(pending.accountId)}:${input.key}`].length > 255 ||
+    typeof relation.transactionId !== 'string' ||
+    routeOf(relation.transactionId) === null ||
+    typeof relation.epoch !== 'number' ||
+    !Number.isSafeInteger(relation.epoch) ||
+    relation.epoch < 1 ||
+    typeof relation.position !== 'string' ||
+    !/^[1-9][0-9]{0,18}$/.test(relation.position) ||
+    BigInt(relation.position) > 9223372036854775807n ||
+    relation.version !== '1'
+  )
+    return null;
+  return { pending, relation: relation as RelationReference };
 }
 
 /** Internal, read-only capability for createAuthBindings({pool, ...bindings}).
@@ -191,7 +302,90 @@ export function createRegistrationProofBindings(config: {
       return null;
     }
   }
+  async function verifyPendingIdentity(reference: string) {
+    try {
+      const automated = decodeAutomated(unseal(referenceKeys, AUTOMATED_SCOPE, reference));
+      const pending = automated?.pending ?? decode(unseal(referenceKeys, SCOPE, reference));
+      if (!pending) return null;
+      return await withConnection(pool, async (client) => {
+        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+        try {
+          const verified = await verifySnapshot(client, pending, automated?.relation);
+          const relation = automated?.relation;
+          const current =
+            verified &&
+            (await pendingRead.run(client, {
+              route: routeOf(pending.accountId)!,
+              account_id: pending.accountId,
+              handle: pending.handle,
+              reservation_id: pending.reservationId,
+              expires_at: pending.expiresAt,
+              transaction_id: relation?.transactionId ?? pending.transactionId,
+              operator_id: relation?.input.operatorAccountId ?? '',
+              operator_reservation_id: relation?.input.reservationId ?? '',
+              operator_version: relation?.version ?? '0',
+            }));
+          await client.query('COMMIT');
+          return current
+            ? {
+                accountId: pending.accountId,
+                kind: 'actor' as const,
+                state: 'pending' as const,
+                authnEpoch: 1,
+                automated: !!relation,
+                operatorAccountId: relation?.input.operatorAccountId ?? null,
+                fenced: false,
+                registrationId: pending.reservationId,
+                expiresAt: pending.expiresAt,
+                receipt: {
+                  registrationId: pending.reservationId,
+                  reservationId: pending.reservationId,
+                  authnEpoch: 1,
+                  expiresAt: pending.expiresAt,
+                },
+              }
+            : null;
+        } catch (error) {
+          try {
+            await client.query('ROLLBACK');
+          } catch (rollbackError) {
+            discardConnection(client, rollbackError as Error);
+          }
+          throw error;
+        }
+      });
+    } catch {
+      return null;
+    }
+  }
   return {
+    async createAutomatedProvisioningReference({ pendingReference, input, outcome }) {
+      try {
+        const reference = decodeAutomated({
+          pending: unseal(referenceKeys, SCOPE, pendingReference),
+          relation: {
+            input: structuredClone(input),
+            transactionId: outcome.transactionId,
+            epoch: outcome.epoch,
+            position: outcome.position.toString(),
+            version: outcome.value.version,
+          },
+        });
+        if (
+          !reference ||
+          outcome.partition !== partitionOf(routeOf(reference.pending.accountId)!) ||
+          outcome.value.subjectAccountId !== input.subjectAccountId ||
+          outcome.value.operatorAccountId !== input.operatorAccountId ||
+          outcome.value.reservationId !== input.reservationId
+        )
+          return null;
+        const encoded = seal(referenceKeys, AUTOMATED_SCOPE, reference);
+        return encoded.length <= MAX_REFERENCE_LENGTH && (await verifyPendingIdentity(encoded)) ? encoded : null;
+      } catch {
+        return null;
+      }
+    },
+    verifyNativePendingIdentity: verifyPendingIdentity,
     async createProvisioningReference({ input, outcome }) {
       try {
         if (

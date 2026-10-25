@@ -12,7 +12,10 @@ CREATE TABLE auth_registration_stage (
   credential_digest bytea,
   expires_at timestamptz,
   completed_at timestamptz,
-  expired_at timestamptz
+  expired_at timestamptz,
+  pending_reference text,
+  automated_reference text,
+  creation_binding jsonb
 );
 CREATE INDEX auth_registration_stage_due ON auth_registration_stage (expires_at, registration_id)
   WHERE completed_at IS NULL AND expired_at IS NULL;

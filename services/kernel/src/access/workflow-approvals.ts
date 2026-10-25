@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
-import type { AccountOperation } from '@rezics/auth';
+import type { AccountOperation, NativeWorkflowProofPorts } from '@rezics/auth';
 import type { Pool } from 'pg';
 import type { Access, AccessContext, AccountActor, ActionCatalogue } from '../request/access.ts';
 import { seal, type KeyRing } from '../tokens/seal.ts';
@@ -53,19 +53,17 @@ const id = (value: unknown): value is string => typeof value === 'string' && rou
 const text = (value: unknown, max = 255): value is string =>
   typeof value === 'string' && value.length > 0 && value.length <= max;
 
-type NativeKind = 'rename' | 'delete' | 'membership';
+type NativeKind = 'rename' | 'delete' | 'membership' | 'automated' | 'opening';
 type Descriptor = { action: string; target: string; targetKind: 'actor' | 'organization' | 'either' };
 /** Server-owned closed descriptors. Missing adapters deny explicitly; a catalogue
  * entry alone can never manufacture native authority for one of these kinds. */
 const unavailableAdapters = {
   organization: 'organization creation parent',
-  automated: 'pending registration and operator management',
   transfer: 'operator responsibility transfer',
   revoke: 'Auth session revocation',
   'fence-operator': 'operator fence',
   consent: 'Auth consent reduction',
   'client-reduction': 'Auth client management',
-  opening: 'operator session opening',
 } as const satisfies Record<Exclude<AccountOperation['kind'], NativeKind>, string>;
 
 function operationSnapshot(value: AccountOperation): { operation: AccountOperation; descriptor: Descriptor } {
@@ -77,6 +75,26 @@ function operationSnapshot(value: AccountOperation): { operation: AccountOperati
   let descriptor: Descriptor;
   let fields: string[];
   switch (operation.kind) {
+    case 'automated':
+      requireAllowed(
+        id(operation.operatorAccountId) &&
+          typeof operation.registrationId === 'string' &&
+          operation.registrationId.length <= 128 &&
+          handle(operation.handle) &&
+          text(operation.operationKey, 128),
+      );
+      fields = ['kind', 'registrationId', 'operatorAccountId', 'handle', 'operationKey', 'authorization'];
+      descriptor = { action: 'account:manage', target: operation.operatorAccountId, targetKind: 'either' };
+      break;
+    case 'opening':
+      requireAllowed(
+        id(operation.operatorAccountId) &&
+          id(operation.subjectAccountId) &&
+          operation.operatorAccountId !== operation.subjectAccountId,
+      );
+      fields = ['kind', 'operatorAccountId', 'subjectAccountId', 'authorization'];
+      descriptor = { action: 'account:manage', target: operation.operatorAccountId, targetKind: 'either' };
+      break;
     case 'rename':
       requireAllowed(
         id(operation.accountId) &&
@@ -146,7 +164,12 @@ function anchor(descriptor: Descriptor) {
  * Auth consent reductions invalidate these original scopes through the shared
  * Access epoch floor. No Auth database, introspection or runtime is consulted.
  */
-export function createWorkflowApprovals(config: WorkflowApprovalConfig) {
+export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(config: Config) {
+  // The optional Auth-owned exact stage reader is a transport capability. It can
+  // prove allocation of a server registration, never approve a business operation.
+  const creationBinding = (
+    config as WorkflowApprovalConfig & { creationBinding?: NativeWorkflowProofPorts['creationBinding'] }
+  ).creationBinding;
   function boundary(context: AccessContext): AccessContext {
     requireAllowed(context.pool === config.pool && Number.isFinite(context.deadline) && Date.now() < context.deadline);
     return { pool: config.pool, deadline: context.deadline };
@@ -179,9 +202,19 @@ export function createWorkflowApprovals(config: WorkflowApprovalConfig) {
           caller.requestedBy === actor.requestedBy &&
           canonicalize([...caller.scopes].sort()) === canonicalize([...actor.scopes].sort())),
     );
+    let approvedOperation = operation;
+    if (operation.kind === 'automated' && operation.registrationId !== '') {
+      requireAllowed(creationBinding && operation.operationKey === row.operationKey);
+      const initial = await creationBinding({
+        registrationId: operation.registrationId,
+        operationKey: row.operationKey,
+      });
+      requireAllowed(initial && initial.registrationId === '' && canonicalize(initial) === canonicalize(row.operation));
+      approvedOperation = { ...operation, registrationId: '' };
+    }
     requireAllowed(
-      hash([row.operationKey, businessOperation(operation)]) === row.digest &&
-        canonicalize(row.operation) === canonicalize(businessOperation(operation)),
+      hash([row.operationKey, businessOperation(approvedOperation)]) === row.digest &&
+        canonicalize(row.operation) === canonicalize(businessOperation(approvedOperation)),
     );
     requireAllowed(config.actions.has(descriptor.action));
     const deadline = Math.min(bounded.deadline, Date.parse(row.expiresAt), Date.parse(row.jwtExpiresAt));
@@ -220,6 +253,10 @@ export function createWorkflowApprovals(config: WorkflowApprovalConfig) {
         requireAllowed(input && text(input.operationKey));
         const operationKey = input.operationKey;
         const { operation, descriptor } = operationSnapshot(input.operation);
+        requireAllowed(
+          operation.kind !== 'automated' ||
+            (operation.registrationId === '' && operation.operationKey === operationKey),
+        );
         const actor = await config.access.authenticate(token, bounded);
         const expires = verifiedBearerExpiry(config.access, actor, bounded);
         const deadline = Math.min(bounded.deadline, expires);

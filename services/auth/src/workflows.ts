@@ -46,7 +46,14 @@ export type AccountOperation =
       reservationId?: string;
       authorization: string;
     }
-  | { kind: 'automated'; registrationId: string; operatorAccountId: string; authorization: string }
+  | {
+      kind: 'automated';
+      registrationId: string;
+      operatorAccountId: string;
+      authorization: string;
+      handle?: string;
+      operationKey?: string;
+    }
   | {
       kind: 'transfer';
       previous: WorkflowResponsibility;
@@ -72,14 +79,22 @@ export interface AccountWorkflowPorts<Context = WorkflowContext> {
   activate(input: Command & { evidence: unknown }): Result<{ accountId: string }>;
   expireRegistration(input: Command & { handle: string; reservationId: string }): Result<unknown>;
   releaseExpiredRegistrationHandle(input: Command & { handle: string; reservationId: string }): Result<unknown>;
-  provisioningReference(input: { accountId: string; reservationId: string }): Promise<string>;
+  provisioningReference(input: {
+    accountId: string;
+    reservationId: string;
+    operation?: AccountOperation;
+  }): Promise<string>;
   provisioningEvidence(input: { accountId: string; reservationId: string }): Promise<unknown>;
   raiseFence(input: Command): Result<WorkflowFence>;
   /** Resolve a durable approval to an authenticated kernel context. Recheck
    * current authorization; never synthesize a context from public JSON. Called
    * inside each protected step, so context/private facts never enter DBOS. */
   authorizeOperation?(reference: string, operation: AccountOperation): Promise<Context>;
+  /** Native hosts deny legacy operations with no durable authorization field.
+   * Callback-only historical hosts may omit this adapter. */
+  authorizeUnprotectedOperation?(operation: AccountOperation): Promise<void>;
   actorAccountId?(context: Context): string;
+  stableCommandKey?(context: Context, phase: string): string;
   holdHandle?(input: WorkflowHandleTransition): Result<unknown>;
   transitionAccountHandle?(context: Context, input: WorkflowHandleTransition): Result<unknown>;
   finalizeHandleTransition?(input: WorkflowHandleTransition): Result<unknown>;
@@ -101,6 +116,7 @@ export interface AccountWorkflowPorts<Context = WorkflowContext> {
   }): Result<WorkflowResponsibility>;
   recordOperatorRelation?(
     input: WorkflowResponsibility & { expectedOperatorAccountId: string | null; expectedVersion: string; key: string },
+    pending?: { reservationId: string; operation: AccountOperation },
   ): Result<WorkflowResponsibility & { version: string }>;
   retireResponsibility?(input: WorkflowResponsibility & { key: string }): Result<unknown>;
   releaseResponsibility?(input: WorkflowResponsibility & { key: string }): Result<unknown>;
@@ -186,6 +202,21 @@ const responsibility = (input: WorkflowResponsibility): WorkflowResponsibility =
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest();
 const workflowId = (key: string) => `accounts:${hash(key).toString('hex')}`;
 
+function businessOperation(input: AccountOperation) {
+  const { authorization: _reference, ...business } = input as AccountOperation & { authorization?: string };
+  const ordered = (value: unknown): unknown =>
+    Array.isArray(value)
+      ? value.map(ordered)
+      : value !== null && typeof value === 'object'
+        ? Object.fromEntries(
+            Object.entries(value)
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([key, field]) => [key, ordered(field)]),
+          )
+        : value;
+  return ordered(business);
+}
+
 /** One explicit Auth application owns DBOS. createAuthService has no global
  * executor side effects. Do not create two workflow hosts in one process. */
 export function createAccountWorkflows<Context = WorkflowContext>(options: AccountWorkflowOptions<Context>) {
@@ -263,13 +294,14 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
   ) {
     const request = requestKey(input.key);
     const handle = normalized(input.handle);
-    const digest = hash(binding === undefined ? [handle] : [handle, binding]);
+    const creation = binding === undefined ? null : businessOperation(binding as AccountOperation);
+    const digest = hash(creation === null ? [handle] : [handle, creation]);
     const id = randomBytes(24).toString('base64url');
     const accountId = access.registrationTarget(request);
     const sealed = credential ? sealCredential(id, accountId, handle, credential) : null;
     const result = await database.query<Stage & { request_digest: Buffer; credential_digest: Buffer | null }>(
-      'INSERT INTO auth_registration_stage (registration_id,request_key,handle,account_id,request_digest,ciphertext,credential_digest) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (request_key) DO UPDATE SET request_key=EXCLUDED.request_key RETURNING *',
-      [id, request, handle, accountId, digest, sealed?.ciphertext ?? null, sealed?.digest ?? null],
+      'INSERT INTO auth_registration_stage (registration_id,request_key,handle,account_id,request_digest,ciphertext,credential_digest,creation_binding) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (request_key) DO UPDATE SET request_key=EXCLUDED.request_key RETURNING *',
+      [id, request, handle, accountId, digest, sealed?.ciphertext ?? null, sealed?.digest ?? null, creation],
     );
     const row = required(result.rows[0]);
     if (
@@ -284,12 +316,36 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     if (
       !('authorization' in input) ||
       typeof input.authorization !== 'string' ||
-      !/^[A-Za-z0-9][A-Za-z0-9:_/-]{0,255}$/.test(input.authorization)
+      input.authorization.length === 0 ||
+      input.authorization.length > 4096
     )
       denied();
-    return required(access.authorizeOperation)(input.authorization, input);
+    const current = await currentOperation(input);
+    if (!('authorization' in current)) denied();
+    return required(access.authorizeOperation)(current.authorization, current);
+  }
+  async function currentOperation(input: AccountOperation): Promise<AccountOperation> {
+    let current = input;
+    if (DBOS.workflowID) {
+      const stored = (
+        await database.query<{ request: AccountOperation }>(
+          'SELECT request FROM auth_workflow_request WHERE workflow_id=$1',
+          [DBOS.workflowID],
+        )
+      ).rows[0]?.request;
+      if (stored) {
+        if (JSON.stringify(businessOperation(stored)) !== JSON.stringify(businessOperation(input))) denied();
+        current = stored;
+      }
+    }
+    return current;
   }
   const commandKey = (phase: string) => `wf:${required(DBOS.workflowID)}:${phase}`;
+  async function authorizedKey(request: AccountOperation | undefined, phase: string) {
+    if (!request) return commandKey(phase);
+    const context = await approved(request);
+    return access.stableCommandKey?.(context, phase) ?? commandKey(phase);
+  }
   const step = <A extends unknown[], R>(name: string, fn: (...args: A) => Promise<R>) =>
     DBOS.registerStep(
       async (...args: A) => {
@@ -312,20 +368,23 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
   type ReductionResult = { clientId: string; nextWorkflowId?: string };
   let clientReduction: (input: ReductionInput) => Promise<ReductionResult>;
   function register() {
-    const read = step('read-registration', stage);
+    const read = step('read-registration', async (id: string, request?: AccountOperation) => {
+      if (request) await approved(request);
+      return stage(id);
+    });
     const reserve = step(
       'reserve-handle',
-      async (row: Stage) =>
+      async (row: Stage, request?: AccountOperation) =>
         (
           await access.reserveHandle({
             handle: row.handle,
             accountId: row.account_id,
-            key: commandKey('reserve-handle'),
+            key: await authorizedKey(request, 'reserve-handle'),
           })
         ).value,
     );
-    const pending = step('pending-account', async (claim: Reservation, id: string) => {
-      const result = await access.createPending({ ...claim, key: commandKey('pending-account') });
+    const pending = step('pending-account', async (claim: Reservation, id: string, request?: AccountOperation) => {
+      const result = await access.createPending({ ...claim, key: await authorizedKey(request, 'pending-account') });
       await database.query(
         'UPDATE auth_registration_stage SET reservation_id=$2, expires_at=$3 WHERE registration_id=$1 AND (reservation_id IS NULL OR reservation_id=$2)',
         [id, claim.reservationId, claim.expiresAt],
@@ -336,13 +395,15 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       const row = await stage(id);
       return !!row.expired_at || required(row.expires_at).getTime() <= now().getTime();
     });
-    const provision = step('install-credential', async (id: string) => {
+    const provision = step('install-credential', async (id: string, request?: AccountOperation) => {
+      if (request) await approved(request);
       const row = await stage(id);
       if (row.expired_at || required(row.expires_at).getTime() <= now().getTime())
         return { accountId: row.account_id, expired: true as const };
       const authorization = await access.provisioningReference({
         accountId: row.account_id,
         reservationId: required(row.reservation_id),
+        ...(request ? { operation: await currentOperation(request) } : {}),
       });
       const encrypted = required(
         (
@@ -367,33 +428,46 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         clear.fill(0);
       }
     });
-    const evidence = step('provisioning-evidence', async (claim: Reservation) => access.provisioningEvidence(claim));
-    const claimHandle = step('claim-handle', async (claim: Reservation, proof: unknown, id: string) => {
-      try {
-        return (await access.claimHandle({ ...claim, evidence: proof, key: commandKey('claim-handle') })).value;
-      } catch {
-        const row = await stage(id);
-        if (required(row.expires_at).getTime() <= now().getTime())
-          return { accountId: row.account_id, expired: true as const };
-        throw new Error('Handle barrier unavailable');
-      }
+    const evidence = step('provisioning-evidence', async (claim: Reservation, request?: AccountOperation) => {
+      if (request) await approved(request);
+      return access.provisioningEvidence(claim);
     });
-    const activate = step('activate-account', async (accountId: string, proof: unknown, id: string) => {
-      try {
-        // A committed activation receipt wins on replay, even past the pending
-        // deadline. An uncommitted activation still uses Access's original TTL.
-        return (await access.activate({ accountId, evidence: proof, key: commandKey('activate') })).value;
-      } catch {
-        const row = await stage(id);
-        if (required(row.expires_at).getTime() <= now().getTime()) return { accountId, expired: true as const };
-        throw new Error('Activation unavailable');
-      }
-    });
+    const claimHandle = step(
+      'claim-handle',
+      async (claim: Reservation, proof: unknown, id: string, request?: AccountOperation) => {
+        try {
+          return (
+            await access.claimHandle({ ...claim, evidence: proof, key: await authorizedKey(request, 'claim-handle') })
+          ).value;
+        } catch {
+          const row = await stage(id);
+          if (required(row.expires_at).getTime() <= now().getTime())
+            return { accountId: row.account_id, expired: true as const };
+          throw new Error('Handle barrier unavailable');
+        }
+      },
+    );
+    const activate = step(
+      'activate-account',
+      async (accountId: string, proof: unknown, id: string, request?: AccountOperation) => {
+        try {
+          // A committed activation receipt wins on replay, even past the pending
+          // deadline. An uncommitted activation still uses Access's original TTL.
+          return (await access.activate({ accountId, evidence: proof, key: await authorizedKey(request, 'activate') }))
+            .value;
+        } catch {
+          const row = await stage(id);
+          if (required(row.expires_at).getTime() <= now().getTime()) return { accountId, expired: true as const };
+          throw new Error('Activation unavailable');
+        }
+      },
+    );
     const defaults = step('operator-management-defaults', async (operatorAccountId: string) => {
       if (access.provisionManagementDefaults)
         await access.provisionManagementDefaults({ operatorAccountId, key: commandKey('management-defaults') });
     });
-    const complete = step('registration-complete', async (id: string) => {
+    const complete = step('registration-complete', async (id: string, request?: AccountOperation) => {
+      if (request) await approved(request);
       await database.query(
         'UPDATE auth_registration_stage SET completed_at=$2,ciphertext=NULL WHERE registration_id=$1 AND expired_at IS NULL',
         [id, now()],
@@ -405,7 +479,10 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     const release = step('release-expired-handle', async (claim: Reservation) => {
       await access.releaseExpiredRegistrationHandle({ ...claim, key: commandKey('release-expired') });
     });
-    const erase = step('erase-auth-owner', async (accountId: string) => auth.internal.eraseAccount(accountId));
+    const erase = step('erase-auth-owner', async (accountId: string, request?: AccountOperation) => {
+      if (request) await approved(request);
+      return auth.internal.eraseAccount(accountId);
+    });
     const expired = step('registration-terminal', async (id: string) => {
       await database.query(
         'UPDATE auth_registration_stage SET expired_at=$2,ciphertext=NULL WHERE registration_id=$1 AND completed_at IS NULL',
@@ -459,24 +536,40 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         (await access.raiseFence({ accountId, key: commandKey(`fence:${accountId}`) })).value,
     );
     const revoke = step('revoke-auth-sessions', async (accountId: string) => auth.internal.revokeSessions(accountId));
-    const hold = step('hold-new-handle', async (input: WorkflowHandleTransition) => {
-      await required(access.holdHandle)({ ...input, key: commandKey('hold-handle') });
+    const hold = step('hold-new-handle', async (input: WorkflowHandleTransition, request?: AccountOperation) => {
+      await required(access.holdHandle)({ ...input, key: await authorizedKey(request, 'hold-handle') });
     });
     const publish = step('publish-handle', async (input: WorkflowHandleTransition, request: AccountOperation) => {
-      await required(access.transitionAccountHandle)(await approved(request), {
+      const context = await approved(request);
+      await required(access.transitionAccountHandle)(context, {
         ...input,
-        key: commandKey('publish-handle'),
+        key: access.stableCommandKey?.(context, 'publish-handle') ?? commandKey('publish-handle'),
       });
     });
-    const finalize = step('finalize-handle', async (input: WorkflowHandleTransition) => {
-      await required(access.finalizeHandleTransition)({ ...input, key: commandKey('finalize-handle') });
+    const finalize = step('finalize-handle', async (input: WorkflowHandleTransition, request?: AccountOperation) => {
+      await required(access.finalizeHandleTransition)({
+        ...input,
+        key: await authorizedKey(request, 'finalize-handle'),
+      });
     });
-    const redirect = step('redirect-old-handle', async (input: WorkflowHandleTransition) => {
-      await required(access.redirectTransitionHandle)({ ...input, key: commandKey('redirect-handle') });
-    });
-    const finishHandle = step('complete-handle-operation', async (input: WorkflowHandleTransition) => {
-      await required(access.completeHandleTransition)({ ...input, key: commandKey('complete-handle') });
-    });
+    const redirect = step(
+      'redirect-old-handle',
+      async (input: WorkflowHandleTransition, request?: AccountOperation) => {
+        await required(access.redirectTransitionHandle)({
+          ...input,
+          key: await authorizedKey(request, 'redirect-handle'),
+        });
+      },
+    );
+    const finishHandle = step(
+      'complete-handle-operation',
+      async (input: WorkflowHandleTransition, request?: AccountOperation) => {
+        await required(access.completeHandleTransition)({
+          ...input,
+          key: await authorizedKey(request, 'complete-handle'),
+        });
+      },
+    );
     const reserveOwner = step('reserve-owner', async (input: AccountOperation, organizationId: string) => {
       const context = await approved(input);
       const ownerAccountId = required(access.actorAccountId)(context);
@@ -519,21 +612,25 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
           accountId: input.memberAccountId,
           relatedAccountId: input.organizationId,
           purpose: 'membership',
-          key: commandKey('reserve-member'),
+          key: await authorizedKey(input, 'reserve-member'),
         })
       ).value;
     });
     const changeMember = step(
       'change-membership',
       async (input: WorkflowMembership & { role: 'owner' | 'member' | null }, request: AccountOperation) => {
-        await required(access.setMembership)(await approved(request), {
+        const context = await approved(request);
+        await required(access.setMembership)(context, {
           ...input,
-          key: commandKey('change-membership'),
+          key: access.stableCommandKey?.(context, 'change-membership') ?? commandKey('change-membership'),
         });
       },
     );
-    const releaseMember = step('release-membership', async (input: WorkflowMembership) => {
-      await required(access.releaseMembershipCoordination)({ ...input, key: commandKey('release-membership') });
+    const releaseMember = step('release-membership', async (input: WorkflowMembership, request?: AccountOperation) => {
+      await required(access.releaseMembershipCoordination)({
+        ...input,
+        key: await authorizedKey(request, 'release-membership'),
+      });
     });
     const reserveOperator = step(
       'reserve-operator',
@@ -543,66 +640,100 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
           await required(access.reserveResponsibility)({
             operatorAccountId,
             subjectAccountId,
-            key: commandKey('reserve-operator'),
+            key: await authorizedKey(request, 'reserve-operator'),
           })
         ).value;
       },
     );
     const relation = step(
       'record-operator',
-      async (input: WorkflowResponsibility, previous: string | null, version: string, request: AccountOperation) => {
+      async (
+        input: WorkflowResponsibility,
+        previous: string | null,
+        version: string,
+        request: AccountOperation,
+        pendingReservationId?: string,
+      ) => {
         await approved(request);
         return (
-          await required(access.recordOperatorRelation)({
-            ...input,
-            expectedOperatorAccountId: previous,
-            expectedVersion: version,
-            key: commandKey('record-operator'),
-          })
+          await required(access.recordOperatorRelation)(
+            {
+              ...input,
+              expectedOperatorAccountId: previous,
+              expectedVersion: version,
+              key: await authorizedKey(request, 'record-operator'),
+            },
+            pendingReservationId
+              ? { reservationId: pendingReservationId, operation: await currentOperation(request) }
+              : undefined,
+          )
         ).value;
       },
     );
-    const retireOperator = step('retire-operator', async (input: WorkflowResponsibility) => {
-      await required(access.retireResponsibility)({ ...input, key: commandKey('retire-operator') });
-    });
-    const releaseOperator = step('release-operator', async (input: WorkflowResponsibility) => {
-      await required(access.releaseResponsibility)({ ...input, key: commandKey('release-operator') });
-    });
-    const credentialless = step('credentialless-owner', async (claim: Reservation) => {
-      const authorization = await access.provisioningReference(claim);
+    const retireOperator = step(
+      'retire-operator',
+      async (input: WorkflowResponsibility, request?: AccountOperation) => {
+        await required(access.retireResponsibility)({ ...input, key: await authorizedKey(request, 'retire-operator') });
+      },
+    );
+    const releaseOperator = step(
+      'release-operator',
+      async (input: WorkflowResponsibility, request?: AccountOperation) => {
+        await required(access.releaseResponsibility)({
+          ...input,
+          key: await authorizedKey(request, 'release-operator'),
+        });
+      },
+    );
+    const credentialless = step('credentialless-owner', async (claim: Reservation, request?: AccountOperation) => {
+      if (request) await approved(request);
+      const authorization = await access.provisioningReference({
+        ...claim,
+        ...(request ? { operation: await currentOperation(request) } : {}),
+      });
       return auth.internal.provisionCredentialless({ authorization });
     });
-    const hasCredential = step(
-      'has-staged-credential',
-      async (id: string) =>
-        !!(
-          await database.query(
-            'SELECT registration_id FROM auth_registration_stage WHERE registration_id=$1 AND ciphertext IS NOT NULL',
-            [id],
-          )
-        ).rowCount,
-    );
-    const inspect = step('account-before-deletion', async (id: string): Promise<WorkflowAccount> => {
-      const value = required(await required(access.readAccount)(id));
-      return {
-        accountId: value.accountId,
-        handle: value.handle,
-        operatorAccountId: value.operatorAccountId,
-        state: value.state,
-        fenced: value.fenced,
-      };
+    const hasCredential = step('has-staged-credential', async (id: string, request?: AccountOperation) => {
+      if (request) await approved(request);
+      return !!(
+        await database.query(
+          'SELECT registration_id FROM auth_registration_stage WHERE registration_id=$1 AND ciphertext IS NOT NULL',
+          [id],
+        )
+      ).rowCount;
     });
+    const inspect = step(
+      'account-before-deletion',
+      async (id: string, request: AccountOperation): Promise<WorkflowAccount> => {
+        await approved(request);
+        const value = required(await required(access.readAccount)(id));
+        return {
+          accountId: value.accountId,
+          handle: value.handle,
+          operatorAccountId: value.operatorAccountId,
+          state: value.state,
+          fenced: value.fenced,
+        };
+      },
+    );
     const tombstone = step('tombstone-account', async (input: Extract<AccountOperation, { kind: 'delete' }>) => {
       return (
         await required(access.tombstone)(await approved(input), {
           accountId: input.accountId,
-          key: commandKey('tombstone'),
+          key: await authorizedKey(input, 'tombstone'),
         })
       ).value;
     });
-    const redirectDeleted = step('redirect-deleted-handle', async (accountId: string, handle: string) => {
-      await required(access.redirectHandle)({ accountId, handle, key: commandKey('redirect-deleted') });
-    });
+    const redirectDeleted = step(
+      'redirect-deleted-handle',
+      async (accountId: string, handle: string, request: AccountOperation) => {
+        await required(access.redirectHandle)({
+          accountId,
+          handle,
+          key: await authorizedKey(request, 'redirect-deleted'),
+        });
+      },
+    );
     const page = step('operator-responsibility-page', async (operatorAccountId: string, cursor?: string) =>
       required(access.responsibilityPage)({ operatorAccountId, limit: 64, ...(cursor ? { cursor } : {}) }),
     );
@@ -691,7 +822,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
               reservationId: input.reservationId ?? (await reserveMember(input)).reservationId,
             }),
             publish: (membership) => changeMember({ ...membership, role: input.role }, input),
-            release: releaseMember,
+            release: (membership) => releaseMember(membership, input),
           });
           return { accountId: input.memberAccountId };
         }
@@ -705,19 +836,19 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         }
         if (input.kind === 'delete') {
           await authorize(input);
-          const account = await inspect(input.accountId);
+          const account = await inspect(input.accountId, input);
           if (
             account.operatorAccountId !== (input.responsibility?.operatorAccountId ?? null) ||
             (input.responsibility && input.responsibility.subjectAccountId !== input.accountId)
           )
             denied();
           await tombstone(input);
-          await erase(input.accountId);
+          await erase(input.accountId, input);
           if (input.responsibility) {
-            await retireOperator(input.responsibility);
-            await releaseOperator(input.responsibility);
+            await retireOperator(input.responsibility, input);
+            await releaseOperator(input.responsibility, input);
           }
-          if (account.handle) await redirectDeleted(account.accountId, account.handle);
+          if (account.handle) await redirectDeleted(account.accountId, account.handle, input);
           return { accountId: input.accountId };
         }
         if (input.kind === 'fence-operator') {
@@ -744,21 +875,21 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
           return { accountId: input.accountId };
         }
         if (input.kind === 'automated') {
-          const row = await read(input.registrationId);
-          const claim = await reserve(row);
+          const row = await read(input.registrationId, input);
+          const claim = await reserve(row, input);
           const held = await reserveOperator(input, input.operatorAccountId, row.account_id);
-          await pending(claim, input.registrationId);
-          await relation(held, null, '0', input);
-          const installed = (await hasCredential(input.registrationId))
-            ? await provision(input.registrationId)
-            : await credentialless(claim);
+          await pending(claim, input.registrationId, input);
+          await relation(held, null, '0', input, claim.reservationId);
+          const installed = (await hasCredential(input.registrationId, input))
+            ? await provision(input.registrationId, input)
+            : await credentialless(claim, input);
           if (!('expired' in installed)) {
-            const proof = await evidence(claim);
-            const claimed = await claimHandle(claim, proof, input.registrationId);
+            const proof = await evidence(claim, input);
+            const claimed = await claimHandle(claim, proof, input.registrationId, input);
             if (!('expired' in claimed)) {
-              const activated = await activate(row.account_id, proof, input.registrationId);
+              const activated = await activate(row.account_id, proof, input.registrationId, input);
               if (!('expired' in activated)) {
-                await complete(input.registrationId);
+                await complete(input.registrationId, input);
                 return { accountId: row.account_id };
               }
             }
@@ -784,7 +915,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
             await organization(accountId, owner.accountId, owner.reservationId);
             await defaults(accountId);
           }
-          const claim = await reserve({ account_id: accountId, handle: input.handle } as Stage);
+          const claim = await reserve({ account_id: accountId, handle: input.handle } as Stage, input);
           const transition = {
             accountId,
             handle: claim.handle,
@@ -793,12 +924,12 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
             operationId: required(DBOS.workflowID),
             key: commandKey('transition'),
           };
-          await hold(transition);
+          await hold(transition, input);
           if (owner) await bootstrap(transition, owner.accountId, owner.reservationId);
           else await publish(transition, input);
-          await finalize(transition);
-          if (transition.expectedHandle !== null) await redirect(transition);
-          await finishHandle(transition);
+          await finalize(transition, input);
+          if (transition.expectedHandle !== null) await redirect(transition, input);
+          await finishHandle(transition, input);
           return { accountId };
         }
         denied();
@@ -845,16 +976,20 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     active();
     requestKey(key);
     if ('authorization' in input) await approved(input);
+    else await access.authorizeUnprotectedOperation?.(input);
     const id = workflowId(`operation:${key}`);
-    const digest = hash(input);
+    const digest = hash(businessOperation(input));
     const row = (
       await database.query<{ digest: Buffer }>(
-        'INSERT INTO auth_workflow_request (workflow_id,digest,request) VALUES ($1,$2,$3) ON CONFLICT (workflow_id) DO UPDATE SET workflow_id=EXCLUDED.workflow_id RETURNING digest',
+        'INSERT INTO auth_workflow_request (workflow_id,digest,request) VALUES ($1,$2,$3) ON CONFLICT (workflow_id) DO UPDATE SET request=CASE WHEN auth_workflow_request.digest=EXCLUDED.digest THEN EXCLUDED.request ELSE auth_workflow_request.request END RETURNING digest',
         [id, digest, input],
       )
     ).rows[0]!;
     if (!row.digest.equals(digest)) denied();
-    return (await DBOS.startWorkflow(operation, { workflowID: id })(input)).getResult();
+    const result = await (await DBOS.startWorkflow(operation, { workflowID: id })(input)).getResult();
+    if ('authorization' in input) await approved(input);
+    else await access.authorizeUnprotectedOperation?.(input);
+    return result;
   }
   async function waitClientReduction(id: string): Promise<{ clientId: string }> {
     const progress = (
@@ -887,6 +1022,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       ).rows[0],
     ).request;
     if ('authorization' in input) await approved(input);
+    else await access.authorizeUnprotectedOperation?.(input);
     if (input.kind === 'client-reduction') return waitClientReduction(id);
     const status = await DBOS.getWorkflowStatus(id);
     if (status?.status === 'ERROR') {
@@ -894,9 +1030,15 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       const failed = required(steps.find((step) => step.error !== null));
       // Official SDK rewind preserves successful Access barriers and reruns
       // only the failed effect under the exact same workflow/command keys.
-      return (await DBOS.rewindWorkflow(id, { startStep: failed.functionID })).getResult();
+      const result = await (await DBOS.rewindWorkflow(id, { startStep: failed.functionID })).getResult();
+      if ('authorization' in input) await approved(input);
+      else await access.authorizeUnprotectedOperation?.(input);
+      return result;
     }
-    return (await DBOS.resumeWorkflow(id)).getResult();
+    const result = await (await DBOS.resumeWorkflow(id)).getResult();
+    if ('authorization' in input) await approved(input);
+    else await access.authorizeUnprotectedOperation?.(input);
+    return result;
   }
   const close = async () => {
     await starting;
@@ -1040,8 +1182,11 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       requestKey(input.key);
       const request = {
         kind: 'automated' as const,
+        registrationId: '',
         authorization: input.authorization,
         operatorAccountId: input.operatorAccountId,
+        handle: normalized(input.handle),
+        operationKey: requestKey(input.key),
       };
       await required(access.authorizeOperation)(input.authorization, { ...request, registrationId: '' });
       const row = await createStage(
@@ -1101,7 +1246,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       const digest = hash(operation);
       const row = (
         await database.query<{ digest: Buffer }>(
-          'INSERT INTO auth_workflow_request (workflow_id,digest,request) VALUES ($1,$2,$3) ON CONFLICT (workflow_id) DO UPDATE SET workflow_id=EXCLUDED.workflow_id RETURNING digest',
+          'INSERT INTO auth_workflow_request (workflow_id,digest,request) VALUES ($1,$2,$3) ON CONFLICT (workflow_id) DO UPDATE SET request=CASE WHEN auth_workflow_request.digest=EXCLUDED.digest THEN EXCLUDED.request ELSE auth_workflow_request.request END RETURNING digest',
           [id, digest, operation],
         )
       ).rows[0]!;
@@ -1128,7 +1273,9 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         operatorAccountId: input.operatorAccountId,
         subjectAccountId: input.subjectAccountId,
         purpose: 'session',
-        key: `session:${hash(requestKey(input.key)).toString('hex')}`,
+        key:
+          access.stableCommandKey?.(context, 'session-opening') ??
+          `session:${hash(requestKey(input.key)).toString('hex')}`,
       });
       // Cookies and the returned Auth response are deliberately never DBOS input
       // or output. The native one-use opening receipt is consumed by Auth.

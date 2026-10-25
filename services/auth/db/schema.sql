@@ -416,7 +416,10 @@ CREATE TABLE public.auth_registration_stage (
     credential_digest bytea,
     expires_at timestamp with time zone,
     completed_at timestamp with time zone,
-    expired_at timestamp with time zone
+    expired_at timestamp with time zone,
+    pending_reference text,
+    automated_reference text,
+    creation_binding jsonb
 );
 
 
