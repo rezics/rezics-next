@@ -20,6 +20,8 @@ export type CommandPrincipal = {
     kind: 'anonymous';
     id: typeof ANONYMOUS_PRINCIPAL_ID;
 };
+/** Pure receipt-key validation; the anonymous marker never identifies an account. */
+export declare function normalizeCommandKey(principal: CommandPrincipal, key: string): string;
 type PrincipalCommandIdentity = Readonly<{
     principal: Readonly<Extract<CommandPrincipal, {
         kind: 'account';
