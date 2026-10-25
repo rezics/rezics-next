@@ -179,19 +179,21 @@ const infobox: Record<string, string[]> = {
 // EpType, PersonType, CharacterType. Appearance roles 1..3:
 // https://github.com/bangumi/Archive/blob/959474a4fcb833f6dabe8dd2f4fe192f82a71140/README.md
 // Also retain observed undocumented codes: person.type=0, appearance.type=4..6,
-// person-characters.type=0..6, and retired game relation=4013. Never infer their meanings.
+// person-characters.type=0..6, platform.anime/music=0, and retired game relation=4013.
+// PersonCareer is the string enumeration in the same pinned API document. Never infer undocumented meanings.
 const enumerations: Record<string, (string | number)[]> = {
   'subject.type': [1, 2, 3, 4, 6],
   'subject.series': ['false', 'true'],
   'episode.type': [0, 1, 2, 3, 4, 5, 6],
   'person.type': [0, 1, 2, 3],
+  'person.career': ['producer', 'mangaka', 'artist', 'seiyu', 'writer', 'illustrator', 'actor'],
   'character.role': [1, 2, 3, 4],
   'subject-characters.type': [1, 2, 3, 4, 5, 6],
   'person-characters.type': [0, 1, 2, 3, 4, 5, 6],
   'platform.book': [0, 1001, 1002, 1003, 1004, 1005, 1006],
-  'platform.anime': [1, 2, 3, 4, 5, 2006],
+  'platform.anime': [0, 1, 2, 3, 4, 5, 2006],
   'platform.real': [0, 1, 2, 3, 6001, 6002, 6003, 6004],
-  'platform.music': [3001, 3002, 3003, 3004],
+  'platform.music': [0, 3001, 3002, 3003, 3004],
   'platform.game': [0, 4001, 4002, 4003, 4004, 4005],
   'staff.2': [
     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32,
@@ -234,6 +236,7 @@ type Decision = {
   licence?: { id: string; url: string };
   qualifiers?: Record<string, Decision>;
   value?: Decision;
+  profile?: Decision;
   concept?: { id: string; scheme: string; label: string };
 };
 type Entry = { id: string | number; mapping: Decision };
@@ -273,6 +276,92 @@ test('every field, infobox key and enumeration of the pinned Bangumi archive is 
   for (const group of data.enumerations) exactIds(group.values, enumerations[group.id]!);
 });
 
+// Closed list checked against the primary vocabulary definitions, not against the inventory at test time:
+// https://schema.org/version/latest/schemaorg-current-https.jsonld and the Wikidata entity/property
+// pages cited by each mapping. This rejects invented schema.org terms and unrelated property IDs.
+const primaryTerms: Record<string, string[]> = {
+  'schema:Book': ['wd:Q47461344'],
+  'schema:BookSeries': ['wd:Q277759'],
+  'schema:CreativeWork': ['wd:Q17537576'],
+  'schema:CreativeWorkSeries': ['wd:Q7725310'],
+  'schema:Episode': ['wd:Q1983062'],
+  'schema:Game': ['wd:Q11410'],
+  'schema:Movie': ['wd:Q11424'],
+  'schema:Organization': ['wd:Q43229'],
+  'schema:Person': ['wd:Q5'],
+  'schema:TVSeries': ['wd:Q5398426'],
+  'schema:VideoGame': ['wd:Q7889'],
+  'schema:abstract': ['wd:Q333291'],
+  'schema:alternateName': ['wd:P2561'],
+  'schema:author': ['wd:P50'],
+  'schema:birthDate': ['wd:P569'],
+  'schema:character': ['wd:P674'],
+  'schema:citation': ['wd:P248'],
+  'schema:contributor': ['wd:P767'],
+  'schema:copyrightNotice': ['wd:P6216'],
+  'schema:datePublished': ['wd:P577'],
+  'schema:director': ['wd:P57'],
+  'schema:duration': ['wd:P2047'],
+  'schema:editor': ['wd:P98'],
+  'schema:endDate': ['wd:P582'],
+  'schema:episodeNumber': ['wd:P1545'],
+  'schema:exampleOfWork': ['wd:P629'],
+  'schema:gamePlatform': ['wd:P400'],
+  'schema:gender': ['wd:P21'],
+  'schema:genre': ['wd:P136'],
+  'schema:hasOccupation': ['wd:P106'],
+  'schema:hasPart': ['wd:P527'],
+  'schema:height': ['wd:P2048'],
+  'schema:illustrator': ['wd:P110'],
+  'schema:image': ['wd:P18'],
+  'schema:inLanguage': ['wd:P407'],
+  'schema:isPartOf': ['wd:P361'],
+  'schema:isbn': ['wd:P212'],
+  'schema:keywords': ['wd:P921'],
+  'schema:lyricist': ['wd:P676'],
+  'schema:musicBy': ['wd:P86'],
+  'schema:name': ['wd:P2561'],
+  'schema:numberOfEpisodes': ['wd:P1113'],
+  'schema:numberOfPages': ['wd:P1104'],
+  'schema:numberOfPlayers': ['wd:P1873'],
+  'schema:position': ['wd:P1545'],
+  'schema:producer': ['wd:P162'],
+  'schema:productionCompany': ['wd:P272'],
+  'schema:publisher': ['wd:P123'],
+  'schema:startDate': ['wd:P580'],
+  'schema:translator': ['wd:P655'],
+  'schema:url': ['wd:P2888', 'wd:P856'],
+  'schema:weight': ['wd:P2067'],
+  'schema:workExample': ['wd:P747'],
+  'skos:Concept': ['wd:Q151885'],
+  'skos:ConceptScheme': ['wd:Q5962346'],
+  'skos:inScheme': ['wd:P361'],
+  'wd:Q7397': ['wd:Q7397'],
+  'wd:Q95074': ['wd:Q95074'],
+  'wdt:P1433': ['wd:P1433'],
+  'wdt:P155': ['wd:P155'],
+  'wdt:P1552': ['wd:P1552'],
+  'wdt:P156': ['wd:P156'],
+  'wdt:P178': ['wd:P178'],
+  'wdt:P1853': ['wd:P1853'],
+  'wdt:P1932': ['wd:P1932'],
+  'wdt:P2635': ['wd:P2635'],
+  'wdt:P287': ['wd:P287'],
+  'wdt:P31': ['wd:P31'],
+  'wdt:P3831': ['wd:P3831'],
+  'wdt:P408': ['wd:P408'],
+  'wdt:P449': ['wd:P449'],
+  'wdt:P453': ['wd:P453'],
+  'wdt:P518': ['wd:P518'],
+  'wdt:P5732': ['wd:P5732'],
+  'wdt:P6296': ['wd:P6296'],
+  'wdt:P6298': ['wd:P6298'],
+  'wdt:P6942': ['wd:P6942'],
+  'wdt:P725': ['wd:P725'],
+  'wdt:P7937': ['wd:P7937'],
+  'wdt:P973': ['wd:P973'],
+};
+
 const conceptIds = new Set<string>();
 function validate(mapping: Decision) {
   expect(['existing', 'proposed', 'omitted']).toContain(mapping.status);
@@ -283,6 +372,7 @@ function validate(mapping: Decision) {
   }
   expect(mapping.meaning?.trim().length).toBeGreaterThan(10);
   expect(mapping.wikidata).toMatch(/^wd:[PQ][1-9][0-9]*$/);
+  expect(primaryTerms[mapping.term ?? '']).toContain(mapping.wikidata);
   if (mapping.status === 'existing') {
     const type = bundledRelease.types[mapping.on ?? ''];
     expect(type).toBeDefined();
@@ -308,6 +398,7 @@ function validate(mapping: Decision) {
     expect(conceptIds.has(mapping.concept.id)).toBe(false);
     conceptIds.add(mapping.concept.id);
   }
+  if (mapping.profile) validate(mapping.profile);
   if (mapping.value) validate(mapping.value);
   for (const qualifier of Object.values(mapping.qualifiers ?? {})) validate(qualifier);
 }
@@ -342,6 +433,38 @@ test('every inventoried Bangumi term is bundled, proposed by the vocabulary rule
       expect(credit.qualifiers?.role?.concept).toBeUndefined();
       expect(credit.qualifiers?.role?.value?.concept?.scheme).toBe('https://rezics.com/schemes/bangumi/staff');
     }
+  const staffTerm = (scheme: string, id: number) => group(scheme).find((entry) => entry.id === id)!.mapping.term;
+  for (const [scheme, id, term] of [
+    ['staff.1', 2001, 'schema:author'],
+    ['staff.1', 2002, 'schema:illustrator'],
+    ['staff.1', 2004, 'schema:publisher'],
+    ['staff.1', 2006, 'schema:translator'],
+    ['staff.2', 2, 'schema:director'],
+    ['staff.2', 6, 'schema:musicBy'],
+    ['staff.2', 67, 'schema:productionCompany'],
+    ['staff.2', 66, 'schema:contributor'],
+    ['staff.4', 1001, 'wdt:P178'],
+  ] as const)
+    expect(staffTerm(scheme, id)).toBe(term);
+  for (const file of ['character', 'subject-characters'])
+    expect(
+      data.files
+        .find(({ id }) => id === file)!
+        .fields.find(({ id }) => id === (file === 'character' ? 'id' : 'character_id'))!.mapping.term,
+    ).toBe('wdt:P6296');
+  const game = data.infobox.find(({ id }) => id === 'Game')!;
+  expect(game.fields.find(({ id }) => id === '游戏引擎')!.mapping.term).toBe('wdt:P408');
+  expect(game.fields.find(({ id }) => id === '平台')!.mapping.term).toBe('schema:gamePlatform');
+  for (const [id, term] of [
+    [4001, 'schema:VideoGame'],
+    [4002, 'wd:Q7397'],
+    [4005, 'schema:Game'],
+  ] as const)
+    expect(group('platform.game').find((entry) => entry.id === id)!.mapping.profile?.term).toBe(term);
+  expect(data.files.find(({ id }) => id === 'person-characters')!.type).toMatchObject({
+    term: 'wdt:P725',
+    qualifiers: { character: { term: 'wdt:P453' } },
+  });
   const appearance = data.files.find(({ id }) => id === 'subject-characters')!.type;
   expect(appearance.term).toBe('schema:character');
   expect(appearance.wikidata).toBe('wd:P674');
