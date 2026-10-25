@@ -195,7 +195,7 @@ test('keyset ties are deterministic and newer insertion between pages cannot dup
   });
   const first = await readBoardCandidates(db.pool, targetBoard, null, 2);
   expect(first.candidates.map((candidate) => candidate.id)).toEqual(ids.slice(0, 2));
-  expect(first.next).toEqual({ createdAt, id: ids[1] });
+  expect(first.next).toEqual({ createdAt, id: ids[1]! });
   await applyBoardCandidate(db.pool, {
     id: newId(sourceRoute),
     boardId: targetBoard,
