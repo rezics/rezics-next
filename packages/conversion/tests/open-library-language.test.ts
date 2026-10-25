@@ -29,7 +29,9 @@ function languages(codes: string[]) {
 
 test('Open Library edition languages become one canonical inLanguage statement per language', () => {
   const statements = languages(['fre', 'eng', 'eng']);
-  expect(statements.map((statement) => statement.value).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))).toEqual([
+  expect(
+    statements.map((statement) => statement.value).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
+  ).toEqual([
     { type: 'value', content: 'en' },
     { type: 'value', content: 'fr' },
   ]);
