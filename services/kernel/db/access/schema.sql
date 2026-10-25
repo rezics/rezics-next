@@ -44,6 +44,25 @@ END;
 $$;
 
 
+--
+-- Name: guard_lifecycle_responsibility(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.guard_lifecycle_responsibility() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF ((NEW.operator_account_id IS DISTINCT FROM OLD.operator_account_id AND NEW.operator_account_id IS NOT NULL)
+      OR (NEW.state = 'deleted' AND OLD.state <> 'deleted'))
+     AND EXISTS (SELECT 1 FROM access.lifecycle_coordination
+                 WHERE route = OLD.route AND account_id = OLD.account_id) THEN
+    RAISE EXCEPTION 'Unresolved account responsibility' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -68,6 +87,10 @@ CREATE TABLE access.account (
     suspension_reason text,
     minimum_authn_epoch bigint DEFAULT 1 NOT NULL,
     transaction_id uuid NOT NULL,
+    registration_id uuid,
+    registration_expires_at timestamp with time zone,
+    authn_fenced boolean DEFAULT false NOT NULL,
+    fence_receipt_id uuid,
     CONSTRAINT account_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT account_check1 CHECK (((operator_account_id IS NULL) OR ((kind = 'actor'::text) AND (operator_account_id <> account_id)))),
     CONSTRAINT account_content_preferences_check CHECK ((jsonb_typeof(content_preferences) = 'object'::text)),
@@ -91,11 +114,61 @@ CREATE TABLE access.handle_claim (
     expires_at timestamp with time zone,
     reserved_until timestamp with time zone,
     transaction_id uuid NOT NULL,
+    reservation_id uuid,
     CONSTRAINT handle_claim_check CHECK ((route = ((get_byte(sha256(convert_to(normalized_handle, 'UTF8'::name)), 0) * 256) + get_byte(sha256(convert_to(normalized_handle, 'UTF8'::name)), 1)))),
     CONSTRAINT handle_claim_check1 CHECK ((((state = 'pending'::text) AND (expires_at IS NOT NULL) AND (reserved_until IS NULL)) OR ((state = 'active'::text) AND (expires_at IS NULL) AND (reserved_until IS NULL)) OR ((state = 'reserved'::text) AND (expires_at IS NULL) AND (reserved_until IS NOT NULL)))),
     CONSTRAINT handle_claim_normalized_handle_check CHECK ((normalized_handle ~ '^[a-z0-9][a-z0-9_-]{0,63}$'::text)),
     CONSTRAINT handle_claim_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT handle_claim_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'active'::text, 'reserved'::text])))
+);
+
+
+--
+-- Name: lifecycle_coordination; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.lifecycle_coordination (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    reservation_id uuid NOT NULL,
+    related_account_id uuid NOT NULL,
+    purpose text NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT lifecycle_coordination_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT lifecycle_coordination_purpose_check CHECK ((purpose = ANY (ARRAY['membership'::text, 'operator'::text])))
+);
+
+
+--
+-- Name: lifecycle_fence_receipt; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.lifecycle_fence_receipt (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    receipt_id uuid NOT NULL,
+    minimum_authn_epoch bigint NOT NULL,
+    kind text NOT NULL,
+    prior_operator_account_id uuid,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT lifecycle_fence_receipt_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT lifecycle_fence_receipt_kind_check CHECK ((kind = ANY (ARRAY['fence'::text, 'tombstone'::text]))),
+    CONSTRAINT lifecycle_fence_receipt_minimum_authn_epoch_check CHECK ((minimum_authn_epoch > 0))
+);
+
+
+--
+-- Name: lifecycle_membership_slot; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.lifecycle_membership_slot (
+    route integer NOT NULL,
+    organization_id uuid NOT NULL,
+    member_account_id uuid NOT NULL,
+    reservation_id uuid NOT NULL,
+    terminal boolean DEFAULT false NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT lifecycle_membership_slot_check CHECK ((route = ((get_byte(uuid_send(organization_id), 10) * 256) + get_byte(uuid_send(organization_id), 11))))
 );
 
 
@@ -193,6 +266,30 @@ ALTER TABLE ONLY access.handle_claim
 
 
 --
+-- Name: lifecycle_coordination lifecycle_coordination_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.lifecycle_coordination
+    ADD CONSTRAINT lifecycle_coordination_pkey PRIMARY KEY (route, account_id, reservation_id);
+
+
+--
+-- Name: lifecycle_fence_receipt lifecycle_fence_receipt_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.lifecycle_fence_receipt
+    ADD CONSTRAINT lifecycle_fence_receipt_pkey PRIMARY KEY (route, account_id, receipt_id);
+
+
+--
+-- Name: lifecycle_membership_slot lifecycle_membership_slot_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.lifecycle_membership_slot
+    ADD CONSTRAINT lifecycle_membership_slot_pkey PRIMARY KEY (route, organization_id, member_account_id, reservation_id);
+
+
+--
 -- Name: organization_member organization_member_pkey; Type: CONSTRAINT; Schema: access; Owner: -
 --
 
@@ -229,6 +326,13 @@ ALTER TABLE ONLY access.resource_grant
 --
 
 CREATE TRIGGER account_identity BEFORE UPDATE ON access.account FOR EACH ROW EXECUTE FUNCTION access.guard_account_identity();
+
+
+--
+-- Name: account lifecycle_responsibility; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER lifecycle_responsibility BEFORE UPDATE ON access.account FOR EACH ROW EXECUTE FUNCTION access.guard_lifecycle_responsibility();
 
 
 --
