@@ -1,10 +1,16 @@
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import type { PoolClient } from 'pg';
 import { createAccess as createPermissionAccess } from '../../src/access/permission.ts';
 import { readAccount, readOrganizationRole, readPublicAccount } from '../../src/access/account-data.ts';
 import { createDelegationCommands, readAssignment } from '../../src/access/delegation-commands.ts';
 import { createGrantCommands, GrantDeniedError } from '../../src/access/grant-commands.ts';
-import { createLifecycleCommands, createLifecycleInternals, REGISTRATION_TTL_MS } from '../../src/access/lifecycle.ts';
+import {
+  createLifecycleCommands,
+  createLifecycleInternals,
+  HANDLE_REDIRECT_TTL_MS,
+  REGISTRATION_TTL_MS,
+} from '../../src/access/lifecycle.ts';
 import {
   initializeResourceGrants,
   installStandingParentGrant,
@@ -31,8 +37,9 @@ import {
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 
-const scalesPerUnit = 100;
-const baselineOrdinals = 500;
+const ordinalsPerScale = 250;
+const baselineOrdinals = 2_000;
+const operationsPerCheck = 18;
 const resourceSchema = 'growth_access_commands';
 const resourceTable = `${resourceSchema}.resource`;
 const actions: ActionCatalogue = new Map([
@@ -157,61 +164,253 @@ async function organization(ownerId: string, partition: number) {
   return organizationId;
 }
 
-async function check(
-  population: Population,
-  operation: GrowthCheck['operation'],
-  name: string,
-  ordinalsPerUnit = scalesPerUnit,
-): Promise<GrowthReport> {
-  await seed({ pool: db.pool, admin: db.admin }, population, {
-    from: 100_000,
-    to: 100_000 + baselineOrdinals,
-  });
-  return checkGrowth(db, {
-    name,
-    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
-    repetitions: 1,
-    warmups: 0,
-    grow: async (growthDb, scale, previous) => {
-      await seed({ pool: growthDb.pool, admin: growthDb.admin }, population, {
-        from: previous * ordinalsPerUnit,
-        to: scale * ordinalsPerUnit,
-      });
-    },
-    operation,
-  });
+async function check(population: Population, operation: GrowthCheck['operation'], name: string): Promise<GrowthReport> {
+  const queryTexts = new Set<string>();
+  const observedClients = new Map<PoolClient, (notice: { message: string | undefined }) => void>();
+  const observeClient = (client: PoolClient) => {
+    if (observedClients.has(client)) return;
+    const observeNotice = (notice: { message: string | undefined }) => {
+      const message = notice.message;
+      const marker = 'plan:\n';
+      if (typeof message !== 'string' || !message.startsWith('duration:') || !message.includes(marker)) return;
+      try {
+        collectCatalogQueryTexts(JSON.parse(message.slice(message.indexOf(marker) + marker.length)), queryTexts);
+      } catch {
+        // The harness already reports malformed auto_explain notices for measured operations.
+      }
+    };
+    observedClients.set(client, observeNotice);
+    client.on('notice', observeNotice);
+  };
+  db.pool.on('acquire', observeClient);
+
+  try {
+    await seed({ pool: db.pool, admin: db.admin }, population, {
+      from: 100_000,
+      to: 100_000 + baselineOrdinals,
+    });
+    const report = await checkGrowth(db, {
+      name,
+      bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+      grow: async (growthDb, scale, previous) => {
+        await seed({ pool: growthDb.pool, admin: growthDb.admin }, population, {
+          from: previous * ordinalsPerScale,
+          to: scale * ordinalsPerScale,
+        });
+      },
+      operation,
+    });
+    printCatalogQueryTexts(report.samples, queryTexts);
+    return report;
+  } catch (error) {
+    if (isGrowthFailure(error)) printCatalogQueryTexts(error.samples, queryTexts);
+    throw error;
+  } finally {
+    db.pool.off('acquire', observeClient);
+    for (const [client, observeNotice] of observedClients) client.off('notice', observeNotice);
+    await clearFixtureRows();
+  }
+}
+
+function isGrowthFailure(error: unknown): error is Error & { samples: readonly GrowthReport['samples'][number][] } {
+  return error instanceof Error && error.name === 'GrowthBoundError' && 'samples' in error;
+}
+
+function hasCatalogRelation(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(hasCatalogRelation);
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  const relation = record['Relation Name'];
+  const schema = record.Schema;
+  if (
+    typeof relation === 'string' &&
+    (schema === 'pg_catalog' || (schema === undefined && ['pg_attribute', 'pg_type'].includes(relation)))
+  ) {
+    return true;
+  }
+  return Object.values(record).some(hasCatalogRelation);
+}
+
+function collectCatalogQueryTexts(value: unknown, queryTexts: Set<string>): void {
+  if (Array.isArray(value)) {
+    for (const entry of value) collectCatalogQueryTexts(entry, queryTexts);
+    return;
+  }
+  if (typeof value !== 'object' || value === null) return;
+  const record = value as Record<string, unknown>;
+  if (typeof record['Query Text'] === 'string' && hasCatalogRelation(record.Plan)) {
+    queryTexts.add(record['Query Text']);
+  }
+  for (const child of Object.values(record)) collectCatalogQueryTexts(child, queryTexts);
+}
+
+function printCatalogQueryTexts(samples: GrowthReport['samples'], queryTexts: Set<string>): void {
+  const catalogRelations = new Set(
+    samples.flatMap(({ cost }) =>
+      Object.keys(cost.relations ?? {}).filter(
+        (relation) => relation.startsWith('pg_catalog.') || ['pg_attribute', 'pg_type'].includes(relation),
+      ),
+    ),
+  );
+  if (catalogRelations.size === 0) return;
+  console.info(`Growth check ${[...catalogRelations].join(', ')} Query Text:\n${[...queryTexts].join('\n')}`);
+}
+
+async function clearFixtureRows(): Promise<void> {
+  await db.admin.query(`
+    TRUNCATE TABLE
+      core.receipt,
+      core.outbox,
+      editorial.write_basis,
+      access.account,
+      access.handle_claim,
+      access.lifecycle_coordination,
+      access.lifecycle_fence_receipt,
+      access.lifecycle_membership_slot,
+      access.organization_member,
+      access.principal_assignment,
+      access.resource_denial,
+      access.resource_grant,
+      access.resource_initialization,
+      access.resource_role_grant,
+      access.standing_parent_installation,
+      ${resourceTable}
+    CASCADE
+  `);
+  await db.admin.query('UPDATE core.partition SET position = 0');
+  accountEvidence.clear();
 }
 
 type CommandHistoryEntry = { readonly kind: string; readonly eventType?: string };
+
+// Receipt and outbox JSON mirror each command's returned value because the executor stores that value verbatim.
+function commandHistoryValue(
+  route: number,
+  ordinal: number,
+  index: number,
+  entry: CommandHistoryEntry,
+  actorAccountId: string,
+): { value: Record<string, unknown>; subject: string } {
+  const resource = { route, id: newId(route) };
+  const relatedAccountId = newId(route);
+  const reservationId = newId(route);
+  const handle = `growth-history-${ordinal}-${index}`;
+  switch (entry.kind) {
+    case 'standing-parent.install':
+      return { value: { resource, actions: ['subject:create'] }, subject: resource.id };
+    case 'grant.create':
+    case 'grant.change':
+    case 'grant.revoke':
+      return {
+        value: { resource, subjectId: relatedAccountId, subjectRole: '', actions: ['subject:read'], valid: '(,)' },
+        subject: resource.id,
+      };
+    case 'assignment.create':
+    case 'assignment.revoke':
+      return {
+        value: { requestedBy: `urn:rezics:request:${actorAccountId}:${reservationId}` },
+        subject: actorAccountId,
+      };
+    case 'actor-pending':
+      return {
+        value: {
+          accountId: actorAccountId,
+          registrationId: reservationId,
+          expiresAt: new Date(Date.now() + REGISTRATION_TTL_MS).toISOString(),
+        },
+        subject: actorAccountId,
+      };
+    case 'organization-created':
+      return { value: { accountId: resource.id, ownerAccountId: actorAccountId }, subject: resource.id };
+    case 'handle-reserved':
+      return {
+        value: {
+          handle,
+          accountId: relatedAccountId,
+          reservationId,
+          expiresAt: new Date(Date.now() + REGISTRATION_TTL_MS).toISOString(),
+        },
+        subject: handle,
+      };
+    case 'handle-claimed':
+      return { value: { handle, accountId: relatedAccountId }, subject: handle };
+    case 'handle-redirected':
+      return {
+        value: {
+          handle,
+          accountId: relatedAccountId,
+          reservedUntil: new Date(Date.now() + HANDLE_REDIRECT_TTL_MS).toISOString(),
+        },
+        subject: handle,
+      };
+    case 'handle-expired':
+      return { value: { handle }, subject: handle };
+    case 'resource-created':
+      return { value: resource, subject: resource.id };
+    case 'account-updated':
+      return { value: { accountId: actorAccountId }, subject: actorAccountId };
+    case 'coordination-reserved':
+      return {
+        value: { accountId: actorAccountId, relatedAccountId, purpose: 'membership', reservationId },
+        subject: actorAccountId,
+      };
+    case 'authentication-fenced':
+      return {
+        value: {
+          receiptId: reservationId,
+          accountId: actorAccountId,
+          minimumAuthnEpoch: '2',
+          kind: 'fence',
+          priorOperatorAccountId: null,
+        },
+        subject: actorAccountId,
+      };
+    case 'membership-changed':
+      return {
+        value: { organizationId: resource.id, memberAccountId: relatedAccountId, reservationId, role: 'member' },
+        subject: resource.id,
+      };
+    case 'account-tombstoned':
+      return {
+        value: {
+          receiptId: reservationId,
+          accountId: actorAccountId,
+          minimumAuthnEpoch: '2',
+          kind: 'tombstone',
+          priorOperatorAccountId: null,
+        },
+        subject: actorAccountId,
+      };
+    default:
+      return { value: { accountId: actorAccountId }, subject: actorAccountId };
+  }
+}
 
 function commandHistory(
   route: number,
   ordinal: number,
   entries: readonly CommandHistoryEntry[],
-  recordReceipts = true,
 ): Record<string, readonly Record<string, unknown>[]> {
   const partition = partitionOf(route);
   const actorAccountId = newId(route);
-  const response = { accountId: actorAccountId };
   const receipts: Record<string, unknown>[] = [];
   const outbox: Record<string, unknown>[] = [];
   const bases: Record<string, unknown>[] = [];
   for (const [index, entry] of entries.entries()) {
     const transactionId = newId(route);
     const position = 1_000_000 + ordinal * 64 + index;
-    if (recordReceipts) {
-      receipts.push({
-        partition_no: partition,
-        actor_account_id: actorAccountId,
-        command_kind: `access.${entry.kind}`,
-        idempotency_key: `${route}:growth:${ordinal}:${index}`,
-        request_digest: new Uint8Array(32).fill(106),
-        epoch: 1,
-        position,
-        transaction_id: transactionId,
-        response,
-      });
-    }
+    const { value, subject } = commandHistoryValue(route, ordinal, index, entry, actorAccountId);
+    receipts.push({
+      partition_no: partition,
+      actor_account_id: actorAccountId,
+      command_kind: `access.${entry.kind}`,
+      idempotency_key: `${route}:growth:${ordinal}:${index}`,
+      request_digest: new Uint8Array(32).fill(106),
+      epoch: 1,
+      position,
+      transaction_id: transactionId,
+      response: value,
+    });
     outbox.push({
       partition_no: partition,
       position,
@@ -220,8 +419,8 @@ function commandHistory(
       epoch: 1,
       id: newId(route),
       type: entry.eventType ?? `com.rezics.access.${entry.kind}.v1`,
-      subject: actorAccountId,
-      data: response,
+      subject,
+      data: value,
     });
     bases.push({
       partition_no: partition,
@@ -234,7 +433,7 @@ function commandHistory(
     });
   }
   return {
-    ...(recordReceipts ? { 'core.receipt': receipts } : {}),
+    'core.receipt': receipts,
     'core.outbox': outbox,
     'editorial.write_basis': bases,
   };
@@ -254,6 +453,60 @@ function commandHistoryFinish(hotPartition: number): NonNullable<Population['fin
       [hotPartition],
     );
   };
+}
+
+type PermissionRows = {
+  'access.resource_grant': Record<string, unknown>[];
+  'access.resource_role_grant': Record<string, unknown>[];
+  'access.resource_denial': Record<string, unknown>[];
+};
+
+function permissionRows(route: number): PermissionRows {
+  const grantTransactionId = newId(route);
+  const roleTransactionId = newId(route);
+  const denialTransactionId = newId(route);
+  return {
+    'access.resource_grant': [
+      {
+        route,
+        resource_id: newId(route),
+        subject_kind: 'identity',
+        subject_id: newId(route),
+        subject_role: '',
+        action: 'subject:read',
+        valid: '(,)',
+        transaction_id: grantTransactionId,
+      },
+    ],
+    'access.resource_role_grant': [
+      {
+        route,
+        resource_id: newId(route),
+        subject_kind: 'identity',
+        subject_id: newId(route),
+        subject_role: '',
+        grant_role: 'content.board.owner',
+        valid: '[2026-01-01T00:00:00.000Z,)',
+        transaction_id: roleTransactionId,
+      },
+    ],
+    'access.resource_denial': [
+      {
+        route,
+        resource_id: newId(route),
+        subject_id: newId(route),
+        subject_role: '',
+        action: 'subject:read',
+        reason: 'resource',
+        valid: '(,)',
+        transaction_id: denialTransactionId,
+      },
+    ],
+  };
+}
+
+function accountRow(route: number, kind: 'actor' | 'organization' = 'actor'): Record<string, unknown> {
+  return { route, account_id: newId(route), kind, state: 'active', transaction_id: newId(route) };
 }
 
 // These accounts, owner intervals and slots match lifecycle-create.sql and lifecycle membership inserts.
@@ -304,19 +557,28 @@ function accountAndMembershipPopulation(name: string, hotPartition: number): Pop
   };
 }
 
-// These grants and command history match grant-create.sql and the shared fence.sql envelope writes.
-function grantPopulation(name: string, hotPartition: number, commandKinds: readonly CommandHistoryEntry[]): Population {
+// These accounts, grant variants and command history match lifecycle creation, permission writes and fence.sql.
+function grantPopulation(
+  name: string,
+  hotPartition: number,
+  commandKinds: readonly CommandHistoryEntry[],
+  includeStandingMarkers = false,
+): Population {
   return {
     name,
     hotPartition,
     hotShare: 1,
     finish: commandHistoryFinish(hotPartition),
     rows: ({ route, ordinal }) => {
+      const authorizationRows = permissionRows(route);
       const resourceId = newId(route);
       const subjectId = newId(route);
       const transactionId = newId(route);
-      return {
+      const population = {
+        ...authorizationRows,
+        'access.account': [accountRow(route)],
         'access.resource_grant': [
+          ...authorizationRows['access.resource_grant'],
           {
             route,
             resource_id: resourceId,
@@ -328,13 +590,26 @@ function grantPopulation(name: string, hotPartition: number, commandKinds: reado
             transaction_id: transactionId,
           },
         ],
+        ...(includeStandingMarkers
+          ? {
+              'access.standing_parent_installation': [
+                {
+                  route,
+                  resource_id: newId(route),
+                  actions: ['subject:create'],
+                  transaction_id: newId(route),
+                },
+              ],
+            }
+          : {}),
         ...commandHistory(route, ordinal, commandKinds),
       };
+      return population;
     },
   };
 }
 
-// These account, self-grant and command-history rows match lifecycle-create.sql, lifecycle-default-grants.sql and fence.sql.
+// These handles, holds, accounts, grants, memberships and command history match lifecycle creation and its writes.
 function accountDefaultGrantPopulation(name: string, hotPartition: number): Population {
   return {
     name,
@@ -343,28 +618,97 @@ function accountDefaultGrantPopulation(name: string, hotPartition: number): Popu
     finish: commandHistoryFinish(hotPartition),
     rows: ({ route, ordinal }) => {
       const accountId = newId(route);
-      const transactionId = newId(route);
+      const organizationId = newId(route);
+      const reservationId = newId(route);
+      const handle = handleInPartition(hotPartition, 200_000 + ordinal);
+      const handleRouteValue = hashRoute(handle);
+      const accountTransactionId = newId(route);
+      const organizationTransactionId = newId(route);
+      const permissionRowsForRoute = permissionRows(route);
       return {
+        ...permissionRowsForRoute,
         'access.account': [
-          { route, account_id: accountId, kind: 'actor', state: 'active', transaction_id: transactionId },
+          { route, account_id: accountId, kind: 'actor', state: 'active', transaction_id: accountTransactionId },
+          {
+            route,
+            account_id: organizationId,
+            kind: 'organization',
+            state: 'active',
+            transaction_id: organizationTransactionId,
+          },
         ],
-        'access.resource_grant': ['account:update', 'account:delete'].map((action) => ({
-          route,
-          resource_id: accountId,
-          subject_kind: 'identity',
-          subject_id: accountId,
-          subject_role: '',
-          action,
-          valid: '(,)',
-          transaction_id: transactionId,
-        })),
+        'access.handle_claim': [
+          {
+            route: handleRouteValue,
+            normalized_handle: handle,
+            account_id: accountId,
+            state: 'pending',
+            expires_at: new Date(Date.now() + REGISTRATION_TTL_MS).toISOString(),
+            reserved_until: null,
+            transaction_id: newId(handleRouteValue),
+            reservation_id: newId(handleRouteValue),
+          },
+        ],
+        'access.lifecycle_coordination': [
+          {
+            route,
+            account_id: accountId,
+            reservation_id: newId(route),
+            related_account_id: organizationId,
+            purpose: 'membership',
+            transaction_id: newId(route),
+          },
+        ],
+        'access.organization_member': [
+          {
+            route,
+            organization_id: organizationId,
+            member_account_id: accountId,
+            role: 'owner',
+            valid: '(,)',
+            transaction_id: organizationTransactionId,
+          },
+        ],
+        'access.lifecycle_membership_slot': [
+          {
+            route,
+            organization_id: organizationId,
+            member_account_id: accountId,
+            reservation_id: reservationId,
+            terminal: false,
+            transaction_id: organizationTransactionId,
+          },
+        ],
+        'access.resource_grant': [
+          ...permissionRowsForRoute['access.resource_grant'],
+          ...['account:update', 'account:delete', 'account:read'].map((action) => ({
+            route,
+            resource_id: accountId,
+            subject_kind: 'identity',
+            subject_id: accountId,
+            subject_role: '',
+            action,
+            valid: '(,)',
+            transaction_id: accountTransactionId,
+          })),
+          ...['account:update', 'account:delete', 'organization:membership'].map((action) => ({
+            route,
+            resource_id: organizationId,
+            subject_kind: 'identity',
+            subject_id: organizationId,
+            subject_role: 'owner',
+            action,
+            valid: '(,)',
+            transaction_id: organizationTransactionId,
+          })),
+        ],
         ...commandHistory(route, ordinal, [{ kind: 'actor-pending' }, { kind: 'organization-created' }]),
       };
     },
   };
 }
 
-// These principal and command-history rows match delegation-create.sql, its identity trigger and fence.sql.
+// These accounts, assignments, permission rows and history match delegation-create.sql and fence.sql.
 function assignmentPopulation(name: string, hotPartition: number): Population {
   return {
     name,
@@ -372,12 +716,22 @@ function assignmentPopulation(name: string, hotPartition: number): Population {
     hotShare: 1,
     finish: commandHistoryFinish(hotPartition),
     rows: ({ route, ordinal }) => {
+      const authorizationRows = permissionRows(route);
       const principalId = newId(route);
+      const assignedActorId = newId(route);
       const requestId = newId(route);
       const transactionId = newId(route);
       return {
+        ...authorizationRows,
         'access.account': [
           { route, account_id: principalId, kind: 'actor', state: 'active', transaction_id: newId(route) },
+          {
+            route,
+            account_id: assignedActorId,
+            kind: 'actor',
+            state: 'active',
+            transaction_id: newId(route),
+          },
         ],
         'access.principal_assignment': [
           {
@@ -385,7 +739,7 @@ function assignmentPopulation(name: string, hotPartition: number): Population {
             principal_id: principalId,
             creator_principal_id: principalId,
             request_id: requestId,
-            assigned_actor_id: newId(route),
+            assigned_actor_id: assignedActorId,
             valid: '(,)',
             issued_valid: '(,)',
             revoked_at: null,
@@ -398,7 +752,7 @@ function assignmentPopulation(name: string, hotPartition: number): Population {
   };
 }
 
-// These resource-role and command-history rows match resource-initialization.sql and fence.sql without receipts.
+// These accounts, resource rows, permission variants and history match child creation and resource initialization.
 function resourceRolePopulation(name: string, hotPartition: number): Population {
   return {
     name,
@@ -406,11 +760,23 @@ function resourceRolePopulation(name: string, hotPartition: number): Population 
     hotShare: 1,
     finish: commandHistoryFinish(hotPartition),
     rows: ({ route, ordinal }) => {
+      const authorizationRows = permissionRows(route);
       const resourceId = newId(route);
       const identityId = newId(route);
       const transactionId = newId(route);
       const initializedAt = '2026-01-01T00:00:00.000Z';
       return {
+        ...authorizationRows,
+        'access.account': [
+          {
+            route,
+            account_id: identityId,
+            kind: 'actor',
+            state: 'active',
+            transaction_id: newId(route),
+          },
+        ],
+        [resourceTable]: [{ route, id: resourceId, transaction_id: transactionId }],
         'access.resource_initialization': [
           {
             route,
@@ -421,6 +787,7 @@ function resourceRolePopulation(name: string, hotPartition: number): Population 
           },
         ],
         'access.resource_role_grant': [
+          ...authorizationRows['access.resource_role_grant'],
           {
             route,
             resource_id: resourceId,
@@ -442,18 +809,15 @@ function resourceRolePopulation(name: string, hotPartition: number): Population 
             transaction_id: transactionId,
           },
         ],
-        ...commandHistory(
-          route,
-          ordinal,
-          [{ kind: 'resource-created', eventType: 'com.rezics.fixture.resource-created.v1' }],
-          false,
-        ),
+        ...commandHistory(route, ordinal, [
+          { kind: 'resource-created', eventType: 'com.rezics.fixture.resource-created.v1' },
+        ]),
       };
     },
   };
 }
 
-// These hold, fence and command-history rows match lifecycle-coordination.sql, lifecycle-fence.sql and fence.sql.
+// These accounts, holds, fence receipts, permission rows and history match lifecycle coordination and fence writes.
 function coordinationAndFencePopulation(name: string, hotPartition: number): Population {
   return {
     name,
@@ -461,6 +825,7 @@ function coordinationAndFencePopulation(name: string, hotPartition: number): Pop
     hotShare: 1,
     finish: commandHistoryFinish(hotPartition),
     rows: ({ route, ordinal }) => {
+      const authorizationRows = permissionRows(route);
       const accountId = newId(route);
       const reservationId = newId(route);
       const receiptId = newId(route);
@@ -468,6 +833,7 @@ function coordinationAndFencePopulation(name: string, hotPartition: number): Pop
       const holdTransactionId = newId(route);
       const fenceTransactionId = newId(route);
       return {
+        ...authorizationRows,
         'access.account': [
           { route, account_id: accountId, kind: 'actor', state: 'active', transaction_id: accountTransactionId },
         ],
@@ -502,7 +868,7 @@ function coordinationAndFencePopulation(name: string, hotPartition: number): Pop
   };
 }
 
-// These unrelated intervals, slots and command history match lifecycle membership writes and fence.sql.
+// These accounts, holds, intervals, slots and history match membership-change writes and the command envelope.
 function membershipPopulation(name: string, hotPartition: number): Population {
   return {
     name,
@@ -510,11 +876,27 @@ function membershipPopulation(name: string, hotPartition: number): Population {
     hotShare: 1,
     finish: commandHistoryFinish(hotPartition),
     rows: ({ route, ordinal }) => {
+      const authorizationRows = permissionRows(route);
       const organizationId = newId(route);
       const memberId = newId(route);
       const reservationId = newId(route);
       const transactionId = newId(route);
       return {
+        ...authorizationRows,
+        'access.account': [
+          { route, account_id: organizationId, kind: 'organization', state: 'active', transaction_id: transactionId },
+          { route, account_id: memberId, kind: 'actor', state: 'active', transaction_id: transactionId },
+        ],
+        'access.lifecycle_coordination': [
+          {
+            route,
+            account_id: memberId,
+            reservation_id: reservationId,
+            related_account_id: organizationId,
+            purpose: 'membership',
+            transaction_id: transactionId,
+          },
+        ],
         'access.organization_member': [
           {
             route,
@@ -552,7 +934,7 @@ function handleInPartition(partition: number, ordinal: number): string {
   }
 }
 
-// These hashed claims and command history match lifecycle-handle-reserve.sql and fence.sql.
+// These hashed claims, accounts and receipts match the reserve, claim, redirect and expiry command writes.
 function handlePopulation(name: string, hotPartition: number): Population {
   return {
     name,
@@ -565,6 +947,16 @@ function handlePopulation(name: string, hotPartition: number): Population {
       const accountId = newId(route);
       const transactionId = newId(route);
       return {
+        'access.account': [
+          {
+            route,
+            account_id: accountId,
+            kind: 'actor',
+            handle,
+            state: 'active',
+            transaction_id: newId(route),
+          },
+        ],
         'access.handle_claim': [
           {
             route,
@@ -579,8 +971,8 @@ function handlePopulation(name: string, hotPartition: number): Population {
         ],
         ...commandHistory(populationRoute, ordinal, [
           { kind: 'handle-reserved' },
-          { kind: 'handle-reserved' },
-          { kind: 'handle-expired' },
+          { kind: 'handle-claimed' },
+          { kind: 'handle-redirected' },
           { kind: 'handle-expired' },
         ]),
       };
@@ -588,7 +980,7 @@ function handlePopulation(name: string, hotPartition: number): Population {
   };
 }
 
-// These organization, owner, grant, interval, slot and command rows match lifecycle creation and fence.sql.
+// These accounts, grants, memberships, holds and history match lifecycle creation, tombstoning and fence.sql.
 function tombstonePopulation(name: string, hotPartition: number): Population {
   return {
     name,
@@ -596,16 +988,19 @@ function tombstonePopulation(name: string, hotPartition: number): Population {
     hotShare: 1,
     finish: commandHistoryFinish(hotPartition),
     rows: ({ route, ordinal }) => {
+      const authorizationRows = permissionRows(route);
       const accountId = newId(route);
       const ownerId = newId(route);
       const transactionId = newId(route);
       const reservationId = newId(route);
       return {
+        ...authorizationRows,
         'access.account': [
           { route, account_id: ownerId, kind: 'actor', state: 'active', transaction_id: newId(route) },
           { route, account_id: accountId, kind: 'organization', state: 'active', transaction_id: transactionId },
         ],
         'access.resource_grant': [
+          ...authorizationRows['access.resource_grant'],
           ...['account:update', 'account:delete'].map((action) => ({
             route,
             resource_id: ownerId,
@@ -644,6 +1039,27 @@ function tombstonePopulation(name: string, hotPartition: number): Population {
             member_account_id: ownerId,
             reservation_id: reservationId,
             terminal: false,
+            transaction_id: transactionId,
+          },
+        ],
+        'access.lifecycle_coordination': [
+          {
+            route,
+            account_id: ownerId,
+            reservation_id: newId(route),
+            related_account_id: accountId,
+            purpose: 'membership',
+            transaction_id: transactionId,
+          },
+        ],
+        'access.lifecycle_fence_receipt': [
+          {
+            route,
+            account_id: accountId,
+            receipt_id: newId(route),
+            minimum_authn_epoch: 2,
+            kind: 'fence',
+            prior_operator_account_id: null,
             transaction_id: transactionId,
           },
         ],
@@ -698,23 +1114,25 @@ test.serial(
   'Standing parent installation stays within its bound as Gt grows',
   async () => {
     const partition = 1538;
-    const parents: Awaited<ReturnType<typeof createActor>>[] = [];
-    for (let index = 0; index < 3; index++) parents.push(await createActor(partition, `growth_standing_${index}`));
-    const parentResources = parents.map(({ accountId }) => ({ route: accountRoute(accountId), id: accountId }));
-    for (const parent of parentResources) {
-      const actorId = parents.find(({ accountId }) => accountId === parent.id)!.accountId;
-      await grant(parent, actorId, 'subject:create');
-      await grant(parent, actorId, 'access:grant');
+    const parents: { actor: Awaited<ReturnType<typeof createActor>>; resource: Resource }[] = [];
+    for (let index = 0; index < operationsPerCheck; index++) {
+      const actor = await createActor(partition, `growth_standing_${index}`);
+      const resource = { route: accountRoute(actor.accountId), id: actor.accountId };
+      await grant(resource, actor.accountId, 'subject:create');
+      await grant(resource, actor.accountId, 'access:grant');
+      parents.push({ actor, resource });
     }
-    const population = grantPopulation('growth-access-standing-parent', partition, [
-      { kind: 'standing-parent.install', eventType: 'com.rezics.access.standing-parent.installed.v1' },
-    ]);
+    const population = grantPopulation(
+      'growth-access-standing-parent',
+      partition,
+      [{ kind: 'standing-parent.install', eventType: 'com.rezics.access.standing-parent.installed.v1' }],
+      true,
+    );
     const report = await check(
       population,
       async (_growthDb, _scale, repetition) => {
-        const resource = parentResources[repetition]!;
-        const parentAccount = parents[repetition]!;
-        const context = contextFor(parentAccount.accountId, parentAccount.account);
+        const { actor, resource } = parents[repetition]!;
+        const context = contextFor(actor.accountId, actor.account);
         const parent = {
           resource,
           validate: async (client: Parameters<typeof readAccount>[0]) =>
@@ -745,7 +1163,10 @@ test.serial(
     const parent: Resource = { route: accountRoute(creator.accountId), id: creator.accountId };
     await grant(parent, creator.accountId, 'subject:create');
     const context = contextFor(creator.accountId, creator.account);
-    const children = Array.from({ length: 3 }, () => ({ route: parent.route, id: newId(parent.route) }));
+    const children = Array.from({ length: operationsPerCheck }, () => ({
+      route: parent.route,
+      id: newId(parent.route),
+    }));
     const population = resourceRolePopulation('growth-access-resource-initialization', partition);
     const report = await check(
       population,
@@ -895,17 +1316,18 @@ test.serial(
   'Account and organization creation stays within its bound as A grows',
   async () => {
     const partition = 1542;
-    const owner = await createActor(partition, 'growth_creation_owner');
     const targets: {
       actorId: string;
       handle: string;
       reservationId: string;
       organizationId: string;
+      ownerAccountId: string;
       ownerHold: string;
     }[] = [];
-    for (let index = 0; index < 3; index++) {
+    for (let index = 0; index < operationsPerCheck; index++) {
+      const owner = await createActor(partition, `growth_creation_owner_${index}`);
       const actorId = newId(partition * 16 + 5);
-      const handle = `growthnew${index}`;
+      const handle = handleInPartition(partition, 400_000 + index);
       const reservation = await internal.reserveHandle({ handle, accountId: actorId, key: Bun.randomUUIDv7() });
       const organizationId = newId(partition * 16 + 8);
       const hold = await internal.reserveCoordination({
@@ -919,6 +1341,7 @@ test.serial(
         handle,
         reservationId: reservation.value.reservationId,
         organizationId,
+        ownerAccountId: owner.accountId,
         ownerHold: hold.value.reservationId,
       });
     }
@@ -927,15 +1350,25 @@ test.serial(
       population,
       async (_growthDb, _scale, repetition) => {
         const target = targets[repetition]!;
-        await internal.createPending({
+        const pending = await internal.createPending({
           accountId: target.actorId,
           handle: target.handle,
           reservationId: target.reservationId,
           key: `growth-pending-${repetition}`,
         });
+        await internal.activate({
+          accountId: target.actorId,
+          key: `growth-activate-${repetition}`,
+          evidence: {
+            accountId: target.actorId,
+            authIdentityId: target.actorId,
+            registrationId: pending.value.registrationId,
+            authnEpoch: 1,
+          },
+        });
         return internal.createOrganization({
           organizationId: target.organizationId,
-          ownerAccountId: owner.accountId,
+          ownerAccountId: target.ownerAccountId,
           ownerReservationId: target.ownerHold,
           key: `growth-organization-${repetition}`,
         });
@@ -950,36 +1383,46 @@ test.serial(
 test.serial(
   'Handle reserve/change/resolve/expire stays within its bound as A grows',
   async () => {
-    const handle = 'growth_handle_anchor';
-    const partition = hashRoute(handle) >>> 4;
-    const firstAccount = await createActor(partition, 'growth_handle_first');
-    const secondAccount = await createActor(partition, 'growth_handle_second');
-    let instant = new Date('2026-01-01T00:00:00.000Z');
+    const partition = 1543;
+    const anchors: { handle: string; actor: Awaited<ReturnType<typeof createActor>> }[] = [];
+    for (let index = 0; index < operationsPerCheck; index++) {
+      const handle = handleInPartition(partition, 300_000 + index);
+      anchors.push({ handle, actor: await createActor(partition, handle) });
+    }
+    let instant = new Date(Date.now() + REGISTRATION_TTL_MS + 1);
     const timed = lifecycle(() => new Date(instant));
+    for (const { handle } of anchors)
+      await timed.expireHandle({ handle, key: `growth-handle-initial-expiry-${handle}` });
     const population = handlePopulation('growth-access-handle-claims', partition);
     const report = await check(
       population,
       async (_growthDb, _scale, repetition) => {
-        instant = new Date('2026-01-01T00:00:00.000Z');
-        await timed.reserveHandle({
+        const { handle, actor } = anchors[repetition]!;
+        instant = new Date(Date.now());
+        const reservation = await timed.reserveHandle({
           handle,
-          accountId: firstAccount.accountId,
-          key: `growth-handle-first-${repetition}`,
+          accountId: actor.accountId,
+          key: `growth-handle-reserve-${repetition}`,
         });
-        const beforeChange = await timed.resolveHandle(handle);
-        instant = new Date(instant.getTime() + REGISTRATION_TTL_MS + 1);
-        await timed.reserveHandle({
+        const pending = await timed.resolveHandle(handle);
+        const claim = await timed.claimHandle({
+          accountId: actor.accountId,
           handle,
-          accountId: secondAccount.accountId,
-          key: `growth-handle-change-${repetition}`,
+          reservationId: reservation.value.reservationId,
+          key: `growth-handle-claim-${repetition}`,
         });
-        const afterChange = await timed.resolveHandle(handle);
-        instant = new Date(instant.getTime() + REGISTRATION_TTL_MS + 1);
+        const active = await timed.resolveHandle(handle);
+        const redirect = await timed.redirectHandle({
+          accountId: actor.accountId,
+          handle,
+          key: `growth-handle-redirect-${repetition}`,
+        });
+        const redirected = await timed.resolveHandle(handle);
+        instant = new Date(instant.getTime() + HANDLE_REDIRECT_TTL_MS + 1);
         await timed.expireHandle({ handle, key: `growth-handle-expire-${repetition}` });
-        return { beforeChange, afterChange, expired: await timed.resolveHandle(handle) };
+        return { pending, claim, active, redirect, redirected, expired: await timed.resolveHandle(handle) };
       },
       'Handle reserve/change/resolve/expire stays within its bound as A grows',
-      8,
     );
     expect(report.samples).toHaveLength(3);
   },
@@ -990,21 +1433,27 @@ test.serial(
   'Account update, coordination and fences stays within its bound as A grows',
   async () => {
     const partition = 1544;
-    const actor = await createActor(partition, 'growth_update_actor');
-    const target = await createActor(partition, 'growth_update_target');
-    const fenceTarget = await createActor(partition, 'growth_fence_target');
-    const resource: Resource = { route: accountRoute(target.accountId), id: target.accountId };
-    await grant(resource, actor.accountId, 'account:update');
+    const anchors: {
+      actor: Awaited<ReturnType<typeof createActor>>;
+      target: Awaited<ReturnType<typeof createActor>>;
+    }[] = [];
+    for (let index = 0; index < operationsPerCheck; index++) {
+      const actor = await createActor(partition, `growth_update_actor_${index}`);
+      const target = await createActor(partition, `growth_update_target_${index}`);
+      await grant({ route: accountRoute(target.accountId), id: target.accountId }, actor.accountId, 'account:update');
+      anchors.push({ actor, target });
+    }
     const commands = createLifecycleCommands({ pool: db.pool, access });
     const population = coordinationAndFencePopulation('growth-access-account-commands', partition);
     const report = await check(
       population,
       async (_growthDb, _scale, repetition) => {
+        const { actor, target } = anchors[repetition]!;
         const ctx = contextFor(actor.accountId, actor.account);
         const update = await commands.updateAccount(ctx, {
           accountId: target.accountId,
           key: `growth-account-update-${repetition}`,
-          patch: { displayName: `growth-${repetition}` },
+          patch: { displayName: 'growth-update' },
         });
         const hold = await internal.reserveCoordination({
           accountId: actor.accountId,
@@ -1013,11 +1462,11 @@ test.serial(
           key: `growth-coordination-${repetition}`,
         });
         const fence = await internal.raiseFence({
-          accountId: fenceTarget.accountId,
+          accountId: target.accountId,
           key: `growth-fence-${repetition}`,
         });
-        const receipt = await internal.readFenceReceipt(fenceTarget.accountId, fence.value.receiptId);
-        const state = await internal.readFenceState(fenceTarget.accountId);
+        const receipt = await internal.readFenceReceipt(target.accountId, fence.value.receiptId);
+        const state = await internal.readFenceState(target.accountId);
         return { update, hold, fence, receipt, state };
       },
       'Account update, coordination and fences stays within its bound as A grows',
@@ -1031,27 +1480,38 @@ test.serial(
   'Membership change stays within its bound as m grows',
   async () => {
     const partition = 1545;
-    const owner = await createActor(partition, 'growth_membership_owner');
-    const member = await createActor(partition, 'growth_membership_member');
-    const organizationId = await organization(owner.accountId, partition);
-    const hold = await internal.reserveCoordination({
-      accountId: member.accountId,
-      relatedAccountId: organizationId,
-      purpose: 'membership',
-      key: 'growth-membership-hold',
-    });
+    const anchors: {
+      owner: Awaited<ReturnType<typeof createActor>>;
+      member: Awaited<ReturnType<typeof createActor>>;
+      organizationId: string;
+      reservationId: string;
+    }[] = [];
+    for (let index = 0; index < operationsPerCheck; index++) {
+      const owner = await createActor(partition, `growth_membership_owner_${index}`);
+      const member = await createActor(partition, `growth_membership_member_${index}`);
+      const organizationId = await organization(owner.accountId, partition);
+      const hold = await internal.reserveCoordination({
+        accountId: member.accountId,
+        relatedAccountId: organizationId,
+        purpose: 'membership',
+        key: `growth-membership-hold-${index}`,
+      });
+      anchors.push({ owner, member, organizationId, reservationId: hold.value.reservationId });
+    }
     const commands = createLifecycleCommands({ pool: db.pool, access });
     const population = membershipPopulation('growth-access-membership-change', partition);
     const report = await check(
       population,
-      async (_growthDb, _scale, repetition) =>
-        commands.setMembership(contextFor(owner.accountId, owner.account), {
-          organizationId,
-          memberAccountId: member.accountId,
-          reservationId: hold.value.reservationId,
+      async (_growthDb, _scale, repetition) => {
+        const target = anchors[repetition]!;
+        return commands.setMembership(contextFor(target.owner.accountId, target.owner.account), {
+          organizationId: target.organizationId,
+          memberAccountId: target.member.accountId,
+          reservationId: target.reservationId,
           role: 'member',
           key: `growth-membership-change-${repetition}`,
-        }),
+        });
+      },
       'Membership change stays within its bound as m grows',
     );
     expect(report.samples).toHaveLength(3);
@@ -1065,7 +1525,7 @@ test.serial(
     const partition = 1546;
     const actor = await createActor(partition, 'growth_tombstone_actor');
     const targets: string[] = [];
-    for (let index = 0; index < 3; index++) {
+    for (let index = 0; index < operationsPerCheck; index++) {
       const id = newId(partition * 16 + 9);
       const hold = await internal.reserveCoordination({
         accountId: actor.accountId,
