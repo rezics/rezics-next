@@ -1,8 +1,10 @@
 import type { BatchCommand, BatchStatement, Rights } from '@rezics/definitions/bulk';
+import type { CoverCredit, CoverProvenance } from '@rezics/definitions/media-import';
 import type { GrowingRelation, SqliteStatement } from './imports-growth-driver';
 import type { Capture } from '../services/kernel/test/support/growth-cost';
 import type { GrowthDatabase, Population } from '../services/kernel/test/support/growth';
 import type { HttpResponse, Json, Reference, Statement, Subject } from './semantic-driver';
+import type { ConversionContext } from '../packages/conversion/src/support';
 
 /**
  * IMPORT_API_DRIVER is an absolute file path/URL exporting createImportApiDriver.
@@ -30,12 +32,15 @@ import type { HttpResponse, Json, Reference, Statement, Subject } from './semant
  * Semantic owns the public proposal/bulk schema. No expected output may be seeded.
  * Only external source HTTP and object-store boundary fixtures are permitted,
  * through production content adapters with deterministic encoded source bytes.
- * Configure the production domain allowlist for the supplied fixture URL; keep
+ * Use the existing production domain allowlist for the supplied fixture URL; keep
  * source/redirect URL validation and byte/time/pixel caps active.
  * Run the real registered content jobs/Sharp pipeline; no fake media state/job,
  * Auth, Access, document persistence, tuple-home fences or evaluator.
- * Cover transport uses POST /v1/media:importFromUrl {sourceUrl,credit,provenance}
- * with the ordinary automated account bearer/bulk-import grant. No BFF, relay,
+ * Register fixture feed openlibrary explicitly with createSourceRegistration's
+ * source alias; never rewrite observed native source envelopes.
+ * Cover transport uses POST /v1/media:importFromUrl {containerId,sourceUrl,credit,provenance}
+ * with containerId resolved from the actual subject bootstrap and the ordinary
+ * automated account bearer/bulk-import grant. No BFF, relay,
  * media:complete, R2 credentials or service token bypass. Every refresh checks
  * all tuple-home fences (unchanged included); preparation rechecks references;
  * final public disclosure reads current fences independently of subject mapping.
@@ -101,6 +106,8 @@ export interface Exchange {
 }
 export interface Run {
   outcome: 'complete' | 'mass-disappearance' | 'invalid-input' | 'denied' | 'interrupted';
+  /** Untouched actual converter results captured during this run; never reconstructed metadata. */
+  conversions: readonly { readonly sourceMetadata?: unknown }[];
   /** Every attempted public bulk write, including rejected/retried attempts. */
   exchanges: Exchange[];
   waits: { startedAtMs: number; durationMs: number }[];
@@ -157,10 +164,9 @@ export interface ImportApiDriver {
     state: string;
     transitions: string[];
     role: string;
-    credit: string;
-    sourceLink: string;
-    imageLicense: string | null;
-    provenance: unknown;
+    /** Native persisted/status credit and provenance, without display-line synthesis. */
+    credit: CoverCredit;
+    provenance: CoverProvenance;
     digest: string;
     sourceBytes: Uint8Array;
     storedBytes: Uint8Array;
@@ -198,11 +204,16 @@ export interface ImportApiDriver {
   takedown(source: Source, externalId: string, fieldGroup: string): Promise<void>;
   /** Configure real import limit and authoritative test clock; no fake 429s. */
   rateLimit(input: { requests: number; windowMs: number; nowMs: number }): Promise<void>;
-  /** Untouched production converter result plus extracted actual statement inputs; no database access. */
+  /**
+   * Untouched production converter result plus extracted actual statement inputs;
+   * no database/network access. Caller supplies actual resolved subject context.
+   * Never turn bootstrap create commands into fabricated statement inputs.
+   */
   convert(
     source: Source,
     record: unknown,
     converterRevision: string,
+    context?: ConversionContext,
   ): Promise<{
     raw: unknown;
     statements: BatchStatement[];

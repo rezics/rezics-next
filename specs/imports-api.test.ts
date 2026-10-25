@@ -1,6 +1,7 @@
 import { expect, setDefaultTimeout, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { checkBatchWrite } from '@rezics/definitions/bulk';
+import { checkMediaImportRequest, type MediaImportRequest } from '@rezics/definitions/media-import';
 import { documentText, parseDocument } from '@rezics/document';
 import { assertGrowth, type GrowthSample } from '../services/kernel/test/support/growth-bound';
 import { checkGrowth } from '../services/kernel/test/support/growth';
@@ -23,14 +24,19 @@ const urls = {
   bangumi: 'https://bgm.tv/subject/1',
   vndb: 'https://vndb.org/v1',
   openlibrary: 'https://openlibrary.org/works/OL1W',
-  wikidata: 'https://www.wikidata.org/entity/Q1',
+  wikidata: 'https://www.wikidata.org/wiki/Q1?oldid=101',
 };
-const licenses = {
-  bangumi: 'https://creativecommons.org/licenses/by-sa/3.0/',
-  vndb: 'https://opendatacommons.org/licenses/odbl/1.0/',
-  openlibrary: 'https://creativecommons.org/publicdomain/zero/1.0/',
-  wikidata: 'https://creativecommons.org/publicdomain/zero/1.0/',
+const sourceMetadata = {
+  bangumi: {
+    recordUrl: urls.bangumi,
+    summary: { language: 'und', takedownEligible: true },
+    cover: { role: 'cover', creditLine: '(c) rights holder via Bangumi', takedownEligible: true },
+  },
+  vndb: { databaseLicense: 'ODbL-1.0', contentsLicense: 'LicenseRef-DbCL-1.0', attribution: 'VNDB' },
+  openlibrary: { recordUrl: urls.openlibrary, bibliographyPermission: 'CC0-1.0' },
+  wikidata: { license: 'CC0-1.0', attribution: 'Wikidata contributors', url: urls.wikidata },
 };
+const coverUrl = 'https://lain.bgm.tv/cover.jpg';
 async function scenario(action: (d: ImportApiDriver) => Promise<void>) {
   const location = process.env.IMPORT_API_DRIVER;
   if (!location) throw new Error('IMPORT_API_DRIVER is required: bind the real importer and public API');
@@ -184,29 +190,54 @@ async function coverField(d: ImportApiDriver, proposal: Proposal) {
   expect(media.state).toBe('available');
   expect(media.transitions).toEqual(['reserved', 'uploaded', 'available']);
   expect(media.role).toBe('cover');
-  expect(media.credit).toContain('(c) Example Studio');
-  expect(media.credit).toContain('via Bangumi');
-  expect(media.sourceLink).toBe(urls.bangumi);
-  expect(media.imageLicense).toBeNull(); // unknown, never inherited metadata licence
+  expect(media.credit).toEqual({
+    rightsHolder: '(c) rights holder',
+    via: { name: 'Bangumi', url: urls.bangumi },
+    license: 'LicenseRef-unknown',
+    obligations: [],
+  });
   expect(JSON.stringify(media.provenance)).toContain(urls.bangumi);
   expect(media.sharedSharpPipeline).toBe(true);
   const transport = media.transport;
   expect(new URL(transport.request.url).pathname).toBe('/v1/media:importFromUrl');
   expect(transport.request.method).toBe('POST');
   expect(transport.request.headers.get('authorization')).toMatch(/^Bearer \S+$/);
+  expect(checkMediaImportRequest(transport.request.body)).toEqual([]);
   expect(transport.request.body).toEqual({
-    sourceUrl: 'https://example.org/cover.jpg',
-    credit: expect.anything(),
-    provenance: expect.anything(),
+    containerId: proposal.subjectId,
+    sourceUrl: coverUrl,
+    credit: {
+      rightsHolder: '(c) rights holder',
+      via: { name: 'Bangumi', url: urls.bangumi },
+      license: 'LicenseRef-unknown',
+      obligations: [],
+    },
+    provenance: {
+      source: proposal.source,
+      external_id: proposal.externalId,
+      record_revision: proposal.recordRevision,
+      converter_revision: proposal.converterRevision,
+      digest: proposal.recordDigest,
+      field_group: 'cover',
+      references: [
+        {
+          parts: [
+            { property: { id: 'schema:url' }, value: { type: 'value', content: urls.bangumi } },
+            { property: { id: 'schema:url' }, value: { type: 'value', content: coverUrl } },
+          ],
+        },
+      ],
+    },
   });
+  expect(media.provenance).toEqual((transport.request.body as MediaImportRequest).provenance);
   expect(transport.verifiedSub).toBe(transport.importerId);
   expect(transport.websiteSession).toBe(false);
   expect(transport.serviceToken).toBe(false);
   expect(transport.importerFetchedBytes).toBe(0);
-  expect(transport.contentFetches).toContain('https://example.org/cover.jpg');
+  expect(transport.contentFetches).toContain(coverUrl);
   expect(media.response.status).toBe(200);
   expect(media.response.headers.get('location')).toBeNull();
-  expect(media.response.url).not.toBe('https://example.org/cover.jpg');
+  expect(media.response.url).not.toBe(coverUrl);
   expect(media.response.bytes).toEqual(media.storedBytes);
   expect(media.response.bytes).not.toEqual(media.sourceBytes);
   expect(media.digest).toBe(sha256(media.storedBytes));
@@ -235,6 +266,8 @@ async function launch(d: ImportApiDriver, source: Source) {
     expect(x.request.method).toBe('POST');
     expect(new URL(x.request.url).pathname).toBe('/v1/subjects:batchWrite');
     expect(checkBatchWrite(x.request.body)).toEqual([]);
+    expect((x.request.body as { commands: unknown[] }).commands.length).toBeLessThanOrEqual(100);
+    expect(encoder.encode(JSON.stringify(x.request.body)).length).toBeLessThanOrEqual(65536);
     expect(x.request.headers.get('authorization')).toMatch(/^Bearer \S+$/);
     expect(x.request.key.length).toBeGreaterThan(0);
     expect(x.response.status).toBeGreaterThanOrEqual(200);
@@ -255,7 +288,11 @@ async function launch(d: ImportApiDriver, source: Source) {
     expect(p.subjectId).toBe(view.subject!.id);
     expect(references(p)).toContain(source === 'vndb' ? `${urls[source]}.${p.recordRevision}` : urls[source]);
   }
-  expect(references(title)).toContain(licenses[source]);
+  expect(run.conversions).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ sourceMetadata: expect.objectContaining(sourceMetadata[source]) }),
+    ]),
+  );
   for (const command of d.commands(run)) {
     if (command.source.field_group === 'facts') expect(command).not.toHaveProperty('rights');
   }
@@ -290,7 +327,7 @@ test('Bangumi dump preserves summary rights and separately credited cover', () =
   scenario(async (d) => {
     const { view } = await launch(d, 'bangumi');
     const summary = await summaryField(d, view, 'A traveller builds a catalogue.');
-    expect(references(summary)).toContain(licenses.bangumi);
+    expect(references(summary)).toContain(urls.bangumi);
     const cover = view.proposals.find((p) => p.statement?.property.id === d.properties.cover)!;
     expect(cover).toBeDefined();
     await coverField(d, cover);
@@ -299,22 +336,23 @@ test('VNDB COPY dump preserves permitted factual rights and source references', 
   scenario(async (d) => {
     const { view } = await launch(d, 'vndb');
     expect(JSON.stringify(view)).not.toContain('UNLICENSED_DESCRIPTION_SENTINEL');
-    expect(references(field(view, d.properties.title, 'A Catalogue Journey'))).toContain(
-      'https://opendatacommons.org/licenses/dbcl/1.0/',
-    );
+    expect(references(field(view, d.properties.title, 'A Catalogue Journey'))).toContain('https://vndb.org/v1.7');
   }));
-test('original inline VNDB COPY fixture remains supported independently of public table entries', () =>
+test('unsupported inline VNDB COPY fixture has no effects or checkpoint', () =>
   scenario(async (d) => {
     const input = await dump('vndb');
-    input.entries = undefined;
+    delete input.entries;
     input.bytes = new Uint8Array(
       await Bun.file(new URL('./fixtures/imports/api/vndb.sql', import.meta.url)).arrayBuffer(),
     );
-    expect((await d.run(input)).outcome).toBe('complete');
-    const view = await d.read('vndb', 'v1');
-    retrieved(view);
-    field(view, d.properties.title, 'A Catalogue Journey');
-    expect((await d.effects()).subjects).toBe(2);
+    const before = await d.effects(),
+      baseline = await d.baseline('vndb');
+    const run = await d.run(input);
+    expect(run.outcome).toBe('invalid-input');
+    expect(run.exchanges).toEqual([]);
+    expect(run.vanished).toEqual([]);
+    expect(await d.effects()).toEqual(before);
+    expect(await d.baseline('vndb')).toEqual(baseline);
   }));
 test('truncated public VNDB table streams and mismatched headers cannot publish or checkpoint', () =>
   scenario(async (d) => {
@@ -605,7 +643,7 @@ test('cover fences prevent reimport on unchanged and changed refresh and hide la
         ? encoder.encode(
             new TextDecoder()
               .decode(input.bytes)
-              .replace('cover.jpg', 'replacement.jpg')
+              .replaceAll('cover.jpg', 'replacement.jpg')
               .replace('A Catalogue Journey', 'Adjacent cover title'),
           )
         : input.bytes;
@@ -713,19 +751,18 @@ test('malformed and truncated dumps never publish disappearances or advance snap
   scenario(async (d) => {
     for (const source of Object.keys(files) as Source[]) {
       const input = await dump(source);
-      if (source === 'vndb') {
-        input.entries = undefined;
-        input.bytes = new Uint8Array(
-          await Bun.file(new URL('./fixtures/imports/api/vndb.sql', import.meta.url)).arrayBuffer(),
-        );
-      }
-      await d.run(input);
+      expect((await d.run(input)).outcome).toBe('complete');
       const before = await d.effects(),
         baseline = await d.baseline(source),
         view = await d.read(source, keys[source]);
-      const text = new TextDecoder().decode(input.bytes);
+      const text =
+        source === 'vndb'
+          ? await Bun.file(new URL('./fixtures/imports/api/vndb.sql', import.meta.url)).text()
+          : new TextDecoder().decode(input.bytes);
       for (const malformed of [text.slice(0, Math.floor(text.length / 3)), text + '\n{malformed\n']) {
-        const run = await d.run({ ...input, snapshot: '2020-01-02', bytes: encoder.encode(malformed) });
+        const invalid = { ...input, snapshot: '2020-01-02', bytes: encoder.encode(malformed) };
+        delete invalid.entries;
+        const run = await d.run(invalid);
         expect(run.outcome).toBe('invalid-input');
         expect(run.vanished).toEqual([]);
         expect(run.exchanges).toEqual([]);
@@ -931,6 +968,7 @@ test('pure conversion scales with bounded fields and rejects the hard field cap 
       return {
         ...first,
         claims: {
+          ...first.claims,
           P648: Array.from({ length: fields }, (_, i) => ({
             ...claim,
             id: `Q1$01234567-89ab-4cde-8012-${String(i).padStart(12, '0')}`,
@@ -939,14 +977,18 @@ test('pure conversion scales with bounded fields and rejects the hard field cap 
         },
       };
     }
+    const { view } = await launch(d, 'wikidata');
+    const context = { subjectId: view.subject!.id };
     await d.seed({ catalogueRecords: 512, historyRows: 512 });
-    for (const fields of [1, 8, 32, 65]) {
+    // The native 64-statement cap includes the preserved P31 type statement.
+    for (const fields of [1, 8, 32, 63, 64, 65]) {
       const input = record(fields),
         bytes = encoder.encode(JSON.stringify(input)).length;
       const measured = await d.measure(async () => {
-        if (fields > 64) await expect(d.convert('wikidata', input, 'conversion-v1')).rejects.toThrow();
+        if (fields + first.claims.P31.length > 64)
+          await expect(d.convert('wikidata', input, 'conversion-v1', context)).rejects.toThrow();
         else {
-          const converted = await d.convert('wikidata', input, 'conversion-v1');
+          const converted = await d.convert('wikidata', input, 'conversion-v1', context);
           const actual = converted.statements.filter((s) => s.property.id === d.properties.externalId);
           expect(actual.length).toBe(fields);
           for (let i = 0; i < fields; i++) {
@@ -972,7 +1014,7 @@ test('pure conversion scales with bounded fields and rejects the hard field cap 
     const oversized = record(1);
     oversized.labels.en.value = 'x'.repeat(65537);
     const rejected = await d.measure(async () => {
-      await expect(d.convert('wikidata', oversized, 'conversion-v1')).rejects.toThrow();
+      await expect(d.convert('wikidata', oversized, 'conversion-v1', context)).rejects.toThrow();
     });
     for (const c of Object.values(rejected)) {
       expect(c.statements).toBe(0);
