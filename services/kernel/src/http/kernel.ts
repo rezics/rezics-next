@@ -55,7 +55,7 @@ export function createKernel(dependencies: KernelDependencies) {
     access: () => resolveAccess({ actions: actionCatalogue(batched) }),
   });
   const app = definitionRoutes(batched as unknown as ReturnType<typeof subjectRoutes>, dependencies);
-  const presentation = profileRoutes(app, dependencies);
+  const presentation = profileRoutes(app, { ...dependencies, tokens });
   const payouts = payoutRoutes(app, {
     ...dependencies,
     access: () => resolveAccess({ actions: actionCatalogue(app) }),

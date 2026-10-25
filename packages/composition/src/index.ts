@@ -37,6 +37,8 @@ export {
   MAX_PROFILE_BYTES,
   MAX_PROFILE_TEMPLATES,
   PROFILE_FORMAT,
+  PROFILE_ROUTE_MAX_LENGTH,
+  PROFILE_ROUTE_PATTERN,
   profileDigest,
   resolveTemplate,
   validateProfile,

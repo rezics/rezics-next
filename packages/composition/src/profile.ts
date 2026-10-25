@@ -23,12 +23,14 @@ export const MAX_PROFILE_BYTES = 1_048_576;
 export const MAX_PROFILE_TEMPLATES = 128;
 
 const MAX_VIOLATIONS = 64;
-const ROUTE_MAX_LENGTH = 256;
+/** A profile route key is at most this many characters. */
+export const PROFILE_ROUTE_MAX_LENGTH = 256;
 // `curie()` admits this many characters. The pattern itself does not limit length.
 const CURIE_MAX_LENGTH = (curie() as unknown as { maxLength: number }).maxLength;
 // `$` matches before a final newline. `(?![\s\S])` is the end, as in the other string rules.
-const ROUTE_PATTERN = '^/(?:[a-z0-9]+(?:-[a-z0-9]+)*(?:/[a-z0-9]+(?:-[a-z0-9]+)*)*)?(?![\\s\\S])';
-const ROUTE = new RegExp(ROUTE_PATTERN, 'u');
+/** The route key pattern `validateProfile` uses. It does not limit length. */
+export const PROFILE_ROUTE_PATTERN = '^/(?:[a-z0-9]+(?:-[a-z0-9]+)*(?:/[a-z0-9]+(?:-[a-z0-9]+)*)*)?(?![\\s\\S])';
+const ROUTE = new RegExp(PROFILE_ROUTE_PATTERN, 'u');
 
 const PRIORITY: Record<CompositionViolationCode, number> = {
   limit: 4,
@@ -96,7 +98,7 @@ function isCurie(value: string): boolean {
 }
 
 function isRoute(value: string): boolean {
-  return value.length <= ROUTE_MAX_LENGTH && ROUTE.test(value);
+  return value.length <= PROFILE_ROUTE_MAX_LENGTH && ROUTE.test(value);
 }
 
 function token(segment: string): string {
