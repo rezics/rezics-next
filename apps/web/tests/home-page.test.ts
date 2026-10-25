@@ -40,6 +40,21 @@ test('the home is the platform route template from one page read', async () => {
   expect(html).toContain('"query-input":"required name=search_term_string"');
 });
 
+test('a kernel without a home page falls back to the static home', async () => {
+  for (const [status, code] of [
+    [404, 'not_found'],
+    [503, 'presentation_not_ready'],
+  ] as const) {
+    const answer = (async () =>
+      new Response(JSON.stringify({ type: 'about:blank', title: code, status, code }), {
+        status,
+        headers: { 'content-type': 'application/problem+json' },
+      })) as unknown as typeof fetch;
+    const client = createKernelClient('https://kernel.invalid', { fetch: answer });
+    expect(await loadRoutePage(client, '/')).toEqual({ kind: 'missing' });
+  }
+});
+
 test('the home route renders the route page', async () => {
   const route = await Bun.file(new URL('../src/routes/index.tsx', import.meta.url)).text();
   expect(route).toContain('features/pages/route');
