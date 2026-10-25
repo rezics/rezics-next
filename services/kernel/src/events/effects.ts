@@ -1,5 +1,6 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool } from 'pg';
+import { startWorker } from '../worker.ts';
 import type { Relay } from './relays.ts';
 import { EVENT_TYPES, readBatch, type CloudEvent, type Envelope } from './log.ts';
 
