@@ -50,13 +50,13 @@ function appendResult(run: PromotionRun, target: 'headResults' | 'prefixResults'
 }
 
 async function gateAt(options: PromotionOptions, run: PromotionRun, commit: string, commands: readonly string[][], label: string,
-  target: 'headResults' | 'prefixResults'): Promise<PromotionGateResult[]> {
+  target: 'headResults' | 'prefixResults', force = false): Promise<PromotionGateResult[]> {
   const store = options.job.tasks.store, main = options.settings.mainCheckout;
   const results: PromotionGateResult[] = [];
   const tree = join(options.settings.worktreeRoot, `promotion-${run.id}-${label}`);
   for (let index = 0; index < commands.length; index++) {
     const command = [...commands[index]!];
-    const cached = run[target].find(result => result.commit === commit && JSON.stringify(result.command) === JSON.stringify(command));
+    const cached = force ? undefined : run[target].find(result => result.commit === commit && JSON.stringify(result.command) === JSON.stringify(command));
     if (cached) results.push(cached);
   }
   if (results.length === commands.length) return results;
@@ -68,7 +68,7 @@ async function gateAt(options: PromotionOptions, run: PromotionRun, commit: stri
     results.length = 0;
     for (let index = 0; index < commands.length; index++) {
       const command = [...commands[index]!];
-      const cached = run[target].find(result => result.commit === commit && JSON.stringify(result.command) === JSON.stringify(command));
+      const cached = force ? undefined : run[target].find(result => result.commit === commit && JSON.stringify(result.command) === JSON.stringify(command));
       if (cached) { results.push(cached); continue; }
       let result: PromotionGateResult;
       try {
@@ -106,6 +106,12 @@ function createRun(options: PromotionOptions, main: string, dev: string, tasks: 
     rootGate: [...options.settings.gate], promotionParallelism: options.settings.promotionParallelism,
     boundaries, headResults: [], prefixResults: [] };
 }
+
+type PromotionFlakeEvent = {
+  kind: 'promotion-flake'; taskId: string; commit: string; command: string[];
+  initial: PromotionGateResult; confirmation: PromotionGateResult; logs: [string, string];
+};
+type PromotionRunWithFlakes = PromotionRun & { flakeEvents?: PromotionFlakeEvent[] };
 
 function dependentClosure(tasks: readonly Task[], culprit: string): string[] {
   const selected = new Set([culprit]);
@@ -154,16 +160,54 @@ async function resolveMainFailure(options: PromotionOptions, run: PromotionRun):
 async function resolveCulprit(options: PromotionOptions, run: PromotionRun): Promise<PromotionRun> {
   const store = options.job.tasks.store;
   const tasks = run.taskIds.map(id => store.task(id));
-  const results = new Map<string, PromotionGateResult[]>();
-  await concurrent(run.boundaries, run.promotionParallelism, async (boundary, index) => {
-    const currentPrefix = tasks.slice(0, index + 1);
-    const checked = await gateAt(options, run, boundary.commit, commandsFor(run.rootGate, currentPrefix), `prefix-${index}`, 'prefixResults');
-    results.set(boundary.taskId, checked);
-  });
-  const failed = run.boundaries.find(boundary => results.get(boundary.taskId)?.some(result => !result.passed));
-  if (!failed) {
-    run.phase = 'report-environment';
-    store.savePromotion(run); return run;
+  // Bisect on the command that failed at the head, with up to promotionParallelism probes per round: a batch of n tasks
+  // costs O(log n) runs of one command, not every prefix with every acceptance command.
+  const command = [...(run.failedCommand ?? run.rootGate)];
+  const results = new Map<number, PromotionGateResult>();
+  const probe = async (index: number): Promise<void> => {
+    const [result] = await gateAt(options, run, run.boundaries[index]!.commit, [command], `prefix-${index}`, 'prefixResults');
+    results.set(index, result!);
+  };
+  // A task's own acceptance command only means something from that task on; earlier prefixes cannot be its culprit.
+  const owner = run.boundaries.findIndex(boundary =>
+    JSON.stringify(store.task(boundary.taskId).brief.acceptance.command) === JSON.stringify(command));
+  let low = owner >= 0 ? owner : 0, high = run.boundaries.length - 1;
+  if (high < 0) { run.phase = 'report-environment'; store.savePromotion(run); return run; }
+  if (run.boundaries[high]!.commit !== run.devHead) {
+    // Commits after the last task boundary are not tasks; when the last boundary passes, no task is to blame.
+    await probe(high);
+    if (results.get(high)!.passed) { run.phase = 'report-environment'; store.savePromotion(run); return run; }
+  }
+  while (low < high) {
+    const span = high - low, count = Math.min(run.promotionParallelism, span);
+    const picks = [...new Set(Array.from({ length: count }, (_, k) => low + Math.floor(((k + 1) * span) / (count + 1))))]
+      .filter(index => index < high).sort((a, b) => a - b);
+    if (!picks.length) picks.push(low);
+    await concurrent(picks, run.promotionParallelism, async index => probe(index));
+    for (const index of picks) {
+      if (results.get(index)!.passed) low = Math.max(low, index + 1);
+      else { high = index; break; }
+    }
+  }
+  const failedBoundaryIndex = high;
+  const failed = run.boundaries[failedBoundaryIndex]!;
+  const initial = results.get(failedBoundaryIndex)
+    ?? run.headResults.find(result => !result.passed && JSON.stringify(result.command) === JSON.stringify(command))!;
+  const commandIndex = 0;
+  const confirmationLabel = 'confirm-culprit';
+  const confirmationLog = join(options.settings.stateDirectory, `promotion-${run.id}-${confirmationLabel}-0.log`);
+  const initialLog = join(options.settings.stateDirectory, `promotion-${run.id}-prefix-${failedBoundaryIndex}-${commandIndex}.log`);
+  const confirmation = (await gateAt(options, run, failed.commit, [initial.command], confirmationLabel,
+    'prefixResults', true))[0]!;
+  if (confirmation.passed || confirmation.firstFailure?.fingerprint !== initial.firstFailure?.fingerprint) {
+    const event: PromotionFlakeEvent = { kind: 'promotion-flake', taskId: failed.taskId, commit: failed.commit,
+      command: [...initial.command], initial, confirmation, logs: [initialLog, confirmationLog] };
+    const currentDev = head(options.settings.mainCheckout, options.settings.integrationBranch);
+    const currentMain = head(options.settings.mainCheckout, options.settings.mainBranch);
+    const next = createRun(options, currentMain, currentDev, boundaryTasks(options, currentMain, currentDev)) as PromotionRunWithFlakes;
+    next.flakeEvents = [...((run as PromotionRunWithFlakes).flakeEvents ?? []), event];
+    store.savePromotion(next);
+    return next;
   }
   const culprit = store.task(failed.taskId);
   const closure = dependentClosure(tasks, culprit.id);
@@ -252,6 +296,8 @@ export async function promote(options: PromotionOptions): Promise<void> {
       }
       if (run.phase === 'classify-main') run = await resolveMainFailure(options, run);
       if (run.phase === 'classify-prefixes') run = await resolveCulprit(options, run);
+      // A flaky confirmation stores a fresh gate-head run; start gating that snapshot under this lease.
+      if (run.phase === 'gate-head') continue;
       if (run.phase === 'report-environment') { reportEnvironment(options, run); return; }
       if (run.phase === 'revert-planned') {
         const currentDev = head(settings.mainCheckout, settings.integrationBranch);
