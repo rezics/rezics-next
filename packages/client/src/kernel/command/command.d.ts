@@ -119,6 +119,8 @@ export type CommandAuthorization = {
     }>;
     prepare?(attempt: CommandAttempt): Promise<unknown>;
     authorize(tx: CommandTransaction, attempt: CommandAttempt, evidence: unknown): Promise<CommandAuthorizationMode>;
+    /** Runs only after a successful body, before receipt/outbox writes. Never on replay. */
+    finalize?(tx: CommandTransaction, attempt: CommandAttempt, evidence: unknown): Promise<void>;
     denied(): Error;
 };
 declare const completedAuthorization: unique symbol;

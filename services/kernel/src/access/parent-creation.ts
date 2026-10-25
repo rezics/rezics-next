@@ -12,7 +12,11 @@ import { validResource } from './grant-command.ts';
 import { GrantDeniedError } from './grant-commands.ts';
 import { permissionEvidenceDeadline } from './permission.ts';
 import { resourceAuthorization } from './resource-authorization.ts';
-import { CreationManifestUnavailableError, type ResourceCreationManifest } from './creation-manifest.ts';
+import {
+  creationManifestEntries,
+  type ResourceCreationEntry,
+  type ResourceCreationManifest,
+} from './creation-manifest.ts';
 
 /** The owning module supplies this port in service code after binding the actual
  * parent storage/identity. validate reads only that parent anchor, and must check
@@ -40,35 +44,35 @@ export type ResourceCreationPort = Readonly<{
 export type ParentCreationContext = AccessContext & {
   resource: Readonly<Resource>;
   creation: ResourceCreationPort;
-  /** Bounded server declaration; initialization is unavailable at this contract stage. */
+  /** Opaque bounded declaration; every tuple must finish initialization before commit. */
   manifest?: ResourceCreationManifest;
+};
+type Entry = {
+  resource: Readonly<Resource>;
+  creator: string;
+  type?: string;
+  validate: ResourceCreationPort['validate'];
+  state: 'pending' | 'initializing' | 'complete';
 };
 type Creation = {
   access: Access;
-  actorId: string;
-  resource: Readonly<Resource>;
   attempt: CommandAttempt;
-  initialized: boolean;
+  proof: unknown;
+  entries: Entry[];
   parent: Readonly<Resource>;
   action: string;
   deadline: number;
-  validateCreation: ResourceCreationPort['validate'];
+  failed: boolean;
+  manifest: boolean;
 };
 const creations = new WeakMap<CommandTransaction, Creation>();
 
-/** Internal capability lookup also requires the command executor's live opaque
- * time/context; retained clients, manual transactions and copied authorizations
- * cannot turn this into an existing-resource owner-grant API.
- */
-export async function creationCapability(
-  tx: CommandTransaction,
-  resource: Resource,
-  creator: string,
-): Promise<Readonly<{ access: Access; time: AuthoritativeTime }>> {
+function liveCreation(tx: CommandTransaction): Creation {
   const command = currentCommand(tx);
   const creation = creations.get(tx);
   if (
     !creation ||
+    creation.failed ||
     creation.attempt.time !== command.time ||
     command.authorization?.mode !== 'execute' ||
     command.authorization.action !== creation.action ||
@@ -76,17 +80,58 @@ export async function creationCapability(
     command.authorization.resource.id !== creation.parent.id ||
     command.basis !== creation.attempt.basis ||
     command.partition !== creation.attempt.partition ||
-    Date.now() >= creation.deadline ||
-    creation.initialized ||
-    creator !== creation.actorId ||
-    resource.route !== creation.resource.route ||
-    resource.id !== creation.resource.id
-  )
+    Date.now() >= creation.deadline
+  ) {
+    if (creation) creation.failed = true;
     throw new GrantDeniedError();
+  }
   authoritativeTimeValue(command.time);
-  creation.initialized = true;
-  if (!(await creation.validateCreation(tx, creation.resource, command.time))) throw new GrantDeniedError();
-  return Object.freeze({ access: creation.access, time: command.time });
+  return creation;
+}
+
+/** Internal exact-tuple reservation. A pending entry becomes complete only when
+ * the native initializer confirms successful grant writes. Any failed, concurrent
+ * or repeated use poisons the attempt, even if the body catches the exception.
+ * Generic resource authorization never installs this transaction capability.
+ */
+export async function creationCapability(
+  tx: CommandTransaction,
+  resource: Resource,
+  creator: string,
+  type?: string,
+): Promise<Readonly<{ access: Access; time: AuthoritativeTime; complete(): void }>> {
+  const creation = liveCreation(tx);
+  const entry = creation.entries.find(
+    (entry) => entry.resource.route === resource.route && entry.resource.id === resource.id,
+  );
+  if (
+    !entry ||
+    entry.creator !== creator ||
+    (entry.type !== undefined && entry.type !== type) ||
+    entry.state !== 'pending'
+  ) {
+    creation.failed = true;
+    throw new GrantDeniedError();
+  }
+  entry.state = 'initializing';
+  try {
+    if (!(await entry.validate(tx, entry.resource, creation.attempt.time))) throw new GrantDeniedError();
+    liveCreation(tx);
+  } catch (error) {
+    creation.failed = true;
+    throw error;
+  }
+  return Object.freeze({
+    access: creation.access,
+    time: creation.attempt.time,
+    complete() {
+      if (liveCreation(tx) !== creation || entry.state !== 'initializing') {
+        creation.failed = true;
+        throw new GrantDeniedError();
+      }
+      entry.state = 'complete';
+    },
+  });
 }
 
 /** Prepare independently anchored identity/org evidence before checking out the
@@ -101,16 +146,18 @@ export function parentCreationAuthorization(input: {
   parent: ParentAnchor;
   context: ParentCreationContext;
 }): CommandAuthorization {
-  // Never fall through to single-resource initialization for a manifest-bearing
-  // command. This guard mints no proof, including for copied or serialized tokens.
-  if (input.context.manifest !== undefined) throw new CreationManifestUnavailableError();
   const { access, actor, action } = input;
   const parent = Object.freeze({ ...input.parent.resource });
-  const resource = Object.freeze({ ...input.context.resource });
+  const manifest = input.context.manifest;
+  const declared: readonly ResourceCreationEntry[] | undefined =
+    manifest === undefined ? undefined : creationManifestEntries(manifest);
+  // Manifest metadata is authoritative; legacy target/port properties are not read.
+  const resource = declared?.[0]?.resource ?? Object.freeze({ ...input.context.resource });
   const { pool, deadline } = input.context;
   const validate = input.parent.validate.bind(input.parent);
-  if (typeof input.context.creation?.validate !== 'function') throw new GrantDeniedError();
-  const validateCreation = input.context.creation.validate.bind(input.context.creation);
+  const legacyPort = declared ? undefined : input.context.creation;
+  if (!declared && typeof legacyPort?.validate !== 'function') throw new GrantDeniedError();
+  const validateCreation = legacyPort?.validate.bind(legacyPort);
   const basis =
     actor.kind === 'account'
       ? { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy }
@@ -126,11 +173,18 @@ export function parentCreationAuthorization(input: {
       validResource(parent) &&
       validResource(resource) &&
       parent.id !== resource.id &&
+      (!declared ||
+        declared.every(
+          (entry) =>
+            entry.creator === basis.actorAccountId &&
+            entry.resource.id !== parent.id &&
+            partitionOf(entry.resource.route) === attempt.partition,
+        )) &&
       attempt.partition === partitionOf(resource.route) &&
       Date.now() < deadline
     );
   }
-  return {
+  return Object.freeze<CommandAuthorization>({
     action,
     resource: parent,
     denied,
@@ -166,16 +220,37 @@ export function parentCreationAuthorization(input: {
       if ((await prepared.authorization.authorize(tx, attempt, proof)) !== 'execute') throw denied();
       creations.set(tx, {
         access,
-        actorId: basis!.actorAccountId,
-        resource,
         attempt,
-        initialized: false,
+        proof,
+        entries: declared
+          ? declared.map((entry) => ({
+              resource: entry.resource,
+              creator: entry.creator,
+              type: entry.type,
+              validate: entry.creation.validate.bind(entry.creation),
+              state: 'pending',
+            }))
+          : [{ resource, creator: basis!.actorAccountId, validate: validateCreation!, state: 'pending' }],
+        failed: false,
+        manifest: declared !== undefined,
         parent,
         action,
         deadline: prepared.deadline,
-        validateCreation,
       });
       return 'execute';
     },
-  };
+    async finalize(tx, attempt, proof) {
+      const creation = liveCreation(tx);
+      if (
+        creation.attempt !== attempt ||
+        creation.proof !== proof ||
+        (creation.manifest && creation.entries.some((entry) => entry.state !== 'complete')) ||
+        creation.entries.some((entry) => entry.state === 'initializing')
+      ) {
+        creation.failed = true;
+        throw denied();
+      }
+      creations.delete(tx);
+    },
+  });
 }

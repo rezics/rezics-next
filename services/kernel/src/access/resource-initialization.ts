@@ -9,8 +9,9 @@ import initialize from './resource-initialization.sql';
 /** Called INSIDE the owning module's new-resource transaction, after its unique
  * resource INSERT. The parentCreationAuthorization capability fixes the creator,
  * exact child resource, partition and shared attempt T. This writes role IDs,
- * never action copies, and never opens a connection/command. Any failure must
- * propagate out of the command body so the resource/outbox/receipt roll back.
+ * never action copies, and never opens a connection/command. Completion follows
+ * successful native writes; finalization rejects missing or failed entries even
+ * when the body catches errors.
  * Empty trusted templates (reports/communal subjects) intentionally grant none.
  */
 export async function initializeResourceGrants(
@@ -22,7 +23,7 @@ export async function initializeResourceGrants(
   },
 ): Promise<void> {
   const { resource, type, creator } = input;
-  const capability = await creationCapability(tx, resource, creator);
+  const capability = await creationCapability(tx, resource, creator, type);
   const template = resourceRoleCatalogue(capability.access)?.types.get(type);
   if (!template) throw new GrantDeniedError();
   const grants = template.standing.map((role) => ({
@@ -41,4 +42,5 @@ export async function initializeResourceGrants(
     transaction_id: Bun.randomUUIDv7(),
   });
   if (rows.length !== grants.length) throw new GrantDeniedError();
+  capability.complete();
 }

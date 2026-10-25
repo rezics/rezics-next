@@ -76,3 +76,10 @@ export class CreationManifestUnavailableError extends Error {
     this.name = 'CreationManifestUnavailableError';
   }
 }
+
+/** Internal Access lookup: a structural copy or inherited token has no entries. */
+export function creationManifestEntries(manifest: ResourceCreationManifest): readonly ResourceCreationEntry[] {
+  const entries = manifests.get(manifest);
+  if (!entries) throw new TypeError('Invalid creation manifest');
+  return entries;
+}

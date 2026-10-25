@@ -144,6 +144,8 @@ export type CommandAuthorization = {
   readonly resource: Readonly<{ route: number; id: string }>;
   prepare?(attempt: CommandAttempt): Promise<unknown>;
   authorize(tx: CommandTransaction, attempt: CommandAttempt, evidence: unknown): Promise<CommandAuthorizationMode>;
+  /** Runs only after a successful body, before receipt/outbox writes. Never on replay. */
+  finalize?(tx: CommandTransaction, attempt: CommandAttempt, evidence: unknown): Promise<void>;
   denied(): Error;
 };
 declare const completedAuthorization: unique symbol;
@@ -389,12 +391,14 @@ export async function runCommand<T>(
     let time: AuthoritativeTime | undefined;
     try {
       let evidence: unknown;
+      let attempt: CommandAttempt | undefined;
       if (authorization?.prepare) {
         // The clock read finishes before parent/org evidence and child checkout.
         time = await withConnection(pool, (client) =>
           boundedRead(client, deadline, () => mintTime(client, options.clock)),
         );
-        evidence = await authorization.prepare(Object.freeze({ partition, basis, time }));
+        attempt = Object.freeze({ partition, basis, time });
+        evidence = await authorization.prepare(attempt);
       }
       const result = await withConnection(pool, async (client) => {
         await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
@@ -403,7 +407,7 @@ export async function runCommand<T>(
           await client.query("SET LOCAL lock_timeout = '200ms'");
           await client.query(`SET LOCAL statement_timeout = '${remaining(deadline)}ms'`);
           time ??= await mintTime(client, options.clock);
-          const attempt = Object.freeze({ partition, basis, time });
+          attempt ??= Object.freeze({ partition, basis, time });
           attempts.set(tx, attempt);
           const mode = authorization ? await authorization.authorize(tx, attempt, evidence) : 'execute';
           if (mode !== 'execute' && mode !== 'receipt-only') throw new TypeError('Invalid command authorization');
@@ -443,6 +447,7 @@ export async function runCommand<T>(
           if (response.events.length === 0) throw new TypeError('A command must emit at least one event');
           if (response.events.length > MAX_COMMAND_EVENTS)
             throw new TooManyEventsError(partition, response.events.length);
+          await authorization?.finalize?.(tx, attempt, evidence);
           let receipt: Record<string, unknown> | null = null;
           let value = response.value;
           if (options.receipt && receiptDigest) {
