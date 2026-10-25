@@ -1,5 +1,6 @@
 import type { Pool } from 'pg';
 import { Type } from 'typebox';
+import { COMMERCE_EVENTS } from '../commerce/events.ts';
 import { Value } from 'typebox/value';
 import { withConnection } from '../database/pool.ts';
 import advanceCheckpoint from './advance-checkpoint.sql';
@@ -13,6 +14,7 @@ export const BATCH_ENVELOPES = 64;
 const UUID = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
 const digest = Type.String({ pattern: '^sha256:[0-9a-f]{64}$' });
 export const EVENT_TYPES = {
+  ...COMMERCE_EVENTS,
   'com.rezics.definitions.published.v1': Type.Object({ digest }, { additionalProperties: false }),
   'com.rezics.definitions.activated.v1': Type.Object(
     { digest, head: Type.Integer({ minimum: 1 }) },

@@ -6,13 +6,16 @@
     "content.thread.standing": ["post:create", "media:create", "report:create"],
     "content.post.owner": ["post:read", "post:revise", "post:erase", "media:create"],
     "content.post.standing": ["report:create"],
-    "content.media.owner": ["media:read_reservation", "media:read", "media:complete", "media:erase"]
+    "content.media.owner": ["media:read_reservation", "media:read", "media:complete", "media:erase"],
+    "commerce.offer.owner": ["offer:read", "offer:manage", "order:create"],
+    "commerce.offer.standing": ["order:create"]
   },
   "types": {
     "content.board": { "owner": "content.board.owner", "standing": ["content.board.standing"] },
     "content.thread": { "owner": "content.thread.owner", "standing": ["content.thread.standing"] },
     "content.post": { "owner": "content.post.owner", "standing": ["content.post.standing"] },
     "content.media": { "owner": "content.media.owner", "standing": [] },
-    "content.report": { "standing": [] }
+    "content.report": { "standing": [] },
+    "commerce.offer": { "owner": "commerce.offer.owner", "standing": ["commerce.offer.standing"] }
   }
 }
