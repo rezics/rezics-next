@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { releaseDigest, type Release } from '@rezics/definitions';
+import { releaseDigest, valueSchema, type Release } from '@rezics/definitions';
 import {
   publishRelease,
   activateRelease,
@@ -43,7 +43,7 @@ const release = (version: string): Release => ({
       datatype: 'url',
       multivalued: false,
       qualifiers: [],
-      value: { type: 'string' },
+      value: valueSchema('url'),
     },
   },
 });
