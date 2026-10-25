@@ -15,7 +15,7 @@ const pick = (type: string) =>
   resolveTemplate(platformProfile, { type, bases: bundledRelease.types[type]?.bases ?? [] });
 const lists = (type: string) =>
   Object.values(planReads(platformRegistry, pick(type).document, { subject }).reads).flatMap((read) =>
-    read.kind === 'search' ? [read.body.filter.statement.property] : [],
+    read.kind === 'search' && 'statement' in read.body.filter ? [read.body.filter.statement.property] : [],
   );
 
 test('people, organisations, concepts, characters and series list their works', () => {
