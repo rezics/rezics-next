@@ -46,8 +46,8 @@ async function uploaded(kind: ImageFixture = 'landscape') {
   const { media, input } = await reserve({ type: source.type, length: source.bytes.length, sha256: source.sha256 });
   await driver.placeOriginal(media.id, source.bytes);
   const completion: Completion = { requestId: requestId(), reservationRequestId: input.requestId,
-    containerId: input.containerId, objectId: media.id, uploaderId: driver.authorId,
-    length: source.bytes.length, sha256: source.sha256 };
+    containerId: input.containerId,
+    byteCount: source.bytes.length, sha256: source.sha256 };
   expect(await driver.complete('worker', completion)).toBe('permitted');
   expect((await row(media.id))?.state).toBe('uploaded');
   return { media, input, completion, source };
@@ -115,17 +115,41 @@ test('trusted completion binds actual bytes owner reservation request and contai
   const source = await driver.source('landscape');
   await driver.placeOriginal(media.id, source.bytes);
   const command: Completion = { requestId: requestId(), reservationRequestId: input.requestId,
-    containerId: media.containerId, objectId: media.id, uploaderId: driver.authorId,
-    length: source.bytes.length, sha256: source.sha256 };
-  for (const as of ['author', 'other', 'moderator', 'anonymous', 'suspended'] as const) {
+    containerId: media.containerId,
+    byteCount: source.bytes.length, sha256: source.sha256 };
+  for (const as of ['author', 'other', 'other-worker', 'moderator', 'anonymous', 'suspended'] as const) {
     await unchanged(() => driver.complete(as, command, { trusted: true, worker: true, uploaderId: driver.authorId }));
   }
   for (const patch of [{ containerId: driver.containers.sibling.id }, { reservationRequestId: 'unrelated-request' },
-    { uploaderId: 'another-uploader' }, { length: source.bytes.length + 1 }, { sha256: '0'.repeat(64) }]) {
+    { byteCount: source.bytes.length + 1 }, { sha256: '0'.repeat(64) }]) {
     await unchanged(() => driver.complete('worker', { ...command, ...patch }));
   }
   expect(await driver.complete('worker', command)).toBe('permitted');
   expect(await row(media.id)).toMatchObject({ state: 'uploaded', sha256: source.sha256, length: source.bytes.length });
+});
+
+test('media specification uses uploader BFF tokens instead of a separate Worker actor', async () => {
+  const { media, input } = await reserve();
+  const author = await driver.authenticationEvidence('author', input.requestId);
+  const source = await driver.source('landscape');
+  await driver.placeOriginal(media.id, source.bytes);
+  const completion: Completion = { requestId: requestId(), reservationRequestId: input.requestId,
+    containerId: media.containerId, byteCount: source.bytes.length, sha256: source.sha256 };
+  await unchanged(() => driver.complete('other-worker', completion, { uploaderId: author.sub }));
+  const other = await driver.authenticationEvidence('other-worker', completion.requestId);
+  expect(await driver.complete('worker', completion)).toBe('permitted');
+  const worker = await driver.authenticationEvidence('worker', completion.requestId);
+  expect(author.sub).toBe(media.uploaderId);
+  expect(worker.sub).toBe(author.sub);
+  expect(worker.clientId).toBe(worker.registeredWebsiteClientId);
+  expect(worker.clientId).toBe('website');
+  expect(worker.scopes).toContain('media:complete');
+  expect(author.scopes).not.toContain('media:complete');
+  expect(other.sub).toBeTruthy();
+  expect(other.sub).not.toBe(worker.sub);
+  expect(other.clientId).toBe(worker.clientId);
+  expect(other.registeredWebsiteClientId).toBe(worker.registeredWebsiteClientId);
+  expect(other.scopes.slice().sort()).toEqual(worker.scopes.slice().sort());
 });
 
 test('completion without declared digest records actual digest and repeated transitions cannot regress', async () => {
@@ -133,8 +157,8 @@ test('completion without declared digest records actual digest and repeated tran
   const { media, input } = await reserve({ sha256: undefined, type: source.type, length: source.bytes.length });
   await driver.placeOriginal(media.id, source.bytes);
   const completion: Completion = { requestId: requestId(), reservationRequestId: input.requestId,
-    containerId: media.containerId, objectId: media.id, uploaderId: driver.authorId,
-    length: source.bytes.length, sha256: source.sha256 };
+    containerId: media.containerId,
+    byteCount: source.bytes.length, sha256: source.sha256 };
   expect(await driver.complete('worker', completion)).toBe('permitted');
   expect((await row(media.id))?.sha256).toBe(source.sha256);
   const uploadedState = await driver.inspect();
@@ -152,7 +176,7 @@ test('illegal processing and unauthorized jobs cannot change state', async () =>
   const reserved = await reserve();
   await unchanged(() => driver.process('job', reserved.media.id));
   const { media } = await uploaded();
-  for (const as of ['author', 'other', 'anonymous', 'suspended', 'moderator', 'worker'] as const) {
+  for (const as of ['author', 'other', 'anonymous', 'suspended', 'moderator', 'worker', 'other-worker'] as const) {
     await unchanged(() => driver.process(as, media.id));
     const before = await driver.inspect();
     expect((await driver.collect(as, media.partition)).outcome).toBe('denied');
@@ -418,12 +442,41 @@ test('parent visibility revocation rechecks even conditional download authorizat
   }
 });
 
-test('revoked parent authority denies reservation completion and claim replays before receipt lookup', async () => {
-  const fixture = await available('tiny');
-  const command = reference(fixture.media);
-  expect(await driver.reference('author', command)).toBe('permitted');
-  await driver.revokeParent();
+test('reserve replay revokes only parent media:create before receipt lookup', async () => {
+  const fixture = await uploaded('tiny');
+  const snapshot = await driver.inspect();
+  await driver.revokeMediaCreate(fixture.media.containerId);
+  expect(await driver.inspect()).toEqual(snapshot);
   await unchanged(() => driver.reserve('author', fixture.input), { outcome: 'denied' });
+  // Completion has independent scope/authority, even after creation is revoked.
+  await unchanged(() => driver.complete('worker', fixture.completion), 'permitted');
+});
+
+test('reservation completion and reference replay denial revoke each commands actual authority', async () => {
+  const fixture = await uploaded('tiny');
+  const before = await driver.authenticationEvidence('worker', fixture.completion.requestId);
+  const snapshot = await driver.inspect();
+  await driver.removeWebsiteCompletionScope();
+  expect(await driver.inspect()).toEqual(snapshot);
   await unchanged(() => driver.complete('worker', fixture.completion));
-  await unchanged(() => driver.reference('author', command));
+  const after = await driver.authenticationEvidence('worker', fixture.completion.requestId);
+  expect(after.sub).toBe(before.sub);
+  expect(after.clientId).toBe(before.clientId);
+  expect(after.registeredWebsiteClientId).toBe(before.registeredWebsiteClientId);
+  expect(after.scopes).not.toContain('media:complete');
+  expect(after.scopes.slice().sort()).toEqual(before.scopes.filter(scope => scope !== 'media:complete').sort());
+  await unchanged(async () => (await driver.reserve('author', fixture.input)).outcome, 'permitted');
+});
+
+test('reference replays revoke only actual post and revision command authority before receipt lookup', async () => {
+  for (const kind of ['post', 'revision'] as const) {
+    const fixture = await available('tiny');
+    const command = reference(fixture.media, { kind });
+    expect(await driver.reference('author', command)).toBe('permitted');
+    const snapshot = await driver.inspect();
+    await driver.revokeReferenceAuthority(fixture.media.containerId, kind);
+    expect(await driver.inspect()).toEqual(snapshot);
+    await unchanged(() => driver.reference('author', command));
+    await unchanged(() => driver.complete('worker', fixture.completion), 'permitted');
+  }
 });

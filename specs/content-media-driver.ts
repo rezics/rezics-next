@@ -14,12 +14,22 @@ import type { DocumentSnapshot } from '../packages/document/src/types';
  *
  * Web owns byte transport. placeOriginal is fixture setup at the storage port,
  * never a Worker implementation. complete exercises the public upload-complete
- * boundary with real server credentials and owning request/container binding.
- * 'worker' selects credentials, never a caller-supplied trusted boolean. The
- * final API binding is coordinated with web; no new crypto protocol is specified.
+ * boundary with the uploader's own verified token and reservation/container binding.
+ * Site Worker is the website BFF and confidential OAuth client: private_key_jwt
+ * keys exist only in Worker. Person access/refresh tokens live only in Worker
+ * server sessions; the browser holds only a session cookie. Real Auth issues these tokens using
+ * private_key_jwt client authentication, never handwritten JWTs in this suite.
+ * 'worker' selects uploader-sub, client_id=website credentials with media:complete;
+ * 'author' is the same uploader with an ordinary token lacking that scope.
+ * Only the website client registration permits media:complete. 'other-worker'
+ * has a real different sub with the same website client and scope. None is a
+ * separate Worker actor or client-sub token; no token exchange or RFC8693.
+ * Creation on the container is authorized at reserve. Completion matches the
+ * reservation uploader to verified sub, the container, measured bytes and SHA256.
+ * Its formula authority and media:complete scope are independent of media:create.
  * Every command authorizes at authoritative T before consulting its receipt.
  */
-export type Persona = 'author' | 'other' | 'anonymous' | 'suspended' | 'moderator' | 'worker' | 'job';
+export type Persona = 'author' | 'other' | 'anonymous' | 'suspended' | 'moderator' | 'worker' | 'other-worker' | 'job';
 export type Outcome = 'permitted' | 'denied' | 'invalid';
 export interface Container { id: string; route: number; partition: number }
 export interface Reservation {
@@ -49,12 +59,11 @@ export interface Media {
 }
 export type Reserved = { outcome: 'permitted'; media: Media } | { outcome: 'denied' | 'invalid' };
 export interface Completion {
+  /** Command receipt identity; transport metadata, not a completion body field. */
   requestId: string;
   reservationRequestId: string;
   containerId: string;
-  objectId: string;
-  uploaderId: string;
-  length: number;
+  byteCount: number;
   sha256: string;
 }
 export interface ReferenceCommand {
@@ -112,7 +121,20 @@ export interface ContentMediaDriver {
     action: string; anchorId: string; partition: number; anchored: boolean;
     authoritativeTime: string; newObjectGrant: boolean;
   }>;
+  /**
+   * HTTP body is {containerId,reservationRequestId,byteCount,sha256}; uploader is
+   * verified sub, never trusted body input. Resolve media by reservation+container.
+   * Reservation/Media length/type are test-only mappings of HTTP byteCount/mediaType.
+   */
   complete(as: Persona, input: Completion, untrusted?: Record<string, unknown>): Promise<Outcome>;
+  /**
+   * Observe claims from the actual JWT verifier for this persona's request, even
+   * if authorization denied it. Website ID comes from real Auth registration.
+   * No adapter constants, decoded-but-unverified tokens or fabricated evidence.
+   */
+  authenticationEvidence(as: 'author' | 'worker' | 'other-worker', requestId: string): Promise<{
+    sub: string; clientId: string; scopes: string[]; registeredWebsiteClientId: string;
+  }>;
   process(as: Persona, objectId: string): Promise<Outcome>;
   reference(as: Persona, input: ReferenceCommand): Promise<Outcome>;
   download(as: Persona, objectId: string, representation: 'original' | 'derivative',
@@ -140,11 +162,20 @@ export interface ContentMediaDriver {
    */
   source(kind: ImageFixture): Promise<Source>;
   placeOriginal(objectId: string, bytes: Uint8Array): Promise<void>;
-  /** Fixture controls only; preserve issued sessions and receipts. */
+  /** Fixture controls only; preserve receipts and sessions except explicit credential replacement. */
   setTime(instant: string): Promise<void>;
   setCreatedAt(objectId: string, instant: string): Promise<void>;
   grantParent(as: 'other', containerId: string): Promise<void>;
-  revokeParent(): Promise<void>;
+  /** Revoke only uploader media:create on this parent; preserve all other authority. */
+  revokeMediaCreate(containerId: string): Promise<void>;
+  /**
+   * Replace only worker credentials with a valid Auth-issued same-sub/client token
+   * lacking media:complete. Preserve other scopes/formula authority, parent-create
+   * grants, reservation, bytes and receipts; author credentials stay valid.
+   */
+  removeWebsiteCompletionScope(): Promise<void>;
+  /** Revoke only the author's actual post/revision command authority on this container. */
+  revokeReferenceAuthority(containerId: string, kind: 'post' | 'revision'): Promise<void>;
   setParentVisibility(value: 'private' | 'taken-down'): Promise<void>;
   erase(objectId: string): Promise<void>;
   /** One-shot failure after real reference writes but before commit; maps to denied and rolls back. */
