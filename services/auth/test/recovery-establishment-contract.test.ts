@@ -12,6 +12,7 @@ const evidence: RecoveryEstablishmentEvidence = Object.freeze({
   minimumAuthnEpoch: '9007199254740993',
   authnEpoch: 3,
   establishmentId: 'committed-native-establishment',
+  expiresAt: '2099-01-01T00:00:00.000Z',
 });
 
 function untouchedDatabase() {
@@ -33,6 +34,7 @@ test('recovery completion evidence has exact barrier and new establishment field
       minimumAuthnEpoch: string;
       authnEpoch: number;
       establishmentId: string;
+      expiresAt: string;
     }>
   >();
   expectTypeOf<auth.RecoveryEstablishmentEvidence>().toEqualTypeOf<RecoveryEstablishmentEvidence>();

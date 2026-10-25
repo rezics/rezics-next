@@ -67,6 +67,9 @@ if (process.env.AUTH_RATE_GROWTH_CHILD !== '1') {
         async authorizeRecovery() {
           throw new Error('Invalid proofs must not advance the floor');
         },
+        async completeRecovery() {
+          throw new Error('Invalid proofs must not complete recovery');
+        },
       },
       recoveryDelivery: {
         async deliver() {
@@ -120,12 +123,21 @@ if (process.env.AUTH_RATE_GROWTH_CHILD !== '1') {
       SELECT 'client-'||i,true,ARRAY['read'] FROM generate_series($1::int,$2::int) i`,
       range,
     );
+    // Match registered-client coverage so admission grows with the client store.
+    await database.admin.query(
+      `INSERT INTO auth_client_coverage (client_id,ready,ready_after)
+      SELECT 'client-'||i,true,statement_timestamp() FROM generate_series($1::int,$2::int) i`,
+      range,
+    );
+    // Native insertion caps each owner's history at 64, including expired rows.
+    // Keep that full neighborhood fixed while unrelated session owners grow.
     await database.admin.query(
       `INSERT INTO session
       (id,token,"userId","updatedAt","expiresAt","clientId","grantedScope","authnEpoch","authTime","authMethods")
       SELECT kind||i,kind||i,CASE WHEN kind='history-' THEN 'measured-owner' ELSE 'owner-'||i END,
         now(),now()-interval '1 day',CASE WHEN kind='history-' THEN 'measured-client' ELSE 'client-'||i END,
-        'read',7,1,'pwd' FROM generate_series($1::int,$2::int) i CROSS JOIN unnest(ARRAY['history-','session-']) kind`,
+        'read',7,1,'pwd' FROM generate_series($1::int,$2::int) i CROSS JOIN unnest(ARRAY['history-','session-']) kind
+        WHERE kind='session-' OR i<=64`,
       range,
     );
     await database.admin.query(
@@ -163,6 +175,7 @@ if (process.env.AUTH_RATE_GROWTH_CHILD !== '1') {
       '"user"',
       'account',
       'auth_client',
+      'auth_client_coverage',
       'auth_client_reduction',
       'session',
       'auth_recovery',

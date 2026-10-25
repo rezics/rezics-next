@@ -6,7 +6,13 @@ import { betterAuth } from 'better-auth';
 import { betterAuthOptions } from '../src/better-auth.ts';
 import { nativeAttemptRequest, pruneAuthAttempts, withAuthTransport } from '../src/rate-limit.ts';
 import { testDatabase } from '../scripts/database.ts';
-import { createAuthService, type AccessAccount, type AuthService, type AuthServiceOptions } from '../src/index.ts';
+import {
+  createAuthService,
+  createRecoveryEstablishmentVerifier,
+  type AccessAccount,
+  type AuthService,
+  type AuthServiceOptions,
+} from '../src/index.ts';
 
 // Run production defaults in a fresh module graph; the frozen foundation suite
 // keeps Better Auth's native test-mode defaults.
@@ -405,6 +411,11 @@ export async function attemptFixture() {
         if (accountId !== account.accountId || proofEpoch !== account.authnEpoch) throw new Error('Stale recovery');
         account.authnEpoch++;
         return { receiptId: `recovery-${account.authnEpoch}`, accountId, minimumAuthnEpoch: account.authnEpoch };
+      },
+      async completeRecovery(reference) {
+        const evidence = await createRecoveryEstablishmentVerifier({ database: pool }).resolve(reference);
+        expect(evidence?.accountId).toBe(account.accountId);
+        expect(evidence?.authnEpoch).toBe(account.authnEpoch);
       },
     },
     recoveryDelivery: {

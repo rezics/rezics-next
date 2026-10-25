@@ -102,6 +102,18 @@ if (process.env.AUTH_ATTEMPT_TEST_CHILD === '1') {
           SELECT 'cost-client-'||i, true, ARRAY['read'] FROM generate_series($1::integer, $2::integer) i`,
           [seeded + 1, size],
         );
+        // Registered clients have ready coverage; grow both sides of admission.
+        await query(
+          `INSERT INTO auth_client_coverage (client_id,ready,ready_after)
+          SELECT 'cost-client-'||i, true, statement_timestamp() FROM generate_series($1::integer, $2::integer) i`,
+          [seeded + 1, size],
+        );
+        // First-party session issuance materializes the owner's consent pair.
+        await query(
+          `INSERT INTO auth_consent (account_id,client_id,scopes)
+          SELECT 'cost-owner-'||i, 'cost-client-'||i, ARRAY['read'] FROM generate_series($1::integer, $2::integer) i`,
+          [seeded + 1, size],
+        );
         await query(
           `INSERT INTO session (id, token, "userId", "createdAt", "updatedAt", "expiresAt",
           "clientId", "grantedScope", "authnEpoch", "authTime", "authMethods")
@@ -109,14 +121,14 @@ if (process.env.AUTH_ATTEMPT_TEST_CHILD === '1') {
             'cost-client-'||i, 'read', 1, 1, 'pwd' FROM generate_series($1::integer, $2::integer) i`,
           [seeded + 1, size],
         );
-        // Grow history for the actual subject/client too, so an accidental
-        // history scan cannot pass using only unrelated owners' sessions.
+        // Fill the actual subject's native cap, including expired history.
+        // Further inserts would only evict rows from this fixed neighborhood.
         await query(
           `INSERT INTO session (id, token, "userId", "createdAt", "updatedAt", "expiresAt",
           "clientId", "grantedScope", "authnEpoch", "authTime", "authMethods")
           SELECT 'cost-history-'||i, 'cost-history-token-'||i, $3, now(), now(), now()-interval '1 day',
             'attempt-web', 'read', 1, 1, 'pwd' FROM generate_series($1::integer, $2::integer) i`,
-          [seeded + 1, size, fixture.account.accountId],
+          [seeded + 1, Math.min(size, 64), fixture.account.accountId],
         );
         // Exercise the empty-table plan at 1x, then growing nonempty reductions.
         if (scale > 1) {
@@ -149,7 +161,9 @@ if (process.env.AUTH_ATTEMPT_TEST_CHILD === '1') {
         const counters = captured.filter((statement) => statement.text === attemptStatement);
         expect(counters).toHaveLength(1);
         expect(captured.length).toBeGreaterThan(1);
-        expect(captured.length).toBeLessThanOrEqual(5);
+        // Counter + client precheck + shared barrier lock/admission/unlock +
+        // native owner/credential reads. Missing owners omit the credential read.
+        expect(captured.length).toBe(7);
         // Explain exactly the statements emitted by the actual handler/adapter,
         // including native credential and registered-client reads.
         let handlerBlocks = 0;

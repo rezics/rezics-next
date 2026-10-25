@@ -76,6 +76,9 @@ beforeAll(async () => {
       readAccount,
       readRecoveryAccount: readAccount,
       authorizeProvisioning: async (id) => ({ accountId: id }),
+      async completeRecovery(reference) {
+        expect(await createRecoveryEstablishmentVerifier({ database }).resolve(reference)).not.toBeNull();
+      },
       async authorizeRecovery(input) {
         authorizations++;
         reference = input.proofReference!;
@@ -160,6 +163,7 @@ test('only committed native recovery credential transaction produces new establi
     minimumAuthnEpoch: '8',
     authnEpoch: 8,
     establishmentId: row.establishment_id,
+    expiresAt: row.expires_at.toISOString(),
   });
   expect(Object.isFrozen(evidence)).toBe(true);
   expect(row.applied_at).toBeInstanceOf(Date);
