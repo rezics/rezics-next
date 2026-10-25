@@ -1,7 +1,11 @@
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { createAuthService, type AuthService } from '@rezics/auth';
+import { exportJWK, generateKeyPair } from 'jose';
+import { Pool } from 'pg';
+import { testDatabase } from '../../../auth/scripts/database.ts';
 import { readAccount } from '../../src/access/account-data.ts';
-import { createAccess } from '../../src/access/permission.ts';
+import { createAccess } from '../../src/access/index.ts';
 import { beginAuthorErasure, readOperation } from '../../src/content/operations.ts';
 import type {
   AuthorErasureDependencies,
@@ -12,13 +16,24 @@ import { bindAuthorErasureWorkflow } from '../../src/content/erasure-workflow-id
 import { createWorkClient } from '../../src/work/client.ts';
 import { readBatch, type Envelope } from '../../src/events/log.ts';
 import { derivedId, newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import type { AccountActor } from '../../src/request/access.ts';
+import { AuthenticationError, type AccountActor } from '../../src/request/access.ts';
 import { checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
 
 const db = await openGrowthDatabase();
+let authDatabase: ReturnType<typeof testDatabase>;
+let authPool: Pool;
+let auth: AuthService;
+let access: ReturnType<typeof createAccess>;
+let actor: AccountActor;
+let other: AccountActor;
+const tokens = new Map<string, string>();
+const issuer = 'https://operations.auth.test';
+const actions = ['post:erase', 'account:read'];
 const nativeClients: Awaited<ReturnType<typeof createWorkClient>>[] = [];
 afterAll(async () => {
   for (const client of nativeClients) await client.close();
+  await authPool?.end();
+  authDatabase?.close();
   await db.close();
 });
 const route = 0x6a31;
@@ -28,15 +43,7 @@ const authorId = id('author', 0x7921);
 const postId = id('first');
 const upperId = id('upper');
 const requested = 'com.rezics.content.author-erasure.requested.v1';
-const actor: AccountActor = {
-  kind: 'account',
-  accountId: authorId,
-  clientId: 'operations-test',
-  scopes: ['post:erase', 'account:read'],
-  requestedBy: null,
-  authnEpoch: 1,
-};
-const other: AccountActor = { ...actor, accountId: id('other', 0x8131) };
+const otherId = id('other', 0x8131);
 const context = (key = crypto.randomUUID()) => ({
   deadline: Date.now() + 10_000,
   idempotencyKey: key,
@@ -45,17 +52,18 @@ const context = (key = crypto.randomUUID()) => ({
 const input = { threadId, authorId };
 let native: NativeWorkflowStatus | null = null;
 const statusIds: string[] = [];
+async function verified(accountId: string, scopes = actions) {
+  return access.authenticate(tokens.get(`${accountId}:${scopes.join(' ')}`)!, {
+    pool: db.pool,
+    deadline: Date.now() + 180_000,
+  });
+}
 async function dependencies(): Promise<AuthorErasureDependencies> {
-  const account = await readAccount(db.pool, routeOf(actor.accountId)!, actor.accountId);
+  actor = await verified(authorId);
+  other = await verified(otherId);
   return {
     pool: db.pool,
-    access: createAccess({
-      actions: new Map([
-        ['post:erase', { anonymous: false }],
-        ['account:read', { anonymous: false }],
-      ]),
-      accountEvidence: () => account,
-    }),
+    access,
     clock: () => new Date(),
     workflows: {
       async enqueue() {
@@ -101,13 +109,78 @@ async function post(name: string, author = authorId, at = '2020-01-01T00:00:00Z'
   return post;
 }
 beforeAll(async () => {
-  for (const identity of [actor, other]) {
+  authDatabase = testDatabase();
+  authPool = new Pool({ connectionString: authDatabase.url });
+  const pair = await generateKeyPair('ES256', { extractable: true });
+  const key = { ...(await exportJWK(pair.privateKey)), kid: 'operations-fixture' };
+  const approvals = new Set([authorId, otherId]);
+  auth = await createAuthService({
+    database: authPool,
+    issuer,
+    audience: 'https://api.example.test',
+    secret: 'operations-fixture-secret-with-at-least-32-bytes',
+    signing: { activeKid: key.kid, privateKeys: [key] },
+    trustedAccess: {
+      async readAccount(accountId) {
+        const account = await readAccount(db.pool, routeOf(accountId)!, accountId);
+        return (
+          account && {
+            accountId: account.accountId,
+            kind: account.kind,
+            state: account.state,
+            authnEpoch: Number(account.minimumAuthnEpoch),
+            automated: account.operatorAccountId !== null,
+            fenced: account.fenced,
+          }
+        );
+      },
+      async authorizeProvisioning(reference) {
+        if (!approvals.delete(reference)) throw new Error('No fixture provisioning approval');
+        return { accountId: reference };
+      },
+    },
+  });
+  await auth.internal.registerClient({ clientId: 'operations-test', firstParty: true, scopes: actions });
+  access = createAccess({
+    actions: new Map(actions.map((action) => [action, { anonymous: false }])),
+    auth: { ...auth.verifier, fetch: async (url, init) => auth.handler(new Request(url, init)) },
+  });
+  const password = 'correct horse battery staple';
+  for (const accountId of [authorId, otherId]) {
     await db.admin.query(
       `INSERT INTO access.account (route,account_id,kind,state,transaction_id)
-      VALUES ($1,$2,'actor','active',$3)`,
-      [routeOf(identity.accountId), identity.accountId, id('transaction')],
+      VALUES ($1,$2,'actor','pending',$3)`,
+      [routeOf(accountId), accountId, id('transaction')],
     );
-    await grant(identity.accountId, 'account:read', identity.accountId);
+    await auth.internal.provisionPassword({ authorization: accountId, email: `${accountId}@example.test`, password });
+    await db.admin.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
+      routeOf(accountId),
+      accountId,
+    ]);
+    await grant(accountId, 'account:read', accountId);
+    for (const scopes of [actions, ['account:read'], ['post:erase']]) {
+      const response = await auth.handler(
+        new Request(`${issuer}/signin`, {
+          method: 'POST',
+          headers: { origin: issuer, 'content-type': 'application/json' },
+          body: JSON.stringify({ account_id: accountId, password, client_id: 'operations-test', scope: scopes }),
+        }),
+      );
+      expect(response.status).toBe(200);
+      const cookie = response.headers
+        .getSetCookie()
+        .map((value) => value.split(';')[0])
+        .join('; ');
+      const issued = await auth.handler(
+        new Request(`${issuer}/token`, {
+          method: 'POST',
+          headers: { origin: issuer, 'content-type': 'application/json', cookie },
+          body: '{}',
+        }),
+      );
+      expect(issued.status).toBe(200);
+      tokens.set(`${accountId}:${scopes.join(' ')}`, ((await issued.json()) as { access_token: string }).access_token);
+    }
   }
   await db.admin.query(
     `INSERT INTO content.thread
@@ -197,7 +270,7 @@ test('initiation commits one identity and ID-only native source before any worke
 
 test('selection is never authority: anonymous, unrelated, scope loss and named denials cannot initiate', async () => {
   const deps = await dependencies();
-  for (const denied of [{ kind: 'anonymous' } as const, other, { ...actor, scopes: ['account:read'] }])
+  for (const denied of [{ kind: 'anonymous' } as const, other, await verified(authorId, ['account:read'])])
     await expect(beginAuthorErasure(deps, denied, input, context())).rejects.toThrow();
   await db.admin.query(
     `INSERT INTO access.resource_denial (route,resource_id,subject_id,action,reason,valid,transaction_id)
@@ -218,14 +291,24 @@ test('status conceals noninitiators and current account denials before exact nat
   expect((await readOperation(deps, actor, outcome.value.operationId, context()))?.done).toBe(false);
   expect(statusIds).toEqual([workflowId]);
   statusIds.length = 0;
-  for (const denied of [{ kind: 'anonymous' } as const, other, { ...actor, scopes: ['post:erase'] }])
+  for (const denied of [{ kind: 'anonymous' } as const, other, await verified(authorId, ['post:erase'])])
     expect(await readOperation(deps, denied, outcome.value.operationId, context())).toBeNull();
   expect(await readOperation(deps, actor, newId(route), context())).toBeNull();
   await db.admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
     routeOf(authorId),
     authorId,
   ]);
-  expect(await readOperation(deps, actor, outcome.value.operationId, context())).toBeNull();
+  // A still-live authenticated read retains its approved account snapshot.
+  expect((await readOperation(deps, actor, outcome.value.operationId, context()))?.done).toBe(false);
+  expect(statusIds).toEqual([workflowId]);
+  statusIds.length = 0;
+  // A new request verifies the original signed bearer against current account state.
+  const newRequest = verified(authorId).then((fresh) =>
+    readOperation(deps, fresh, outcome.value.operationId, context()),
+  );
+  await expect(newRequest).rejects.toBeInstanceOf(AuthenticationError);
+  await expect(newRequest).rejects.toMatchObject({ status: 401 });
+  expect(statusIds).toEqual([]);
   await db.admin.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
     routeOf(authorId),
     authorId,
@@ -384,17 +467,7 @@ test('native counters and pending or terminal result arms fail closed when malfo
 
 test('explicit legal grants, concurrent retries and current named status denials use native authority', async () => {
   const deps = await dependencies();
-  const account = await readAccount(db.pool, routeOf(other.accountId)!, other.accountId);
-  const legalDeps: AuthorErasureDependencies = {
-    ...deps,
-    access: createAccess({
-      actions: new Map([
-        ['post:erase', { anonymous: false }],
-        ['account:read', { anonymous: false }],
-      ]),
-      accountEvidence: () => account,
-    }),
-  };
+  const legalDeps = deps;
   await grant(postId, 'post:erase', other.accountId);
   const ctx = context();
   const attempts = await Promise.all([
