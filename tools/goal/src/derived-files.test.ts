@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { git } from './merge.ts';
+import { stagePaths } from './merge-train.ts';
 import { integrationHarness } from './test-support.ts';
 
 function commitFixture(h: ReturnType<typeof integrationHarness>, files: Record<string, string>): void {
@@ -31,6 +32,21 @@ test('integration admits a branch whose only out-of-scope changes are derived fi
     expect(h.outcomes[0]?.stage).toBe('merge');
     expect(h.head()).toBe(h.head(task.branch));
     expect(git(h.root, 'show', `dev:${generated}`)).toBe(generated);
+  } finally {
+    h.dispose();
+  }
+});
+
+test('staging derived files skips one whose deletion is already staged', () => {
+  const h = integrationHarness();
+  try {
+    const orphan = 'packages/client/src/kernel/orphan.d.ts', kept = 'packages/client/src/kernel/kept.d.ts';
+    commitFixture(h, { [orphan]: 'orphan\n', [kept]: 'kept\n' });
+    git(h.root, 'rm', '-q', '--', orphan);
+    writeFileSync(join(h.root, kept), 'regenerated\n');
+    stagePaths(h.root, [orphan, kept]);
+
+    expect(git(h.root, 'diff', '--cached', '--name-status')).toBe(`M\t${kept}\nD\t${orphan}`);
   } finally {
     h.dispose();
   }
