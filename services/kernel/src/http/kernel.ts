@@ -40,7 +40,7 @@ export function createKernel(dependencies: KernelDependencies) {
     (access ??= typeof factory === 'function' ? factory(config) : factory);
   const tokens = dependencies.tokens ?? { current: 1, keys: new Map([[1, new Uint8Array(randomBytes(32))]]) };
   const app = definitionRoutes(
-    subjectRoutes(createApp({ ...dependencies, access: resolveAccess, tokens }), dependencies),
+    subjectRoutes(createApp({ ...dependencies, access: resolveAccess, tokens }), { ...dependencies, tokens }),
     dependencies,
   );
   const payouts = payoutRoutes(app, {

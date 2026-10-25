@@ -4,7 +4,7 @@ import { installStandingParentGrant } from '../access/index.ts';
 import type { Access, AccountActor } from '../request/access.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from './definitions.ts';
 
-/** Install the immutable bundled release and global catalogue creation grant at startup. */
+/** Install the immutable bundled release and global catalogue grants at startup. */
 export async function setupSemantic(pool: Pool, release: Release): Promise<string> {
   const digest = await bootstrapRelease(pool, release);
   const actor: AccountActor = {
@@ -42,6 +42,12 @@ export async function setupSemantic(pool: Pool, release: Release): Promise<strin
       return 'execute' as const;
     },
   };
-  await installStandingParentGrant({ access, parent, authority, context, actions: ['subject:create'] });
+  await installStandingParentGrant({
+    access,
+    parent,
+    authority,
+    context,
+    actions: ['subject:create', 'statement:propose'],
+  });
   return digest;
 }

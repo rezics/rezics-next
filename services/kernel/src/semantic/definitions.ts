@@ -1,6 +1,6 @@
 import { releaseDigest, validateRelease, type Release, type ReleaseViolation } from '@rezics/definitions';
 import type { Pool } from 'pg';
-import { runCommand, type CommandAuthorization } from '../command/command.ts';
+import { runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
 import type { AccessCheck, AccountActor } from '../request/access.ts';
 import activate from './definitions-activate.sql';
 import pointer from './definitions-active.sql';
@@ -34,7 +34,7 @@ function freeze(value: unknown): void {
 }
 
 /** Read existence from this database; only immutable, validated bodies are shared across pools. */
-export async function readRelease(pool: Pool, digest: string): Promise<Release | null> {
+export async function readRelease(pool: Pool | CommandTransaction, digest: string): Promise<Release | null> {
   if (DIGEST.exec(digest)?.[0] !== digest) return null;
   const row = await read.run(pool, { route: resource.route, digest });
   if (!row) return null;

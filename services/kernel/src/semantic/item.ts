@@ -29,7 +29,7 @@ export type Item = {
 export type Fact = {
   slot_id: string;
   log_seq: number;
-  operation: 'assert' | 'retract';
+  operation: 'assert' | 'retract' | 'expand';
   kind: 'label' | 'description' | 'alias' | 'statement';
   language: string | null;
   property: string | null;
@@ -60,7 +60,7 @@ export class SubjectInputError extends Error {
   }
 }
 
-const SLOT_NS = 'c30d6caa-d9e8-4108-a42a-35701219e8ec';
+export const SLOT_NS = 'c30d6caa-d9e8-4108-a42a-35701219e8ec';
 const STATEMENT_NS = '9f44e74c-b77c-47aa-96d0-b7a4aa330182';
 const languagePattern = /^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/;
 const own = (value: object, key: string) => Object.prototype.hasOwnProperty.call(value, key);
@@ -301,6 +301,7 @@ export function resolveItem(
   const aliases = new Map<string, string[]>();
   const statements = new Map<string, Statement[]>();
   for (const row of rows) {
+    if (row.operation === 'expand') continue;
     if (row.kind === 'label' || row.kind === 'description') {
       const target = row.kind === 'label' ? labels : descriptions;
       if (row.operation === 'retract') delete target[row.language!];

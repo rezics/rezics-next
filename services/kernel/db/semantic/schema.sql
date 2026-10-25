@@ -37,6 +37,76 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
+-- Name: acceptance; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.acceptance (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    context_id uuid NOT NULL,
+    candidate_id uuid NOT NULL,
+    head integer NOT NULL,
+    verdict text NOT NULL,
+    revision integer NOT NULL,
+    CONSTRAINT acceptance_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
+    CONSTRAINT acceptance_head_check CHECK ((head >= 1)),
+    CONSTRAINT acceptance_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT acceptance_verdict_check CHECK ((verdict = ANY (ARRAY['accept'::text, 'reject'::text, 'abstain'::text])))
+);
+
+
+--
+-- Name: adoption; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.adoption (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    slot_id uuid NOT NULL,
+    context_id uuid NOT NULL,
+    head integer NOT NULL,
+    mode text NOT NULL,
+    selection jsonb NOT NULL,
+    revision integer NOT NULL,
+    CONSTRAINT adoption_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
+    CONSTRAINT adoption_head_check CHECK ((head >= 1)),
+    CONSTRAINT adoption_mode_check CHECK ((mode = ANY (ARRAY['inherit'::text, 'replace'::text, 'suppress'::text]))),
+    CONSTRAINT adoption_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT adoption_selection_check CHECK ((jsonb_typeof(selection) = 'array'::text)),
+    CONSTRAINT adoption_selection_check1 CHECK ((jsonb_array_length(selection) <= 32)),
+    CONSTRAINT adoption_selection_check2 CHECK ((NOT jsonb_path_exists(selection, '$[*]?(@."candidate".type() != "string" || @."rank" != "normal" && @."rank" != "preferred")'::jsonpath))),
+    CONSTRAINT adoption_selection_check3 CHECK ((NOT jsonb_path_exists(selection, '$[*]?(!(exists (@."candidate")) || !(exists (@."rank")))'::jsonpath)))
+);
+
+
+--
+-- Name: candidate; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.candidate (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    candidate_id uuid NOT NULL,
+    slot_id uuid NOT NULL,
+    property text NOT NULL,
+    rank text NOT NULL,
+    statement jsonb NOT NULL,
+    release text NOT NULL,
+    revision integer NOT NULL,
+    origin text NOT NULL,
+    view_order integer DEFAULT 0 NOT NULL,
+    CONSTRAINT candidate_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
+    CONSTRAINT candidate_check1 CHECK ((route = ((get_byte(uuid_send(candidate_id), 10) * 256) + get_byte(uuid_send(candidate_id), 11)))),
+    CONSTRAINT candidate_origin_check CHECK ((origin = ANY (ARRAY['compact'::text, 'proposal'::text]))),
+    CONSTRAINT candidate_rank_check CHECK ((rank = ANY (ARRAY['normal'::text, 'preferred'::text]))),
+    CONSTRAINT candidate_release_check CHECK ((release ~ '^sha256:[0-9a-f]{64}$'::text)),
+    CONSTRAINT candidate_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT candidate_statement_check CHECK ((jsonb_typeof(statement) = 'object'::text)),
+    CONSTRAINT candidate_view_order_check CHECK (((view_order >= 0) AND (view_order <= 32)))
+);
+
+
+--
 -- Name: context; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -96,10 +166,11 @@ CREATE TABLE semantic.fact (
     statement_id uuid,
     body jsonb NOT NULL,
     recorded_transaction_id uuid NOT NULL,
-    CONSTRAINT fact_check CHECK ((((kind = ANY (ARRAY['label'::text, 'description'::text, 'alias'::text])) AND (language IS NOT NULL) AND (property IS NULL) AND (statement_id IS NULL)) OR ((kind = 'statement'::text) AND (language IS NULL) AND (property IS NOT NULL) AND (statement_id IS NOT NULL)))),
+    CONSTRAINT fact_check CHECK ((((operation = 'expand'::text) AND (kind = 'statement'::text) AND (language IS NULL) AND (property IS NOT NULL) AND (statement_id IS NULL) AND (body = '{}'::jsonb)) OR ((operation <> 'expand'::text) AND (((kind = ANY (ARRAY['label'::text, 'description'::text, 'alias'::text])) AND (language IS NOT NULL) AND (property IS NULL) AND (statement_id IS NULL)) OR ((kind = 'statement'::text) AND (language IS NULL) AND (property IS NOT NULL) AND (statement_id IS NOT NULL)))))),
     CONSTRAINT fact_kind_check CHECK ((kind = ANY (ARRAY['label'::text, 'description'::text, 'alias'::text, 'statement'::text]))),
-    CONSTRAINT fact_log_seq_check CHECK (((log_seq >= 1) AND (log_seq <= 32))),
-    CONSTRAINT fact_operation_check CHECK ((operation = ANY (ARRAY['assert'::text, 'retract'::text])))
+    CONSTRAINT fact_log_seq_check CHECK ((((log_seq >= 1) AND (log_seq <= 33)) AND ((log_seq <> 33) OR (operation = 'expand'::text)))),
+    CONSTRAINT fact_operation_check CHECK ((operation = ANY (ARRAY['assert'::text, 'retract'::text, 'expand'::text]))),
+    CONSTRAINT fact_subject_route_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11))))
 );
 
 
@@ -117,7 +188,8 @@ CREATE TABLE semantic.revision (
     CONSTRAINT revision_kind_check CHECK ((kind = ANY (ARRAY['create'::text, 'propose'::text, 'accept'::text, 'reject'::text, 'adopt'::text, 'merge'::text]))),
     CONSTRAINT revision_release_check CHECK ((release ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT revision_revision_check CHECK ((revision >= 1)),
-    CONSTRAINT revision_route_check CHECK (((route >= 0) AND (route <= 65535)))
+    CONSTRAINT revision_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT revision_subject_route_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11))))
 );
 
 
@@ -134,6 +206,30 @@ CREATE TABLE semantic.subject (
     CONSTRAINT subject_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT subject_type_check CHECK ((type ~ '^[a-z][a-z0-9_]*:[A-Za-z][A-Za-z0-9_]*$'::text))
 );
+
+
+--
+-- Name: acceptance acceptance_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.acceptance
+    ADD CONSTRAINT acceptance_pkey PRIMARY KEY (route, subject_id, context_id, candidate_id, head);
+
+
+--
+-- Name: adoption adoption_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.adoption
+    ADD CONSTRAINT adoption_pkey PRIMARY KEY (route, subject_id, slot_id, context_id, head);
+
+
+--
+-- Name: candidate candidate_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.candidate
+    ADD CONSTRAINT candidate_pkey PRIMARY KEY (route, subject_id, candidate_id);
 
 
 --
@@ -185,10 +281,80 @@ ALTER TABLE ONLY semantic.subject
 
 
 --
+-- Name: candidate_page; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX candidate_page ON semantic.candidate USING btree (route, subject_id, slot_id, revision, view_order, candidate_id);
+
+
+--
+-- Name: fact_terms; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX fact_terms ON semantic.fact USING btree (route, subject_id, slot_id, log_seq) WHERE (kind <> 'statement'::text);
+
+
+--
 -- Name: revision_transaction; Type: INDEX; Schema: semantic; Owner: -
 --
 
 CREATE INDEX revision_transaction ON semantic.revision USING btree (route, subject_id, recorded_transaction_id);
+
+
+--
+-- Name: acceptance acceptance_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER acceptance_immutable BEFORE DELETE OR UPDATE ON semantic.acceptance FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: acceptance acceptance_immutable_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER acceptance_immutable_truncate BEFORE TRUNCATE ON semantic.acceptance FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: adoption adoption_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER adoption_immutable BEFORE DELETE OR UPDATE ON semantic.adoption FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: adoption adoption_immutable_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER adoption_immutable_truncate BEFORE TRUNCATE ON semantic.adoption FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: candidate candidate_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER candidate_immutable BEFORE DELETE OR UPDATE ON semantic.candidate FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: candidate candidate_immutable_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER candidate_immutable_truncate BEFORE TRUNCATE ON semantic.candidate FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: fact fact_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER fact_immutable BEFORE DELETE OR UPDATE ON semantic.fact FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: fact fact_immutable_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER fact_immutable_truncate BEFORE TRUNCATE ON semantic.fact FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
 
 
 --
@@ -203,6 +369,62 @@ CREATE TRIGGER revision_immutable BEFORE DELETE OR UPDATE ON semantic.revision F
 --
 
 CREATE TRIGGER revision_immutable_truncate BEFORE TRUNCATE ON semantic.revision FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: acceptance acceptance_route_subject_id_candidate_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.acceptance
+    ADD CONSTRAINT acceptance_route_subject_id_candidate_id_fkey FOREIGN KEY (route, subject_id, candidate_id) REFERENCES semantic.candidate(route, subject_id, candidate_id);
+
+
+--
+-- Name: acceptance acceptance_route_subject_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.acceptance
+    ADD CONSTRAINT acceptance_route_subject_id_fkey FOREIGN KEY (route, subject_id) REFERENCES semantic.subject(route, subject_id);
+
+
+--
+-- Name: acceptance acceptance_route_subject_id_revision_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.acceptance
+    ADD CONSTRAINT acceptance_route_subject_id_revision_fkey FOREIGN KEY (route, subject_id, revision) REFERENCES semantic.revision(route, subject_id, revision);
+
+
+--
+-- Name: adoption adoption_route_subject_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.adoption
+    ADD CONSTRAINT adoption_route_subject_id_fkey FOREIGN KEY (route, subject_id) REFERENCES semantic.subject(route, subject_id);
+
+
+--
+-- Name: adoption adoption_route_subject_id_revision_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.adoption
+    ADD CONSTRAINT adoption_route_subject_id_revision_fkey FOREIGN KEY (route, subject_id, revision) REFERENCES semantic.revision(route, subject_id, revision);
+
+
+--
+-- Name: candidate candidate_route_subject_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.candidate
+    ADD CONSTRAINT candidate_route_subject_id_fkey FOREIGN KEY (route, subject_id) REFERENCES semantic.subject(route, subject_id);
+
+
+--
+-- Name: candidate candidate_route_subject_id_revision_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.candidate
+    ADD CONSTRAINT candidate_route_subject_id_revision_fkey FOREIGN KEY (route, subject_id, revision) REFERENCES semantic.revision(route, subject_id, revision);
 
 
 --

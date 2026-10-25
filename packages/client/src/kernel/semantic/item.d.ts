@@ -48,7 +48,7 @@ export type Item = {
 export type Fact = {
     slot_id: string;
     log_seq: number;
-    operation: 'assert' | 'retract';
+    operation: 'assert' | 'retract' | 'expand';
     kind: 'label' | 'description' | 'alias' | 'statement';
     language: string | null;
     property: string | null;
@@ -73,6 +73,7 @@ export declare class SubjectInputError extends Error {
     readonly violations: Violation[];
     constructor(violations: Violation[]);
 }
+export declare const SLOT_NS = "c30d6caa-d9e8-4108-a42a-35701219e8ec";
 export declare function itemFacts(subjectId: string, input: unknown, _type?: string): Fact[];
 export declare function resolveItem(subjectId: string, rows: readonly FactRow[], type: string, dataTypes: Readonly<Record<string, DataType>>, metadata: {
     revision: number;

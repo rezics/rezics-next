@@ -1,15 +1,15 @@
-WITH input AS NOT MATERIALIZED (
-  SELECT :partition_no::integer AS partition_no, :subject_ids::uuid[] AS subject_ids
-)
 SELECT s.subject_id::text AS id,
-       COALESCE(jsonb_object_agg(f.language, f.body) FILTER (WHERE f.kind = 'label' AND f.operation = 'assert'), '{}'::jsonb) AS labels
-FROM semantic.subject AS s
-CROSS JOIN input
-LEFT JOIN semantic.fact AS f ON f.route = s.route AND f.subject_id = s.subject_id
-  AND f.kind = 'label' AND f.operation = 'assert'
-  AND f.route >= input.partition_no * 16
-  AND f.route < (input.partition_no + 1) * 16
-WHERE s.route >= input.partition_no * 16
-  AND s.route < (input.partition_no + 1) * 16
-  AND s.subject_id = ANY(input.subject_ids)
-GROUP BY s.subject_id;
+       COALESCE(labels.body, '{}'::jsonb) AS labels
+FROM unnest(:subject_ids::uuid[]) AS input(id)
+JOIN LATERAL (
+  SELECT route, subject_id FROM semantic.subject
+  WHERE route = get_byte(uuid_send(input.id), 10) * 256 + get_byte(uuid_send(input.id), 11)
+    AND subject_id = input.id
+  LIMIT 1
+) AS s ON true
+LEFT JOIN LATERAL (
+  SELECT jsonb_object_agg(language, body) AS body FROM semantic.fact
+  WHERE route = s.route AND subject_id = s.subject_id AND kind <> 'statement'
+    AND kind = 'label' AND operation = 'assert'
+) AS labels ON true
+WHERE s.route / 16 = :partition_no::integer;

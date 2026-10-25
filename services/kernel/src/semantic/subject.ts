@@ -9,6 +9,7 @@ import { itemFacts, resolveItem, type FactRow, type Item } from './item.ts';
 import { SubjectInputError } from './item.ts';
 import { checkTyped } from './rules.ts';
 import { GLOBAL_CONTEXT } from './definitions.ts';
+import { slotView } from './slots.ts';
 import createRevision from './create-revision.sql';
 import insertFacts from './insert-facts.sql';
 import insertSubject from './create-subject.sql';
@@ -227,10 +228,20 @@ export async function readSubject(
         return null;
       }
       const allowed = await authorize(client);
+      const release = await getRelease(client, rows[0]!.release);
+      if (!release) throw new Error('Subject revision release is missing');
+      const statementFacts: FactRow[] = [];
+      if (allowed) {
+        for (const property of release.types[rows[0]!.type]!.properties) {
+          statementFacts.push(...(await slotView(client, id, property)));
+        }
+      }
       await client.query('COMMIT');
       if (!allowed) return null;
       return {
         rows,
+        statementFacts,
+        release,
         component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
       };
     } catch (error) {
@@ -238,14 +249,12 @@ export async function readSubject(
     }
   });
   if (!snapshot) return null;
-  const { rows, component } = snapshot;
-  const release = await getRelease(pool, rows[0]!.release);
-  if (!release) throw new Error('Subject revision release is missing');
+  const { rows, component, release, statementFacts } = snapshot;
   const dataTypes = Object.fromEntries(
     Object.entries(release.properties).map(([property, definition]) => [property, definition.datatype]),
   );
   return {
-    subject: resolveItem(id, asFacts(rows), rows[0]!.type, dataTypes, {
+    subject: resolveItem(id, [...asFacts(rows), ...statementFacts], rows[0]!.type, dataTypes, {
       revision: rows[0]!.revision,
       release: rows[0]!.release,
       context: CONTEXT,
