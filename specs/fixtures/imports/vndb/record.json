@@ -1,0 +1,67 @@
+{
+  "vn": {
+    "id": "v123",
+    "image": "cv123",
+    "c_image": "cv123",
+    "olang": "en",
+    "c_votecount": 2,
+    "c_rating": 700,
+    "c_average": 700,
+    "c_length": null,
+    "c_lengthnum": 0,
+    "length": 2,
+    "devstatus": 0,
+    "alias": "Harbor Sentinel",
+    "description": "UNLICENSED_DESCRIPTION_SENTINEL: third-party promotional prose."
+  },
+  "vn_titles": [
+    { "id": "v123", "lang": "en", "official": true, "title": "Sentinel Harbor", "latin": null },
+    { "id": "v123", "lang": "de", "official": true, "title": "Harbor German Edition", "latin": null }
+  ],
+  "entry_meta": {
+    "id": "v123",
+    "created": "2020-01-01",
+    "lastmod": "2026-10-24",
+    "revision": 7,
+    "num_edits": 6,
+    "num_users": 3
+  },
+  "releases": [{ "id": "r456", "olang": "en", "released": 20200102, "official": true, "patch": false }],
+  "releases_vn": [{ "id": "r456", "vid": "v123", "rtype": "complete" }],
+  "releases_titles": [{ "id": "r456", "lang": "en", "mtl": false, "title": "Sentinel Harbor Release", "latin": null }],
+  "images": [
+    {
+      "id": "cv123",
+      "width": 640,
+      "height": 960,
+      "c_votecount": 0,
+      "c_sexual_avg": 0,
+      "c_sexual_stddev": 0,
+      "c_violence_avg": 0,
+      "c_violence_stddev": 0,
+      "c_weight": 0
+    }
+  ],
+  "vn_extlinks": [{ "id": "v123", "link": 11 }],
+  "extlinks": [{ "id": 11, "site": "website", "value": "https://example.org/harbor" }],
+  "threads_posts": [{ "tid": "t99", "uid": "u9", "num": 1, "msg": "USER_POST_SENTINEL: never copy this discussion." }],
+  "reviews": [
+    {
+      "id": "w9",
+      "uid": "u9",
+      "vid": "v123",
+      "spoiler": false,
+      "text": "USER_REVIEW_SENTINEL: never copy this review."
+    }
+  ],
+  "users": [{ "id": "u9", "username": "ACCOUNT_SENTINEL" }],
+  "ulist_vns": [
+    {
+      "uid": "u9",
+      "vid": "v123",
+      "c_private": true,
+      "notes": "PRIVATE_LIST_SENTINEL: private account notes.",
+      "vote": 90
+    }
+  ]
+}
