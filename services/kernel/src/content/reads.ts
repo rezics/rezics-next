@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import type { Access, Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type {
   Anchored,
@@ -15,25 +16,22 @@ import type {
 } from './model.ts';
 import { unfinishedPort } from './model.ts';
 
-export type ContentReadDependencies = Readonly<{ pool: Pool; tokens: KeyRing }>;
-
-export async function readBoard(
+export type ContentReadDependencies = Readonly<{ pool: Pool; access: Access; tokens: KeyRing }>;
+export function readBoard(
   _dependencies: ContentReadDependencies,
   _boardId: BoardId,
   _context: ReadContext,
 ): Promise<Anchored<BoardView | null>> {
   throw unfinishedPort('readBoard');
 }
-
-export async function readThread(
+export function readThread(
   _dependencies: ContentReadDependencies,
   _threadId: ThreadId,
   _context: ReadContext,
 ): Promise<Anchored<ThreadView | null>> {
   throw unfinishedPort('readThread');
 }
-
-export async function readPost(
+export function readPost(
   _dependencies: ContentReadDependencies,
   _threadId: ThreadId,
   _postId: PostId,
@@ -42,8 +40,7 @@ export async function readPost(
 ): Promise<Anchored<ItemView | null>> {
   throw unfinishedPort('readPost');
 }
-
-export async function listThreadPosts(
+export function listThreadPosts(
   _dependencies: ContentReadDependencies,
   _threadId: ThreadId,
   _context: ReadContext,
@@ -52,8 +49,7 @@ export async function listThreadPosts(
 ): Promise<Page<ItemView>> {
   throw unfinishedPort('listThreadPosts');
 }
-
-export async function listPostRevisions(
+export function listPostRevisions(
   _dependencies: ContentReadDependencies,
   _threadId: ThreadId,
   _postId: PostId,
@@ -63,11 +59,11 @@ export async function listPostRevisions(
 ): Promise<Page<RevisionView>> {
   throw unfinishedPort('listPostRevisions');
 }
-
-export async function discloseThreads(
+export function discloseThreads(
   _dependencies: ContentReadDependencies,
   _threadIds: readonly ThreadId[],
   _context: ReadContext,
 ): Promise<readonly Anchored<ThreadView | null>[]> {
   throw unfinishedPort('discloseThreads');
 }
+export type { Actor };

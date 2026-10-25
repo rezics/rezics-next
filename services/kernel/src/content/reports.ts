@@ -1,47 +1,53 @@
 import type { Pool } from 'pg';
+import type { CommandOutcome } from '../command/command.ts';
 import type { Access, Actor } from '../request/access.ts';
-import type { Anchored, ContentId, Page, PostId, ReportId, RequestContext, ThreadId } from './model.ts';
+import type { Anchored, BoardId, Page, PostId, ReportId, RequestContext, RevisionId, ThreadId } from './model.ts';
 import { unfinishedPort } from './model.ts';
 
-export type ReportTarget = Readonly<{ kind: 'thread' | 'post' | 'media'; id: string }>;
+export type ReportTarget =
+  | Readonly<{ kind: 'board'; id: BoardId }>
+  | Readonly<{ kind: 'thread'; id: ThreadId }>
+  | Readonly<{ kind: 'post'; id: PostId }>;
+export type ReportInput = Readonly<{
+  target: ReportTarget;
+  revisionId?: RevisionId;
+  reason: string;
+  evidence?: string;
+}>;
 export type ReportView = Readonly<{
   id: ReportId;
-  reporterId: ContentId;
+  partition: number;
   target: ReportTarget;
-  category: string;
-  detail: string | null;
+  revisionId: RevisionId | null;
+  reason: string;
+  evidence: string | null;
   createdAt: string;
-  state: 'open' | 'closed';
+  transactionId: string;
+  reporterId: string | null;
 }>;
-export type ReportInput = Readonly<{ target: ReportTarget; category: string; detail?: string }>;
-export type ReportDependencies = Readonly<{ pool: Pool; access: Access }>;
-export type ReportReceipt = Readonly<{ receiptId: string; reportId: ReportId }>;
-
-export async function createReport(
+export type ReportDependencies = Readonly<{ pool: Pool; access: Access; routeKey: Uint8Array; clock?: () => Date }>;
+export type ReportRequestContext = RequestContext & Readonly<{ trustedAnonymousAdmission?: object }>;
+export function createReport(
   _dependencies: ReportDependencies,
   _actor: Actor,
   _input: ReportInput,
   _context: RequestContext,
-): Promise<Readonly<{ receipt: ReportReceipt; reportId: ReportId }>> {
+): Promise<CommandOutcome<Readonly<{ reportId: ReportId }>>> {
   throw unfinishedPort('createReport');
 }
-
-export async function readReport(
+export function readReport(
   _dependencies: ReportDependencies,
   _reportId: ReportId,
-  _actor: Actor,
+  _context: Readonly<{ actor: Actor; deadline: number }>,
 ): Promise<Anchored<ReportView | null>> {
   throw unfinishedPort('readReport');
 }
-
-export async function listTargetReports(
+export function listTargetReports(
   _dependencies: ReportDependencies,
   _target: ReportTarget,
-  _actor: Actor,
+  _context: Readonly<{ actor: Actor; deadline: number }>,
   _cursor?: string,
   _limit?: number,
 ): Promise<Page<ReportView>> {
   throw unfinishedPort('listTargetReports');
 }
-
-export type ReportTargetIds = Readonly<{ threadId?: ThreadId; postId?: PostId }>;

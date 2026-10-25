@@ -1,5 +1,4 @@
 import type { DocumentSnapshot } from '@rezics/document';
-import type { CommandBasis } from '../command/command.ts';
 import type { Actor } from '../request/access.ts';
 import type { Partition } from '../partition/partition.ts';
 
@@ -11,6 +10,11 @@ export type RevisionId = ContentId;
 export type ReportId = ContentId;
 export type MediaId = ContentId;
 export type Route = number;
+export type SecurityRevision = string;
+export type Visibility = 'published' | 'draft' | 'protected' | 'taken_down';
+export type Availability = 'available' | 'erased';
+export type Component = Readonly<{ partition: number; epoch: number; position: bigint; transactionId: string }>;
+export type ContentCommandValue = Readonly<{ threadId: ThreadId; itemId: PostId; revisionId: RevisionId }>;
 
 export type ItemMetadata = Readonly<{
   id: PostId;
@@ -22,9 +26,11 @@ export type ItemMetadata = Readonly<{
   subjectIds: readonly ContentId[];
   boardId: BoardId;
   visibility: Visibility;
-  securityRevision: number;
+  securityRevision: SecurityRevision;
   availability: Availability;
   createdAt: string;
+  sha256: string;
+  mediaIds: readonly MediaId[];
 }>;
 
 export type RevisionMetadata = Readonly<{
@@ -37,26 +43,30 @@ export type RevisionMetadata = Readonly<{
   subjectIds: readonly ContentId[];
   boardId: BoardId;
   createdAt: string;
+  sha256: string;
+  mediaIds: readonly MediaId[];
 }>;
 
 export type ItemView = Readonly<
-  ItemMetadata & { revisionId: RevisionId } & ({ body: DocumentSnapshot; erased: false } | { body: null; erased: true })
+  ItemMetadata & { revisionId: RevisionId } & (
+      | { body: DocumentSnapshot; availability: 'available' }
+      | { body: null; availability: 'erased' }
+    )
 >;
-
 export type RevisionView = Readonly<
-  RevisionMetadata & ({ body: DocumentSnapshot; erased: false } | { body: null; erased: true })
+  RevisionMetadata & ({ body: DocumentSnapshot; availability: 'available' } | { body: null; availability: 'erased' })
 >;
 
 export type ThreadView = Readonly<{
   id: ThreadId;
   route: Route;
   authorId: ContentId;
-  title: string;
+  title: string | null;
   licence: string;
   subjectIds: readonly ContentId[];
   boardId: BoardId;
   visibility: Visibility;
-  securityRevision: number;
+  securityRevision: SecurityRevision;
   availability: Availability;
   createdAt: string;
   firstPost: ItemView;
@@ -65,12 +75,12 @@ export type ThreadView = Readonly<{
 export type BoardView = Readonly<{
   id: BoardId;
   route: Route;
-  title: string;
+  title: string | null;
+  visibility: Visibility;
+  securityRevision: SecurityRevision;
+  availability: Availability;
   createdAt: string;
 }>;
-
-export type Visibility = 'published' | 'draft' | 'protected' | 'taken_down';
-export type Availability = 'available' | 'erased';
 
 export type ThreadInput = Readonly<{
   title: string;
@@ -80,7 +90,6 @@ export type ThreadInput = Readonly<{
   boardId: BoardId;
   visibility: 'published' | 'draft';
 }>;
-
 export type PostInput = Readonly<{
   threadId: ThreadId;
   body: unknown;
@@ -88,8 +97,8 @@ export type PostInput = Readonly<{
   subjectIds?: readonly ContentId[];
   boardId?: BoardId;
   parentId?: PostId | null;
+  mediaIds?: readonly MediaId[];
 }>;
-
 export type RevisionInput = Readonly<{
   threadId: ThreadId;
   itemId: PostId;
@@ -97,44 +106,13 @@ export type RevisionInput = Readonly<{
   licence?: string;
   subjectIds?: readonly ContentId[];
   boardId?: BoardId;
+  mediaIds?: readonly MediaId[];
 }>;
-
-export type RequestContext = Readonly<{
-  basis: Readonly<CommandBasis> | null;
-  requestId: string;
-  idempotencyKey: string;
-}>;
-
-export type CommandReceipt<TId extends ContentId = ContentId> = Readonly<{
-  receiptId: string;
-  id: TId;
-  itemId?: PostId;
-  revisionId?: RevisionId;
-}>;
-
-export type CommandResult<TId extends ContentId = ContentId> = Readonly<{
-  receipt: CommandReceipt<TId>;
-  componentId?: ContentId;
-  itemId?: PostId;
-  revisionId?: RevisionId;
-}>;
-
-export type AnchoredPosition = Readonly<{
-  partition: Partition;
-  epoch: number;
-  position: bigint;
-}>;
-
+export type RequestContext = Readonly<{ idempotencyKey: string; deadline: number; requestId: string }>;
+export type AnchoredPosition = Readonly<{ partition: Partition; epoch: number; position: bigint }>;
 export type Anchored<T> = Readonly<{ value: T; anchor: AnchoredPosition }>;
-
 export type ReadContext = Readonly<{ actor: Actor; deadline: number }>;
-
-export type Page<T> = Readonly<{
-  entries: readonly T[];
-  nextCursor: string | null;
-  anchor: AnchoredPosition;
-}>;
-
+export type Page<T> = Readonly<{ entries: readonly T[]; nextCursor: string | null; anchor: AnchoredPosition }>;
 export type UnfinishedPortError = Error & { readonly port: string };
 
 export function unfinishedPort(port: string): UnfinishedPortError {

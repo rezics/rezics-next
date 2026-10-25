@@ -9,22 +9,38 @@ import * as reportEffect from '../../src/content/report-effect.ts';
 import * as imageJob from '../../src/content/image-job.ts';
 import * as collectionJob from '../../src/content/collection-job.ts';
 import * as erasureJob from '../../src/content/erasure-job.ts';
-import type { ContentCommandDependencies, ThreadTarget } from '../../src/content/commands.ts';
+import type { ContentCommandDependencies } from '../../src/content/commands.ts';
 import type { BoardCandidate, BoardCandidateKey, BoardCandidatePage } from '../../src/content/board-projection.ts';
-import type { MediaDependencies, MediaMetadata, MediaStorage, ReserveMediaResult } from '../../src/content/media.ts';
-import type { ModerationDependencies, ModerationReceipt } from '../../src/content/moderation.ts';
-import type { ReportDependencies, ReportInput, ReportView } from '../../src/content/reports.ts';
+import type {
+  MediaDependencies,
+  MediaMetadata,
+  MediaPurpose,
+  MediaState,
+  MediaStorage,
+  MediaVariant,
+} from '../../src/content/media.ts';
+import type { ModerationDependencies, TakedownTarget } from '../../src/content/moderation.ts';
+import type {
+  ReportDependencies,
+  ReportInput,
+  ReportRequestContext,
+  ReportTarget,
+  ReportView,
+} from '../../src/content/reports.ts';
 import type { ImageJobOutcome } from '../../src/content/image-job.ts';
 import type { CollectionOutcome } from '../../src/content/collection-job.ts';
 import type { PurgeOutcome } from '../../src/content/erasure-job.ts';
+import type { CommandOutcome } from '../../src/command/command.ts';
+import type { Access, Actor, Resource } from '../../src/request/access.ts';
+import type { KeyRing } from '../../src/tokens/seal.ts';
 import type {
   Anchored,
   AnchoredPosition,
   Availability,
   BoardView,
-  CommandReceipt,
+  Component,
+  ContentCommandValue,
   ContentId,
-  CommandResult,
   ItemMetadata,
   ItemView,
   Page,
@@ -34,6 +50,7 @@ import type {
   RevisionMetadata,
   RevisionView,
   RequestContext,
+  SecurityRevision,
   ThreadInput,
   ThreadView,
   Visibility,
@@ -72,26 +89,32 @@ const ports = [
   imageJob.processImage,
   collectionJob.createCollectionJob,
   collectionJob.collectPartition,
-  collectionJob.readCollectionProgress,
   erasureJob.createErasureJob,
   erasureJob.purgeObject,
 ];
 
-type Port = (...args: never[]) => unknown;
-export type PublishedContentContracts = readonly [
+type PublishedContentContracts = readonly [
   ContentCommandDependencies,
-  ThreadTarget,
+  CommandOutcome<ContentCommandValue>,
+  Resource,
+  Access,
+  Actor,
+  KeyRing,
   BoardCandidate,
   BoardCandidateKey,
   BoardCandidatePage,
   MediaDependencies,
   MediaMetadata,
+  MediaPurpose,
+  MediaState,
   MediaStorage,
-  ReserveMediaResult,
+  MediaVariant,
   ModerationDependencies,
-  ModerationReceipt,
+  TakedownTarget,
   ReportDependencies,
   ReportInput,
+  ReportRequestContext,
+  ReportTarget,
   ReportView,
   ImageJobOutcome,
   CollectionOutcome,
@@ -99,8 +122,8 @@ export type PublishedContentContracts = readonly [
   Anchored<BoardView | null>,
   AnchoredPosition,
   Availability,
-  CommandReceipt,
-  CommandResult<ContentId>,
+  Component,
+  ContentId,
   ItemMetadata,
   ItemView,
   Page<ItemView>,
@@ -110,11 +133,16 @@ export type PublishedContentContracts = readonly [
   RevisionMetadata,
   RevisionView,
   RequestContext,
+  SecurityRevision,
   ThreadInput,
   ThreadView,
   Visibility,
 ];
 
+const publishedContracts: PublishedContentContracts | null = null;
+void publishedContracts;
+
+type Port = (...args: never[]) => unknown;
 test('content ports are published and fail closed before touching dependencies', async () => {
   let touches = 0;
   const dependency = new Proxy(

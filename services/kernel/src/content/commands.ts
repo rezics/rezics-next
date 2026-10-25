@@ -1,49 +1,40 @@
 import type { Pool } from 'pg';
+import type { CommandOutcome } from '../command/command.ts';
 import type { Access, Actor, Resource } from '../request/access.ts';
-import type {
-  CommandReceipt,
-  ItemView,
-  PostInput,
-  RequestContext,
-  RevisionInput,
-  ThreadId,
-  ThreadInput,
-  ThreadView,
-} from './model.ts';
+import type { ContentCommandValue, PostInput, RequestContext, RevisionInput, ThreadInput } from './model.ts';
 import { unfinishedPort } from './model.ts';
 
-export type ContentCommandDependencies = Readonly<{ pool: Pool; access: Access }>;
-export type ThreadTarget = Readonly<{ id: ThreadId; route: number }>;
-
-export function threadTarget(_threadId: ThreadId): Resource {
+export type ContentCommandDependencies = Readonly<{
+  pool: Pool;
+  access: Access;
+  routeKey: Uint8Array;
+  clock?: () => Date;
+}>;
+export type ThreadTarget = Resource;
+export function threadTarget(_routeKey: Uint8Array, _accountId: string, _idempotencyKey: string): Resource {
   throw unfinishedPort('threadTarget');
 }
-
-export async function createThread(
+export function createThread(
   _dependencies: ContentCommandDependencies,
   _actor: Actor,
   _input: ThreadInput,
   _context: RequestContext,
-): Promise<Readonly<{ receipt: CommandReceipt<ThreadId>; threadId: ThreadId; firstPostId: string }>> {
+): Promise<CommandOutcome<ContentCommandValue>> {
   throw unfinishedPort('createThread');
 }
-
-export async function createPost(
+export function createPost(
   _dependencies: ContentCommandDependencies,
   _actor: Actor,
   _input: PostInput,
   _context: RequestContext,
-): Promise<Readonly<{ receipt: CommandReceipt; postId: string }>> {
+): Promise<CommandOutcome<ContentCommandValue>> {
   throw unfinishedPort('createPost');
 }
-
-export async function revisePost(
+export function revisePost(
   _dependencies: ContentCommandDependencies,
   _actor: Actor,
   _input: RevisionInput,
   _context: RequestContext,
-): Promise<Readonly<{ receipt: CommandReceipt; itemId: string; revisionId: string }>> {
+): Promise<CommandOutcome<ContentCommandValue>> {
   throw unfinishedPort('revisePost');
 }
-
-export type { ItemView, ThreadView };
