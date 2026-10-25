@@ -177,6 +177,9 @@ test(
           expect(await page.getByRole('link', { name: own.account_sign_in, exact: true }).count()).toBe(1);
         if (entry.name === 'Signed In') {
           expect(await page.getByRole('link', { name: own.account_sign_in, exact: true }).count()).toBe(0);
+          const account = page.getByRole('button', { name: own.account_menu, exact: true });
+          const menu = page.getByRole('group', { name: own.account_menu, exact: true });
+          if ((await account.count()) && !(await menu.isVisible())) await account.click();
           expect(await page.getByRole('button', { name: own.account_sign_out, exact: true }).count()).toBe(1);
         }
         if (name === 'home' || name === 'missing-subject')

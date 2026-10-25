@@ -439,6 +439,11 @@
 }
 
 @layer base {
+  /* Utility display classes can override the user-agent popover rule. */
+  [popover]:not(:popover-open):not(dialog[open]) {
+    display: none !important;
+  }
+
   ::selection {
     @apply bg-primary/80 text-primary-foreground;
   }
