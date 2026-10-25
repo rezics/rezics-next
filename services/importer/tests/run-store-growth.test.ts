@@ -4,6 +4,8 @@ import type { BatchCommand, BatchWriteResult } from '@rezics/definitions/bulk';
 import { assertGrowth, type GrowthSample } from '../../kernel/test/support/growth-bound.ts';
 import { runStoreCost, type Staged } from '../../../specs/imports-run-store-driver.ts';
 import { createImportRunStoreDriver } from './run-store-driver.ts';
+import { RunStore } from '../src/run-store.ts';
+import { createSqliteProbe } from './support/sqlite-growth.ts';
 
 function record(key: string, revision: number): Staged {
   const projection: Staged['projection'] = [
@@ -131,4 +133,146 @@ test('fixed run-state operations stay indexed at three scales', async () => {
     await d.close();
     await rm(directory, { recursive: true, force: true });
   }
+}, 120_000);
+
+const RUN_SCALES = [1, 8, 64] as const;
+const FIXTURE_SOURCE = 'run-growth-fixture';
+const FIXTURE_RUN = { source: FIXTURE_SOURCE, id: '1', lease: 'a'.repeat(48) };
+const fixtureRow = (key: string) => ({
+  source: FIXTURE_SOURCE,
+  recordKey: key,
+  recordRevision: 'unversioned',
+  digest: 'a'.repeat(64),
+  converter_revision: 'fixture@1',
+  state: 'present' as const,
+});
+const fixtureRowJson = (key: string) => JSON.stringify(fixtureRow(key));
+
+function seedRunStore(store: RunStore, count: number, status: 'staging' | 'ready' = 'ready') {
+  const db = store.database;
+  db.exec('BEGIN');
+  const statements = new Map<string, ReturnType<typeof db.prepare>>();
+  try {
+    const put = (sql: string, ...values: (string | number | null)[]) => {
+      let statement = statements.get(sql);
+      if (!statement) {
+        statement = db.prepare(sql);
+        statements.set(sql, statement);
+      }
+      statement.run(...values);
+    };
+    put('INSERT INTO run_sources VALUES(?,?,?,?,?)', FIXTURE_SOURCE, count + 1, FIXTURE_RUN.id, null, count);
+    for (let i = 0; i < count; i++) {
+      const key = `${crypto.randomUUID().replaceAll('-', '')}-${String(i).padStart(6, '0')}`;
+      const id = i === 0 ? FIXTURE_RUN.id : `history-${String(i).padStart(8, '0')}`;
+      if (i > 0) put('INSERT INTO run_sources VALUES(?,?,?,?,?)', `fixture-${i}`, 1, null, null, 0);
+      put(
+        `INSERT INTO run_generations(source,id,seq,lease,status,threshold,prior,supplied,survivors,classified,resolved,expected,changed,prepared,cursor)
+         VALUES(?,?,?,?,?,0.5,?,?,?,?,?,?,?,?,?)`,
+        FIXTURE_SOURCE, id, i + 1, i === 0 ? FIXTURE_RUN.lease : 'old-lease', i === 0 ? status : 'complete',
+        count, count, count, status === 'ready' && i === 0 ? count : 0, status === 'ready' && i === 0 ? count : 0,
+        count, count, count, '',
+      );
+      put(
+        `INSERT INTO run_entries(source,run_id,record_key,row_json,projection_json,kind,resolved,bytes,keys_json,omissions_json,pending,remaining)
+         VALUES(?,?,?,?,?,'unchanged',1,'{}','[]','[]',0,0)`,
+        FIXTURE_SOURCE, FIXTURE_RUN.id, key, fixtureRowJson(key), '[]',
+      );
+      put('INSERT INTO run_members VALUES(?,?,?,?,?)', FIXTURE_SOURCE, key, 1, i + 1, fixtureRowJson(key));
+      put('INSERT INTO run_acknowledged VALUES(?,?,?,?)', FIXTURE_SOURCE, key, fixtureRowJson(key), '[]');
+      put('INSERT INTO run_commands VALUES(?,?,?,?,?,1)', FIXTURE_SOURCE, id, `C${i}`, key, 'facts');
+      put('INSERT INTO run_payloads VALUES(?,?,?)', FIXTURE_SOURCE, `C${i}`, '{}');
+    }
+    for (const statement of statements.values()) statement.finalize();
+    db.exec('COMMIT');
+  } catch (error) {
+    for (const statement of statements.values()) statement.finalize();
+    db.exec('ROLLBACK');
+    throw error;
+  }
+  db.exec('ANALYZE');
+  const first = db.prepare('SELECT record_key FROM run_entries WHERE source=? AND run_id=? ORDER BY record_key LIMIT 1');
+  try {
+    return (first.get(FIXTURE_SOURCE, FIXTURE_RUN.id) as { record_key: string }).record_key;
+  } finally {
+    first.finalize();
+  }
+}
+
+async function measureRunGrowth(
+  name: string,
+  operation: (store: RunStore, scale: number, key: string) => unknown,
+  page = false,
+  status: 'staging' | 'ready' = 'ready',
+) {
+  const samples: GrowthSample[] = [];
+  const plans: string[] = [];
+  for (const scale of RUN_SCALES) {
+    await mkdir('.temp', { recursive: true });
+    const directory = await mkdtemp('.temp/run-store-growth-followup-');
+    const store = new RunStore(`${directory}/runs.sqlite`);
+    const probe = createSqliteProbe(store.database, {
+      growingTables: ['run_sources', 'run_generations', 'run_entries', 'run_members', 'run_acknowledged', 'run_commands', 'run_payloads'],
+    });
+    try {
+      const key = seedRunStore(store, 500 * scale, status);
+      const measured = probe.measure(() => operation(store, scale, key));
+      try {
+        probe.verifyPlans();
+      } catch (error) {
+        const statements = measured.statements.map((event) => `${event.sql}\n${JSON.stringify(event.plan)}`).join('\n');
+        throw new Error(`${name}: ${String(error)}\n${statements}`);
+      }
+      samples.push({ scale, cost: measured.cost });
+      plans.push(`scale ${scale}:\n${measured.statements.map((event) => `${event.sql}\n${JSON.stringify(event.plan)}`).join('\n')}`);
+    } finally {
+      store.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  }
+  try {
+    assertGrowth(samples, {
+      rows: page ? 'linear' : 'constant',
+      blocks: 'constant',
+      statements: page ? 'linear' : 'constant',
+    }, { blocks: { absolute: 0, relative: 0 } });
+  } catch (error) {
+    throw new Error(`${name}: ${String(error)}\n${plans.join('\n')}`);
+  }
+}
+
+test('Run control stays within its bound as R grows', async () => {
+  await measureRunGrowth('Run control', (store) => store.begin(FIXTURE_SOURCE));
+}, 120_000);
+
+test('Run staging stays within its bound as R grows', async () => {
+  await measureRunGrowth('Run staging', (store, scale) => {
+    const key = `fresh-${scale}-${crypto.randomUUID()}`;
+    store.stage(FIXTURE_RUN, { row: fixtureRow(key), projection: [] });
+  }, false, 'staging');
+}, 120_000);
+
+test('Run projection page stays within its bound as R grows', async () => {
+  await measureRunGrowth('Run projection page', (store) => store.pageStaged(FIXTURE_RUN, { limit: 8 }), true);
+}, 120_000);
+
+test('Run vanished page stays within its bound as R grows', async () => {
+  await measureRunGrowth('Run vanished page', (store) => store.pageVanished(FIXTURE_RUN, { limit: 8 }), true);
+}, 120_000);
+
+test('Run key observation stays within its bound as R grows', async () => {
+  await measureRunGrowth('Run key observation', (store, _scale, key) => store.key(FIXTURE_SOURCE, key, FIXTURE_RUN));
+}, 120_000);
+
+test('Run omission check stays within its bound as R grows', async () => {
+  await measureRunGrowth('Run omission check', (store, _scale, key) =>
+    store.classify(FIXTURE_RUN, key, {
+      commands: [],
+      omissions: [{ field_group: 'facts', disposition: 'fenced', securityRevision: '1' }],
+    }),
+  );
+}, 120_000);
+
+test('Run finalize stays within its bound as R grows', async () => {
+  await measureRunGrowth('Run finalize', (store) => store.finalize(FIXTURE_RUN, 8), true);
 }, 120_000);
