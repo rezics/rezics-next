@@ -20,7 +20,7 @@ const events = (): CommandEvent[] => [{ type: 'com.rezics.growth.event.v1', subj
 const basis = { actorAccountId: actor, clientId, requestedBy: null };
 const ordinalsPerScale = 64;
 
-// These rows mirror fence.sql's outbox, receipt and write_basis inserts, using route-shaped UUIDs and one event.
+// This population matches fence.sql's route-shaped UUIDs, one-event outbox rows, and receipt/write-basis values.
 const population: Population = {
   name: 'kernel-command-growth',
   hotPartition: anchorPartition,
