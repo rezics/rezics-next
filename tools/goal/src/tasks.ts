@@ -18,6 +18,9 @@ export function git(cwd: string, args: string[]): string {
   return result.stdout.trimEnd();
 }
 export type RetryOptions = { profile?: Profile; fixRound?: number; consulted?: boolean; escalation?: string; evidence?: string; consultation?: string; excludePools?: string[] };
+export class HeldTaskConflictError extends Error {
+  constructor(readonly detail: string) { super(detail); this.name = 'HeldTaskConflictError'; }
+}
 export class WorkerTasks {
   constructor(readonly settings: Settings, readonly store: WorkerStore, readonly reader: PoolReader = readPool,
     readonly launcher: typeof launch = launch) {}
@@ -44,9 +47,26 @@ export class WorkerTasks {
     } finally { lease.release(); }
   }
   async retry(taskId: string, options: RetryOptions = {}): Promise<RunningWorker> {
+    return this.retryTask(taskId, options, false);
+  }
+  async retryHeld(taskId: string): Promise<RunningWorker> {
+    return this.retryTask(taskId, {}, true);
+  }
+  private async retryTask(taskId: string, options: RetryOptions, refreshHeldBase: boolean): Promise<RunningWorker> {
     const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
     try {
-      const task = this.store.task(taskId);
+      let task = this.store.task(taskId);
+      if (refreshHeldBase) {
+        if (task.state !== 'ready' || task.currentAttempt !== 0 || !task.brief.after.length)
+          throw new Error('only a released held task can be started from current main');
+        const main = git(this.settings.mainCheckout, ['rev-parse', '--verify', this.settings.mainBranch]);
+        const commits = Number(git(task.worktree, ['rev-list', '--count', `${task.base}..HEAD`]));
+        if (commits > 0) throw new HeldTaskConflictError(`held task has ${commits} commit(s) beyond its recorded base`);
+        const branch = git(task.worktree, ['branch', '--show-current']);
+        if (branch !== task.branch) throw new Error(`held task worktree is on ${branch || 'detached HEAD'}, expected ${task.branch}`);
+        git(task.worktree, ['reset', '--hard', main]);
+        task = this.store.updateTask({ taskId, attempt: 0 }, current => { current.base = main; });
+      }
       if (!task.branch || !task.base || !task.brief.acceptance.command.length) throw new Error('Imported attempts need a dispatchable contract before retry');
       if (!['ready', 'running', 'landing', 'stopped'].includes(task.state)) throw new Error(`cannot retry ${task.state} task`);
       const old = task.currentAttempt ? this.store.attempt({ taskId, attempt: task.currentAttempt }) : null;

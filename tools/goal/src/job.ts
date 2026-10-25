@@ -8,7 +8,7 @@ import { consult } from './consult.ts';
 import { readMeasurement } from './records.ts';
 import { readRouting } from './routing.ts';
 import { settle } from './settle.ts';
-import { git, type WorkerTasks, type RetryOptions } from './tasks.ts';
+import { git, HeldTaskConflictError, type WorkerTasks, type RetryOptions } from './tasks.ts';
 import type { ManagerEventKind } from './contracts.ts';
 import type { RunningWorker } from './launch.ts';
 
@@ -32,6 +32,18 @@ export class WorkerJob implements GateOutcomeSink {
   async start(taskId: string, options: RetryOptions = {}): Promise<void> {
     const worker = await this.tasks.retry(taskId, options);
     await this.follow(worker);
+  }
+  private async startReleased(taskId: string): Promise<void> {
+    try { await this.follow(await this.tasks.retryHeld(taskId)); }
+    catch (error) {
+      if (!(error instanceof HeldTaskConflictError)) throw error;
+      const task = this.tasks.store.task(taskId), ref = { taskId, attempt: 0 };
+      const event = { managerId: task.brief.manager, taskId, kind: 'spec-conflict' as const,
+        summary: `spec-conflict: refusing to release task because ${error.detail}` };
+      this.tasks.store.updateTask(ref, current => { current.state = 'stopped'; });
+      this.tasks.store.event(ref, 'manager-event', event);
+      this.inbox.deliver(event);
+    }
   }
   private hasCommit(ref: AttemptRef): boolean {
     const task = this.tasks.store.task(ref.taskId);
@@ -202,7 +214,7 @@ export class WorkerJob implements GateOutcomeSink {
       }
       store.putRecord(record);
     });
-    for (const taskId of released) this.track(this.start(taskId));
+    for (const taskId of released) this.track(this.startReleased(taskId));
     if (action) this.track(action());
   }
   /** Reattach to a persisted running attempt after a controller restart using a kernel exit notification. */
