@@ -1,0 +1,14 @@
+{
+  "type": { "key": "/type/work" },
+  "key": "/works/OL900000001W",
+  "revision": 7,
+  "last_modified": { "type": "/type/datetime", "value": "2025-01-02T03:04:05.123456" },
+  "title": "The Glass Atlas",
+  "authors": [{ "type": { "key": "/type/author_role" }, "author": { "key": "/authors/OL900000001A" } }],
+  "description": { "type": "/type/text", "value": "A publisher description; no separate license was supplied." },
+  "covers": [900000001],
+  "links": [{ "title": "Publisher", "url": "https://publisher.example/books/glass-atlas" }],
+  "private_notes": "PRIVATE_TEXT_SENTINEL_do_not_disclose",
+  "user_posts": [{ "text": "USER_POST_SENTINEL_do_not_import" }],
+  "account": { "email": "ACCOUNT_SENTINEL@example.invalid" }
+}

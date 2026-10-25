@@ -1,0 +1,19 @@
+[
+  {
+    "type": { "key": "/type/list" },
+    "key": "/people/example/lists/OL900000003L",
+    "revision": 2,
+    "last_modified": { "type": "/type/datetime", "value": "2025-03-01T00:00:00" },
+    "name": "PRIVATE_TEXT_SENTINEL_private_reading_list",
+    "description": "USER_POST_SENTINEL_reading_notes",
+    "seeds": [{ "key": "/works/OL900000001W" }]
+  },
+  {
+    "type": { "key": "/type/user" },
+    "key": "/people/example",
+    "revision": 1,
+    "last_modified": { "type": "/type/datetime", "value": "2025-03-01T00:00:00" },
+    "displayname": "ACCOUNT_SENTINEL_private_account",
+    "email": "PRIVATE_TEXT_SENTINEL@example.invalid"
+  }
+]

@@ -1,0 +1,14 @@
+{
+  "type": { "key": "/type/edition" },
+  "key": "/books/OL900000002M",
+  "revision": 11,
+  "last_modified": { "type": "/type/datetime", "value": "2025-02-03T04:05:06.654321" },
+  "title": "The Glass Atlas: Pocket Edition",
+  "works": [{ "key": "/works/OL900000001W" }],
+  "authors": [{ "key": "/authors/OL900000001A" }],
+  "isbn_10": ["0306406152"],
+  "isbn_13": ["9780306406157"],
+  "publish_date": "May 1980",
+  "publishers": ["Example Press"],
+  "notes": { "type": "/type/text", "value": "USER_POST_SENTINEL_not_a_bibliographic_fact" }
+}
