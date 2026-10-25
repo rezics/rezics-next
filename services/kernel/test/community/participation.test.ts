@@ -169,6 +169,17 @@ async function createRealm(actor: Person, spaceId: string, visibility: 'public' 
   return (result.value as { realm: Realm }).realm;
 }
 
+async function protectRealm(actor: Person, realm: Realm) {
+  const result = await call('PATCH', `/v1/realms/${realm.realmId}`, {
+    bearer: actor.bearer,
+    key: crypto.randomUUID(),
+    headers: { 'if-match': JSON.stringify(realm.headRevisionId) },
+    body: { visibility: 'protected' },
+  });
+  expect(result.response.status).toBe(200);
+  return (result.value as { realm: Realm }).realm;
+}
+
 function withoutRequest(value: Record<string, unknown>) {
   const { request_id: _requestId, ...rest } = value;
   return rest;
@@ -360,11 +371,14 @@ test.serial(
     const unrelated = await personWithToken(`participation_unrelated_${crypto.randomUUID()}`, scopes);
     await grant(owner.accountId, ['realm:create', 'space:create']);
     const protectedSpace = await createSpace(owner, `Protected participation host ${crypto.randomUUID()}`);
-    const protectedRealm = await createRealm(
+    const protectedRealm = await protectRealm(
       owner,
-      protectedSpace.spaceId,
-      'protected',
-      `Protected participation Realm ${crypto.randomUUID()}`,
+      await createRealm(
+        owner,
+        protectedSpace.spaceId,
+        'public',
+        `Protected participation Realm ${crypto.randomUUID()}`,
+      ),
     );
     const publicSpace = await createSpace(owner, `Public participation host ${crypto.randomUUID()}`);
     const publicRealm = await createRealm(
@@ -435,11 +449,9 @@ test.serial('Realm participation stays bounded as Realms, members and grants gro
   const member = await personWithToken(`participation_growth_member_${crypto.randomUUID()}`, scopes);
   await grant(owner.accountId, ['realm:create', 'space:create']);
   const space = await createSpace(owner, `Growth participation host ${crypto.randomUUID()}`);
-  const protectedRealm = await createRealm(
+  const protectedRealm = await protectRealm(
     owner,
-    space.spaceId,
-    'protected',
-    `Growth participation Realm ${crypto.randomUUID()}`,
+    await createRealm(owner, space.spaceId, 'public', `Growth participation Realm ${crypto.randomUUID()}`),
   );
   const joined = await joinMember(protectedRealm.realmId, member, owner);
   expect(joined).toMatchObject({ status: 'completed', accountId: member.accountId });
