@@ -344,7 +344,10 @@ test('anonymous uploader author and suspended denials preserve state; bytes and 
     await expect(f.execute(input(id))).rejects.toBeInstanceOf(GrantDeniedError);
   const erased = await insertMedia(admin);
   await grant(admin, erased);
-  await admin.query('UPDATE content.media SET erased=true WHERE route=$1 AND media_id=$2', [route, erased]);
+  await admin.query(
+    'UPDATE content.media SET erased=true, security_revision=security_revision+1 WHERE route=$1 AND media_id=$2',
+    [route, erased],
+  );
   await expect(f.execute(input(erased))).rejects.toBeInstanceOf(GrantDeniedError);
   const variants = (
     await admin.query('SELECT * FROM content.media_variant WHERE route=$1 AND media_id=$2', [route, f.mediaId])
