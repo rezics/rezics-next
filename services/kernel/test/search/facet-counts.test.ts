@@ -108,7 +108,7 @@ async function refusal(promise: Promise<unknown>) {
     (caught: unknown) => caught,
   );
   expect(error).toBeInstanceOf(ProblemError);
-  return [(error as ProblemError).code, (error as ProblemError).errors];
+  return [(error as ProblemError).code, (error as ProblemError).errors] as unknown[];
 }
 
 test('facet values count subjects, top k first, with their labels', async () => {
