@@ -102,9 +102,30 @@ export async function standingFixture(extraActions: readonly string[] = []) {
     await auth.internal.provisionPassword({ authorization: id, email: `${id}@example.test`, password });
     await reader.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [routeOf(id), id]);
   }
+  const declaredTypes: Readonly<Record<string, readonly string[]>> = {
+    'subject:create': [
+      'content.board',
+      'content.thread',
+      'content.post',
+      'content.media',
+      'content.report',
+      'semantic.communal',
+      'fixture.owned',
+      'fixture.unmounted',
+      'fixture.missing',
+      'unknown.type',
+    ],
+    'thread:create': ['content.thread', 'content.post'],
+    'post:create': ['content.post'],
+  };
   const app = new Elysia();
   for (const [index, action] of actions.entries()) {
-    const detail = { operationId: action.replace(':', '.'), 'x-action': action, security: [{ bearerAuth: [] }] };
+    const detail = {
+      operationId: action.replace(':', '.'),
+      'x-action': action,
+      security: [{ bearerAuth: [] }],
+      ...(declaredTypes[action] === undefined ? {} : { 'x-resource-types': declaredTypes[action] }),
+    };
     app.get(
       `/fixture/${index}`,
       {

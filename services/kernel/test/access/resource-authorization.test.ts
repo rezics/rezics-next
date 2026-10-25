@@ -66,6 +66,10 @@ async function fixture(identity?: AccountActor) {
   const actor = identity ?? f.delegated;
   const account = await readAccount(admin, routeOf(actor.accountId)!, actor.accountId);
   const access = f.permissions({
+    actions: new Map([
+      [action, { anonymous: false, 'x-resource-types': ['fixture.owned'] }],
+      ['subject:update', { anonymous: false }],
+    ]),
     accountEvidence: () => account,
     resourceRoles: {
       roles: { 'fixture.owner': [action] },

@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { parseExposure } from '../access/gates/declaration.ts';
+import { assertDeclaredResourceTypes } from '../access/resource-roles.ts';
 import { createAccess } from '../access/index.ts';
 import { accessRoutes } from '../access/routes.ts';
 import { exposureRoutes } from '../access/gates/routes.ts';
@@ -187,6 +188,7 @@ export function createKernel(dependencies: KernelDependencies) {
       throw new Error(`${route.method.toUpperCase()} ${route.path}: invalid x-exposure declaration`, { cause });
     }
   }
+  assertDeclaredResourceTypes(collections);
   return collections as typeof collections &
     typeof personal &
     typeof community &

@@ -168,12 +168,16 @@ async function makeAnchor(options: { partition?: number; tag?: string } = {}): P
     VALUES ($1,$2,$3,'Growth media board','published',1,$4)`, [route, boardId, actorId, newId(route)]);
   await db!.admin.query(`INSERT INTO content.thread(route,thread_id,author_account_id,board_id,title,visibility,security_revision,recorded_transaction_id)
     VALUES ($1,$2,$3,$4,'Growth media thread','published',1,$5)`, [route, threadId, actorId, boardId, newId(route)]);
-  await db!.admin.query(`INSERT INTO semantic.subject(route,subject_id,type,recorded_transaction_id)
-    VALUES ($1,$2,'schema:Book',$3) ON CONFLICT (route,subject_id) DO NOTHING`, [route, threadId, newId(route)]);
+  await db!.admin.query(`INSERT INTO semantic.subject(route,subject_id,type,recorded_transaction_id,current_release)
+    VALUES ($1,$2,'schema:Book',$3,'seed') ON CONFLICT (route,subject_id) DO NOTHING`, [route, threadId, newId(route)]);
   for (const [resource, action] of [[threadId, 'media:create'], [threadId, 'post:create'], [boardId, 'board:read'],
     [platform, 'media:import_from_url'], [platform, 'source_fence:read'], [platform, 'source_fence:takedown']] as const)
     await grant({ actor }, resource, action);
-  const access = createAccess({ actions: new Map(actor.scopes.map(action => [action, { anonymous: false }])),
+  const access = createAccess({ actions: new Map(actor.scopes.map(action => [action, { anonymous: false, ...(action === 'media:create' || action === 'media:import_from_url'
+  ? { 'x-resource-types': ['content.media'] as const }
+  : action === 'post:create'
+    ? { 'x-resource-types': ['content.post'] as const }
+    : {}) }])),
     accountEvidence: candidate => accounts.get(candidate.accountId) });
   const position = await db!.admin.query<{ position: string }>(
     'SELECT COALESCE(max(position),0)::text AS position FROM core.outbox WHERE partition_no=$1', [partition]);

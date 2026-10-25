@@ -92,6 +92,7 @@ export function mediaImportRoutes(
           operationId: 'media.import_from_url',
           'x-exposure': 'public',
           'x-action': 'media:import_from_url',
+          'x-resource-types': ['content.media'],
           'x-rate-limit': uploadRate,
           security,
         },

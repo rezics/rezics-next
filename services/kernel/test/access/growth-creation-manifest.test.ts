@@ -17,13 +17,21 @@ let access: Access;
 beforeAll(async () => {
   db = await openGrowthDatabase();
   db.pool.options.max = 1;
-  f = await standingFixture();
+  // reaction:set is a mounted standing action; without it the thread and post templates drop.
+  f = await standingFixture(['reaction:set']);
   await f.reset();
   await f.grant(f.actor, 'subject:create');
   actor = (await f.context()).actor;
   let account = await readAccount(db.admin, routeOf(f.actor)!, f.actor);
   access = createAccess({
-    actions: new Map(f.actions.map((action) => [action, { anonymous: false }])),
+    actions: new Map(
+      f.actions.map((action) => [
+        action,
+        action === 'subject:create'
+          ? { anonymous: false as const, 'x-resource-types': ['content.thread', 'content.post'] as const }
+          : { anonymous: false as const },
+      ]),
+    ),
     accountEvidence: () => account,
   });
   const prepare = access.prepare!.bind(access);

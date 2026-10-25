@@ -37,7 +37,8 @@ const input = (): ThreadInput => ({
 const dependencies = () => ({ pool: f.pool, access: f.access, routeKey });
 
 beforeAll(async () => {
-  f = await standingFixture();
+  // reaction:set is a mounted standing action; without it the thread and post templates drop.
+  f = await standingFixture(['reaction:set']);
   await f.reader.query(
     `INSERT INTO content.board(route,board_id,subject_id,title,visibility,security_revision,recorded_transaction_id)
      VALUES ($1,$2,$3,'Books','published',1,$4)`,

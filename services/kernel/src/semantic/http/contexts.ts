@@ -70,6 +70,7 @@ function contextRoutes(
           operationId: 'context.create',
           'x-exposure': 'public',
           'x-action': 'context:create',
+          'x-resource-types': ['semantic.context'],
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
           security: [{ bearerAuth: [] }],
         },

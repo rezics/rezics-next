@@ -182,7 +182,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
           422: problemSchema('idempotency_conflict'),
           503: unavailable,
         },
-        detail: detail('offer.create', 'offer:create'),
+        detail: { ...detail('offer.create', 'offer:create'), 'x-resource-types': ['commerce.offer'] },
       },
       async ({ body, headers, actor, admission, job, session, set }) => {
         requireAccount(actor);

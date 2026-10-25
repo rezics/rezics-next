@@ -102,8 +102,8 @@ for (const mode of ['stable tuple', 'creation'] as const) {
         );
         await database.admin.query(
           `INSERT INTO core.receipt
-          (partition_no,actor_account_id,command_kind,idempotency_key,request_digest,epoch,position,transaction_id,response)
-          SELECT $1,$2,$3,id::text || '-' || n,$4,1,1,$5,'{}'::jsonb
+          (partition_no,principal_kind,principal_id,command_kind,idempotency_key,request_digest,epoch,position,transaction_id,response)
+          SELECT $1,'account',$2,$3,id::text || '-' || n,$4,1,1,$5,'{}'::jsonb
           FROM unnest($6::uuid[]) id CROSS JOIN generate_series(1,4) n`,
           [partitionOf(0x9876), f.actorId, `growth.resource.${mode}`, Buffer.alloc(32), f.transactionId, ids],
         );
@@ -204,7 +204,8 @@ for (const mode of ['stable tuple', 'creation'] as const) {
                 resource.route,
                 resource.id,
               ]);
-              await creationCapability(tx, resource, f.actorId);
+              const capability = await creationCapability(tx, resource, f.actorId);
+              capability.complete();
             }
             return { value: 'done', events: [{ type: 'com.rezics.test.growth-resource-authorized.v1', data: {} }] };
           },

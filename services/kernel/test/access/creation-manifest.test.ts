@@ -24,7 +24,8 @@ let validations = 0;
 let bodies = 0;
 const provenance = new WeakMap<CommandTransaction, string>();
 beforeAll(async () => {
-  f = await standingFixture();
+  // reaction:set is a mounted standing action; without it the thread and post templates drop.
+  f = await standingFixture(['reaction:set']);
   const authorize = f.access.authorize.bind(f.access);
   f.access.authorize = async (...args) => {
     parentFormulas++;

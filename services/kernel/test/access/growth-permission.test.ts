@@ -147,7 +147,8 @@ const population: Population = {
           transaction_id: rowTransactionId,
           epoch: 1,
           position,
-          actor_account_id: actorId,
+          principal_kind: 'account',
+          principal_id: actorId,
           client_id: seedClientId,
           requested_by: null,
         },
@@ -155,7 +156,8 @@ const population: Population = {
       'core.receipt': [
         {
           partition_no: partition,
-          actor_account_id: actorId,
+          principal_kind: 'account',
+          principal_id: actorId,
           command_kind: seedCommandKind,
           idempotency_key: `seed-${ordinal}`,
           request_digest: receiptDigest,
@@ -240,8 +242,8 @@ beforeAll(async () => {
   await db.admin.query(
     `INSERT INTO access.resource_grant
      (route, resource_id, subject_kind, subject_id, subject_role, action, valid, transaction_id)
-     VALUES ($1, $2, 'identity', $3, 'owner', $4, '(,)'::tstzrange, $5)`,
-    [target.route, target.id, organizationId, action, transactionId],
+     VALUES ($1, $2, 'identity', $3, '', $4, '(,)'::tstzrange, $5)`,
+    [target.route, target.id, actorId, action, transactionId],
   );
   await db.admin.query(`ANALYZE ${resources}`);
 }, 90_000);
@@ -421,7 +423,8 @@ test('Parent creation authorization stays within its bound as G grows', async ()
       },
       async (tx) => {
         await tx.query(`INSERT INTO ${resources} (route, id) VALUES ($1, $2)`, [child.route, child.id]);
-        await creationCapability(tx, child, actor.accountId);
+        const capability = await creationCapability(tx, child, actor.accountId);
+        capability.complete();
         return { value: child, events: [{ type: 'com.rezics.growth.parent-created.v1', data: child }] };
       },
     );

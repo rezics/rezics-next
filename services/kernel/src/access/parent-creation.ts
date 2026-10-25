@@ -12,6 +12,7 @@ import { validResource } from './grant-command.ts';
 import { GrantDeniedError } from './grant-commands.ts';
 import { permissionEvidenceDeadline } from './permission.ts';
 import { resourceAuthorization } from './resource-authorization.ts';
+import { resourceRoleCatalogue } from './resource-roles.ts';
 import {
   creationManifestEntries,
   type ResourceCreationEntry,
@@ -113,6 +114,11 @@ export async function creationCapability(
     creation.failed = true;
     throw new GrantDeniedError();
   }
+  if (
+    type !== undefined &&
+    !resourceRoleCatalogue(creation.access)?.declaredTypes?.get(creation.action)?.includes(type)
+  )
+    throw new TypeError(`Resource type ${type} is not declared by ${creation.action}`);
   entry.state = 'initializing';
   try {
     if (!(await entry.validate(tx, entry.resource, creation.attempt.time))) throw new GrantDeniedError();

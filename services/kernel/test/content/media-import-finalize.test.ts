@@ -144,7 +144,9 @@ beforeAll(async () => {
     actions: new Map(
       [...actions, 'media:read_reservation', 'media:read', 'media:complete', 'media:erase'].map((a) => [
         a,
-        { anonymous: false },
+        a === 'media:import_from_url'
+          ? { anonymous: false as const, 'x-resource-types': ['content.media'] as const }
+          : { anonymous: false as const },
       ]),
     ),
     auth: { ...auth.verifier, fetch: async (url, init) => auth.handler(new Request(url, init)) },
@@ -161,8 +163,8 @@ beforeAll(async () => {
     fetchConfig: { allowedHosts: ['images.example.test'] },
   };
   await db.admin.query(
-    `INSERT INTO semantic.subject(route,subject_id,type,recorded_transaction_id)
-    VALUES($1,$2,'schema:Book',$2)`,
+    `INSERT INTO semantic.subject(route,subject_id,type,recorded_transaction_id,current_release)
+    VALUES($1,$2,'schema:Book',$2,'seed')`,
     [route, request.containerId],
   );
   for (const action of actions) await grant(action);
@@ -381,6 +383,7 @@ test('actual native growth remains one-partition bounded at three informative sc
                 subject_id: id,
                 type: 'schema:Book',
                 recorded_transaction_id: id,
+                current_release: 'seed',
               })),
               'content.source_fences': ids.map((id) => ({
                 route: sourceRoute,

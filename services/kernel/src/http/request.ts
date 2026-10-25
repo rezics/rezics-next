@@ -65,6 +65,7 @@ export function anonymousRequestDigest(operation: string, input: { semantic: unk
 
 const ACTION_PATTERN = /^[a-z][a-z_]*:[a-z][a-z_]*$/;
 const OPERATION_PATTERN = /^[a-z][a-z_]*\.[a-z][a-z_]*$/;
+const RESOURCE_TYPE_PATTERN = /^[a-z][a-z0-9_.-]*$/;
 
 export type MountedRoute = {
   method: string;
@@ -78,10 +79,37 @@ type RouteApp = {
   '~config'?: { strictPath?: boolean };
 };
 
-type RouteDeclaration = { action: string; anonymous: boolean; replay?: 'self-account-read' };
+type RouteDeclaration = {
+  action: string;
+  anonymous: boolean;
+  replay?: 'self-account-read';
+  resourceTypes?: readonly string[];
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function sameResourceTypes(left: readonly string[] | undefined, right: readonly string[] | undefined): boolean {
+  if (left === undefined || right === undefined) return left === right;
+  if (left.length !== right.length) return false;
+  const orderedLeft = [...left].sort();
+  const orderedRight = [...right].sort();
+  return orderedLeft.every((type, index) => type === orderedRight[index]);
+}
+
+function resourceTypesOf(route: MountedRoute, detail: Record<string, unknown>): readonly string[] | undefined {
+  const value = detail['x-resource-types'];
+  if (value === undefined) return undefined;
+  const label = `${route.method.toUpperCase()} ${route.path}`;
+  if (
+    !Array.isArray(value) ||
+    value.length === 0 ||
+    value.some((type) => typeof type !== 'string' || !RESOURCE_TYPE_PATTERN.test(type)) ||
+    new Set(value).size !== value.length
+  )
+    throw new Error(`${label}: x-resource-types must be a non-empty list of distinct resource type names`);
+  return Object.freeze([...value]);
 }
 
 function declaration(route: MountedRoute): RouteDeclaration {
@@ -99,10 +127,12 @@ function declaration(route: MountedRoute): RouteDeclaration {
   if (replay !== undefined && replay !== 'self-account-read')
     throw new Error(`${label}: unsupported x-replay-authorization`);
 
+  const resourceTypes = resourceTypesOf(route, detail);
   return {
     action,
     anonymous: security.some((requirement) => isRecord(requirement) && Object.keys(requirement).length === 0),
     ...(replay === undefined ? {} : { replay }),
+    ...(resourceTypes === undefined ? {} : { resourceTypes }),
   };
 }
 
@@ -114,20 +144,28 @@ export function actionCatalogue(app: RouteApp): ActionCatalogue {
   if (mounted) return actionCatalogue(mounted);
   const cached = actionCatalogues.get(app);
   if (cached) return cached;
-  const catalogue = new Map<string, { anonymous: boolean; replay?: 'self-account-read' }>();
+  const catalogue = new Map<
+    string,
+    { anonymous: boolean; replay?: 'self-account-read'; 'x-resource-types'?: readonly string[] }
+  >();
   for (const route of app.routes) {
     const detail = isRecord(route.hooks?.detail) ? route.hooks.detail : {};
     if (detail.hide === true) continue;
 
-    const { action, anonymous, replay } = declaration(route);
+    const { action, anonymous, replay, resourceTypes } = declaration(route);
     const previous = catalogue.get(action);
+    const label = `${route.method.toUpperCase()} ${route.path}`;
     if (previous && previous.anonymous !== anonymous)
-      throw new Error(`${route.method.toUpperCase()} ${route.path}: ${action} is declared with different security`);
+      throw new Error(`${label}: ${action} is declared with different security`);
     if (previous && previous.replay !== replay)
-      throw new Error(
-        `${route.method.toUpperCase()} ${route.path}: ${action} is declared with different replay authorization`,
-      );
-    catalogue.set(action, { anonymous, ...(replay === undefined ? {} : { replay }) });
+      throw new Error(`${label}: ${action} is declared with different replay authorization`);
+    if (previous && !sameResourceTypes(previous['x-resource-types'], resourceTypes))
+      throw new Error(`${label}: ${action} is declared with different resource types`);
+    catalogue.set(action, {
+      anonymous,
+      ...(replay === undefined ? {} : { replay }),
+      ...(resourceTypes === undefined ? {} : { 'x-resource-types': resourceTypes }),
+    });
   }
   // Unsealed applications may still mount routes. Cache only the final snapshot.
   if (app instanceof MountedRouteCatalogue) actionCatalogues.set(app, catalogue);

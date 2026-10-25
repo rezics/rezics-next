@@ -12831,7 +12831,10 @@
         "x-rate-limit": {
           "family": "write",
           "units": 1
-        }
+        },
+        "x-resource-types": [
+          "semantic.context"
+        ]
       }
     },
     "/v1/contexts/{id}": {
@@ -31084,7 +31087,10 @@
         "x-rate-limit": {
           "family": "upload",
           "units": 1
-        }
+        },
+        "x-resource-types": [
+          "content.media"
+        ]
       }
     },
     "/v1/media/{id}": {
@@ -37021,7 +37027,10 @@
         "x-rate-limit": {
           "family": "upload",
           "units": 1
-        }
+        },
+        "x-resource-types": [
+          "content.media"
+        ]
       }
     },
     "/v1/offers": {
@@ -37607,7 +37616,10 @@
         "x-rate-limit": {
           "family": "write",
           "units": 1
-        }
+        },
+        "x-resource-types": [
+          "commerce.offer"
+        ]
       }
     },
     "/v1/offers/{offerId}": {
@@ -64843,7 +64855,10 @@
         "x-rate-limit": {
           "family": "write",
           "units": 1
-        }
+        },
+        "x-resource-types": [
+          "community.realm"
+        ]
       }
     },
     "/v1/realms/{realmId}": {
@@ -71303,7 +71318,10 @@
         "x-rate-limit": {
           "family": "write",
           "units": 1
-        }
+        },
+        "x-resource-types": [
+          "content.board"
+        ]
       }
     },
     "/v1/realms/{realmId}/members": {
@@ -85799,7 +85817,10 @@
         "x-rate-limit": {
           "family": "write",
           "units": 1
-        }
+        },
+        "x-resource-types": [
+          "community.space"
+        ]
       }
     },
     "/v1/spaces/{spaceId}": {
@@ -104858,7 +104879,11 @@
         "x-rate-limit": {
           "family": "write",
           "units": 1
-        }
+        },
+        "x-resource-types": [
+          "content.thread",
+          "content.post"
+        ]
       }
     },
     "/v1/threads/{id}": {
@@ -108059,7 +108084,10 @@
         "x-rate-limit": {
           "family": "write",
           "units": 1
-        }
+        },
+        "x-resource-types": [
+          "content.post"
+        ]
       }
     },
     "/v1/threads/{id}/reaction": {

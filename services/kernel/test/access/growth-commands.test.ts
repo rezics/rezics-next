@@ -49,7 +49,7 @@ const actions: ActionCatalogue = new Map([
   ['organization:membership', { anonymous: false }],
   ['access:grant', { anonymous: false }],
   ['account:delegate', { anonymous: false }],
-  ['subject:create', { anonymous: false }],
+  ['subject:create', { anonymous: false, 'x-resource-types': ['content.board'] }],
   ['subject:read', { anonymous: false }],
   ['subject:update', { anonymous: false }],
   ['board:read', { anonymous: false }],

@@ -21,10 +21,13 @@ export type Resource = {
     /** Compatibility spelling; uses the same opaque capability and evaluator. */
     anonymousEligibility?: ResourceEligibility;
 };
-export type ActionCatalogue = ReadonlyMap<string, {
+export type ActionMetadata = {
     anonymous: boolean;
     replay?: 'self-account-read';
-}>;
+    /** Resource types the command initializes. Absent means it initializes none. */
+    'x-resource-types'?: readonly string[];
+};
+export type ActionCatalogue = ReadonlyMap<string, ActionMetadata>;
 /** Server-owned Realm membership proofs. The permission formula calls this on the
  * released Realm anchor; a missing reader denies Realm group matches.
  */

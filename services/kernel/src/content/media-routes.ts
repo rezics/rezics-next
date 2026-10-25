@@ -116,6 +116,7 @@ export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependenci
           operationId: 'media.create',
           'x-exposure': 'public',
           'x-action': 'media:create',
+          'x-resource-types': ['content.media'],
           'x-rate-limit': upload,
           security: secured,
         },
