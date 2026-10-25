@@ -3,6 +3,11 @@ import type { CommandOutcome } from '../command/command.ts';
 import type { Access, AccountActor } from '../request/access.ts';
 
 export type RequestContext = Readonly<{ deadline: number }>;
+export type CommandRequestContext = RequestContext &
+  Readonly<{
+    idempotencyKey: string;
+    requestId: string;
+  }>;
 
 export type AuthorErasureInput = Readonly<{
   threadId: string;
@@ -21,6 +26,11 @@ export type OperationMetadata = Readonly<{
 }>;
 
 export type OperationResponse = Readonly<{
+  processedPosts: OperationCount;
+  erasedRevisions: OperationCount;
+}>;
+
+export type OperationProgress = Readonly<{
   processedPosts: OperationCount;
   erasedRevisions: OperationCount;
 }>;
@@ -46,6 +56,8 @@ export type Operation =
 
 export type NativeWorkflowStatus = Readonly<{
   done: boolean;
+  /** Bounded progress from native workflow events or its durable checkpoint. */
+  progress: OperationProgress;
   response?: OperationResponse;
   error?: Problem;
 }>;
@@ -62,7 +74,7 @@ export interface NativeAuthorErasureWorkflows {
       authorId: string;
       actor: AccountActor;
     }>,
-    context: RequestContext,
+    context: CommandRequestContext,
   ): Promise<void>;
   status(operationId: string, context: RequestContext): Promise<NativeWorkflowStatus | null>;
 }
@@ -79,7 +91,7 @@ export type BeginAuthorErasure = (
   deps: AuthorErasureDependencies,
   actor: import('../request/access.ts').Actor,
   input: AuthorErasureInput,
-  context: RequestContext,
+  context: CommandRequestContext,
 ) => Promise<CommandOutcome<{ operationId: string }>>;
 
 export type ReadOperation = (
