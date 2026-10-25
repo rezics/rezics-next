@@ -4,6 +4,8 @@ import { bundledRelease } from '../src/bundled.ts';
 import { checkBatchWrite, type Rights, type Source } from '../src/bulk.ts';
 import { DATA_TYPES, valueSchema } from '../src/index.ts';
 
+const locales = ['de', 'en', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant'];
+
 const source = (field_group: Source['field_group'], overrides: Partial<Source> = {}): Source => ({
   source: 'bangumi',
   external_id: '253',
@@ -149,5 +151,5 @@ test('the catalogue defines the launch types, summaries, covers and source ident
     expect.arrayContaining(['schema:position', 'wdt:P648', 'wdt:P6298', 'wdt:P3180']),
   );
   for (const id of ['schema:abstract', 'schema:image', 'wdt:P648', 'schema:TVSeries'])
-    expect(Object.keys((properties[id] ?? types[id])!.labels).sort()).toEqual(['en', 'ja', 'zh-Hant']);
+    expect(Object.keys((properties[id] ?? types[id])!.labels).sort()).toEqual(locales);
 });

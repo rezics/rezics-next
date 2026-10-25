@@ -1,6 +1,15 @@
 import { expect, test } from 'bun:test';
+import { readdirSync } from 'node:fs';
 import { bundledSources } from '../src/bundled.ts';
 import { CatalogueError, compileCatalogue } from '../src/compile.ts';
+
+const locales = ['de', 'en', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant'];
+
+const yamlNames = (directory: URL) =>
+  readdirSync(directory, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.yaml'))
+    .map((entry) => entry.name)
+    .sort();
 
 const withVertical = (presentation = bundledSources().presentation) => {
   const sources = bundledSources();
@@ -100,41 +109,19 @@ test('labels split across files merge per locale and a term labelled twice in on
 
 test('every catalogue and presentation file is bundled with no code edit', () => {
   const sources = bundledSources();
-  expect(Object.keys(sources.schemas).sort()).toEqual([
-    'anime.yaml',
-    'book.yaml',
-    'character.yaml',
-    'classification.yaml',
-    'core.yaml',
-    'game.yaml',
-    'manga.yaml',
-    'recipe.yaml',
-    'rezics.yaml',
-    'series.yaml',
-    'visual-novel.yaml',
-    'works.yaml',
-  ]);
-  expect(Object.keys(sources.presentation).sort()).toEqual([
-    'anime/en',
-    'anime/ja',
-    'anime/zh-Hant',
-    'book/en',
-    'book/ja',
-    'book/zh-Hant',
-    'core/en',
-    'core/ja',
-    'core/zh-Hant',
-    'game/en',
-    'game/ja',
-    'game/zh-Hant',
-    'recipe/en',
-    'recipe/ja',
-    'recipe/zh-Hant',
-    'visual-novel/en',
-    'visual-novel/ja',
-    'visual-novel/zh-Hant',
-    'works/en',
-    'works/ja',
-    'works/zh-Hant',
-  ]);
+  const catalogue = new URL('../catalogue/', import.meta.url);
+  expect(Object.keys(sources.schemas).sort()).toEqual(yamlNames(catalogue));
+
+  const presentation = new URL('../presentation/', import.meta.url);
+  const keys: string[] = [];
+  const groups = readdirSync(presentation, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+  for (const group of groups) {
+    const groupLocales = yamlNames(new URL(`${group}/`, presentation)).map((name) => name.replace(/\.yaml$/u, ''));
+    expect(groupLocales).toEqual(locales);
+    for (const locale of groupLocales) keys.push(`${group}/${locale}`);
+  }
+  expect(Object.keys(sources.presentation).sort()).toEqual(keys.sort());
 });

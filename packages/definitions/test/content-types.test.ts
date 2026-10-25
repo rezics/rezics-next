@@ -1,8 +1,7 @@
 import { expect, test } from 'bun:test';
 import { Compile } from 'typebox/schema';
-import { bundledRelease } from '../src/bundled.ts';
 import { CatalogueError, compileCatalogue } from '../src/compile.ts';
-import { validateRelease, valueSchema } from '../src/index.ts';
+import { RELEASE_FORMAT, validateRelease, valueSchema, type Release } from '../src/index.ts';
 
 const UUID = '019a1b2c-3d4e-7f00-8a00-5b0000000061';
 
@@ -28,16 +27,47 @@ test('content value schemas describe the portable envelope and refuse quantity a
   }
 });
 
+const contentRelease = (id: 'schema:abstract' | 'schema:image'): Release => {
+  const datatype = id === 'schema:abstract' ? 'document' : 'media';
+  return {
+    format: RELEASE_FORMAT,
+    catalogue: { id: 'urn:catalogue:content', version: '1' },
+    generator: { name: 'test', version: '1' },
+    prefixes: { schema: 'http://schema.org/' },
+    types: {
+      'schema:Book': {
+        iri: 'http://schema.org/Book',
+        labels: { en: 'book' },
+        mappings: [],
+        bases: [],
+        properties: [],
+        facets: [],
+      },
+    },
+    properties: {
+      [id]: {
+        iri: `http://schema.org/${id.slice('schema:'.length)}`,
+        labels: { en: datatype === 'document' ? 'abstract' : 'image' },
+        mappings: [],
+        datatype,
+        multivalued: true,
+        qualifiers: [],
+        value: valueSchema(datatype),
+      },
+    },
+  };
+};
+
 test('release content properties refuse patterns, targets, units and numeric bounds', () => {
-  for (const property of ['schema:abstract', 'schema:image']) {
-    for (const member of ['targets', 'units', 'minimum', 'maximum']) {
-      const release = structuredClone(bundledRelease);
+  for (const property of ['schema:abstract', 'schema:image'] as const) {
+    for (const member of ['targets', 'units', 'minimum', 'maximum'] as const) {
+      const release = contentRelease(property);
       Object.assign(release.properties[property]!, {
         [member]: member === 'targets' ? ['schema:Book'] : member === 'units' ? ['1'] : 1,
       });
       expect(validateRelease(release)).toEqual([{ pointer: `/properties/${property}/${member}`, code: 'invalid' }]);
     }
-    const release = structuredClone(bundledRelease);
+    const release = contentRelease(property);
     Object.assign(release.properties[property]!.value, { pattern: '^x' });
     expect(validateRelease(release)).toEqual([{ pointer: `/properties/${property}/value`, code: 'invalid' }]);
   }
