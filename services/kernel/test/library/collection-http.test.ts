@@ -215,7 +215,7 @@ test('all Collection routes mount once and declare their exposure, actions and c
     '/v1/collections/{collectionId}/members': ['get', 'post'],
     '/v1/collections/{collectionId}/members/{memberId}': ['patch', 'delete'],
     '/v1/collections/{collectionId}/members/{memberId}:move': ['post'],
-    '/v1/subjects/{subjectId}/collections': ['get'],
+    '/v1/subjects/{id}/collections': ['get'],
   };
   for (const [url, methods] of Object.entries(expected))
     for (const method of methods) {

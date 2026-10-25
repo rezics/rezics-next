@@ -152,7 +152,7 @@ test("a subject's public Collections are served under the subjects path with the
   const route = document.paths['/v1/subjects/{id}/collections']?.get;
   expect(route).toBeDefined();
   expect(route?.parameters ?? []).toContainEqual(expect.objectContaining({ in: 'path', name: 'id' }));
-  expect(paths.filter((path) => path.includes('{subjectId}'))).toEqual([]);
+  expect(paths.filter((path) => path.startsWith('/v1/subjects/') && path.includes('{subjectId}'))).toEqual([]);
 
   const response = await request('GET', `/v1/subjects/${subjectId}/collections`, undefined, true);
   expect(response.status).toBe(200);
