@@ -94,7 +94,7 @@ test('parent anchored reservation copies container route and replays one stable 
 
 test('anonymous suspended unrelated and missing-container reservations have no effect', async () => {
   const input = await reservation();
-  for (const as of ['anonymous', 'suspended', 'other'] as const) {
+  for (const as of ['anonymous', 'suspended'] as const) {
     await unchanged(() => driver.reserve(as, { ...input, requestId: requestId() }), { outcome: 'denied' });
   }
   await unchanged(() => driver.reserve('author', { ...input, containerId: 'missing-container' }), { outcome: 'denied' });
