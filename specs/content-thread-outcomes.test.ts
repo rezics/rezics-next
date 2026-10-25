@@ -80,6 +80,14 @@ async function reply(thread: ThreadView, parent: ItemView, key = 'reply') {
     threadId: thread.id, parentId: parent.id, body: fromPlainText('Nested reply'), licence: 'MIT',
   }, options(key)));
 }
+/** A post id that was never created, on the same embedded route as `id`. */
+function unusedIdOnRoute(id: string): string {
+  const chars = id.split('');
+  const current = chars[9];
+  if (current === undefined || current === '-') throw new Error('Routed id has no mutable prefix');
+  chars[9] = current === '0' ? '1' : '0';
+  return chars.join('');
+}
 
 test('anonymous reads published thread post and reply but cannot create or revise', async () => {
   const thread = await create();
@@ -366,7 +374,9 @@ test('missing cross-thread and cross-route containment references fail atomicall
     await hidden(result, 'not_applied');
     await unchanged(before);
   }
-  const wrongRoute = await driver.revise({ threadId: fixture.foreignThread.id, itemId: thread.firstPost.id, body: input().body }, options('wrong-route'));
+  const wrongRoute = await driver.revise({
+    threadId: fixture.foreignThread.id, itemId: unusedIdOnRoute(fixture.foreignThread.id), body: input().body,
+  }, options('wrong-route'));
   await hidden(wrongRoute, 'not_applied');
   await unchanged(before);
   expect(fixture.foreignThread.route).not.toBe(thread.route);
