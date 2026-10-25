@@ -82,10 +82,15 @@ export interface SemanticDriver {
   /**
    * Use @rezics/definitions, including its bundled core.yaml, book.yaml,
    * recipe.yaml and rezics.yaml in the source map. root is a schema filename;
-   * schemas maps filenames to LinkML YAML. presentation is catalogue data.
+   * schemas maps filenames to LinkML YAML. presentation maps BCP 47 tags to
+   * type and property labels, merged over bundled presentation by the driver
+   * so bundled terms keep their labels.
    * Never import product code from the suite or hand-build compiler output.
    */
-  compile(root: string, schemas: Record<string, string>, presentation: Release):
+  compile(root: string, schemas: Record<string, string>, presentation: Record<string, {
+    types?: Record<string, string>;
+    properties?: Record<string, string>;
+  }>):
     Promise<{ digest: string; release: Release }>;
   /** Fixture setup through accounts grant administration, never fake Access. */
   grant(persona: Persona, actions: string[], resourceId: string): Promise<void>;

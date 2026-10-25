@@ -154,33 +154,48 @@ async function music() {
   return driver.compile('fixture.yaml', {
     'fixture.yaml': `id: https://rezics.com/fixtures/catalogue
 name: fixture
-imports: [rezics, music]
+version: 1.0.0
+prefixes:
+  linkml: https://w3id.org/linkml/
+  schema: http://schema.org/
+  wd: http://www.wikidata.org/entity/
+imports: [linkml:types, rezics, music]
 `,
     'music.yaml': String.raw`id: https://rezics.com/fixtures/music
 name: music
-imports: [core]
+version: 1.0.0
 prefixes:
-  schema: https://schema.org/
+  linkml: https://w3id.org/linkml/
+  schema: http://schema.org/
   wd: http://www.wikidata.org/entity/
-  rezics: https://rezics.com/vocab/
+default_range: string
+imports: [linkml:types, core]
 classes:
-  MusicComposition:
+  Composition:
+    is_a: Thing
     class_uri: schema:MusicComposition
+    exact_mappings: [wd:Q207628]
     slots: [composer, iswcCode]
 slots:
   composer:
     slot_uri: schema:composer
     range: Person
     multivalued: true
+    exact_mappings: [wd:P86]
+    annotations:
+      datatype: wikibase-item
   iswcCode:
     slot_uri: schema:iswcCode
     range: string
     pattern: '^T-[0-9]{3}\.[0-9]{3}\.[0-9]{3}-[0-9]$'
     exact_mappings: [wd:P1827]
     annotations:
-      rezics:external_id: true
+      datatype: external-id
 `,
-  }, { labels: { en: { 'schema:MusicComposition': 'Musical composition', 'schema:composer': 'composer', 'schema:iswcCode': 'ISWC' } } });
+  }, { en: {
+    types: { 'schema:MusicComposition': 'musical composition' },
+    properties: { 'schema:composer': 'composer', 'schema:iswcCode': 'ISWC' },
+  } });
 }
 
 test('Anonymous reads the active pointer and the complete bundled catalogue with immutable caching', async () => {
@@ -207,10 +222,7 @@ test('Anonymous reads the active pointer and the complete bundled catalogue with
   expect(contains(entry(release, 'schema:isbn'), 'external-id')).toBe(true);
   expect(contains(entry(release, 'schema:isbn'), 'wd:P212')).toBe(true);
   const pages = entry(release, 'schema:numberOfPages');
-  expect(contains(pages, 'quantity')).toBe(true);
-  expect(contains(pages, 'integer')).toBe(true);
-  expect(pages).toMatchObject({ unit: '1' });
-  expect(JSON.stringify(pages)).toContain('"minimum":1');
+  expect(pages).toMatchObject({ datatype: 'quantity', units: ['1'], minimum: 1 });
   const ingredient = entry(release, 'schema:recipeIngredient');
   expect(ingredient).toMatchObject({ multivalued: true });
   expect(contains(ingredient, 'monolingualtext')).toBe(true);
@@ -284,7 +296,7 @@ test('Editor creates a work edition and recipe in Wikibase shape and creation ke
   const { digest } = await active();
   const person = await create('schema:Person', 'Natsume Sōseki');
   const author = { ...statement('schema:author', person.id, 'preferred'),
-    qualifiers: [statement('schema:position', { amount: '+1', unit: '1' })], references: [reference()] };
+    qualifiers: [statement('schema:position', '1')], references: [reference()] };
   const body = { type: 'schema:Book', labels: { en: 'Kokoro', ja: 'こころ' }, descriptions: { en: 'A novel by Natsume Sōseki' },
     aliases: { en: ['The Heart'] }, statements: { 'schema:author': [author] } };
   const token = key();
@@ -344,6 +356,7 @@ test('Invalid subject types properties values targets qualifiers and ranks fail 
     await invalid({ ...base, statements: { 'schema:author': [{ ...statement('schema:author', author.id), qualifiers: [statement('schema:isbn', '9780143106036')] }] } }, '/statements/schema:author/0/qualifiers/0/property/id', 'unsupported');
     await invalid({ ...base, statements: { 'schema:url': [{ ...statement('schema:url', 'https://www.aozora.gr.jp/'), rank: 'deprecated' }] } }, '/statements/schema:url/0/rank', 'unsupported');
     await invalid({ type: 'bf:Instance', labels: { en: 'Invalid pages' }, statements: { 'schema:numberOfPages': [statement('schema:numberOfPages', { amount: '+0', unit: '1' })] } }, '/statements/schema:numberOfPages/0/value/content/amount', 'out_of_range');
+    await invalid({ type: 'bf:Instance', labels: { en: 'Invalid pages' }, statements: { 'schema:numberOfPages': [statement('schema:numberOfPages', { amount: '+12.5', unit: '1' })] } }, '/statements/schema:numberOfPages/0/value/content/amount', 'invalid_format');
   });
 });
 
