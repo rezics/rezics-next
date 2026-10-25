@@ -146,6 +146,12 @@ export function createApp({
     })
     .onBeforeHandle('global', async ({ request, route, body, actor, job, server }) => {
       const original = originalRequests.get(request) ?? request;
+      const declaration = mountedApp.routes.find(
+        (entry) =>
+          (entry.method === request.method || entry.method === 'ALL' || entry.method === '*') &&
+          entry.path === (route ?? new URL(request.url).pathname),
+      )?.hooks?.detail as Record<string, unknown> | undefined;
+      if (declaration?.['x-action'] === undefined) return;
       await admission.run('normal', job, () =>
         rateStage({
           request,
