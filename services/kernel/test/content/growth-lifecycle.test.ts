@@ -10,8 +10,17 @@ import { beginAuthorErasure, readOperation } from '../../src/content/operations.
 import type { AuthorErasureDependencies } from '../../src/content/operation-contract.ts';
 import { bindAuthorErasureWorkflow } from '../../src/content/erasure-workflow-identity.ts';
 import { readBatch, type Envelope } from '../../src/events/log.ts';
+import type { MediaImportRequest } from '@rezics/definitions/media-import';
+import { readMediaImportStatus, type MediaImportDependencies } from '../../src/content/media-import.ts';
+import { tupleRoute } from '../../src/content/imported-contract.ts';
 import { createTurnstileVerifier } from '../../src/content/turnstile.ts';
-import { principalCommandIdentity, runCommand, type CommandTransaction } from '../../src/command/command.ts';
+import {
+  authoritativeTimeValue,
+  principalCommandIdentity,
+  runCommand,
+  type CommandTransaction,
+} from '../../src/command/command.ts';
+import reserveImportedMedia from '../../src/content/reserve-import-media.sql';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, seed, type Population, type Row } from '../support/growth.ts';
 
@@ -610,6 +619,248 @@ test('Author erasure binding and status stays within its bound as P grows', asyn
       const operation = await readOperation(deps, actor, fixture.operationId, { deadline: Date.now() + 10_000 });
       expect(workflowId).toContain(fixture.operationId);
       expect(operation?.done).toBe(false);
+    },
+  });
+  expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
+  expectNoContentSequentialScans(report);
+}, 90_000);
+
+const mediaRoute = 42_000;
+const mediaRoot = { route: 0, id: '00000000-0000-8000-8000-000000000000' };
+const mediaActions = [
+  'media:import_from_url',
+  'source_fence:read',
+  'media:read_reservation',
+  'media:read',
+  'media:complete',
+  'media:erase',
+] as const;
+const mediaRouteKey = new Uint8Array(32).fill(7);
+
+function coverRequest(containerId: string, externalId: string): MediaImportRequest {
+  return {
+    containerId,
+    sourceUrl: 'https://images.example.test/cover.jpg',
+    credit: {
+      rightsHolder: 'Cover Artist',
+      via: { name: 'Catalogue', url: 'https://catalogue.example.test/42' },
+      license: 'LicenseRef-unknown',
+      obligations: [],
+    },
+    provenance: {
+      source: 'catalogue',
+      external_id: externalId,
+      record_revision: 'growth-v1',
+      digest: 'b'.repeat(64),
+      converter_revision: 'growth-converter',
+      field_group: 'cover',
+      references: [
+        {
+          parts: [
+            { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://catalogue.example.test/42' } },
+            { property: { id: 'schema:author' }, value: { type: 'somevalue' } },
+            { property: { id: 'schema:datePublished' }, value: { type: 'novalue' } },
+          ],
+        },
+      ],
+    },
+  };
+}
+
+function mediaContext() {
+  return { deadline: Date.now() + 15_000, idempotencyKey: randomUUID(), requestId: newId(mediaRoute) };
+}
+
+async function reserveMediaAnchor(
+  route: number,
+  actorId: string,
+  request: MediaImportRequest,
+  idempotencyKey = randomUUID(),
+): Promise<string> {
+  const mediaId = newId(route);
+  await runCommand(db.pool, { partition: partitionOf(route), deadline: Date.now() + 15_000 }, async (tx, command) => {
+    const row = await reserveImportedMedia.run(tx, {
+      route,
+      media_id: mediaId,
+      container_id: request.containerId,
+      uploader_id: actorId,
+      reservation_request_id: idempotencyKey,
+      key: `m/${mediaId}/original`,
+      source_url: request.sourceUrl,
+      credit: request.credit,
+      provenance: request.provenance,
+      at: authoritativeTimeValue(command.time),
+      transaction_id: command.transactionId,
+    });
+    if (row.media_id !== mediaId) throw new Error('Growth media reservation did not create its anchor');
+    return {
+      value: mediaId,
+      events: [
+        {
+          type: 'com.rezics.content.media.import-requested.v1',
+          subject: mediaId,
+          data: { mediaId },
+        },
+      ],
+    };
+  });
+  return mediaId;
+}
+
+async function grantMediaOwner(route: number, mediaId: string, actorId: string): Promise<void> {
+  await db.admin.query(
+    `INSERT INTO access.resource_role_grant
+       (route, resource_id, subject_kind, subject_id, grant_role, valid, transaction_id)
+     VALUES ($1, $2, 'identity', $3, 'content.media.owner', '(,)', $3)`,
+    [route, mediaId, actorId],
+  );
+}
+
+async function createMediaDependencies() {
+  const { actor, access } = await createActor(mediaRoute, mediaActions);
+  await addGrant(0, mediaRoot.id, actor.accountId, 'media:import_from_url');
+  await addGrant(0, mediaRoot.id, actor.accountId, 'source_fence:read');
+  const deps: MediaImportDependencies = {
+    pool: db.pool,
+    access,
+    routeKey: mediaRouteKey,
+    clock: () => new Date(),
+    fetchConfig: { allowedHosts: ['images.example.test'] },
+  };
+  return { actor, deps };
+}
+
+function mediaPopulationRows(
+  route: number,
+  sourceRoute: number,
+  actorId: string,
+  request: MediaImportRequest,
+  ordinal: number,
+) {
+  const id = newId(route);
+  return {
+    'content.media': [
+      {
+        route,
+        media_id: id,
+        container_id: newId(route),
+        uploader_id: actorId,
+        reservation_request_id: `growth-media-${ordinal}`,
+        purpose: 'cover',
+        media_type: null,
+        byte_count: null,
+        declared_sha256: null,
+        actual_byte_count: null,
+        sha256: null,
+        state: 'reserved',
+        decision: null,
+        key: `m/${id}/original`,
+        claimed_at: null,
+        created_at: new Date('2025-01-01T00:00:00.000Z'),
+        transaction_id: newId(route),
+        erased: false,
+        collection_pending: false,
+        source_url: request.sourceUrl,
+        credit: request.credit,
+        provenance: request.provenance,
+        taken_down: false,
+        security_revision: 0,
+      },
+    ],
+    'content.media_variant': [
+      {
+        route,
+        media_id: id,
+        format: 'webp',
+        width: 320,
+        height: 180,
+        media_type: 'image/webp',
+        byte_count: 128,
+        sha256: 'c'.repeat(64),
+        key: `m/${id}/webp-320`,
+        transaction_id: newId(route),
+        created_at: new Date('2025-01-01T00:00:00.000Z'),
+      },
+    ],
+    'content.source_fences': [
+      {
+        route: sourceRoute,
+        source: 'catalogue',
+        external_id: `growth-source-${ordinal}`,
+        field_group: 'cover',
+        taken_down: false,
+        security_revision: 1,
+      },
+    ],
+    'semantic.subject': [
+      { route, subject_id: newId(route), type: 'schema:Book', recorded_transaction_id: newId(route) },
+    ],
+  };
+}
+
+test('URL status stays within its bound as T grows', async () => {
+  const { actor, deps } = await createMediaDependencies();
+  const containerId = newId(mediaRoute);
+  await db.admin.query(
+    `INSERT INTO semantic.subject (route, subject_id, type, recorded_transaction_id)
+     VALUES ($1, $2, 'schema:Book', $2)`,
+    [mediaRoute, containerId],
+  );
+  let externalId = 'growth-cover-target';
+  while (partitionOf(tupleRoute(mediaRouteKey, 'catalogue', externalId)) !== partitionOf(mediaRoute))
+    externalId = `growth-cover-target-${randomUUID()}`;
+  const request = coverRequest(containerId, externalId);
+  const sourceRoute = tupleRoute(mediaRouteKey, 'catalogue', externalId);
+  const mediaId = await reserveMediaAnchor(mediaRoute, actor.accountId, request, mediaContext().idempotencyKey);
+  await grantMediaOwner(mediaRoute, mediaId, actor.accountId);
+  expect(routeOf(mediaId)).toBe(mediaRoute);
+  expect((await readMediaImportStatus(deps, actor, mediaId, { deadline: Date.now() + 10_000 }))?.media.id).toBe(
+    mediaId,
+  );
+
+  const auth: AccessPopulation = {
+    homeRoute: mediaRoute,
+    actorId: actor.accountId,
+    actions: mediaActions,
+    roles: ['content.media.owner', 'platform.governance'],
+    name: 'growth-media-status',
+  };
+  // This population matches imported cover rows, variants, source tuples and fixed Access history.
+  const population: Population = {
+    name: `growth-media-status-${randomUUID()}`,
+    hotPartition: partitionOf(mediaRoute),
+    hotShare: 1,
+    rows: ({ ordinal }) => ({
+      ...mediaPopulationRows(mediaRoute, sourceRoute, actor.accountId, request, ordinal),
+      'semantic.context': [
+        { route: 0, context_id: newId(0), kind: 'community', labels: {}, recorded_transaction_id: newId(0) },
+      ],
+      ...accessRows(ordinal, auth),
+    }),
+  };
+  const report = await checkGrowth(db, {
+    name: 'URL status',
+    scales,
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    grow: async (_database, scale, previous) =>
+      seedScale(population, scale, previous, [
+        { table: 'content.media', partition: partitionOf(mediaRoute) },
+        { table: 'content.media_variant', partition: partitionOf(mediaRoute) },
+        { table: 'content.source_fences', partition: partitionOf(sourceRoute) },
+        { table: 'semantic.subject', partition: partitionOf(mediaRoute) },
+        { table: 'semantic.context', partition: 0 },
+        { table: 'access.account', partition: partitionOf(mediaRoute) },
+        { table: 'access.membership_inverse', partition: partitionOf(mediaRoute) },
+        { table: 'access.resource_grant', partition: partitionOf(mediaRoute) },
+        { table: 'access.resource_grant', partition: 0 },
+        { table: 'access.resource_denial', partition: partitionOf(mediaRoute) },
+        { table: 'access.resource_denial', partition: 0 },
+        { table: 'access.resource_role_grant', partition: partitionOf(mediaRoute) },
+        { table: 'access.resource_role_grant', partition: 0 },
+      ]),
+    operation: async () => {
+      const result = await readMediaImportStatus(deps, actor, mediaId, { deadline: Date.now() + 10_000 });
+      expect(result?.media.id).toBe(mediaId);
     },
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
