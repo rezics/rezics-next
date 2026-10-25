@@ -129,7 +129,7 @@ async function invalid(url: string, token?: string) {
 
 test('board metadata and listing mount once with the actual read action and plural envelope', async () => {
   const operation = openApiDocument(app).paths['/v1/boards/{id}/threads']?.get;
-  expect(operation?.operationId).toBe('board.threads.list');
+  expect(operation?.operationId).toBe('board_threads.list');
   expect(operation?.['x-action']).toBe('thread:read');
   expect(actionCatalogue(app).get('thread:read')?.anonymous).toBe(true);
   expect(app.routes.filter((r) => r.path === '/v1/boards/:id')).toHaveLength(1);

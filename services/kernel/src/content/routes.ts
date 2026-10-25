@@ -88,6 +88,7 @@ const revisionInput = strictContentSchema(RevisionInputSchema);
 const threadResponse = strictContentSchema(ThreadResponseSchema);
 const postResponse = strictContentSchema(PostResponseSchema);
 const boardResponse = strictContentSchema(BoardResponseSchema);
+const boardThreadsQuery = strictContentSchema(BoardThreadsQuerySchema);
 const boardThreadsResponse = strictContentSchema(BoardThreadsResponseSchema);
 const postPageResponse = strictContentSchema(PostPageResponseSchema);
 const revisionPageResponse = strictContentSchema(RevisionPageResponseSchema);
@@ -439,8 +440,12 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       {
         params,
         query: BoardThreadsQuerySchema,
+        transform: ({ query }) => {
+          // Board query failures expose the same generic problem as invalid cursors.
+          if ('issues' in boardThreadsQuery['~standard'].validate(query)) throw new ProblemError('invalid_request');
+        },
         response: { 200: withHeaders(boardThreadsResponse, sessionHeader), ...readFailures },
-        detail: { operationId: 'board.threads.list', 'x-action': 'thread:read', security: readSecurity },
+        detail: { operationId: 'board_threads.list', 'x-action': 'thread:read', security: readSecurity },
       },
       async ({ params: { id }, query, actor, admission, job, session }) => {
         existingId(id);

@@ -578,7 +578,7 @@
     },
     "/v1/boards/{id}/threads": {
       "get": {
-        "operationId": "board.threads.list",
+        "operationId": "board_threads.list",
         "parameters": [
           {
             "in": "path",
