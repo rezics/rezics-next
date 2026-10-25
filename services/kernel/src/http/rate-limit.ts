@@ -2,6 +2,7 @@ export type RateLimitFamily = 'write' | 'upload' | 'report' | 'correspondence' |
 
 export type RateLimitDeclaration = {
   readonly family: RateLimitFamily;
+  /** One ordinary unit, or the validated command array's cardinality (1 to 100). */
   readonly units: 1 | 'commands';
 };
 
