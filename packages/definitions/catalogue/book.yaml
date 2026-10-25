@@ -1,0 +1,84 @@
+id: https://rezics.com/catalogue/book
+name: book
+version: 1.0.0
+description: Book work and edition profile terms.
+prefixes:
+  linkml: https://w3id.org/linkml/
+  schema: http://schema.org/
+  wd: http://www.wikidata.org/entity/
+  bf: http://id.loc.gov/ontologies/bibframe/
+default_range: string
+imports:
+  - linkml:types
+  - core
+classes:
+  Work:
+    is_a: Thing
+    class_uri: schema:Book
+    description: A creative work that is a book, independent of its editions.
+    exact_mappings:
+      - wd:Q47461344
+    slots:
+      - author
+      - datePublished
+      - inLanguage
+  Edition:
+    is_a: Thing
+    class_uri: bf:Instance
+    description: A published edition of a book work.
+    exact_mappings:
+      - wd:Q3331189
+    slots:
+      - exampleOfWork
+      - isbn
+      - publisher
+      - datePublished
+      - numberOfPages
+      - inLanguage
+      - translator
+slots:
+  exampleOfWork:
+    slot_uri: schema:exampleOfWork
+    description: The book work represented by this edition.
+    range: Work
+    exact_mappings:
+      - wd:P629
+    annotations:
+      datatype: wikibase-item
+  isbn:
+    slot_uri: schema:isbn
+    description: The ISBN-13 identifier of the edition.
+    pattern: '^97[89]-?(?:[0-9]-?){9}[0-9]$'
+    exact_mappings:
+      - wd:P212
+    annotations:
+      datatype: external-id
+  publisher:
+    slot_uri: schema:publisher
+    description: An organization that published the edition.
+    range: Organization
+    multivalued: true
+    exact_mappings:
+      - wd:P123
+    annotations:
+      datatype: wikibase-item
+  numberOfPages:
+    slot_uri: schema:numberOfPages
+    description: The number of pages in the edition.
+    range: integer
+    minimum_value: 1
+    exact_mappings:
+      - wd:P1104
+    annotations:
+      datatype: quantity
+      units: '1'
+  translator:
+    slot_uri: schema:translator
+    description: A person credited with translating the edition.
+    range: Person
+    multivalued: true
+    exact_mappings:
+      - wd:P655
+    annotations:
+      datatype: wikibase-item
+      qualifiers: position

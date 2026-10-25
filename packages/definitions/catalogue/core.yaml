@@ -1,0 +1,92 @@
+id: https://rezics.com/catalogue/core
+name: core
+version: 1.0.0
+description: Shared identity and attribution terms.
+prefixes:
+  linkml: https://w3id.org/linkml/
+  schema: http://schema.org/
+  wd: http://www.wikidata.org/entity/
+  bf: http://id.loc.gov/ontologies/bibframe/
+default_range: string
+imports:
+  - linkml:types
+classes:
+  Thing:
+    abstract: true
+    description: A thing that can be identified by a URL.
+    slots:
+      - url
+  Person:
+    is_a: Thing
+    class_uri: schema:Person
+    description: A person.
+    exact_mappings:
+      - wd:Q5
+    slots:
+      - birthDate
+      - deathDate
+  Organization:
+    is_a: Thing
+    class_uri: schema:Organization
+    description: An organization.
+    exact_mappings:
+      - wd:Q43229
+slots:
+  url:
+    slot_uri: schema:url
+    description: The URL identifying this thing.
+    range: uri
+    exact_mappings:
+      - wd:P856
+    annotations:
+      datatype: url
+  birthDate:
+    slot_uri: schema:birthDate
+    description: The date on which the person was born.
+    range: date
+    exact_mappings:
+      - wd:P569
+    annotations:
+      datatype: time
+  deathDate:
+    slot_uri: schema:deathDate
+    description: The date on which the person died.
+    range: date
+    exact_mappings:
+      - wd:P570
+    annotations:
+      datatype: time
+  author:
+    slot_uri: schema:author
+    description: A person or organization credited as an author.
+    any_of:
+      - range: Person
+      - range: Organization
+    multivalued: true
+    exact_mappings:
+      - wd:P50
+    annotations:
+      datatype: wikibase-item
+      qualifiers: position
+  position:
+    slot_uri: schema:position
+    description: The one-based position of an attributed person or organization.
+    pattern: '^[1-9][0-9]{0,3}$'
+    exact_mappings:
+      - wd:P1545
+    annotations:
+      datatype: string
+  datePublished:
+    slot_uri: schema:datePublished
+    description: The date on which the work was published.
+    range: date
+    exact_mappings:
+      - wd:P577
+    annotations:
+      datatype: time
+  inLanguage:
+    slot_uri: schema:inLanguage
+    description: The language used for the resource.
+    pattern: '^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$'
+    annotations:
+      datatype: string

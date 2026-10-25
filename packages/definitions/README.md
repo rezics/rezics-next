@@ -19,7 +19,19 @@ Inputs are parsed JSON, without cycles. Validation does not mutate them.
 `valueSchema(datatype, options)` builds the fixed Wikibase value-content schema.
 `releaseDigest(release)` returns `sha256:` followed by the SHA-256 digest of its
 RFC 8785 canonical JSON. Validate first: the digest function does not validate.
-Catalogue generation and bundled definitions are separate concerns.
+
+## Bundled catalogue
+
+The LinkML sources in `catalogue/` define the bundled terms. `rezics.yaml` imports
+the shared `core` terms and the `book` and `recipe` profiles. These profiles add
+types and properties through catalogue data; they do not need package code. The
+compiled release is checked in at `release/rezics.json`, and `src/bundled.ts`
+exposes both the source files and that release.
+
+To change the catalogue, edit its LinkML source or the language files in
+`presentation/`, then run `bun run --cwd packages/definitions release` and review
+the resulting release. A term has one meaning for its lifetime. If its meaning
+changes, add a new term instead of editing the existing one.
 
 Run `bun run --cwd packages/definitions check` from the repository root.
 

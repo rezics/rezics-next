@@ -1,2 +1,3 @@
 contracts/openapi.json linguist-generated
 packages/client/src/kernel/** linguist-generated
+packages/definitions/release/*.json linguist-generated

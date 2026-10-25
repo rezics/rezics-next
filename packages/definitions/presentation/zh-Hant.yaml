@@ -1,0 +1,22 @@
+types:
+  schema:Person: 人物
+  schema:Organization: 組織
+  schema:Book: 書籍
+  bf:Instance: 版本
+  schema:Recipe: 食譜
+properties:
+  schema:url: URL
+  schema:birthDate: 出生日期
+  schema:deathDate: 逝世日期
+  schema:author: 作者
+  schema:position: 順序
+  schema:datePublished: 出版日期
+  schema:inLanguage: 語言
+  schema:exampleOfWork: 原作品
+  schema:isbn: ISBN-13
+  schema:publisher: 出版者
+  schema:numberOfPages: 頁數
+  schema:translator: 譯者
+  schema:recipeIngredient: 食材
+  schema:cookTime: 烹調時間
+  schema:recipeYield: 份量

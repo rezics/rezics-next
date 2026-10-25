@@ -1,0 +1,528 @@
+{
+  "format": "https://rezics.com/definitions/release/1",
+  "catalogue": {
+    "id": "https://rezics.com/catalogue/rezics",
+    "version": "1.0.0"
+  },
+  "generator": {
+    "name": "@neverblink/linkml",
+    "version": "0.17.1"
+  },
+  "prefixes": {
+    "bf": "http://id.loc.gov/ontologies/bibframe/",
+    "schema": "http://schema.org/",
+    "wd": "http://www.wikidata.org/entity/"
+  },
+  "types": {
+    "bf:Instance": {
+      "iri": "http://id.loc.gov/ontologies/bibframe/Instance",
+      "labels": {
+        "en": "edition",
+        "ja": "版",
+        "zh-Hant": "版本"
+      },
+      "mappings": [
+        "wd:Q3331189"
+      ],
+      "properties": [
+        "schema:datePublished",
+        "schema:exampleOfWork",
+        "schema:inLanguage",
+        "schema:isbn",
+        "schema:numberOfPages",
+        "schema:publisher",
+        "schema:translator",
+        "schema:url"
+      ]
+    },
+    "schema:Book": {
+      "iri": "http://schema.org/Book",
+      "labels": {
+        "en": "book",
+        "ja": "書籍",
+        "zh-Hant": "書籍"
+      },
+      "mappings": [
+        "wd:Q47461344"
+      ],
+      "properties": [
+        "schema:author",
+        "schema:datePublished",
+        "schema:inLanguage",
+        "schema:url"
+      ]
+    },
+    "schema:Organization": {
+      "iri": "http://schema.org/Organization",
+      "labels": {
+        "en": "organization",
+        "ja": "組織",
+        "zh-Hant": "組織"
+      },
+      "mappings": [
+        "wd:Q43229"
+      ],
+      "properties": [
+        "schema:url"
+      ]
+    },
+    "schema:Person": {
+      "iri": "http://schema.org/Person",
+      "labels": {
+        "en": "person",
+        "ja": "人物",
+        "zh-Hant": "人物"
+      },
+      "mappings": [
+        "wd:Q5"
+      ],
+      "properties": [
+        "schema:birthDate",
+        "schema:deathDate",
+        "schema:url"
+      ]
+    },
+    "schema:Recipe": {
+      "iri": "http://schema.org/Recipe",
+      "labels": {
+        "en": "recipe",
+        "ja": "レシピ",
+        "zh-Hant": "食譜"
+      },
+      "mappings": [
+        "wd:Q219239"
+      ],
+      "properties": [
+        "schema:author",
+        "schema:cookTime",
+        "schema:datePublished",
+        "schema:recipeIngredient",
+        "schema:recipeYield",
+        "schema:url"
+      ]
+    }
+  },
+  "properties": {
+    "schema:exampleOfWork": {
+      "iri": "http://schema.org/exampleOfWork",
+      "labels": {
+        "en": "edition of",
+        "ja": "原作品",
+        "zh-Hant": "原作品"
+      },
+      "mappings": [
+        "wd:P629"
+      ],
+      "datatype": "wikibase-item",
+      "multivalued": false,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "targets": [
+        "schema:Book"
+      ]
+    },
+    "schema:isbn": {
+      "iri": "http://schema.org/isbn",
+      "labels": {
+        "en": "ISBN-13",
+        "ja": "ISBN-13",
+        "zh-Hant": "ISBN-13"
+      },
+      "mappings": [
+        "wd:P212"
+      ],
+      "datatype": "external-id",
+      "multivalued": false,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1500,
+        "pattern": "^97[89]-?(?:[0-9]-?){9}[0-9]$"
+      }
+    },
+    "schema:numberOfPages": {
+      "iri": "http://schema.org/numberOfPages",
+      "labels": {
+        "en": "number of pages",
+        "ja": "ページ数",
+        "zh-Hant": "頁數"
+      },
+      "mappings": [
+        "wd:P1104"
+      ],
+      "datatype": "quantity",
+      "multivalued": false,
+      "qualifiers": [],
+      "value": {
+        "type": "object",
+        "required": [
+          "amount",
+          "unit"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "type": "string",
+            "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+          },
+          "unit": {
+            "enum": [
+              "1"
+            ]
+          }
+        }
+      },
+      "units": [
+        "1"
+      ],
+      "minimum": 1
+    },
+    "schema:publisher": {
+      "iri": "http://schema.org/publisher",
+      "labels": {
+        "en": "publisher",
+        "ja": "出版社",
+        "zh-Hant": "出版者"
+      },
+      "mappings": [
+        "wd:P123"
+      ],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "targets": [
+        "schema:Organization"
+      ]
+    },
+    "schema:translator": {
+      "iri": "http://schema.org/translator",
+      "labels": {
+        "en": "translator",
+        "ja": "翻訳者",
+        "zh-Hant": "譯者"
+      },
+      "mappings": [
+        "wd:P655"
+      ],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [
+        "schema:position"
+      ],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "targets": [
+        "schema:Person"
+      ]
+    },
+    "schema:author": {
+      "iri": "http://schema.org/author",
+      "labels": {
+        "en": "author",
+        "ja": "著者",
+        "zh-Hant": "作者"
+      },
+      "mappings": [
+        "wd:P50"
+      ],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [
+        "schema:position"
+      ],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "targets": [
+        "schema:Organization",
+        "schema:Person"
+      ]
+    },
+    "schema:birthDate": {
+      "iri": "http://schema.org/birthDate",
+      "labels": {
+        "en": "date of birth",
+        "ja": "生年月日",
+        "zh-Hant": "出生日期"
+      },
+      "mappings": [
+        "wd:P569"
+      ],
+      "datatype": "time",
+      "multivalued": false,
+      "qualifiers": [],
+      "value": {
+        "type": "object",
+        "required": [
+          "time",
+          "precision",
+          "calendarmodel"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "time": {
+            "type": "string",
+            "pattern": "^[+-][0-9]{4,}-[0-9]{2}-[0-9]{2}T00:00:00Z$"
+          },
+          "precision": {
+            "enum": [
+              9,
+              10,
+              11
+            ]
+          },
+          "calendarmodel": {
+            "const": "http://www.wikidata.org/entity/Q1985727"
+          }
+        }
+      }
+    },
+    "schema:datePublished": {
+      "iri": "http://schema.org/datePublished",
+      "labels": {
+        "en": "publication date",
+        "ja": "出版日",
+        "zh-Hant": "出版日期"
+      },
+      "mappings": [
+        "wd:P577"
+      ],
+      "datatype": "time",
+      "multivalued": false,
+      "qualifiers": [],
+      "value": {
+        "type": "object",
+        "required": [
+          "time",
+          "precision",
+          "calendarmodel"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "time": {
+            "type": "string",
+            "pattern": "^[+-][0-9]{4,}-[0-9]{2}-[0-9]{2}T00:00:00Z$"
+          },
+          "precision": {
+            "enum": [
+              9,
+              10,
+              11
+            ]
+          },
+          "calendarmodel": {
+            "const": "http://www.wikidata.org/entity/Q1985727"
+          }
+        }
+      }
+    },
+    "schema:deathDate": {
+      "iri": "http://schema.org/deathDate",
+      "labels": {
+        "en": "date of death",
+        "ja": "没年月日",
+        "zh-Hant": "逝世日期"
+      },
+      "mappings": [
+        "wd:P570"
+      ],
+      "datatype": "time",
+      "multivalued": false,
+      "qualifiers": [],
+      "value": {
+        "type": "object",
+        "required": [
+          "time",
+          "precision",
+          "calendarmodel"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "time": {
+            "type": "string",
+            "pattern": "^[+-][0-9]{4,}-[0-9]{2}-[0-9]{2}T00:00:00Z$"
+          },
+          "precision": {
+            "enum": [
+              9,
+              10,
+              11
+            ]
+          },
+          "calendarmodel": {
+            "const": "http://www.wikidata.org/entity/Q1985727"
+          }
+        }
+      }
+    },
+    "schema:inLanguage": {
+      "iri": "http://schema.org/inLanguage",
+      "labels": {
+        "en": "language",
+        "ja": "言語",
+        "zh-Hant": "語言"
+      },
+      "mappings": [],
+      "datatype": "string",
+      "multivalued": false,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1500,
+        "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$"
+      }
+    },
+    "schema:position": {
+      "iri": "http://schema.org/position",
+      "labels": {
+        "en": "position",
+        "ja": "順序",
+        "zh-Hant": "順序"
+      },
+      "mappings": [
+        "wd:P1545"
+      ],
+      "datatype": "string",
+      "multivalued": false,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1500,
+        "pattern": "^[1-9][0-9]{0,3}$"
+      }
+    },
+    "schema:url": {
+      "iri": "http://schema.org/url",
+      "labels": {
+        "en": "URL",
+        "ja": "URL",
+        "zh-Hant": "URL"
+      },
+      "mappings": [
+        "wd:P856"
+      ],
+      "datatype": "url",
+      "multivalued": false,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "maxLength": 1500,
+        "pattern": "^https?://[^\\s]+$"
+      }
+    },
+    "schema:cookTime": {
+      "iri": "http://schema.org/cookTime",
+      "labels": {
+        "en": "cooking time",
+        "ja": "調理時間",
+        "zh-Hant": "烹調時間"
+      },
+      "mappings": [],
+      "datatype": "quantity",
+      "multivalued": false,
+      "qualifiers": [],
+      "value": {
+        "type": "object",
+        "required": [
+          "amount",
+          "unit"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "type": "string",
+            "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+          },
+          "unit": {
+            "enum": [
+              "http://www.wikidata.org/entity/Q7727"
+            ]
+          }
+        }
+      },
+      "units": [
+        "http://www.wikidata.org/entity/Q7727"
+      ],
+      "minimum": 0
+    },
+    "schema:recipeIngredient": {
+      "iri": "http://schema.org/recipeIngredient",
+      "labels": {
+        "en": "ingredient",
+        "ja": "材料",
+        "zh-Hant": "食材"
+      },
+      "mappings": [],
+      "datatype": "monolingualtext",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "object",
+        "required": [
+          "text",
+          "language"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1500
+          },
+          "language": {
+            "type": "string",
+            "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$"
+          }
+        }
+      }
+    },
+    "schema:recipeYield": {
+      "iri": "http://schema.org/recipeYield",
+      "labels": {
+        "en": "servings",
+        "ja": "人数",
+        "zh-Hant": "份量"
+      },
+      "mappings": [],
+      "datatype": "quantity",
+      "multivalued": false,
+      "qualifiers": [],
+      "value": {
+        "type": "object",
+        "required": [
+          "amount",
+          "unit"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "type": "string",
+            "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+          },
+          "unit": {
+            "enum": [
+              "1"
+            ]
+          }
+        }
+      },
+      "units": [
+        "1"
+      ],
+      "minimum": 1
+    }
+  }
+}

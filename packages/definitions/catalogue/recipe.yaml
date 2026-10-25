@@ -1,0 +1,49 @@
+id: https://rezics.com/catalogue/recipe
+name: recipe
+version: 1.0.0
+description: Recipe profile terms.
+prefixes:
+  linkml: https://w3id.org/linkml/
+  schema: http://schema.org/
+  wd: http://www.wikidata.org/entity/
+  bf: http://id.loc.gov/ontologies/bibframe/
+default_range: string
+imports:
+  - linkml:types
+  - core
+classes:
+  Recipe:
+    is_a: Thing
+    class_uri: schema:Recipe
+    description: Instructions and ingredients for preparing food.
+    exact_mappings:
+      - wd:Q219239
+    slots:
+      - author
+      - datePublished
+      - recipeIngredient
+      - cookTime
+      - recipeYield
+slots:
+  recipeIngredient:
+    slot_uri: schema:recipeIngredient
+    description: An ingredient used to prepare the recipe.
+    multivalued: true
+    annotations:
+      datatype: monolingualtext
+  cookTime:
+    slot_uri: schema:cookTime
+    description: The time needed to cook the recipe.
+    range: integer
+    minimum_value: 0
+    annotations:
+      datatype: quantity
+      units: wd:Q7727
+  recipeYield:
+    slot_uri: schema:recipeYield
+    description: The number of servings produced by the recipe.
+    range: integer
+    minimum_value: 1
+    annotations:
+      datatype: quantity
+      units: '1'

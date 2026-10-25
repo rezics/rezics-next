@@ -1,0 +1,22 @@
+types:
+  schema:Person: person
+  schema:Organization: organization
+  schema:Book: book
+  bf:Instance: edition
+  schema:Recipe: recipe
+properties:
+  schema:url: URL
+  schema:birthDate: date of birth
+  schema:deathDate: date of death
+  schema:author: author
+  schema:position: position
+  schema:datePublished: publication date
+  schema:inLanguage: language
+  schema:exampleOfWork: edition of
+  schema:isbn: ISBN-13
+  schema:publisher: publisher
+  schema:numberOfPages: number of pages
+  schema:translator: translator
+  schema:recipeIngredient: ingredient
+  schema:cookTime: cooking time
+  schema:recipeYield: servings

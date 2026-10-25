@@ -1,0 +1,15 @@
+id: https://rezics.com/catalogue/rezics
+name: rezics
+version: 1.0.0
+description: The bundled REZICS definition catalogue.
+prefixes:
+  linkml: https://w3id.org/linkml/
+  schema: http://schema.org/
+  wd: http://www.wikidata.org/entity/
+  bf: http://id.loc.gov/ontologies/bibframe/
+default_range: string
+imports:
+  - linkml:types
+  - core
+  - book
+  - recipe
