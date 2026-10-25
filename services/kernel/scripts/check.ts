@@ -124,7 +124,7 @@ function formattedFiles(files: string[]): string[] {
   return files.filter((file) => formatExtensions.has(extname(file).toLowerCase()));
 }
 
-function run(program: string, args: string[], env: NodeJS.ProcessEnv = process.env): string {
+export function run(program: string, args: string[], env: NodeJS.ProcessEnv = process.env): string {
   const result = spawnSync(program, args, { cwd: directory, env, encoding: 'utf8' });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`${program} ${args.join(' ')} failed:\n${result.stdout}${result.stderr}`);
@@ -141,19 +141,19 @@ function capture(
   return { status: result.status, output: `${result.stdout}${result.stderr}` };
 }
 
-function docker(args: string[]): string {
+export function docker(args: string[]): string {
   return run('docker', args);
 }
 
-function cleanupStale(): void {
-  // One listing carries each owner, so a concurrent check's container that exits meanwhile cannot fail an inspect.
+export function cleanupStale(kind: 'check' | 'derived' = 'check'): void {
+  // One listing carries each owner, so a concurrent run that exits meanwhile cannot fail an inspect.
   const rows = docker([
     'ps',
     '-a',
     '--filter',
-    'label=rezics.kernel.check.pid',
+    `label=rezics.kernel.${kind}.pid`,
     '--format',
-    '{{.ID}} {{.Label "rezics.kernel.check.pid"}}',
+    `{{.ID}} {{.Label "rezics.kernel.${kind}.pid"}}`,
   ])
     .split('\n')
     .filter(Boolean);
@@ -168,8 +168,8 @@ function cleanupStale(): void {
   }
 }
 
-function cleanup(): void {
-  for (const id of [searchContainer, container]) {
+export function cleanup(containers: readonly string[] = [searchContainer, container]): void {
+  for (const id of containers) {
     if (!id) continue;
     try {
       docker(['rm', '-f', id]);

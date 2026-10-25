@@ -1,57 +1,16 @@
-import { spawnSync } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { migrate, POSTGRES_IMAGE, validateMigrationVersions } from './database.ts';
+import { cleanup, cleanupStale, docker, run } from './check.ts';
 
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const pid = String(process.pid);
 let container = '';
 
-function run(program: string, args: string[], env: NodeJS.ProcessEnv = process.env): string {
-  const result = spawnSync(program, args, { cwd: directory, env, encoding: 'utf8' });
-  if (result.error) throw result.error;
-  if (result.status !== 0) throw new Error(`${program} ${args.join(' ')} failed:\n${result.stdout}${result.stderr}`);
-  return result.stdout.trim();
-}
-
-function docker(args: string[]): string {
-  return run('docker', args);
-}
-
-function cleanupStale(): void {
-  const rows = docker([
-    'ps',
-    '-a',
-    '--filter',
-    'label=rezics.kernel.derived.pid',
-    '--format',
-    '{{.ID}} {{.Label "rezics.kernel.derived.pid"}}',
-  ])
-    .split('\n')
-    .filter(Boolean);
-  for (const row of rows) {
-    const [id, owner] = row.split(' ');
-    try {
-      process.kill(Number(owner), 0);
-    } catch {
-      spawnSync('docker', ['rm', '-f', id!], { cwd: directory, encoding: 'utf8' });
-    }
-  }
-}
-
-function cleanup(): void {
-  if (!container) return;
-  try {
-    docker(['rm', '-f', container]);
-  } catch (error) {
-    console.error(error);
-  }
-}
-
 async function main(): Promise<void> {
   const migrations = Array.from(new Bun.Glob('db/**/migrations/*.sql').scanSync({ cwd: directory }));
   validateMigrationVersions(migrations, new Date());
-  cleanupStale();
+  cleanupStale('derived');
   container = docker([
     'run',
     '-d',
@@ -88,11 +47,11 @@ async function main(): Promise<void> {
 
 if (import.meta.main) {
   process.on('SIGINT', () => {
-    cleanup();
+    cleanup([container]);
     process.exit(130);
   });
   process.on('SIGTERM', () => {
-    cleanup();
+    cleanup([container]);
     process.exit(143);
   });
   try {
@@ -101,6 +60,6 @@ if (import.meta.main) {
     console.error(error);
     process.exitCode = 1;
   } finally {
-    cleanup();
+    cleanup([container]);
   }
 }
