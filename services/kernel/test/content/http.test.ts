@@ -321,8 +321,10 @@ describe('content HTTP with native database adapters', () => {
         const client = await database.admin.connect();
         try {
           await client.query('BEGIN');
+          const distractors: string[] = [];
           for (let ordinal = previous * 16; ordinal < scale * 16; ordinal++) {
             const postId = newId(thread.route);
+            distractors.push(postId);
             const revisionId = newId(thread.route);
             const transaction = randomUUID();
             const distractorBoard = newId(routeOf(boardId)!);
@@ -351,6 +353,23 @@ describe('content HTTP with native database adapters', () => {
               [thread.route, thread.id, postId, revisionId, bytes, digest, boardId, transaction],
             );
           }
+          // Populate every Access relation probed by anonymous final disclosure as
+          // well as content relations, without changing the measured target's grants.
+          await client.query(
+            `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+             SELECT $1,id,$2,'post:read','(,)'::tstzrange,$3 FROM unnest($4::uuid[]) AS id`,
+            [thread.route, actor.accountId, randomUUID(), distractors],
+          );
+          await client.query(
+            `INSERT INTO access.resource_role_grant(route,resource_id,subject_id,grant_role,valid,transaction_id)
+             SELECT $1,id,$2,'content.post.owner','(,)'::tstzrange,$3 FROM unnest($4::uuid[]) AS id`,
+            [thread.route, actor.accountId, randomUUID(), distractors],
+          );
+          await client.query(
+            `INSERT INTO access.resource_denial(route,resource_id,subject_id,action,reason,valid,transaction_id)
+             SELECT $1,id,$2,'post:read','resource','(,)'::tstzrange,$3 FROM unnest($4::uuid[]) AS id`,
+            [thread.route, fixture.recipient, randomUUID(), distractors],
+          );
           await client.query('COMMIT');
         } catch (error) {
           await client.query('ROLLBACK');
@@ -358,7 +377,9 @@ describe('content HTTP with native database adapters', () => {
         } finally {
           client.release();
         }
-        await database.admin.query('VACUUM (ANALYZE) content.board, content.thread, content.post, content.revision');
+        await database.admin.query(
+          'VACUUM (ANALYZE) content.board, content.thread, content.post, content.revision, access.resource_grant, access.resource_role_grant, access.resource_denial',
+        );
       },
       async operation() {
         // This app and its actual Access use the observed db.pool; P=2 and H remain fixed.
