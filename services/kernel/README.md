@@ -28,6 +28,9 @@ migration is merged, never rename or edit it. Run `bun run db dump` to update an
 Only kernel migrations create PostgreSQL extensions. A module that needs an extension asks the kernel to install it;
 module migrations may use extensions but must not create them.
 
+DBOS Transact keeps its system tables in the `dbos` schema, created and upgraded by its own migrations when `migrate`
+runs, and left out of the schema dumps.
+
 A 16-bit route value maps to its partition by taking the top 12 bits.
 
 Every SQL statement is stored in one reylo-typed `.sql` file and run through `pg` from an adapter module (ADR-0026).

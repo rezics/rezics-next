@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const POSTGRES_IMAGE = 'postgres:19rc1@sha256:7c70c2455c1f22cf4fbf90b16345aa4e5f4e3efd68d68f7cd6d014f529a69108';
+// src/events/effects.ts launches DBOS on this schema.
+const DBOS_SCHEMA = 'dbos';
 const container = 'rezics-kernel-dev';
 const volume = 'rezics-kernel-dev';
 const port = Number(process.env.KERNEL_DATABASE_PORT ?? '54329');
@@ -81,6 +83,9 @@ export function migrate(url: string, root = directory): void {
     ],
     { cwd: root },
   );
+  command(process.execPath, [resolve(directory, 'node_modules/.bin/dbos'), 'schema', url, '--schema', DBOS_SCHEMA], {
+    cwd: root,
+  });
 }
 
 function schemaDumpWith(url: string, options: string[] = [], root = directory): string {
@@ -114,7 +119,7 @@ export function schemaDumps(url: string, root = directory): Record<string, strin
   const dumps: Record<string, string> = {};
   dumps['db/schema.sql'] = schemaDumpWith(
     url,
-    moduleNames.map((name) => `--exclude-schema=${name}`),
+    [...moduleNames, DBOS_SCHEMA].map((name) => `--exclude-schema=${name}`),
     root,
   );
   for (const name of moduleNames) {
@@ -126,7 +131,7 @@ export function schemaDumps(url: string, root = directory): Record<string, strin
 export function schemaDump(url: string, root = directory): string {
   return schemaDumpWith(
     url,
-    modules(root).map((name) => `--exclude-schema=${name}`),
+    [...modules(root), DBOS_SCHEMA].map((name) => `--exclude-schema=${name}`),
     root,
   );
 }
