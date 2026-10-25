@@ -10,6 +10,7 @@ import { deadlineClient, within } from './authenticate.ts';
 import { validResource } from './grant-command.ts';
 import { GrantDeniedError } from './grant-commands.ts';
 import { permissionEvidenceDeadline } from './permission.ts';
+import type { ResourceEligibility } from './eligibility.ts';
 import type { Access, AccessClient, AccessContext, Actor, Resource } from '../request/access.ts';
 
 /** Trusted server binding to the authorization resource. validate checks THAT
@@ -32,6 +33,14 @@ export type ResourceAuthorizationInput = {
   action: string;
   anchor: AuthorizationAnchor;
   context: ResourceAuthorizationContext;
+};
+
+/** Anonymous command contract; execution remains unavailable until implemented. */
+export type AnonymousResourceAuthorizationInput = Omit<ResourceAuthorizationInput, 'actor' | 'anchor'> & {
+  actor: Extract<Actor, { kind: 'anonymous' }>;
+  anchor: AuthorizationAnchor & {
+    resource: Readonly<Resource & { eligibility: ResourceEligibility }>;
+  };
 };
 
 export class ResourceAuthorizationUnavailableError extends Error {
@@ -57,6 +66,8 @@ export class ResourceAuthorizationUnavailableError extends Error {
  * bounded actor inverses and matched group anchors, then one authority anchor,
  * O((1 + K) log G + L log R), K <= 1000 per account. No target read or ACL scan.
  */
+export function resourceAuthorization(input: AnonymousResourceAuthorizationInput): CommandAuthorization;
+export function resourceAuthorization(input: ResourceAuthorizationInput): CommandAuthorization;
 export function resourceAuthorization(input: ResourceAuthorizationInput): CommandAuthorization {
   const { access, actor, action } = input;
   const resource = Object.freeze({ ...input.anchor.resource });

@@ -102,6 +102,7 @@ export {
 export {
   resourceAuthorization,
   ResourceAuthorizationUnavailableError,
+  type AnonymousResourceAuthorizationInput,
   type AuthorizationAnchor,
   type ResourceAuthorizationContext,
   type ResourceAuthorizationInput,
