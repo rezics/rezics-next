@@ -120,7 +120,7 @@ export class WorkerTasks {
     try {
       let task = this.store.task(taskId);
       if (!task.branch || !task.base) throw new Error('Imported attempts need a dispatchable contract before retry');
-      if (!['ready', 'running', 'landing', 'stopped'].includes(task.state)) throw new Error(`cannot retry ${task.state} task`);
+      if (!['ready', 'running', 'landing', 'stopped', 'held'].includes(task.state)) throw new Error(`cannot retry ${task.state} task`);
       const reshaped = options.brief === undefined ? undefined : this.validateBrief(options.brief, taskId);
       if (reshaped && (reshaped.brief.goal !== task.brief.goal || reshaped.brief.manager !== task.brief.manager))
         throw new Error('a reshaped brief must keep the same goal and manager');

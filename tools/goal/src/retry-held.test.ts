@@ -83,3 +83,21 @@ test('a stopped task retried after its dependencies merged starts from a base th
     expect(spawnSync('git', ['merge-base', '--is-ancestor', main, 'HEAD'], { cwd: started.worktree }).status).toBe(0);
   } finally { h.dispose(); }
 });
+
+test('a held task accepts a reshaped brief and stays held while its dependency is unmerged', async () => {
+  const h = harness();
+  try {
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    const dependency = h.tasks.dispatch(h.briefFile);
+    const waiting = join(h.root, '.temp/goal/waiting.md');
+    writeFileSync(waiting, markdown.replace('waiting: []', `waiting: []\nafter: [${dependency.id}]`));
+    const task = h.tasks.dispatch(waiting);
+    expect(h.store.task(task.id).state).toBe('held');
+    const reshaped = join(h.root, '.temp/goal/reshaped.md');
+    writeFileSync(reshaped, `${markdown.replace('waiting: []', `waiting: []\nafter: [${dependency.id}]`)}\nCost: one point read.\n`);
+    await job.start(task.id, { brief: reshaped }); await job.drain();
+    expect(h.store.task(task.id).state).toBe('held');
+    expect(h.store.task(task.id).currentAttempt).toBe(0);
+    expect(h.store.task(task.id).brief.markdown).toContain('Cost: one point read.');
+  } finally { h.dispose(); }
+});
