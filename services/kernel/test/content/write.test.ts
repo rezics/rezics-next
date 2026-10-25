@@ -10,6 +10,7 @@ import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
 import type { GrowthDatabase } from '../support/growth.ts';
 import type { ThreadInput } from '../../src/content/model.ts';
 
+// Frozen write-path acceptance assertions precede the command implementation.
 let f: Awaited<ReturnType<typeof standingFixture>>;
 let owner: Awaited<ReturnType<typeof f.context>>['actor'];
 const routeKey = new Uint8Array(32).fill(7);
