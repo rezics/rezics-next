@@ -14,6 +14,9 @@ export type GrantSubject = typeof ACTIVE_ACCOUNTS | Readonly<{
     id: string;
     role: 'owner' | 'member';
 }>;
+export type PublicGrantSubject = Exclude<GrantSubject, {
+    kind: 'realm';
+}>;
 export type StoredGrantSubject = {
     kind: 'identity' | 'active_accounts';
     id: string;

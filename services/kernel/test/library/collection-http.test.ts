@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import pg from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
 import { createAccess } from '../../src/access/index.ts';
@@ -65,10 +66,10 @@ async function problem(response: Response, status: number, code: string) {
   expect(response.headers.get('content-type')).toStartWith('application/problem+json');
   const { request_id: requestId, ...stable } = await json<Record<string, unknown>>(response, status);
   expect(requestId).toBeString();
-  expect(stable).toMatchObject({
+  expect({ ...stable }).toMatchObject({
     code,
     status,
-    type: `https://api.rezics.com/problems/${code}`,
+    type: `https://rezics.com/problems/${code}`,
     title: expect.any(String),
   });
   return stable;
@@ -104,7 +105,7 @@ async function all<T>(url: string, plural: string, as: Persona = 'owner') {
   const items: T[] = [];
   let cursor: string | null = null;
   do {
-    const result = await page<T>(
+    const result: { items: T[]; next: string | null } = await page<T>(
       `${url}${url.includes('?') ? '&' : '?'}limit=2${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
       plural,
       as,
@@ -161,7 +162,7 @@ beforeAll(async () => {
         .setAudience('https://api.rezics.test')
         .setSubject(id)
         .setIssuedAt()
-        .setExpirationTime('1h')
+        .setExpirationTime('5m')
         .sign(signing.privateKey),
     );
   }
@@ -186,7 +187,20 @@ beforeAll(async () => {
     authorize: async () => true,
   });
   subjectId = subject.subject.id;
-  suspendedCollection = await collection('private', 'suspended');
+  // The command module owns a second real pool. Include its SQL in the shared capture.
+  const NativePool = pg.Pool;
+  pg.Pool = class extends NativePool {
+    constructor(config?: pg.PoolConfig) {
+      super(config);
+      pg.Pool = NativePool;
+      return db.openPool(config);
+    }
+  };
+  try {
+    suspendedCollection = await collection('private', 'suspended');
+  } finally {
+    pg.Pool = NativePool;
+  }
   await db.admin.query("UPDATE access.account SET state='suspended' WHERE account_id=$1", [suspended]);
 });
 afterAll(async () => {
@@ -262,9 +276,9 @@ test('curator creates replays updates conflicts and deletes with only the contra
   const deleted = await request('DELETE', `${path(shelf.id)}?revision=2`);
   expect(deleted.status).toBe(204);
   expect(await deleted.text()).toBe('');
-  expect(await problem(await request('GET', path(shelf.id)), 404, 'not_found')).toEqual(
-    await problem(await request('GET', path(unknown)), 404, 'not_found'),
-  );
+  const deletedProblem = await problem(await request('GET', path(shelf.id)), 404, 'not_found');
+  const unknownProblem = await problem(await request('GET', path(unknown)), 404, 'not_found');
+  expect(deletedProblem).toEqual(unknownProblem);
 });
 
 test('members support duplicate subjects first after last moves notes removal and cursor pages', async () => {
@@ -299,10 +313,11 @@ test('private and unknown reads have identical problems while unlisted and publi
       expect(await json(await request('GET', path(id), undefined, as))).toEqual({
         collection: shelves.find((shelf) => shelf.id === id),
       });
-    for (const url of [path, members])
-      expect(await problem(await request('GET', url(hidden.id), undefined, as), 404, 'not_found')).toEqual(
-        await problem(await request('GET', url(unknown), undefined, as), 404, 'not_found'),
-      );
+    for (const url of [path, members]) {
+      const hiddenProblem = await problem(await request('GET', url(hidden.id), undefined, as), 404, 'not_found');
+      const unknownProblem = await problem(await request('GET', url(unknown), undefined, as), 404, 'not_found');
+      expect(hiddenProblem).toEqual(unknownProblem);
+    }
     const listed = await all<CollectionView>(`/v1/collections?curatorAccountId=${owner}`, 'collections', as);
     expect(listed.some((shelf) => shelf.id === visible.id)).toBe(true);
     expect(listed.every((shelf) => shelf.visibility === 'public')).toBe(true);
@@ -365,10 +380,11 @@ test('closed bodies malformed identifiers missing keys and invalid pagination fa
     ['POST', `${members(shelf.id)}/${item.id}:move`, { after: null }],
   ] as const)
     await problem(await request(method, url, body, 'owner', null), 400, 'invalid_request');
-  for (const url of [path('malformed'), members('malformed'), '/v1/subjects/malformed/collections'])
-    expect(await problem(await request('GET', url), 404, 'not_found')).toEqual(
-      await problem(await request('GET', path(unknown)), 404, 'not_found'),
-    );
+  for (const url of [path('malformed'), members('malformed'), '/v1/subjects/malformed/collections']) {
+    const malformedProblem = await problem(await request('GET', url), 404, 'not_found');
+    const unknownProblem = await problem(await request('GET', path(unknown)), 404, 'not_found');
+    expect(malformedProblem).toEqual(unknownProblem);
+  }
   await problem(await request('POST', members(shelf.id), { subjectId: 'malformed' }), 404, 'not_found');
   for (const url of [
     members(shelf.id),
@@ -428,6 +444,9 @@ test('add-member requests and member pages keep equal statements across three un
     }
     previous = scale;
     const added = await capture(db, () => add(shelf.id));
+    expect(
+      added.capture.statements.some((statement) => /INSERT INTO library\.collection_member/i.test(statement)),
+    ).toBe(true);
     const paged = await capture(db, () => page(`${members(shelf.id)}?limit=1`, 'members'));
     adds.push(added.capture.statements.length);
     pages.push(paged.capture.statements.length);

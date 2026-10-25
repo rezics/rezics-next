@@ -23,6 +23,7 @@ export declare function grantCommand<T>(config: {
 }, context: GrantCommandContext, options: {
     resource: Resource;
     actions: readonly string[];
+    consentedActions?: readonly string[];
     kind: string;
     key: string;
     input: unknown;

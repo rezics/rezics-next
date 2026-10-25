@@ -105,8 +105,8 @@ export declare const CONTENT_EVENTS: {
         actorId: Type.TString;
         targetKind: Type.TUnion<[Type.TLiteral<"thread">, Type.TLiteral<"post">]>;
         targetId: Type.TString;
-        previousKind: Type.TUnion<[Type.TUnion<Type.TLiteral<"downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote">[]>, Type.TNull]>;
-        kind: Type.TUnion<[Type.TUnion<Type.TLiteral<"downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote">[]>, Type.TNull]>;
+        previousKind: Type.TUnion<[Type.TEnum<["upvote", "downvote", "like", "love", "laugh", "insightful", "sad"]>, Type.TNull]>;
+        kind: Type.TUnion<[Type.TEnum<["upvote", "downvote", "like", "love", "laugh", "insightful", "sad"]>, Type.TNull]>;
     }>;
 };
 export type ContentEventType = keyof typeof CONTENT_EVENTS;

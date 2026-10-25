@@ -7,6 +7,7 @@ import { communityRoutes } from '../community/routes.ts';
 import { systemClock } from '../clock.ts';
 import { payoutRoutes } from '../commerce/payout-routes.ts';
 import { commerceRoutes, type CommerceDependencies } from '../commerce/routes.ts';
+import { collectionRoutes } from '../library/collection-routes.ts';
 import { progressRoutes } from '../library/progress-routes.ts';
 import type { ContentBoardDependencies } from '../content/boards.ts';
 import { mediaRoutes } from '../content/media-routes.ts';
@@ -124,8 +125,14 @@ export function createKernel(dependencies: KernelDependencies) {
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(personal) }),
   });
-  declareKernelWriteRates(personal);
-  for (const route of personal.routes) {
+  const collections = collectionRoutes(personal as unknown as ReturnType<typeof definitionRoutes>, {
+    pool: dependencies.pool,
+    tokens,
+    clock,
+    access: () => resolveAccess({ actions: actionCatalogue(collections) }),
+  });
+  declareKernelWriteRates(collections);
+  for (const route of collections.routes) {
     if (route.hooks.detail?.hide === true) continue;
     try {
       parseExposure(route.hooks.detail);
@@ -133,7 +140,8 @@ export function createKernel(dependencies: KernelDependencies) {
       throw new Error(`${route.method.toUpperCase()} ${route.path}: invalid x-exposure declaration`, { cause });
     }
   }
-  return personal as typeof personal &
+  return collections as typeof collections &
+    typeof personal &
     typeof community &
     typeof exposed &
     typeof batched &

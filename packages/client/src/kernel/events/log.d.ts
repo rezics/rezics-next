@@ -6,6 +6,11 @@ export declare const EVENT_TYPES: {
         id: Type.TString;
         survivor: Type.TString;
     }>;
+    readonly "com.rezics.subject.revised.v1": Type.TObject<{
+        id: Type.TString;
+        revision: Type.TInteger;
+        kind: Type.TUnion<[Type.TLiteral<"create">, Type.TLiteral<"propose">, Type.TLiteral<"accept">, Type.TLiteral<"reject">, Type.TLiteral<"adopt">, Type.TLiteral<"merge">, Type.TLiteral<"retract">]>;
+    }>;
     readonly "com.rezics.semantic.links.moving.v1": Type.TObject<{
         id: Type.TString;
         survivor: Type.TString;
@@ -207,6 +212,249 @@ export declare const EVENT_TYPES: {
         }>;
         role: Type.TLiteral<string>;
     }>;
+    readonly 'com.rezics.access.handle-held.v1': Type.TObject<{
+        accountId: Type.TString;
+        handle: Type.TString;
+        reservationId: Type.TString;
+        operationId: Type.TString;
+    }>;
+    readonly 'com.rezics.access.organization-handle-published.v1': Type.TObject<{
+        accountId: Type.TString;
+        handle: Type.TString;
+        operationId: Type.TString;
+    }>;
+    readonly 'com.rezics.access.account-handle-published.v1': Type.TObject<{
+        accountId: Type.TString;
+        handle: Type.TString;
+        operationId: Type.TString;
+    }>;
+    readonly 'com.rezics.access.transition-handle-claimed.v1': Type.TObject<{
+        accountId: Type.TString;
+        handle: Type.TString;
+    }>;
+    readonly 'com.rezics.access.transition-handle-redirected.v1': Type.TObject<{
+        accountId: Type.TString;
+        handle: Type.TString;
+        reservedUntil: Type.TString;
+    }>;
+    readonly 'com.rezics.access.handle-transition-completed.v1': Type.TObject<{
+        accountId: Type.TString;
+        handle: Type.TString;
+    }>;
+    readonly 'com.rezics.access.handle-transition-cancelled.v1': Type.TObject<{
+        accountId: Type.TString;
+        operationId: Type.TString;
+    }>;
+    readonly 'com.rezics.access.handle-transition-released.v1': Type.TObject<{
+        accountId: Type.TString;
+        handle: Type.TString;
+    }>;
+    readonly 'com.rezics.access.registration-expired.v1': Type.TObject<{
+        receiptId: Type.TString;
+        accountId: Type.TString;
+        minimumAuthnEpoch: Type.TString;
+        kind: Type.TLiteral<"fence" | "tombstone">;
+        priorOperatorAccountId: Type.TNull | Type.TUnion<[Type.TString, Type.TNull]>;
+    }>;
+    readonly 'com.rezics.access.registration-handle-released.v1': Type.TObject<{
+        accountId: Type.TString;
+        handle: Type.TString;
+    }>;
+    readonly 'com.rezics.access.handle-reserved.v1': Type.TObject<{
+        handle: Type.TString;
+        accountId: Type.TString;
+        reservationId: Type.TString;
+        expiresAt: Type.TString;
+    }>;
+    readonly 'com.rezics.access.actor-pending.v1': Type.TObject<{
+        accountId: Type.TString;
+        registrationId: Type.TString;
+        expiresAt: Type.TString;
+    }>;
+    readonly 'com.rezics.access.actor-activated.v1': Type.TObject<{
+        accountId: Type.TString;
+    }>;
+    readonly 'com.rezics.access.self-read-installed.v1': Type.TObject<{
+        accountId: Type.TString;
+        installed: Type.TInteger;
+    }>;
+    readonly 'com.rezics.access.handle-claimed.v1': Type.TObject<{
+        handle: Type.TString;
+        accountId: Type.TString;
+    }>;
+    readonly 'com.rezics.access.handle-redirected.v1': Type.TObject<{
+        handle: Type.TString;
+        accountId: Type.TString;
+        reservedUntil: Type.TString;
+    }>;
+    readonly 'com.rezics.access.handle-expired.v1': Type.TObject<{
+        handle: Type.TString;
+        released: Type.TLiteral<true>;
+    }>;
+    readonly 'com.rezics.access.coordination-reserved.v1': Type.TObject<{
+        accountId: Type.TString;
+        relatedAccountId: Type.TString;
+        purpose: Type.TLiteral<"operator">;
+        reservationId: Type.TString;
+    }>;
+    readonly 'com.rezics.access.membership-terminalized.v1': Type.TObject<{
+        organizationId: Type.TString;
+        memberAccountId: Type.TString;
+        reservationId: Type.TString;
+        key: Type.TString;
+        transactionId: Type.TString;
+    }>;
+    readonly 'com.rezics.access.organization-created.v1': Type.TObject<{
+        accountId: Type.TString;
+        ownerAccountId: Type.TString;
+    }>;
+    readonly 'com.rezics.access.authentication-floor-advanced.v1': Type.TObject<{
+        receiptId: Type.TString;
+        accountId: Type.TString;
+        minimumAuthnEpoch: Type.TString;
+        kind: Type.TLiteral<"fence" | "tombstone">;
+        priorOperatorAccountId: Type.TNull | Type.TUnion<[Type.TString, Type.TNull]>;
+    }>;
+    readonly 'com.rezics.access.authentication-fenced.v1': Type.TObject<{
+        receiptId: Type.TString;
+        accountId: Type.TString;
+        minimumAuthnEpoch: Type.TString;
+        kind: Type.TLiteral<"fence" | "tombstone">;
+        priorOperatorAccountId: Type.TNull | Type.TUnion<[Type.TString, Type.TNull]>;
+    }>;
+    readonly 'com.rezics.access.authentication-established.v1': Type.TObject<{
+        accountId: Type.TString;
+        receiptId: Type.TString;
+        minimumAuthnEpoch: Type.TString;
+    }>;
+    readonly 'com.rezics.access.account-updated.v1': Type.TObject<{
+        accountId: Type.TString;
+    }>;
+    readonly 'com.rezics.access.membership-changed.v1': Type.TObject<{
+        organizationId: Type.TString;
+        memberAccountId: Type.TString;
+        reservationId: Type.TString;
+        role: Type.TUnion<[Type.TLiteral<"owner">, Type.TLiteral<"member">, Type.TNull]>;
+    }>;
+    readonly 'com.rezics.access.account-tombstoned.v1': Type.TObject<{
+        receiptId: Type.TString;
+        accountId: Type.TString;
+        minimumAuthnEpoch: Type.TString;
+        kind: Type.TLiteral<"fence" | "tombstone">;
+        priorOperatorAccountId: Type.TNull | Type.TUnion<[Type.TString, Type.TNull]>;
+    }>;
+    readonly 'com.rezics.access.membership-inverse-reserved.v1': Type.TObject<{
+        accountId: Type.TString;
+        principal: Type.TObject<{
+            kind: Type.TUnion<[Type.TLiteral<"organization">, Type.TLiteral<"realm">]>;
+            id: Type.TString;
+        }>;
+        reservationId: Type.TString;
+    }>;
+    readonly 'com.rezics.access.membership-inverse-bootstrapped.v1': Type.TObject<{
+        accountId: Type.TString;
+        principal: Type.TObject<{
+            kind: Type.TUnion<[Type.TLiteral<"organization">, Type.TLiteral<"realm">]>;
+            id: Type.TString;
+        }>;
+        reservationId: Type.TString;
+        sourceTransactionId: Type.TString;
+    }>;
+    readonly 'com.rezics.access.membership-inverse-released.v1': Type.TObject<{
+        accountId: Type.TString;
+        principal: Type.TObject<{
+            kind: Type.TUnion<[Type.TLiteral<"organization">, Type.TLiteral<"realm">]>;
+            id: Type.TString;
+        }>;
+        reservationId: Type.TString;
+        proofTransactionId: Type.TString;
+    }>;
+    readonly 'com.rezics.access.membership-coordination-released.v1': Type.TObject<{
+        accountId: Type.TString;
+        principal: Type.TObject<{
+            kind: Type.TUnion<[Type.TLiteral<"organization">, Type.TLiteral<"realm">]>;
+            id: Type.TString;
+        }>;
+        reservationId: Type.TString;
+        proofTransactionId: Type.TString;
+        organizationId: Type.TString;
+        memberAccountId: Type.TString;
+    }>;
+    readonly 'com.rezics.access.operator.management-provisioned.v1': Type.TObject<{
+        operatorAccountId: Type.TString;
+        action: Type.TString;
+    }>;
+    readonly 'com.rezics.access.operator.responsibility-reserved.v1': Type.TObject<{
+        operatorAccountId: Type.TString;
+        subjectAccountId: Type.TString;
+        reservationId: Type.TString;
+    }>;
+    readonly 'com.rezics.access.operator.relation-recorded.v1': Type.TObject<{
+        subjectAccountId: Type.TString;
+        operatorAccountId: Type.TString;
+        reservationId: Type.TString;
+        version: Type.TString;
+    }>;
+    readonly 'com.rezics.access.operator.responsibility-retired.v1': Type.TObject<{
+        operatorAccountId: Type.TString;
+        subjectAccountId: Type.TString;
+        reservationId: Type.TString;
+    }>;
+    readonly 'com.rezics.access.operator.responsibility-released.v1': Type.TObject<{
+        operatorAccountId: Type.TString;
+        subjectAccountId: Type.TString;
+        reservationId: Type.TString;
+    }>;
+    readonly 'com.rezics.access.operator.opening-authorized.v1': Type.TObject<{
+        operatorAccountId: Type.TString;
+        subjectAccountId: Type.TString;
+        reservationId: Type.TString;
+        version: Type.TString;
+        receiptId: Type.TString;
+        actingHumanId: Type.TString;
+        purpose: Type.TUnion<[Type.TLiteral<"session">, Type.TLiteral<"credential-management">]>;
+        clientId: Type.TString;
+        scopes: Type.TArray<Type.TString>;
+        requestedBy: Type.TUnion<[Type.TString, Type.TNull]>;
+        expiresAt: Type.TString;
+    }>;
+    readonly 'com.rezics.access.operator.opening-consumed.v1': Type.TObject<{
+        operatorAccountId: Type.TString;
+        subjectAccountId: Type.TString;
+        reservationId: Type.TString;
+        version: Type.TString;
+        receiptId: Type.TString;
+        actingHumanId: Type.TString;
+        purpose: Type.TUnion<[Type.TLiteral<"session">, Type.TLiteral<"credential-management">]>;
+        clientId: Type.TString;
+        scopes: Type.TArray<Type.TString>;
+        requestedBy: Type.TUnion<[Type.TString, Type.TNull]>;
+        expiresAt: Type.TString;
+    }>;
+    readonly 'com.rezics.access.workflow-bound.v1': Type.TObject<{
+        digest: Type.TString;
+    }>;
+    readonly 'com.rezics.access.workflow-approved.v1': Type.TObject<{
+        approvalId: Type.TString;
+        digest: Type.TString;
+    }>;
+    readonly 'com.rezics.access.credential-approved-consumed.v1': Type.TObject<{
+        approvalId: Type.TString;
+    }>;
+    readonly 'com.rezics.access.workflow-approvals-swept.v1': Type.TObject<{
+        route: Type.TInteger;
+        count: Type.TInteger;
+    }>;
+    readonly 'com.rezics.access.credential-floor-advanced.v1': Type.TObject<{
+        openingReceiptId: Type.TString;
+    }>;
+    readonly 'com.rezics.access.standing-parent.installed.v1': Type.TObject<{
+        resource: Type.TObject<{
+            route: Type.TInteger;
+            id: Type.TString;
+        }>;
+        actions: Type.TArray<Type.TString>;
+    }>;
     readonly 'com.rezics.commerce.payout_statement.updated.v1': Type.TObject<{
         statementId: Type.TString;
     }>;
@@ -316,6 +564,11 @@ export declare const EVENT_TYPES: {
         targetId: Type.TString;
         revisionId: Type.TOptional<Type.TString>;
     }>;
+    readonly 'com.rezics.content.report-target.projected.v1': Type.TObject<{
+        reportId: Type.TString;
+        targetKind: Type.TUnion<[Type.TLiteral<"board">, Type.TLiteral<"thread">, Type.TLiteral<"post">]>;
+        targetId: Type.TString;
+    }>;
     readonly 'com.rezics.content.source_fence.taken_down.v1': Type.TObject<{
         route: Type.TInteger;
         source: Type.TString;
@@ -345,8 +598,8 @@ export declare const EVENT_TYPES: {
         actorId: Type.TString;
         targetKind: Type.TUnion<[Type.TLiteral<"thread">, Type.TLiteral<"post">]>;
         targetId: Type.TString;
-        previousKind: Type.TUnion<[Type.TUnion<Type.TLiteral<"downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote">[]>, Type.TNull]>;
-        kind: Type.TUnion<[Type.TUnion<Type.TLiteral<"downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote">[]>, Type.TNull]>;
+        previousKind: Type.TUnion<[Type.TEnum<["upvote", "downvote", "like", "love", "laugh", "insightful", "sad"]>, Type.TNull]>;
+        kind: Type.TUnion<[Type.TEnum<["upvote", "downvote", "like", "love", "laugh", "insightful", "sad"]>, Type.TNull]>;
     }>;
     readonly 'com.rezics.library.subject.listed.v1': Type.TObject<{
         subjectId: Type.TString;
