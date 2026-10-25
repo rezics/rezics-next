@@ -21,7 +21,7 @@ const actorId = '00000000-0000-8000-8000-000000000003';
 const requestId = '00000000-0000-8000-8000-000000000004';
 const principalRoute = routeOf(principal)!;
 const actorRoute = routeOf(actorId)!;
-const hotPartition = principalRoute >>> 4;
+const hotPartition = actorRoute >>> 4;
 const units = 500;
 let db: GrowthDatabase | undefined;
 let publicJwk: JWK;
@@ -57,7 +57,7 @@ const assignments: Population = {
   hotPartition,
   hotShare: 1,
   rows: ({ ordinal, route }) => {
-    const id = derivedId(namespace, `request-${ordinal}`, route);
+    const id = derivedId(namespace, `request-${ordinal}`, principalRoute);
     return {
       'access.principal_assignment': [
         {
