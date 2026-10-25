@@ -294,7 +294,8 @@ async function main(): Promise<void> {
       `CREATE DATABASE ${database} TEMPLATE rezics`,
     ]);
     try {
-      run('bun', ['test', `./${file}`], {
+      // Kernel tests start containers and compilers; under a loaded host Bun's 5 s per-test default fails them at random.
+      run('bun', ['test', '--timeout', '60000', `./${file}`], {
         ...env,
         DATABASE_URL: url.replace(/\/rezics(?=\?)/, `/${database}`),
         OPENSEARCH_URL: searchUrl,
