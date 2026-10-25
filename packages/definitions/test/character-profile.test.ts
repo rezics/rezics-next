@@ -22,7 +22,6 @@ const characterProperties = [
   'wdt:P6296',
 ];
 const newProperties = [
-  'schema:alternateName',
   'schema:gender',
   'schema:height',
   'schema:weight',
@@ -171,12 +170,13 @@ test('VNDB and Bangumi character fields are bundled or omitted with a reason', (
 });
 
 test('character terms carry labels in all eight UI locales', () => {
-  for (const key of [character, ...newProperties]) {
+  for (const key of [character, ...characterProperties]) {
     const term = bundledRelease.types[key] ?? bundledRelease.properties[key];
     expect(term).toBeDefined();
     expect(Object.keys(term!.labels).sort()).toEqual(locales);
     for (const locale of locales) {
       expect(term!.labels[locale]?.trim().length).toBeGreaterThan(0);
+      if (key !== character && !newProperties.includes(key)) continue;
       const labels = Bun.YAML.parse(bundledSources().presentation[`character/${locale}`]!) as {
         types?: Record<string, string>;
         properties?: Record<string, string>;
