@@ -117,7 +117,9 @@ async function gateAt(options: PromotionOptions, run: PromotionRun, commit: stri
   for (let index = 0; index < commands.length; index++) {
     const command = [...commands[index]!];
     const cached = force ? undefined : run[target].find(result => result.commit === commit && JSON.stringify(result.command) === JSON.stringify(command));
-    if (cached) results.push(cached);
+    if (!cached) break;
+    results.push(cached);
+    if (!cached.passed) return results;
   }
   if (results.length === commands.length) return results;
   const logFor = (index: number) => join(options.settings.stateDirectory, `promotion-${run.id}-${label}-${index}.log`);
@@ -129,7 +131,7 @@ async function gateAt(options: PromotionOptions, run: PromotionRun, commit: stri
     for (let index = 0; index < commands.length; index++) {
       const command = [...commands[index]!];
       const cached = force ? undefined : run[target].find(result => result.commit === commit && JSON.stringify(result.command) === JSON.stringify(command));
-      if (cached) { results.push(cached); continue; }
+      if (cached) { results.push(cached); if (!cached.passed) break; continue; }
       let result: PromotionGateResult;
       try {
         const outcome = await (options.runGate ?? gateRunner())(command, tree, logFor(index));
@@ -144,6 +146,8 @@ async function gateAt(options: PromotionOptions, run: PromotionRun, commit: stri
       results.push(result);
       appendResult(run, target, result);
       store.savePromotion(run);
+      // The first failure decides the run; later commands on a broken commit only cost time.
+      if (!result.passed) break;
     }
   } finally { git(main, 'worktree', 'remove', '--force', tree); }
   return results;
