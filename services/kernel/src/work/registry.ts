@@ -7,6 +7,7 @@ export type WorkContext = {
   readonly pool: Pool;
   readonly queues: typeof WORK_QUEUES;
   readonly client: WorkClient;
+  readonly env: Readonly<Record<string, string | undefined>>;
 };
 export type WorkModule = { name: string; register(context: WorkContext): void | Promise<void> };
 export type WorkOptions = {
@@ -14,6 +15,7 @@ export type WorkOptions = {
   executorId?: string;
   pool: Pool;
   client: WorkClient;
+  env?: Readonly<Record<string, string | undefined>>;
 };
 
 let composed = false;
@@ -42,7 +44,12 @@ export async function composeWork(modules: readonly WorkModule[], options: WorkO
   for (const [name, parameters] of Object.entries(WORK_QUEUES)) {
     await options.client.registerQueue(name, parameters);
   }
-  const context: WorkContext = Object.freeze({ pool: options.pool, queues: WORK_QUEUES, client: options.client });
+  const context: WorkContext = Object.freeze({
+    pool: options.pool,
+    queues: WORK_QUEUES,
+    client: options.client,
+    env: options.env ?? process.env,
+  });
   for (const module of registrations) await module.register(context);
 
   let launching: Promise<void> | undefined;

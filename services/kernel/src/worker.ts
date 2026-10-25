@@ -41,7 +41,11 @@ export function readWorkerConfig(env: NodeJS.ProcessEnv): WorkerConfig {
   };
 }
 
-export async function startWorker(config: WorkerConfig, modules: readonly WorkModule[] = KERNEL_WORK_MODULES) {
+export async function startWorker(
+  config: WorkerConfig,
+  modules: readonly WorkModule[] = KERNEL_WORK_MODULES,
+  env: Readonly<Record<string, string | undefined>> = process.env,
+) {
   const pool = new pg.Pool({ connectionString: config.databaseUrl, max: config.poolSize });
   pool.on('error', () => {});
   const client = await createWorkClient(config.databaseUrl, pool);
@@ -75,7 +79,7 @@ export async function startWorker(config: WorkerConfig, modules: readonly WorkMo
   process.on('SIGTERM', signal);
   try {
     starting = (async () => {
-      work = await composeWork(modules, { ...config, pool, client });
+      work = await composeWork(modules, { ...config, pool, client, env });
       await work.launch();
     })();
     await starting;

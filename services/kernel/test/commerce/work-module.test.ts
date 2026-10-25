@@ -40,8 +40,9 @@ test('the configured commerce module runs a workflow using the worker environmen
     );
 
     expect(await handle.getResult()).toBeUndefined();
-    expect(stripe.requests.some((request) => request.method === 'GET' && request.path === '/v1/checkout/sessions'))
-      .toBe(true);
+    expect(
+      stripe.requests.some((request) => request.method === 'GET' && request.path === '/v1/checkout/sessions'),
+    ).toBe(true);
   } finally {
     await worker?.stop();
     await client?.close();

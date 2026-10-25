@@ -59,7 +59,7 @@ test('a worker missing or rejecting commerce configuration names the variable an
   };
   const cases = [
     ['STRIPE_SECRET_KEY', undefined, 'STRIPE_SECRET_KEY'],
-    ['STRIPE_SECRET_KEY', 'sk_test_do_not_print_secret', 'STRIPE_SECRET_KEY'],
+    ['STRIPE_SECRET_KEY', 'sk_test_do_not_print_secret!', 'STRIPE_SECRET_KEY'],
     ['STRIPE_MANAGED_PAYMENTS', undefined, 'STRIPE_MANAGED_PAYMENTS'],
     ['STRIPE_MANAGED_PAYMENTS', 'sometimes', 'STRIPE_MANAGED_PAYMENTS'],
     ['CHECKOUT_SUCCESS_URL', undefined, 'CHECKOUT_SUCCESS_URL'],
@@ -68,22 +68,42 @@ test('a worker missing or rejecting commerce configuration names the variable an
     ['CHECKOUT_CANCEL_URL', 'javascript:secret-value', 'CHECKOUT_CANCEL_URL'],
     ['STRIPE_API_HOST', 'ftp://secret-host.invalid', 'STRIPE_API_HOST'],
   ] as const;
+  const program = `
+    import { ConfigError } from './src/commerce/config.ts';
+    import { readWorkerConfig, startWorker } from './src/worker.ts';
+    import { KERNEL_WORK_MODULES } from './src/work/modules.ts';
 
+    const env = { ...process.env };
+    const { variable, value } = JSON.parse(process.env.WORKER_CONFIG_CASE);
+    if (value === undefined) delete env[variable];
+    else env[variable] = value;
+    try {
+      const worker = await startWorker(readWorkerConfig(env), KERNEL_WORK_MODULES, env);
+      await worker.stop();
+      console.log('Worker ready');
+    } catch (error) {
+      console.error(error instanceof ConfigError ? error.message : 'Worker startup failed');
+      process.exitCode = 1;
+    }
+  `;
   for (const [variable, value, expected] of cases) {
-    const env = { ...valid, [variable]: value };
-    const child = Bun.spawn([process.execPath, `${import.meta.dir}/../../src/worker.ts`], {
+    const env: Record<string, string> = { ...valid };
+    env.WORKER_CONFIG_CASE = JSON.stringify({ variable, ...(value === undefined ? {} : { value }) });
+    const child = Bun.spawn([process.execPath, '-e', program], {
       env,
       stdout: 'pipe',
       stderr: 'pipe',
     });
+    const timeout = setTimeout(() => child.kill('SIGKILL'), 10_000);
     const [exitCode, stdout, stderr] = await Promise.all([
       child.exited,
       new Response(child.stdout).text(),
       new Response(child.stderr).text(),
     ]);
+    clearTimeout(timeout);
     const output = `${stdout}${stderr}`;
-    expect(exitCode, output).not.toBe(0);
-    expect(output).toContain(expected);
+    expect(exitCode, `${variable}: ${output}`).not.toBe(0);
+    expect(output, variable).toContain(expected);
     expect(output).not.toContain('do_not_print_secret');
     expect(output).not.toContain('secret-value');
     expect(output).not.toContain('secret-host.invalid');
