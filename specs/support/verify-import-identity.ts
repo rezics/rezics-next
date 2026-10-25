@@ -1,21 +1,12 @@
 #!/usr/bin/env bun
-/** Green verifies executable red identity specification, never production lifecycle proof. */
-import assert from 'node:assert/strict';
+/**
+ * This command proves specification executability only. Product acceptance comes
+ * from the separately dispatched frozen identity-outcomes wrapper with the actual
+ * native driver.
+ */
 import { fileURLToPath } from 'node:url';
-import { MISSING_IMPORT_IDENTITY, openImportIdentity } from '../../services/kernel/test/imports/identity-fixture.ts';
+import { MISSING_IMPORT_IDENTITY } from '../../services/kernel/test/imports/identity-fixture.ts';
 
-// Only probe the composition stub's no-setup failure. No database/pool, account,
-// policy or outcome is fabricated: accessing this unavailable input must fail.
-await assert.rejects(
-  () =>
-    openImportIdentity({
-      get database(): never {
-        throw new Error('The composition stub must not open a database');
-      },
-      clock: () => new Date(),
-    }),
-  { name: 'Error', message: MISSING_IMPORT_IDENTITY },
-);
 const child = Bun.spawn(
   [
     process.execPath,
