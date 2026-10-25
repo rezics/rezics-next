@@ -9,8 +9,9 @@ import { readPartition, type Partition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { CONTENT_EVENTS, type ContentEventData } from './events.ts';
 import type { BoardId, ThreadId } from './model.ts';
+import activePage from './board-rank-page.sql';
 import page from './page-board-threads.sql';
-import upsert from './upsert-board-thread.sql';
+import upsert from './board-rank-upsert.sql';
 
 export type BoardCandidateKey = Readonly<{ createdAt: string; id: ThreadId }>;
 export type BoardCandidate = Readonly<{
@@ -26,8 +27,24 @@ export type BoardCandidatePage = Readonly<{
   epoch: number;
   position: bigint;
 }>;
+export type BoardRankKey = Readonly<{ activeRank: number; threadId: ThreadId }>;
+export type BoardRankCandidate = Readonly<{
+  id: ThreadId;
+  activeRank: number;
+  rankRefreshedAt: string;
+}>;
+export type BoardRankCandidatePage = Readonly<{
+  candidates: readonly BoardRankCandidate[];
+  next: BoardRankKey | null;
+  epoch: number;
+  position: bigint;
+}>;
 
-const sourceTypes = ['com.rezics.content.thread.created.v1', 'com.rezics.content.revision.created.v1'] as const;
+const sourceTypes = [
+  'com.rezics.content.thread.created.v1',
+  'com.rezics.content.post.created.v1',
+  'com.rezics.content.revision.created.v1',
+] as const;
 const projected = 'com.rezics.content.board-thread.projected.v1';
 const maxPosition = 9223372036854775807n;
 
@@ -89,7 +106,7 @@ export function createBoardEffect(pool: Pool): Effect {
         !/^\d{19}$/.test(event.sequence) ||
         BigInt(event.sequence) <= 0n ||
         BigInt(event.sequence) > maxPosition ||
-        event.subject !== data.threadId ||
+        (event.subject !== data.threadId && event.subject !== data.itemId) ||
         route(data.itemId) !== sourceRoute ||
         route(data.revisionId) !== sourceRoute ||
         !/^[0-9a-f-]{36}$/.test(event.id)
@@ -99,14 +116,25 @@ export function createBoardEffect(pool: Pool): Effect {
       const thread = await snapshot(pool, partitionOf(sourceRoute), async (client, anchor) => {
         if (epoch > anchor.epoch || (epoch === anchor.epoch && position > anchor.position))
           throw new Error('Source envelope is ahead of its partition');
-        const { rows } = await client.query<{ board_id: string; created_at: string }>(
-          `SELECT board_id, to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at
-           FROM content.thread WHERE route = $1 AND thread_id = $2`,
-          [sourceRoute, data.threadId],
+        const { rows } = await client.query<{
+          board_id: string;
+          created_at: string;
+          item_created_at: string | null;
+        }>(
+          `SELECT thread.board_id,
+                  to_char(thread.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at,
+                  to_char(post.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS item_created_at
+           FROM content.thread AS thread
+           LEFT JOIN content.post AS post
+             ON post.route = thread.route AND post.thread_id = thread.thread_id AND post.post_id = $3
+           WHERE thread.route = $1 AND thread.thread_id = $2`,
+          [sourceRoute, data.threadId, data.itemId],
         );
         return rows[0];
       });
       if (!thread) throw new Error('Source thread reference is missing');
+      const activityAt = type === 'com.rezics.content.post.created.v1' ? thread.item_created_at : thread.created_at;
+      if (!activityAt) throw new Error('Source post reference is missing');
       // The source snapshot and its checkout are released before the board command starts.
       const identity = JSON.stringify([event.source, event.sequence, event.id, event.type]);
       const digest = createHash('sha256').update(identity).digest();
@@ -114,6 +142,7 @@ export function createBoardEffect(pool: Pool): Effect {
         pool,
         { id: data.threadId, boardId: thread.board_id, createdAt: timestamp(thread.created_at), epoch, position },
         data.revisionId,
+        timestamp(activityAt),
         { actorAccountId: data.actorId, kind: 'content.board-thread.project', key: digest.toString('hex'), digest },
       );
     },
@@ -174,17 +203,63 @@ export async function pageBoardCandidates(
   });
 }
 
+/** Bounded active-rank traversal. Candidate identity still carries no disclosure authority. */
+export async function pageActiveBoardCandidates(
+  pool: Pool,
+  boardId: BoardId,
+  after: BoardRankKey | null,
+  limit: number,
+): Promise<BoardRankCandidatePage> {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new RangeError('Candidate limit must be 1 to 200');
+  const boardRoute = route(boardId);
+  if (after) {
+    route(after.threadId);
+    if (!Number.isFinite(after.activeRank) || after.activeRank < 0) throw new RangeError('Invalid active rank cursor');
+  }
+  return snapshot(pool, partitionOf(boardRoute), async (client, anchor) => {
+    const parameters = {
+      route: boardRoute,
+      board_id: boardId,
+      active_rank: after?.activeRank ?? 0,
+      thread_id: after?.threadId ?? '00000000-0000-0000-0000-000000000000',
+      has_after: after !== null,
+      limit,
+    };
+    const { rows } = await client.query<(typeof activePage)['~reylo']['element']>(
+      activePage.sql,
+      activePage.params.map((name) => parameters[name as keyof typeof parameters]),
+    );
+    const candidates = rows.map((row) => {
+      if (row.rank_refreshed_at === null) throw new Error('Board rank freshness is missing');
+      return {
+        id: row.thread_id,
+        activeRank: row.active_rank,
+        rankRefreshedAt: row.rank_refreshed_at,
+      };
+    });
+    const last = candidates.at(-1);
+    return {
+      candidates,
+      next: candidates.length === limit && last ? { activeRank: last.activeRank, threadId: last.id } : null,
+      epoch: anchor.epoch,
+      position: anchor.position,
+    };
+  });
+}
+
 class UnchangedCandidate extends Error {}
 
 async function updateCandidate(
   pool: Pool,
   candidate: BoardCandidate,
   revisionId: string | null,
+  activityAt: string,
   receipt?: CommandReceipt,
 ) {
   const boardRoute = route(candidate.boardId);
   route(candidate.id);
   checkTime(candidate.createdAt);
+  checkTime(activityAt);
   if (
     !Number.isInteger(candidate.epoch) ||
     candidate.epoch < 1 ||
@@ -201,6 +276,7 @@ async function updateCandidate(
         board_id: candidate.boardId,
         thread_id: candidate.id,
         created_at: candidate.createdAt,
+        activity_at: activityAt,
         source_epoch: candidate.epoch,
         source_position: candidate.position.toString(),
         source_revision_id: revisionId,
@@ -234,5 +310,5 @@ async function updateCandidate(
 
 /** Trusted workflow input only. Candidate references are never authoritative disclosure. */
 export async function applyBoardCandidate(pool: Pool, candidate: BoardCandidate): Promise<void> {
-  await updateCandidate(pool, candidate, null);
+  await updateCandidate(pool, candidate, null, candidate.createdAt);
 }

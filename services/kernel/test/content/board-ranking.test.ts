@@ -14,24 +14,27 @@ afterAll(() => db.close());
 
 const sourceRoute = 0x1234;
 const boardRoute = 0x5678;
-const authorId = newId(0x9abc);
+const growthAuthorId = newId(0x9abc);
 const tokenKeys = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(9)]]) };
-const readerContext = { actor: { kind: 'anonymous' as const }, deadline: Date.now() + 10_000 };
 const createdType = 'com.rezics.content.thread.created.v1';
 const replyType = 'com.rezics.content.post.created.v1';
 const baseCreatedAt = '2026-10-25T00:00:00.000Z';
 const refreshAt = '2026-10-26T12:00:00.000Z';
-const refreshOldAt = '2026-10-26T11:00:00.000Z';
 
 type SourceThread = {
   boardId: string;
   threadId: string;
+  authorId: string;
   itemId: string;
   revisionId: string;
   createdAt: string;
 };
 
 type RankedPage = Awaited<ReturnType<typeof listBoardThreads>> & { rankRefreshedAt: string | null };
+
+function readerContext() {
+  return { actor: { kind: 'anonymous' as const }, deadline: Date.now() + 10_000 };
+}
 
 function dependencies(pool = db.pool): ContentBoardDependencies {
   return {
@@ -59,6 +62,7 @@ async function createBoard(): Promise<string> {
 
 async function createSourceThread(boardId: string, createdAt: string): Promise<SourceThread> {
   const threadId = newId(sourceRoute);
+  const authorId = newId(0x9abc);
   const itemId = newId(sourceRoute);
   const revisionId = newId(sourceRoute);
   const body = Buffer.from(JSON.stringify(fromPlainText(`Thread ${threadId}`)));
@@ -101,7 +105,7 @@ async function createSourceThread(boardId: string, createdAt: string): Promise<S
       events: [{ type: createdType, subject: threadId, data: { threadId, itemId, revisionId, actorId: authorId } }],
     };
   });
-  return { boardId, threadId, itemId, revisionId, createdAt };
+  return { boardId, threadId, authorId, itemId, revisionId, createdAt };
 }
 
 async function createReply(thread: SourceThread, createdAt: string): Promise<string> {
@@ -115,7 +119,16 @@ async function createReply(thread: SourceThread, createdAt: string): Promise<str
         (route, thread_id, post_id, reply_to_post_id, author_account_id, head_revision_id, visibility,
          security_revision, recorded_transaction_id, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, 'published', 1, $7, $8)`,
-      [sourceRoute, thread.threadId, postId, thread.itemId, authorId, revisionId, context.transactionId, createdAt],
+      [
+        sourceRoute,
+        thread.threadId,
+        postId,
+        thread.itemId,
+        thread.authorId,
+        revisionId,
+        context.transactionId,
+        createdAt,
+      ],
     );
     await tx.query(
       `INSERT INTO content.revision
@@ -141,7 +154,7 @@ async function createReply(thread: SourceThread, createdAt: string): Promise<str
         {
           type: replyType,
           subject: postId,
-          data: { threadId: thread.threadId, itemId: postId, revisionId, actorId: authorId },
+          data: { threadId: thread.threadId, itemId: postId, revisionId, actorId: thread.authorId },
         },
       ],
     };
@@ -212,7 +225,7 @@ function growthPopulation(activeRank: number): Population {
           {
             route,
             thread_id: threadId,
-            author_account_id: authorId,
+            author_account_id: growthAuthorId,
             board_id: boardId,
             title: 'Rank growth thread',
             visibility: 'published',
@@ -229,7 +242,7 @@ function growthPopulation(activeRank: number): Population {
             thread_id: threadId,
             post_id: postId,
             reply_to_post_id: null,
-            author_account_id: authorId,
+            author_account_id: growthAuthorId,
             head_revision_id: revisionId,
             visibility: 'published',
             security_revision: 1,
@@ -276,48 +289,54 @@ function growthPopulation(activeRank: number): Population {
   };
 }
 
-test('a reply moves its thread activity and active listing uses the rank keyset cursor', async () => {
-  const boardId = await createBoard();
-  const now = Date.now();
-  const repliedThread = await createSourceThread(boardId, new Date(now - 6 * 60 * 60_000).toISOString());
-  const otherThread = await createSourceThread(boardId, new Date(now - 2 * 60 * 60_000).toISOString());
-  const replyAt = new Date(now - 60 * 60_000).toISOString();
-  const replyId = await createReply(repliedThread, replyAt);
-  const events = await readEvents();
-  await project(events);
+test.serial(
+  'a reply moves its thread activity and active listing uses the rank keyset cursor',
+  async () => {
+    const boardId = await createBoard();
+    const now = Date.now();
+    const repliedThread = await createSourceThread(boardId, new Date(now - 6 * 60 * 60_000).toISOString());
+    const otherThread = await createSourceThread(boardId, new Date(now - 2 * 60 * 60_000).toISOString());
+    const replyAt = new Date(now - 60 * 60_000).toISOString();
+    const replyId = await createReply(repliedThread, replyAt);
+    const events = await readEvents();
+    await project(events);
 
-  expect(await rankRow(repliedThread.threadId)).toMatchObject({
-    last_activity_at: replyAt.replace('Z', '000Z'),
-  });
+    expect(await rankRow(repliedThread.threadId)).toMatchObject({
+      last_activity_at: replyAt.replace('Z', '000Z'),
+    });
 
-  const first = (await listBoardThreads(
-    dependencies(),
-    boardId,
-    readerContext,
-    activePageInput({ limit: 1 }),
-  )) as RankedPage;
-  expect(first.entries.map(({ id }) => id)).toEqual([repliedThread.threadId]);
-  expect(first.nextCursor).toEqual(expect.any(String));
-  expect(first.rankRefreshedAt).toBe((await rankRow(repliedThread.threadId)).rank_refreshed_at);
+    const first = (await listBoardThreads(
+      dependencies(),
+      boardId,
+      readerContext(),
+      activePageInput({ limit: 1 }),
+    )) as RankedPage;
+    expect(first.entries.map(({ id }) => id)).toEqual([repliedThread.threadId]);
+    expect(first.nextCursor).toEqual(expect.any(String));
+    expect(first.rankRefreshedAt).toBe((await rankRow(repliedThread.threadId)).rank_refreshed_at);
 
-  const second = (await listBoardThreads(
-    dependencies(),
-    boardId,
-    readerContext,
-    activePageInput({ limit: 1, cursor: first.nextCursor! }),
-  )) as RankedPage;
-  expect(second.entries.map(({ id }) => id)).toEqual([otherThread.threadId]);
-  await expect(
-    listBoardThreads(dependencies(), boardId, readerContext, {
-      limit: 1,
-      sort: 'newest',
-      cursor: first.nextCursor!,
-    }),
-  ).rejects.toThrow(TypeError);
-  expect(replyId).toEqual(expect.any(String));
-}, 30_000);
+    const second = (await listBoardThreads(
+      dependencies(),
+      boardId,
+      readerContext(),
+      activePageInput({ limit: 1, cursor: first.nextCursor! }),
+    )) as RankedPage;
+    expect(second.entries.map(({ id }) => id)).toEqual([otherThread.threadId]);
+    await expect(
+      listBoardThreads(dependencies(), boardId, readerContext(), {
+        limit: 1,
+        sort: 'newest',
+        cursor: first.nextCursor!,
+      }),
+    ).rejects.toThrow(TypeError);
+    expect(replyId).toEqual(expect.any(String));
+  },
+  30_000,
+);
 
-test('rank refresh skips zero rows and updates no more than 500 rows per batch', async () => {
+test.serial('rank refresh skips zero rows and updates no more than 500 rows per batch', async () => {
+  const batchAt = new Date().toISOString();
+  const staleAt = new Date(Date.parse(batchAt) - 60 * 60_000).toISOString();
   const boardId = newId(boardRoute);
   const rows = Array.from({ length: 504 }, (_, index) => ({ threadId: newId(sourceRoute), zero: index >= 502 }));
   await db.admin.query(
@@ -332,18 +351,18 @@ test('rank refresh skips zero rows and updates no more than 500 rows per batch',
       boardRoute,
       boardId,
       baseCreatedAt,
-      refreshOldAt,
-      JSON.stringify(rows.map((row, index) => ({ ...row, ordinal: index + 1 }))),
+      staleAt,
+      JSON.stringify(rows.map((row, index) => ({ thread_id: row.threadId, zero: row.zero, ordinal: index + 1 }))),
     ],
   );
 
   const first = await db.admin.query<{ refreshed: number }>(
     'SELECT content.refresh_board_thread_rank_batch($1::timestamptz) AS refreshed',
-    [refreshAt],
+    [batchAt],
   );
   const second = await db.admin.query<{ refreshed: number }>(
     'SELECT content.refresh_board_thread_rank_batch($1::timestamptz) AS refreshed',
-    [refreshAt],
+    [batchAt],
   );
   expect(first.rows[0]?.refreshed).toBe(500);
   expect(second.rows[0]?.refreshed).toBe(2);
@@ -353,68 +372,72 @@ test('rank refresh skips zero rows and updates no more than 500 rows per batch',
   );
   expect(stored.rows.filter((row) => row.active_rank > 0)).toHaveLength(502);
   expect(
-    stored.rows.filter((row) => row.rank_refreshed_at.toISOString() === new Date(refreshAt).toISOString()),
+    stored.rows.filter((row) => row.rank_refreshed_at.toISOString() === new Date(batchAt).toISOString()),
   ).toHaveLength(502);
   expect(
-    stored.rows.filter((row) => row.active_rank === 0 && row.rank_refreshed_at.toISOString() === refreshOldAt),
+    stored.rows.filter((row) => row.active_rank === 0 && row.rank_refreshed_at.toISOString() === staleAt),
   ).toHaveLength(2);
   expect(stored.rows.find((row) => row.active_rank > 0)?.active_rank).toBeCloseTo(Math.log10(2) / Math.pow(3, 1.8));
 });
 
-test('active pages and one rank refresh batch keep constant cost as boards and threads grow', async () => {
-  const boardId = await createBoard();
-  const anchor = await createSourceThread(boardId, new Date(Date.now() - 60 * 60_000).toISOString());
-  await project(await readEvents());
-  const pagePopulation = growthPopulation(0);
-  const scales = [2048, 8192, 32768] as const;
-  const pageReport = await checkGrowth(db, {
-    name: 'active board page',
-    scales,
-    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
-    repetitions: 1,
-    warmups: 0,
-    grow: async (growthDb, scale, previous) =>
-      seed({ pool: growthDb.pool, admin: growthDb.admin }, pagePopulation, { from: previous, to: scale }),
-    operation: async (growthDb) => {
-      const page = (await listBoardThreads(
-        dependencies(growthDb.pool),
-        boardId,
-        readerContext,
-        activePageInput({ limit: 1 }),
-      )) as RankedPage;
-      expect(page.entries.map(({ id }) => id)).toEqual([anchor.threadId]);
-      return page;
-    },
-  });
-  expect(pageReport.samples.map(({ scale }) => scale)).toEqual([...scales]);
-  expect(
-    pageReport.samples.every((sample) =>
-      Object.values(sample.cost.relations ?? {}).every((relation) => relation.sequentialScans === 0),
-    ),
-  ).toBe(true);
+test.serial(
+  'active pages and one rank refresh batch keep constant cost as boards and threads grow',
+  async () => {
+    const boardId = await createBoard();
+    const anchor = await createSourceThread(boardId, new Date(Date.now() - 60 * 60_000).toISOString());
+    await project(await readEvents());
+    const pagePopulation = growthPopulation(0);
+    const scales = [2048, 8192, 32768] as const;
+    const pageReport = await checkGrowth(db, {
+      name: 'active board page',
+      scales,
+      bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+      repetitions: 1,
+      warmups: 0,
+      grow: async (growthDb, scale, previous) =>
+        seed({ pool: growthDb.pool, admin: growthDb.admin }, pagePopulation, { from: previous, to: scale }),
+      operation: async (growthDb) => {
+        const page = (await listBoardThreads(
+          dependencies(growthDb.pool),
+          boardId,
+          readerContext(),
+          activePageInput({ limit: 1 }),
+        )) as RankedPage;
+        expect(page.entries.map(({ id }) => id)).toEqual([anchor.threadId]);
+        return page;
+      },
+    });
+    expect(pageReport.samples.map(({ scale }) => scale)).toEqual([...scales]);
+    expect(
+      pageReport.samples.every((sample) =>
+        Object.values(sample.cost.relations ?? {}).every((relation) => relation.sequentialScans === 0),
+      ),
+    ).toBe(true);
 
-  const refreshPopulation = growthPopulation(1);
-  const refreshReport = await checkGrowth(db, {
-    name: 'one active rank refresh batch',
-    scales,
-    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
-    repetitions: 1,
-    warmups: 0,
-    grow: async (growthDb, scale, previous) =>
-      seed({ pool: growthDb.pool, admin: growthDb.admin }, refreshPopulation, { from: previous, to: scale }),
-    operation: async (growthDb) => {
-      const result = await growthDb.pool.query<{ refreshed: number }>(
-        'SELECT content.refresh_board_thread_rank_batch($1::timestamptz) AS refreshed',
-        [new Date().toISOString()],
-      );
-      expect(result.rows[0]?.refreshed).toBe(500);
-      return result.rows[0];
-    },
-  });
-  expect(refreshReport.samples.map(({ scale }) => scale)).toEqual([...scales]);
-  expect(
-    refreshReport.samples.every((sample) =>
-      Object.values(sample.cost.relations ?? {}).every((relation) => relation.sequentialScans === 0),
-    ),
-  ).toBe(true);
-}, 180_000);
+    const refreshPopulation = growthPopulation(1);
+    const refreshReport = await checkGrowth(db, {
+      name: 'one active rank refresh batch',
+      scales,
+      bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+      repetitions: 1,
+      warmups: 0,
+      grow: async (growthDb, scale, previous) =>
+        seed({ pool: growthDb.pool, admin: growthDb.admin }, refreshPopulation, { from: previous, to: scale }),
+      operation: async (growthDb) => {
+        const result = await growthDb.pool.query<{ refreshed: number }>(
+          'SELECT content.refresh_board_thread_rank_batch($1::timestamptz) AS refreshed',
+          [new Date().toISOString()],
+        );
+        expect(result.rows[0]?.refreshed).toBe(500);
+        return result.rows[0];
+      },
+    });
+    expect(refreshReport.samples.map(({ scale }) => scale)).toEqual([...scales]);
+    expect(
+      refreshReport.samples.every((sample) =>
+        Object.values(sample.cost.relations ?? {}).every((relation) => relation.sequentialScans === 0),
+      ),
+    ).toBe(true);
+  },
+  180_000,
+);

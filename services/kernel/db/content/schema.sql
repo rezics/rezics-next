@@ -24,6 +24,21 @@ CREATE SCHEMA content;
 
 
 --
+-- Name: board_thread_active_rank(integer, timestamp with time zone, timestamp with time zone); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.board_thread_active_rank(p_score integer, p_activity_at timestamp with time zone, p_at timestamp with time zone) RETURNS double precision
+    LANGUAGE sql IMMUTABLE STRICT
+    AS $$
+  SELECT CASE
+    WHEN p_activity_at < p_at - INTERVAL '7 days' THEN 0::double precision
+    ELSE log(greatest(2::numeric, p_score::numeric + 2)::double precision)
+      / power(greatest(0::double precision, extract(epoch FROM (p_at - p_activity_at)) / 3600.0) + 2.0, 1.8)
+  END
+$$;
+
+
+--
 -- Name: guard_board_thread(); Type: FUNCTION; Schema: content; Owner: -
 --
 
@@ -33,8 +48,11 @@ CREATE FUNCTION content.guard_board_thread() RETURNS trigger
 BEGIN
   IF ROW(NEW.route, NEW.board_id, NEW.thread_id, NEW.created_at)
      IS DISTINCT FROM ROW(OLD.route, OLD.board_id, OLD.thread_id, OLD.created_at)
-     OR ROW(NEW.source_epoch, NEW.source_position) <= ROW(OLD.source_epoch, OLD.source_position) THEN
-    RAISE EXCEPTION 'Board candidate identity, ordering and source watermark cannot regress' USING ERRCODE = '23514';
+     OR ROW(NEW.source_epoch, NEW.source_position) < ROW(OLD.source_epoch, OLD.source_position)
+     OR (ROW(NEW.source_epoch, NEW.source_position) = ROW(OLD.source_epoch, OLD.source_position)
+         AND NEW.source_revision_id IS DISTINCT FROM OLD.source_revision_id)
+     OR NEW.last_activity_at < OLD.last_activity_at THEN
+    RAISE EXCEPTION 'Board candidate identity, activity and source watermark cannot regress' USING ERRCODE = '23514';
   END IF;
   RETURN NEW;
 END;
@@ -298,6 +316,47 @@ CREATE FUNCTION content.operation_scopes_valid(scopes text[]) RETURNS boolean
 $_$;
 
 
+--
+-- Name: refresh_board_thread_rank_batch(timestamp with time zone, integer); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.refresh_board_thread_rank_batch(p_at timestamp with time zone DEFAULT clock_timestamp(), p_limit integer DEFAULT 500) RETURNS integer
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  refreshed integer;
+BEGIN
+  IF NOT isfinite(p_at) OR p_limit < 1 OR p_limit > 500 THEN
+    RAISE EXCEPTION 'Invalid board rank refresh batch';
+  END IF;
+
+  PERFORM set_config('enable_seqscan', 'off', true);
+
+  WITH selected AS MATERIALIZED (
+    SELECT route, board_id, thread_id
+    FROM content.board_thread
+    WHERE active_rank <> 0
+      AND rank_refreshed_at <= p_at - INTERVAL '10 minutes'
+    ORDER BY rank_refreshed_at, route, board_id, thread_id
+    LIMIT p_limit
+    FOR UPDATE SKIP LOCKED
+  ), updated AS (
+    UPDATE content.board_thread AS candidate
+    SET active_rank = content.board_thread_active_rank(candidate.score, candidate.last_activity_at, p_at),
+        rank_refreshed_at = p_at
+    FROM selected
+    WHERE candidate.route = selected.route
+      AND candidate.board_id = selected.board_id
+      AND candidate.thread_id = selected.thread_id
+    RETURNING 1
+  )
+  SELECT count(*)::integer INTO refreshed FROM updated;
+
+  RETURN refreshed;
+END;
+$$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -337,8 +396,15 @@ CREATE TABLE content.board_thread (
     source_epoch integer NOT NULL,
     source_position bigint NOT NULL,
     source_revision_id uuid,
+    last_activity_at timestamp with time zone DEFAULT transaction_timestamp() NOT NULL,
+    score integer DEFAULT 0 NOT NULL,
+    active_rank double precision DEFAULT 0 NOT NULL,
+    rank_refreshed_at timestamp with time zone DEFAULT transaction_timestamp() NOT NULL,
+    CONSTRAINT board_thread_active_rank_finite CHECK (((active_rank >= (0)::double precision) AND (active_rank < 'Infinity'::double precision))),
     CONSTRAINT board_thread_check CHECK ((route = ((get_byte(uuid_send(board_id), 10) * 256) + get_byte(uuid_send(board_id), 11)))),
     CONSTRAINT board_thread_created_at_check CHECK (isfinite(created_at)),
+    CONSTRAINT board_thread_last_activity_finite CHECK (isfinite(last_activity_at)),
+    CONSTRAINT board_thread_rank_refreshed_finite CHECK (isfinite(rank_refreshed_at)),
     CONSTRAINT board_thread_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT board_thread_source_epoch_check CHECK ((source_epoch > 0)),
     CONSTRAINT board_thread_source_position_check CHECK ((source_position > 0))
@@ -864,10 +930,24 @@ CREATE INDEX board_realm_page ON content.board USING btree (route, realm_id, boa
 
 
 --
+-- Name: board_thread_active_page_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX board_thread_active_page_idx ON content.board_thread USING btree (route, board_id, active_rank DESC, thread_id);
+
+
+--
 -- Name: board_thread_page_idx; Type: INDEX; Schema: content; Owner: -
 --
 
 CREATE INDEX board_thread_page_idx ON content.board_thread USING btree (route, board_id, created_at, thread_id);
+
+
+--
+-- Name: board_thread_rank_refresh_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX board_thread_rank_refresh_idx ON content.board_thread USING btree (rank_refreshed_at, route, board_id, thread_id) WHERE (active_rank <> (0)::double precision);
 
 
 --

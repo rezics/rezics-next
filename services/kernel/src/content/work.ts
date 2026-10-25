@@ -21,6 +21,7 @@ import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import type { WorkContext, WorkModule } from '../work/registry.ts';
 import { createImageJob } from './image-job.ts';
 import { createCollectionJob } from './collection-job.ts';
+import { refreshBoardRankBatch } from './board-rank.ts';
 import { createErasureJob } from './erasure-job.ts';
 import type { MediaStorage } from './media-storage.ts';
 import {
@@ -33,7 +34,9 @@ import {
 
 export const CONTENT_OPERATION_PROGRESS = 'content.authorErasure.progress';
 export const CONTENT_COLLECTION_SCHEDULE = 'content.collection.hourly';
+export const CONTENT_BOARD_RANK_SCHEDULE = 'content.board-rank.every-10-minutes';
 const PARTITION_WORKFLOW = 'content.collect.partition';
+const BOARD_RANK_WORKFLOW = 'content.board-rank.refresh';
 const BATCH_SIZE = 100;
 const PARTITION_CONCURRENCY = 8;
 const RETRY = { retriesAllowed: true, intervalSeconds: 1, backoffRate: 1, maxAttempts: 100 } as const;
@@ -225,6 +228,13 @@ async function registerWork(
     },
     { name: CONTENT_WORKFLOWS.collect },
   );
+  const refreshRanks = DBOS.registerStep(async () => refreshBoardRankBatch(context.pool, context.clock()), {
+    name: 'content.board-rank.refresh.step',
+    ...RETRY,
+  });
+  DBOS.registerWorkflow(async (_scheduledDate: Date, _context: unknown) => refreshRanks(), {
+    name: BOARD_RANK_WORKFLOW,
+  });
   // Client schedule provisioning works before launch. SDK applySchedules upserts
   // this stable name and preserves a single persistent schedule across restarts.
   await context.client.applySchedules([
@@ -232,6 +242,14 @@ async function registerWork(
       scheduleName: CONTENT_COLLECTION_SCHEDULE,
       workflowName: CONTENT_WORKFLOWS.collect,
       schedule: '0 * * * *',
+      queueName: CONTENT_QUEUES.collect,
+      cronTimezone: 'UTC',
+      automaticBackfill: false,
+    },
+    {
+      scheduleName: CONTENT_BOARD_RANK_SCHEDULE,
+      workflowName: BOARD_RANK_WORKFLOW,
+      schedule: '*/10 * * * *',
       queueName: CONTENT_QUEUES.collect,
       cronTimezone: 'UTC',
       automaticBackfill: false,
