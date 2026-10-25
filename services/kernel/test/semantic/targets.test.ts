@@ -91,7 +91,17 @@ const access: Access = {
     );
   },
 };
-const kernel = createKernel({ pool, access, tokens, routeKey: new Uint8Array(32).fill(4) });
+const kernel = createKernel({
+  pool,
+  access,
+  tokens,
+  routeKey: new Uint8Array(32).fill(4),
+  writeRate: {
+    async spend() {
+      return { allowed: true };
+    },
+  },
+});
 
 async function call(method: string, path: string, body?: unknown) {
   const response = await kernel.handle(

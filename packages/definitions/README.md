@@ -266,6 +266,12 @@ allowed target types for the caller to check against its database. The checks do
 not read a database or import the kernel; compiled value validators are cached
 per release. Supply an immutable, validated release and parsed JSON inputs.
 
+An item property's release `targets` may name a type key or any CURIE listed in
+the `bases` of a release type. This lets a target name an abstract base that has
+no entry in the release's `types`. A value matches when its subject's type equals
+a target or its type's `bases` contains a target. Expanded lists of concrete type
+keys remain valid.
+
 Structural limits apply to every release: decimal strings have at most 127
 characters and a time's year has at most 16 digits. An oversized value reports
 `out_of_range` at its decimal member or `/time`, without further value checks.

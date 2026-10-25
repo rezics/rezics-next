@@ -27,6 +27,7 @@ import {
 } from './slots.ts';
 import readTypes from './read-item-types.sql';
 import { contextSnapshot } from './context.ts';
+import { matchesTarget } from './targets.ts';
 
 export class SubjectNotFoundError extends Error {}
 export class EditorialConflictError extends Error {}
@@ -113,7 +114,7 @@ export async function proposeStatement(
         for (const row of rows) types.set(row.id, row.type);
       }
       const errors = input.items.flatMap((item) =>
-        item.targets.includes(types.get(item.id) ?? '')
+        matchesTarget(options.release.release, types.get(item.id) ?? '', item.targets)
           ? []
           : [{ pointer: item.pointer, code: 'out_of_range' as const }],
       );

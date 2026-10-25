@@ -287,6 +287,8 @@ function semantics(release: Release, add: (pointer: string, code?: ReleaseViolat
         add(facetPointer);
     });
   }
+  const targetNames = new Set(Object.keys(release.types));
+  for (const type of Object.values(release.types)) for (const base of type.bases) targetNames.add(base);
   for (const [key, property] of Object.entries(release.properties)) {
     const pointer = at('/properties', key);
     list(property.qualifiers, at(pointer, 'qualifiers'), release.properties);
@@ -296,7 +298,13 @@ function semantics(release: Release, add: (pointer: string, code?: ReleaseViolat
       if ((!allowed && own(property, member)) || (allowed && required && !own(property, member)))
         add(at(pointer, member));
     }
-    if (property.targets) list(property.targets, at(pointer, 'targets'), release.types);
+    if (property.targets) {
+      const targetPointer = at(pointer, 'targets');
+      list(property.targets, targetPointer);
+      property.targets.forEach((target, index) => {
+        if (!targetNames.has(target)) add(at(targetPointer, index));
+      });
+    }
     if (property.units) list(property.units, at(pointer, 'units'), undefined, false);
     if (property.minimum !== undefined && property.maximum !== undefined && property.maximum < property.minimum)
       add(at(pointer, 'maximum'));

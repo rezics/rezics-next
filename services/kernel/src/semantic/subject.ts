@@ -12,6 +12,7 @@ import { rejectContent } from './rules.ts';
 import { GLOBAL_CONTEXT } from './definitions.ts';
 import { contextSnapshot } from './context.ts';
 import { slotView } from './slots.ts';
+import { matchesTarget } from './targets.ts';
 import createRevision from './create-revision.sql';
 import insertFacts from './insert-facts.sql';
 import insertSubject from './create-subject.sql';
@@ -109,7 +110,7 @@ export async function createSubject(
       }
       const targetErrors = checked.targets.flatMap((item) => {
         const targetType = itemTypes.get(item.id);
-        return targetType && item.targets.includes(targetType)
+        return targetType && matchesTarget(options.release.release, targetType, item.targets)
           ? []
           : [{ pointer: item.pointer, code: 'out_of_range' as const }];
       });
