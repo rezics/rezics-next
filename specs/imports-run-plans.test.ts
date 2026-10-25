@@ -516,7 +516,7 @@ test('unchanged and explicit fenced zero-command records resolve only their prov
     const omission = {
       field_group: 'facts' as const,
       disposition: 'fenced' as const,
-      securityRevision: '9007199254740993:opaque',
+      securityRevision: '9007199254740993',
     };
     await h.d.classify(changedRun, 'Q1', { commands: [], omissions: [omission] });
     changedRun = await h.reopen(changedRun);
