@@ -17,9 +17,11 @@ test('risk ownership intersects declared globs, including a broad claim and zero
   expect(classifyTask(risk)).toBe('claim');
 });
 test('routing uses observable features and task sequence; retry sequence does not rerandomize the experiment', () => {
-  expect(routeTask(brief(), 1, table).profile.effort).toBe('high');
-  expect(routeTask(brief(), 2, table).profile.effort).toBe('max');
-  expect(routeTask(brief(), 3, table).experiment).toBe('implementation-effort');
+  expect(routeTask(brief(), 1, table).profile.model).toBe('grok-4.7');
+  expect(routeTask(brief(), 2, table).profile.model).toBe('grok-4.7');
+  expect(routeTask(brief(), 3, table).profile).toMatchObject({ model: 'gpt-6-luna', effort: 'max' });
+  expect(routeTask(brief(), 4, table).profile.model).toBe('grok-4.7');
+  expect(routeTask(brief(), 3, table).experiment).toBe('implementation-model');
   expect(routeTask(brief(), 3, table).tableVersion).toBe(table.version);
   expect(classifyTask({ ...brief(), hostileInput: true })).toBe('claim');
   expect(classifyTask({ ...brief(), citesSources: true })).toBe('claim');
