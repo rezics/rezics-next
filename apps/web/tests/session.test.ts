@@ -10,6 +10,10 @@ const timeout = 300_000;
 const clientId = 'rezics-website';
 const session = '__Host-rezics_session';
 const login = '__Host-rezics_login';
+// The API's RFC 8707 resource identifier in tests; production uses https://api.rezics.com.
+const resource = 'https://api.rezics.test';
+// The API scopes registered for the website client, as deployment configures them; these five carry the media routes.
+const scopes = ['media:create', 'media:read_reservation', 'media:read', 'media:complete', 'media:erase'];
 
 // The website client's key, which only the Worker holds, and the issuer's signing key.
 const clientKeys = await generateKeyPair('ES256', { extractable: true });
@@ -23,6 +27,7 @@ const codes = new Map<string, Grant>();
 const families = new Map<string, Family>();
 const assertions = new Set<string>();
 const tokenRequests: string[] = [];
+const grantResources: string[] = [];
 const accessTokens: string[] = [];
 const idTokens: string[] = [];
 const revoked: string[] = [];
@@ -79,6 +84,7 @@ const fake = Bun.serve({
     if (url.pathname === '/auth/token' && request.method === 'POST') {
       const form = new URLSearchParams(await request.text());
       tokenRequests.push(form.get('grant_type') ?? '');
+      grantResources.push(`${form.get('grant_type')} ${form.getAll('resource').join(' ')}`);
       if (!(await client(form))) return json({ error: 'invalid_client' }, 401);
       if (form.get('grant_type') === 'authorization_code') {
         const grant = codes.get(form.get('code') ?? '');
@@ -140,7 +146,8 @@ function site(): Promise<string> {
     child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
       cwd: app, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, KERNEL_ORIGIN: fake.url.origin, AUTH_ISSUER: `${fake.url.origin}/auth`,
-        WEBSITE_CLIENT_ID: clientId, WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk) },
+        WEBSITE_CLIENT_ID: clientId, WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk), API_RESOURCE: resource,
+        WEBSITE_SCOPES: scopes.join(' ') },
     });
     child.stdout!.on('data', keep);
     child.stderr!.on('data', keep);
@@ -209,7 +216,7 @@ test('signing in runs the authorization code flow with PKCE and keeps the tokens
   expect(params.get('response_type')).toBe('code');
   expect(params.get('client_id')).toBe(clientId);
   expect(params.get('redirect_uri')).toBe(`${origin}/auth/callback`);
-  expect(params.get('scope')!.split(' ').sort()).toEqual(['media:complete', 'offline_access', 'openid']);
+  expect(params.get('scope')!.split(' ').sort()).toEqual(['openid', 'offline_access', ...scopes].sort());
   expect(params.get('code_challenge_method')).toBe('S256');
   expect(params.get('code_challenge')).toMatch(/^[A-Za-z0-9_-]{43}$/);
   expect(params.get('state')!.length).toBeGreaterThanOrEqual(22);
@@ -337,4 +344,14 @@ test('signing out revokes the tokens at Auth, deletes the session and ends the A
   expect(cleared(setCookie(out, session))).toBe(true);
   expect(revoked).toContain(refresh);
   expect(await credentialOf(value)).toBeNull();
+}, timeout);
+
+test('every grant names the API resource, so access tokens carry the API audience', async () => {
+  const before = grantResources.length;
+  const { location, session: value } = await signIn('/ja', { expiresIn: 61 });
+  expect(location.searchParams.getAll('resource')).toEqual([resource]);
+  // Within a minute of expiry the next credential use refreshes, naming the same resource.
+  await Bun.sleep(2_200);
+  expect(await credentialOf(value)).toBe(`Bearer ${accessTokens.at(-1)}`);
+  expect(grantResources.slice(before)).toEqual([`authorization_code ${resource}`, `refresh_token ${resource}`]);
 }, timeout);
