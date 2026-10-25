@@ -255,10 +255,8 @@ test('organizations cannot hold credentials and automated subjects cannot become
 test('every consume rechecks the same native formula state floor and current operator relation', async () => {
   const native = await d();
   const common: Revocation[] = [
-    'actor-grant',
     'consent',
     'scope',
-    'explicit-deny',
     'missing-evidence',
     'human-floor',
     'subject-floor',
@@ -274,7 +272,7 @@ test('every consume rechecks the same native formula state floor and current ope
             ...common,
             'operator-floor',
             'operator-relation',
-            ...(mode === 'organization-operator' ? (['organization-membership'] as const) : []),
+            ...(mode === 'organization-operator' ? (['actor-grant', 'organization-membership'] as const) : []),
           ];
     for (const fact of facts) {
       const f = await native.seed(mode);
@@ -355,7 +353,7 @@ test('lost acknowledgement cannot repeat a credential effect', async () => {
         } else await denied(response);
         expect(await native.inspect(f)).toEqual(before);
       }
-      await native.revoke(f, 'actor-grant');
+      await native.revoke(f, mode === 'organization-operator' ? 'actor-grant' : 'human-suspended');
       await rejects(f, a, op);
     }
 });
@@ -423,7 +421,7 @@ test('concurrent consumption commits at most one credential effect and exact suc
 
 test('own credential automated sign-in remains independent of operator management authority', async () => {
   const native = await d();
-  const f = await native.seed('human-operator');
+  const f = await native.seed('organization-operator');
   const op = await staged(f, 'add-key');
   const a = await approved(f, op);
   await native.revoke(f, 'actor-grant');

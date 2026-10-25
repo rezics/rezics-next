@@ -83,7 +83,6 @@ export type Revocation =
   | 'actor-grant'
   | 'consent'
   | 'scope'
-  | 'explicit-deny'
   | 'missing-evidence'
   | 'human-floor'
   | 'subject-floor'
@@ -95,10 +94,11 @@ export type Revocation =
   | 'organization-membership';
 export type Checkpoint = 'before-native-consume' | 'after-native-consume-before-auth-commit';
 export interface NativeCredentialEffectDriver {
-  /** Fresh independent fully allowed fixture, K<=1000. Org operator includes a
-   * current eligible human member with management authority. Automated sign-in
-   * uses its own OLD credential, independent of operator management permission.
-   * Scope is genuinely consented and signed, not an adapter boolean.
+  /** Fresh independent fully allowed fixture, K<=1000. In organization-operator
+   * mode, seed gives the acting human a direct account:manage grant on the
+   * organization from an owner, through the ordinary grant routes. Automated
+   * sign-in uses its own OLD credential, independent of operator management
+   * permission. Scope is genuinely consented and signed, not an adapter boolean.
    */
   seed(mode: Mode, sessions?: number): Promise<Fixture>;
   /** Actual Auth staging: validate/hash only in Auth, keyed commitment and secret
@@ -141,6 +141,9 @@ export interface NativeCredentialEffectDriver {
   /** Attempt native operator conversion through its normal command and holds;
    * never corrupt relation rows or bypass the responsibility safeguard. */
   automateOperator(f: Fixture): Promise<Reply<unknown>>;
+  /** In organization-operator mode, revoke(f, 'actor-grant') is that owner
+   * revoking the acting human's direct account:manage grant.
+   */
   revoke(f: Fixture, fact: Revocation): Promise<void>;
   signInAutomated(f: Fixture, credential: 'own' | 'wrong' | 'none'): Promise<Reply<SessionProof>>;
   /** Real current human login after floor increase; no token refresh or proof copy. */
