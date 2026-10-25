@@ -4,7 +4,7 @@ import { renderToString } from 'react-dom/server';
 import { createKernelClient } from '@rezics/client';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
-import { loadSubjectPage, SubjectPage } from '../src/features/pages/subject.tsx';
+import { loadSubjectPage, SubjectPage, type SubjectActionsInput } from '../src/features/pages/subject.tsx';
 
 const messages = {
   unknown: 'Unknown',
@@ -25,8 +25,13 @@ async function kokoroPage() {
 
 test('the site renders its subject controls in the header actions slot', async () => {
   const page = await kokoroPage();
-  const actions = createElement('button', { type: 'button', 'data-test': 'collect' }, 'Add to collection');
+  const inputs: SubjectActionsInput[] = [];
+  const actions = (subject: SubjectActionsInput) => {
+    inputs.push(subject);
+    return createElement('button', { type: 'button', 'data-test': 'collect' }, 'Add to collection');
+  };
   const html = renderToString(createElement(SubjectPage, { page, locale: 'en', messages, actions }));
+  expect(inputs).toEqual([{ id: kokoro, type: 'schema:Book', locale: 'en' }]);
   expect(html).toMatch(/<div[^>]*data-slot="actions"[^>]*>\s*<button[^>]*data-test="collect"/);
   expect(html.match(/data-test="collect"/g)).toHaveLength(1);
   const heading = html.indexOf('<h1');
