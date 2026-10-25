@@ -168,7 +168,7 @@ export function itemFacts(subjectId: string, input: unknown, _type?: string): Fa
     }
     if (expected && id !== expected) add(`${at}/property/id`, 'invalid_format');
     const val = raw.value;
-    if (!isObject(val) || !['value', 'somevalue', 'novalue'].includes(String(val.type))) {
+    if (!isObject(val) || typeof val.type !== 'string' || !['value', 'somevalue', 'novalue'].includes(val.type)) {
       add(`${at}/value`, 'invalid_format');
       return null;
     }
@@ -201,8 +201,9 @@ export function itemFacts(subjectId: string, input: unknown, _type?: string): Fa
             property: string;
             value: unknown;
           } | null;
-          const rank = entry.rank ?? 'normal';
-          if (!['normal', 'preferred', 'deprecated'].includes(String(rank))) add(`${path}/rank`, 'invalid_format');
+          const rank = entry.rank === undefined ? 'normal' : entry.rank;
+          if (typeof rank !== 'string') add(`${path}/rank`, 'invalid_type');
+          else if (!['normal', 'preferred', 'deprecated'].includes(rank)) add(`${path}/rank`, 'invalid_format');
           const qualifiers: unknown[] = [];
           if (entry.qualifiers !== undefined) {
             if (!Array.isArray(entry.qualifiers)) add(`${path}/qualifiers`, 'invalid_type');
@@ -232,7 +233,8 @@ export function itemFacts(subjectId: string, input: unknown, _type?: string): Fa
               });
             }
           }
-          if (snak) entries.push({ property: prop, rank: String(rank), value: snak.value, qualifiers, references });
+          if (snak && typeof rank === 'string')
+            entries.push({ property: prop, rank, value: snak.value, qualifiers, references });
         });
         drafts.push({ property: prop, entries });
       }
