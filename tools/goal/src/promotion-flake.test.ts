@@ -123,3 +123,26 @@ test('a failing root gate at the head stops the head gate before the acceptance 
     expect(atHead.filter(command => command.startsWith('fixture-acceptance'))).toEqual([]);
   } finally { h.dispose(); }
 });
+
+test('a failing batch publishes its passing prefix to main before it confirms and reverts the culprit', async () => {
+  const h = integrationHarness();
+  try {
+    const alpha = await h.seed('alpha');
+    const beta = await h.seed('beta');
+    const prefix = h.head();
+    const bad = await h.seed('bad');
+    const culpritCommit = h.head();
+    await h.seed('gamma');
+    let mainAtConfirmation: string | undefined;
+    let culpritRuns = 0;
+    await h.promote(async (command, cwd) => {
+      const commit = git(cwd, 'rev-parse', 'HEAD');
+      if (commit === culpritCommit && ++culpritRuns === 2) mainAtConfirmation = h.head('main');
+      return existsSync(`${cwd}/bad`) ? failure : success;
+    });
+    expect(mainAtConfirmation).toBe(prefix);
+    for (const task of [alpha, beta]) expect(h.store.task(task.id).state).toBe('merged');
+    expect(h.store.task(bad.id).currentAttempt).toBe(2);
+    expect(existsSync(`${h.root}/bad`)).toBe(false);
+  } finally { h.dispose(); }
+});
