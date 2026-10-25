@@ -158,6 +158,21 @@ disposable database, creates a recording account with governance authority, sign
 the launch subject through `POST /v1/subjects`, and records reads of that subject and a missing ID. It stops the kernel
 and removes its container on success and failure; it does not use a development kernel or shared database.
 
+Run `bun run screenshots` to capture every story in all eight locales and both themes for review by eye.
+The command builds Storybook once into a temporary directory, serves that build on a free port, and writes a
+full-page PNG after the story has rendered and fonts have loaded. The default viewport is 1280×720 CSS pixels.
+Files are named `<story id>.<locale>.<theme>.png` and land in `.temp/screenshots/` at the repository root.
+A subject-page capture at that viewport is 1280×721 pixels. Choose a story id or glob, and repeat locale and theme,
+with:
+
+```sh
+bun run screenshots [--story <id or glob>] [--locale <code>]... [--theme light|dark]... [--width <px>] [--out <dir>]
+```
+
+The defaults are every story, `en`, `zh-Hant`, `zh-Hans`, `ja`, `ko`, `de`, `fr` and `es`, both `light` and `dark`,
+1280 pixels wide, and `.temp/screenshots/`. The script captures four pages at a time, prints one path per file and
+then the total, and stops the server when it exits.
+
 ## Cost
 
 The web Goal owns this Worker app. These bounds follow `src/server.ts`, `src/routes/`, `src/kernel/`,

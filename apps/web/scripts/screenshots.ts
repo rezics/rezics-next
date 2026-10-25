@@ -1,0 +1,289 @@
+import { stat } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
+import { chromium, type Browser, type Page } from 'playwright';
+
+const app = resolve(import.meta.dir, '..');
+const root = resolve(app, '../..');
+const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'] as const;
+const themes = ['light', 'dark'] as const;
+// Only the width is a command option. 720 is the review viewport height.
+const viewportHeight = 720;
+const captureLimit = 4;
+const buildTimeout = 480_000;
+let building: ReturnType<typeof Bun.spawn> | undefined;
+
+type Theme = (typeof themes)[number];
+type Options = {
+  stories: string[];
+  locales: string[];
+  themes: Theme[];
+  width: number;
+  out: string;
+  help: boolean;
+};
+type Job = { id: string; locale: string; theme: string };
+type StoryPreview = {
+  __STORYBOOK_PREVIEW__?: { currentRender?: { id?: string; phase?: string } };
+};
+
+function usage(): string {
+  return 'Usage: bun run screenshots [--story <id or glob>] [--locale <code>]... [--theme light|dark]... [--width <px>] [--out <dir>]';
+}
+
+function unique<T>(values: readonly T[]): T[] {
+  const seen = new Set<T>();
+  const result: T[] = [];
+  for (const value of values) {
+    if (seen.has(value)) continue;
+    seen.add(value);
+    result.push(value);
+  }
+  return result;
+}
+
+function storyMatches(id: string, pattern: string): boolean {
+  if (!pattern.includes('*') && !pattern.includes('?')) return id === pattern;
+  const expression = `^${pattern
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    .replaceAll('*', '.*')
+    .replaceAll('?', '.')}$`;
+  return new RegExp(expression).test(id);
+}
+
+function parse(argv: readonly string[]): Options {
+  const options: Options = {
+    stories: [],
+    locales: [],
+    themes: [],
+    width: 1280,
+    out: resolve(root, '.temp/screenshots'),
+    help: false,
+  };
+  const take = (flag: string, index: number): string => {
+    const value = argv[index + 1];
+    if (value === undefined || value.startsWith('--')) throw new Error(`${usage()}\nMissing value for ${flag}.`);
+    return value;
+  };
+  for (let index = 0; index < argv.length; index += 1) {
+    const flag = argv[index];
+    if (flag === undefined) continue;
+    if (flag === '--help' || flag === '-h') {
+      options.help = true;
+      continue;
+    }
+    if (flag === '--story') {
+      const story = take(flag, index);
+      index += 1;
+      if (story === '') throw new Error(`${usage()}\nMissing story id.`);
+      options.stories.push(story);
+      continue;
+    }
+    if (flag === '--locale') {
+      const locale = take(flag, index);
+      index += 1;
+      if (locale === '') throw new Error(`${usage()}\nMissing locale code.`);
+      options.locales.push(locale);
+      continue;
+    }
+    if (flag === '--theme') {
+      const theme = take(flag, index);
+      index += 1;
+      if (theme !== 'light' && theme !== 'dark') throw new Error(`${usage()}\nUnknown theme ${theme}.`);
+      options.themes.push(theme);
+      continue;
+    }
+    if (flag === '--width') {
+      const width = Number(take(flag, index));
+      index += 1;
+      if (!Number.isInteger(width) || width <= 0) throw new Error(`${usage()}\nWidth must be a positive integer.`);
+      options.width = width;
+      continue;
+    }
+    if (flag === '--out') {
+      options.out = resolve(take(flag, index));
+      index += 1;
+      continue;
+    }
+    throw new Error(`${usage()}\nUnknown argument ${flag}.`);
+  }
+  if (options.locales.length === 0) options.locales = [...locales];
+  if (options.themes.length === 0) options.themes = [...themes];
+  options.stories = unique(options.stories);
+  options.locales = unique(options.locales);
+  options.themes = unique(options.themes);
+  return options;
+}
+
+function safePath(directory: string, pathname: string): string | undefined {
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(pathname);
+  } catch {
+    return undefined;
+  }
+  const relativePath = decoded.replace(/^\/+/, '');
+  if (relativePath.split('/').includes('..')) return undefined;
+  const target = resolve(directory, relativePath);
+  if (target !== directory && !target.startsWith(`${directory}/`)) return undefined;
+  return target;
+}
+
+function serve(directory: string) {
+  return Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    async fetch(request) {
+      const target = safePath(directory, new URL(request.url).pathname);
+      if (!target) return new Response(null, { status: 400 });
+      const info = await stat(target).catch(() => undefined);
+      if (!info) return new Response(null, { status: 404 });
+      const file = info.isDirectory() ? join(target, 'index.html') : target;
+      if (!(await Bun.file(file).exists())) return new Response(null, { status: 404 });
+      return new Response(Bun.file(file));
+    },
+  });
+}
+
+async function build(directory: string, cacheDir: string): Promise<void> {
+  const storybook = join(app, 'node_modules/.bin/storybook');
+  await mkdir(cacheDir, { recursive: true });
+  const child = Bun.spawn([storybook, 'build', '--output-dir', directory, '--disable-telemetry', '--quiet'], {
+    cwd: app,
+    stdin: 'ignore',
+    stdout: 'pipe',
+    stderr: 'pipe',
+    env: { ...process.env, CI: '1', STORYBOOK_DISABLE_TELEMETRY: '1', CACHE_DIR: cacheDir },
+  });
+  building = child;
+  const output = Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      child.kill();
+      reject(new Error('Storybook build timed out.'));
+    }, buildTimeout);
+  });
+  try {
+    const [stdout, stderr, code] = await Promise.race([output, timeout]);
+    if (code !== 0) throw new Error(`Storybook build failed (${code}):\n${stdout}\n${stderr}`);
+  } finally {
+    clearTimeout(timer);
+    building = undefined;
+  }
+}
+
+async function settle(page: Page, id: string): Promise<void> {
+  await page.waitForFunction(
+    (storyId: string) => {
+      const render = (globalThis as StoryPreview).__STORYBOOK_PREVIEW__?.currentRender;
+      return render?.id === storyId && (render.phase === 'finished' || render.phase === 'errored');
+    },
+    id,
+    { timeout: 60_000 },
+  );
+  const phase = await page.evaluate(() => (globalThis as StoryPreview).__STORYBOOK_PREVIEW__?.currentRender?.phase);
+  if (phase !== 'finished') throw new Error(`Story ${id} ended in phase ${phase ?? 'missing'}.`);
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    if (document.fonts.status !== 'loaded') await document.fonts.ready;
+  });
+}
+
+async function captureOne(page: Page, origin: string, job: Job, out: string): Promise<string> {
+  const url = `${origin}/iframe.html?id=${encodeURIComponent(job.id)}&globals=locale:${job.locale};theme:${job.theme}`;
+  await page.goto(url, { waitUntil: 'load', timeout: 60_000 });
+  await settle(page, job.id);
+  const file = join(out, `${job.id}.${job.locale}.${job.theme}.png`);
+  await page.screenshot({ path: file, type: 'png', fullPage: true, animations: 'disabled', scale: 'css' });
+  return file;
+}
+
+async function capture(
+  browser: Browser,
+  origin: string,
+  jobs: readonly Job[],
+  out: string,
+  width: number,
+): Promise<string[]> {
+  const pages: Page[] = [];
+  for (let index = 0; index < Math.min(captureLimit, jobs.length); index += 1) {
+    const context = await browser.newContext({
+      viewport: { width, height: viewportHeight },
+      deviceScaleFactor: 1,
+      reducedMotion: 'reduce',
+    });
+    pages.push(await context.newPage());
+  }
+  const files = new Array<string>(jobs.length);
+  let cursor = 0;
+  await Promise.all(
+    pages.map(async (page) => {
+      for (;;) {
+        const index = cursor;
+        cursor += 1;
+        if (index >= jobs.length) return;
+        const job = jobs[index];
+        if (!job) return;
+        const file = await captureOne(page, origin, job, out);
+        files[index] = file;
+      }
+    }),
+  );
+  return files.filter((file): file is string => file !== undefined);
+}
+
+async function main(): Promise<void> {
+  const options = parse(process.argv.slice(2));
+  if (options.help) {
+    process.stdout.write(`${usage()}\n`);
+    return;
+  }
+  await mkdir(join(root, '.temp'), { recursive: true });
+  await mkdir(options.out, { recursive: true });
+  const buildDir = await mkdtemp(join(root, '.temp/storybook-build-'));
+  const site = join(buildDir, 'site');
+  let server: ReturnType<typeof Bun.serve> | undefined;
+  let browser: Browser | undefined;
+  let stopped = false;
+  const stop = async () => {
+    if (stopped) return;
+    stopped = true;
+    if (building && building.exitCode === null) building.kill();
+    server?.stop(true);
+    await browser?.close().catch(() => undefined);
+    await rm(buildDir, { recursive: true, force: true }).catch(() => undefined);
+  };
+  for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+    process.on(signal, () => {
+      void stop().finally(() => process.exit(signal === 'SIGINT' ? 130 : 143));
+    });
+  }
+  try {
+    await build(site, join(buildDir, 'cache'));
+    const indexFile = Bun.file(join(site, 'index.json'));
+    if (!(await indexFile.exists())) throw new Error('Storybook build did not write index.json.');
+    const index = (await indexFile.json()) as { entries?: Record<string, { id?: string; type?: string }> };
+    const stories = Object.values(index.entries ?? {})
+      .flatMap((entry) => (entry.type === 'story' && entry.id ? [entry.id] : []))
+      .filter((id) => options.stories.length === 0 || options.stories.some((pattern) => storyMatches(id, pattern)))
+      .sort();
+    if (stories.length === 0) throw new Error('No stories matched.');
+    server = serve(site);
+    const origin = `http://127.0.0.1:${server.port}`;
+    browser = await chromium.launch();
+    const jobs = stories.flatMap((id) =>
+      options.locales.flatMap((locale) => options.themes.map((theme) => ({ id, locale, theme }))),
+    );
+    const files = await capture(browser, origin, jobs, options.out, options.width);
+    for (const file of files) process.stdout.write(`${file}\n`);
+    process.stdout.write(`${files.length}\n`);
+  } finally {
+    await stop();
+  }
+}
+
+main().catch((error: unknown) => {
+  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+  process.exitCode = 1;
+});
