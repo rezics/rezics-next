@@ -32,6 +32,19 @@
         "vite": "8.3.5",
       },
     },
+    "packages/client": {
+      "name": "@rezics/client",
+      "version": "0.1.0",
+      "dependencies": {
+        "@elysia/eden": "2.0.0-rc.0",
+        "@types/pg": "8.23.1",
+        "elysia": "2.0.0-rc.0",
+        "typebox": "1.4.3",
+      },
+      "devDependencies": {
+        "@types/bun": "1.4.4",
+      },
+    },
     "packages/document": {
       "name": "@rezics/document",
       "version": "0.1.0",
@@ -237,6 +250,8 @@
     "@dbmate/win32-x64": ["@dbmate/win32-x64@2.37.0", "", { "os": "win32", "cpu": "x64" }, "sha512-j66FzJqHRkqSA4aa8/Vyik34nXRpyRYKts80+8qchagreXfsrzfsD93IIAqfguAbRfBmDZab0ky0Ud9cf78R9Q=="],
 
     "@dbos-inc/dbos-sdk": ["@dbos-inc/dbos-sdk@5.4.6-preview", "", { "dependencies": { "commander": "^12.0.0", "pg": "^8.11.3", "serialize-error": "^8.1.0", "superjson": "^1.13.3", "yaml": "^2.8.3" }, "peerDependencies": { "@dbos-inc/dbos-enterprise": "*" }, "optionalPeers": ["@dbos-inc/dbos-enterprise"], "bin": { "dbos": "dist/src/cli/cli.js", "dbos-sdk": "dist/src/cli/cli.js" } }, "sha512-91vg0zlcKYw33RB84ABeaBIxIcJ0ndVyggMMM0NRYfltTVsDr/BwDn5CJodTy3LFd3RBBXF+pI+DhRLYpdRHmw=="],
+
+    "@elysia/eden": ["@elysia/eden@2.0.0-rc.0", "", { "peerDependencies": { "elysia": ">= 2.0.0-rc.0" } }, "sha512-Hw2YUjGBzeu+Wr1bflrbQLoFGAHK4sQlKHoKFSWNlfgW39yV5VJqf2G8g8VI5lzVgHFWqu0ldAPVWyhB1aFSRg=="],
 
     "@elysia/openapi": ["@elysia/openapi@2.0.0-rc.0", "", { "peerDependencies": { "elysia": ">= 2.0.0-rc.0" } }, "sha512-IkRdigbDxqZpQzZ9Dg/HpJT2S4SUdRboVZ5umT0uYrUffJTRnb11seetF/gt96xqxbrWSZSlG8pxKtuabJ6NGg=="],
 
@@ -609,6 +624,8 @@
     "@reylosql/postgres": ["@reylosql/postgres@0.5.0", "", {}, "sha512-8LExNyW+CMdcSqXH6gT6Xvmvzpz3fyGRlcZgavmXIiMNpf8PgI+ft0imBufmgW4FsUoxOk7Vzh23duqHS1JmJg=="],
 
     "@rezics/auth": ["@rezics/auth@workspace:services/auth"],
+
+    "@rezics/client": ["@rezics/client@workspace:packages/client"],
 
     "@rezics/document": ["@rezics/document@workspace:packages/document"],
 
