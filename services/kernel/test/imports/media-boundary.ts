@@ -20,8 +20,7 @@ export type SourceFault =
   | 'stream-over-20-mib'
   | 'timeout'
   | 'over-40-megapixels'
-  | 'corrupt-image'
-  | 'temporary-unavailable';
+  | 'corrupt-image';
 export interface MediaBoundaryOptions {
   /** Shared real database, Access, clock and route key; supplied by the API assembly. */
   content: Omit<MediaImportJobDependencies, 'storage' | 'fetchConfig'>;
@@ -47,13 +46,16 @@ export interface NativeMediaObservation {
   events: readonly { type: string; transactionId: string }[];
   variants: readonly (MediaVariant & { bytes: Uint8Array })[];
   original: Uint8Array | null;
-  /** Actual tuple-home reference computed with tupleRoute, not container placement. */
+  /** Actual production fence-read bind parameters, never reconstructed from expected input. */
   fence: SourceFenceTuple;
 }
 export interface MediaBoundary {
   /** Production MediaStorage interface (also implemented by R2Storage), faked here ONLY. */
   configuration: Pick<MediaImportJobDependencies, 'storage' | 'fetchConfig'>;
-  source(host: string, fault?: SourceFault): Promise<SourceFixture>;
+  /** Serve this exact native HTTPS URL. Stream overflow omits Content-Length;
+   * timeout stalls the response. Neither mode changes production limits.
+   */
+  source(url: string, fault?: SourceFault): Promise<SourceFixture>;
   /** Fail one real object-store operation; never fabricate a content job result. */
   failNextPut(): void;
   /** Test facade over real registered dispatch; not a new production queue API.
@@ -63,7 +65,7 @@ export interface MediaBoundary {
   drain(input: { mediaIds: readonly string[]; maxJobs: 16; signal: AbortSignal; redeliver?: boolean }): Promise<void>;
   observe(mediaId: string): Promise<NativeMediaObservation>;
   capture(): Promise<{
-    sourceRequests: readonly { url: string; bytes: number; headers: Headers }[];
+    sourceRequests: readonly { url: string; bytes: number; headers: Headers; responseHeaders: Headers }[];
     liveInternetRequests: readonly string[];
     peakBufferedSourceBytes: number;
     executedJobs: number;
