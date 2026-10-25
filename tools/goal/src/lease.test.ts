@@ -69,7 +69,9 @@ test('concurrent dispatch processes wait for the lifecycle lease to be released'
     const started = await firstReader.read(); firstReader.releaseLock();
     expect(new TextDecoder().decode(started.value).trim()).toBe('acquired');
     second = Bun.spawn([process.execPath, '-e', source], { env: { ...env, HOLD_MS: '0' }, stdout: 'pipe', stderr: 'pipe' });
-    const secondReader = second.stdout.getReader();
+    const secondOutput = second.stdout;
+    if (!secondOutput || typeof secondOutput === 'number') throw new Error('second process stdout was not piped');
+    const secondReader = secondOutput.getReader();
     const acquired = await secondReader.read(); secondReader.releaseLock();
     expect(new TextDecoder().decode(acquired.value).trim()).toBe('acquired');
     expect(await first.exited).toBe(0);
