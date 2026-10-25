@@ -263,8 +263,8 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       throw new AuthenticationError(401, 'Bearer');
   });
 
-  return documentRoutes(
-    reportRoutes(
+  return reportRoutes(
+    documentRoutes(
       mediaImportRoutes(
         mediaModerationRoutes(
           sourceFenceGovernanceRoutes(sourceFenceRoutes(app, dependencies), dependencies),

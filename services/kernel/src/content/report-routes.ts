@@ -7,7 +7,7 @@ import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/re
 import { AuthenticationError } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { MAX_DOCUMENT_BYTES } from './document.ts';
-import type { mediaImportRoutes } from './media-import-routes.ts';
+import type { documentRoutes } from './document-routes.ts';
 import { createReport, readReport, ReportUnavailableError, type ReportDependencies } from './reports.ts';
 import { ReportInputSchema, ReportReceiptSchema, ReportResponseSchema, strictContentSchema } from './schemas.ts';
 
@@ -27,7 +27,7 @@ const readFailures = {
 const privateHeaders = { [SESSION_HEADER]: t.String(), 'cache-control': t.String() };
 
 /** Account transport only. Anonymous front admission is composed separately. */
-export function reportRoutes(app: ReturnType<typeof mediaImportRoutes>, dependencies: ReportDependencies) {
+export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencies: ReportDependencies) {
   const oversized = new WeakSet<Request>();
   app.onTransform(({ request }) => {
     const path = new URL(request.url).pathname;

@@ -409,6 +409,14 @@ test('checkGrowth proves the declared three-scale machine-independent bound', as
   const f = await fixture();
   const db = await openGrowthDatabase(system.database.pool.options.connectionString);
   const grow = async (_db: { admin: Pool }, scale: number, previous: number) => {
+    if (previous === 0) {
+      // Fixed background at the smallest scale gives the native planner realistic
+      // grant statistics. These unrelated resources grant nothing on the target.
+      for (let index = 0; index < 4096; index++) {
+        await provisionGrantAuthority({ kind: 'post', id: newId(routeOf(f.target.id)!) }, ['report:create']);
+      }
+      await _db.admin.query('ANALYZE access.resource_grant');
+    }
     // Setup is outside capture. Same-target distractors exercise the hot reverse-index prefix.
     for (let index = previous; index < scale; index++) {
       const author = await accountActor(system.actors.author.bearer);
