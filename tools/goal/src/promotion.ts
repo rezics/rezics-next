@@ -176,6 +176,11 @@ type PromotionFlakeEvent = {
   initial: PromotionGateResult; confirmation: PromotionGateResult; logs: [string, string];
 };
 type PromotionRunWithFlakes = PromotionRun & { flakeEvents?: PromotionFlakeEvent[] };
+type PromotionProbeRetry = {
+  kind: 'promotion-probe-retry'; taskId: string; commit: string; command: string[];
+  initial: PromotionGateResult; retry: PromotionGateResult; logs: [string, string];
+};
+type PromotionRunWithProbeRetries = PromotionRun & { probeRetries?: PromotionProbeRetry[] };
 
 function dependentClosure(tasks: readonly Task[], culprit: string): string[] {
   const selected = new Set([culprit]);
@@ -229,8 +234,22 @@ async function resolveCulprit(options: PromotionOptions, run: PromotionRun): Pro
   const command = [...(run.failedCommand ?? run.rootGate)];
   const results = new Map<number, PromotionGateResult>();
   const probe = async (index: number): Promise<void> => {
-    const [result] = await gateAt(options, run, run.boundaries[index]!.commit, [command], `prefix-${index}`, 'prefixResults');
-    results.set(index, result!);
+    const boundary = run.boundaries[index]!;
+    const label = `prefix-${index}`;
+    const [initial] = await gateAt(options, run, boundary.commit, [command], label, 'prefixResults');
+    let result = initial!;
+    if (!result.passed && result.firstFailure?.fingerprint !== run.firstFailure?.fingerprint) {
+      const retryLabel = `${label}-retry`;
+      const [retry] = await gateAt(options, run, boundary.commit, [command], retryLabel, 'prefixResults', true);
+      result = retry!;
+      const initialLog = join(options.settings.stateDirectory, `promotion-${run.id}-${label}-0.log`);
+      const retryLog = join(options.settings.stateDirectory, `promotion-${run.id}-${retryLabel}-0.log`);
+      const saved = run as PromotionRunWithProbeRetries;
+      saved.probeRetries = [...(saved.probeRetries ?? []), { kind: 'promotion-probe-retry', taskId: boundary.taskId,
+        commit: boundary.commit, command: [...command], initial: initial!, retry: result, logs: [initialLog, retryLog] }];
+      store.savePromotion(run);
+    }
+    results.set(index, result);
   };
   // A task's own acceptance command only means something from that task on; earlier prefixes cannot be its culprit.
   const owner = run.boundaries.findIndex(boundary =>
