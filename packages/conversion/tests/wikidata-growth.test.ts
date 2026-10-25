@@ -10,17 +10,35 @@ const subjectId = '00000000-0000-4000-8000-000000000001';
 // One generator varies only the explicit source statement population.
 function seed(fields: number) {
   return {
-    id: 'Q571', type: 'item', lastrevid: 7,
+    id: 'Q571',
+    type: 'item',
+    lastrevid: 7,
     labels: { en: { language: 'en', value: 'Growth book' } },
-    aliases: {}, descriptions: {},
+    aliases: {},
+    descriptions: {},
     claims: {
-      P31: [{ type: 'statement', rank: 'normal', mainsnak: {
-        property: 'P31', snaktype: 'value', datatype: 'wikibase-item',
-        datavalue: { type: 'wikibase-entityid', value: { 'entity-type': 'item', 'numeric-id': 47461344, id: 'Q47461344' } },
-      } }],
+      P31: [
+        {
+          type: 'statement',
+          rank: 'normal',
+          mainsnak: {
+            property: 'P31',
+            snaktype: 'value',
+            datatype: 'wikibase-item',
+            datavalue: {
+              type: 'wikibase-entityid',
+              value: { 'entity-type': 'item', 'numeric-id': 47461344, id: 'Q47461344' },
+            },
+          },
+        },
+      ],
       P856: Array.from({ length: fields - 1 }, (_, i) => ({
-        type: 'statement', rank: 'normal', mainsnak: {
-          property: 'P856', snaktype: 'value', datatype: 'url',
+        type: 'statement',
+        rank: 'normal',
+        mainsnak: {
+          property: 'P856',
+          snaktype: 'value',
+          datatype: 'url',
           datavalue: { type: 'string', value: `https://example.org/book/${i}` },
         },
       })),
@@ -59,7 +77,9 @@ test('pure converter growth stays within its declared field and byte cap', () =>
 test('fixed conversion touches zero SQL network or filesystem across unrelated populations', () => {
   const record = seed(8);
   const expected = convertWikidata(input(record), { subjectId });
-  const deny = () => { throw new Error('Unexpected conversion I/O'); };
+  const deny = () => {
+    throw new Error('Unexpected conversion I/O');
+  };
   const guards = [
     spyOn(globalThis, 'fetch').mockImplementation(Object.assign(deny, { preconnect: deny })),
     spyOn(Bun, 'SQL').mockImplementation(deny),
@@ -79,7 +99,9 @@ test('fixed conversion touches zero SQL network or filesystem across unrelated p
       expect(convertWikidata(input(record), { subjectId })).toEqual(expected);
     }
     for (const guard of guards) expect(guard).not.toHaveBeenCalled();
-  } finally { guards.forEach((guard) => guard.mockRestore()); }
+  } finally {
+    guards.forEach((guard) => guard.mockRestore());
+  }
 });
 
 test('source scalars remain sensitive while target registration and private data stay outside the digest', () => {
@@ -91,9 +113,14 @@ test('source scalars remain sensitive while target registration and private data
   expect(JSON.stringify(changed.proposals)).toContain('Changed title');
   const pollution = { ...record, account: { password: 'PRIVATE' }, posts: ['PRIVATE'], converter_revision: 'forged' };
   expect(convertWikidata(input(pollution), { subjectId })).toEqual(changed);
-  const rebound = convertWikidata(input(record), {
-    subjectId: '00000000-0000-4000-8000-000000000002', mediaIds: { ignored: subjectId },
-  }, { converterRevision: 'registered-next' });
+  const rebound = convertWikidata(
+    input(record),
+    {
+      subjectId: '00000000-0000-4000-8000-000000000002',
+      mediaIds: { ignored: subjectId },
+    },
+    { converterRevision: 'registered-next' },
+  );
   expect(rebound.digest).toBe(changed.digest);
   expect(rebound.converter_revision).toBe('registered-next');
   expect(original.converter_revision).toBe(converter_revision);
