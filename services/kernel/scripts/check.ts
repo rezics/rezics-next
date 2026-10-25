@@ -90,7 +90,26 @@ async function main(): Promise<void> {
   run(resolve(directory, '../../node_modules/.bin/tsc'), ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json'], env);
   run(resolve(directory, '../../node_modules/.bin/oxlint'), ['--config', '../../.oxlintrc.json', '.'], env);
   run(resolve(directory, '../../node_modules/.bin/oxfmt'), ['--check', '.'], env);
-  run('bun', ['test'], env);
+
+  const testFiles = Array.from(new Bun.Glob('test/**/*.test.ts').scanSync({ cwd: directory })).sort();
+  for (const [index, file] of testFiles.entries()) {
+    const database = `kernel_test_${index + 1}`;
+    // Each file gets a fresh copy so its result cannot depend on writes from another file.
+    docker([
+      'exec',
+      container,
+      'psql',
+      '-U',
+      'rezics',
+      '-d',
+      'postgres',
+      '-v',
+      'ON_ERROR_STOP=1',
+      '-c',
+      `CREATE DATABASE ${database} TEMPLATE rezics`,
+    ]);
+    run('bun', ['test', `./${file}`], { ...env, DATABASE_URL: url.replace(/\/rezics(?=\?)/, `/${database}`) });
+  }
 }
 
 process.on('SIGINT', () => {

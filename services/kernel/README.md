@@ -11,7 +11,9 @@ and recreate the database, and `bun run db dump` to update the committed schema 
 ## Check
 
 Run `bun run check` from this workspace. It starts a disposable PostgreSQL database, applies migrations and checks the
-schema dump, runs TypeScript, lint and formatting checks, then runs the tests. The test database is removed at the end.
+schema dump, runs TypeScript, lint and formatting checks, then runs each test file on its own copy of the migrated
+database. A plain `bun test` shares one database across files, so run a single file when not running the check. The test
+database is removed at the end.
 
 ## Database changes
 
