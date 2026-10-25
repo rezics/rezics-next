@@ -121,3 +121,40 @@ writeFileSync(resolve(root, 'packages/client/src/kernel/fixture.d.ts'), 'declare
     h.dispose();
   }
 });
+
+test('promotion installs dependencies in the derived worktree before running a generator that needs them', async () => {
+  const h = integrationHarness();
+  try {
+    const route = 'contracts/routes.json';
+    commitFixture(h, {
+      [route]: 'initial route\n',
+      'contracts/openapi.json': 'initial contract\n',
+      '.gitignore': '.temp/\nnode_modules\ninstalled\n',
+      'package.json': JSON.stringify({ name: 'fixture', private: true, scripts: { postinstall: 'touch installed' } }),
+      'services/kernel/package.json': JSON.stringify({
+        private: true,
+        scripts: { derived: 'bun scripts/derived-fixture.ts' },
+      }),
+      'services/kernel/scripts/derived-fixture.ts': `import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+const root = resolve(import.meta.dir, '../../..');
+if (!existsSync(resolve(root, 'installed'))) throw new Error('dependencies are not installed');
+writeFileSync(resolve(root, 'contracts/openapi.json'), 'contract: ' + readFileSync(resolve(root, 'contracts/routes.json'), 'utf8'));
+`,
+    });
+    h.ensureDev();
+    const task = h.dispatch(route);
+    await h.start(task);
+    await h.train(undefined, false);
+    const integrated = h.head();
+
+    await h.promote(async () => ({ passed: true, output: '', timedOut: false }));
+
+    expect(h.head()).not.toBe(integrated);
+    expect(git(h.root, 'show', '-s', '--format=%s', h.head())).toBe('chore: regenerate derived files');
+    expect(h.head('main')).toBe(h.head());
+    expect(h.store.task(task.id).state).toBe('merged');
+  } finally {
+    h.dispose();
+  }
+});

@@ -41,7 +41,9 @@ async function regenerateDerivedHead(options: PromotionOptions, expected: string
     const commands = new Map<string, string[]>();
     for (const file of files) if (tracked.some(path => matchesPath(path, [file.path])))
       commands.set(JSON.stringify(file.command), file.command);
-    for (const command of commands.values()) {
+    // A fresh worktree has no node_modules, and generators such as the kernel's run its installed tools.
+    const install = commands.size && existsSync(join(tree, 'package.json')) ? [['bun', 'install', '--frozen-lockfile']] : [];
+    for (const command of [...install, ...commands.values()]) {
       const result = spawnSync(command[0]!, command.slice(1), { cwd: tree, encoding: 'utf8' });
       const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
       appendFileSync(logPath, `$ ${command.join(' ')} (cwd: ${tree})\n${output}`);
