@@ -355,7 +355,7 @@ async function launchSelection(selected: Awaited<ReturnType<typeof scope>>, paus
   let envelope: Envelope | undefined;
   await readBatch(fixture.pool, {
     partition,
-    consumer: `erasure_${crypto.randomUUID()}`,
+    consumer: `erasure_${crypto.randomUUID().replaceAll('-', '')}`,
     apply: async (envelopes) => {
       envelope = envelopes.find((item) => item.position === source.position);
     },
@@ -454,3 +454,169 @@ for (const revocation of ['grant', 'consent'] as const) {
     ).toEqual([{ availability: 'available' }, { availability: 'available' }]);
   });
 }
+
+test('checkGrowth proves fixed native erasure pages against unrelated and same-partition history', async () => {
+  const { checkGrowth, openGrowthDatabase, seed } = await import('../support/growth.ts');
+  const { pageAuthorErasurePosts, nullErasedRevisionPage, eraseRevisionMedia } =
+    await import('../../src/content/erasure-workflow.ts');
+  const db = await openGrowthDatabase();
+  const selected = await scope(1, 100);
+  await erasePostLogical(
+    { pool: fixture.pool, access: fixture.access, routeKey },
+    selected.actor,
+    { postId: selected.ids[0]!, reason: 'Erase' },
+    context(),
+  );
+  const population = {
+    name: 'erasure-history',
+    hotPartition: partition,
+    rows({ route: seededRoute, ordinal }: { route: number; ordinal: number }) {
+      const thread = newId(seededRoute),
+        post = newId(seededRoute),
+        revision = newId(seededRoute);
+      const media = newId(seededRoute),
+        author = newId(0x1234),
+        board = newId(seededRoute);
+      const body = Buffer.alloc(256, 7);
+      return {
+        'content.thread': [
+          {
+            route: seededRoute,
+            thread_id: thread,
+            board_id: board,
+            author_account_id: author,
+            title: 'Unrelated',
+            visibility: 'published',
+            recorded_transaction_id: thread,
+          },
+        ],
+        'content.post': [
+          {
+            route: seededRoute,
+            thread_id: thread,
+            post_id: post,
+            author_account_id: author,
+            head_revision_id: revision,
+            visibility: 'published',
+            recorded_transaction_id: post,
+          },
+        ],
+        'content.revision': [
+          {
+            route: seededRoute,
+            thread_id: thread,
+            post_id: post,
+            revision_id: revision,
+            body,
+            body_sha256: new Bun.CryptoHasher('sha256').update(body).digest(),
+            search_text: 'Unrelated',
+            licence: 'MIT',
+            subject_ids: [],
+            board_id: board,
+            availability: 'available',
+            recorded_transaction_id: post,
+          },
+        ],
+        'content.media': [
+          {
+            route: seededRoute,
+            media_id: media,
+            container_id: thread,
+            uploader_id: author,
+            reservation_request_id: `seed-${ordinal}`,
+            purpose: 'post-image',
+            state: 'reserved',
+            key: `m/${media}/original`,
+            transaction_id: media,
+          },
+        ],
+      };
+    },
+  };
+  const rollback = new Error('Rollback measured cleanup');
+  try {
+    const report = await checkGrowth(db, {
+      name: 'native content erasure pages',
+      scales: [32, 256, 2048],
+      bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+      grow: (target, scale, previous) => seed(target, population, { from: previous, to: scale }),
+      async operation(target) {
+        try {
+          await runCommand(target.pool, { partition }, async (tx) => {
+            const posts = await pageAuthorErasurePosts(tx, {
+              route,
+              partition_no: partition,
+              operation_id: selected.threadId,
+              initiator_id: selected.actor.accountId,
+              thread_id: selected.threadId,
+              author_id: selected.actor.accountId,
+              after_at: '-infinity',
+              after_id: selected.threadId,
+              upper_at: selected.at,
+              upper_id: selected.ids[0]!,
+            });
+            expect(posts.map((post) => post.post_id)).toEqual(selected.ids);
+            const revisions = await nullErasedRevisionPage(tx, {
+              route,
+              post_id: selected.ids[0]!,
+              after_at: '-infinity',
+              after_id: selected.ids[0]!,
+            });
+            expect(revisions).toHaveLength(100);
+            expect(
+              await eraseRevisionMedia(tx, {
+                route,
+                post_id: selected.ids[0]!,
+                revision_id: revisions[0]!.revision_id,
+              }),
+            ).toEqual([]);
+            throw rollback;
+          });
+        } catch (error) {
+          if (error !== rollback) throw error;
+        }
+      },
+    });
+    expect(report.samples.every((sample) => sample.cost.rows > 0 && sample.cost.blocks > 0)).toBe(true);
+    console.info('Native erasure growth', JSON.stringify(report.samples));
+    // Affected-row and byte growth is deliberate and separate from unrelated
+    // history: every revision has the same 256-byte body and exact parent key.
+    const linearScopes = new Map<number, Awaited<ReturnType<typeof scope>>>();
+    const linear = await checkGrowth(db, {
+      name: 'affected erasure revisions',
+      scales: [1, 8, 64],
+      bounds: { rows: 'linear', statements: 'constant', blocks: 'linear' },
+      async grow(_target, scale) {
+        const value = await scope(1, scale);
+        await erasePostLogical(
+          { pool: fixture.pool, access: fixture.access, routeKey },
+          value.actor,
+          { postId: value.ids[0]!, reason: 'Erase' },
+          context(),
+        );
+        linearScopes.set(scale, value);
+      },
+      async operation(target, scale) {
+        const value = linearScopes.get(scale)!;
+        try {
+          await runCommand(target.pool, { partition }, async (tx) => {
+            expect(
+              await nullErasedRevisionPage(tx, {
+                route,
+                post_id: value.ids[0]!,
+                after_at: '-infinity',
+                after_id: value.ids[0]!,
+              }),
+            ).toHaveLength(scale);
+            throw rollback;
+          });
+        } catch (error) {
+          if (error !== rollback) throw error;
+        }
+      },
+    });
+    console.info('Affected erasure growth', JSON.stringify(linear.samples));
+  } finally {
+    await db.close();
+  }
+});
