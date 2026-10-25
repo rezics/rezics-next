@@ -1,0 +1,14 @@
+{
+  "role": "platform.governance",
+  "actions": [
+    "access:grant",
+    "subject:create",
+    "subject:batch_write",
+    "source_fence:read",
+    "source_fence:takedown",
+    "media:import_from_url",
+    "definitions:publish",
+    "definitions:activate",
+    "context:create"
+  ]
+}

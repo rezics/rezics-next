@@ -38,7 +38,7 @@ test('operator governance bootstrap contract exposes the fixed Global authority 
   expect(JSON.stringify(openApiDocument(app))).not.toMatch(/bootstrap|platform\.governance/i);
 });
 
-test('unimplemented bootstrap fails closed', async () => {
+test('malformed bootstrap input fails closed before I/O', async () => {
   let touched = false;
   const pool = new Proxy({} as Pool, {
     get() {
@@ -46,7 +46,7 @@ test('unimplemented bootstrap fails closed', async () => {
       throw new Error('Unavailable bootstrap must not touch storage');
     },
   });
-  for (const id of [accountId, '', 'root']) {
+  for (const id of ['', 'root']) {
     await expect(bootstrapGovernance(pool, id)).rejects.toBeInstanceOf(BootstrapGovernanceUnavailableError);
   }
   expect(touched).toBe(false);
@@ -103,7 +103,7 @@ test('repository-root CLI requires DATABASE_URL and reports unavailable without 
   }
 });
 
-test('unavailable CLI closes its owned pool without storage I/O', () => {
+test('CLI closes its owned pool when deployment storage is unavailable', () => {
   mkdirSync(resolve(root, '.temp'), { recursive: true });
   const directory = mkdtempSync(resolve(root, '.temp/bootstrap-governance-'));
   try {

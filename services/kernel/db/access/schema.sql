@@ -290,6 +290,21 @@ CREATE TABLE access.account (
 
 
 --
+-- Name: governance_bootstrap; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.governance_bootstrap (
+    route integer NOT NULL,
+    resource_id uuid NOT NULL,
+    account_id uuid NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT governance_bootstrap_check CHECK ((route = ((get_byte(uuid_send(resource_id), 10) * 256) + get_byte(uuid_send(resource_id), 11)))),
+    CONSTRAINT governance_bootstrap_resource_id_check CHECK ((resource_id = '00000000-0000-8000-8000-000000000000'::uuid)),
+    CONSTRAINT governance_bootstrap_route_check CHECK ((route = 0))
+);
+
+
+--
 -- Name: handle_claim; Type: TABLE; Schema: access; Owner: -
 --
 
@@ -699,6 +714,14 @@ CREATE UNLOGGED TABLE access.write_rate_counter (
 
 ALTER TABLE ONLY access.account
     ADD CONSTRAINT account_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: governance_bootstrap governance_bootstrap_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.governance_bootstrap
+    ADD CONSTRAINT governance_bootstrap_pkey PRIMARY KEY (route, resource_id);
 
 
 --

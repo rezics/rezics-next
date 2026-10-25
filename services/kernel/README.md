@@ -42,6 +42,53 @@ and `https://api.rezics.test` in tests. Verification still uses standard JOSE,
 cached public keys and current account state, epoch floor and fence checks;
 failures retain the `invalid_token` response.
 
+## First governance grant
+
+An operator with deployment database access can grant platform governance to one explicitly named,
+already active human account. From the repository root, run:
+
+```sh
+DATABASE_URL='postgres://...' bun services/kernel/scripts/bootstrap-governance.ts --account <id>
+```
+
+`DATABASE_URL` must name the migrated deployment database, including its seeded Global Context at route 0,
+`00000000-0000-8000-8000-000000000000`. The command registers Reylo before dynamically importing SQL-bearing
+code, so the root invocation needs neither a preload flag nor the kernel workspace's Bun configuration.
+Malformed arguments fail before database access. Missing, pending, suspended, deleted, organization, automated
+and authentication-fenced accounts refuse. No HTTP route, Auth signing key or first-user inference participates.
+
+The native Global-partition command commits a durable one-time marker, one ordinary `platform.governance`
+resource role grant and one `com.rezics.access.governance.bootstrapped.v1` audit/outbox event together.
+The audit contains only the governance account, Global resource and role. Repeating the same account is a no-op;
+another account refuses. The marker survives grant revocation, so rerunning the command cannot restore rights.
+Concurrent invocations select one winner, and a failed commit leaves none of these effects.
+
+The role expands from `src/access/platform-governance.json`, intersected once at app composition with its trusted
+mounted action catalogue. Missing modules contribute no callable actions. All other role validation stays strict.
+Later delegation and revocation use ordinary grant commands: the grantor needs management and every delegated
+action on Global, with actual client scopes as a separate ceiling. Governance grants imply no rights on other
+resources, including resources owned by that person or routed to the same partition.
+
+Account lifecycle and Auth credential establishment precede this operation. The native tests compose registration
+receipt verification, Auth provisioning evidence and lifecycle activation directly. The host still needs to carry
+exact pending receipt metadata through its provisioning composition: the generic `createAuthBindings` identity
+approval alone does not supply that metadata. Bootstrap consumes the resulting committed active human account;
+it adds no public registration or client flow.
+
+Derived cost: with `R = N + U*t + M`, each attempt reads the exact named account on its anchor at the native
+attempt's authoritative time, releases that connection, then seeks the existing Global row and marker key.
+First installation changes one marker, one role row and one audit event, plus the normal partition fence.
+A no-op or refusal reads the marker and writes no receipt, grant, fence or event. Rows and statements are constant;
+native index buffers are `O(log R)`. Role expansion is bounded by the explicit action data at composition and
+creates no per-action governance rows. There is no account scan or cross-partition transaction.
+
+The shared 1x/8x/64x growth checks grow accounts, community contexts, same-Global unrelated grants, unrelated
+receipts, same-account receipt history and outbox history at fixed actions. Warm native attempts use 5 statements
+for first installation and 3 for no-op/refusal; cold exact CLI processes use 9 and 5 respectively, including Reylo's
+fixed schema-catalogue validation. Both paths check constant examined rows/statements and logarithmic shared
+buffers using native `auto_explain`, without wall-clock bounds or planner forcing. This adds no recurring global
+hotspot beyond the fixed platform resource's intentional one-time installation.
+
 ## Durable work
 
 Run `bun run worker` for the kernel's single durable-work process. It requires `DATABASE_URL` and accepts

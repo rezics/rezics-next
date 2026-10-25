@@ -1,9 +1,11 @@
 import type { Access, ActionCatalogue } from '../request/access.ts';
 import defaults from './resource-roles.json';
+import governance from './platform-governance.json';
 
 /** Trusted composition-root data, never request JSON. Organization owner/member
  * membership roles are unrelated to these resource-local grant role identifiers.
- * Definitions must resolve entirely against mounted OpenAPI x-action metadata.
+ * Arbitrary definitions must resolve entirely against mounted action metadata.
+ * The reserved governance role is composed from explicit platform action data.
  */
 export type ResourceRoleCatalogue = Readonly<{
   roles: Readonly<Record<string, readonly string[]>>;
@@ -26,7 +28,12 @@ export function resolveResourceRoles(
   actions: ActionCatalogue,
   extension?: ResourceRoleCatalogue,
 ): ResolvedResourceRoles {
-  const definitions: Record<string, readonly string[]> = { ...defaults.roles };
+  const definitions: Record<string, readonly string[]> = {
+    ...defaults.roles,
+    // Only this reserved built-in role is composed from mounted platform gates.
+    // Arbitrary roles still require every declared action to be mounted below.
+    [governance.role]: governance.actions.filter((action) => actions.has(action)),
+  };
   const templates: Record<string, ResourceRoleTemplate> = { ...defaults.types };
   for (const [role, values] of Object.entries(extension?.roles ?? {})) {
     if (Object.hasOwn(definitions, role)) throw new TypeError('Duplicate resource role definition');

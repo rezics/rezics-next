@@ -1,7 +1,8 @@
 import type { Access, ActionCatalogue } from '../request/access.ts';
 /** Trusted composition-root data, never request JSON. Organization owner/member
  * membership roles are unrelated to these resource-local grant role identifiers.
- * Definitions must resolve entirely against mounted OpenAPI x-action metadata.
+ * Arbitrary definitions must resolve entirely against mounted action metadata.
+ * The reserved governance role is composed from explicit platform action data.
  */
 export type ResourceRoleCatalogue = Readonly<{
     roles: Readonly<Record<string, readonly string[]>>;

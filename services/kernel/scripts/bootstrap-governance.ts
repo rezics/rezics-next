@@ -1,4 +1,3 @@
-import 'reylo/register';
 import { createPool } from '../src/database/pool.ts';
 import { routeOf } from '../src/route/route.ts';
 
@@ -17,7 +16,10 @@ async function main(): Promise<void> {
   const { accountId } = parseBootstrapGovernanceArgs(process.argv.slice(2));
   const url = process.env.DATABASE_URL;
   if (!url?.trim()) throw new Error('DATABASE_URL is required');
-  // Load command SQL only after the repository's Reylo runtime has registered.
+  // Root Bun invocations do not load services/kernel/bunfig.toml. Register the
+  // native SQL loader explicitly, then import the SQL-bearing module dynamically;
+  // a static import would be linked before this runtime registration executes.
+  await import('reylo/register');
   const { bootstrapGovernance } = await import('../src/access/bootstrap-governance.ts');
   const pool = createPool(url);
   try {
