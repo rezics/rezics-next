@@ -11,7 +11,7 @@ import { customMethod } from '../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
-import { AuthenticationError, type Access } from '../request/access.ts';
+import { AuthenticationError, type Access, type AccessClient } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import {
@@ -27,6 +27,7 @@ import {
 import { claimSpaceAddress, readSpaceAddress, SpaceAddressConflictError } from './space-address.ts';
 import { createRealm, RealmConflictError, RealmInputError, updateRealm, type RealmDependencies } from './realm.ts';
 import { readRealm, setBoardScheme, type Realm } from './board-scheme.ts';
+import { createRealmParticipationCheck } from './participation.ts';
 import {
   listPublications,
   publish,
@@ -562,6 +563,49 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         const representation = publishedRealm(current);
         set.headers.etag = JSON.stringify(representation.headRevisionId);
         return { realm: representation };
+      },
+    )
+    .get(
+      '/v1/realms/:realmId/participation',
+      {
+        params: realmParams,
+        response: {
+          204: t.Void(),
+          ...readFailures,
+          403: problemSchema('forbidden'),
+          429: problemSchema('rate_limited'),
+          503: problemSchema(
+            'overloaded',
+            'deadline_exceeded',
+            'partition_unavailable',
+            'transaction_retry_exhausted',
+            'dependency_unavailable',
+            'rate_limit_unavailable',
+          ),
+        },
+        detail: {
+          operationId: 'realm.participation',
+          'x-exposure': 'public',
+          'x-action': 'realm:participate',
+          'x-rate-limit': writeRate,
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { realmId }, actor, admission, job, set }) => {
+        const allowed = await admission.run('normal', job, () =>
+          createRealmParticipationCheck({ pool: dependencies.pool, access: dependencies.access() })(
+            dependencies.pool as unknown as AccessClient,
+            { realmId, actor },
+          ),
+        );
+        if (!allowed) {
+          const readable = await admission.run('normal', job, () =>
+            readRealm(realmDependencies(), actor, realmId, { deadline: job.deadline }),
+          );
+          if (!readable) throw new ProblemError('not_found');
+          throw new ProblemError('forbidden');
+        }
+        set.status = 204;
       },
     )
     .patch(

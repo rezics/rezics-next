@@ -1,6 +1,8 @@
 {
   "roles": {
+    "community.realm.standing": ["realm:participate"],
     "community.realm.owner": ["realm:read", "realm:manage", "realm:publish", "board:create", "access:grant"],
+    "community.realm.member": ["realm:read", "realm:participate"],
     "community.realm.moderator": ["realm:read", "realm:publish", "board:create"],
     "community.space.owner": ["space:read", "space:manage"],
     "community.space.standing": ["space:read"],
@@ -21,7 +23,7 @@
   "types": {
     "community.realm": {
       "owner": "community.realm.owner",
-      "standing": []
+      "standing": ["community.realm.standing"]
     },
     "community.space": {
       "owner": "community.space.owner",

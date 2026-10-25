@@ -25,6 +25,7 @@ import { withConnection } from '../database/pool.ts';
 import { accessCheck, type Access, type Actor, type Resource } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { publicContextEligibility } from '../semantic/context.ts';
+import { ensureRealmMemberGrant } from './participation.ts';
 import type { SpaceDependencies, SpaceContext } from './space.ts';
 import read from './realm-read.sql';
 import insert from './realm-insert.sql';
@@ -410,6 +411,7 @@ export async function updateRealm(deps: RealmDependencies, actor: Actor, input: 
         }))
       )
         throw new RealmConflictError();
+      if (visibility === 'protected') await ensureRealmMemberGrant(tx, { realmId: body.realmId });
       return {
         value: { realmId: body.realmId, revisionId: revision },
         events: [

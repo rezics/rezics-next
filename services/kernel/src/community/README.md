@@ -2,7 +2,7 @@
 
 A Space is the stable, routed identity for a future Realm (community) or Zone (site).
 Its metadata is an append-only revision chain; the Space points to its current head.
-This module provides commands and point reads. HTTP composition belongs to a later module change.
+This module provides commands, point reads and HTTP routes.
 
 `createSpace` derives its route from the authenticated account and idempotency key.
 It requires `space:create` on the Global Context through `parentCreationAuthorization`.
@@ -52,12 +52,25 @@ metadata and rechecks any supplied Context. Visibility and classification on the
 identity must agree with its head; a deferred foreign key enforces this in PostgreSQL.
 Realm identity, host and creation provenance are immutable, and revisions are append-only.
 
-`community.realm.owner` grants only `realm:read` and `realm:manage`. The role template
-has no per-resource visibility condition, so Realm creation installs no standing role.
-`realmReadEligibility` instead supplies anonymous public eligibility only while the
-current Realm is public. `readRealm(deps, actor, realmId, { deadline })` performs the
-head read inside that eligibility verification at Access's authoritative T. A protected
-Realm requires a native `realm:read` grant; denied and missing reads both return null.
+`community.realm.owner` grants `realm:read` and `realm:manage`. The standing role grants
+active accounts `realm:participate`; `community.realm.member` grants both `realm:read`
+and `realm:participate` through the Realm's `member` group. `realmReadEligibility`
+supplies public read eligibility only while the current Realm is public.
+`readRealm(deps, actor, realmId, { deadline })` performs the head read inside that
+eligibility verification at Access's authoritative T. A protected Realm requires a
+native `realm:read` grant; denied and missing reads both return null.
+
+`createRealmParticipationCheck({ pool, access })` checks `realm:participate` and the
+independent `realm:read` anchor at one T. The read anchor ensures that the standing
+participation grant cannot expose a protected Realm to a non-member. The
+`GET /v1/realms/{realmId}/participation` route returns 204 when both checks pass, 403
+when a readable Realm denies participation and the ordinary 404 when the Realm cannot
+be read. A `realm_ban` denial applies to `realm:participate` even when the Realm is public.
+
+`ensureRealmMemberGrant(tx, { realmId })` installs the identity role grant for the Realm's
+`member` group only while that Realm is protected. It is idempotent and requires the
+current command to target that exact Realm. `updateRealm` calls it after moving the head
+when the new visibility is protected, in the same transaction as `realm.updated`.
 
 ## Cost
 
@@ -152,3 +165,15 @@ A missing Realm, or one that is not yet active at T, has no proof.
 | Publish membership      | One Realm point read at T, one interval open or close, and at most one terminal insert in the Realm partition, plus A | O(1) rows, O(log R) blocks, plus A | `growth-membership.test.ts`: a fixed probe at 2048, 8192 and 32768 members of other Realms and accounts; constant rows and statements, zero sequential scans |
 | Read terminal or change | One point read, on the terminal primary key or `realm_member_change`                                                  | O(1) rows, O(log R) blocks         | The same fixed probe and scales                                                                                                                              |
 | Role proof              | Two membership index seeks (the temporal primary key and `realm_member_next`) plus the Realm existence point          | O(1) rows, O(log R) blocks         | The same fixed probe and scales                                                                                                                              |
+
+### Check Realm participation
+
+- Touches: One Access evaluation for `realm:participate`, one `realm:read` eligibility check, and one exact Realm head read at their shared T.
+- Bound: O(1) rows and statements plus Access's bounded membership proof; O(log R) blocks.
+- Growth check: `participation.test.ts` keeps the fixed protected Realm probe at 2048, 8192 and 32768 Realms, members and grants; constant rows/statements and zero sequential scans.
+
+### Ensure protected Realm member grant
+
+- Touches: One exact Realm head read and one idempotent `resource_role_grant` insert in the Realm command transaction.
+- Bound: O(1) rows and statements; O(log R) blocks.
+- Growth check: `participation.test.ts` asserts one group grant after protection and uses the same bounded 2048, 8192 and 32768 population checks.
