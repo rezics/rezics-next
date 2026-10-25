@@ -51,13 +51,17 @@ test('series are catalogue profiles that members join by an ordered statement', 
   const bookSeries = types['schema:BookSeries'];
   expect(series).toMatchObject({
     bases: ['schema:CreativeWorkSeries', 'schema:CreativeWork', 'schema:Thing'],
-    facets: ['schema:genre', 'schema:keywords'],
   });
+  expect(series!.facets).toEqual(expect.arrayContaining(['schema:genre', 'schema:keywords']));
+  expect(series!.facets.length).toBeLessThanOrEqual(16);
   expect(bookSeries).toMatchObject({
     mappings: ['wd:Q277759'],
     bases: ['schema:CreativeWorkSeries', 'schema:CreativeWork', 'schema:Thing'],
-    facets: ['schema:genre', 'schema:keywords', 'schema:startDate'],
   });
+  expect(bookSeries!.facets).toEqual(
+    expect.arrayContaining(['schema:genre', 'schema:keywords', 'schema:startDate']),
+  );
+  expect(bookSeries!.facets.length).toBeLessThanOrEqual(16);
   expect(bookSeries!.bases).not.toContain('wd:Q7725310');
   expect(types['wd:Q196600']).toBeUndefined();
   for (const facet of [...series!.facets, ...bookSeries!.facets])

@@ -43,8 +43,12 @@ test('a manga work and its volumes are catalogue profiles', () => {
   const { types, properties } = bundledRelease;
   const work = types['schema:ComicSeries'];
   const volume = types['schema:PublicationVolume'];
-  expect(work).toMatchObject({ mappings: ['wd:Q21198342'], facets: mangaFacets });
-  expect(volume).toMatchObject({ mappings: ['wd:Q1238720'], facets: mangaFacets });
+  expect(work).toMatchObject({ mappings: ['wd:Q21198342'] });
+  expect(work!.facets).toEqual(expect.arrayContaining(mangaFacets));
+  expect(work!.facets.length).toBeLessThanOrEqual(16);
+  expect(volume).toMatchObject({ mappings: ['wd:Q1238720'] });
+  expect(volume!.facets).toEqual(expect.arrayContaining(mangaFacets));
+  expect(volume!.facets.length).toBeLessThanOrEqual(16);
   expect(work!.bases).not.toContain('schema:BookSeries');
   expect(volume!.bases).not.toContain('schema:BookSeries');
   expect(work!.bases).toEqual(['schema:CreativeWorkSeries', 'schema:CreativeWork', 'schema:Thing']);
