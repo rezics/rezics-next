@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { checkMediaImportRequest, type MediaImportRequest } from '@rezics/definitions/media-import';
-import { checkMediaObject } from '../../src/content/cover-reference.ts';
-import { newId } from '../../src/route/route.ts';
+import { claimCoverMedia, checkMediaObject } from '../../src/content/cover-reference.ts';
+import { runCommand } from '../../src/command/command.ts';
+import type { ClaimMediaInput } from '../../src/content/media.ts';
+import { newId, partitionOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -213,3 +215,135 @@ test('exact cover lookup has bounded actual rows, statements and buffers among s
     expect(sample.cost.blocks).toBeGreaterThan(0);
   }
 }, 60000);
+
+// These hook tests trust the referencing command's prior authorization. Shared Access,
+// semantic proposal persistence and final disclosure remain integration requirements.
+function claimInput(id: string): Extract<ClaimMediaInput, { reference: unknown }> {
+  return {
+    mediaIds: [id],
+    containerId,
+    author: {
+      kind: 'account',
+      accountId: uploaderId,
+      clientId: 'cover-importer',
+      scopes: [],
+      requestedBy: null,
+      authnEpoch: 0,
+    },
+    reference: { kind: 'semantic_candidate', subjectId: containerId, candidateId: newId(route), revision: 7 },
+  };
+}
+const commandOptions = {
+  partition: partitionOf(route),
+  basis: { actorAccountId: uploaderId, clientId: 'cover-importer', requestedBy: null },
+};
+const claimEvent = { type: 'com.rezics.test.cover_claimed.v1', data: {} };
+async function claimedAt(id: string) {
+  return (await db.admin.query('SELECT claimed_at FROM content.media WHERE route=$1 AND media_id=$2', [route, id]))
+    .rows[0].claimed_at;
+}
+
+test('cover claim uses a live referencing command, locks the exact row and rolls back with proposal failure', async () => {
+  const id = await available();
+  const input = claimInput(id);
+  await expect(claimCoverMedia(db.admin, input)).rejects.toThrow('live command');
+  const proposalFailure = new Error('proposal rejected after claim');
+  await expect(
+    runCommand(db.pool, commandOptions, async (tx) => {
+      await claimCoverMedia(tx, input);
+      const contender = await db.admin.connect();
+      try {
+        await contender.query('BEGIN');
+        await expect(
+          contender.query('SELECT media_id FROM content.media WHERE route=$1 AND media_id=$2 FOR UPDATE NOWAIT', [
+            route,
+            id,
+          ]),
+        ).rejects.toMatchObject({ code: '55P03' });
+      } finally {
+        await contender.query('ROLLBACK');
+        contender.release();
+      }
+      throw proposalFailure;
+    }),
+  ).rejects.toBe(proposalFailure);
+  expect(await claimedAt(id)).toBeNull();
+  await runCommand(db.pool, commandOptions, async (tx) => {
+    await claimCoverMedia(tx, input);
+    return { value: null, events: [claimEvent] };
+  });
+  const firstClaim = await claimedAt(id);
+  expect(firstClaim).not.toBeNull();
+  await runCommand(db.pool, commandOptions, async (tx) => {
+    await claimCoverMedia(tx, input);
+    return { value: null, events: [claimEvent] };
+  });
+  expect(await claimedAt(id)).toEqual(firstClaim);
+});
+
+test('cover claims deny mismatched author, current container, native revision, route and actual command partition', async () => {
+  const id = await available();
+  const input = claimInput(id);
+  const invalid = [
+    { ...input, author: { ...input.author, kind: 'anonymous' as const } },
+    { ...input, author: { ...input.author, kind: 'account' as const, accountId: newId(route) } },
+    { ...input, containerId: newId(route) },
+    { ...input, reference: { ...input.reference, revision: 0 } },
+    { ...input, reference: { ...input.reference, candidateId: newId(route + 16) } },
+    { ...input, reference: { ...input.reference, subjectId: newId(route + 16) } },
+    { ...input, mediaIds: [id, newId(route + 16)] },
+    { ...input, mediaIds: Array.from({ length: 33 }, () => newId(route)) },
+  ];
+  for (const candidate of invalid) {
+    await expect(
+      runCommand(db.pool, commandOptions, async (tx) => {
+        await claimCoverMedia(tx, candidate);
+        return { value: null, events: [claimEvent] };
+      }),
+    ).rejects.toThrow();
+    expect(await claimedAt(id)).toBeNull();
+  }
+  // An object and valid input in one partition cannot be claimed by a live command in another.
+  await expect(
+    runCommand(db.pool, { ...commandOptions, partition: partitionOf(route + 16) }, async (tx) => {
+      await claimCoverMedia(tx, input);
+      return { value: null, events: [claimEvent] };
+    }),
+  ).rejects.toThrow();
+  expect(await claimedAt(id)).toBeNull();
+  const otherUploader = await available();
+  await db.admin.query('UPDATE content.media SET uploader_id=$3 WHERE route=$1 AND media_id=$2', [
+    route,
+    otherUploader,
+    newId(route),
+  ]);
+  await expect(
+    runCommand(db.pool, commandOptions, async (tx) => {
+      await claimCoverMedia(tx, { ...input, mediaIds: [id, otherUploader] });
+      return { value: null, events: [claimEvent] };
+    }),
+  ).rejects.toThrow();
+  expect(await claimedAt(id)).toBeNull();
+});
+
+test('cover claim rejects every unavailable state and wrong purpose inside a native command', async () => {
+  for (const assignment of [
+    "state='uploaded'",
+    "state='rejected', decision='invalid_image'",
+    'erased=true',
+    'collection_pending=true',
+    'taken_down=true, security_revision=1',
+    "purpose='post-image'",
+    "credit=jsonb_set(credit,'{license}','\"unknown\"')",
+  ]) {
+    const id = await available();
+    await db.admin.query(`UPDATE content.media SET ${assignment} WHERE route=$1 AND media_id=$2`, [route, id]);
+    await expect(
+      runCommand(db.pool, commandOptions, async (tx) => {
+        await claimCoverMedia(tx, claimInput(id));
+        return { value: null, events: [claimEvent] };
+      }),
+    ).rejects.toThrow();
+    expect(await claimedAt(id)).toBeNull();
+  }
+});

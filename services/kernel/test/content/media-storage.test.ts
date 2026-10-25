@@ -162,6 +162,11 @@ test('content media tables expose route-leading identity, lifecycle, and variant
     'transaction_id',
     'erased',
     'collection_pending',
+    'source_url',
+    'credit',
+    'provenance',
+    'taken_down',
+    'security_revision',
   ]);
   expect(columns.filter((column) => column.table_name === 'media_variant').map((column) => column.column_name)).toEqual(
     [
@@ -185,14 +190,14 @@ test('content media tables expose route-leading identity, lifecycle, and variant
     'media.uploader_id',
     'media.reservation_request_id',
     'media.purpose',
-    'media.media_type',
-    'media.byte_count',
     'media.state',
     'media.key',
     'media.created_at',
     'media.transaction_id',
     'media.erased',
     'media.collection_pending',
+    'media.taken_down',
+    'media.security_revision',
     'media_variant.route',
     'media_variant.media_id',
     'media_variant.format',
@@ -206,6 +211,11 @@ test('content media tables expose route-leading identity, lifecycle, and variant
   ])
     expect(nullability.get(name)).toBe('NO');
   for (const name of [
+    'media.media_type',
+    'media.byte_count',
+    'media.source_url',
+    'media.credit',
+    'media.provenance',
     'media.declared_sha256',
     'media.actual_byte_count',
     'media.sha256',
