@@ -2,6 +2,7 @@ import { createAccess } from '../access/index.ts';
 import resourceRoles from '../access/resource-roles.json';
 import { readMembershipRouteKey } from '../access/membership-work-config.ts';
 import { createAuthConsentReader, type CurrentConsentReader } from '../access/auth-consent.ts';
+import type { KernelClock } from '../clock.ts';
 import { contentEffects } from './relays.ts';
 import type { WorkModule } from '../work/registry.ts';
 import type { MediaStorage } from './media-storage.ts';
@@ -12,14 +13,16 @@ import { readContentWorkConfig, type ContentWorkConfig } from './work-config.ts'
 
 /** Resolve the shared role catalogue in full; a partial action catalogue would
  * disable owner roles containing actions in addition to post:erase. This private
- * worker Access instance restores native initiators, never HTTP credentials. */
-export function createContentWorkAccess() {
+ * worker Access instance restores native initiators, never HTTP credentials.
+ * Reads outside a command bind this kernel clock. */
+export function createContentWorkAccess(clock: KernelClock) {
   return createAccess({
     actions: new Map(
       Object.values(resourceRoles.roles)
         .flat()
         .map((action) => [action, { anonymous: false }]),
     ),
+    clock,
   });
 }
 
@@ -90,7 +93,7 @@ export const registerContent: WorkModule = {
     }
     await createContentWork({
       storage: dependencies.storage,
-      access: createContentWorkAccess(),
+      access: createContentWorkAccess(context.clock),
       readConsent: dependencies.readConsent,
       routeKey: readMembershipRouteKey(context.env),
       fetchConfig: dependencies.fetchConfig,

@@ -26,6 +26,7 @@ import { eraseStandaloneMedia } from '../../src/content/moderation.ts';
 import { decideDownload } from '../../src/content/media.ts';
 import { runCommand } from '../../src/command/command.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { systemClock } from '../../src/clock.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { KERNEL_WORK_MODULES } from '../../src/work/modules.ts';
 import { WORK_QUEUES } from '../../src/work/queues.ts';
@@ -63,7 +64,9 @@ if (process.argv.includes('--content-worker')) {
           fetch,
         }),
         collectionPartitions: [partition],
-        access: createContentWorkAccess(),
+        access: createContentWorkAccess(
+          process.env.CONTENT_TEST_NOW ? () => new Date(process.env.CONTENT_TEST_NOW!) : systemClock,
+        ),
         readConsent: createAuthConsentReader({
           url: `${process.env.CONTENT_TEST_CONSENT ?? 'http://127.0.0.1:1'}/internal/v1/consents:read`,
           serviceTokenId: 'fixture.access',

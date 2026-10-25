@@ -58,7 +58,9 @@ test("the content worker's Access sees a grant written at a command's T on a clo
     alg: 'ES256',
     use: 'sig',
   };
-  const fetchKeys = spyOn(globalThis, 'fetch').mockImplementation(async () => Response.json({ keys: [publicKey] }));
+  const fetchKeys = spyOn(globalThis, 'fetch').mockImplementation(
+    Object.assign(async () => Response.json({ keys: [publicKey] }), { preconnect() {} }),
+  );
   const previous = {
     issuer: process.env.AUTH_ISSUER,
     audience: process.env.AUTH_AUDIENCE,
