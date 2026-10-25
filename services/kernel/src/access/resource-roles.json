@@ -1,5 +1,6 @@
 {
   "roles": {
+    "community.realm.owner": ["realm:read", "realm:manage"],
     "community.space.owner": ["space:read", "space:manage"],
     "community.space.standing": ["space:read"],
     "content.board.owner": ["board:read", "board:manage", "thread:create"],
@@ -14,6 +15,10 @@
     "commerce.payout.owner": ["payout_statement:list", "payout_statement:read"]
   },
   "types": {
+    "community.realm": {
+      "owner": "community.realm.owner",
+      "standing": []
+    },
     "community.space": {
       "owner": "community.space.owner",
       "standing": ["community.space.standing"]

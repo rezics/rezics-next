@@ -1,0 +1,425 @@
+import { createHash } from 'node:crypto';
+import canonicalize from 'canonicalize';
+import {
+  createResourcePublicEligibility,
+  initializeResourceGrants,
+  parentCreationAuthorization,
+  resourceAuthorization,
+  type ResourceEligibility,
+} from '../access/index.ts';
+import { accessCommandAttempt } from '../access/command-admission.ts';
+import { deadlineClient, within } from '../access/authenticate.ts';
+import { GrantDeniedError } from '../access/grant-commands.ts';
+import { permissionEvidenceDeadline } from '../access/permission.ts';
+import { installResourceRoleCatalogue, resourceRoleCatalogue } from '../access/resource-roles.ts';
+import {
+  authoritativeTimeValue,
+  principalCommandIdentity,
+  runCommand,
+  type AuthoritativeTime,
+  type CommandAuthorization,
+  type CommandTransaction,
+} from '../command/command.ts';
+import { platformRootAnchor } from '../commerce/catalogue.ts';
+import { withConnection } from '../database/pool.ts';
+import { accessCheck, type Access, type Actor, type Resource } from '../request/access.ts';
+import { newId, partitionOf, routeOf } from '../route/route.ts';
+import { publicContextEligibility } from '../semantic/context.ts';
+import type { SpaceDependencies, SpaceContext } from './space.ts';
+import read from './realm-read.sql';
+import insert from './realm-insert.sql';
+import append from './realm-revision.sql';
+import moveHead from './realm-head.sql';
+import host from './realm-space.sql';
+
+export type RealmDependencies = SpaceDependencies;
+export type RealmContext = SpaceContext;
+export type RealmInput = Readonly<{
+  spaceId: string;
+  title: string;
+  summary?: string;
+  visibility: 'public' | 'protected';
+  contextId: string;
+}>;
+export type RealmUpdate = Readonly<{
+  realmId: string;
+  expectedHead: string;
+  title?: string;
+  summary?: string;
+  visibility?: 'public' | 'protected';
+  contextId?: string;
+}>;
+type RealmRow = NonNullable<Awaited<ReturnType<typeof read.run>>>;
+export type Realm = Readonly<{
+  realmId: string;
+  spaceId: string;
+  state: string;
+  visibility: string;
+  contextId: string;
+  headRevisionId: string;
+  createdAt: string;
+  creator: string;
+  predecessor: string | null;
+  title: string;
+  summary: string;
+  revisionCreatedAt: string;
+  author: string;
+}>;
+export class RealmConflictError extends Error {
+  constructor() {
+    super('Realm head has changed');
+    this.name = 'RealmConflictError';
+  }
+}
+export class RealmInputError extends Error {
+  constructor() {
+    super('Invalid Realm metadata or revision identity');
+    this.name = 'RealmInputError';
+  }
+}
+function account(actor: Actor) {
+  if (actor.kind !== 'account') throw new GrantDeniedError();
+  return actor;
+}
+function metadata(title: unknown, summary: unknown, visibility: unknown, contextId: string) {
+  if (
+    typeof title !== 'string' ||
+    [...title].length < 1 ||
+    [...title].length > 1024 ||
+    typeof summary !== 'string' ||
+    [...summary].length > 4096 ||
+    title.includes('\0') ||
+    summary.includes('\0') ||
+    (visibility !== 'public' && visibility !== 'protected') ||
+    routeOf(contextId) === null
+  )
+    throw new RealmInputError();
+}
+function options(
+  deps: RealmDependencies,
+  actor: Actor,
+  route: number,
+  kind: string,
+  input: unknown,
+  context: RealmContext,
+) {
+  const identity = principalCommandIdentity(account(actor));
+  return {
+    ...identity,
+    partition: partitionOf(route),
+    deadline: context.deadline,
+    clock: deps.clock,
+    receipt: {
+      kind,
+      key: context.idempotencyKey,
+      digest: createHash('sha256')
+        .update(canonicalize([identity, kind, input])!)
+        .digest(),
+    },
+  };
+}
+function record(row: RealmRow): Realm {
+  return {
+    realmId: row.realm_id,
+    spaceId: row.space_id,
+    state: row.state,
+    visibility: row.visibility,
+    contextId: row.context_id,
+    headRevisionId: row.head_revision_id,
+    createdAt: new Date(row.created_at).toISOString(),
+    creator: row.creator,
+    predecessor: row.predecessor,
+    title: row.title,
+    summary: row.summary,
+    revisionCreatedAt: new Date(row.revision_created_at).toISOString(),
+    author: row.author,
+  };
+}
+
+/** One head seek at Access's authoritative T, with the native grant branch
+ * required for protected Realms. Missing and denied resources both return null.
+ */
+export async function readRealm(
+  deps: Pick<RealmDependencies, 'pool' | 'access'>,
+  actor: Actor,
+  realmId: string,
+  context: { deadline: number },
+): Promise<Realm | null> {
+  const route = routeOf(realmId);
+  if (route === null || !Number.isFinite(context.deadline) || Date.now() >= context.deadline) return null;
+  let current: RealmRow | null = null;
+  const resource = { route, id: realmId };
+  const eligibility = readEligibility(resource, (row) => {
+    current = row;
+  });
+  const check = await accessCheck(
+    deps.access,
+    actor,
+    'realm:read',
+    { ...resource, eligibility },
+    { pool: deps.pool, deadline: context.deadline },
+  );
+  return withConnection(deps.pool, async (client) => {
+    if (!(await check(deadlineClient(client, context.deadline)))) return null;
+    return current ? record(current) : null;
+  });
+}
+
+function readEligibility(identity: Resource, observe?: (row: RealmRow | null) => void): ResourceEligibility {
+  const resource = Object.freeze({ route: identity.route, id: identity.id });
+  return createResourcePublicEligibility({
+    resource,
+    action: 'realm:read',
+    async prepare() {
+      return resource;
+    },
+    async verify({ client, at }) {
+      const row = await read.run(client, { route: resource.route, id: resource.id, at });
+      observe?.(row);
+      return row?.visibility === 'public';
+    },
+  });
+}
+
+export function realmReadEligibility(identity: Resource): ResourceEligibility {
+  return readEligibility(identity);
+}
+
+type Requirement = { action: string; resource: Resource };
+/** Add independently anchored checks to the parent's exact trusted context.
+ * Production Access caches its single admission observation by actor/live T.
+ */
+function requirements(
+  access: Access,
+  extra: readonly Requirement[],
+  validate?: (client: Parameters<Access['authorize']>[0], time: AuthoritativeTime) => Promise<boolean>,
+) {
+  const deadlines = new WeakMap<AuthoritativeTime, number>();
+  const combined: Access = {
+    authenticate: access.authenticate.bind(access),
+    authorize: access.authorize.bind(access),
+    async prepare(actor, action, resource, context) {
+      const attempt = accessCommandAttempt(context);
+      if (!attempt) throw new GrantDeniedError();
+      const primary = await access.prepare?.(actor, action, resource, context);
+      let deadline = Math.min(context.deadline, permissionEvidenceDeadline(primary) ?? -Infinity);
+      const checks: (Requirement & { evidence: unknown })[] = [];
+      for (const requirement of extra) {
+        const evidence = await access.prepare?.(actor, requirement.action, requirement.resource, context);
+        deadline = Math.min(deadline, permissionEvidenceDeadline(evidence) ?? -Infinity);
+        checks.push({ ...requirement, evidence });
+      }
+      if (Date.now() >= deadline) throw new GrantDeniedError();
+      await within(deadline, () =>
+        withConnection(context.pool, async (client) => {
+          const bounded = deadlineClient(client, deadline);
+          if (validate && !(await validate(bounded, attempt.time))) throw new GrantDeniedError();
+          for (const check of checks)
+            if (!(await access.authorize(bounded, actor, check.action, check.resource, check.evidence, attempt.time)))
+              throw new GrantDeniedError();
+        }),
+      );
+      deadlines.set(attempt.time, deadline);
+      return primary;
+    },
+  };
+  const roles = resourceRoleCatalogue(access);
+  if (roles) installResourceRoleCatalogue(combined, roles);
+  return {
+    access: combined,
+    bound(authorization: CommandAuthorization): CommandAuthorization {
+      return {
+        ...authorization,
+        async authorize(tx, attempt, proof) {
+          if (Date.now() >= (deadlines.get(attempt.time) ?? -Infinity)) throw new GrantDeniedError();
+          return authorization.authorize(tx, attempt, proof);
+        },
+      };
+    },
+  };
+}
+function contextRequirement(id: string): Requirement {
+  const route = routeOf(id);
+  if (route === null) throw new RealmInputError();
+  const resource = { route, id };
+  return { action: 'context:read', resource: { ...resource, eligibility: publicContextEligibility(resource) } };
+}
+
+export async function createRealm(deps: RealmDependencies, actor: Actor, input: RealmInput, context: RealmContext) {
+  const creator = account(actor).accountId;
+  const body = {
+    spaceId: input.spaceId,
+    title: input.title,
+    summary: input.summary === undefined ? '' : input.summary,
+    visibility: input.visibility,
+    contextId: input.contextId,
+  };
+  const route = routeOf(body.spaceId);
+  if (route === null) throw new RealmInputError();
+  const resource = { route, id: newId(route) },
+    revision = newId(route);
+  const available = new WeakMap<AuthoritativeTime, boolean>();
+  const inserted = new WeakSet<CommandTransaction>();
+  const combined = requirements(
+    deps.access,
+    [{ action: 'space:manage', resource: { route, id: body.spaceId } }, contextRequirement(body.contextId)],
+    async (client, time) => {
+      const row = await host.run(client, { route, space: body.spaceId, at: authoritativeTimeValue(time) });
+      available.set(time, !!row && row.realm_id === null);
+      return !!row;
+    },
+  );
+  const authorization = parentCreationAuthorization({
+    access: combined.access,
+    actor,
+    action: 'realm:create',
+    parent: platformRootAnchor,
+    context: {
+      pool: deps.pool,
+      deadline: context.deadline,
+      resource,
+      creation: {
+        async validate(tx, target, time) {
+          if (!inserted.has(tx)) return false;
+          const row = await read.run(tx, { route: target.route, id: target.id, at: authoritativeTimeValue(time) });
+          return (
+            row?.inserted_here === true &&
+            row.creator === creator &&
+            row.space_id === body.spaceId &&
+            row.head_revision_id === revision
+          );
+        },
+      },
+    },
+  });
+  return runCommand(
+    deps.pool,
+    {
+      ...options(deps, actor, route, 'community.realm.create', body, context),
+      authorization: combined.bound(authorization),
+    },
+    async (tx, command) => {
+      // An authorized receipt replay returns before this slot gate. New attempts
+      // must have observed a free slot at T; the unique key arbitrates contenders.
+      if (!available.get(command.time)) throw new GrantDeniedError();
+      metadata(body.title, body.summary, body.visibility, body.contextId);
+      const at = authoritativeTimeValue(command.time);
+      await insert.run(tx, {
+        route,
+        id: resource.id,
+        space: body.spaceId,
+        revision,
+        at,
+        creator,
+        visibility: body.visibility,
+        context: body.contextId,
+      });
+      await append.run(tx, {
+        route,
+        id: resource.id,
+        revision,
+        predecessor: null,
+        title: body.title,
+        summary: body.summary,
+        visibility: body.visibility,
+        context: body.contextId,
+        at,
+        author: creator,
+      });
+      inserted.add(tx);
+      await initializeResourceGrants(tx, { resource, type: 'community.realm', creator });
+      return {
+        value: { realmId: resource.id, revisionId: revision },
+        events: [
+          {
+            type: 'com.rezics.community.realm.created.v1',
+            subject: resource.id,
+            data: { realmId: resource.id, revisionId: revision },
+          },
+        ],
+      };
+    },
+  );
+}
+
+export async function updateRealm(deps: RealmDependencies, actor: Actor, input: RealmUpdate, context: RealmContext) {
+  const author = account(actor).accountId;
+  const body = {
+    realmId: input.realmId,
+    expectedHead: input.expectedHead,
+    title: input.title,
+    summary: input.summary,
+    visibility: input.visibility,
+    contextId: input.contextId,
+  };
+  const route = routeOf(body.realmId);
+  if (route === null) throw new RealmInputError();
+  const current = new WeakMap<AuthoritativeTime, Realm>();
+  const combined = requirements(deps.access, body.contextId === undefined ? [] : [contextRequirement(body.contextId)]);
+  const authorization = resourceAuthorization({
+    access: combined.access,
+    actor,
+    action: 'realm:manage',
+    anchor: {
+      resource: { route, id: body.realmId },
+      async validate(client, time) {
+        const row = await read.run(client, { route, id: body.realmId, at: authoritativeTimeValue(time) });
+        if (!row) return false;
+        current.set(time, record(row));
+        return true;
+      },
+    },
+    context: { pool: deps.pool, deadline: context.deadline, partition: partitionOf(route) },
+  });
+  return runCommand(
+    deps.pool,
+    {
+      ...options(deps, actor, route, 'community.realm.update', body, context),
+      authorization: combined.bound(authorization),
+    },
+    async (tx, command) => {
+      const previous = current.get(command.time)!;
+      if (routeOf(body.expectedHead) !== route) throw new RealmInputError();
+      if (previous.headRevisionId !== body.expectedHead) throw new RealmConflictError();
+      const title = body.title === undefined ? previous.title : body.title,
+        summary = body.summary === undefined ? previous.summary : body.summary;
+      const visibility = body.visibility === undefined ? previous.visibility : body.visibility,
+        contextId = body.contextId === undefined ? previous.contextId : body.contextId;
+      metadata(title, summary, visibility, contextId);
+      const revision = newId(route);
+      await append.run(tx, {
+        route,
+        id: body.realmId,
+        revision,
+        predecessor: body.expectedHead,
+        title,
+        summary,
+        visibility,
+        context: contextId,
+        at: authoritativeTimeValue(command.time),
+        author,
+      });
+      if (
+        !(await moveHead.run(tx, {
+          route,
+          id: body.realmId,
+          revision,
+          expected: body.expectedHead,
+          visibility,
+          context: contextId,
+        }))
+      )
+        throw new RealmConflictError();
+      return {
+        value: { realmId: body.realmId, revisionId: revision },
+        events: [
+          {
+            type: 'com.rezics.community.realm.updated.v1',
+            subject: body.realmId,
+            data: { realmId: body.realmId, revisionId: revision },
+          },
+        ],
+      };
+    },
+  );
+}

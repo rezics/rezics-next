@@ -25,6 +25,29 @@ It returns metadata without implying permission. Callers compose Access `space:r
 `spaceReadEligibility`, which prepares non-null domain evidence and verifies the current active
 Space and head at Access's authoritative time. Missing domain evidence denies public reading.
 
+A Realm is the community carried by a Space. `createRealm` mints its distinct identity
+and initial revision on the Space's route, with `realm:create` on the Global Context
+and `space:manage` on the host. Both checks use the same trusted command context and
+share one admission observation. The host must exist and be active at T. Its single
+Realm slot is observed at T and enforced before new writes and by a unique database
+key, so concurrent creations cannot both commit. Authorized receipt replays can return
+their original result without attempting to claim the slot again.
+
+The classification `contextId` must name an existing Context readable through
+`publicContextEligibility`. Context authorization is prepared before target checkout
+and verified at the command's T. `updateRealm` requires `realm:manage`, appends a
+revision and compares `expectedHead` before moving the head. It preserves omitted
+metadata and rechecks any supplied Context. Visibility and classification on the
+identity must agree with its head; a deferred foreign key enforces this in PostgreSQL.
+Realm identity, host and creation provenance are immutable, and revisions are append-only.
+
+`community.realm.owner` grants only `realm:read` and `realm:manage`. The role template
+has no per-resource visibility condition, so Realm creation installs no standing role.
+`realmReadEligibility` instead supplies anonymous public eligibility only while the
+current Realm is public. `readRealm(deps, actor, realmId, { deadline })` performs the
+head read inside that eligibility verification at Access's authoritative T. A protected
+Realm requires a native `realm:read` grant; denied and missing reads both return null.
+
 ## Cost
 
 A is Access's bounded admission and permission evaluation; C is a partition-local `runCommand`
@@ -44,3 +67,9 @@ fixed probe, and require zero sequential scans on community relations. Metadata 
 bounded by the database character limits. Revision and predecessor lookups use exact routed keys;
 no operation walks revision history or counts Spaces. Command serialization uses a partition-local
 position counter.
+
+| Operation    | Touches                                                                                                                                                                                                                                                                | Bound                                                                        | Growth check                                                                 |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Create Realm | One admission observation shared by Global parent, Space and Context checks; one host point read and unique slot probe, prepared Context evidence and one Context verification at T; two inserts, a creation proof and grant initialization in the Space partition (C) | O(1) rows and statements; O(log R) blocks, plus A                            | `growth-realm.test.ts`: create at 256, 2048 and 16384 other Realms           |
+| Update Realm | A on the Realm and one exact head read; a supplied Context adds its prepared evidence and point verification at T; one revision insert and head compare-and-set (C)                                                                                                    | O(1) rows and statements; O(log R) blocks, plus A                            | `growth-realm.test.ts`: update a fixed probe at the same scales              |
+| Read Realm   | One exact head read during public eligibility verification; protected reads require A's grant branch                                                                                                                                                                   | O(1) domain rows and statements; O(log R) blocks, plus A for protected reads | `growth-realm.test.ts`: public and protected fixed probes at the same scales |
