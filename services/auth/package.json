@@ -1,0 +1,21 @@
+{
+  "name": "@rezics/auth",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "bun scripts/check.ts",
+    "db": "bun scripts/database.ts"
+  },
+  "dependencies": {
+    "better-auth": "1.7.12",
+    "jose": "6.2.13",
+    "pg": "8.23.1"
+  },
+  "devDependencies": {
+    "@types/pg": "8.23.1",
+    "dbmate": "2.37.0"
+  }
+}
