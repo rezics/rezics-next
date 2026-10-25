@@ -49,40 +49,36 @@ const LengthLimit = Extension.create<{ limit: number }>({
   },
 });
 
-/** Markdown rules that operate only on nodes and marks present in the selected profile. */
-const MarkdownShortcuts = Extension.create<{ profile: DocumentProfile }>({
+/** Markdown rules for nodes and marks that exist in the editor schema. */
+const MarkdownShortcuts = Extension.create({
   name: 'markdownShortcuts',
-  addOptions: () => ({ profile: 'text' }),
   addInputRules() {
     const schema = this.editor.schema;
     const rules = [];
+    const heading = schema.nodes.heading;
+    const blockquote = schema.nodes.blockquote;
+    const bulletList = schema.nodes.bulletList;
+    const orderedList = schema.nodes.orderedList;
 
-    if (this.options.profile === 'blocks') {
-      const heading = schema.nodes.heading;
-      const blockquote = schema.nodes.blockquote;
-      const bulletList = schema.nodes.bulletList;
-      const orderedList = schema.nodes.orderedList;
-
-      if (heading) {
-        rules.push(
-          textblockTypeInputRule({
-            find: /^(#{1,6})\s$/,
-            type: heading,
-            getAttributes: (match) => ({ level: match[1]!.length }),
-          }),
-        );
-      }
-      if (blockquote) rules.push(wrappingInputRule({ find: /^>\s$/, type: blockquote }));
-      if (bulletList) rules.push(wrappingInputRule({ find: /^[-+*]\s$/, type: bulletList }));
-      if (orderedList) {
-        rules.push(
-          wrappingInputRule({
-            find: /^(\d+)\.\s$/,
-            type: orderedList,
-            getAttributes: (match) => ({ start: Math.max(1, Number(match[1]) || 1) }),
-          }),
-        );
-      }
+    if (heading) {
+      rules.push(
+        textblockTypeInputRule({
+          find: /^(#{1,6})\s$/,
+          type: heading,
+          getAttributes: (match) => ({ level: match[1]!.length }),
+        }),
+      );
+    }
+    if (blockquote) rules.push(wrappingInputRule({ find: /^>\s$/, type: blockquote }));
+    if (bulletList) rules.push(wrappingInputRule({ find: /^[-+*]\s$/, type: bulletList }));
+    if (orderedList) {
+      rules.push(
+        wrappingInputRule({
+          find: /^(\d+)\.\s$/,
+          type: orderedList,
+          getAttributes: (match) => ({ start: Math.max(1, Number(match[1]) || 1) }),
+        }),
+      );
     }
 
     const shortcuts = [
@@ -115,7 +111,7 @@ export function editorExtensions(
       generateID: () => crypto.randomUUID(),
       updateDocument: !options.readOnly,
     }),
-    MarkdownShortcuts.configure({ profile }),
+    MarkdownShortcuts,
     ...(options.maxLength === undefined ? [] : [LengthLimit.configure({ limit: options.maxLength })]),
   ];
 }

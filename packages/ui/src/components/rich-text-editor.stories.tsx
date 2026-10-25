@@ -89,12 +89,17 @@ export const TextProfile: Story = {
   render: () => <textProfile.Demo />,
   async play({ canvasElement }) {
     const textbox = within(canvasElement).getByRole('textbox', { name: 'Text profile post' });
-    await userEvent.type(textbox, '## This stays literal');
-    await waitFor(() => expect(textProfile.latest.current).not.toBeNull());
+    await userEvent.type(textbox, '## A text heading{Enter}> A text quote');
+    await waitFor(() => {
+      const current = textProfile.latest.current;
+      expect(current?.doc.content?.[0]?.content?.[0]?.text).toBe('A text heading');
+      expect(current?.doc.content?.[1]?.content?.[0]?.content?.[0]?.text).toBe('A text quote');
+    });
     const snapshot = checkedSnapshot(textProfile.latest, textProfile.initial);
     expect(snapshot.profile).toBe('text');
-    expect(snapshot.doc.content?.[0]?.type).toBe('paragraph');
-    expect(snapshot.doc.content?.[0]?.content?.[0]?.text).toBe('## This stays literal');
+    expect(snapshot.doc.content?.[0]?.type).toBe('heading');
+    expect(snapshot.doc.content?.[0]?.attrs?.level).toBe(2);
+    expect(snapshot.doc.content?.[1]?.type).toBe('blockquote');
   },
 };
 
