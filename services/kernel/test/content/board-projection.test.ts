@@ -292,9 +292,9 @@ test('checkGrowth proves the declared three-scale machine-independent bound', as
     }));
     await database.admin.query(
       `INSERT INTO content.board_thread (route, board_id, thread_id, created_at, source_epoch, source_position)
-       SELECT $1, $2, x.thread_id, '2020-01-01'::timestamptz, 1, 1
+       SELECT $1::integer, $2::uuid, x.thread_id, '2020-01-01'::timestamptz, 1::integer, 1::bigint
        FROM jsonb_to_recordset($3::jsonb) x(thread_id uuid)
-       UNION ALL SELECT $1, x.other_board, x.other_id, '2020-01-01'::timestamptz, 1, 1
+       UNION ALL SELECT $1::integer, x.other_board, x.other_id, '2020-01-01'::timestamptz, 1::integer, 1::bigint
        FROM jsonb_to_recordset($3::jsonb) x(other_board uuid, other_id uuid)`,
       [boardRoute, targetBoard, JSON.stringify(rows)],
     );
