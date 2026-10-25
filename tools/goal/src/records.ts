@@ -17,7 +17,10 @@ export function classifyStep(name: string, input: string): StepClass {
 }
 function tokens(value: Record<string, unknown>): Tokens {
   const num = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0;
-  return { input: num(value.input_tokens ?? value.inputTokens), cached: num(value.cached_input_tokens ?? value.cachedInputTokens ?? value.cache_read_input_tokens), output: num(value.output_tokens ?? value.outputTokens) };
+  // Anthropic-style usage (Grok) counts cache reads apart from input_tokens; the records count them inside input.
+  const cacheRead = num(value.cache_read_input_tokens);
+  return { input: num(value.input_tokens ?? value.inputTokens) + cacheRead, cached: num(value.cached_input_tokens ?? value.cachedInputTokens) + cacheRead,
+    output: num(value.output_tokens ?? value.outputTokens) };
 }
 export type LogMeasurement = { tokens: Tokens; total: Tokens; steps: Record<StepClass, number>; session: string | null; result: string; blocker: string | null; failureKind: AttemptFailure | null };
 /** Cumulative totals are differenced, duplicate snapshots contribute zero, and pre-window totals establish a baseline. */
@@ -25,7 +28,9 @@ export function measureLog(text: string, options: { startedAt?: string; endedAt?
   const start = options.startedAt ? Date.parse(options.startedAt) : -Infinity;
   const end = options.endedAt ? Date.parse(options.endedAt) : Infinity;
   if (Number.isNaN(start) || Number.isNaN(end) || end < start) throw new Error('invalid measurement interval');
-  const events = text.split('\n').flatMap(line => { try { return [JSON.parse(line)]; } catch { return []; } });
+  const lines = text.split('\n').flatMap(line => { try { return [JSON.parse(line)]; } catch { return []; } });
+  // Grok's JSON output is one pretty-printed object rather than JSON Lines.
+  const events = lines.length ? lines : (() => { try { return [JSON.parse(text)]; } catch { return []; } })();
   const hasRollout = events.some(e => e.payload?.type === 'token_count' && e.payload.info?.total_token_usage);
   let previous = options.baseline ?? emptyTokens();
   const result: LogMeasurement = { tokens: emptyTokens(), total: previous, steps: emptySteps(), session: null, result: '', blocker: null, failureKind: null };
@@ -68,7 +73,7 @@ export function measureLog(text: string, options: { startedAt?: string; endedAt?
     }
     if (type === 'agent_message') result.result = item.text ?? '';
     if (payload.type === 'message' && payload.role === 'assistant') result.result = (payload.content ?? []).map((c: { text?: string }) => c.text ?? '').join('\n');
-    if (event.type === 'result' || event.result !== undefined) {
+    if (event.type === 'result' || event.result !== undefined || (event.text !== undefined && event.stopReason !== undefined)) {
       const answer = event.result ?? event.text ?? result.result;
       result.result = typeof answer === 'string' ? answer : JSON.stringify(answer);
       result.session = event.session_id ?? event.sessionId ?? result.session;
