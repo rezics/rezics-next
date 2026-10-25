@@ -1,3 +1,5 @@
+import { env } from 'cloudflare:workers';
+import { mediaRequest, type MediaEnv } from './media/index.ts';
 import { createStartHandler, defaultStreamHandler } from '@tanstack/react-start/server';
 import { paraglideMiddleware } from './paraglide/server.js';
 import { defineCustomServerStrategy, extractLocaleFromRequestAsync, extractLocaleFromRequestWithStrategies, localizeUrl, locales } from './paraglide/runtime.js';
@@ -18,6 +20,7 @@ const fetchHandler = createStartHandler(defaultStreamHandler);
 export default {
   async fetch(request: Request) {
     const url = new URL(request.url);
+    if (url.pathname.startsWith('/media/')) return mediaRequest(request, env as Partial<MediaEnv>);
     if (url.pathname === '/') {
       const locale = await extractLocaleFromRequestAsync(request);
       const location = localizeUrl(url, { locale });
