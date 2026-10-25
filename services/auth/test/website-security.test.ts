@@ -252,7 +252,7 @@ test('confidential assertions and PKCE are independent, exact and durably one-us
     assertion({ exp: now + 121 }),
     assertion({ jti: '' }),
   ]) {
-    expect((await post('/token', await fields(params, proof))).status).toBe(400);
+    expect((await post('/token', await fields(params, proof))).status).toBe(401);
   }
   const duplicate = await fields(params);
   duplicate.append('client_id', WEBSITE_CLIENT_ID);
@@ -266,9 +266,9 @@ test('confidential assertions and PKCE are independent, exact and durably one-us
   const valid = await grant(cookie);
   const body = await fields({ ...params, code: valid.code, code_verifier: valid.verifier });
   const [first, second] = await Promise.all([post('/token', body), post('/token', body)]);
-  expect([first.status, second.status].sort()).toEqual([200, 400]);
+  expect([first.status, second.status].sort()).toEqual([200, 401]);
   service = await createAuthService(options);
-  expect((await post('/token', body)).status).toBe(400);
+  expect((await post('/token', body)).status).toBe(401);
 });
 
 test('refresh denies expired, expanded, stale account and missing consent evidence', async () => {
@@ -293,7 +293,7 @@ test('refresh denies expired, expanded, stale account and missing consent eviden
   await issue(cookie);
   available = false;
   try {
-    expect((await refresh(issued.refresh_token)).status).toBe(400);
+    expect((await refresh(issued.refresh_token)).status).toBe(503);
   } finally {
     available = true;
   }
