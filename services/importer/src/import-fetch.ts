@@ -121,7 +121,9 @@ function checkBodySize(body: BodyInit | null | undefined, limit: number): void {
   } else if (body instanceof Blob) {
     if (body.size > limit) throw tooLarge();
   } else if (body instanceof ArrayBuffer || ArrayBuffer.isView(body)) {
-    if (body.byteLength > limit) throw tooLarge();
+    // Request may copy direct input, so admit the entire producer backing first.
+    const backing = body instanceof ArrayBuffer ? body : body.buffer;
+    if (backing.byteLength > MAX_IMPORT_BODY_BYTES || body.byteLength > limit) throw tooLarge();
   }
 }
 
@@ -144,7 +146,8 @@ async function readBody(
       const { done, value } = await abortable(request.signal, () => reader.read());
       if (done) break;
       if (!(value instanceof Uint8Array)) throw new TypeError('Import request body must contain bytes');
-      if (value.byteLength > limit - size) throw tooLarge();
+      // Even an empty view can pin excessive backing; check before copying any bytes.
+      if (value.buffer.byteLength > MAX_IMPORT_BODY_BYTES || value.byteLength > limit - size) throw tooLarge();
       // Grow within the cap, without retaining source backing buffers or an
       // object per chunk when a hostile stream supplies many tiny chunks.
       if (size + value.byteLength > bytes.byteLength) {
