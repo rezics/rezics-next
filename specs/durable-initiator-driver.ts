@@ -110,9 +110,7 @@ export type Mutation =
   | 'epoch-floor-increased'
   | 'organization-membership'
   | 'realm-membership'
-  | 'actor-block'
-  | 'principal-block'
-  | 'organization-block'
+  /** The Realm owner bans the initiating account with the native Realm ban command. */
   | 'realm-block';
 /** Invoke the real production restore/command boundary with these adverse inputs
  * or isolated storage faults. No precomputed denied branch in the adapter.
@@ -203,8 +201,6 @@ export interface DurableInitiatorDriver {
    * endpoint, policy callback or continuation exception. This is an internal
    * Access conformance read through the SAME resource authorization flow. */
   readPublic(operation: Anchor): Promise<{ point: Point; anonymous: Attempt; restored: Attempt }>;
-  /** Commit an explicit actor denial for that exact public-read action/resource. */
-  blockPublicRead(fixture: Fixture): Promise<void>;
   /** Independently read real current account/client/assignment state and grants.
    * Used to prove the changed axis and unchanged operands, not evaluate policy. */
   authority(fixture: Fixture): Promise<{

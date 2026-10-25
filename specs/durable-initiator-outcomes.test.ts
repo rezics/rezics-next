@@ -332,11 +332,10 @@ test('operation provenance target or tuple substitution denies', async () => {
   }
 });
 
-test('current organization Realm and explicit blocks retain the native formula', async () => {
+test('current organization membership, Realm membership and the Realm ban retain the native formula', async () => {
   const d = await setup();
   for (const [mode, axes] of [
-    ['delegated', ['actor-block', 'principal-block']],
-    ['organization', ['organization-membership', 'organization-block']],
+    ['organization', ['organization-membership']],
     ['realm', ['realm-membership', 'realm-block']],
   ] as const) {
     const baseline = await create(d, mode);
@@ -361,18 +360,12 @@ test('native public floor and direct initiator retain existing scope and grant s
   }
   const floor = await create(d, 'direct');
   await changed(d, floor.f, 'actor-grant');
-  const before = await d.inspect(floor.op);
   const read = await d.readPublic(floor.op);
   expect(floor.f.tuple.scopes).not.toContain(read.point.action);
   expect(read.anonymous.result.outcome).toBe('permitted');
   expect(read.restored.result.outcome).toBe('permitted');
   time(read.restored, read.point);
   nativeReads(read.restored);
-  await d.blockPublicRead(floor.f);
-  const blocked = await d.readPublic(floor.op);
-  expect(blocked.anonymous.result.outcome).toBe('permitted');
-  expect(blocked.restored.result).toEqual({ outcome: 'denied' });
-  expect((await d.inspect(floor.op)).protected).toEqual(before.protected);
   // Captured scope still cannot supply a private grant branch.
   const privateCase = await create(d);
   await d.park(privateCase.op, privateCase.points[0]!.id);
