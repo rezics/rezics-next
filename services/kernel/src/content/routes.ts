@@ -8,6 +8,7 @@ import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/re
 import { AuthenticationError } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import { sourceFenceRoutes } from './source-fence-routes.ts';
 import {
   ContentForbiddenError,
   ContentNotFoundError as CommandNotFoundError,
@@ -183,7 +184,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
     return { value: result.value, anchor: result.anchor };
   }
 
-  return app
+  return sourceFenceRoutes(app, dependencies)
     .post(
       '/v1/threads',
       {
