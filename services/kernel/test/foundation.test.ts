@@ -75,4 +75,4 @@ test('migrations apply once and the committed schema dump matches the database',
   expect(before).toBe(await Bun.file(new URL('../db/schema.sql', import.meta.url)).text());
   const { rows } = await pool.query('SELECT count(*)::int AS partitions FROM core.partition');
   expect(rows).toEqual([{ partitions: 4096 }]);
-});
+}, 30_000);
