@@ -34,6 +34,7 @@ async function setup(name: string, axes: readonly Axis[]) {
   const accounts = new Map<string, AccessAccount>();
   const authorizations = new Map<string, EffectAuthorization>();
   const invalidates = new Set<string>();
+  let recoveryToken = '';
   let sequence = 0;
   const actor = (accountId: string, automated = false) => {
     const account: AccessAccount = { accountId, kind: 'actor', state: 'pending', automated, authnEpoch: 1 };
@@ -79,8 +80,14 @@ async function setup(name: string, axes: readonly Axis[]) {
         async authorizeProvisioning(accountId) {
           return { accountId };
         },
-        async authorizeRecovery() {
-          throw new Error('Recovery completion is outside the bounded case');
+        async authorizeRecovery({ accountId, proofEpoch }) {
+          const account = accounts.get(accountId)!;
+          expect(proofEpoch).toBe(account.authnEpoch);
+          return {
+            receiptId: id(`recovery-${sequence++}`),
+            accountId,
+            minimumAuthnEpoch: ++account.authnEpoch,
+          };
         },
         async consumeAuthorization({ authorization, subjectAccountId, purpose, human: proof }) {
           const receipt = authorizations.get(authorization);
@@ -104,7 +111,11 @@ async function setup(name: string, axes: readonly Axis[]) {
           return receipt;
         },
       },
-      recoveryDelivery: { async deliver() {} },
+      recoveryDelivery: {
+        async deliver({ token }) {
+          recoveryToken = token;
+        },
+      },
     });
     const request = async (path: string, body?: unknown, cookie = '') => {
       const response = await service.handler(
@@ -353,6 +364,7 @@ async function setup(name: string, axes: readonly Axis[]) {
       check,
       restoreSession,
       robotSession,
+      recoveryToken,
     };
   } catch (error) {
     await close();
@@ -518,5 +530,54 @@ test(
   timeout,
 );
 
-// Native expiry cleanup scans all V even with fixed owner, identifier matches and session fanout.
-test.skip('Recovery completion stays within its bound as V grows', () => {}, timeout);
+test(
+  'Recovery completion stays within its bound as V grows',
+  () =>
+    fixture('Recovery completion stays within its bound as V grows', ['A', 'V'], async (f) => {
+      const proofHash = createHash('sha256').update(f.recoveryToken).digest('hex');
+      const verification = (await f.db.admin.query('SELECT * FROM verification WHERE value=$1', [f.human])).rows[0];
+      const recovery = (await f.db.admin.query('SELECT * FROM auth_recovery WHERE proof_hash=$1', [proofHash])).rows[0];
+      const sessions = (await f.db.admin.query('SELECT * FROM session WHERE "userId"=$1', [f.human])).rows;
+      const credential = (await f.db.admin.query('SELECT * FROM account WHERE "userId"=$1', [f.human])).rows[0];
+      const epoch = f.person.authnEpoch;
+      await f.check(async () => {
+        // Restore the production-created proof, credential and fixed session neighbourhood outside capture.
+        f.person.authnEpoch = epoch;
+        await f.db.admin.query('DELETE FROM auth_barrier_proof WHERE account_id=$1', [f.human]);
+        await f.db.admin.query('DELETE FROM auth_effect_receipt WHERE account_id=$1', [f.human]);
+        await f.db.admin.query('DELETE FROM auth_recovery WHERE proof_hash=$1', [proofHash]);
+        for (const [table, row] of [
+          ['verification', verification],
+          ['auth_recovery', recovery],
+        ] as const)
+          await f.db.admin.query(
+            `INSERT INTO ${table} SELECT * FROM jsonb_populate_record(NULL::${table},$1::jsonb) ON CONFLICT DO NOTHING`,
+            [JSON.stringify(row)],
+          );
+        await f.db.admin.query('UPDATE account SET password=$2,"updatedAt"=$3 WHERE id=$1', [
+          credential.id,
+          credential.password,
+          credential.updatedAt,
+        ]);
+        for (const session of sessions) await f.restoreSession(session);
+        expect(
+          await (
+            await f.request('/recovery/complete', {
+              account_id: f.human,
+              token: f.recoveryToken,
+              new_password: password,
+            })
+          ).json(),
+        ).toEqual({ success: true });
+        expect(f.person.authnEpoch).toBe(epoch + 1);
+        expect(
+          (await f.db.admin.query('SELECT id FROM verification WHERE id=$1', [verification.id])).rows,
+        ).toHaveLength(0);
+        expect((await f.db.admin.query('SELECT id FROM session WHERE "userId"=$1', [f.human])).rows).toHaveLength(0);
+        expect(
+          (await f.db.admin.query('SELECT password FROM account WHERE id=$1', [credential.id])).rows[0].password,
+        ).not.toBe(credential.password);
+      });
+    }),
+  timeout,
+);
