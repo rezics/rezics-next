@@ -1,0 +1,4 @@
+preload = ["reylo/register"]
+
+[test]
+preload = ["reylo/register"]
