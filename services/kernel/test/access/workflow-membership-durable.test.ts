@@ -318,3 +318,81 @@ test('real automated creation and operator session consume native receipts and t
   expect(serialized).not.toContain(login.cookie);
   expect(serialized).not.toContain(cookie);
 }, 60000);
+
+test('successful consent and client reductions invalidate already issued JWTs at the actual kernel account read', async () => {
+  const actor = await person('reduction_actor');
+  const login = await operatorLogin(actor);
+  const post = (path: string, body: unknown, cookie = login.cookie) =>
+    fixture.auth.handler(
+      new Request(`${issuer}${path}`, {
+        method: 'POST',
+        headers: { origin: issuer, 'content-type': 'application/json', cookie },
+        body: JSON.stringify(body),
+      }),
+    );
+  await fixture.auth.internal.registerClient({
+    clientId: 'reduction-client',
+    firstParty: false,
+    scopes: ['read', 'write'],
+  });
+  expect((await post('/consent', { client_id: 'reduction-client', scope: ['read', 'write'] })).status).toBe(200);
+  const signin = await post(
+    '/signin',
+    { account_id: actor, password, client_id: 'reduction-client', scope: ['read', 'write'] },
+    '',
+  );
+  expect(signin.status).toBe(200);
+  const tokenResponse = await post(
+    '/token',
+    {},
+    signin.headers
+      .getSetCookie()
+      .map((value) => value.split(';')[0])
+      .join('; '),
+  );
+  const old = ((await tokenResponse.json()) as { access_token: string }).access_token;
+  expect((await fixture.authenticate(old)).kind).toBe('account');
+  fixture.approve('consent-reduction', login.token);
+  await fixture.workflows.reduceConsent({
+    key: 'native_consent_reduction',
+    authorization: 'consent-reduction',
+    accountId: actor,
+    clientId: 'reduction-client',
+    scopes: ['read'],
+  });
+  await expect(fixture.authenticate(old)).rejects.toThrow();
+  expect(
+    (
+      await fixture.database.query('SELECT scopes FROM auth_consent WHERE account_id=$1 AND client_id=$2', [
+        actor,
+        'reduction-client',
+      ])
+    ).rows,
+  ).toEqual([{ scopes: ['read'] }]);
+  const receipt = (
+    await fixture.database.query<{ receipt_id: string }>(
+      "SELECT receipt_id FROM auth_effect_receipt WHERE account_id=$1 AND purpose='consent-reduction'",
+      [actor],
+    )
+  ).rows[0]!;
+  expect(await fixture.internal.readFenceReceipt(actor, receipt.receipt_id)).toMatchObject({
+    receiptId: receipt.receipt_id,
+  });
+
+  const administrator = await person('client_reduction_admin');
+  const adminLogin = await operatorLogin(administrator);
+  fixture.approve('client-reduction', adminLogin.token);
+  expect((await fixture.authenticate(adminLogin.token)).kind).toBe('account');
+  await fixture.workflows.reduceClientScopes({
+    key: 'native_client_reduction',
+    authorization: 'client-reduction',
+    clientId: 'durable-web',
+    firstParty: true,
+    scopes: ['account:update'],
+  });
+  await expect(fixture.authenticate(adminLogin.token)).rejects.toThrow();
+  expect(
+    (await fixture.database.query('SELECT scopes FROM auth_client WHERE client_id=$1', ['durable-web'])).rows,
+  ).toEqual([{ scopes: ['account:update'] }]);
+  expect((await fixture.database.query('SELECT client_id FROM auth_client_reduction')).rows).toEqual([]);
+}, 60000);
