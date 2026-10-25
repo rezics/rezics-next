@@ -38,7 +38,24 @@ Not built yet.
 
 ## Consent
 
-Not built yet.
+`/consent?client_id=<id>&scope=<space-separated scopes>` reviews a third-party client's request. One browser
+`GET /consent/<client_id>` with the session cookie loads its display name (falling back to its id), registered scopes
+and this person's current consent. The page makes no kernel reads. Each requested scope is shown as already granted,
+new or not available; known protocol scopes have localized descriptions, and other scopes retain their raw ids.
+
+Approval uses the shared Auth client to send one same-origin JSON `POST /consent` with only `client_id` and `scope`.
+The approved set is the union of current grants and requested registered scopes, since the write replaces consent.
+Unregistered requested scopes are never sent. Declining writes nothing and confirms that the client got no new access.
+After approval the person can return to the client. Neither query parameters nor response bodies supply a return
+target, and the page never redirects.
+
+Signed-out visitors get a link to `/login`. Unknown and first-party clients show a localized not-found message.
+Other failures use the shared status-and-code messages, including valid `Retry-After` seconds; Auth body text is
+never displayed. Pending approval disables both buttons, and a failure permits retrying.
+
+Approval is currently blocked by issuer routing: `src/server.ts` renders `/consent` for every HTTP method, so
+`POST /consent` returns page HTML instead of reaching Auth. The consent acceptance tests expose this integration gap;
+method-aware dispatch is needed before approval can work.
 
 ## Security
 

@@ -1,11 +1,147 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useLocation } from '@tanstack/react-router';
+import { Button } from '@rezics/ui/button';
+import { useEffect, useRef, useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
+import { authPost, failureMessage } from '../api';
+import { approvedScopes, readConsent, type Consent } from '../consent';
 
 export const Route = createFileRoute('/consent')({
   component: ConsentPage,
 });
 
 function ConsentPage() {
-  return <AuthPage heading={m.auth_consent_heading()} />;
+  const query = useLocation({ select: (location) => location.searchStr });
+  const parameters = new URLSearchParams(query);
+  const client_id = parameters.get('client_id') ?? '';
+  const scope = parameters.get('scope') ?? '';
+  return <ConsentRequest key={JSON.stringify([client_id, scope])} clientId={client_id} scope={scope} />;
+}
+
+type State = 'loading' | 'ready' | 'signed-out' | 'not-found' | 'failed' | 'approved' | 'declined';
+
+function scopeDescription(scope: string): string | null {
+  if (scope === 'openid') return m.auth_consent_scope_openid();
+  if (scope === 'offline_access') return m.auth_consent_scope_offline_access();
+  return null;
+}
+
+function ConsentRequest({ clientId, scope }: { clientId: string; scope: string }) {
+  const [state, setState] = useState<State>(clientId ? 'loading' : 'not-found');
+  const [consent, setConsent] = useState<Consent | null>(null);
+  const [pending, setPending] = useState(false);
+  const [message, setMessage] = useState('');
+  const submitting = useRef(false);
+  const alert = useRef<HTMLDivElement>(null);
+  const requested = [...new Set(scope.split(/\s+/).filter(Boolean))];
+
+  useEffect(() => {
+    if (!clientId) return;
+    let active = true;
+    void readConsent(clientId).then((result) => {
+      if (!active) return;
+      if (result.ok) {
+        setConsent(result.body);
+        setState('ready');
+      } else if (result.status === 401) setState('signed-out');
+      else if (result.status === 404) setState('not-found');
+      else {
+        setMessage(failureMessage(result.status, result.code, result.retryAfter));
+        setState('failed');
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [clientId]);
+
+  useEffect(() => {
+    if (message) alert.current?.focus();
+  }, [message]);
+
+  async function approve() {
+    if (!consent || state !== 'ready' || submitting.current) return;
+    submitting.current = true;
+    setPending(true);
+    setMessage('');
+    const result = await authPost('/consent', {
+      client_id: consent.client_id,
+      scope: approvedScopes(consent, requested),
+    });
+    submitting.current = false;
+    setPending(false);
+    if (result.ok) setState('approved');
+    else if (result.status === 401) setState('signed-out');
+    else if (result.status === 404) setState('not-found');
+    else setMessage(failureMessage(result.status, result.code, result.retryAfter));
+  }
+
+  return (
+    <AuthPage heading={m.auth_consent_heading()}>
+      <div className="auth-login-form">
+        {state === 'loading' ? <p role="status">{m.auth_consent_loading()}</p> : null}
+        {state === 'signed-out' ? (
+          <>
+            <p>{m.auth_consent_sign_in_required()}</p>
+            <a href="/login">{m.auth_login_heading()}</a>
+          </>
+        ) : null}
+        {state === 'not-found' ? <p>{m.auth_consent_not_found()}</p> : null}
+        {state === 'approved' ? <p role="status">{m.auth_consent_approved()}</p> : null}
+        {state === 'declined' ? <p role="status">{m.auth_consent_declined()}</p> : null}
+        {state === 'ready' && consent ? (
+          <>
+            <div>
+              <p>{m.auth_consent_request()}</p>
+              <p className="font-semibold wrap-anywhere">{consent.display_name ?? consent.client_id}</p>
+            </div>
+            {requested.length ? (
+              <ul className="m-0 grid list-none gap-4 p-0">
+                {requested.map((id) => {
+                  const available = consent.scopes.includes(id);
+                  const description = scopeDescription(id);
+                  return (
+                    <li key={id} className="grid gap-1 wrap-anywhere">
+                      <code>{id}</code>
+                      {description ? <span>{description}</span> : null}
+                      <span className="text-sm text-muted-foreground">
+                        {!available
+                          ? m.auth_consent_not_available()
+                          : consent.granted.includes(id)
+                            ? m.auth_consent_already_granted()
+                            : m.auth_consent_new()}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p>{m.auth_consent_empty()}</p>
+            )}
+            <Button type="button" onClick={approve} disabled={pending} isLoading={pending}>
+              {m.auth_consent_approve()}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pending}
+              onClick={() => {
+                if (!submitting.current) {
+                  setMessage('');
+                  setState('declined');
+                }
+              }}
+            >
+              {m.auth_consent_decline()}
+            </Button>
+          </>
+        ) : null}
+        {message ? (
+          <div className="auth-login-alert" role="alert" tabIndex={-1} ref={alert}>
+            {message}
+          </div>
+        ) : null}
+      </div>
+    </AuthPage>
+  );
 }
