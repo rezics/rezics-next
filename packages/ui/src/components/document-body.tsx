@@ -1,7 +1,7 @@
 import { renderToReactElement } from '@tiptap/static-renderer/pm/react';
 import type { DocumentSnapshot } from '@rezics/document';
 import { DocumentSpoiler } from './document-spoiler.tsx';
-import { documentExtensions } from './document-extensions.tsx';
+import { documentExtensions } from './document-extensions.ts';
 import { safeDocumentUrl } from './document-url.ts';
 
 const rel = 'noopener noreferrer nofollow ugc';
