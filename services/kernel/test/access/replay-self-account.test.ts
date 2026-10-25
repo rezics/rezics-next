@@ -287,3 +287,51 @@ test('the actual public lifecycle binding authorizes matching replays with insta
   expect(trace).not.toContain('receipt');
   expect(await f.snapshot()).toEqual(before);
 });
+
+for (const operation of ['approval', 'consumption'])
+  test(`public operator ${operation} reauthorizes before a matching receipt`, async () => {
+    const { createOperatorCommands, OperatorDeniedError } = await import('../../src/access/operator.ts');
+    const f = await fixture('account:update');
+    const operators = createOperatorCommands({ pool, access, actions: catalogue, managementAction: 'account:update' });
+    const held = await operators.reserveResponsibility({
+      operatorAccountId: f.accountId,
+      subjectAccountId: f.otherId,
+      key: Bun.randomUUIDv7(),
+    });
+    await operators.recordOperatorRelation({
+      ...held.value,
+      expectedOperatorAccountId: null,
+      expectedVersion: '0',
+      key: Bun.randomUUIDv7(),
+    });
+    const context = async () => ({
+      actor: await f.authenticate(),
+      account: await readAccount(admin, f.route, f.accountId),
+      deadline: Date.now() + 2000,
+    });
+    const input = {
+      operatorAccountId: f.accountId,
+      subjectAccountId: f.otherId,
+      purpose: 'session' as const,
+      key: Bun.randomUUIDv7(),
+    };
+    const opening = await operators.authorizeOpening(await context(), input);
+    const consumption = { ...input, receiptId: opening.value.receiptId, key: Bun.randomUUIDv7() };
+    if (operation === 'consumption') await operators.consumeOpening(await context(), consumption);
+    const before = await f.snapshot();
+    if (operation === 'approval') {
+      trace = [];
+      expect(await operators.authorizeOpening(await context(), input)).toEqual({ ...opening, replayed: true });
+      expect(trace).toEqual(['authorize', 'receipt']);
+      expect(await f.snapshot()).toEqual(before);
+    }
+    await f.revoke(f.accountId, f.accountId, 'account:update');
+    trace = [];
+    await expect(
+      operation === 'approval'
+        ? operators.authorizeOpening(await context(), input)
+        : operators.consumeOpening(await context(), consumption),
+    ).rejects.toBeInstanceOf(OperatorDeniedError);
+    expect(trace).toEqual(['authorize']);
+    expect(await f.snapshot()).toEqual(before);
+  });
