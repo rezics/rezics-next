@@ -9,6 +9,7 @@ import { createSigner } from './signing.ts';
 import { issuerOrigin } from './issuer.ts';
 import { nativeAttemptRequest } from './rate-limit.ts';
 import { nativeVerificationPlugin, pruneExpiredVerifications } from './verification-maintenance.ts';
+import { clientAuthority } from './account-workflows.ts';
 import type {
   AccessAccount,
   AuthService,
@@ -94,7 +95,16 @@ async function bodyOf(request: Request): Promise<Record<string, unknown>> {
 }
 
 export async function buildAuthService(options: AuthServiceOptions): Promise<AuthService> {
-  const { database, trustedAccess } = options;
+  const { trustedAccess } = options;
+  const authority = clientAuthority(
+    options.database,
+    trustedAccess,
+    () => {
+      throw new Denied();
+    },
+    scopes,
+  );
+  const { database, withIssuance, materialize } = authority;
   issuerOrigin(options.issuer);
   const audience = new URL(options.audience);
   if (audience.protocol !== 'https:') throw new Error('The API audience must be an HTTPS URL');
@@ -124,7 +134,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
   }
   async function clientFor(clientId: string): Promise<Client> {
     const result = await database.query<Client>(
-      'SELECT client_id, first_party, scopes FROM auth_client WHERE client_id=$1 AND NOT EXISTS (SELECT 1 FROM auth_client_reduction r WHERE r.client_id=auth_client.client_id)',
+      'SELECT client_id, first_party, scopes FROM auth_client WHERE client_id=$1 AND EXISTS (SELECT 1 FROM auth_client_coverage v WHERE v.client_id=auth_client.client_id AND v.ready) AND NOT EXISTS (SELECT 1 FROM auth_client_reduction r WHERE r.client_id=auth_client.client_id)',
       [clientId],
     );
     if (!result.rows[0]) throw new Denied();
@@ -141,6 +151,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       const consent = result.rows[0];
       if (!consent || selected.scopes.some((scope) => !consent.scopes.includes(scope))) throw new Denied();
     }
+    if (binding.getStore()) await materialize(accountId, selected.clientId, client.scopes, client.first_party);
   }
   function nativeAuth() {
     return betterAuth({
@@ -394,16 +405,18 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     }
   }
   async function establish(selected: Binding, headers: Headers): Promise<Response> {
-    return established(
-      await binding.run(selected, () =>
-        getAuth().api.establish({
-          headers: new Headers({
-            origin: options.issuer,
-            'content-type': 'application/json',
-            'user-agent': headers.get('user-agent') ?? '',
+    return await withIssuance(selected.clientId, async () =>
+      established(
+        await binding.run(selected, () =>
+          getAuth().api.establish({
+            headers: new Headers({
+              origin: options.issuer,
+              'content-type': 'application/json',
+              'user-agent': headers.get('user-agent') ?? '',
+            }),
+            asResponse: true,
           }),
-          asResponse: true,
-        }),
+        ),
       ),
     );
   }
@@ -683,117 +696,9 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         }
         await (await getContext()).internalAdapter.deleteUserSessions(input.accountId);
       },
-      async beginClientReduction(input) {
-        const granted = scopes(input.scopes);
-        text(input.operationId);
-        if (typeof input.firstParty !== 'boolean') throw new Denied();
-        const connection = await database.connect();
-        try {
-          await connection.query('BEGIN');
-          await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
-            `auth-client:${text(input.clientId)}`,
-          ]);
-          const client = (
-            await connection.query<Client>('SELECT * FROM auth_client WHERE client_id=$1 FOR UPDATE', [input.clientId])
-          ).rows[0];
-          if (
-            !client ||
-            granted.some((scope) => !client.scopes.includes(scope)) ||
-            (!client.first_party && input.firstParty)
-          )
-            throw new Denied();
-          const row = (
-            await connection.query<{ operation_id: string; scopes: string[]; first_party: boolean }>(
-              'INSERT INTO auth_client_reduction (client_id,operation_id,scopes,first_party) VALUES ($1,$2,$3,$4) ON CONFLICT (client_id) DO UPDATE SET client_id=EXCLUDED.client_id RETURNING operation_id,scopes,first_party',
-              [input.clientId, input.operationId, granted, input.firstParty],
-            )
-          ).rows[0]!;
-          if (
-            row.operation_id !== input.operationId ||
-            row.first_party !== input.firstParty ||
-            JSON.stringify(row.scopes) !== JSON.stringify(granted)
-          )
-            throw new Denied();
-          await connection.query('COMMIT');
-        } catch (error) {
-          await connection.query('ROLLBACK');
-          throw error;
-        } finally {
-          connection.release();
-        }
-      },
-      async clientReductionPage(input) {
-        if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 100) throw new Denied();
-        if (
-          !(
-            await database.query('SELECT client_id FROM auth_client_reduction WHERE client_id=$1 AND operation_id=$2', [
-              input.clientId,
-              input.operationId,
-            ])
-          ).rowCount
-        )
-          throw new Denied();
-        // Conservatively invalidate all existing Auth owners, including owners
-        // whose sessions were already erased while issued JWTs remain live.
-        const rows = (
-          await database.query<{ id: string }>('SELECT id FROM "user" WHERE id>$1 ORDER BY id LIMIT $2', [
-            input.after,
-            input.limit + 1,
-          ])
-        ).rows;
-        const items = rows.slice(0, input.limit).map((row) => row.id);
-        return { items, next: rows.length > input.limit ? items.at(-1)! : null };
-      },
-      async finishClientReduction(input) {
-        const granted = scopes(input.scopes);
-        const connection = await database.connect();
-        try {
-          await connection.query('BEGIN');
-          await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
-            `auth-client:${input.clientId}`,
-          ]);
-          const row = (
-            await connection.query<{ operation_id: string; scopes: string[]; first_party: boolean }>(
-              'SELECT operation_id,scopes,first_party FROM auth_client_reduction WHERE client_id=$1 FOR UPDATE',
-              [input.clientId],
-            )
-          ).rows[0];
-          if (!row) {
-            const client = (
-              await connection.query<Client>('SELECT * FROM auth_client WHERE client_id=$1', [input.clientId])
-            ).rows[0];
-            if (
-              !client ||
-              client.first_party !== input.firstParty ||
-              JSON.stringify(client.scopes) !== JSON.stringify(granted)
-            )
-              throw new Denied();
-          } else {
-            if (
-              row.operation_id !== input.operationId ||
-              row.first_party !== input.firstParty ||
-              JSON.stringify(row.scopes) !== JSON.stringify(granted)
-            )
-              throw new Denied();
-            await connection.query('UPDATE auth_client SET scopes=$2,first_party=$3 WHERE client_id=$1', [
-              input.clientId,
-              granted,
-              input.firstParty,
-            ]);
-            await connection.query('DELETE FROM auth_client_reduction WHERE client_id=$1 AND operation_id=$2', [
-              input.clientId,
-              input.operationId,
-            ]);
-          }
-          await connection.query('COMMIT');
-        } catch (error) {
-          await connection.query('ROLLBACK');
-          throw error;
-        } finally {
-          connection.release();
-        }
-      },
-      async revokeSessions(accountId) {
+      ...authority.internal,
+      async revokeSessions(accountId, cleanup) {
+        if (cleanup?.boundedCleanup) return authority.cleanupFencedSessions(accountId, cleanup.barrier);
         await (await getContext()).internalAdapter.deleteUserSessions(accountId);
       },
       async registerClient(input) {
@@ -819,6 +724,11 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             'INSERT INTO auth_client (client_id, first_party, scopes) VALUES ($1,$2,$3) ON CONFLICT (client_id) DO UPDATE SET first_party=EXCLUDED.first_party, scopes=EXCLUDED.scopes',
             [id, input.firstParty, granted],
           );
+          if (!previous)
+            await connection.query(
+              'INSERT INTO auth_client_coverage (client_id,ready,ready_after) VALUES ($1,true,CURRENT_TIMESTAMP)',
+              [id],
+            );
           await connection.query('COMMIT');
         } catch (error) {
           await connection.query('ROLLBACK');
@@ -956,94 +866,107 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           }
           const selected = { clientId: text(body.client_id), scopes: scopes(body.scope) };
           await clientFor(selected.clientId);
-          const response = await binding.run(selected, () =>
-            getAuth().api.signInEmail({
-              headers: request.headers,
-              body: { email: text(body.email), password: text(body.password) },
-              asResponse: true,
-            }),
-          );
-          if (!response.ok)
-            return json({ error: 'authentication_denied' }, response.status >= 400 ? response.status : 401);
-          const setCookies = response.headers.getSetCookie();
-          const headers = new Headers({ cookie: setCookies.map((cookie) => cookie.split(';')[0]).join('; ') });
-          try {
-            const proof = await sessionProof(headers);
-            return json(proof, 200, setCookies);
-          } catch (error) {
-            // A state/consent change during establishment must not release its cookie.
-            const created = await getAuth().api.getSession({ headers });
-            if (created) await (await getContext()).internalAdapter.deleteSession(created.session.token);
-            throw error;
-          }
+          return await withIssuance(selected.clientId, async () => {
+            const response = await binding.run(selected, () =>
+              getAuth().api.signInEmail({
+                headers: request.headers,
+                body: { email: text(body.email), password: text(body.password) },
+                asResponse: true,
+              }),
+            );
+            if (!response.ok)
+              return json({ error: 'authentication_denied' }, response.status >= 400 ? response.status : 401);
+            const setCookies = response.headers.getSetCookie();
+            const headers = new Headers({ cookie: setCookies.map((cookie) => cookie.split(';')[0]).join('; ') });
+            try {
+              const proof = await sessionProof(headers);
+              return json(proof, 200, setCookies);
+            } catch (error) {
+              // A state/consent change during establishment must not release its cookie.
+              const created = await getAuth().api.getSession({ headers });
+              if (created) await (await getContext()).internalAdapter.deleteSession(created.session.token);
+              throw error;
+            }
+          });
         }
         if (url.pathname === '/token') {
           fields(body, []);
-          const proof = await sessionProof(request.headers);
-          const now = Math.floor(Date.now() / 1000);
-          const accessToken = await signer.sign({
-            iss: options.issuer,
-            aud: options.audience,
-            sub: proof.account_id,
-            client_id: proof.client_id,
-            scope: proof.scope.join(' '),
-            authn_epoch: proof.authn_epoch,
-            iat: now,
-            exp: now + 300,
-            auth_time: proof.auth_time,
-            amr: proof.amr,
+          const native = await getAuth().api.getSession({
+            headers: request.headers,
+            query: { disableCookieCache: true, disableRefresh: true },
           });
-          return json({ access_token: accessToken, token_type: 'Bearer', expires_in: 300 });
+          if (!native) throw new Denied();
+          return await withIssuance(native.session.clientId, async () => {
+            const proof = await sessionProof(request.headers);
+            const client = await clientFor(proof.client_id);
+            await materialize(proof.account_id, proof.client_id, client.scopes, client.first_party);
+            const now = Math.floor(Date.now() / 1000);
+            const accessToken = await signer.sign({
+              iss: options.issuer,
+              aud: options.audience,
+              sub: proof.account_id,
+              client_id: proof.client_id,
+              scope: proof.scope.join(' '),
+              authn_epoch: proof.authn_epoch,
+              iat: now,
+              exp: now + 300,
+              auth_time: proof.auth_time,
+              amr: proof.amr,
+            });
+            return json({ access_token: accessToken, token_type: 'Bearer', expires_in: 300 });
+          });
         }
         if (url.pathname === '/consent') {
           fields(body, ['client_id', 'scope']);
-          const proof = await sessionProof(request.headers);
-          const client = await clientFor(text(body.client_id));
-          const granted = scopes(body.scope);
-          if (client.first_party || granted.some((scope) => !client.scopes.includes(scope))) throw new Denied(400);
-          const connection = await database.connect();
-          let reducing = false;
-          try {
-            await connection.query('BEGIN');
-            await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
-              `auth-consent:${proof.account_id}:${client.client_id}`,
-            ]);
-            const previous = (
-              await connection.query<{ scopes: string[] }>(
-                'SELECT scopes FROM auth_consent WHERE account_id=$1 AND client_id=$2 FOR UPDATE',
-                [proof.account_id, client.client_id],
-              )
-            ).rows[0];
-            reducing = !!previous?.scopes.some((scope) => !granted.includes(scope));
-            if (reducing) {
-              if (!trustedAccess.invalidateAccount) throw new Denied();
-              const current = await activeActor(proof.account_id);
-              if (proof.authn_epoch < current.authnEpoch) throw new Denied();
-              const previousEpoch = current.authnEpoch;
-              const receipt = await trustedAccess.invalidateAccount({
-                accountId: proof.account_id,
-                previousEpoch,
-                reason: 'consent-reduction',
-              });
-              invalidation(receipt, proof.account_id, previousEpoch);
+          return await withIssuance(text(body.client_id), async () => {
+            const proof = await sessionProof(request.headers);
+            const client = await clientFor(text(body.client_id));
+            const granted = scopes(body.scope);
+            if (client.first_party || granted.some((scope) => !client.scopes.includes(scope))) throw new Denied(400);
+            const connection = await database.connect();
+            let reducing = false;
+            try {
+              await connection.query('BEGIN');
+              await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
+                `auth-consent:${proof.account_id}:${client.client_id}`,
+              ]);
+              const previous = (
+                await connection.query<{ scopes: string[] }>(
+                  'SELECT scopes FROM auth_consent WHERE account_id=$1 AND client_id=$2 FOR UPDATE',
+                  [proof.account_id, client.client_id],
+                )
+              ).rows[0];
+              reducing = !!previous?.scopes.some((scope) => !granted.includes(scope));
+              if (reducing) {
+                if (!trustedAccess.invalidateAccount) throw new Denied();
+                const current = await activeActor(proof.account_id);
+                if (proof.authn_epoch < current.authnEpoch) throw new Denied();
+                const previousEpoch = current.authnEpoch;
+                const receipt = await trustedAccess.invalidateAccount({
+                  accountId: proof.account_id,
+                  previousEpoch,
+                  reason: 'consent-reduction',
+                });
+                invalidation(receipt, proof.account_id, previousEpoch);
+                await connection.query(
+                  'INSERT INTO auth_effect_receipt (receipt_id, account_id, purpose, minimum_authn_epoch) VALUES ($1,$2,$3,$4)',
+                  [receipt.receiptId, proof.account_id, 'consent-reduction', receipt.minimumAuthnEpoch],
+                );
+              }
               await connection.query(
-                'INSERT INTO auth_effect_receipt (receipt_id, account_id, purpose, minimum_authn_epoch) VALUES ($1,$2,$3,$4)',
-                [receipt.receiptId, proof.account_id, 'consent-reduction', receipt.minimumAuthnEpoch],
+                'INSERT INTO auth_consent (account_id, client_id, scopes) VALUES ($1,$2,$3) ON CONFLICT (account_id, client_id) DO UPDATE SET scopes=EXCLUDED.scopes',
+                [proof.account_id, client.client_id, granted],
               );
+              await connection.query('COMMIT');
+            } catch (error) {
+              await connection.query('ROLLBACK');
+              throw error;
+            } finally {
+              connection.release();
             }
-            await connection.query(
-              'INSERT INTO auth_consent (account_id, client_id, scopes) VALUES ($1,$2,$3) ON CONFLICT (account_id, client_id) DO UPDATE SET scopes=EXCLUDED.scopes',
-              [proof.account_id, client.client_id, granted],
-            );
-            await connection.query('COMMIT');
-          } catch (error) {
-            await connection.query('ROLLBACK');
-            throw error;
-          } finally {
-            connection.release();
-          }
-          if (reducing) await (await getContext()).internalAdapter.deleteUserSessions(proof.account_id);
-          return json({ client_id: client.client_id, scope: granted });
+            if (reducing) await (await getContext()).internalAdapter.deleteUserSessions(proof.account_id);
+            return json({ client_id: client.client_id, scope: granted });
+          });
         }
         fields(body, []);
         // Better Auth owns cookie clearing and deletion of its own persistent session.

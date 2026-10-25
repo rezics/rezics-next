@@ -68,6 +68,18 @@ CREATE TABLE public.auth_client (
 
 
 --
+-- Name: auth_client_coverage; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_client_coverage (
+    client_id text NOT NULL,
+    after_account text DEFAULT ''::text NOT NULL,
+    ready boolean DEFAULT false NOT NULL,
+    ready_after timestamp with time zone DEFAULT (CURRENT_TIMESTAMP + '00:05:00'::interval) NOT NULL
+);
+
+
+--
 -- Name: auth_client_reduction; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -76,6 +88,22 @@ CREATE TABLE public.auth_client_reduction (
     operation_id text NOT NULL,
     scopes text[] NOT NULL,
     first_party boolean NOT NULL
+);
+
+
+--
+-- Name: auth_client_reduction_progress; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_client_reduction_progress (
+    operation_id text NOT NULL,
+    client_id text NOT NULL,
+    scopes text[] NOT NULL,
+    first_party boolean NOT NULL,
+    after_account text DEFAULT ''::text NOT NULL,
+    page_after text DEFAULT ''::text NOT NULL,
+    terminal_account text,
+    completed boolean DEFAULT false NOT NULL
 );
 
 
@@ -315,6 +343,14 @@ ALTER TABLE ONLY public.auth_attempt_counter
 
 
 --
+-- Name: auth_client_coverage auth_client_coverage_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_client_coverage
+    ADD CONSTRAINT auth_client_coverage_pkey PRIMARY KEY (client_id);
+
+
+--
 -- Name: auth_client auth_client_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -336,6 +372,14 @@ ALTER TABLE ONLY public.auth_client_reduction
 
 ALTER TABLE ONLY public.auth_client_reduction
     ADD CONSTRAINT auth_client_reduction_pkey PRIMARY KEY (client_id);
+
+
+--
+-- Name: auth_client_reduction_progress auth_client_reduction_progress_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_client_reduction_progress
+    ADD CONSTRAINT auth_client_reduction_progress_pkey PRIMARY KEY (operation_id);
 
 
 --
@@ -545,6 +589,13 @@ CREATE INDEX auth_attempt_counter_retention ON public.auth_attempt_counter USING
 
 
 --
+-- Name: auth_consent_client_owner; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX auth_consent_client_owner ON public.auth_consent USING btree (client_id, account_id);
+
+
+--
 -- Name: auth_recovery_account_id_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -602,6 +653,14 @@ ALTER TABLE ONLY public.account
 
 
 --
+-- Name: auth_client_coverage auth_client_coverage_client_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_client_coverage
+    ADD CONSTRAINT auth_client_coverage_client_id_fkey FOREIGN KEY (client_id) REFERENCES public.auth_client(client_id);
+
+
+--
 -- Name: auth_client_reduction auth_client_reduction_client_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -610,11 +669,11 @@ ALTER TABLE ONLY public.auth_client_reduction
 
 
 --
--- Name: auth_consent auth_consent_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: auth_client_reduction_progress auth_client_reduction_progress_client_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.auth_consent
-    ADD CONSTRAINT auth_consent_account_id_fkey FOREIGN KEY (account_id) REFERENCES public."user"(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.auth_client_reduction_progress
+    ADD CONSTRAINT auth_client_reduction_progress_client_id_fkey FOREIGN KEY (client_id) REFERENCES public.auth_client(client_id);
 
 
 --

@@ -193,13 +193,27 @@ export interface AuthService {
       after: string;
       limit: number;
     }): Promise<{ items: string[]; next: string | null }>;
+    /** Record an Access floor only after native session revocation completed. */
+    completeClientReductionOwner(input: {
+      clientId: string;
+      operationId: string;
+      accountId: string;
+      barrier: InvalidationReceipt;
+    }): Promise<void>;
+    /** Deployment-only bounded coverage; existing clients remain closed until ready. */
+    backfillClientIssuance(input: {
+      clientId: string;
+      limit: number;
+    }): Promise<{ next: string | null; ready: boolean }>;
     finishClientReduction(input: {
       clientId: string;
       operationId: string;
       scopes: string[];
       firstParty: boolean;
     }): Promise<void>;
-    revokeSessions(accountId: string): Promise<void>;
+    /** Bounded cleanup is valid only after a durable Access floor; remaining
+     * native rows cannot pass sessionProof and expire when presented. */
+    revokeSessions(accountId: string, options?: { boundedCleanup: true; barrier: InvalidationReceipt }): Promise<void>;
     registerClient(input: { clientId: string; firstParty: boolean; scopes: string[] }): Promise<void>;
   };
 }

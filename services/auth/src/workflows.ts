@@ -286,9 +286,12 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
   // Functions are registered on start, and recreated after a clean SDK shutdown.
   let registration: (input: RegistrationInput) => Promise<{ accountId: string; expired?: true }>;
   let operation: (input: AccountOperation) => Promise<{ accountId: string }>;
-  let clientReduction: (
-    input: Extract<AccountOperation, { kind: 'client-reduction' }>,
-  ) => Promise<{ clientId: string }>;
+  type ReductionInput = Extract<AccountOperation, { kind: 'client-reduction' }> & {
+    operationId?: string;
+    after?: string;
+  };
+  type ReductionResult = { clientId: string; nextWorkflowId?: string };
+  let clientReduction: (input: ReductionInput) => Promise<ReductionResult>;
   function register() {
     const read = step('read-registration', stage);
     const reserve = step(
@@ -609,29 +612,50 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         await auth.internal.beginClientReduction({ ...input, operationId: required(DBOS.workflowID) });
       },
     );
-    const reductionPage = step('client-reduction-page', async (clientId: string, after: string) =>
-      auth.internal.clientReductionPage({ clientId, operationId: required(DBOS.workflowID), after, limit: 64 }),
+    const reductionPage = step('client-reduction-page', async (clientId: string, operationId: string, after: string) =>
+      auth.internal.clientReductionPage({ clientId, operationId, after, limit: 64 }),
     );
-    const finishReduction = step(
-      'finish-client-reduction',
-      async (input: Extract<AccountOperation, { kind: 'client-reduction' }>) => {
-        await auth.internal.finishClientReduction({ ...input, operationId: required(DBOS.workflowID) });
-      },
+    const revokeReduction = step('revoke-client-reduction-sessions', async (barrier: WorkflowFence) =>
+      auth.internal.revokeSessions(barrier.accountId, {
+        boundedCleanup: true,
+        barrier: { ...barrier, minimumAuthnEpoch: Number(barrier.minimumAuthnEpoch) },
+      }),
     );
+    const completedOwner = step(
+      'complete-client-reduction-owner',
+      async (clientId: string, operationId: string, barrier: WorkflowFence) =>
+        auth.internal.completeClientReductionOwner({
+          clientId,
+          operationId,
+          accountId: barrier.accountId,
+          barrier: { ...barrier, minimumAuthnEpoch: Number(barrier.minimumAuthnEpoch) },
+        }),
+    );
+    const finishReduction = step('finish-client-reduction', async (input: ReductionInput, operationId: string) => {
+      await auth.internal.finishClientReduction({ ...input, operationId });
+    });
     clientReduction = DBOS.registerWorkflow(
-      async (input: Extract<AccountOperation, { kind: 'client-reduction' }>) => {
-        await beginReduction(input);
-        let after = '';
-        while (true) {
-          const batch = await reductionPage(input.clientId, after);
-          for (const id of batch.items) {
-            await fence(id);
-            await revoke(id);
-          }
-          if (batch.next === null) break;
-          after = batch.next;
+      async (input: ReductionInput): Promise<ReductionResult> => {
+        const operationId = input.operationId ?? required(DBOS.workflowID);
+        if (!input.operationId) await beginReduction(input);
+        const batch = await reductionPage(input.clientId, operationId, input.after ?? '');
+        for (const id of batch.items) {
+          const barrier = await fence(id);
+          await revokeReduction(barrier);
+          await completedOwner(input.clientId, operationId, barrier);
         }
-        await finishReduction(input);
+        if (batch.next !== null) {
+          // Each durable workflow has one bounded page. It schedules, but does
+          // not await, its continuation, so history and recovery stay bounded.
+          const nextWorkflowId = `${operationId}:page:${hash(batch.next).toString('hex')}`;
+          await DBOS.startWorkflow(clientReduction, { workflowID: nextWorkflowId })({
+            ...input,
+            operationId,
+            after: batch.next,
+          });
+          return { clientId: input.clientId, nextWorkflowId };
+        }
+        await finishReduction(input, operationId);
         return { clientId: input.clientId };
       },
       { name: 'accounts.client-reduction' },
@@ -811,6 +835,26 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     if (!row.digest.equals(digest)) denied();
     return (await DBOS.startWorkflow(operation, { workflowID: id })(input)).getResult();
   }
+  async function waitClientReduction(id: string): Promise<{ clientId: string }> {
+    const progress = (
+      await database.query<{ client_id: string; completed: boolean; page_after: string }>(
+        'SELECT client_id,completed,page_after FROM auth_client_reduction_progress WHERE operation_id=$1',
+        [id],
+      )
+    ).rows[0];
+    if (progress?.completed) return { clientId: progress.client_id };
+    if (progress?.page_after) id = `${id}:page:${hash(progress.page_after).toString('hex')}`;
+    while (true) {
+      const status = await DBOS.getWorkflowStatus(id);
+      let result: ReductionResult;
+      if (status?.status === 'ERROR') {
+        const failed = required((await DBOS.listWorkflowSteps(id))?.find((s) => s.error !== null));
+        result = await (await DBOS.rewindWorkflow<ReductionResult>(id, { startStep: failed.functionID })).getResult();
+      } else result = await DBOS.retrieveWorkflow<ReductionResult>(id).getResult();
+      if (!result.nextWorkflowId) return { clientId: result.clientId };
+      id = result.nextWorkflowId;
+    }
+  }
   async function resumeRequest(id: string) {
     active();
     const input = required(
@@ -822,6 +866,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       ).rows[0],
     ).request;
     if ('authorization' in input) await approved(input);
+    if (input.kind === 'client-reduction') return waitClientReduction(id);
     const status = await DBOS.getWorkflowStatus(id);
     if (status?.status === 'ERROR') {
       const steps = required(await DBOS.listWorkflowSteps(id));
@@ -1027,7 +1072,8 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         )
       ).rows[0]!;
       if (!row.digest.equals(digest)) denied();
-      return (await DBOS.startWorkflow(clientReduction, { workflowID: id })(operation)).getResult();
+      await DBOS.startWorkflow(clientReduction, { workflowID: id })(operation);
+      return waitClientReduction(id);
     },
     async openOperatorSession(input: {
       key: string;
