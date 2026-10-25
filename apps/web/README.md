@@ -182,6 +182,9 @@ it with the request and passes it to TanStack Router's `ssr.nonce`, including it
 navigation reuses the document's nonce. Pages remain private and uncacheable; media downloads retain their
 separate `default-src 'none'; sandbox` policy.
 
+The rich-text editor disables Tiptap's runtime CSS injection. Its ProseMirror base rules ship in the UI
+package's static `prose.css`, imported by `styles.css`, so editors and their menus work under the same policy.
+
 The production Content Security Policy is defined in `src/security/headers.ts`:
 
 | Directive                                                                 | Purpose                                                                                                                                                |

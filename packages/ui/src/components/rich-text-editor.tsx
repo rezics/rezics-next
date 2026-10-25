@@ -228,6 +228,7 @@ export function RichTextEditor({
         slashExtension(slashHandlers),
       ],
       content: normalizedValue.doc as JSONContent,
+      injectCSS: false,
       immediatelyRender: false,
       shouldRerenderOnTransaction: false,
       autofocus: autoFocus,
