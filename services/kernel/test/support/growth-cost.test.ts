@@ -67,7 +67,12 @@ test('a sequential scan counts filtered out rows as examined', async () => {
   const cost = costOf({ statements: [], plans: [plan] });
 
   expect(cost.rows).toBe(100);
-  expect(cost.relations['growth_cost_test.seq_rows']).toEqual({ rows: 100, blocks: expect.any(Number), nodes: 1 });
+  expect(cost.relations['growth_cost_test.seq_rows']).toEqual({
+    rows: 100,
+    blocks: expect.any(Number),
+    nodes: 1,
+    sequentialScans: 1,
+  });
 });
 
 test('counts sequential scans per relation', () => {
@@ -155,6 +160,7 @@ test('an unreferenced data-modifying CTE contributes its relation rows and block
       rows: 1,
       blocks: expect.any(Number),
       nodes: 1,
+      sequentialScans: 0,
     });
     expect(cost.relations['growth_cost_test.cte_target']?.blocks).toBeGreaterThan(0);
   } finally {
@@ -213,7 +219,7 @@ test('plans without ANALYZE rows or BUFFERS counts are refused', () => {
 test('median cost takes the lower median of each measure and matching relations', () => {
   const cost = (values: Omit<Cost, 'relations'>, relation: string): Cost => ({
     ...values,
-    relations: { [relation]: { rows: values.rows, blocks: values.blocks, nodes: 1 } },
+    relations: { [relation]: { rows: values.rows, blocks: values.blocks, nodes: 1, sequentialScans: 0 } },
   });
   const first = cost(
     { statements: 1, controlStatements: 0, plans: 1, rows: 10, blocks: 4, sharedHit: 2, sharedRead: 2 },

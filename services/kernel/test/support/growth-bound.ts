@@ -9,7 +9,9 @@ export const DEFAULT_SLACK: Readonly<Record<Metric, Slack>> = {
 
 /** Structural, so the harness's Cost type is assignable without an import. */
 export type Measured = Readonly<Record<Metric, number>> & {
-  readonly relations?: Readonly<Record<string, { readonly rows: number; readonly blocks: number }>>;
+  readonly relations?: Readonly<
+    Record<string, { readonly rows: number; readonly blocks: number; readonly sequentialScans?: number }>
+  >;
 };
 export type GrowthSample = { readonly scale: number; readonly cost: Measured };
 export type Violation = {
@@ -112,6 +114,13 @@ function formatRelations(samples: readonly GrowthSample[]): string[] {
   if (blocks.length > 0)
     lines.push(
       `Largest relations by blocks: ${blocks.map(([name, cost]) => `${name} (${cost.blocks} blocks)`).join(', ')}`,
+    );
+  const sequentialScans = entries
+    .filter(([, cost]) => (cost.sequentialScans ?? 0) > 0)
+    .toSorted((left, right) => right[1].rows - left[1].rows);
+  if (sequentialScans.length > 0)
+    lines.push(
+      `Sequential scans: ${sequentialScans.map(([name, cost]) => `${name} (${cost.rows} rows)`).join(', ')} (a sequential scan of a small relation is the planner's choice; seed every relation the operation reads to thousands of rows at the smallest scale)`,
     );
   return lines;
 }

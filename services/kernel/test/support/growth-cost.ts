@@ -1,6 +1,11 @@
 export type Capture = { readonly statements: readonly string[]; readonly plans: readonly unknown[] };
 
-export type RelationCost = { readonly rows: number; readonly blocks: number; readonly nodes: number };
+export type RelationCost = {
+  readonly rows: number;
+  readonly blocks: number;
+  readonly nodes: number;
+  readonly sequentialScans: number;
+};
 
 export type Cost = {
   readonly statements: number;
@@ -21,7 +26,7 @@ type NodeTotals = {
   readonly inclusiveHit: number;
   readonly inclusiveRead: number;
 };
-type MutableRelationCost = { rows: number; blocks: number; nodes: number };
+type MutableRelationCost = { rows: number; blocks: number; nodes: number; sequentialScans: number };
 
 const rowScans = new Set([
   'Seq Scan',
@@ -104,6 +109,7 @@ function costNode(node: PlanNode, root: boolean, relations: Map<string, MutableR
         key,
         nodeType === 'ModifyTable' ? actualRows * loops : examined,
         exclusiveHit + exclusiveRead,
+        nodeType === 'Seq Scan' ? 1 : 0,
       );
     }
   } else if (nodeType === 'Bitmap Index Scan') {
@@ -120,11 +126,18 @@ function costNode(node: PlanNode, root: boolean, relations: Map<string, MutableR
   };
 }
 
-function addRelation(relations: Map<string, MutableRelationCost>, key: string, rows: number, blocks: number): void {
-  const relation = relations.get(key) ?? { rows: 0, blocks: 0, nodes: 0 };
+function addRelation(
+  relations: Map<string, MutableRelationCost>,
+  key: string,
+  rows: number,
+  blocks: number,
+  sequentialScans = 0,
+): void {
+  const relation = relations.get(key) ?? { rows: 0, blocks: 0, nodes: 0, sequentialScans: 0 };
   relation.rows += rows;
   relation.blocks += blocks;
   relation.nodes++;
+  relation.sequentialScans += sequentialScans;
   relations.set(key, relation);
 }
 
