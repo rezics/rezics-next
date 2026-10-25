@@ -1,13 +1,26 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from '@tanstack/react-router';
+import { createServerFn } from '@tanstack/react-start';
+import { getRequestHeader } from '@tanstack/react-start/server';
 import { m } from '../paraglide/messages.js';
-import { getLocale } from '../paraglide/runtime.js';
+import { getLocale, locales } from '../paraglide/runtime.js';
+import { AppShell, ErrorPage, NotFoundPage } from '../shell/shell';
 import '../styles.css';
 
+const readPreferences = createServerFn({ method: 'GET' }).handler(() => {
+  const cookie = getRequestHeader('cookie') ?? '';
+  const theme = /(?:^|;\s*)rezics_theme=(system|light|dark)(?:;|$)/.exec(cookie)?.[1] ?? 'system';
+  const host = getRequestHeader('host') ?? 'localhost';
+  const protocol = getRequestHeader('x-forwarded-proto') ?? 'http';
+  return { theme, origin: `${protocol}://${host}`, collapsed: /(?:^|;\s*)rezics_nav=collapsed(?:;|$)/.test(cookie) };
+});
 export const Route = createRootRoute({
-  head: () => ({ meta: [{ charSet: 'utf-8' }, { name: 'viewport', content: 'width=device-width, initial-scale=1' }, { title: 'REZICS' }] }),
+  loader: () => readPreferences(),
+  head: ({ loaderData }) => ({ meta: [{ charSet: 'utf-8' }, { name: 'viewport', content: 'width=device-width, initial-scale=1' }, { title: m.home_heading() }], links: [{ rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' }, ...locales.map(locale => ({ rel: 'alternate', hrefLang: locale, href: `${loaderData?.origin ?? 'http://localhost'}/${locale}` })), { rel: 'alternate', hrefLang: 'x-default', href: `${loaderData?.origin ?? 'http://localhost'}/` }] }),
   component: Root,
-  notFoundComponent: () => <main><h1>{m.not_found_heading()}</h1><p>{m.not_found_message()}</p></main>,
+  notFoundComponent: NotFoundPage,
+  errorComponent: ErrorPage,
 });
 function Root() {
-  return <html lang={getLocale()}><head><HeadContent /></head><body><Outlet /><Scripts /></body></html>;
+  const { theme, collapsed } = Route.useLoaderData();
+  return <html lang={getLocale()} className={theme === 'system' ? undefined : theme}><head><HeadContent /></head><body><AppShell theme={theme} collapsed={collapsed}><Outlet /></AppShell><Scripts /></body></html>;
 }

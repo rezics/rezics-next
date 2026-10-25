@@ -1,3 +1,4 @@
 import { createFileRoute } from '@tanstack/react-router';
+import { HomePage } from '../shell/shell';
 import { m } from '../paraglide/messages.js';
-export const Route = createFileRoute('/')({ component: () => <main><h1>{m.home_heading()}</h1></main> });
+export const Route = createFileRoute('/')({ head: () => ({ meta: [{ title: m.home_heading() }] }), component: HomePage });
