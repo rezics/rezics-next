@@ -6,15 +6,17 @@ import type { CommerceDriver, Inspection, Persona, StripeCreate } from '../../..
 import { migrate as migrateAuth } from '../../../../auth/scripts/database.ts';
 import { createAccess } from '../../../src/access/index.ts';
 import { readAccount } from '../../../src/access/account-data.ts';
+import { PLATFORM_RESOURCE } from '../../../src/access/bootstrap-governance.ts';
+import { createGrantCommands } from '../../../src/access/grant-commands.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { createCommerceCommands } from '../../../src/commerce/commands.ts';
+import { checkout } from '../../../src/commerce/checkout.ts';
 import { createCommerceWork } from '../../../src/commerce/enqueue.ts';
 import { createStripePort } from '../../../src/commerce/stripe.ts';
 import * as store from '../../../src/commerce/store.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
 import { actionCatalogue } from '../../../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
-import { GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
 import { createWorkClient } from '../../../src/work/client.ts';
 import { KERNEL_WORK_MODULES } from '../../../src/work/modules.ts';
 import { startWorker } from '../../../src/worker.ts';
@@ -89,8 +91,9 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
     suspended: account(0x5520),
   };
   const seller = account(0x2200);
+  const governor = account(0x1100);
   const seedAccounts = [account(0x3300), account(0x6610)];
-  const people = [...Object.values(accounts), seller, ...seedAccounts];
+  const people = [...Object.values(accounts), seller, governor, ...seedAccounts];
   const approvals = new Set(people.map(({ id }) => id));
   const issuer = 'https://auth.example.test';
   const audience = 'https://api.rezics.test';
@@ -167,7 +170,7 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
     }
   }
   let app = kernel();
-  const scopes = [...actionCatalogue(app).keys()];
+  const scopes = [...actionCatalogue(app).keys(), 'access:grant'];
   await auth.internal.registerClient({ clientId: 'web', firstParty: true, scopes });
   const tokens = new Map<string, string>();
   for (const person of people) {
@@ -206,10 +209,6 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
     accounts.suspended.route,
     accounts.suspended.id,
   ]);
-  await db.admin.query(
-    "INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id) VALUES (0,$1,$2,'offer:create','(,)',$2)",
-    [GLOBAL_CONTEXT, seller.id],
-  );
   // Resolve the same mounted Access catalogue used by the HTTP boundary for trusted commands.
   await app.handle(
     new Request('http://kernel.test/v1/entitlements', {
@@ -218,6 +217,43 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
   );
   const actor = (id: string) => access.authenticate(tokens.get(id)!, { pool: db.pool, deadline: Date.now() + 5000 });
   const commands = () => createCommerceCommands({ pool: db.pool, access });
+  // Grant administration is an internal command, with its management action
+  // declared by this trusted composition just as in Access's governance tests.
+  const grantAccess = createAccess({
+    actions: new Map([...actionCatalogue(app), ['access:grant', { anonymous: false }]]),
+    auth: {
+      issuer,
+      audience,
+      jwksUrl: `${issuer}/.well-known/jwks.json`,
+      fetch: async (location, init) => auth.handler(new Request(location, init)),
+    },
+  });
+  let sellerAuthority: Promise<void> | undefined;
+  async function authorizeSeller() {
+    const bootstrap = Bun.spawn([process.execPath, 'scripts/bootstrap-governance.ts', '--account', governor.id], {
+      cwd: new URL('../../../', import.meta.url).pathname,
+      env: { ...process.env, DATABASE_URL: databaseUrl },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const [code, stdout, stderr] = await Promise.all([
+      bootstrap.exited,
+      new Response(bootstrap.stdout).text(),
+      new Response(bootstrap.stderr).text(),
+    ]);
+    if (code !== 0) throw new Error(`Governance bootstrap exited ${code}: ${stdout}${stderr}`);
+    const context = { pool: db.pool, deadline: Date.now() + 5000 };
+    await createGrantCommands({ pool: db.pool, access: grantAccess, managementAction: 'access:grant' }).create(
+      { ...context, actor: await grantAccess.authenticate(tokens.get(governor.id)!, context) },
+      {
+        resource: PLATFORM_RESOURCE,
+        subject: { kind: 'account', id: seller.id },
+        actions: ['offer:create'],
+        valid: '(,)',
+        key: 'commerce-fixture-seller',
+      },
+    );
+  }
   let child: ReturnType<typeof Bun.spawn> | undefined;
   let held = true;
   const disputes = new Map<string, string>();
@@ -286,6 +322,7 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
       app = kernel();
     },
     async provisionOffer(input = {}) {
+      await (sellerAuthority ??= authorizeSeller());
       return (
         await commands().createOffer(
           await actor(seller.id),
@@ -483,11 +520,29 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
     },
     async seedUnrelatedOrders(total) {
       if (!seedOffer && total > 0) seedOffer = (await driver.provisionOffer()).id;
-      // Use the same createOrder command (including its snapshot, grants, receipt and events)
-      // as HTTP checkout. Seeding creates no provider sessions and does not settle anything.
+      // Use POST /v1/orders' production orchestration, including provider session
+      // creation. The resulting reconciliation workflows remain part of settle().
       while (seeded < total) {
         const person = seedAccounts[seeded % seedAccounts.length]!;
-        await commands().createOrder(await actor(person.id), seedOffer!, Bun.randomUUIDv7());
+        await checkout(
+          {
+            pool: db.pool,
+            commands: commands(),
+            stripe: createStripePort({
+              apiKey: 'sk_test_commerce',
+              managedPayments,
+              host: '127.0.0.1',
+              port: fake.port,
+              protocol: 'http',
+              maxNetworkRetries: 0,
+              clock: () => new Date(instant),
+            }),
+            ...configuration,
+          },
+          await actor(person.id),
+          seedOffer!,
+          Bun.randomUUIDv7(),
+        );
         seeded++;
       }
     },
