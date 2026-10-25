@@ -30,7 +30,7 @@ test('portable checks return nested item targets and preserve capped diagnostic 
       {
         pointer: '/statements/schema:author/0/references/0/parts/0/value/content',
         id: target,
-        targets: ['schema:Organization'],
+        targets: ['schema:Organization', 'schema:Person'],
       },
     ],
   });

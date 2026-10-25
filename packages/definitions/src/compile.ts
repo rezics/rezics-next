@@ -370,7 +370,6 @@ export async function compileCatalogue(input: {
     }
   }
   const slots = terms('slots', globals);
-  const classKeysByName = new Map(classes.map((term) => [term.name, term.key]));
   const slotKeysByName = new Map(slots.map((term) => [term.name, term.key]));
   const classChain = (name: string) => {
     const result: string[] = [];
@@ -383,19 +382,29 @@ export async function compileCatalogue(input: {
     }
     return result;
   };
-  const descendants = (range: string): string[] =>
-    classes
-      .filter((term) => {
-        let current: string | undefined = term.name;
-        const seen = new Set<string>();
-        while (current && !seen.has(current)) {
-          if (current === range) return true;
-          seen.add(current);
-          current = parents.get(current);
-        }
-        return false;
-      })
-      .map((term) => term.name);
+  const children = new Map<string, string[]>();
+  for (const [name, parent] of parents) children.set(parent, [...(children.get(parent) ?? []), name]);
+  const classUri = (name: string): string | undefined => {
+    const value = sourceClasses.get(name)?.value.class_uri;
+    return typeof value === 'string' ? value : undefined;
+  };
+  // A named range contributes its own CURIE. A class without one contributes the
+  // nearest descendants that have one, not their further subtypes.
+  const declaredRange = (range: string): string[] => {
+    if (classUri(range)) return [range];
+    if (!sourceClasses.has(range)) return [];
+    const found: string[] = [];
+    const seen = new Set<string>();
+    const queue = [...(children.get(range) ?? [])];
+    while (queue.length) {
+      const name = queue.shift()!;
+      if (seen.has(name)) continue;
+      seen.add(name);
+      if (classUri(name)) found.push(name);
+      else for (const child of children.get(name) ?? []) queue.push(child);
+    }
+    return found;
+  };
   const mappings = (term: Term) => {
     const result = unique(names(term.value.exact_mappings));
     for (const mapping of result)
@@ -470,14 +479,14 @@ export async function compileCatalogue(input: {
     const datatype = annotations.datatype as DataType;
     const range = slot.range ?? parsed[location.file]?.default_range ?? 'string';
     const ranges = Array.isArray(slot.any_of) ? slot.any_of.map((entry) => object(entry).range) : [range];
-    const expandedTargets = unique(
-      ranges.flatMap((candidate) => (typeof candidate === 'string' ? descendants(candidate) : [])),
+    const declaredClasses = ranges.flatMap((candidate) =>
+      typeof candidate === 'string' ? declaredRange(candidate) : [],
     );
     const agrees =
       DATA_TYPES.includes(datatype) &&
       ranges.length > 0 &&
       ranges.every((range) => {
-        if (datatype === 'wikibase-item') return typeof range === 'string' && descendants(range).length > 0;
+        if (datatype === 'wikibase-item') return typeof range === 'string' && declaredRange(range).length > 0;
         const expected =
           datatype === 'quantity'
             ? ['integer', 'decimal']
@@ -514,8 +523,17 @@ export async function compileCatalogue(input: {
       else add(annotation('qualifiers'), 'invalid', `Unknown qualifier ${name}`);
     }
     property.qualifiers = unique(property.qualifiers);
-    if (datatype === 'wikibase-item')
-      property.targets = unique(expandedTargets.map((name) => classKeysByName.get(name)!));
+    if (datatype === 'wikibase-item') {
+      const targets: string[] = [];
+      for (const name of declaredClasses) {
+        const definition = sourceClasses.get(name);
+        const uri = definition?.value.class_uri;
+        if (typeof uri !== 'string') continue;
+        const uriLocation = { ...definition!.location, pointer: at(definition!.location.pointer, 'class_uri') };
+        if (expand(uri, uriLocation)) targets.push(uri);
+      }
+      property.targets = unique(targets);
+    }
     if (datatype === 'quantity') {
       const units = words(annotations.units);
       if (!units.length || units.length > 16)

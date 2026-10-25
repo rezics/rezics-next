@@ -15,6 +15,7 @@ imports:
 classes:
   Thing:
     abstract: true
+    class_uri: schema:Thing
     description: A thing that can be identified by a URL.
     slots:
       - url

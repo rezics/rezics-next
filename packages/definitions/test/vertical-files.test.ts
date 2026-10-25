@@ -9,7 +9,7 @@ const withVertical = (presentation = bundledSources().presentation) => {
   english.types ??= {};
   english.properties ??= {};
   english.types!['schema:FictionalPerson'] = 'fictional person';
-  english.types!['schema:FictionalCharacter'] = 'fictional character';
+  english.types!['schema:VerticalCharacter'] = 'vertical character';
   english.properties!['schema:relatedPerson'] = 'related person';
   const presentations = { ...presentation, [englishKey]: Bun.YAML.stringify(english) };
   const root = Bun.YAML.parse(sources.schemas['rezics.yaml']!) as Record<string, unknown>;
@@ -31,9 +31,9 @@ classes:
   AbstractCharacter:
     is_a: Thing
     abstract: true
-  FictionalCharacter:
+  VerticalCharacter:
     is_a: AbstractCharacter
-    class_uri: schema:FictionalCharacter
+    class_uri: schema:VerticalCharacter
 slots:
   relatedPerson:
     slot_uri: schema:relatedPerson
@@ -55,20 +55,16 @@ slots:
 
 test('a range targets its concrete class and every concrete descendant, including through an abstract class', async () => {
   const release = await compileCatalogue(withVertical());
-  expect(release.properties['schema:author']!.targets).toEqual([
-    'schema:FictionalPerson',
-    'schema:Organization',
-    'schema:Person',
-  ]);
-  expect(release.properties['schema:relatedPerson']!.targets).toEqual(['schema:FictionalPerson', 'schema:Person']);
-  expect(release.properties['schema:author']!.targets).not.toContain('schema:FictionalCharacter');
+  expect(release.properties['schema:author']!.targets).toEqual(['schema:Organization', 'schema:Person']);
+  expect(release.properties['schema:relatedPerson']!.targets).toEqual(['schema:Person']);
+  expect(release.properties['schema:author']!.targets).not.toContain('schema:VerticalCharacter');
 });
 
 test('a subclass in another schema file widens a range with no edit to the slot', async () => {
   const input = withVertical();
   expect(input.schemas['core.yaml']).not.toContain('FictionalPerson');
   const release = await compileCatalogue(input);
-  expect(release.properties['schema:author']!.targets).toContain('schema:FictionalPerson');
+  expect(release.properties['schema:author']!.targets).toEqual(['schema:Organization', 'schema:Person']);
 });
 
 test('labels split across files merge per locale and a term labelled twice in one locale is refused', async () => {

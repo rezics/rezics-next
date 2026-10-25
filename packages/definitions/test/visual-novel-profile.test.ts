@@ -36,7 +36,7 @@ test('a visual novel and its releases by platform and language are catalogue pro
   );
   expect(properties['schema:exampleOfWork']).toMatchObject({
     datatype: 'wikibase-item',
-    targets: expect.arrayContaining(['wd:Q689445']),
+    targets: ['schema:CreativeWork'],
   });
   for (const credit of ['wdt:P178', 'schema:publisher'])
     expect(properties[credit]?.qualifiers).toEqual(

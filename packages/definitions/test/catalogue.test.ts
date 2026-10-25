@@ -75,6 +75,7 @@ test('book work, edition and recipe are profiles of the catalogue', () => {
     'schema:cookTime',
     'schema:datePublished',
     'schema:image',
+    'schema:keywords',
     'schema:name',
     'schema:recipeIngredient',
     'schema:recipeYield',
@@ -91,15 +92,7 @@ test('book work, edition and recipe are profiles of the catalogue', () => {
   expect(properties['schema:exampleOfWork']).toMatchObject({
     datatype: 'wikibase-item',
     multivalued: false,
-    targets: [
-      'bf:Instance',
-      'schema:Book',
-      'schema:MusicAlbum',
-      'schema:TVSeries',
-      'schema:VideoGame',
-      'wd:Q689445',
-      'wd:Q7725310',
-    ],
+    targets: ['schema:CreativeWork'],
     mappings: ['wd:P629'],
   });
   expect(properties['schema:isbn']).toMatchObject({

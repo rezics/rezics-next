@@ -107,11 +107,14 @@ test('an appearance is a character statement qualified by its role and a voice a
   expect(release.properties['schema:character']).toMatchObject({
     datatype: 'wikibase-item',
     multivalued: true,
-    targets: ['ex:Character'],
+    targets: ['ex:Character', 'wd:Q95074'],
     mappings: ['wd:P674'],
     qualifiers: ['rezics:spoilerLevel', 'wdt:P1932', 'wdt:P3831'],
   });
-  expect(release.properties['wdt:P453']).toMatchObject({ datatype: 'wikibase-item', targets: ['ex:Character'] });
+  expect(release.properties['wdt:P453']).toMatchObject({
+    datatype: 'wikibase-item',
+    targets: ['ex:Character', 'wd:Q95074'],
+  });
   expect(release.properties['wdt:P725']!.qualifiers).toContain('wdt:P453');
   expect(release.properties['rezics:spoilerLevel']).toMatchObject({
     iri: 'https://rezics.com/vocab/spoilerLevel',
@@ -162,10 +165,9 @@ test('genres, tags and detailed roles are SKOS concepts and a concept focuses on
   const release = await extendedRelease();
   expect(release.properties['foaf:focus']).toMatchObject({
     datatype: 'wikibase-item',
-    targets: Object.keys(release.types).sort(),
+    targets: ['schema:Thing'],
   });
-  expect(release.properties['schema:exampleOfWork']!.targets).toContain('ex:Work');
-  expect(release.properties['schema:exampleOfWork']!.targets).not.toContain('schema:Person');
+  expect(release.properties['schema:exampleOfWork']!.targets).toEqual(['schema:CreativeWork']);
 });
 
 test('series membership is a statement on the member with its order', async () => {
@@ -177,7 +179,7 @@ test('series membership is a statement on the member with its order', async () =
   const release = await extendedRelease();
   expect(release.properties['wdt:P179']).toMatchObject({
     datatype: 'wikibase-item',
-    targets: ['ex:Series'],
+    targets: ['schema:CreativeWorkSeries'],
     qualifiers: ['schema:position'],
   });
   for (const type of [

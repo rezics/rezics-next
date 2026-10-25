@@ -23,11 +23,13 @@ A property may name at most 1,024 targets. Compilation allows at most 256 schema
 The launch grain is three types and twelve properties in one schema file. The bundled
 catalogue has 17 types, 68 properties and 12 schema files. One hundred such verticals
 add 300 types, 1,200 properties and 100 schema files: 317 types, 1,268 properties and
-112 schema files, 874,688 canonical bytes. `foaf:focus` ranges over Thing, so the new
-concrete classes are targets too (316). `schema:exampleOfWork` gains the creative-work
-descendants (210). The previous caps of 256 types, 1,024 properties, 64 schema files
-and 16 targets do not fit that grain. The measured body is 874,688 bytes, so the
-previous 1 MiB cap still holds it. The new caps multiply those limits by four: 1,024
+112 schema files, 874,688 canonical bytes. `foaf:focus` ranges over `Thing`, so its
+target is `schema:Thing`; a later type matches through its `bases`.
+`schema:exampleOfWork` ranges over `CreativeWork`, so its target stays
+`schema:CreativeWork` when a vertical adds a creative-work subtype. Adding a
+vertical never changes another vertical's properties. The previous caps of 256
+types, 1,024 properties and 64 schema files do not fit that grain. The measured
+body is 874,688 bytes, so the previous 1 MiB cap still holds it. The new caps multiply those limits by four: 1,024
 types, 4,096 properties, 256 schema files and 4 MiB. Targets are the exception: every
 target is a type, so the target cap equals the type cap. That is about three times the
 measured type and property counts. Per-type caps stay 64 properties and 16 facets,
@@ -111,9 +113,12 @@ Run `bun run --cwd packages/definitions check` from the repository root.
 
 `CreativeWork`, `Character` and `CreativeWorkSeries` are abstract anchors. Book
 works, editions and launch works extend `CreativeWork`; `FictionalCharacter` and
-`Series` extend the other two anchors. A range on an anchor reaches every concrete
-subclass a vertical adds. The two concrete profiles add no slots of their own here.
-`schema:exampleOfWork` ranges over all creative works, including editions.
+`Series` extend the other two anchors. An item property's `targets` name its
+declared range. `schema:exampleOfWork` ranges over `CreativeWork`, so its target
+is `schema:CreativeWork`. A value matches when its subject's type is that target
+or the type's `bases` contain it, including editions and any later creative-work
+subtype. Adding a vertical never changes another vertical's properties. The two
+concrete profiles add no slots of their own here.
 
 A credit is a statement whose property names the job and whose value is a person
 or organization. Its qualifiers record the name as credited, credit order and a
@@ -130,7 +135,8 @@ custom `rezics:spoilerLevel` quantity uses unit `1`, from 0 (no spoiler) through
 Genres, tags and detailed roles are SKOS concepts. A concept and its scheme are
 subjects, created and adopted like any other subject; a Realm's board scheme is
 one example. When a classification value stands for another subject, the concept
-names that subject with `foaf:focus`, whose range is `Thing`.
+names that subject with `foaf:focus`, whose range is `Thing` and whose target is
+`schema:Thing`. Any type under `Thing` matches that target through its `bases`.
 
 Series membership is an adopted `wdt:P179` statement on the member creative work,
 with its ordinal in `schema:position`. It is never a list membership. The shared
@@ -227,8 +233,8 @@ Source conventions:
   across files. Different induced contracts for the same property cannot be
   represented in one release and are refused.
 - Slot `annotations` permits only `datatype`, `units`, and `qualifiers`. `datatype`
-  is required: `wikibase-item` needs a concrete class range or `any_of` concrete
-  class ranges; `string`, `external-id`, `monolingualtext`, `document`, and `media` need `string`;
+  is required: `wikibase-item` needs a class range or `any_of` class ranges; `string`,
+  `external-id`, `monolingualtext`, `document`, and `media` need `string`;
   `url` needs `uri`; `quantity` needs `integer` or `decimal`; `time` needs `date`.
   An omitted range uses the source schema's default, otherwise `string`.
 - `external-id` requires exactly one exact mapping, matching `wd:P<digits>`.
@@ -257,11 +263,15 @@ Source conventions:
   64 in each group. An empty map omits `filters`.
 
 Limits and profile checks precede LinkML loading and linting, then mapping, then
-labels, then context settings, then saved filters. A `wikibase-item` range includes
-its concrete class and every concrete descendant reachable through `is_a`, including when the range
-or an intermediate class is abstract. Descendants are resolved across all supplied schemas; an
-abstract range with no concrete descendants is invalid. Emitted targets are
-sorted and unique, and a property may name at most 1,024. Compilation stops at the first stage with violations. LinkML
+labels, then context settings, then saved filters. A `wikibase-item` property's
+`targets` name its declared range: the CURIE of each class named by `range` or
+`any_of`, sorted and unique. A named class without `class_uri` contributes the
+CURIEs of its nearest descendants that have one, resolved across all supplied
+schemas; a range that contributes none is invalid. Emitted targets are sorted
+and unique, and a property may name at most 1,024. A value matches a target when
+its subject's type equals that target or the type's `bases` contain it, so adding
+a vertical never changes another vertical's properties. Compilation stops at the
+first stage with violations. LinkML
 warnings are permitted; errors are refused. Derived JSON with derivation enabled supplies
 classes and induced attributes. An auxiliary abstract class induces all global
 slots through LinkML, preserving unused qualifier properties without resolving
@@ -299,8 +309,9 @@ per release. Supply an immutable, validated release and parsed JSON inputs.
 An item property's release `targets` may name a type key or any CURIE listed in
 the `bases` of a release type. This lets a target name an abstract base that has
 no entry in the release's `types`. A value matches when its subject's type equals
-a target or its type's `bases` contains a target. Expanded lists of concrete type
-keys remain valid.
+a target or its type's `bases` contains a target. The compiler emits the declared
+range, so adding a subtype matches through `bases` and does not change `targets`.
+Expanded lists of concrete type keys remain valid.
 
 Structural limits apply to every release: decimal strings have at most 127
 characters and a time's year has at most 16 digits. An oversized value reports
