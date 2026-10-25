@@ -16,6 +16,8 @@ export type CommerceConfig = {
 
 export type CommerceWorkerConfig = Omit<CommerceConfig, 'webhookSecrets'>;
 
+export type CheckoutUrls = Pick<CommerceWorkerConfig, 'successUrl' | 'cancelUrl'>;
+
 type Environment = Readonly<Record<string, string | undefined>>;
 
 function required(env: Environment, variable: string): string {
@@ -34,6 +36,24 @@ function absoluteUrl(value: string, variable: string, protocols: readonly string
   if (!protocols.includes(url.protocol) || !url.hostname || url.username || url.password)
     throw new ConfigError(variable);
   return url;
+}
+
+/** Resolve the order placeholder consistently for the HTTP attempt and its workflow retry. */
+export function checkoutUrlsForOrder(urls: CheckoutUrls, orderId: string): CheckoutUrls {
+  return {
+    successUrl: urls.successUrl.replaceAll('{ORDER_ID}', orderId),
+    cancelUrl: urls.cancelUrl.replaceAll('{ORDER_ID}', orderId),
+  };
+}
+
+function checkoutUrl(value: string, variable: string): void {
+  const withoutKnownPlaceholders = value.replaceAll('{ORDER_ID}', '').replaceAll('{CHECKOUT_SESSION_ID}', '');
+  if (/[{}]/.test(withoutKnownPlaceholders)) throw new ConfigError(variable);
+
+  const withSampleValues = value
+    .replaceAll('{ORDER_ID}', '00000000-0000-4000-8000-000000000000')
+    .replaceAll('{CHECKOUT_SESSION_ID}', 'cs_test_checkout_session_id');
+  absoluteUrl(withSampleValues, variable, ['https:']);
 }
 
 function readStripeApiKey(env: Environment): string {
@@ -69,8 +89,8 @@ function readStripeConfig(env: Environment, apiKey = readStripeApiKey(env)): Com
 function readCheckoutConfig(env: Environment): Pick<CommerceWorkerConfig, 'successUrl' | 'cancelUrl'> {
   const successUrl = required(env, 'CHECKOUT_SUCCESS_URL');
   const cancelUrl = required(env, 'CHECKOUT_CANCEL_URL');
-  absoluteUrl(successUrl, 'CHECKOUT_SUCCESS_URL', ['https:']);
-  absoluteUrl(cancelUrl, 'CHECKOUT_CANCEL_URL', ['https:']);
+  checkoutUrl(successUrl, 'CHECKOUT_SUCCESS_URL');
+  checkoutUrl(cancelUrl, 'CHECKOUT_CANCEL_URL');
   return { successUrl, cancelUrl };
 }
 

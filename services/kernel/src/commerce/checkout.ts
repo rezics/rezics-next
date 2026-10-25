@@ -2,6 +2,7 @@ import type { Pool } from 'pg';
 import type { Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { createCommerceCommands } from './commands.ts';
+import { checkoutUrlsForOrder } from './config.ts';
 import { StripeRejectedError, StripeUnavailableError, type Order, type StripePort } from './model.ts';
 import { readOrder } from './store.ts';
 
@@ -38,6 +39,7 @@ export async function checkout(
   const order = await current();
   if (order.checkoutSessionId !== null || order.settlement === 'failed' || order.settlement === 'paid') return order;
   try {
+    const urls = checkoutUrlsForOrder({ successUrl, cancelUrl }, id);
     const session = await stripe.createCheckoutSession(
       {
         orderId: id,
@@ -46,8 +48,7 @@ export async function checkout(
         currency: order.currency,
         unitAmountMinor: order.unitAmountMinor,
         taxCode: order.taxCode,
-        successUrl,
-        cancelUrl,
+        ...urls,
         expiresAt: Math.floor(Date.parse(order.createdAt) / 1000) + 3600,
       },
       `order:${id}`,

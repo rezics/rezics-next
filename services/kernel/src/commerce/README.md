@@ -2,6 +2,10 @@
 
 Commerce owns offers, checkout orders, payment evidence, buyer entitlements and creator royalty statements.
 
+## Checkout return URLs
+
+Configure `CHECKOUT_SUCCESS_URL` and `CHECKOUT_CANCEL_URL` as absolute HTTPS URLs. Either URL may include `{ORDER_ID}`; the kernel replaces every occurrence with the order's ID for both the initial Checkout Session create and reconciliation retries. Stripe's `{CHECKOUT_SESSION_ID}` placeholder is also allowed and passes through unchanged. For example, `https://rezics.com/orders/{ORDER_ID}?checkout=success` returns to the order page. Other brace placeholders are rejected at startup.
+
 ## Cost
 
 These are derivations from the commerce adapters and SQL, `src/work/`, `db/commerce/migrations/` and `db/commerce/schema.sql`, not measurements or guaranteed PostgreSQL plans.

@@ -27,6 +27,16 @@ test('commerce configuration preserves checkout URLs and rotating secrets and co
   });
 });
 
+test('checkout URL configuration preserves the supported order and Stripe placeholders', () => {
+  const checkout = readCommerceConfig({
+    ...env,
+    CHECKOUT_SUCCESS_URL: 'https://web.example.test/orders/{ORDER_ID}?session={CHECKOUT_SESSION_ID}',
+    CHECKOUT_CANCEL_URL: 'https://web.example.test/orders/{ORDER_ID}/cancel',
+  });
+  expect(checkout.successUrl).toBe('https://web.example.test/orders/{ORDER_ID}?session={CHECKOUT_SESSION_ID}');
+  expect(checkout.cancelUrl).toBe('https://web.example.test/orders/{ORDER_ID}/cancel');
+});
+
 test('missing and invalid configuration names the variable without printing its value or secrets', () => {
   const invalid: Record<string, (string | undefined)[]> = {
     STRIPE_SECRET_KEY: [undefined, '', ' ', 'not-a-secret-key', 'sk_test_secret\n'],
@@ -46,8 +56,17 @@ test('missing and invalid configuration names the variable without printing its 
       '/relative',
       'http://web.example.test',
       'https://user:password@web.example.test',
+      'https://web.example.test/orders/{ACCOUNT_ID}',
+      'https://web.example.test:{ORDER_ID}/orders',
     ],
-    CHECKOUT_CANCEL_URL: [undefined, '', '/relative', 'javascript:alert(1)', 'http://web.example.test'],
+    CHECKOUT_CANCEL_URL: [
+      undefined,
+      '',
+      '/relative',
+      'javascript:alert(1)',
+      'http://web.example.test',
+      'https://web.example.test/orders/{ORDER-ID}',
+    ],
   };
   for (const [variable, values] of Object.entries(invalid)) {
     for (const value of values) {

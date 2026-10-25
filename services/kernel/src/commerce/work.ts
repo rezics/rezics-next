@@ -3,6 +3,7 @@ import { createAccess } from '../access/index.ts';
 import { routeOf } from '../route/route.ts';
 import type { WorkModule } from '../work/registry.ts';
 import { createCommerceCommands, type CheckoutOutcome } from './commands.ts';
+import { checkoutUrlsForOrder } from './config.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import {
   StripeRejectedError,
@@ -132,7 +133,7 @@ export function createCommerceWork(deps: CommerceWorkDependencies): WorkModule {
                   currency: order.currency,
                   unitAmountMinor: order.unitAmountMinor,
                   taxCode: order.taxCode,
-                  ...checkout,
+                  ...checkoutUrlsForOrder(checkout, order.id),
                   // Stable across the HTTP attempt, delayed reconciliation and step recovery.
                   expiresAt: Math.floor(Date.parse(order.createdAt) / 1000) + 3600,
                 },
