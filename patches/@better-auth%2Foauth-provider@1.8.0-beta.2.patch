@@ -1,19 +1,33 @@
+Downstream patch for @better-auth/oauth-provider 1.8.0-beta.2.
+
+Defect: refresh-token reuse detection does not linearize with rotation. A
+rotation revokes its parent and then inserts the child in a separate,
+non-transactional write. A concurrent replay of the parent, in another process,
+deletes the client/user refresh history (a request-time findMany/deleteMany scan)
+between those writes; the paused rotation then inserts a child that remains
+usable, including after restart (RFC 9700 section 4.14.2 is not met). The
+replay path also skips issuance hooks, and code replay cleanup has the same gap.
+
+Fix: one oauthRefreshFamily row per authorization grant, keyed by the code's
+stored identifier (authorizationCodeId). Rotation locks that row and performs
+the parent compare-and-swap and child insert in one transaction on the bound
+adapter. Reuse, code replay and RFC 7009 revocation revoke the family
+permanently by exact key. Refresh grant, refresh introspection and opaque
+access-token validation refuse tokens of a revoked, expired or missing family.
+No request path enumerates refresh history; expired rows are left to bounded
+retention jobs.
+
+Drop this patch once upstream ships equivalent atomic, permanent family
+revocation without history scans. Upstream issue draft and reproduction:
+services/auth/scripts/probe-native-refresh.ts.
 diff --git a/dist/authorize-DXYo-K2n.mjs b/dist/authorize-DXYo-K2n.mjs
-index 28cf3e94393d04c56caf0456781315e292667e88..80cdb92019bfd3bf6bcc3f9233c1bb6fdf9662d4 100644
+index 28cf3e9439..93f1844340 100644
 --- a/dist/authorize-DXYo-K2n.mjs
 +++ b/dist/authorize-DXYo-K2n.mjs
-@@ -1,5 +1,5 @@
- import { t as __exportAll } from "./rolldown-runtime-wcPFST8Q.mjs";
--import { A as getAcrValuesSupported, C as authorizationQuerySchema, D as STANDARD_CLAIMS, F as getRequestedUserInfoClaims, I as isValidOidcClaimsRequest, M as canSatisfyEssentialAcrRequest, N as claimsRequestParameterSchema, O as STANDARD_CLAIM_NAMES, P as filterClaimsRequestUserInfoClaims, S as SafeUrlSchema, T as clientRegistrationRequestSchema, _ as logStartupSeedFailure, a as tokenEndpoint, b as userInfoResource, c as normalizeClientCredentialsScopes, d as JWS_ALGORITHMS, f as assertIdentifierValid, g as logEnforcePerClientResourcesResolution, h as isAudienceClaimAllowed, i as invalidateRefreshFamily, j as resolveAuthenticationContext, k as getSupportedClaims, l as validateClientCredentialsScopes, m as invalidateResourceCache, o as userInfoEndpoint, p as getResource, s as findToken, t as introspectEndpoint, u as getEndpointUrl, v as resolveResourcePolicy, w as clientJwksSchema, x as ResourceUriSchema, y as seedResourcesOnce } from "./introspect-kDLwBDTx.mjs";
-+import { A as getAcrValuesSupported, C as authorizationQuerySchema, D as STANDARD_CLAIMS, F as getRequestedUserInfoClaims, I as isValidOidcClaimsRequest, M as canSatisfyEssentialAcrRequest, N as claimsRequestParameterSchema, O as STANDARD_CLAIM_NAMES, P as filterClaimsRequestUserInfoClaims, S as SafeUrlSchema, T as clientRegistrationRequestSchema, _ as logStartupSeedFailure, a as tokenEndpoint, b as userInfoResource, c as normalizeClientCredentialsScopes, d as JWS_ALGORITHMS, f as assertIdentifierValid, g as logEnforcePerClientResourcesResolution, h as isAudienceClaimAllowed, i as invalidateRefreshFamily, q as withRefreshFamily, j as resolveAuthenticationContext, k as getSupportedClaims, l as validateClientCredentialsScopes, m as invalidateResourceCache, o as userInfoEndpoint, p as getResource, s as findToken, t as introspectEndpoint, u as getEndpointUrl, v as resolveResourcePolicy, w as clientJwksSchema, x as ResourceUriSchema, y as seedResourcesOnce } from "./introspect-kDLwBDTx.mjs";
- import { $ as validateOAuthProviderExtensions, A as storeClientSecret, E as removePromptFromQuery, F as validateClientCredentials, J as getSupportedGrantTypes, K as getExtensionInteractionRequest, L as verifyOAuthQueryParams, N as toResourceList, O as resolveSubjectIdentifier, Q as validateExtensionClientMetadata, R as applyOAuthProviderMetadataExtensions, S as parsePrompt, T as removeMaxAgeFromQuery, U as getClientDiscoveries, W as getExtensionClientMetadataFields, Y as hasExtensionClientMetadata, Z as isExtensionTokenEndpointAuthMethod, _ as mergeDiscoveryMetadata, a as decryptStoredClientSecret, b as parseBearerToken, c as extractClientCredentials, d as getConsentReferenceId, f as getJwtPlugin, g as isSessionFreshForSignedQuery, h as isPKCERequired, i as consentCovers, j as storeToken, k as searchParamsToQuery, l as findConsent, n as assertNotTrustedClient, o as deriveSectorIdentifier, q as getSupportedAuthMethods, r as clientAllowsGrant, s as destructureCredentials, t as applyFormParams, tt as stripReservedOAuthClientMetadataExtensions, u as getClient, w as readFormParams, x as parseClientMetadata } from "./utils-CyzcafJL.mjs";
- import { a as setSignedOAuthQueryParameterNames, i as readSignedOAuthQuery, n as canonicalizeOAuthQueryParams, o as signedQueryIssuedAtParam, r as postLoginClearedParam } from "./signed-query-BDVFtIwB.mjs";
- import { t as PACKAGE_VERSION } from "./version-BS4NkjRz.mjs";
-@@ -3728,35 +3728,9 @@ async function revokeOpaqueAccessToken(ctx, accessToken) {
- 		}]
+@@ -3729,28 +3729,7 @@ async function revokeOpaqueAccessToken(ctx, accessToken) {
  	});
  }
--async function revokeRefreshToken(ctx, refreshToken, clientId) {
+ async function revokeRefreshToken(ctx, refreshToken, clientId) {
 -	const { userId } = refreshToken;
 -	if (refreshToken.revoked) {
 -		await invalidateRefreshFamily(ctx, clientId, userId);
@@ -36,42 +50,40 @@ index 28cf3e94393d04c56caf0456781315e292667e88..80cdb92019bfd3bf6bcc3f9233c1bb6f
 -		await invalidateRefreshFamily(ctx, clientId, userId);
 -		return;
 -	}
--	await ctx.context.adapter.deleteMany({
--		model: "oauthAccessToken",
--		where: [{
--			field: "refreshId",
--			value: refreshToken.id
--		}]
-+async function revokeRefreshToken(ctx, refreshToken, clientId, opts) {
-+	return withRefreshFamily(ctx, opts, refreshToken.authorizationCodeId, clientId, false, async (ctx) => {
-+		await invalidateRefreshFamily(ctx, clientId, refreshToken.userId, refreshToken.authorizationCodeId);
- 	});
- }
- async function revokeEndpoint(ctx, opts) {
-@@ -3784,7 +3758,7 @@ async function revokeEndpoint(ctx, opts) {
- 		}
- 		if (found.type === "jwt") return await revokeJwtAccessToken(ctx, opts, found.payload);
- 		if (found.type === "opaque") await revokeOpaqueAccessToken(ctx, found.record);
--		else await revokeRefreshToken(ctx, found.record, client.clientId);
-+		else await revokeRefreshToken(ctx, found.record, client.clientId, opts);
- 		return null;
- 	} catch (error) {
- 		if (error instanceof APIError$1) throw error;
-@@ -4093,6 +4067,12 @@ const schema = {
++	await invalidateRefreshFamily(ctx, refreshToken.authorizationCodeId);
+ 	await ctx.context.adapter.deleteMany({
+ 		model: "oauthAccessToken",
+ 		where: [{
+@@ -4093,6 +4072,27 @@ const schema = {
  	*
  	* Refresh tokens are linked to a session.
  	*/
 +	oauthRefreshFamily: { fields: {
-+		clientId: { type: "string", required: true },
-+		revoked: { type: "boolean", required: true, defaultValue: false },
-+		sequence: { type: "number", required: true, defaultValue: 0 },
-+		expiresAt: { type: "date", required: true, index: true }
++		clientId: {
++			type: "string",
++			required: true
++		},
++		revoked: {
++			type: "boolean",
++			required: true,
++			defaultValue: false
++		},
++		sequence: {
++			type: "number",
++			required: true,
++			defaultValue: 0
++		},
++		expiresAt: {
++			type: "date",
++			required: true,
++			index: true
++		}
 +	} },
  	oauthRefreshToken: { fields: {
  		token: {
  			type: "string",
 diff --git a/dist/introspect-kDLwBDTx.mjs b/dist/introspect-kDLwBDTx.mjs
-index 1398e6d76691366a4c30c56dc0b113ec9d754363..2c8345abb7c12173d21f3ae188442c375852b961 100644
+index 1398e6d766..c6e7f44b3f 100644
 --- a/dist/introspect-kDLwBDTx.mjs
 +++ b/dist/introspect-kDLwBDTx.mjs
 @@ -1,6 +1,7 @@
@@ -82,7 +94,7 @@ index 1398e6d76691366a4c30c56dc0b113ec9d754363..2c8345abb7c12173d21f3ae188442c37
  import { generateRandomString, symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
  import { APIError as APIError$1 } from "better-call";
  import { logger } from "@better-auth/core/env";
-@@ -1626,68 +1627,64 @@ async function createOpaqueAccessToken(ctx, opts, user, client, scopes, payload,
+@@ -1626,68 +1627,77 @@ async function createOpaqueAccessToken(ctx, opts, user, client, scopes, payload,
  	return (opts.prefix?.opaqueAccessToken ?? "") + token;
  }
  /**
@@ -90,7 +102,8 @@ index 1398e6d76691366a4c30c56dc0b113ec9d754363..2c8345abb7c12173d21f3ae188442c37
 -* any access tokens that reference those refresh rows, per RFC 9700 §4.14.
 -* Access tokens are deleted first so the parent rows' foreign-key children
 -* do not block the refresh-row delete.
--*
++* Refresh-token family guard (RFC 9700 section 4.14.2).
+ *
 -* TODO(invalidate-family-race): the two `deleteMany` calls are not atomic
 -* with respect to each other. Between them, a concurrent rotation in a
 -* different worker can `create` a fresh refresh row (and, immediately after,
@@ -99,13 +112,25 @@ index 1398e6d76691366a4c30c56dc0b113ec9d754363..2c8345abb7c12173d21f3ae188442c37
 -* any deletion. Closing this window requires the same transactional adapter
 -* contract tracked under FIXME(strict-family-invalidation) in
 -* `createRefreshToken`.
--*
--* @internal
--*/
++* A family is the authorization grant created by one authorization code; its
++* key is that code's stored identifier, which every rotated refresh token
++* already carries as `authorizationCodeId`. Rotation, reuse detection and
++* revocation linearize on the one `oauthRefreshFamily` row. Reuse revokes the
++* family permanently, so a child inserted by a concurrent rotation can never
++* become usable. Token rows stay authoritative and expire lazily; nothing on
++* the request path enumerates a client's or user's refresh history. Expired
++* families and tokens are removed by bounded, index-ordered retention jobs.
+ *
+ * @internal
+ */
 -async function invalidateRefreshFamily(ctx, clientId, userId) {
 -	const refreshTokens = await ctx.context.adapter.findMany({
 -		model: "oauthRefreshToken",
--		where: [{
++async function invalidateRefreshFamily(ctx, familyId) {
++	if (!familyId) return;
++	await (await getCurrentAdapter(ctx.context.adapter)).update({
++		model: "oauthRefreshFamily",
+ 		where: [{
 -			field: "clientId",
 -			value: clientId
 -		}, {
@@ -120,44 +145,67 @@ index 1398e6d76691366a4c30c56dc0b113ec9d754363..2c8345abb7c12173d21f3ae188442c37
 -			operator: "in",
 -			value: refreshTokens.map((r) => r.id)
 -		}]
--	});
++			field: "id",
++			value: familyId
++		}],
++		update: { revoked: true }
+ 	});
 -	await ctx.context.adapter.deleteMany({
 -		model: "oauthRefreshToken",
--		where: [{
++}
++/** Establish the family before its code is consumed, so a replay that finds
++* the code consumed always finds this family to revoke. Unknown or foreign
++* codes never create family rows. */
++async function createRefreshFamily(ctx, opts, familyId, clientId) {
++	const verification = await ctx.context.internalAdapter.findVerificationValue(familyId);
++	if (!verification) return;
++	try {
++		if (JSON.parse(verification.value)?.query?.client_id !== clientId) return;
++	} catch {
++		return;
++	}
++	try {
++		await ctx.context.adapter.create({
++			model: "oauthRefreshFamily",
++			forceAllowId: true,
++			data: {
++				id: familyId,
++				clientId,
++				revoked: false,
++				sequence: 0,
++				expiresAt: /* @__PURE__ */ new Date(Date.now() + (opts.refreshTokenExpiresIn ?? 2592e3) * 1e3)
++			}
++		});
++	} catch (error) {
++		if (!await ctx.context.adapter.findOne({
++			model: "oauthRefreshFamily",
++			where: [{
++				field: "id",
++				value: familyId
++			}]
++		})) throw error;
++	}
++}
++/** Whether a token's family can still authorize. Missing family keys fail closed. */
++async function isRefreshFamilyActive(ctx, familyId, clientId) {
++	if (!familyId) return false;
++	const family = await ctx.context.adapter.findOne({
++		model: "oauthRefreshFamily",
+ 		where: [{
 -			field: "clientId",
 -			value: clientId
 -		}, {
 -			field: "userId",
 -			value: userId
--		}]
-+ * RFC 9700 section 4.14.2: rotation and reuse must linearize on one durable
-+ * family key. Remove this downstream patch when upstream provides equivalent
-+ * atomic, permanently revoked, bounded family storage on PostgreSQL.
-+ * Native token rows and the authorization-code digest remain authoritative.
-+ */
-+async function invalidateRefreshFamily(ctx, clientId, userId, authorizationCodeId) {
-+	if (!authorizationCodeId) throw new APIError("BAD_REQUEST", { error: "invalid_grant" });
-+	await ctx.context.adapter.update({
-+		model: "oauthRefreshFamily",
-+		where: [{ field: "id", value: authorizationCodeId }, { field: "clientId", value: clientId }],
-+		update: { revoked: true }
++			field: "id",
++			value: familyId
+ 		}]
  	});
++	return !!family && !family.revoked && family.clientId === clientId && family.expiresAt > /* @__PURE__ */ new Date();
  }
  async function revokeTokensIssuedForAuthorizationCode(ctx, authorizationCodeId) {
 -	const deleteIssuedTokens = async (model) => {
-+	await ctx.context.adapter.update({
-+		model: "oauthRefreshFamily",
-+		where: [{ field: "id", value: authorizationCodeId }],
-+		update: { revoked: true }
-+	});
-+}
-+async function withRefreshFamily(ctx, opts, authorizationCodeId, clientId, create, action) {
-+	if (!authorizationCodeId) throw new APIError("BAD_REQUEST", { error: "invalid_grant" });
-+	const root = ctx.context.adapter;
-+	// Only an existing native code can establish a guard. Unknown bearer input
-+	// never creates retention metadata. The unique key arbitrates first exchange.
-+	if (create && await ctx.context.internalAdapter.findVerificationValue(authorizationCodeId)) {
- 		try {
+-		try {
 -			await ctx.context.adapter.deleteMany({
 -				model,
 -				where: [{
@@ -165,105 +213,171 @@ index 1398e6d76691366a4c30c56dc0b113ec9d754363..2c8345abb7c12173d21f3ae188442c37
 -					value: authorizationCodeId
 -				}]
 -			});
-+			await root.create({ model: "oauthRefreshFamily", forceAllowId: true, data: {
-+				id: authorizationCodeId, clientId, revoked: false, sequence: 0,
-+				expiresAt: new Date(Date.now() + (opts.refreshTokenExpiresIn ?? 2592000) * 1000)
-+			} });
- 		} catch (error) {
+-		} catch (error) {
 -			ctx.context.logger.error("authorization code replay cleanup failed", error);
-+			if (!await root.findOne({ model: "oauthRefreshFamily", where: [{ field: "id", value: authorizationCodeId }] })) throw error;
- 		}
+-		}
 -	};
 -	await deleteIssuedTokens("oauthAccessToken");
 -	await deleteIssuedTokens("oauthRefreshToken");
-+	}
-+	const outcome = await runWithTransaction(root, async () => {
-+		const adapter = await getCurrentAdapter(root);
-+		// incrementOne is an exact-key UPDATE, which takes the family row lock.
-+		// Rebind direct OAuth calls as well as the internal adapter's ALS calls.
-+		const family = await adapter.incrementOne({ model: "oauthRefreshFamily",
-+			where: [{ field: "id", value: authorizationCodeId }, { field: "clientId", value: clientId }],
-+			increment: { sequence: 1 }, set: {} });
-+		if (!family || family.revoked || family.expiresAt <= new Date()) return { error: new APIError("BAD_REQUEST", { error: "invalid_grant" }) };
-+		const scoped = { ...ctx, context: { ...ctx.context, adapter } };
-+		try {
-+			const value = await action(scoped);
-+			await adapter.update({ model: "oauthRefreshFamily", where: [{ field: "id", value: authorizationCodeId }],
-+				update: { expiresAt: new Date(Date.now() + (opts.refreshTokenExpiresIn ?? 2592000) * 1000) } });
-+			return { value };
-+		} catch (error) {
-+			// Protocol failures commit one-use consumption and reuse tombstones.
-+			// Infrastructure failures roll back; no token response can escape.
-+			if (error instanceof APIError || error instanceof APIError$1) return { error };
-+			throw error;
-+		}
-+	});
-+	if (outcome.error) throw outcome.error;
-+	return outcome.value;
++	await invalidateRefreshFamily(ctx, authorizationCodeId);
  }
  async function createRefreshToken(ctx, opts, user, referenceId, authorizationCodeId, client, scopes, payload, originalRefresh, authTime, resources, confirmation, requestedUserInfoClaims, authenticationContext) {
  	const iat = payload.iat ?? Math.floor(Date.now() / 1e3);
-@@ -1737,10 +1734,10 @@ async function createRefreshToken(ctx, opts, user, referenceId, authorizationCod
- 		}],
- 		increment: {},
- 		set: rotationUpdate
+@@ -1711,13 +1721,7 @@ async function createRefreshToken(ctx, opts, user, referenceId, authorizationCod
+ 		createdAt: /* @__PURE__ */ new Date(iat * 1e3),
+ 		expiresAt: /* @__PURE__ */ new Date(exp * 1e3)
+ 	};
+-	if (!originalRefresh?.id) return {
+-		id: (await ctx.context.adapter.create({
+-			model: "oauthRefreshToken",
+-			data: newRow
+-		})).id,
+-		token: await encodeRefreshToken(opts, token, sessionId)
+-	};
++	const familyId = originalRefresh?.id ? originalRefresh.authorizationCodeId : authorizationCodeId;
+ 	const rotatedAt = /* @__PURE__ */ new Date(iat * 1e3);
+ 	const rotationUpdate = {
+ 		revoked: rotatedAt,
+@@ -1725,27 +1729,54 @@ async function createRefreshToken(ctx, opts, user, referenceId, authorizationCod
+ 	};
+ 	const reuseInterval = opts.refreshTokenReuseInterval ?? 0;
+ 	if (reuseInterval > 0) rotationUpdate.rotationReplayExpiresAt = /* @__PURE__ */ new Date((iat + reuseInterval) * 1e3);
+-	if (!await ctx.context.adapter.incrementOne({
+-		model: "oauthRefreshToken",
+-		where: [{
+-			field: "id",
+-			value: originalRefresh.id
+-		}, {
+-			field: "revoked",
+-			operator: "eq",
+-			value: null
+-		}],
+-		increment: {},
+-		set: rotationUpdate
 -	})) throw new APIError("BAD_REQUEST", {
--		error_description: "invalid refresh token",
--		error: "invalid_grant"
--	});
-+	})) {
-+		await invalidateRefreshFamily(ctx, client.clientId, user.id, originalRefresh.authorizationCodeId);
-+		throw new APIError("BAD_REQUEST", { error: "invalid_grant" });
-+	}
++	const created = familyId ? await runWithTransaction(ctx.context.adapter, async () => {
++		const adapter = await getCurrentAdapter(ctx.context.adapter);
++		const family = await adapter.incrementOne({
++			model: "oauthRefreshFamily",
++			where: [{
++				field: "id",
++				value: familyId
++			}],
++			increment: { sequence: 1 },
++			set: {}
++		});
++		if (!family || family.revoked || family.clientId !== client.clientId || family.expiresAt <= /* @__PURE__ */ new Date()) return null;
++		if (originalRefresh?.id && !await adapter.incrementOne({
++			model: "oauthRefreshToken",
++			where: [{
++				field: "id",
++				value: originalRefresh.id
++			}, {
++				field: "revoked",
++				operator: "eq",
++				value: null
++			}],
++			increment: {},
++			set: rotationUpdate
++		})) {
++			await invalidateRefreshFamily(ctx, familyId);
++			return null;
++		}
++		const row = await adapter.create({
++			model: "oauthRefreshToken",
++			data: newRow
++		});
++		await adapter.update({
++			model: "oauthRefreshFamily",
++			where: [{
++				field: "id",
++				value: familyId
++			}],
++			update: { expiresAt: newRow.expiresAt }
++		});
++		return row;
++	}) : null;
++	if (!created) throw new APIError("BAD_REQUEST", {
+ 		error_description: "invalid refresh token",
+ 		error: "invalid_grant"
+ 	});
  	return {
- 		id: (await ctx.context.adapter.create({
- 			model: "oauthRefreshToken",
-@@ -2134,6 +2131,7 @@ async function handleAuthorizationCodeGrant(ctx, opts) {
+-		id: (await ctx.context.adapter.create({
+-			model: "oauthRefreshToken",
+-			data: newRow
+-		})).id,
++		id: created.id,
+ 		token: await encodeRefreshToken(opts, token, sessionId)
+ 	};
+ }
+@@ -2134,6 +2165,7 @@ async function handleAuthorizationCodeGrant(ctx, opts) {
  	* `invalid_client`, so resolve it before the code lookup can report
  	* `invalid_grant` and before a one-time code is consumed). */
  	const client = await validateClientCredentials(ctx, opts, client_id, client_secret, void 0, preVerified, "authorization_code", authMethod);
-+	return withRefreshFamily(ctx, opts, await storeToken(opts.storeTokens, code, "authorization_code"), client_id, true, async (ctx) => {
++	await createRefreshFamily(ctx, opts, await storeToken(opts.storeTokens, code, "authorization_code"), client_id);
  	/** Get and check Verification Value */
  	const { verificationValue, effectiveResources, authorizedResources, authorizationCodeId } = await checkVerificationValue(ctx, opts, code, client_id, redirect_uri, resources);
  	const scopes = verificationValue.query.scope?.split(" ");
-@@ -2211,6 +2209,7 @@ async function handleAuthorizationCodeGrant(ctx, opts) {
- 		resources: effectiveResources,
- 		originalResources: authorizedResources
- 	});
-+	});
- }
- /**
- * Grant that allows direct access to an API using the application's credentials
-@@ -2277,6 +2276,9 @@ async function handleRefreshTokenGrant(ctx, opts) {
+@@ -2277,12 +2309,34 @@ async function handleRefreshTokenGrant(ctx, opts) {
  	* `invalid_client`, so resolve it before the refresh token lookup can
  	* report `invalid_grant`). */
  	const client = await validateClientCredentials(ctx, opts, client_id, client_secret, void 0, preVerified, "refresh_token", authMethod);
-+	const initial = await findRefreshToken(ctx, opts, refresh_token);
-+	if (!initial || initial.clientId !== client_id) throw new APIError("BAD_REQUEST", { error: "invalid_grant" });
-+	return withRefreshFamily(ctx, opts, initial.authorizationCodeId, client_id, false, async (ctx) => {
- 	const refreshToken = await findRefreshToken(ctx, opts, refresh_token);
- 	if (!refreshToken) throw new APIError("BAD_REQUEST", {
+-	const refreshToken = await findRefreshToken(ctx, opts, refresh_token);
+-	if (!refreshToken) throw new APIError("BAD_REQUEST", {
++	const presented = await findRefreshToken(ctx, opts, refresh_token);
++	if (!presented) throw new APIError("BAD_REQUEST", {
  		error_description: "session not found",
-@@ -2318,7 +2320,7 @@ async function handleRefreshTokenGrant(ctx, opts) {
+ 		error: "invalid_grant"
+ 	});
+-	if (refreshToken.clientId !== client_id) throw new APIError("BAD_REQUEST", {
++	/** Wait for any in-flight rotation of this family, then re-read the token
++	* under the family lock, so reuse is classified before any issuance work. */
++	const refreshToken = presented.clientId === client_id && presented.authorizationCodeId ? await runWithTransaction(ctx.context.adapter, async () => {
++		const adapter = await getCurrentAdapter(ctx.context.adapter);
++		const family = await adapter.incrementOne({
++			model: "oauthRefreshFamily",
++			where: [{
++				field: "id",
++				value: presented.authorizationCodeId
++			}],
++			increment: { sequence: 1 },
++			set: {}
++		});
++		if (!family || family.revoked || family.clientId !== client_id || family.expiresAt <= /* @__PURE__ */ new Date()) return null;
++		return adapter.findOne({
++			model: "oauthRefreshToken",
++			where: [{
++				field: "id",
++				value: presented.id
++			}]
++		});
++	}) : null;
++	if (!refreshToken) throw new APIError("BAD_REQUEST", {
+ 		error_description: "invalid refresh token",
+ 		error: "invalid_grant"
+ 	});
+@@ -2318,7 +2372,7 @@ async function handleRefreshTokenGrant(ctx, opts) {
  				error: "invalid_grant"
  			});
  		}
 -		await invalidateRefreshFamily(ctx, client_id, refreshToken.userId);
-+		await invalidateRefreshFamily(ctx, client_id, refreshToken.userId, refreshToken.authorizationCodeId);
++		await invalidateRefreshFamily(ctx, refreshToken.authorizationCodeId);
  		throw new APIError("BAD_REQUEST", {
  			error_description: "invalid refresh token",
  			error: "invalid_grant"
-@@ -2345,6 +2347,7 @@ async function handleRefreshTokenGrant(ctx, opts) {
- 		amr: refreshToken.amr ?? void 0,
- 		requestedUserInfoClaims: refreshToken.requestedUserInfoClaims
- 	});
-+	});
- }
- //#endregion
- //#region src/introspect.ts
-@@ -2629,4 +2632,4 @@ async function introspectEndpoint(ctx, opts) {
- 	}
- }
- //#endregion
--export { getAcrValuesSupported as A, authorizationQuerySchema as C, STANDARD_CLAIMS as D, oauthClientMetadataSchema as E, getRequestedUserInfoClaims as F, isValidOidcClaimsRequest as I, canSatisfyEssentialAcrRequest as M, claimsRequestParameterSchema as N, STANDARD_CLAIM_NAMES as O, filterClaimsRequestUserInfoClaims as P, SafeUrlSchema as S, clientRegistrationRequestSchema as T, logStartupSeedFailure as _, tokenEndpoint as a, userInfoResource as b, normalizeClientCredentialsScopes as c, JWS_ALGORITHMS as d, assertIdentifierValid as f, logEnforcePerClientResourcesResolution as g, isAudienceClaimAllowed as h, invalidateRefreshFamily as i, resolveAuthenticationContext as j, getSupportedClaims as k, validateClientCredentialsScopes as l, invalidateResourceCache as m, introspect_exports as n, userInfoEndpoint as o, getResource as p, getOAuthProviderApi as r, findToken as s, introspectEndpoint as t, getEndpointUrl as u, resolveResourcePolicy as v, clientJwksSchema as w, ResourceUriSchema as x, seedResourcesOnce as y };
-+export { getAcrValuesSupported as A, authorizationQuerySchema as C, STANDARD_CLAIMS as D, oauthClientMetadataSchema as E, getRequestedUserInfoClaims as F, isValidOidcClaimsRequest as I, canSatisfyEssentialAcrRequest as M, claimsRequestParameterSchema as N, STANDARD_CLAIM_NAMES as O, filterClaimsRequestUserInfoClaims as P, SafeUrlSchema as S, clientRegistrationRequestSchema as T, logStartupSeedFailure as _, tokenEndpoint as a, userInfoResource as b, normalizeClientCredentialsScopes as c, JWS_ALGORITHMS as d, assertIdentifierValid as f, logEnforcePerClientResourcesResolution as g, isAudienceClaimAllowed as h, invalidateRefreshFamily as i, withRefreshFamily as q, resolveAuthenticationContext as j, getSupportedClaims as k, validateClientCredentialsScopes as l, invalidateResourceCache as m, introspect_exports as n, userInfoEndpoint as o, getResource as p, getOAuthProviderApi as r, findToken as s, introspectEndpoint as t, getEndpointUrl as u, resolveResourcePolicy as v, clientJwksSchema as w, ResourceUriSchema as x, seedResourcesOnce as y };
+@@ -2432,6 +2486,7 @@ async function validateJwtAccessToken(ctx, opts, jwtPayload, clientId) {
+ async function validateOpaqueAccessToken(ctx, opts, accessToken, clientId) {
+ 	if (!accessToken.expiresAt || accessToken.expiresAt < /* @__PURE__ */ new Date()) return inactiveAccessToken();
+ 	if (accessToken.revoked) return inactiveAccessToken();
++	if (accessToken.authorizationCodeId && !await isRefreshFamilyActive(ctx, accessToken.authorizationCodeId, accessToken.clientId)) return inactiveAccessToken();
+ 	const resources = Array.isArray(accessToken.resources) ? accessToken.resources : void 0;
+ 	let client;
+ 	if (accessToken.clientId) {
+@@ -2507,6 +2562,7 @@ async function validateRefreshToken(ctx, opts, refreshToken, clientId) {
+ 	if (!refreshToken.clientId || refreshToken.clientId !== clientId) return { active: false };
+ 	if (!refreshToken.expiresAt || refreshToken.expiresAt < /* @__PURE__ */ new Date()) return { active: false };
+ 	if (refreshToken.revoked) return { active: false };
++	if (!await isRefreshFamilyActive(ctx, refreshToken.authorizationCodeId, clientId)) return { active: false };
+ 	let sessionId = refreshToken.sessionId ?? void 0;
+ 	if (sessionId) {
+ 		const session = await ctx.context.adapter.findOne({
