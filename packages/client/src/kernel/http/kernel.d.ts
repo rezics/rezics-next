@@ -17918,6 +17918,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
             post: {
                 body: {
                     labels?: Record<string, any>;
+                    settings?: string;
                 };
                 params: {};
                 query: unknown;
@@ -17930,6 +17931,11 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                             id: string;
                             kind: 'community';
                             labels: Record<string, string>;
+                            settings: {
+                                id: string;
+                                release: string;
+                            } | null;
+                            defaults: Record<string, "inherit" | "suppress">;
                         };
                     };
                     201: {
@@ -17937,6 +17943,11 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                             id: string;
                             kind: "community" | "global";
                             labels: Record<string, string>;
+                            settings: {
+                                id: string;
+                                release: string;
+                            } | null;
+                            defaults: Record<string, "inherit" | "suppress">;
                         };
                     };
                     400: {
@@ -18043,6 +18054,11 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 id: import("typebox").TString;
                 kind: import("typebox").TUnion<[import("typebox").TLiteral<"community">, import("typebox").TLiteral<"global">]>;
                 labels: import("typebox").TRecord<"^.*$", import("typebox").TString>;
+                settings: import("typebox").TUnion<[import("typebox").TObject<{
+                    id: import("typebox").TString;
+                    release: import("typebox").TString;
+                }>, import("typebox").TNull]>;
+                defaults: import("typebox").TRecord<"^.*$", import("typebox").TUnion<[import("typebox").TLiteral<"inherit">, import("typebox").TLiteral<"suppress">]>>;
             }>;
         }> & {
             headers: {
@@ -18116,6 +18132,11 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 id: string;
                 kind: "community" | "global";
                 labels: Record<string, string>;
+                settings: {
+                    id: string;
+                    release: string;
+                } | null;
+                defaults: Record<string, "inherit" | "suppress">;
             };
         };
         401: {
@@ -18167,6 +18188,11 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 id: string;
                 kind: "community" | "global";
                 labels: Record<string, string>;
+                settings: {
+                    id: string;
+                    release: string;
+                } | null;
+                defaults: Record<string, "inherit" | "suppress">;
             };
         };
         401: {
@@ -18222,6 +18248,11 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                     id: import("typebox").TString;
                     kind: import("typebox").TUnion<[import("typebox").TLiteral<"community">, import("typebox").TLiteral<"global">]>;
                     labels: import("typebox").TRecord<"^.*$", import("typebox").TString>;
+                    settings: import("typebox").TUnion<[import("typebox").TObject<{
+                        id: import("typebox").TString;
+                        release: import("typebox").TString;
+                    }>, import("typebox").TNull]>;
+                    defaults: import("typebox").TRecord<"^.*$", import("typebox").TUnion<[import("typebox").TLiteral<"inherit">, import("typebox").TLiteral<"suppress">]>>;
                 }>;
             }> & {
                 headers: {
@@ -18332,6 +18363,11 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 id: import("typebox").TString;
                 kind: import("typebox").TUnion<[import("typebox").TLiteral<"community">, import("typebox").TLiteral<"global">]>;
                 labels: import("typebox").TRecord<"^.*$", import("typebox").TString>;
+                settings: import("typebox").TUnion<[import("typebox").TObject<{
+                    id: import("typebox").TString;
+                    release: import("typebox").TString;
+                }>, import("typebox").TNull]>;
+                defaults: import("typebox").TRecord<"^.*$", import("typebox").TUnion<[import("typebox").TLiteral<"inherit">, import("typebox").TLiteral<"suppress">]>>;
             }>;
         }> & {
             headers: {
@@ -26164,6 +26200,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
             post: {
                 body: {
                     labels?: Record<string, any>;
+                    settings?: string;
                 };
                 params: {};
                 query: unknown;
@@ -26176,6 +26213,11 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                             id: string;
                             kind: 'community';
                             labels: Record<string, string>;
+                            settings: {
+                                id: string;
+                                release: string;
+                            } | null;
+                            defaults: Record<string, "inherit" | "suppress">;
                         };
                     };
                     201: {
@@ -26183,6 +26225,11 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                             id: string;
                             kind: "community" | "global";
                             labels: Record<string, string>;
+                            settings: {
+                                id: string;
+                                release: string;
+                            } | null;
+                            defaults: Record<string, "inherit" | "suppress">;
                         };
                     };
                     400: {
@@ -26289,6 +26336,11 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 id: import("typebox").TString;
                 kind: import("typebox").TUnion<[import("typebox").TLiteral<"community">, import("typebox").TLiteral<"global">]>;
                 labels: import("typebox").TRecord<"^.*$", import("typebox").TString>;
+                settings: import("typebox").TUnion<[import("typebox").TObject<{
+                    id: import("typebox").TString;
+                    release: import("typebox").TString;
+                }>, import("typebox").TNull]>;
+                defaults: import("typebox").TRecord<"^.*$", import("typebox").TUnion<[import("typebox").TLiteral<"inherit">, import("typebox").TLiteral<"suppress">]>>;
             }>;
         }> & {
             headers: {
@@ -26362,6 +26414,11 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 id: string;
                 kind: "community" | "global";
                 labels: Record<string, string>;
+                settings: {
+                    id: string;
+                    release: string;
+                } | null;
+                defaults: Record<string, "inherit" | "suppress">;
             };
         };
         401: {
@@ -26413,6 +26470,11 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 id: string;
                 kind: "community" | "global";
                 labels: Record<string, string>;
+                settings: {
+                    id: string;
+                    release: string;
+                } | null;
+                defaults: Record<string, "inherit" | "suppress">;
             };
         };
         401: {
@@ -26468,6 +26530,11 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                     id: import("typebox").TString;
                     kind: import("typebox").TUnion<[import("typebox").TLiteral<"community">, import("typebox").TLiteral<"global">]>;
                     labels: import("typebox").TRecord<"^.*$", import("typebox").TString>;
+                    settings: import("typebox").TUnion<[import("typebox").TObject<{
+                        id: import("typebox").TString;
+                        release: import("typebox").TString;
+                    }>, import("typebox").TNull]>;
+                    defaults: import("typebox").TRecord<"^.*$", import("typebox").TUnion<[import("typebox").TLiteral<"inherit">, import("typebox").TLiteral<"suppress">]>>;
                 }>;
             }> & {
                 headers: {
@@ -26578,6 +26645,11 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 id: import("typebox").TString;
                 kind: import("typebox").TUnion<[import("typebox").TLiteral<"community">, import("typebox").TLiteral<"global">]>;
                 labels: import("typebox").TRecord<"^.*$", import("typebox").TString>;
+                settings: import("typebox").TUnion<[import("typebox").TObject<{
+                    id: import("typebox").TString;
+                    release: import("typebox").TString;
+                }>, import("typebox").TNull]>;
+                defaults: import("typebox").TRecord<"^.*$", import("typebox").TUnion<[import("typebox").TLiteral<"inherit">, import("typebox").TLiteral<"suppress">]>>;
             }>;
         }> & {
             headers: {

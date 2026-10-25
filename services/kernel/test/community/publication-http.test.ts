@@ -370,8 +370,11 @@ test.serial('a Realm moderator publishes a subject, and anonymous lists and read
     const invalid = await call('GET', `${f.path}?${query}`);
     expect(invalid.response.status).toBe(400);
   }
-  // Invalidate one subject's production disclosure evidence after the heads were stored.
-  await admin.query('DELETE FROM semantic.subject WHERE subject_id=$1', [ids[1]]);
+  await call('POST', `${f.path}/${ids[1]}:withdraw`, {
+    bearer: moderator.bearer,
+    key: crypto.randomUUID(),
+    headers: { 'if-match': JSON.stringify(heads[1]!.publicationId) },
+  });
   const disclosed = await call('GET', `${f.path}?limit=10`);
   expect(disclosed.response.status).toBe(200);
   expect(new Set((disclosed.value.items as Head[]).map((head) => head.subjectId))).toEqual(new Set([ids[0]!, ids[2]!]));
