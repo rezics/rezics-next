@@ -1,4 +1,5 @@
 import { Database } from 'bun:sqlite';
+import { createDumpCounters, DEFAULT_DUMP_CHUNK_BYTES, dumpChunkLimit, DumpMemory } from './dumps-bytes.ts';
 
 /** Raw importer archive input, after tar/zstd framing has been checked by its reader. */
 interface ArchiveEntry {
@@ -28,6 +29,7 @@ type Options = {
   pageSize?: number;
   maxRows?: number;
   maxSourceRecords?: number;
+  maxChunkBytes?: number;
 };
 
 // COPY TO STDOUT, not executable SQL. Official generator/dump evidence and hashes:
@@ -158,6 +160,7 @@ export class VndbTablesStore {
   private readonly pageSize: number;
   private readonly maxRows: number;
   private readonly maxSourceRecords: number;
+  private readonly chunkBytes: number;
 
   /** Caller owns the real handle and may attach SQL evidence before construction. */
   constructor(
@@ -169,6 +172,7 @@ export class VndbTablesStore {
     this.pageSize = bounded(options.pageSize ?? 16, 16);
     this.maxRows = bounded(options.maxRows ?? 2_000_000, 10_000_000);
     this.maxSourceRecords = bounded(options.maxSourceRecords ?? 500_000, 1_000_000);
+    this.chunkBytes = bounded(dumpChunkLimit(options.maxChunkBytes), DEFAULT_DUMP_CHUNK_BYTES);
     // Match importer staging's WAL policy: each completed statement is durable
     // across reopen, without a filesystem synchronization for every COPY row.
     db.exec('PRAGMA journal_mode = WAL');
@@ -306,25 +310,38 @@ export class VndbTablesStore {
   private async readEntry(entry: ArchiveEntry, supported: boolean, row: (raw: Uint8Array) => void) {
     // Ignored entries have no row buffer and never reach a decoder, SQL or logs.
     const buffer = supported ? new Uint8Array(ROW_BYTES) : null;
+    const memory = new DumpMemory(createDumpCounters());
+    memory.hold(1, buffer, 'line');
     let used = 0;
     let bytes = 0;
-    for await (const chunk of entry.bytes) {
-      check(chunk instanceof Uint8Array);
-      bytes += chunk.byteLength;
-      check(Number.isSafeInteger(bytes) && bytes <= entry.declaredBytes);
-      if (!buffer) continue;
-      for (const byte of chunk) {
-        if (byte === 10) {
-          check(used > 0);
-          row(buffer.subarray(0, used));
-          used = 0;
-        } else {
-          check(used < ROW_BYTES);
-          buffer[used++] = byte;
+    try {
+      for await (const chunk of entry.bytes) {
+        // Check the entire allocation before retaining, reading or scanning even
+        // ignored entries: a tiny view can otherwise pin a whole source file.
+        check(chunk instanceof Uint8Array && chunk.buffer.byteLength <= this.chunkBytes);
+        memory.hold(0, chunk, 'input');
+        try {
+          bytes += chunk.byteLength;
+          check(Number.isSafeInteger(bytes) && bytes <= entry.declaredBytes);
+          if (!buffer) continue;
+          for (const byte of chunk) {
+            if (byte === 10) {
+              check(used > 0);
+              row(buffer.subarray(0, used));
+              used = 0;
+            } else {
+              check(used < ROW_BYTES);
+              buffer[used++] = byte;
+            }
+          }
+        } finally {
+          memory.hold(0, null);
         }
       }
+      check(bytes === entry.declaredBytes && used === 0);
+    } finally {
+      memory.close();
     }
-    check(bytes === entry.declaredBytes && used === 0);
   }
 
   private insert(source: string, run: string, table: Table, header: string[], raw: Uint8Array): number {
