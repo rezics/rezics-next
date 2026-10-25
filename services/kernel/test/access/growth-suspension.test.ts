@@ -202,7 +202,7 @@ beforeAll(async () => {
     stderr: 'pipe',
   });
   expect(await bootstrap.exited).toBe(0);
-  for (let i = 0; i < 3; i++) positives.push(await person(`positive_${i}`));
+  for (let i = 0; i < 4; i++) positives.push(await person(`positive_${i}`));
   await lifecycle.reserveCoordination({
     accountId: grantor.accountId,
     relatedAccountId: newId(0x7311),
@@ -298,6 +298,7 @@ test('mounted suspension keeps full native formula, stage and counter cost bound
     },
     operation: exercise,
   });
+  positive = positives[3]!;
   const observed = await capture(db, exercise);
   for (const fragment of [
     'access.account',
