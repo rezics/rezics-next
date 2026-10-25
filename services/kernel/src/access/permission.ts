@@ -42,6 +42,8 @@ export type PermissionConfig = {
    * Following is not membership. Missing verifier or required proof denies.
    */
   realmRoleReader?: RealmRoleReader;
+  /** Outside a command, bind this instant. Absent uses PostgreSQL clock_timestamp(). */
+  clock?: () => Date;
 };
 export type MembershipRoleProof = { role: 'owner' | 'member'; member: boolean; valid: string };
 export type RealmRoleReader = (
@@ -86,6 +88,14 @@ const uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const uuidPattern = new RegExp(`^${uuid}$`);
 const requestedByPattern = new RegExp(`^urn:rezics:request:(${uuid}):(${uuid})$`);
 const routeOf = (id: string): number => Number.parseInt(id.slice(24, 28), 16);
+async function readPermissionTime(
+  client: Parameters<typeof timeRead.run>[0],
+  clock?: () => Date,
+): Promise<string | undefined> {
+  const configured = clock?.();
+  if (configured && !Number.isFinite(configured.getTime())) throw new TypeError('Invalid command clock');
+  return (await timeRead.run(client, { at: configured?.toISOString() ?? '' }))?.at;
+}
 const bind = (actor: Actor, action: string, resource: Resource): string =>
   JSON.stringify([
     actor.kind,
@@ -120,6 +130,7 @@ export async function checkPermission(
   resource: Resource,
   evidence?: unknown,
   time?: AuthoritativeTime,
+  clock?: () => Date,
 ): Promise<boolean> {
   try {
     const facts = typeof evidence === 'object' && evidence !== null ? prepared.get(evidence) : undefined;
@@ -135,7 +146,7 @@ export async function checkPermission(
       return false;
     // Obtain one authoritative T on this attempt's own resource client. Domain
     // verification and the permission formula must evaluate exactly this instant.
-    const at = time ? authoritativeTimeValue(time) : (await timeRead.run(client))?.at;
+    const at = time ? authoritativeTimeValue(time) : await readPermissionTime(client, clock);
     if (!at) return false;
     const domainEligible = facts.verifyFloor ? await facts.verifyFloor(client, at) : false;
     const floor = facts.admitsAnonymous && domainEligible;
@@ -222,12 +233,12 @@ export function createAccess(config: PermissionConfig): Access {
         );
         // Every query uses the pool independently before resource checkout. None
         // of these reads holds a connection while another partition is consulted.
-        const time = await timeRead.run(context.pool);
-        if (!time) return evidence;
+        const recorded = await readPermissionTime(context.pool, config.clock);
+        if (!recorded) return evidence;
         // Commands prepare after their executor mints T. Negative membership
         // proofs must start at that same T, not at a later preparation clock.
         const attempt = accessCommandAttempt(context);
-        const at = attempt ? authoritativeTimeValue(attempt.time) : time.at;
+        const at = attempt ? authoritativeTimeValue(attempt.time) : recorded;
         let principalId: string | null = null;
         let valid = '(,)';
         const members: { accountId: string; automated: boolean }[] = [];
@@ -389,7 +400,8 @@ export function createAccess(config: PermissionConfig): Access {
       }
       return evidence;
     },
-    authorize: checkPermission,
+    authorize: (client, actor, action, resource, evidence, time) =>
+      checkPermission(client, actor, action, resource, evidence, time, config.clock),
   };
   installResourceRoleCatalogue(access, catalogue);
   return access;

@@ -61,7 +61,7 @@ export function createKernel(dependencies: KernelDependencies) {
     return realmMembership.roleReader(client, input);
   };
   const resolveAccess = (config: AccessConfig) =>
-    (access ??= typeof factory === 'function' ? factory({ ...config, realmRoleReader }) : factory);
+    (access ??= typeof factory === 'function' ? factory({ ...config, realmRoleReader, clock }) : factory);
   let opened: Promise<WorkClient> | undefined;
   const workClient = (): Promise<WorkClient> => {
     if (dependencies.workClient) return Promise.resolve(dependencies.workClient);

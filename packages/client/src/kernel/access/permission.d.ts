@@ -21,6 +21,8 @@ export type PermissionConfig = {
      * Following is not membership. Missing verifier or required proof denies.
      */
     realmRoleReader?: RealmRoleReader;
+    /** Outside a command, bind this instant. Absent uses PostgreSQL clock_timestamp(). */
+    clock?: () => Date;
 };
 export type MembershipRoleProof = {
     role: 'owner' | 'member';
@@ -39,7 +41,7 @@ export declare function permissionEvidenceDeadline(evidence: unknown): number | 
 /** Runs only the final resource-anchored statement on the command's own client.
  * Reuse through accessCheck so every actual command attempt checks current rows/time.
  */
-export declare function checkPermission(client: AccessClient, actor: Actor, action: string, resource: Resource, evidence?: unknown, time?: AuthoritativeTime): Promise<boolean>;
+export declare function checkPermission(client: AccessClient, actor: Actor, action: string, resource: Resource, evidence?: unknown, time?: AuthoritativeTime, clock?: () => Date): Promise<boolean>;
 /** Thin Access adapter. Auth and the kernel request hook are separate bindings. */
 export declare function createAccess(config: PermissionConfig): Access;
 /** Prepare each proposed permission before checkout, then check all of them on

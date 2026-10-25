@@ -30,6 +30,7 @@ const accountsWorkModule: WorkModule = {
         if (!membership) throw new Error('Realm membership role reader is not installed');
         return membership.roleReader(client, input);
       },
+      clock: context.clock,
     });
     membership = createRealmMembership({
       pool: context.pool,

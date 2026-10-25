@@ -17,6 +17,7 @@ import type {
 } from '../request/access.ts';
 import { installResourceRoleCatalogue, resourceRoleCatalogue } from './resource-roles.ts';
 import { createAccess as permissionAccess } from './permission.ts';
+import timeRead from './permission-time.sql';
 import { createAuthenticator, deadlineClient, within, type AuthenticationConfig } from './authenticate.ts';
 import { installDurableIdentityBridge } from './durable-identity.ts';
 import { installApprovalIdentityBridge } from './approved-identity.ts';
@@ -54,6 +55,10 @@ const platformGateChecks = new WeakMap<Access, PlatformGateCheck>();
 const gateActionPattern = /^gate:([a-z][a-z_]{0,62})$/;
 const reservedGateNames = new Set(['any', 'open', 'close']);
 
+function permissionTimeStatement(statement: string): boolean {
+  const normalize = (value: string) => value.replace(/\s+/g, ' ').trim().replace(/;$/, '');
+  return statement.length > 0 && normalize(statement) === normalize(timeRead.sql);
+}
 function atTimeClient(client: AccessClient, at: string): AccessClient {
   const query = client.query.bind(client) as (...args: unknown[]) => Promise<unknown>;
   const bounded = Object.create(client) as AccessClient;
@@ -65,7 +70,7 @@ function atTimeClient(client: AccessClient, at: string): AccessClient {
         : typeof first === 'object' && first !== null && 'text' in first && typeof first.text === 'string'
           ? first.text
           : '';
-    if (statement.replace(/\s+/g, ' ').trim().replace(/;$/, '') === 'SELECT clock_timestamp()::text AS at') {
+    if (permissionTimeStatement(statement)) {
       return Promise.resolve({ rows: [{ at }], rowCount: 1, command: 'SELECT', oid: 0, fields: [] });
     }
     return query(...args);
@@ -93,6 +98,7 @@ export function createAccess(config: AccessConfig): Access {
     resourceRoles: config.resourceRoles,
     accountEvidence: (actor) => authentication.identity(actor)?.account,
     ...(config.realmRoleReader ? { realmRoleReader: config.realmRoleReader } : {}),
+    ...(config.clock ? { clock: config.clock } : {}),
   });
   const access: Access = {
     authenticate: authentication.authenticate,
@@ -189,6 +195,7 @@ export function createAccess(config: AccessConfig): Access {
         const original = originals.get(candidate) ?? candidate;
         return authentication.identity(original)?.account;
       },
+      ...(config.clock ? { clock: config.clock } : {}),
     });
     const gateContext = {
       pool: deadlineClient(context.pool, context.deadline) as typeof context.pool,
@@ -251,6 +258,7 @@ export function createAccess(config: AccessConfig): Access {
       actions,
       resourceRoles: config.resourceRoles,
       accountEvidence: (actor) => (actor === claims.actor ? claims.account : undefined),
+      ...(config.clock ? { clock: config.clock } : {}),
     });
     const evidence = await native.prepare!(claims.actor, 'account:manage', resource, context);
     return withConnection(context.pool, (client) =>

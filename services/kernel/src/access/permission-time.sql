@@ -1,1 +1,1 @@
-SELECT clock_timestamp()::text AS at;
+SELECT COALESCE(NULLIF(:at::text, '')::timestamptz, clock_timestamp())::text AS at;

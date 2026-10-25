@@ -45,6 +45,8 @@ export type AccessConfig = {
   actions: ActionCatalogue;
   resourceRoles?: ResourceRoleCatalogue;
   realmRoleReader?: AccessRealmRoleReader;
+  /** Outside a command, permission checks bind this instant. Absent uses PostgreSQL clock_timestamp(). */
+  clock?: () => Date;
 };
 
 /** Builds an access implementation from an application's configuration. */
