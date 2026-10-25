@@ -1,15 +1,18 @@
 import { randomUUID } from 'node:crypto';
 import { Pool, type PoolClient } from 'pg';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { fromPlainText } from '@rezics/document';
 import { createPool } from '../../src/database/pool.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createGrantCommands, GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { createDelegationCommands } from '../../src/access/delegation-commands.ts';
 import { createSuspensionCommands } from '../../src/access/suspension.ts';
 import { createLifecycleInternals } from '../../src/access/lifecycle.ts';
+import { createThread } from '../../src/content/commands.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
-import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { newId, routeOf } from '../../src/route/route.ts';
+import type { RequestContext, ThreadInput } from '../../src/content/model.ts';
 import type {
   Account,
   Actor,
@@ -22,14 +25,15 @@ import type {
 const issuer = 'https://command-admission.example.test';
 const audience = 'https://api.command-admission.example.test';
 const clientId = 'command-admission-fixture';
-const action = 'subject:read';
+const action = 'thread:create';
+const boardReadAction = 'board:read';
 const managementAction = 'access:grant';
 const suspensionAction = 'account:suspend';
 const delegationAction = 'account:delegate';
-const createdAction = 'subject:read';
-const grantEventType = 'com.rezics.access.grant.create.v1';
+const threadCreatedEventType = 'com.rezics.content.thread.created.v1';
+const threadCommandKind = 'content.thread.create';
 
-type SeedData = { recipientId: string };
+type SeedData = { command: ThreadInput };
 function quoteIdentifier(value: string): string {
   return `"${value.replaceAll('"', '""')}"`;
 }
@@ -196,22 +200,34 @@ export async function createCommandAdmissionDriver(): Promise<CommandAdmissionDr
       );
     }
 
-    function nativeGrantKey(f: Fixture, key: string): string {
-      const prefix = `${f.resource.route}:`;
-      if (!key.startsWith(prefix)) throw new TypeError('Command key does not match its resource route');
-      return key.slice(prefix.length);
+    async function insertBoard(resource: { route: number; id: string }, subjectId: string): Promise<void> {
+      await fixturePool!.query(
+        `INSERT INTO content.board
+          (route, board_id, subject_id, title, visibility, security_revision, recorded_transaction_id)
+         VALUES ($1, $2, $3, 'Command admission fixture', 'published', 1, $4)`,
+        [resource.route, resource.id, subjectId, transactionId()],
+      );
     }
 
     async function seed(mode?: 'missing-scope'): Promise<Fixture> {
       const actorId = newId(0x1234);
       const principalId = newId(0x2345);
-      const recipientId = newId(0x3456);
       const resourceRoute = 0x8000 + otherPools.length * 16 + seedCounter++ * 16;
       const resource = { route: resourceRoute, id: newId(resourceRoute) };
       const requestId = newId(routeOf(principalId)!);
-      for (const id of [actorId, principalId, recipientId]) await insertAccount(id);
+      const subjectId = newId(resourceRoute);
+      const command: ThreadInput = {
+        title: 'Command admission fixture thread',
+        body: fromPlainText('Command admission fixture body'),
+        licence: 'MIT',
+        subjectIds: [subjectId],
+        boardId: resource.id,
+        visibility: 'published',
+      };
+      for (const id of [actorId, principalId]) await insertAccount(id);
+      await insertBoard(resource, subjectId);
 
-      for (const grantAction of [managementAction, action]) {
+      for (const grantAction of [managementAction, action, boardReadAction]) {
         await insertGrant(resource, actorId, grantAction);
         await insertGrant(resource, principalId, grantAction);
       }
@@ -233,7 +249,12 @@ export async function createCommandAdmissionDriver(): Promise<CommandAdmissionDr
         { principalId, assignedActorId: actorId, requestId, valid: '(,)', key: `assignment-${randomUUID()}` },
       );
       const requestedBy = `urn:rezics:request:${principalId}:${requestId}`;
-      const actorScopes = [managementAction, suspensionAction, ...(mode === 'missing-scope' ? [] : [action])];
+      const actorScopes = [
+        managementAction,
+        suspensionAction,
+        boardReadAction,
+        ...(mode === 'missing-scope' ? [] : [action]),
+      ];
       const bearer = await sign(actorId, actorScopes, requestedBy);
       const authenticationStartedAt = Date.now();
       const deadline = authenticationStartedAt + 180_000;
@@ -251,7 +272,7 @@ export async function createCommandAdmissionDriver(): Promise<CommandAdmissionDr
         resource,
         keys: [`${keyPrefix}${randomUUID()}`, `${keyPrefix}${randomUUID()}`],
       };
-      fixtureData.set(fixture, { recipientId });
+      fixtureData.set(fixture, { command });
       return fixture;
     }
 
@@ -269,15 +290,20 @@ export async function createCommandAdmissionDriver(): Promise<CommandAdmissionDr
       try {
         const data = fixtureData.get(fixture);
         if (!data) throw new TypeError('Unknown command admission fixture');
-        const outcome = await grants.create(
-          { pool: commandPool as ReturnType<typeof createPool>, actor, deadline: fixture.deadline },
+        const context: RequestContext = {
+          deadline: fixture.deadline,
+          idempotencyKey: key,
+          requestId: randomUUID(),
+        };
+        const outcome = await createThread(
           {
-            resource: fixture.resource,
-            subject: { kind: 'account', id: data.recipientId },
-            actions: [createdAction],
-            valid: '(,)',
-            key: nativeGrantKey(fixture, key),
+            pool: commandPool as ReturnType<typeof createPool>,
+            access,
+            routeKey: new Uint8Array(32).fill(43),
           },
+          actor,
+          data.command,
+          context,
         );
         return {
           actor,
@@ -374,64 +400,92 @@ export async function createCommandAdmissionDriver(): Promise<CommandAdmissionDr
     async function inspect(fixture: Fixture): Promise<Snapshot> {
       const data = fixtureData.get(fixture);
       if (!data) throw new TypeError('Unknown command admission fixture');
-      const partition = partitionOf(fixture.resource.route);
-      const [grantsResult, rolesResult, denialsResult, initializedResult, effectsResult, outboxResult, receiptsResult] =
-        await Promise.all([
-          observationPool!.query(
-            `SELECT route, resource_id::text AS "resourceId", subject_kind AS "subjectKind", subject_id::text AS "subjectId",
-                    subject_role AS "subjectRole", action, valid::text AS valid, transaction_id::text AS "transactionId"
-             FROM access.resource_grant WHERE route = $1 AND resource_id = $2 ORDER BY subject_kind, subject_id, subject_role, action, valid, transaction_id`,
-            [fixture.resource.route, fixture.resource.id],
-          ),
-          observationPool!.query(
-            `SELECT route, resource_id::text AS "resourceId", subject_kind AS "subjectKind", subject_id::text AS "subjectId",
-                    subject_role AS "subjectRole", grant_role AS "grantRole", valid::text AS valid, transaction_id::text AS "transactionId"
-             FROM access.resource_role_grant WHERE route = $1 AND resource_id = $2 ORDER BY subject_kind, subject_id, subject_role, grant_role, valid, transaction_id`,
-            [fixture.resource.route, fixture.resource.id],
-          ),
-          observationPool!.query(
-            `SELECT route, resource_id::text AS "resourceId", subject_id::text AS "subjectId", subject_role AS "subjectRole",
-                    action, reason, valid::text AS valid, transaction_id::text AS "transactionId"
-             FROM access.resource_denial WHERE route = $1 AND resource_id = $2 ORDER BY subject_id, subject_role, action, reason, valid, transaction_id`,
-            [fixture.resource.route, fixture.resource.id],
-          ),
-          observationPool!.query(
-            `SELECT route, resource_id::text AS "resourceId", resource_type AS "resourceType", creator_id::text AS "creatorId",
-                    initialized_at::text AS "initializedAt"
-             FROM access.resource_initialization WHERE route = $1 AND resource_id = $2 ORDER BY resource_type, creator_id, initialized_at`,
-            [fixture.resource.route, fixture.resource.id],
-          ),
-          observationPool!.query(
-            `SELECT route, resource_id::text AS "resourceId", subject_kind AS "subjectKind", subject_id::text AS "subjectId",
-                    action, valid::text AS valid, transaction_id::text AS "transactionId"
-             FROM access.resource_grant
-             WHERE route = $1 AND resource_id = $2 AND subject_id = $3 AND action = $4
-             ORDER BY subject_kind, subject_role, valid, transaction_id`,
-            [fixture.resource.route, fixture.resource.id, data.recipientId, createdAction],
-          ),
-          observationPool!.query(
-            `SELECT partition_no AS partition, "position"::text AS position, event_seq AS "eventSeq", event_count AS "eventCount",
-                    epoch, id::text, type, subject, data, recorded_at::text AS "recordedAt"
-             FROM core.outbox WHERE partition_no = $1 AND type = $2 AND subject = $3
-             ORDER BY epoch, "position", event_seq`,
-            [partition, grantEventType, fixture.resource.id],
-          ),
-          observationPool!.query(
-            `SELECT transaction_id::text AS id, idempotency_key AS key, response
-             FROM core.receipt
-             WHERE partition_no = $1 AND principal_kind = 'account' AND principal_id = $2 AND command_kind = 'access.grant.create'
-             ORDER BY epoch, "position"`,
-            [partition, fixture.actor.accountId],
-          ),
-        ]);
+      const [
+        threadsResult,
+        postsResult,
+        revisionsResult,
+        grantsResult,
+        rolesResult,
+        denialsResult,
+        initializedResult,
+        outboxResult,
+        receiptsResult,
+      ] = await Promise.all([
+        observationPool!.query(
+          `SELECT to_jsonb(t) AS row FROM content.thread t
+           WHERE t.board_id = $1 ORDER BY t.route, t.thread_id`,
+          [fixture.resource.id],
+        ),
+        observationPool!.query(
+          `SELECT to_jsonb(p) AS row FROM content.post p
+           JOIN content.thread t ON t.route = p.route AND t.thread_id = p.thread_id
+           WHERE t.board_id = $1 ORDER BY p.route, p.thread_id, p.post_id`,
+          [fixture.resource.id],
+        ),
+        observationPool!.query(
+          `SELECT to_jsonb(r) AS row FROM content.revision r
+           JOIN content.thread t ON t.route = r.route AND t.thread_id = r.thread_id
+           WHERE t.board_id = $1 ORDER BY r.route, r.thread_id, r.post_id, r.revision_id`,
+          [fixture.resource.id],
+        ),
+        observationPool!.query(
+          `SELECT to_jsonb(g) AS row FROM access.resource_grant g
+           WHERE EXISTS (SELECT 1 FROM content.thread t WHERE t.route = g.route AND t.thread_id = g.resource_id AND t.board_id = $1)
+              OR EXISTS (SELECT 1 FROM content.post p JOIN content.thread t ON t.route = p.route AND t.thread_id = p.thread_id
+                         WHERE t.route = g.route AND p.post_id = g.resource_id AND t.board_id = $1)
+           ORDER BY g.route, g.resource_id, g.subject_kind, g.subject_id, g.subject_role, g.action, g.valid`,
+          [fixture.resource.id],
+        ),
+        observationPool!.query(
+          `SELECT to_jsonb(g) AS row FROM access.resource_role_grant g
+           WHERE EXISTS (SELECT 1 FROM content.thread t WHERE t.route = g.route AND t.thread_id = g.resource_id AND t.board_id = $1)
+              OR EXISTS (SELECT 1 FROM content.post p JOIN content.thread t ON t.route = p.route AND t.thread_id = p.thread_id
+                         WHERE t.route = g.route AND p.post_id = g.resource_id AND t.board_id = $1)
+           ORDER BY g.route, g.resource_id, g.subject_kind, g.subject_id, g.subject_role, g.grant_role, g.valid`,
+          [fixture.resource.id],
+        ),
+        observationPool!.query(
+          `SELECT to_jsonb(d) AS row FROM access.resource_denial d
+           WHERE EXISTS (SELECT 1 FROM content.thread t WHERE t.route = d.route AND t.thread_id = d.resource_id AND t.board_id = $1)
+              OR EXISTS (SELECT 1 FROM content.post p JOIN content.thread t ON t.route = p.route AND t.thread_id = p.thread_id
+                         WHERE t.route = d.route AND p.post_id = d.resource_id AND t.board_id = $1)
+           ORDER BY d.route, d.resource_id, d.subject_id, d.subject_role, d.action, d.reason, d.valid`,
+          [fixture.resource.id],
+        ),
+        observationPool!.query(
+          `SELECT to_jsonb(i) AS row FROM access.resource_initialization i
+           WHERE EXISTS (SELECT 1 FROM content.thread t WHERE t.route = i.route AND t.thread_id = i.resource_id AND t.board_id = $1)
+              OR EXISTS (SELECT 1 FROM content.post p JOIN content.thread t ON t.route = p.route AND t.thread_id = p.thread_id
+                         WHERE t.route = i.route AND p.post_id = i.resource_id AND t.board_id = $1)
+           ORDER BY i.route, i.resource_id`,
+          [fixture.resource.id],
+        ),
+        observationPool!.query(
+          `SELECT partition_no AS partition, "position"::text AS position, event_seq AS "eventSeq", event_count AS "eventCount",
+                  epoch, id::text, type, subject, data, recorded_at::text AS "recordedAt"
+           FROM core.outbox WHERE type = $1 AND data->>'actorId' = $2
+           ORDER BY partition_no, epoch, "position", event_seq`,
+          [threadCreatedEventType, fixture.actor.accountId],
+        ),
+        observationPool!.query(
+          `SELECT transaction_id::text AS id, idempotency_key AS key, response
+           FROM core.receipt
+           WHERE principal_kind = 'account' AND principal_id = $1 AND command_kind = $2
+           ORDER BY partition_no, epoch, "position"`,
+          [fixture.actor.accountId, threadCommandKind],
+        ),
+      ]);
       return {
         state: {
+          threads: threadsResult.rows,
+          posts: postsResult.rows,
+          revisions: revisionsResult.rows,
           resourceGrants: grantsResult.rows,
           roleGrants: rolesResult.rows,
           denials: denialsResult.rows,
           initialization: initializedResult.rows,
         },
-        effects: effectsResult.rows,
+        effects: threadsResult.rows,
         outbox: outboxResult.rows,
         receipts: receiptsResult.rows,
       };
@@ -441,19 +495,14 @@ export async function createCommandAdmissionDriver(): Promise<CommandAdmissionDr
       const data = fixtureData.get(fixture);
       if (!data) throw new TypeError('Unknown command admission fixture');
       return kernel!.handle(
-        new Request('http://kernel.test/v1/grants', {
+        new Request('http://kernel.test/v1/threads', {
           method: 'POST',
           headers: {
             authorization: `Bearer ${fixture.bearer}`,
             'content-type': 'application/json',
             [IDEMPOTENCY_HEADER]: JSON.stringify(key),
           },
-          body: JSON.stringify({
-            resource: fixture.resource,
-            subject: { kind: 'account', id: data.recipientId },
-            actions: [createdAction],
-            valid: '(,)',
-          }),
+          body: JSON.stringify(data.command),
         }),
       );
     }
