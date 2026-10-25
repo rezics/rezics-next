@@ -21,12 +21,14 @@ async function resolveSessionIdentity(request: Request, env: Partial<SessionEnv>
     const id = cookie(request, SESSION_COOKIE);
     if (!validId(id)) return { state: 'signed-out', csrfToken: null };
     const result = await env.SESSIONS.get(env.SESSIONS.idFromName(id)).signedIn();
-    if (typeof result === 'string' && result)
-      return { state: 'signed-in', subject: result, csrfToken: null };
-    if (typeof result === 'boolean')
-      return { state: result ? 'signed-in' : 'signed-out', csrfToken: null };
+    if (typeof result === 'string' && result) return { state: 'signed-in', subject: result, csrfToken: null };
+    if (typeof result === 'boolean') return { state: result ? 'signed-in' : 'signed-out', csrfToken: null };
     return result.signedIn
-      ? { state: 'signed-in', subject: result.subject, csrfToken: result.csrfToken }
+      ? {
+          state: 'signed-in',
+          ...(result.subject ? { subject: result.subject } : {}),
+          csrfToken: result.csrfToken,
+        }
       : { state: 'signed-out', csrfToken: null };
   } catch {
     // A page remains usable when the local session cannot be read.
