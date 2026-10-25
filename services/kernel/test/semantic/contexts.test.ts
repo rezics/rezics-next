@@ -142,7 +142,9 @@ test('an editor creates a community Context that anyone reads and its key replay
   const first = await create(body, 'editor', token);
   expect(first.response.status).toBe(201);
   const context = first.body.context;
-  expect(first.body).toEqual({ context: { id: expect.any(String), kind: 'community', labels: body.labels } });
+  expect(first.body).toEqual({
+    context: { id: expect.any(String), kind: 'community', labels: body.labels, settings: null, defaults: {} },
+  });
   expect(first.response.headers.get('location')).toBe(`/v1/contexts/${context.id}`);
   expect(first.response.headers.get('rezics-session-token')).toBeTruthy();
   const unrelatedGrant = await create({ labels: { en: 'Unrelated grant' } }, 'outsider');
@@ -162,7 +164,9 @@ test('an editor creates a community Context that anyone reads and its key replay
   expect(rows).toEqual([{ route: routeOf(context.id), kind: 'community', labels: body.labels }]);
   const global = await call('GET', `/v1/contexts/${GLOBAL_CONTEXT}`, { token: 'outsider' });
   expect(global.response.status).toBe(200);
-  expect(global.body).toEqual({ context: { id: GLOBAL_CONTEXT, kind: 'global', labels: { en: 'Global' } } });
+  expect(global.body).toEqual({
+    context: { id: GLOBAL_CONTEXT, kind: 'global', labels: { en: 'Global' }, settings: null, defaults: {} },
+  });
 });
 
 test('Context creators receive the owner actions, while the moderator role grants acceptance only', async () => {
@@ -176,7 +180,7 @@ test('Context creators receive the owner actions, while the moderator role grant
 
   const roles = resourceRoleCatalogue(access)!;
   expect(roles.types.get('semantic.context')).toEqual({ owner: 'semantic.context.owner', standing: [] });
-  expect(roles.roles.get('semantic.context.owner')).toEqual(['context:accept', 'context:adopt']);
+  expect(roles.roles.get('semantic.context.owner')).toEqual(['context:accept', 'context:adopt', 'access:grant'].sort());
   expect(roles.roles.get('semantic.context.moderator')).toEqual(['context:accept']);
 
   await admin.query(
