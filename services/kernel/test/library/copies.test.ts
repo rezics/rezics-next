@@ -341,7 +341,7 @@ test('a stale or concurrent revision does not change the copy', async () => {
   });
   const current = await commands.readCopy(owner, created.value.id);
   expect(current.revision).toBe(2);
-  expect(['A', 'B']).toContain(current.note);
+  expect(current.note === 'A' || current.note === 'B').toBe(true);
   const before = await snapshot();
   await expect(commands.updateCopy(owner, created.value.id, { revision: 1, note: 'C' }, key())).rejects.toBeInstanceOf(
     CopyConflictError,
