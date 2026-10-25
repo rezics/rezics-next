@@ -88,6 +88,62 @@ export function ownDiagnostics(output: string, files: string[]): string[] {
   return diagnostics;
 }
 
+type FileOutcome<T> = { file: string; database: string; output?: T; error?: Error };
+type FileRunner<T> = {
+  create: (file: string, database: string) => void | Promise<void>;
+  run: (file: string, database: string) => T | Promise<T>;
+  drop: (file: string, database: string) => void | Promise<void>;
+  onComplete?: (outcome: FileOutcome<T>) => void;
+};
+
+/** Run independent files through a fixed-size worker pool, cleaning up each created database. */
+export async function scheduleFiles<T>(
+  files: string[],
+  concurrency: number,
+  runner: FileRunner<T>,
+): Promise<FileOutcome<T>[]> {
+  if (!Number.isInteger(concurrency) || concurrency < 1) throw new Error('Concurrency must be a positive integer');
+  const outcomes = new Array<FileOutcome<T>>(files.length);
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (true) {
+      const index = next++;
+      if (index >= files.length) return;
+      const file = files[index]!;
+      const database = `kernel_test_${index + 1}`;
+      let created = false;
+      let output: T | undefined;
+      let error: Error | undefined;
+      try {
+        await runner.create(file, database);
+        created = true;
+        output = await runner.run(file, database);
+      } catch (cause) {
+        error = cause instanceof Error ? cause : new Error(String(cause));
+      } finally {
+        if (created) {
+          try {
+            await runner.drop(file, database);
+          } catch (cause) {
+            const dropError = cause instanceof Error ? cause : new Error(String(cause));
+            error = error ? new Error(`${error.message}\nDatabase cleanup failed: ${dropError.message}`) : dropError;
+          }
+        }
+      }
+      const outcome: FileOutcome<T> = {
+        file,
+        database,
+        ...(output === undefined ? {} : { output }),
+        ...(error ? { error } : {}),
+      };
+      outcomes[index] = outcome;
+      runner.onComplete?.(outcome);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, files.length) }, () => worker()));
+  return outcomes;
+}
+
 function hasDiagnosticLine(output: string): boolean {
   return output.split(/\r\n?|\n/).some((line) => diagnosticPath(line) !== undefined);
 }
@@ -280,31 +336,36 @@ async function main(): Promise<void> {
 
   const testFiles = plan.tests;
   await waitForSearch(searchUrl, searchContainer);
-  for (const [index, file] of testFiles.entries()) {
-    const database = `kernel_test_${index + 1}`;
-    // Each file gets a fresh copy so its result cannot depend on writes from another file.
-    docker([
-      'exec',
-      container,
-      'psql',
-      '-U',
-      'rezics',
-      '-d',
-      'postgres',
-      '-v',
-      'ON_ERROR_STOP=1',
-      '-c',
-      `CREATE DATABASE ${database} TEMPLATE rezics`,
-    ]);
-    try {
+  const concurrency = Number(process.env.KERNEL_CHECK_CONCURRENCY ?? 6);
+  if (!Number.isInteger(concurrency) || concurrency < 1) fail('KERNEL_CHECK_CONCURRENCY must be a positive integer');
+  const outcomes = await scheduleFiles(testFiles, concurrency, {
+    create: (_file, database) => {
+      // Each file gets a fresh copy so its result cannot depend on writes from another file.
+      docker([
+        'exec',
+        container,
+        'psql',
+        '-U',
+        'rezics',
+        '-d',
+        'postgres',
+        '-v',
+        'ON_ERROR_STOP=1',
+        '-c',
+        `CREATE DATABASE ${database} TEMPLATE rezics`,
+      ]);
+    },
+    run: (file, database) => {
       // Kernel tests start containers and compilers; under a loaded host Bun's 5 s per-test default fails them at random.
-      run('bun', ['test', '--timeout', '60000', `./${file}`], {
+      const result = capture('bun', ['test', '--timeout', '60000', `./${file}`], {
         ...env,
         DATABASE_URL: url.replace(/\/rezics(?=\?)/, `/${database}`),
         OPENSEARCH_URL: searchUrl,
       });
-    } finally {
-      // The tmpfs holds one copy at a time; keeping every copy filled it once the suite passed 80 files.
+      if (result.status !== 0) throw new Error(`bun test ./${file} failed:\n${result.output}`);
+      return result.output;
+    },
+    drop: (_file, database) => {
       docker([
         'exec',
         container,
@@ -318,8 +379,14 @@ async function main(): Promise<void> {
         '-c',
         `DROP DATABASE IF EXISTS ${database} WITH (FORCE)`,
       ]);
-    }
-  }
+    },
+    onComplete: (outcome) => {
+      if (outcome.output) process.stdout.write(outcome.output.endsWith('\n') ? outcome.output : `${outcome.output}\n`);
+      if (outcome.error) process.stderr.write(`${outcome.file}: ${outcome.error.message}\n`);
+    },
+  });
+  const failedFiles = outcomes.filter((outcome) => outcome.error).map((outcome) => outcome.file);
+  if (failedFiles.length) fail(`Kernel tests failed for ${failedFiles.length} file(s):\n${failedFiles.join('\n')}`);
 }
 
 if (import.meta.main) {
