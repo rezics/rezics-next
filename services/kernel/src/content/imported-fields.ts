@@ -1,4 +1,6 @@
 import type { PoolClient } from 'pg';
+import { BatchReferenceSchema, SourceSchema } from '@rezics/definitions/bulk';
+import { Value } from 'typebox/value';
 import { currentCommand, type CommandTransaction } from '../command/command.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { validateContentDocument } from './document.ts';
@@ -51,7 +53,7 @@ function validateEnvelope(input: ImportedFieldInput): void {
     !/^[a-z][a-z0-9_-]{0,31}$/.test(source.source) ||
     !text(source.external_id, 2048) ||
     !text(source.record_revision, 2048) ||
-    !text(source.digest, 256) ||
+    !Value.Check(SourceSchema, source) ||
     !text(source.converter_revision, 256) ||
     source.field_group !== 'summary' ||
     !Array.isArray(source.references) ||
@@ -72,22 +74,9 @@ function validateEnvelope(input: ImportedFieldInput): void {
     throw new TypeError('Invalid imported summary language');
   }
   for (const reference of source.references) {
-    if (
-      !record(reference) ||
-      !onlyKeys(reference, ['url', 'title']) ||
-      !text(reference.url, 8192) ||
-      (reference.title !== undefined && !text(reference.title, 2048))
-    )
-      throw new TypeError('Invalid imported source reference');
-    let url: URL;
-    try {
-      url = new URL(reference.url);
-    } catch {
-      throw new TypeError('Invalid imported source URL');
-    }
-    if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password)
-      throw new TypeError('Invalid imported source URL');
+    if (!Value.Check(BatchReferenceSchema, reference)) throw new TypeError('Invalid imported source reference');
   }
+
   if (
     source.source === 'bangumi' &&
     (rights.license !== 'CC-BY-SA-3.0' ||
