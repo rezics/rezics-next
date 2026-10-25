@@ -1,7 +1,6 @@
 import type { BatchCommand, BatchWriteRequest, BatchWriteResult, FieldGroup } from '@rezics/definitions/bulk';
 import type { ConversionInput, ConvertedRecord, SourceId } from '@rezics/conversion';
 import type { ConversionContext } from '../../../packages/conversion/src/support.ts';
-import type { SourceFence } from '../../kernel/src/content/source-fences.ts';
 
 export type ImportBatchRequest = BatchWriteRequest;
 export type ImportBatchResult = BatchWriteResult;
@@ -12,7 +11,7 @@ export interface ImportTransport {
     source: string;
     external_id: string;
     field_group: FieldGroup;
-  }): Promise<{ fenced: boolean; securityRevision: SourceFence['securityRevision'] }>;
+  }): Promise<{ fenced: boolean; securityRevision: string | null }>;
 }
 
 export type ImportConversionContext = Omit<ConversionContext, 'source'> & { readonly source: string };
