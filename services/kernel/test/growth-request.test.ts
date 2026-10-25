@@ -5,6 +5,7 @@ import { createAccess } from '../src/access/index.ts';
 import { createKernel } from '../src/http/kernel.ts';
 import { IDEMPOTENCY_HEADER, SESSION_HEADER } from '../src/http/request.ts';
 import { itemFacts } from '../src/semantic/item.ts';
+import { pageSubjects } from '../src/semantic/page.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../src/route/route.ts';
 import { AuthenticationError, type Access, type AccessFactory, type AccountActor } from '../src/request/access.ts';
 import { encodeSession, type SessionComponent } from '../src/tokens/session.ts';
@@ -482,4 +483,44 @@ test('Session header stays within its bound as j grows', async () => {
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([2, 8, 32]);
   expect(dispatchedActions).toContain('subject:read');
+}, 90_000);
+
+test('Cursors and seal stays within its bound as N grows', async () => {
+  const state = fixtureState();
+  const partition = 40;
+  const pagePopulation: Population = {
+    name: `request-cursor-page-${randomUUID()}`,
+    hotPartition: partition,
+    hotShare: 1,
+    rows: ({ ordinal, route }) => {
+      const id = newId(route);
+      const transaction = newId(route);
+      state.subjectIds.add(id);
+      return {
+        'semantic.subject': [{ route, subject_id: id, type: 'schema:Book', recorded_transaction_id: transaction }],
+        'semantic.fact': itemFacts(id, { labels: { en: `Cursor page subject ${ordinal}` } }).map((fact) => ({
+          route,
+          subject_id: id,
+          ...fact,
+          recorded_transaction_id: transaction,
+        })),
+      };
+    },
+  };
+  await seed({ pool: db.pool, admin: db.admin }, pagePopulation, { from: 0, to: 2 });
+  const population = requestPopulation(state, `request-cursor-${randomUUID()}`, (partition + 1) % 4096);
+  const report = await checkGrowth(db, {
+    name: 'Cursors and seal stays within its bound as N grows',
+    bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
+    grow: (growthDb, scale, previous) => grow(growthDb, population, scale, previous),
+    operation: async () => {
+      const firstPage = await pageSubjects(db.pool, tokens, { partition, size: 1 });
+      if (!firstPage?.next) throw new Error('The first subject page did not return a cursor');
+      const cursor = firstPage.next;
+      const nextPage = await pageSubjects(db.pool, tokens, { partition, size: 1, cursor });
+      if (!nextPage || nextPage.subjects.length !== 1) throw new Error('The cursor did not return the next subject');
+      return nextPage;
+    },
+  });
+  expect(report.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
 }, 90_000);
