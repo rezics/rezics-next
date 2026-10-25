@@ -29,7 +29,7 @@ async function board(id: string) {
   await db.admin.query(
     `INSERT INTO content.board
      (route, board_id, subject_id, title, visibility, security_revision, recorded_transaction_id)
-     VALUES ($1, $2, $3, 'Books', 'public', 1, $4) ON CONFLICT DO NOTHING`,
+     VALUES ($1, $2, $3, 'Books', 'published', 1, $4) ON CONFLICT DO NOTHING`,
     [boardRoute, id, newId(0xdef0), randomUUID()],
   );
 }
@@ -45,13 +45,13 @@ async function source(targetBoard = boardId) {
     await tx.query(
       `INSERT INTO content.thread
        (route, thread_id, author_account_id, board_id, title, visibility, security_revision, recorded_transaction_id)
-       VALUES ($1, $2, $3, $4, 'Private title', 'public', 1, $5)`,
+       VALUES ($1, $2, $3, $4, 'Private title', 'published', 1, $5)`,
       [sourceRoute, threadId, authorId, targetBoard, context.transactionId],
     );
     await tx.query(
       `INSERT INTO content.post
        (route, thread_id, post_id, author_account_id, head_revision_id, visibility, security_revision, recorded_transaction_id)
-       VALUES ($1, $2, $3, $4, $5, 'public', 1, $6)`,
+       VALUES ($1, $2, $3, $4, $5, 'published', 1, $6)`,
       [sourceRoute, threadId, itemId, authorId, revisionId, context.transactionId],
     );
     await tx.query(
