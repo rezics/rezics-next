@@ -27,9 +27,11 @@ import entitlementInsert from './store-entitlement-insert.sql';
 import entitlementChange from './store-entitlement-change.sql';
 import transactionsRead from './store-transactions-read.sql';
 import transactionsInsert from './store-transactions-insert.sql';
+import transactionsCount from './store-transactions-count.sql';
 import transactionsProbe from './store-transactions-probe.sql';
 import transactionsNamed from './store-transactions-named.sql';
-import { assertTransactionBound } from './settlement.ts';
+import { assertTransactionBound, CheckoutMismatchError } from './settlement.ts';
+import { MAX_ORDER_TRANSACTIONS } from './model.ts';
 
 type Client = Pick<PoolClient, 'query'>;
 // All projections normalize PostgreSQL scalars explicitly, so the minimal pg interface
@@ -292,6 +294,11 @@ export async function applyCheckoutDecision(
     (action.kind !== 'grant' && action.kind !== 'none' && !currentEntitlement)
   )
     throw new Error('Checkout entitlement action conflicts with current state');
+  if (decision.newTransactions.length) {
+    const storedTransactions = await transactionsCount.run(queryClient(client), { route, order_id: state.order.id });
+    if (storedTransactions.length + decision.newTransactions.length > MAX_ORDER_TRANSACTIONS)
+      throw new CheckoutMismatchError('Checkout would exceed the order transaction limit');
+  }
   const order = asOrder(
     required(
       await orderDecision.run(queryClient(client), {

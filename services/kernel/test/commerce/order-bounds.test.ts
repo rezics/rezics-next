@@ -142,7 +142,7 @@ test('the trusted snapshot command also rejects an over-cap snapshot before any 
 });
 
 test('stored order transactions stay within the cap across snapshots with different IDs', async () => {
-  transactionCount = 201;
+  transactionCount = 200;
   const rejectedOrder = await fixture.checkout();
   fixture.transport.fake.pay(rejectedOrder.session.id);
   const rawInitial = await stripe.readCheckout(rejectedOrder.session.id);
@@ -231,7 +231,9 @@ test('fulfilment without new transactions does not add a transaction-count state
     fixture.pool.removeListener('acquire', onAcquire);
   }
   expect(queries).toBe(17);
-  expect(await readOrderTransactions(fixture.pool, routeOf(order.id)!, order.id)).toHaveLength(1);
+  expect(await readOrderTransactions(fixture.pool, routeOf(order.id)!, order.id)).toHaveLength(
+    snapshot.transactions.length,
+  );
 });
 
 test('grant uses the target captured at order creation when the creator offer is gone', async () => {
