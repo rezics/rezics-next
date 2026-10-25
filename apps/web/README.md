@@ -1,6 +1,5 @@
 Run the site locally with `bun run dev` from `apps/web`. Run `bun run check` to generate, type-check, test, and build.
 Browser tests wait for `html[data-hydrated]` before interacting with a page.
-Tests run in a private network namespace that holds only loopback, so changes to the host's network interfaces cannot interrupt browser requests. Run one test file with `bun run test <file>` to use the same isolation.
 
 The Cloudflare Vite plugin deploys with `cf deploy` (not run here).
 
@@ -50,3 +49,7 @@ so connecting the Worker to Auth later requires configuration only. If any auth 
 Set `KERNEL_ORIGIN`, the content API's origin, in the environment of `bun run dev`, for example
 `KERNEL_ORIGIN=http://127.0.0.1:3000 bun run dev`. Production supplies it as a Worker variable.
 When it is missing, media routes return 503 while the rest of the site continues to work.
+
+Subject pages read through `@rezics/client`. Set `KERNEL_ORIGIN` to the kernel API origin when running locally, for
+example `KERNEL_ORIGIN=http://127.0.0.1:3000 bun run dev`. In development, when it is unset, subject reads use the
+local route fixtures; production requires `KERNEL_ORIGIN`.
