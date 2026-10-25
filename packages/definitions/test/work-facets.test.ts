@@ -31,9 +31,15 @@ test('every launch work type registers its credits, characters, series, genres a
   const omissions: string[] = [];
   for (const [key, type] of Object.entries(bundledRelease.types)) {
     if (!type.bases.includes('schema:CreativeWork')) continue;
-    const missing = reverseLookupFacets.filter(
-      (property) => type.properties.includes(property) && !type.facets.includes(property),
-    );
+    const missing = reverseLookupFacets.filter((property) => {
+      // An edition's genre, keywords and series belong to its work. Readers reach the edition through exampleOfWork.
+      if (
+        key === 'bf:Instance' &&
+        (property === 'schema:genre' || property === 'schema:keywords' || property === 'wdt:P179')
+      )
+        return false;
+      return type.properties.includes(property) && !type.facets.includes(property);
+    });
     if (missing.length === 0) continue;
     if (type.facets.length !== facetLimit) omissions.push(`${key} (${type.facets.length}): ${missing.join(', ')}`);
   }

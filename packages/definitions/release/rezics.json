@@ -294,7 +294,8 @@
         "schema:translator",
         "schema:publisher",
         "schema:datePublished",
-        "schema:numberOfPages"
+        "schema:numberOfPages",
+        "schema:contributor"
       ]
     },
     "schema:Book": {
@@ -327,7 +328,14 @@
         "wdt:P5732",
         "wdt:P648"
       ],
-      "facets": ["schema:author", "schema:genre", "schema:keywords", "wdt:P179", "schema:datePublished"]
+      "facets": [
+        "schema:author",
+        "schema:genre",
+        "schema:keywords",
+        "wdt:P179",
+        "schema:datePublished",
+        "schema:contributor"
+      ]
     },
     "wd:Q95074": {
       "iri": "http://www.wikidata.org/entity/Q95074",

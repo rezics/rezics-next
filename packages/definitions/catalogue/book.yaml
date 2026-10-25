@@ -30,7 +30,7 @@ classes:
       - keywords
       - partOfSeries
     annotations:
-      facets: author genre keywords partOfSeries datePublished
+      facets: author genre keywords partOfSeries datePublished contributor
   Edition:
     is_a: CreativeWork
     class_uri: bf:Instance
@@ -48,7 +48,7 @@ classes:
       - inLanguage
       - translator
     annotations:
-      facets: exampleOfWork author translator publisher datePublished numberOfPages
+      facets: exampleOfWork author translator publisher datePublished numberOfPages contributor
 slots:
   exampleOfWork:
     slot_uri: schema:exampleOfWork
