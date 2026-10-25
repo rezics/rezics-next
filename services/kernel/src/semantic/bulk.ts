@@ -55,6 +55,20 @@ export function statementDigest(statement: Extract<BatchCommand, { op: 'propose'
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
+type DocumentNode = { attrs?: { id?: unknown }; content?: DocumentNode[] };
+
+/** Block ids are generated per snapshot. The summary identity keeps document order, not those ids. */
+function identityDocument(document: DocumentSnapshot): DocumentSnapshot {
+  const clone = structuredClone(document);
+  let ordinal = 0;
+  const visit = (node: DocumentNode): void => {
+    if (node.attrs && typeof node.attrs.id === 'string') node.attrs.id = `block-${++ordinal}`;
+    for (const child of node.content ?? []) if (child && typeof child === 'object') visit(child);
+  };
+  visit(clone.doc);
+  return clone;
+}
+
 /** A summary's source identity is the property, language, and document bytes, before content stores them. */
 export function importedStatementDigest(
   statement: Extract<BatchCommand, { op: 'propose' }>['statement'],
@@ -64,7 +78,7 @@ export function importedStatementDigest(
     const content = statement.value.content;
     if (typeof content.language === 'string' && content.document !== undefined) {
       const documentDigest = createHash('sha256')
-        .update(serializeDocument(content.document as DocumentSnapshot))
+        .update(serializeDocument(identityDocument(content.document as DocumentSnapshot)))
         .digest('hex');
       return createHash('sha256')
         .update(canonicalize({ property: statement.property, language: content.language, digest: documentDigest })!)
@@ -214,59 +228,70 @@ export async function batchCommand(
             if (existing.rows[0])
               return resolve({ candidate: existing.rows[0].candidate_id, revision: subject.revision });
             let written: Awaited<ReturnType<typeof writeProposal>>;
+            const proposal = {
+              subject: command.subject,
+              statement: command.statement,
+              release: options.release,
+              source,
+              allowContent: imported,
+            };
             try {
-              written = await writeProposal(tx, transactionId, {
-                subject: command.subject,
-                statement: command.statement,
-                release: options.release,
-                source,
-                allowContent: imported,
-                install: imported
-                  ? async ({ candidate, revision, body }) => {
-                      if (!record(body) || !record(body.value)) throw new TypeError('Invalid imported statement');
-                      if (source.field_group === 'summary') {
-                        const content = body.value.content;
-                        if (!command.rights || !record(content) || typeof content.language !== 'string')
-                          throw new TypeError('Invalid imported summary');
-                        const stored = await appendImportedField(tx, {
-                          subject: command.subject,
-                          candidate,
-                          revision,
-                          language: content.language,
-                          document: content.document,
-                          source: {
-                            source: source.source,
-                            external_id: source.external_id,
-                            record_revision: source.record_revision,
-                            digest: source.digest,
-                            converter_revision: source.converter_revision,
-                            field_group: 'summary',
-                            references: command.statement.references,
-                          },
-                          rights: {
-                            license: command.rights.license,
-                            obligations: command.rights.obligations,
-                            attribution: command.rights.attribution,
+              written = await writeProposal(
+                tx,
+                transactionId,
+                imported
+                  ? {
+                      ...proposal,
+                      install: async ({ candidate, revision, body }) => {
+                        if (!record(body) || !record(body.value)) throw new TypeError('Invalid imported statement');
+                        if (source.field_group === 'summary') {
+                          const content = body.value.content;
+                          if (!command.rights || !record(content) || typeof content.language !== 'string')
+                            throw new TypeError('Invalid imported summary');
+                          const stored = await appendImportedField(tx, {
+                            subject: command.subject,
+                            candidate,
+                            revision,
+                            language: content.language,
+                            document: content.document,
+                            source: {
+                              source: source.source,
+                              external_id: source.external_id,
+                              record_revision: source.record_revision,
+                              digest: source.digest,
+                              converter_revision: source.converter_revision,
+                              field_group: 'summary',
+                              references: command.statement.references,
+                            },
+                            rights: {
+                              license: command.rights.license,
+                              obligations: command.rights.obligations,
+                              attribution: command.rights.attribution,
+                            },
+                          });
+                          body.value.content = {
+                            language: content.language,
+                            document: stored.id,
+                            digest: stored.digest,
+                          };
+                          return;
+                        }
+                        if (typeof body.value.content !== 'string') throw new TypeError('Invalid cover media');
+                        await claimMedia(tx, {
+                          mediaIds: [body.value.content],
+                          containerId: command.subject,
+                          author: actor,
+                          reference: {
+                            kind: 'semantic_candidate',
+                            subjectId: command.subject,
+                            candidateId: candidate,
+                            revision,
                           },
                         });
-                        body.value.content = { language: content.language, document: stored.id, digest: stored.digest };
-                        return;
-                      }
-                      if (typeof body.value.content !== 'string') throw new TypeError('Invalid cover media');
-                      await claimMedia(tx, {
-                        mediaIds: [body.value.content],
-                        containerId: command.subject,
-                        author: actor,
-                        reference: {
-                          kind: 'semantic_candidate',
-                          subjectId: command.subject,
-                          candidateId: candidate,
-                          revision,
-                        },
-                      });
+                      },
                     }
-                  : undefined,
-              });
+                  : proposal,
+              );
             } catch (error) {
               if (imported && (error instanceof TypeError || error instanceof RangeError))
                 throw new SubjectInputError([{ pointer: '/statement/value/content', code: 'out_of_range' }]);

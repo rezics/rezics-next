@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import sharp from 'sharp';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
-import type { BatchCommand, Source } from '@rezics/definitions/bulk';
+import type { BatchCommand, BatchStatement, Rights, Source } from '@rezics/definitions/bulk';
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import { fromPlainText } from '@rezics/document';
 import { createAccess } from '../../src/access/index.ts';
@@ -38,6 +38,7 @@ const importerActions = [
   'source_fence:takedown',
   'source_fence:read',
   'media:import_from_url',
+  'media:read_reservation',
 ];
 const otherActions = ['subject:batch_write', 'statement:propose', 'subject:read'];
 const auth = {
@@ -67,7 +68,22 @@ let coverBytes = new Uint8Array();
 const storage = new ByteStore();
 const kernel = createKernel({
   pool,
-  access: (config) => createAccess({ ...config, auth }),
+  access: (config) => {
+    // The kernel builds one Access from the first route group's catalogue. Content
+    // actions used by this file must be present then, or later routes answer 403.
+    const actions = new Map(config.actions);
+    for (const action of [
+      'media:import_from_url',
+      'media:read_reservation',
+      'media:read',
+      'media:complete',
+      'media:erase',
+      'source_fence:read',
+      'source_fence:takedown',
+    ] as const)
+      if (!actions.has(action)) actions.set(action, { anonymous: false });
+    return createAccess({ ...config, actions, auth });
+  },
   tokens,
   routeKey,
   writeRate: createWriteRateLimiter({
@@ -114,7 +130,7 @@ beforeAll(async () => {
       .setAudience(audience)
       .setSubject(id)
       .setIssuedAt(now)
-      .setExpirationTime('30m')
+      .setExpirationTime(now + 300)
       .sign(keys.privateKey);
   };
   importer = await issue(importerId, importerActions);
@@ -145,7 +161,7 @@ async function call(method: string, path: string, options: { token?: string; bod
 }
 const batch = (commands: unknown[], token = importer) =>
   call('POST', '/v1/subjects:batchWrite', { token, body: { commands } });
-const value = (content: unknown) => ({ type: 'value', content });
+const value = (content: unknown) => ({ type: 'value' as const, content });
 const statement = (property: string, content: unknown) => ({ property: { id: property }, value: value(content) });
 const record = (externalId: string, overrides: Partial<Source> = {}): Source => ({
   source: 'openlibrary',
@@ -156,12 +172,12 @@ const record = (externalId: string, overrides: Partial<Source> = {}): Source => 
   field_group: 'facts',
   ...overrides,
 });
-const cited = (property: string, content: unknown, url = 'https://openlibrary.org/works/OL1W') => ({
+const cited = (property: string, content: unknown, url = 'https://openlibrary.org/works/OL1W'): BatchStatement => ({
   ...statement(property, content),
   references: [{ parts: [statement('schema:url', url)] }],
 });
 const work = (title: string) => ({ type: 'schema:Book', labels: { en: title } });
-const rights = {
+const rights: Rights = {
   license: 'CC-BY-SA-3.0',
   obligations: ['cc:Attribution', 'cc:ShareAlike'],
   attribution: 'Open Library contributors',
@@ -443,7 +459,9 @@ test('a fenced source tuple refuses new contributions and hides existing ones at
   const source = subjectSource(pool, routeKey);
   const indexed = await source.read(partitionOf(routeOf(book.id)!), [book.id]);
   expect(indexed.subjects[0]!.statements.map((row) => row.value)).toContain('ja');
-  expect(JSON.stringify(indexed)).not.toContain(token);
+  expect(JSON.stringify(indexed, (_key, item) => (typeof item === 'bigint' ? item.toString() : item))).not.toContain(
+    token,
+  );
 
   await fence('openlibrary', book.externalId, 'facts');
   const afterFacts = requireStatus(

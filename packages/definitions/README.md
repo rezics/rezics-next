@@ -370,8 +370,9 @@ Propose returns 201 `{ candidate, revision }`. A source's refresh with the same
 `(source, external_id, field_group)` returns 200 with its existing candidate and
 the latest subject revision when the statement identity matches. Facts and covers
 use the canonical property, value, and qualifiers. A summary uses the property,
-language, and SHA-256 of `serializeDocument(document)`, computed before content's
-hook, so an unchanged summary appends no document. References and rank do not
+language, and SHA-256 of `serializeDocument` after block ids are replaced in
+document order, computed before content's hook, so an unchanged summary appends
+no document. Generated block ids are not part of that identity. References and rank do not
 change that identity. Refreshes cannot restore moderated content. A hidden or
 taken-down candidate answers its id only to a command that is currently allowed.
 Retract requires a candidate proposed by the same source tuple; another source's
