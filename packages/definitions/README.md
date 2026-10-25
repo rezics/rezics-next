@@ -22,3 +22,73 @@ RFC 8785 canonical JSON. Validate first: the digest function does not validate.
 Catalogue generation and bundled definitions are separate concerns.
 
 Run `bun run --cwd packages/definitions check` from the repository root.
+
+Release tooling imports `compileCatalogue` and `CatalogueError` from
+`@rezics/definitions/compile`. This separate entry point loads
+`@neverblink/linkml` 0.17.1; the default entry point never imports the compiler or
+LinkML. Compilation runs at release time, with all source text supplied in memory:
+
+```ts
+import { compileCatalogue } from '@rezics/definitions/compile';
+
+const release = await compileCatalogue({
+  root: 'catalogue.yaml',
+  schemas: { 'catalogue.yaml': catalogueYaml, 'core.yaml': coreYaml },
+  presentation: { en: englishLabelsYaml, ja: japaneseLabelsYaml },
+});
+```
+
+Source conventions:
+
+- Supply at most 64 schema files, each at most 256 KiB of UTF-8. YAML is parsed
+  with `Bun.YAML.parse`. Imports may reference `linkml:types` or supplied files,
+  using LinkML's relative paths and optional `.yaml` or `.yml` extensions.
+- Schema keys are limited to `id`, `name`, `title`, `description`, `version`,
+  `license`, `prefixes`, `default_prefix`, `default_range`, `imports`, `classes`,
+  and `slots`. The root's `id` and `version` identify the release catalogue.
+- Class keys are limited to `class_uri`, `description`, `is_a`, `abstract`,
+  `slots`, `slot_usage`, `exact_mappings`, and `close_mappings`. Every concrete
+  class needs an explicit `class_uri` CURIE and becomes a type. LinkML derives
+  its properties through `is_a` and `slot_usage`; each type has at most 64.
+- Slot keys are limited to `slot_uri`, `description`, `range`, `any_of`,
+  `multivalued`, `pattern`, `minimum_value`, `maximum_value`, `exact_mappings`,
+  `close_mappings`, and `annotations`. `slot_usage` entries allow the same keys
+  except `slot_uri`. Each `any_of` entry permits only `range`. Every global slot
+  needs an explicit `slot_uri` CURIE, including slots used only as qualifiers.
+  Class and slot keys must each be unique. Prefix expansions must be consistent
+  across files. Different induced contracts for the same property cannot be
+  represented in one release and are refused.
+- `annotations` permits only `datatype`, `units`, and `qualifiers`. `datatype`
+  is required: `wikibase-item` needs a concrete class range or `any_of` concrete
+  class ranges; `string`, `external-id`, and `monolingualtext` need `string`;
+  `url` needs `uri`; `quantity` needs `integer` or `decimal`; `time` needs `date`.
+  An omitted range uses the source schema's default, otherwise `string`.
+- `external-id` requires exactly one exact mapping, matching `wd:P<digits>`.
+  Exact mappings become release mappings; close mappings are accepted as source
+  metadata. Quantity requires `units`, a space-separated string of `1` or
+  CURIEs, expanded to IRIs, and alone permits minimum and maximum bounds.
+  `qualifiers` is a space-separated string of existing slot names.
+- Patterns are allowed only on `string`, `external-id`, and `monolingualtext`.
+  Every source pattern must compile with JavaScript's `u` flag, contain at most
+  256 characters, and receive `safe` from recheck's synchronous checker.
+- Each presentation entry uses a BCP 47 language tag and contains a YAML object
+  with optional `types` and `properties` maps, keyed by release CURIE. Labels
+  must be nonempty strings of at most 256 characters. Unknown terms and other
+  keys are refused. Every emitted type and property requires an `en` label;
+  other locales may be partial.
+
+Limits and profile checks precede LinkML loading and linting, then mapping, then
+labels. Compilation stops at the first stage with violations. LinkML warnings
+are permitted; errors are refused. Derived JSON with derivation enabled supplies
+classes and induced attributes. An auxiliary abstract class induces all global
+slots through LinkML, preserving unused qualifier properties without resolving
+inheritance in this compiler. Lists are sorted and deduplicated. Release prefixes
+contain exactly those used in keys, mappings, and targets; unit-only prefixes are
+expanded but omitted. Generator metadata comes from `LinkML.buildInfo()`.
+
+`CatalogueError.violations` contains `{ file, pointer, code, message }` records,
+sorted by file and RFC 6901 pointer and capped at 64. Label files are named
+`presentation/<tag>` in diagnostics. Codes are `unsupported`, `invalid`, `limit`,
+`unsafe_pattern`, `linkml`, `duplicate`, and `missing_label`. The final release is
+checked with `validateRelease`; a failure at that point throws a plain `Error`
+because it indicates a compiler defect.

@@ -1,0 +1,449 @@
+import { LinkML, type SchemaValidationReport } from '@neverblink/linkml';
+import canonicalize from 'canonicalize';
+import { posix } from 'node:path';
+import { checkSync } from 'recheck/lib/browser.js';
+import releaseSchema from '../schema/release.json';
+import {
+  DATA_TYPES,
+  RELEASE_FORMAT,
+  validateRelease,
+  valueSchema,
+  type DataType,
+  type PropertyDefinition,
+  type Release,
+} from './index.ts';
+
+export type CatalogueViolation = {
+  file: string;
+  pointer: string;
+  code: 'unsupported' | 'invalid' | 'limit' | 'unsafe_pattern' | 'linkml' | 'duplicate' | 'missing_label';
+  message: string;
+};
+export class CatalogueError extends Error {
+  readonly violations: CatalogueViolation[];
+  constructor(violations: CatalogueViolation[]) {
+    super('Catalogue compilation failed');
+    this.name = 'CatalogueError';
+    this.violations = violations.sort((a, b) => compare(a.file, b.file) || compare(a.pointer, b.pointer)).slice(0, 64);
+  }
+}
+
+type Node = Record<string, unknown>;
+type Location = { file: string; pointer: string };
+const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+const record = (value: unknown): value is Node => value !== null && typeof value === 'object' && !Array.isArray(value);
+const object = (value: unknown): Node => (record(value) ? value : (Object.create(null) as Node));
+const dictionary = <T>(): Record<string, T> => Object.create(null) as Record<string, T>;
+const at = (pointer: string, key: string | number) =>
+  `${pointer}/${String(key).replace(/~/g, '~0').replace(/\//g, '~1')}`;
+const unique = (items: string[]) => [...new Set(items)].sort(compare);
+const names = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
+const words = (value: unknown) => (typeof value === 'string' ? value.trim().split(/\s+/u).filter(Boolean) : []);
+const schemaKeys =
+  'id name title description version license prefixes default_prefix default_range imports classes slots';
+const classKeys = 'class_uri description is_a abstract slots slot_usage exact_mappings close_mappings';
+const slotKeys =
+  'description range any_of multivalued pattern minimum_value maximum_value exact_mappings close_mappings annotations';
+const iri = /^[A-Za-z][A-Za-z0-9+.-]*:[^\s\u0000-\u0020\u007f-\u009f<>"{}|\\^`]*$(?![\s\S])/u;
+const normalize = (file: string) => posix.normalize(file).replace(/\.ya?ml$/u, '');
+const languagePattern = new RegExp(Object.keys(releaseSchema.$defs.labels.patternProperties)[0]!, 'u');
+
+export async function compileCatalogue(input: {
+  root: string;
+  schemas: Record<string, string>;
+  presentation: Record<string, string>;
+}): Promise<Release> {
+  const errors: CatalogueViolation[] = [];
+  const add = (location: Location, code: CatalogueViolation['code'], message: string) => {
+    if (!errors.some((e) => e.file === location.file && e.pointer === location.pointer && e.code === code))
+      errors.push({ ...location, code, message });
+  };
+  const stop = () => {
+    if (errors.length) throw new CatalogueError(errors);
+  };
+  const parse = (text: string, file: string): Node => {
+    try {
+      const value: unknown = Bun.YAML.parse(text);
+      if (record(value)) return value;
+      add({ file, pointer: '' }, 'invalid', 'Expected a YAML object');
+    } catch (error) {
+      add({ file, pointer: '' }, 'invalid', String(error));
+    }
+    return object(undefined);
+  };
+  const allowed = (value: unknown, keys: string, location: Location) => {
+    if (!record(value)) {
+      add(location, 'invalid', 'Expected an object');
+      return;
+    }
+    for (const key of Object.keys(value))
+      if (!keys.split(' ').includes(key))
+        add({ ...location, pointer: at(location.pointer, key) }, 'unsupported', 'Unsupported key');
+  };
+  const parsed = dictionary<Node>();
+  const files = Object.keys(input.schemas).sort(compare);
+  if (files.length > 64) add({ file: input.root, pointer: '' }, 'limit', 'At most 64 schema files are allowed');
+  for (const file of files.slice(0, 64)) {
+    if (Buffer.byteLength(input.schemas[file]!, 'utf8') > 256 * 1024)
+      add({ file, pointer: '' }, 'limit', 'Schema exceeds 256 KiB');
+    else parsed[file] = parse(input.schemas[file]!, file);
+  }
+  const safety = new Map<unknown, boolean>();
+  const slotProfile = (slot: unknown, location: Location, usage = false) => {
+    allowed(slot, usage ? slotKeys : `slot_uri ${slotKeys}`, location);
+    if (!record(slot)) return;
+    if (slot.annotations !== undefined)
+      allowed(slot.annotations, 'datatype units qualifiers', {
+        ...location,
+        pointer: at(location.pointer, 'annotations'),
+      });
+    if (slot.any_of !== undefined) {
+      if (!Array.isArray(slot.any_of))
+        add({ ...location, pointer: at(location.pointer, 'any_of') }, 'invalid', 'Expected a list');
+      else
+        slot.any_of.forEach((entry, i) =>
+          allowed(entry, 'range', { ...location, pointer: at(at(location.pointer, 'any_of'), i) }),
+        );
+    }
+    if (slot.pattern !== undefined) {
+      let safe = safety.get(slot.pattern);
+      if (safe === undefined) {
+        safe = false;
+        if (typeof slot.pattern === 'string' && slot.pattern.length <= 256) {
+          try {
+            new RegExp(slot.pattern, 'u');
+            safe = checkSync(slot.pattern, 'u', { timeout: 3000 }).status === 'safe';
+          } catch {
+            /* Inconclusive patterns are refused. */
+          }
+        }
+        safety.set(slot.pattern, safe);
+      }
+      if (!safe)
+        add(
+          { ...location, pointer: at(location.pointer, 'pattern') },
+          'unsafe_pattern',
+          'Pattern must be safe Unicode syntax of at most 256 characters',
+        );
+    }
+  };
+  for (const [file, source] of Object.entries(parsed)) {
+    allowed(source, schemaKeys, { file, pointer: '' });
+    for (const collection of ['classes', 'slots'] as const) {
+      if (source[collection] !== undefined && !record(source[collection]))
+        add({ file, pointer: `/${collection}` }, 'invalid', 'Expected an object');
+      for (const [name, value] of Object.entries(object(source[collection]))) {
+        const location = { file, pointer: at(`/${collection}`, name) };
+        if (collection === 'slots') slotProfile(value, location);
+        else {
+          allowed(value, classKeys, location);
+          const usage = object(value).slot_usage;
+          if (usage !== undefined && !record(usage))
+            add({ file, pointer: at(location.pointer, 'slot_usage') }, 'invalid', 'Expected an object');
+          for (const [slot, definition] of Object.entries(object(usage)))
+            slotProfile(definition, { file, pointer: at(at(location.pointer, 'slot_usage'), slot) }, true);
+        }
+      }
+    }
+    if (source.imports !== undefined && !Array.isArray(source.imports))
+      add({ file, pointer: '/imports' }, 'invalid', 'Expected a list');
+    if (Array.isArray(source.imports))
+      source.imports.forEach((entry, i) => {
+        if (
+          entry !== 'linkml:types' &&
+          (typeof entry !== 'string' ||
+            !files.some((candidate) => normalize(candidate) === normalize(posix.join(posix.dirname(file), entry))))
+        )
+          add(
+            { file, pointer: at('/imports', i) },
+            'unsupported',
+            'Import must name a supplied schema or linkml:types',
+          );
+      });
+  }
+  if (!Object.hasOwn(input.schemas, input.root))
+    add({ file: input.root, pointer: '' }, 'invalid', 'Root schema is missing');
+  stop();
+
+  const fileFor = (id: unknown) => files.find((file) => parsed[file]!.id === id) ?? input.root;
+  const report = (value: SchemaValidationReport) => {
+    for (const issue of value.issues)
+      if (issue.severity !== 'WARNING') {
+        const source = 'source_uri' in issue ? issue.source_uri : undefined;
+        add(
+          {
+            file: source && Object.hasOwn(parsed, source) ? source : fileFor(issue.location.schema_id),
+            pointer: issue.location.json_pointer ?? '',
+          },
+          'linkml',
+          issue.message ?? issue.issue_type,
+        );
+      }
+  };
+  let derived: Node = object(undefined);
+  let globals: Node = object(undefined);
+  try {
+    const loaded = LinkML.loadFromPath(input.root, input.schemas);
+    report(loaded.report);
+    if (loaded.view) report(LinkML.lint(loaded.view));
+    stop();
+    if (!loaded.view) add({ file: input.root, pointer: '' }, 'linkml', 'LinkML did not produce a schema');
+    stop();
+    derived = JSON.parse(LinkML.linkml(loaded.view!, 'skip', false, undefined, 'json')) as Node;
+    // Derived LinkML emits slots only as class attributes. Induce every global slot
+    // on an auxiliary abstract class so unused qualifier slots are retained, too.
+    const inventory = object(JSON.parse(LinkML.linkml(loaded.view!, 'skip', true, undefined, 'json')));
+    let carrier = '__catalogue_slots';
+    while (Object.hasOwn(object(inventory.classes), carrier)) carrier += '_';
+    let path = posix.join(posix.dirname(input.root), '__catalogue.yaml');
+    while (files.some((file) => normalize(file) === normalize(path))) path += '.yaml';
+    const wrapper = JSON.stringify({
+      id: 'urn:rezics:compiler:slots',
+      name: 'catalogue_slots',
+      imports: [`./${posix.basename(input.root)}`],
+      classes: { [carrier]: { abstract: true, slots: Object.keys(object(inventory.slots)).sort(compare) } },
+    });
+    const all = LinkML.loadFromPath(path, { ...input.schemas, [path]: wrapper });
+    report(all.report);
+    stop();
+    if (!all.view) throw new Error('Cannot induce catalogue slots');
+    const induced = object(JSON.parse(LinkML.linkml(all.view, 'skip', false, undefined, 'json')));
+    globals = object(object(object(induced.classes)[carrier]).attributes);
+  } catch (error) {
+    if (error instanceof CatalogueError) throw error;
+    add({ file: input.root, pointer: '' }, 'linkml', String(error));
+  }
+  stop();
+
+  const release: Release = {
+    format: RELEASE_FORMAT,
+    catalogue: { id: parsed[input.root]!.id as string, version: parsed[input.root]!.version as string },
+    generator: { name: '@neverblink/linkml', version: LinkML.buildInfo().linkml_scala_version },
+    prefixes: dictionary<string>(),
+    types: dictionary(),
+    properties: dictionary(),
+  };
+  const prefixes = object(derived.prefixes);
+  const expand = (value: unknown, location: Location, retain = true): string | undefined => {
+    if (typeof value === 'string') {
+      const match = /^([a-z][a-z0-9_]*):([^\s]+)$(?![\s\S])/u.exec(value);
+      const base = match && (object(parsed[location.file]?.prefixes)[match[1]!] ?? prefixes[match[1]!]);
+      if (match && typeof base === 'string' && iri.test(base + match[2]!)) {
+        if (retain) {
+          const previous = release.prefixes[match[1]!];
+          if (previous !== undefined && previous !== base)
+            add(location, 'invalid', 'Prefix has conflicting expansions');
+          else release.prefixes[match[1]!] = base;
+        }
+        return base + match[2]!;
+      }
+    }
+    add(location, 'invalid', 'Expected a CURIE with a declared prefix');
+    return undefined;
+  };
+  type Term = { name: string; value: Node; location: Location; key: string };
+  const terms = (collection: 'classes' | 'slots', values: Node): Term[] => {
+    const uri = collection === 'classes' ? 'class_uri' : 'slot_uri';
+    const entries = Object.entries(values)
+      .map(([name, value]) => {
+        const node = object(value);
+        return {
+          name,
+          value: node,
+          location: { file: fileFor(node.from_schema), pointer: at(`/${collection}`, name) },
+          key: node[uri] as string,
+        };
+      })
+      .sort((a, b) => compare(a.location.file, b.location.file) || compare(a.location.pointer, b.location.pointer));
+    const seen = new Set<string>();
+    return entries.filter((term) => {
+      if (collection === 'classes' && term.value.abstract === true) return false;
+      const source = object(object(parsed[term.location.file]![collection])[term.name]);
+      if (!Object.hasOwn(source, uri) || !expand(term.key, term.location)) {
+        add(term.location, 'invalid', `${uri} must be explicit in the source`);
+        return false;
+      }
+      if (seen.has(term.key)) {
+        add(term.location, 'duplicate', `Duplicate key ${term.key}`);
+        return false;
+      }
+      seen.add(term.key);
+      return true;
+    });
+  };
+  const classes = terms('classes', object(derived.classes));
+  // Use induced attributes for properties used by concrete classes. A global
+  // property cannot represent two different class-specific value contracts.
+  const effective = new Map<string, string>();
+  for (const term of classes) {
+    for (const [name, attribute] of Object.entries(object(term.value.attributes))) {
+      const slot = object(attribute);
+      const contract = canonicalize(
+        Object.fromEntries(
+          `slot_uri ${slotKeys}`
+            .split(' ')
+            .filter((key) => !['description', 'close_mappings'].includes(key))
+            .map((key) => [
+              key,
+              key === 'range'
+                ? (slot.range ?? parsed[fileFor(slot.from_schema)]?.default_range ?? 'string')
+                : slot[key],
+            ])
+            .filter(([, value]) => value !== undefined),
+        ),
+      )!;
+      const previous = effective.get(name);
+      if (previous !== undefined && previous !== contract)
+        add(
+          { file: term.location.file, pointer: at(at(term.location.pointer, 'slot_usage'), name) },
+          'invalid',
+          'Induced property contracts disagree across concrete classes',
+        );
+      else {
+        effective.set(name, contract);
+        globals[name] = slot;
+      }
+    }
+  }
+  const slots = terms('slots', globals);
+  const classKeysByName = new Map(classes.map((term) => [term.name, term.key]));
+  const slotKeysByName = new Map(slots.map((term) => [term.name, term.key]));
+  const mappings = (term: Term) => {
+    const result = unique(names(term.value.exact_mappings));
+    for (const mapping of result)
+      expand(mapping, { ...term.location, pointer: at(term.location.pointer, 'exact_mappings') });
+    return result;
+  };
+  for (const term of classes) {
+    const properties = unique(
+      Object.keys(object(term.value.attributes)).flatMap((name) => slotKeysByName.get(name) ?? []),
+    );
+    if (properties.length > 64) add(term.location, 'limit', 'A type may have at most 64 properties');
+    release.types[term.key] = {
+      iri: expand(term.key, term.location)!,
+      labels: dictionary(),
+      mappings: mappings(term),
+      properties,
+    };
+  }
+  for (const term of slots) {
+    const { value: slot, location } = term;
+    const field = (key: string) => ({ ...location, pointer: at(location.pointer, key) });
+    const annotation = (key: string) => ({ ...location, pointer: at(at(location.pointer, 'annotations'), key) });
+    const annotations = object(slot.annotations);
+    const datatype = annotations.datatype as DataType;
+    const range = slot.range ?? parsed[location.file]?.default_range ?? 'string';
+    const ranges = Array.isArray(slot.any_of) ? slot.any_of.map((entry) => object(entry).range) : [range];
+    const agrees =
+      DATA_TYPES.includes(datatype) &&
+      ranges.length > 0 &&
+      ranges.every((range) => {
+        if (datatype === 'wikibase-item') return typeof range === 'string' && classKeysByName.has(range);
+        const expected =
+          datatype === 'quantity'
+            ? ['integer', 'decimal']
+            : datatype === 'time'
+              ? ['date']
+              : datatype === 'url'
+                ? ['uri']
+                : ['string'];
+        return typeof range === 'string' && expected.includes(range);
+      });
+    if (!agrees) {
+      add(annotation('datatype'), 'invalid', 'Data type must agree with the range');
+      continue;
+    }
+    const exact = mappings(term);
+    if (datatype === 'external-id' && (exact.length !== 1 || !/^wd:P[0-9]+$(?![\s\S])/u.test(exact[0]!)))
+      add(field('exact_mappings'), 'invalid', 'External identifiers require exactly one wd:P mapping');
+    if (slot.pattern !== undefined && !['string', 'external-id', 'monolingualtext'].includes(datatype))
+      add(field('pattern'), 'invalid', 'Pattern is not allowed for this data type');
+    const property: PropertyDefinition = {
+      iri: expand(term.key, location)!,
+      labels: dictionary(),
+      mappings: exact,
+      datatype,
+      multivalued: slot.multivalued === true,
+      qualifiers: [],
+      value: {},
+    };
+    if (annotations.qualifiers !== undefined && typeof annotations.qualifiers !== 'string')
+      add(annotation('qualifiers'), 'invalid', 'Qualifiers must be space-separated slot names');
+    for (const name of words(annotations.qualifiers)) {
+      const key = slotKeysByName.get(name);
+      if (key) property.qualifiers.push(key);
+      else add(annotation('qualifiers'), 'invalid', `Unknown qualifier ${name}`);
+    }
+    property.qualifiers = unique(property.qualifiers);
+    if (datatype === 'wikibase-item')
+      property.targets = unique(ranges.map((range) => classKeysByName.get(range as string)!));
+    if (datatype === 'quantity') {
+      const units = words(annotations.units);
+      if (!units.length || units.length > 16)
+        add(annotation('units'), 'invalid', 'Quantity needs between one and 16 units');
+      property.units = unique(
+        units.map((unit) => (unit === '1' ? unit : (expand(unit, annotation('units'), false) ?? unit))),
+      );
+    } else if (annotations.units !== undefined)
+      add(annotation('units'), 'invalid', 'Units are only allowed for quantity');
+    for (const [source, target] of [
+      ['minimum_value', 'minimum'],
+      ['maximum_value', 'maximum'],
+    ] as const) {
+      if (slot[source] === undefined) continue;
+      if (datatype !== 'quantity' || typeof slot[source] !== 'number' || !Number.isFinite(slot[source]))
+        add(field(source), 'invalid', 'Bounds require a finite quantity');
+      else property[target] = slot[source];
+    }
+    if (property.minimum !== undefined && property.maximum !== undefined && property.minimum > property.maximum)
+      add(field('maximum_value'), 'invalid', 'Maximum is below minimum');
+    if (property.targets && property.targets.length > 16)
+      add(field('any_of'), 'limit', 'At most 16 targets are allowed');
+    property.value = valueSchema(datatype, {
+      ...(typeof slot.pattern === 'string' && ['string', 'external-id', 'monolingualtext'].includes(datatype)
+        ? { pattern: slot.pattern }
+        : {}),
+      ...(property.units ? { units: property.units, integer: range === 'integer' } : {}),
+    });
+    release.properties[term.key] = property;
+  }
+  if (classes.length > 256 || slots.length > 1024)
+    add({ file: input.root, pointer: '' }, 'limit', 'Release collection limit exceeded');
+  if (typeof release.catalogue.id !== 'string' || !iri.test(release.catalogue.id))
+    add({ file: input.root, pointer: '/id' }, 'invalid', 'Catalogue id must be an IRI');
+  if (typeof release.catalogue.version !== 'string' || !release.catalogue.version.length)
+    add({ file: input.root, pointer: '/version' }, 'invalid', 'Catalogue version is required');
+  stop();
+
+  for (const tag of Object.keys(input.presentation).sort(compare)) {
+    const file = `presentation/${tag}`;
+    const labels = parse(input.presentation[tag]!, file);
+    // Use the release schema's complete BCP 47 grammar, including grandfathered tags.
+    if (!languagePattern.test(tag)) add({ file, pointer: '' }, 'invalid', 'Expected a BCP 47 language tag');
+    allowed(labels, 'types properties', { file, pointer: '' });
+    for (const collection of ['types', 'properties'] as const) {
+      if (labels[collection] !== undefined && !record(labels[collection]))
+        add({ file, pointer: `/${collection}` }, 'invalid', 'Expected a label object');
+      for (const [key, label] of Object.entries(object(labels[collection]))) {
+        const location = { file, pointer: at(`/${collection}`, key) };
+        if (!Object.hasOwn(release[collection], key)) add(location, 'invalid', 'Unknown term');
+        else if (typeof label !== 'string' || !label.length || [...label].length > 256)
+          add(location, 'invalid', 'Label must contain between one and 256 characters');
+        else release[collection][key]!.labels[tag] = label;
+      }
+    }
+  }
+  for (const collection of ['types', 'properties'] as const)
+    for (const [key, term] of Object.entries(release[collection]))
+      if (!Object.hasOwn(term.labels, 'en'))
+        add(
+          { file: 'presentation/en', pointer: at(`/${collection}`, key) },
+          'missing_label',
+          'English label is required',
+        );
+  stop();
+  const defects = validateRelease(release);
+  if (defects.length) throw new Error(`Compiler produced an invalid release: ${JSON.stringify(defects)}`);
+  return release;
+}
