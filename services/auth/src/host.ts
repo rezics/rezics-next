@@ -112,6 +112,16 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
   });
   let starting: Promise<void> | undefined;
   let stopping: Promise<void> | undefined;
+  if (!service) throw new Error('Auth service did not start');
+  const auth = service;
+  // Point-read only. registerClient takes the client advisory lock on its own
+  // connection, so holding that lock here would deadlock. An existing login
+  // client is left unchanged, including one registered with scopes.
+  const registerLoginClient = async () => {
+    const present = await options.database.query('SELECT 1 FROM auth_client WHERE client_id=$1', ['login']);
+    if (present.rowCount) return;
+    await auth.internal.registerClient({ clientId: 'login', firstParty: true, scopes: [] });
+  };
   const interrupt = () => {
     void stop();
   };
@@ -138,6 +148,7 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
       if (stopping) return Promise.reject(new Error('Auth host is stopped'));
       return (starting ??= (async () => {
         try {
+          await registerLoginClient();
           await workflows.start();
           await maintenance!.start(schedule);
           process.once('SIGINT', interrupt);

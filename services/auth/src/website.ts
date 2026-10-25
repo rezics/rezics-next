@@ -28,6 +28,38 @@ class ProtocolRefused extends Error {
 function deny(code: RefusalCode): never {
   throw new ProtocolRefused(code);
 }
+const authorizationParameters = new Set([
+  'client_id',
+  'redirect_uri',
+  'response_type',
+  'scope',
+  'state',
+  'nonce',
+  'code_challenge',
+  'code_challenge_method',
+  'resource',
+  'prompt',
+  'max_age',
+]);
+function asksForLogin(prompt: string | null) {
+  return (prompt ?? '').split(' ').includes('login');
+}
+/** OIDC max_age is the elapsed seconds since auth_time. Zero is never fresh. */
+function authenticationIsStale(authTime: number, maxAge: string | null) {
+  if (maxAge === null || !/^(0|[1-9]\d*)$/.test(maxAge)) return false;
+  const seconds = Number(maxAge);
+  if (!Number.isSafeInteger(seconds)) return false;
+  if (seconds === 0) return true;
+  return Math.floor(Date.now() / 1000) - authTime > seconds;
+}
+/** Keep the provider's signed query bytes. Re-encoding would change the signature. */
+function stepUpLocation(location: string, issuer: string) {
+  const login = '/login';
+  const absolute = `${issuer}${login}`;
+  if (location === absolute || location.startsWith(`${absolute}?`)) return `/step-up${location.slice(absolute.length)}`;
+  if (location === login || location.startsWith(`${login}?`)) return `/step-up${location.slice(login.length)}`;
+  return undefined;
+}
 function invalidJwt(error: unknown) {
   return (
     error instanceof errors.JOSEError &&
@@ -265,6 +297,18 @@ export function websiteRoutes(input: {
   function only(fields: URLSearchParams, allowed: string[]) {
     for (const key of fields.keys()) if (!allowed.includes(key)) deny('invalid_request');
   }
+  function authorizationQuery(search: URLSearchParams) {
+    const fields = new URLSearchParams();
+    const seen = new Set<string>();
+    for (const [key, value] of search) {
+      if (value.length > 8192) deny('invalid_request');
+      if (!authorizationParameters.has(key)) continue;
+      if (seen.has(key)) deny('invalid_request');
+      seen.add(key);
+      fields.append(key, value);
+    }
+    return fields;
+  }
   function resource(fields: URLSearchParams) {
     if (!fields.get('resource')) deny('invalid_request');
     if (fields.get('resource') !== options.audience) deny('invalid_target');
@@ -478,20 +522,7 @@ export function websiteRoutes(input: {
         }
         if (url.pathname === '/authorize') {
           if (request.method !== 'GET') deny('invalid_request');
-          const fields = unique(url.searchParams);
-          only(fields, [
-            'client_id',
-            'redirect_uri',
-            'response_type',
-            'scope',
-            'state',
-            'nonce',
-            'code_challenge',
-            'code_challenge_method',
-            'resource',
-            'prompt',
-            'max_age',
-          ]);
+          const fields = authorizationQuery(url.searchParams);
           const registered = await client();
           if (
             fields.get('client_id') !== WEBSITE_CLIENT_ID ||
@@ -513,15 +544,32 @@ export function websiteRoutes(input: {
             await input.sessionProof(request.headers);
             await proof(current.session, scopes, true);
           }
+          // The session above is the one already loaded for this request.
+          const stepUp =
+            current !== null &&
+            (asksForLogin(fields.get('prompt')) ||
+              authenticationIsStale(current.session.authTime, fields.get('max_age')));
+          // Native max_age follows session creation, not auth_time. prompt=login
+          // makes an aged auth_time take the same login redirect, which we rewrite.
+          if (stepUp && !asksForLogin(fields.get('prompt'))) {
+            const prompt = fields.get('prompt');
+            fields.set('prompt', prompt ? `${prompt} login` : 'login');
+          }
           return input.withIssuance(WEBSITE_CLIENT_ID, async () => {
-            if (current) {
+            if (current && !stepUp) {
               await database.query(
                 `INSERT INTO auth_consent (account_id,client_id,scopes) VALUES ($1,$2,$3) ON CONFLICT (account_id,client_id) DO NOTHING`,
                 [current.session.userId, WEBSITE_CLIENT_ID, registered.scopes],
               );
               await proof(current.session, scopes);
             }
-            return input.native().handler(nativeRequest(request, '/oauth2/authorize', fields));
+            const response = await input.native().handler(nativeRequest(request, '/oauth2/authorize', fields));
+            if (!stepUp) return response;
+            const rewritten = stepUpLocation(response.headers.get('location') ?? '', options.issuer);
+            if (!rewritten) return response;
+            const headers = new Headers(response.headers);
+            headers.set('location', rewritten);
+            return new Response(response.body, { status: response.status, headers });
           });
         }
         if (url.pathname === '/token' || url.pathname === '/revoke') {

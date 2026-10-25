@@ -14,7 +14,7 @@ import { betterAuthOptions, credentialOwnerSchema } from './better-auth.ts';
 import { createSigner } from './signing.ts';
 import { signSessionAccessToken } from './session-proof-capability.ts';
 import { issuerOrigin } from './issuer.ts';
-import { nativeAttemptRequest } from './rate-limit.ts';
+import { attemptStatement, nativeAttemptRequest } from './rate-limit.ts';
 import { nativeSessionLimits, pruneExpiredSessions, trimSessionHistory, sessionUpgradePage } from './session-limits.ts';
 import { nativeVerificationPlugin, pruneExpiredVerifications } from './verification-maintenance.ts';
 import { clientAuthority } from './account-workflows.ts';
@@ -81,6 +81,13 @@ function text(value: unknown): string {
   if (typeof value !== 'string' || !value || value.length > 1024) throw new Denied(400);
   return value;
 }
+const recoveryEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+function recoveryAddress(body: Record<string, unknown>) {
+  fields(body, ['email']);
+  const email = text(body.email).toLowerCase();
+  if (email.length > 254 || !recoveryEmail.test(email)) throw new Denied(400);
+  return email;
+}
 function fields(body: Record<string, unknown>, names: string[]): void {
   if (Object.keys(body).some((key) => !names.includes(key))) throw new Denied(400);
 }
@@ -144,7 +151,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
   const proofSources = new WeakMap<SessionProof, { id: string; expiresAt: number }>();
   const proofScope = new AsyncLocalStorage<{ proof: SessionProof; live: boolean }>();
   const binding = new AsyncLocalStorage<Binding>();
-  const recoveryBinding = recoveryDelivery(database, options.recoveryDelivery);
+  const recoveryBinding = recoveryDelivery(database, options.recoveryDelivery, options.issuer);
   // Native router admission runs before this private alias dispatch hook. A
   // request cannot install it through a header, body or native endpoint name.
   const attemptDispatch = new AsyncLocalStorage<() => Promise<Response>>();
@@ -609,6 +616,72 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     )
       throw new Denied();
     return account;
+  }
+  function recoverableHuman(account: AccessAccount | null, accountId: string): account is AccessAccount {
+    return (
+      !!account &&
+      account.accountId === accountId &&
+      account.kind === 'actor' &&
+      !account.automated &&
+      account.state === 'active' &&
+      Number.isSafeInteger(account.authnEpoch) &&
+      account.authnEpoch >= 0 &&
+      account.authnEpoch <= 2147483647
+    );
+  }
+  async function deliverRecovery(email: string) {
+    const found = await database.query<{ id: string }>('SELECT id FROM "user" WHERE email=$1', [email]);
+    const accountId = found.rows[0]?.id;
+    if (
+      !accountId ||
+      !trustedAccess.readRecoveryAccount ||
+      !trustedAccess.authorizeRecovery ||
+      !options.recoveryDelivery
+    )
+      return;
+    const account = await trustedAccess.readRecoveryAccount(accountId);
+    if (!recoverableHuman(account, accountId)) return;
+    // Admit the account before minting a proof, so a cooled-down start stores nothing.
+    const key = createHmac('sha256', options.secret)
+      .update(JSON.stringify(['auth-recovery-mail-v1', accountId]))
+      .digest('hex');
+    const consumed = await database.query<{ allowed: boolean }>(attemptStatement, [key, 60, 1]);
+    if (!consumed.rows[0]?.allowed) return;
+    try {
+      await recoveryBinding.run({ accountId, epoch: account.authnEpoch }, () =>
+        getAuth().api.requestPasswordReset({ body: { email } }),
+      );
+    } catch (error) {
+      await database.query('DELETE FROM auth_attempt_counter WHERE key=$1', [key]).catch(() => {});
+      throw error;
+    }
+  }
+  async function presentedSession(headers: Headers) {
+    try {
+      return await getAuth().api.getSession({
+        headers,
+        query: { disableCookieCache: true, disableRefresh: true },
+      });
+    } catch {
+      return null;
+    }
+  }
+  async function replacePreviousSession(previous: Awaited<ReturnType<typeof presentedSession>>, response: Response) {
+    if (!previous || !response.ok) return response;
+    const headers = new Headers({
+      cookie: response.headers
+        .getSetCookie()
+        .map((cookie) => cookie.split(';')[0])
+        .join('; '),
+    });
+    const created = await getAuth().api.getSession({
+      headers,
+      query: { disableCookieCache: true, disableRefresh: true },
+    });
+    // Issuance has released its connection. Delete only the session this request presented.
+    if (created && created.session.id !== previous.session.id)
+      await (await getContext()).internalAdapter.deleteSession(previous.session.token);
+    return response;
   }
 
   const provisioningEvidence = createProvisioningEvidenceVerifier({ database });
@@ -1352,6 +1425,9 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         // All mutations require the configured origin, including first-login CSRF protection.
         if (request.headers.get('origin') !== options.issuer || request.headers.get('sec-fetch-site') === 'cross-site')
           throw new Denied(403);
+        // Validate before the attempt limit so a malformed address is not charged.
+        if (url.pathname === '/recovery/start' && !attemptDispatch.getStore())
+          recoveryAddress(await bodyOf(request.clone()));
         const attemptPath = {
           '/signin': '/sign-in/email',
           '/signin/key': '/sign-in/email',
@@ -1394,13 +1470,11 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           return json({}, 200, cookies);
         }
         if (url.pathname === '/recovery/start') {
-          fields(body, ['account_id']);
-          const account = await recoveryAccount(text(body.account_id));
-          const user = await (await getContext()).internalAdapter.findUserById(account.accountId);
-          if (!user?.email) throw new Denied();
-          await recoveryBinding.run({ accountId: account.accountId, epoch: account.authnEpoch }, () =>
-            getAuth().api.requestPasswordReset({ body: { email: user.email } }),
-          );
+          const email = recoveryAddress(body);
+          // Lookup, Access and delivery stay off this response. Failures are logged without the address.
+          void deliverRecovery(email).catch(() => {
+            console.error('Recovery start failed');
+          });
           return json({ success: true });
         }
         if (url.pathname === '/recovery/complete') {
@@ -1604,6 +1678,8 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         }
         if (url.pathname === '/signin') {
           fields(body, ['email', 'account_id', 'password', 'client_id', 'scope']);
+          const previous = await presentedSession(request.headers);
+          let response: Response;
           if (body.account_id !== undefined) {
             if (body.email !== undefined) throw new Denied(400);
             const account = await activeActor(text(body.account_id));
@@ -1615,7 +1691,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               !(await (await getContext()).password.verify({ hash: credential.password, password }))
             )
               throw new Denied();
-            return await establish(
+            response = await establish(
               {
                 clientId: text(body.client_id),
                 scopes: scopes(body.scope),
@@ -1625,31 +1701,33 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               },
               request.headers,
             );
+          } else {
+            const selected = { clientId: text(body.client_id), scopes: scopes(body.scope) };
+            await clientFor(selected.clientId);
+            response = await withIssuance(selected.clientId, async () => {
+              const signed = await binding.run(selected, () =>
+                getAuth().api.signInEmail({
+                  headers: request.headers,
+                  body: { email: text(body.email), password: text(body.password) },
+                  asResponse: true,
+                }),
+              );
+              if (!signed.ok)
+                return json({ error: 'authentication_denied' }, signed.status >= 400 ? signed.status : 401);
+              const setCookies = signed.headers.getSetCookie();
+              const headers = new Headers({ cookie: setCookies.map((cookie) => cookie.split(';')[0]).join('; ') });
+              try {
+                const proof = await sessionProof(headers);
+                return json(proof, 200, setCookies);
+              } catch (error) {
+                // A state/consent change during establishment must not release its cookie.
+                const created = await getAuth().api.getSession({ headers });
+                if (created) await (await getContext()).internalAdapter.deleteSession(created.session.token);
+                throw error;
+              }
+            });
           }
-          const selected = { clientId: text(body.client_id), scopes: scopes(body.scope) };
-          await clientFor(selected.clientId);
-          return await withIssuance(selected.clientId, async () => {
-            const response = await binding.run(selected, () =>
-              getAuth().api.signInEmail({
-                headers: request.headers,
-                body: { email: text(body.email), password: text(body.password) },
-                asResponse: true,
-              }),
-            );
-            if (!response.ok)
-              return json({ error: 'authentication_denied' }, response.status >= 400 ? response.status : 401);
-            const setCookies = response.headers.getSetCookie();
-            const headers = new Headers({ cookie: setCookies.map((cookie) => cookie.split(';')[0]).join('; ') });
-            try {
-              const proof = await sessionProof(headers);
-              return json(proof, 200, setCookies);
-            } catch (error) {
-              // A state/consent change during establishment must not release its cookie.
-              const created = await getAuth().api.getSession({ headers });
-              if (created) await (await getContext()).internalAdapter.deleteSession(created.session.token);
-              throw error;
-            }
-          });
+          return await replacePreviousSession(previous, response);
         }
         if (url.pathname === '/token') {
           fields(body, ['requested_by']);

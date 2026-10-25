@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { Pool } from 'pg';
+import { Pool, type PoolClient } from 'pg';
 import { createLocalJWKSet, decodeJwt, exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
 import {
@@ -16,6 +16,52 @@ const password = 'correct horse battery staple';
 const accounts = new Map<string, AccessAccount>();
 const deliveries = new Map<string, string>();
 let pool: Pool;
+let drain = async () => {};
+function trackQueries(target: Pool) {
+  let inflight = 0;
+  const query = target.query.bind(target);
+  const connect = target.connect.bind(target) as {
+    (): Promise<PoolClient>;
+    (...args: unknown[]): void;
+  };
+  const tracked = (run: () => unknown) => {
+    inflight++;
+    try {
+      return Promise.resolve(run()).finally(() => {
+        inflight--;
+      });
+    } catch (error) {
+      inflight--;
+      throw error;
+    }
+  };
+  // node-pg Pool.query checks out through callback connect. Replacing that
+  // path with a promise leaves the callback uncalled and the query pending.
+  const hasCallback = (args: unknown[]) => typeof args.at(-1) === 'function';
+  const trackClient = (client: PoolClient) => {
+    if (Object.hasOwn(client, 'trackedQuery')) return client;
+    const clientQuery = client.query.bind(client);
+    Object.defineProperty(client, 'trackedQuery', { value: true });
+    client.query = ((...args: unknown[]) =>
+      hasCallback(args)
+        ? clientQuery(...(args as [string]))
+        : tracked(() => clientQuery(...(args as [string])))) as PoolClient['query'];
+    return client;
+  };
+  target.query = ((...args: unknown[]) =>
+    hasCallback(args) ? query(...(args as [string])) : tracked(() => query(...(args as [string])))) as Pool['query'];
+  target.connect = ((...args: unknown[]) =>
+    hasCallback(args) ? connect(...args) : connect().then(trackClient)) as Pool['connect'];
+  return async function settled() {
+    for (;;) {
+      await new Promise((resolve) => setImmediate(resolve));
+      if (inflight === 0) {
+        await new Promise((resolve) => setImmediate(resolve));
+        if (inflight === 0) return;
+      }
+    }
+  };
+}
 let service: AuthService;
 let options: AuthServiceOptions;
 let fixture: ReturnType<typeof testDatabase> | undefined;
@@ -147,6 +193,12 @@ async function keySignin(id: string, jwt: string, target = service) {
     target,
   );
 }
+async function startRecovery(email: string) {
+  await pool.query('DELETE FROM auth_attempt_counter');
+  const response = await request('/recovery/start', { email });
+  await drain();
+  return response;
+}
 async function issued(cookieValue: string) {
   const response = await request('/token', {}, cookieValue);
   expect(response.status).toBe(200);
@@ -168,6 +220,7 @@ async function kernelAccepts(token: string) {
 beforeAll(async () => {
   fixture = testDatabase();
   pool = new Pool({ connectionString: fixture.url });
+  drain = trackQueries(pool);
   await pool.query(
     'CREATE TABLE test_effect_receipt (id text PRIMARY KEY, value jsonb NOT NULL, invalidates boolean NOT NULL)',
   );
@@ -294,7 +347,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await pool?.end();
   fixture?.close();
-});
+}, 30000);
 
 test('automated opening consumes its own durable purpose-bound Access receipt before a real Better Auth session', async () => {
   actor('effects-agent', true);
@@ -477,7 +530,7 @@ test('approved credential effects toggle independent automated signin and enforc
 
 test('native human recovery delivers short lived one-use proof and requires Access invalidation before resetting credentials', async () => {
   const old = await issued(await login('effects-human'));
-  expect((await request('/recovery/start', { account_id: 'effects-human' })).status).toBe(200);
+  expect((await startRecovery('effects-human@example.test')).status).toBe(200);
   const token = deliveries.get('effects-human')!;
   expect(token.length).toBeGreaterThan(10);
   const response = await request('/recovery/complete', { account_id: 'effects-human', token, new_password: password });
@@ -490,14 +543,14 @@ test('native human recovery delivers short lived one-use proof and requires Acce
   expect(await recoverySnapshot()).toEqual(saved);
   expect(saved.proof.every((row) => row.consumed_operation !== null)).toBe(true);
   expect((await login('effects-human')).length).toBeGreaterThan(0);
-  expect((await request('/recovery/start', { account_id: 'effects-agent' })).status).toBeGreaterThanOrEqual(400);
+  expect((await startRecovery('effects-agent@example.test')).status).toBe(200);
   expect(deliveries.has('effects-agent')).toBe(false);
   const native = await pool.query('SELECT identifier FROM verification');
   expect(JSON.stringify(native.rows)).not.toContain(token);
 });
 
 test('stale expired wrong-owner recovery and Access outage cannot clear a newer floor or fence', async () => {
-  await request('/recovery/start', { account_id: 'effects-human' });
+  await startRecovery('effects-human@example.test');
   const stale = deliveries.get('effects-human')!;
   accounts.get('effects-human')!.authnEpoch++;
   fence = true;
@@ -507,7 +560,7 @@ test('stale expired wrong-owner recovery and Access outage cannot clear a newer 
   ).toBeGreaterThanOrEqual(400);
   expect(accounts.get('effects-human')!.authnEpoch).toBe(floor);
   expect(fence).toBe(true);
-  await request('/recovery/start', { account_id: 'effects-human' });
+  await startRecovery('effects-human@example.test');
   const fresh = deliveries.get('effects-human')!;
   outage = true;
   expect(
@@ -516,14 +569,14 @@ test('stale expired wrong-owner recovery and Access outage cannot clear a newer 
   outage = false;
   expect(accounts.get('effects-human')!.authnEpoch).toBe(floor);
   expect(fence).toBe(true);
-  await request('/recovery/start', { account_id: 'effects-human' });
+  await startRecovery('effects-human@example.test');
   const expired = deliveries.get('effects-human')!;
   await pool.query('UPDATE auth_recovery SET expires_at=$1', [new Date(0)]);
   expect(
     (await request('/recovery/complete', { account_id: 'effects-human', token: expired, new_password: password }))
       .status,
   ).toBeGreaterThanOrEqual(400);
-  await request('/recovery/start', { account_id: 'effects-human' });
+  await startRecovery('effects-human@example.test');
   const current = deliveries.get('effects-human')!;
   expect(
     (await request('/recovery/complete', { account_id: 'effects-agent', token: current, new_password: password }))

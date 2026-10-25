@@ -288,7 +288,7 @@ export interface AuthServiceOptions {
   /** Trusted mounted x-action catalogue, supplied by production composition. */
   siteActions?: ReadonlyMap<string, { anonymous: boolean; replay?: 'self-account-read' }>;
   recoveryDelivery?: {
-    deliver(input: { accountId: string; email: string; token: string; expiresAt: Date }): Promise<void>;
+    deliver(input: { accountId: string; email: string; token: string; expiresAt: Date; url: string }): Promise<void>;
   };
 }
 

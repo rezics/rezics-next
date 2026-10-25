@@ -10,7 +10,7 @@ type Reset = { accountId: string; epoch: number; live: boolean; captured: boolea
 const hash = (token: string) => createHash('sha256').update(token).digest('hex');
 
 /** Private to one service and one native reset call; never installed from HTTP evidence. */
-export function recoveryDelivery(database: Pool, delivery: AuthServiceOptions['recoveryDelivery']) {
+export function recoveryDelivery(database: Pool, delivery: AuthServiceOptions['recoveryDelivery'], issuer = '') {
   const scope = new AsyncLocalStorage<Reset>();
   const hooks: VerificationHooks = {
     create: {
@@ -82,6 +82,7 @@ export function recoveryDelivery(database: Pool, delivery: AuthServiceOptions['r
           email: user.email,
           token,
           expiresAt: new Date(locator.expiresAt),
+          url: `${issuer}/recovery#account_id=${encodeURIComponent(user.id)}&token=${encodeURIComponent(token)}`,
         });
       } catch {
         // Do not delete an earlier proof if this request's INSERT conflicted.
