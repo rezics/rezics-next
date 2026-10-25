@@ -1,0 +1,151 @@
+import { expect, expectTypeOf, test } from 'bun:test';
+import type {
+  AuthService,
+  CredentialEffectBinding,
+  CredentialEffectVerifier,
+  SessionProof,
+  TrustedAccessPorts,
+} from '@rezics/auth';
+import { AuthBindingUnavailableError } from '../../src/access/auth-bindings.ts';
+import { createCredentialCapability } from '../../src/access/auth-credential-capability.ts';
+
+type ConsumeInput = Parameters<NonNullable<TrustedAccessPorts['consumeAuthorization']>>[0];
+type CredentialPurpose = 'set-password' | 'remove-password' | 'add-key' | 'remove-key';
+type SessionInput = {
+  authorization: string;
+  subjectAccountId: string;
+  purpose: 'session';
+  human: SessionProof;
+};
+type CredentialInput = Omit<SessionInput, 'purpose'> & {
+  purpose: CredentialPurpose;
+  operationKey: string;
+  effectReference: string;
+};
+
+test('credential consume input is a closed union that leaves the session variant unchanged', () => {
+  expectTypeOf<Extract<ConsumeInput, { purpose: 'session' }>>().toEqualTypeOf<SessionInput>();
+  expectTypeOf<ConsumeInput['purpose']>().toEqualTypeOf<'session' | CredentialPurpose>();
+  expectTypeOf<Exclude<ConsumeInput, { purpose: 'session' }>>().toMatchTypeOf<CredentialInput>();
+  expectTypeOf<Extract<ConsumeInput, { purpose: 'set-password' }>>().toMatchTypeOf<CredentialInput>();
+  expectTypeOf<Extract<ConsumeInput, { purpose: 'remove-password' }>>().toMatchTypeOf<CredentialInput>();
+  expectTypeOf<Extract<ConsumeInput, { purpose: 'add-key' }>>().toMatchTypeOf<CredentialInput>();
+  expectTypeOf<Extract<ConsumeInput, { purpose: 'remove-key' }>>().toMatchTypeOf<CredentialInput>();
+  expectTypeOf<Omit<CredentialInput, 'operationKey'>>().not.toMatchTypeOf<ConsumeInput>();
+  expectTypeOf<Omit<CredentialInput, 'effectReference'>>().not.toMatchTypeOf<ConsumeInput>();
+  expectTypeOf<SessionInput & { purpose: 'device' }>().toEqualTypeOf<never>();
+});
+
+function fixture() {
+  let calls = 0;
+  const io = () => {
+    calls++;
+    throw new Error('Credential contract must perform no I/O');
+  };
+  const config = {
+    pool: { query: io, connect: io },
+    access: { authenticate: io, prepare: io, authorize: io },
+    operators: { authorizeOpening: io, consumeOpening: io },
+    workflowApprovals: { approve: io, resolve: io, resolveForCaller: io },
+    referenceKeys: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(1)]]) },
+    accessTokenForProof: io,
+    verifyCredentialEffect: io,
+  } as unknown as Parameters<typeof createCredentialCapability>[0];
+  return { config, calls: () => calls };
+}
+
+function unread<T>(): T {
+  return new Proxy({} as object, {
+    get() {
+      throw new Error('Unavailable credential methods must not inspect input');
+    },
+  }) as T;
+}
+
+test('credential capability factory validates config without I/O and every credential call fails closed until native', async () => {
+  const { config, calls } = fixture();
+  for (const value of [undefined, null, {}]) {
+    expect(() => createCredentialCapability(value as unknown as typeof config)).toThrow();
+  }
+  for (const key of Object.keys(config)) {
+    const incomplete = { ...config };
+    delete incomplete[key as keyof typeof incomplete];
+    expect(() => createCredentialCapability(incomplete)).toThrow();
+  }
+  for (const referenceKeys of [
+    { current: 1, keys: new Map() },
+    { current: 2, keys: new Map([[1, new Uint8Array(32)]]) },
+    { current: 1, keys: new Map([[1, new Uint8Array(31)]]) },
+    { current: 256, keys: new Map([[256, new Uint8Array(32)]]) },
+  ]) {
+    expect(() => createCredentialCapability({ ...config, referenceKeys })).toThrow();
+  }
+  const capability = createCredentialCapability(config);
+  expect(calls()).toBe(0);
+  expect(Object.keys(capability).sort()).toEqual([
+    'advanceCredentialFloor',
+    'consumeAuthAuthorization',
+    'createOpeningReference',
+  ]);
+  expect(() => capability.createOpeningReference(unread())).toThrow(AuthBindingUnavailableError);
+  for (const purpose of ['set-password', 'remove-password', 'add-key', 'remove-key'] as const) {
+    await expect(
+      capability.consumeAuthAuthorization({
+        authorization: 'opening-reference',
+        subjectAccountId: 'subject',
+        purpose,
+        operationKey: 'operation',
+        effectReference: 'stage-reference',
+        human: unread(),
+      }),
+    ).rejects.toBeInstanceOf(AuthBindingUnavailableError);
+  }
+  await expect(capability.consumeAuthAuthorization(unread())).rejects.toBeInstanceOf(AuthBindingUnavailableError);
+  await expect(capability.advanceCredentialFloor(unread())).rejects.toBeInstanceOf(AuthBindingUnavailableError);
+  expect(calls()).toBe(0);
+});
+
+test('credential binding and stage commands are typed nonsecret locators', () => {
+  type Internal = AuthService['internal'];
+  type Stage = Awaited<ReturnType<Internal['stageCredentialEffect']>>;
+  type Approve = Awaited<ReturnType<Internal['approveCredentialEffect']>>;
+  type Apply = Awaited<ReturnType<Internal['applyCredentialEffect']>>;
+  expectTypeOf<Stage>().toEqualTypeOf<{
+    effectRef: string;
+    key: string;
+    subjectId: string;
+    purpose: CredentialPurpose;
+    digest: string;
+  }>();
+  expectTypeOf<Approve>().toEqualTypeOf<{ reference: string; expiresAt: string }>();
+  expectTypeOf<Apply>().toEqualTypeOf<{ receiptId: string; replayed: boolean }>();
+  expectTypeOf<Internal['verifyCredentialEffect']>().toEqualTypeOf<CredentialEffectVerifier>();
+  expectTypeOf<Awaited<ReturnType<CredentialEffectVerifier>>>().toEqualTypeOf<CredentialEffectBinding>();
+  expectTypeOf<CredentialEffectBinding>().toMatchTypeOf<{
+    operationKey: string;
+    effectReference: string;
+    effectDigest: string;
+    subjectAccountId: string;
+    purpose: CredentialPurpose;
+    actingHumanId: string;
+    clientId: string;
+    scopes: string[];
+  }>();
+  expectTypeOf<
+    Extract<keyof CredentialEffectBinding, 'password' | 'privateKey' | 'cookie' | 'jwt'>
+  >().toEqualTypeOf<never>();
+  expectTypeOf<Extract<keyof Stage, 'credential' | 'human' | 'headers'>>().toEqualTypeOf<never>();
+  expectTypeOf<Parameters<Internal['approveCredentialEffect']>[0]>().toEqualTypeOf<{
+    effectRef: string;
+    key: string;
+    subjectAccountId: string;
+    headers: Headers;
+  }>();
+  expectTypeOf<Parameters<Internal['applyCredentialEffect']>[0]>().toEqualTypeOf<{
+    authorization: string;
+    effectRef: string;
+    key: string;
+    subjectAccountId: string;
+    headers: Headers;
+  }>();
+});
