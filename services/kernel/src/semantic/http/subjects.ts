@@ -18,6 +18,7 @@ import type { AccountActor } from '../../request/access.ts';
 import { AuthenticationError } from '../../request/access.ts';
 import { createResourcePublicEligibility } from '../../access/index.ts';
 import { createApp } from '../../http/app.ts';
+import { defineRateLimit } from '../../http/rate-limit.ts';
 import { ProblemError, problemSchema } from '../../http/problem.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, requestDigest, SESSION_HEADER } from '../../http/request.ts';
 import subjectExists from '../subject-exists.sql';
@@ -151,6 +152,7 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey }: Su
         detail: {
           operationId: 'subject.create',
           'x-action': 'subject:create',
+          'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
           security: [{ bearerAuth: [] }],
         },
       },

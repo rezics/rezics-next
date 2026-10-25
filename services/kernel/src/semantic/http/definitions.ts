@@ -4,6 +4,7 @@ import type { Pool } from 'pg';
 import { withConnection } from '../../database/pool.ts';
 import { customMethod } from '../../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../../http/problem.ts';
+import { defineRateLimit } from '../../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, requestDigest, SESSION_HEADER } from '../../http/request.ts';
 import type { subjectRoutes } from './subjects.ts';
 import { AuthenticationError } from '../../request/access.ts';
@@ -66,6 +67,7 @@ export function definitionRoutes(app: ReturnType<typeof subjectRoutes>, { pool }
         detail: {
           operationId: 'definitions.publish',
           'x-action': 'definitions:publish',
+          'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
           security: [{ bearerAuth: [] }],
         },
       },
@@ -171,6 +173,7 @@ export function definitionRoutes(app: ReturnType<typeof subjectRoutes>, { pool }
         detail: {
           operationId: 'definitions.activate',
           'x-action': 'definitions:activate',
+          'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
           security: [{ bearerAuth: [] }],
         },
       },

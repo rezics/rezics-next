@@ -13,6 +13,7 @@ import {
   readContext,
 } from '../context.ts';
 import { ProblemError, problemSchema } from '../../http/problem.ts';
+import { defineRateLimit } from '../../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, requestDigest, SESSION_HEADER } from '../../http/request.ts';
 import { GLOBAL_CONTEXT } from '../definitions.ts';
 
@@ -57,6 +58,7 @@ function contextRoutes(
         detail: {
           operationId: 'context.create',
           'x-action': 'context:create',
+          'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
           security: [{ bearerAuth: [] }],
         },
       },

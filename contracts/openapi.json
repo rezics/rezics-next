@@ -571,7 +571,11 @@
             "bearerAuth": []
           }
         ],
-        "x-action": "context:create"
+        "x-action": "context:create",
+        "x-rate-limit": {
+          "family": "write",
+          "units": 1
+        }
       }
     },
     "/v1/contexts/{id}": {
@@ -1799,7 +1803,11 @@
             "bearerAuth": []
           }
         ],
-        "x-action": "definitions:publish"
+        "x-action": "definitions:publish",
+        "x-rate-limit": {
+          "family": "write",
+          "units": 1
+        }
       }
     },
     "/v1/definitions/releases/{digest}": {
@@ -2854,7 +2862,11 @@
             "bearerAuth": []
           }
         ],
-        "x-action": "definitions:activate"
+        "x-action": "definitions:activate",
+        "x-rate-limit": {
+          "family": "write",
+          "units": 1
+        }
       }
     },
     "/v1/entitlements": {
@@ -9550,7 +9562,11 @@
             "bearerAuth": []
           }
         ],
-        "x-action": "subject:create"
+        "x-action": "subject:create",
+        "x-rate-limit": {
+          "family": "write",
+          "units": 1
+        }
       }
     },
     "/v1/subjects/{id}": {

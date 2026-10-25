@@ -683,6 +683,7 @@ export declare function definitionRoutes(app: ReturnType<typeof subjectRoutes>, 
     detail: {
         operationId: string;
         'x-action': string;
+        'x-rate-limit': Readonly<import("../../http/rate-limit.ts").RateLimitDeclaration>;
         security: {
             bearerAuth: never[];
         }[];
@@ -1025,6 +1026,7 @@ export declare function definitionRoutes(app: ReturnType<typeof subjectRoutes>, 
         detail: {
             operationId: string;
             'x-action': string;
+            'x-rate-limit': Readonly<import("../../http/rate-limit.ts").RateLimitDeclaration>;
             security: {
                 bearerAuth: never[];
             }[];
@@ -1197,6 +1199,7 @@ export declare function definitionRoutes(app: ReturnType<typeof subjectRoutes>, 
     detail: {
         operationId: string;
         'x-action': string;
+        'x-rate-limit': Readonly<import("../../http/rate-limit.ts").RateLimitDeclaration>;
         security: {
             bearerAuth: never[];
         }[];
