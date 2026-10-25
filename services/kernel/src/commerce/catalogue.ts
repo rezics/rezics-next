@@ -1,13 +1,13 @@
 import type { ParentAnchor } from '../access/index.ts';
 import { authoritativeTimeValue, type AuthoritativeTime } from '../command/command.ts';
 import { routeOf } from '../route/route.ts';
+import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import type { Offer } from './model.ts';
 import { readOffer } from './store.ts';
 
-/** Commerce owns a fixed root, separate from the semantic Global Context. */
-export const COMMERCE_CATALOGUE = '00000000-0000-8000-8000-000000000002';
-export const commerceCatalogueAnchor: ParentAnchor = Object.freeze({
-  resource: Object.freeze({ route: 0, id: COMMERCE_CATALOGUE }),
+/** Offers are created under the platform's Global Context. */
+export const platformRootAnchor: ParentAnchor = Object.freeze({
+  resource: Object.freeze({ route: 0, id: GLOBAL_CONTEXT }),
   async validate(_client, time) {
     authoritativeTimeValue(time);
     return true;

@@ -15,7 +15,7 @@ import {
 import { accessCommandAuthorization, type Actor } from '../request/access.ts';
 import type { Access } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
-import { commerceCatalogueAnchor, offerParentAnchor } from './catalogue.ts';
+import { offerParentAnchor, platformRootAnchor } from './catalogue.ts';
 import type { CheckoutSession, CheckoutSnapshot, Offer } from './model.ts';
 import { decideCheckout } from './settlement.ts';
 import * as store from './store.ts';
@@ -125,7 +125,7 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
       access,
       actor,
       action: 'offer:create',
-      parent: commerceCatalogueAnchor,
+      parent: platformRootAnchor,
       context: {
         ...context(),
         resource,
