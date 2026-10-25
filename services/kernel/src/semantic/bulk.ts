@@ -1,23 +1,28 @@
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
+import { serializeDocument, type DocumentSnapshot } from '@rezics/document';
 import type { BatchCommand, Source } from '@rezics/definitions/bulk';
 import type { Release } from '@rezics/definitions';
 import type { Pool } from 'pg';
 import {
   runCommand,
+  type CommandAttempt,
   type CommandAuthorization,
   type CommandTransaction,
   type CommandOutcome,
 } from '../command/command.ts';
+import { appendImportedField } from '../content/imported-fields.ts';
 import { tupleRoute } from '../content/imported-contract.ts';
+import { claimMedia } from '../content/media.ts';
 import { requestDigest } from '../http/request.ts';
 import type { AccountActor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
 import { EditorialConflictError, SubjectNotFoundError, writeProposal } from './candidates.ts';
+import { SUBJECT_REVISED } from './events.ts';
+import { SubjectInputError } from './item.ts';
 import { redirectOf, SubjectRedirectError } from './merges.ts';
 import { writeSubject, type SubjectComponent } from './subject.ts';
-import { SUBJECT_REVISED } from './events.ts';
 import updateSubjectRelease from './update-subject-release.sql';
 
 export type BulkValue =
@@ -45,6 +50,53 @@ export function statementDigest(statement: Extract<BatchCommand, { op: 'propose'
       canonicalize({ property: statement.property, value: statement.value, qualifiers: statement.qualifiers ?? [] })!,
     )
     .digest('hex');
+}
+
+const record = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/** A summary's source identity is the property, language, and document bytes, before content stores them. */
+export function importedStatementDigest(
+  statement: Extract<BatchCommand, { op: 'propose' }>['statement'],
+  fieldGroup: Source['field_group'],
+): string {
+  if (fieldGroup === 'summary' && statement.value.type === 'value' && record(statement.value.content)) {
+    const content = statement.value.content;
+    if (typeof content.language === 'string' && content.document !== undefined) {
+      const documentDigest = createHash('sha256')
+        .update(serializeDocument(content.document as DocumentSnapshot))
+        .digest('hex');
+      return createHash('sha256')
+        .update(canonicalize({ property: statement.property, language: content.language, digest: documentDigest })!)
+        .digest('hex');
+    }
+  }
+  return statementDigest(statement);
+}
+
+/** Summary and cover proposals record the subject resource. The grant check stays on the prepared target. */
+export function guardBatchAuthorization(
+  authorization: CommandAuthorization,
+  command: BatchCommand,
+  route: number,
+  enforce: (tx: CommandTransaction) => Promise<void>,
+): CommandAuthorization {
+  const bound: CommandAuthorization =
+    command.op === 'propose' && (command.source.field_group === 'summary' || command.source.field_group === 'cover')
+      ? { ...authorization, resource: { route, id: command.subject } }
+      : authorization;
+  return {
+    action: bound.action,
+    resource: bound.resource,
+    denied: () => bound.denied(),
+    ...(bound.prepare ? { prepare: (attempt: CommandAttempt) => bound.prepare!(attempt) } : {}),
+    authorize: async (tx, attempt, proof) => {
+      const mode = await bound.authorize(tx, attempt, proof);
+      await enforce(tx);
+      return mode;
+    },
+    ...(bound.finalize ? { finalize: (tx, attempt, proof) => bound.finalize!(tx, attempt, proof) } : {}),
+  };
 }
 
 async function visibleSubject(tx: CommandTransaction, route: number, id: string) {
@@ -151,7 +203,8 @@ export async function batchCommand(
           }
           const subject = await visibleSubject(tx, route, command.subject);
           if (command.op === 'propose') {
-            const hash = statementDigest(command.statement);
+            const imported = source.field_group === 'summary' || source.field_group === 'cover';
+            const hash = importedStatementDigest(command.statement, source.field_group);
             const key = [route, command.subject, source.source, source.external_id, source.field_group, hash];
             const existing = await tx.query<{ candidate_id: string }>(
               `SELECT candidate_id FROM semantic.source_candidate
@@ -160,12 +213,65 @@ export async function batchCommand(
             );
             if (existing.rows[0])
               return resolve({ candidate: existing.rows[0].candidate_id, revision: subject.revision });
-            const written = await writeProposal(tx, transactionId, {
-              subject: command.subject,
-              statement: command.statement,
-              release: options.release,
-              source,
-            });
+            let written: Awaited<ReturnType<typeof writeProposal>>;
+            try {
+              written = await writeProposal(tx, transactionId, {
+                subject: command.subject,
+                statement: command.statement,
+                release: options.release,
+                source,
+                allowContent: imported,
+                install: imported
+                  ? async ({ candidate, revision, body }) => {
+                      if (!record(body) || !record(body.value)) throw new TypeError('Invalid imported statement');
+                      if (source.field_group === 'summary') {
+                        const content = body.value.content;
+                        if (!command.rights || !record(content) || typeof content.language !== 'string')
+                          throw new TypeError('Invalid imported summary');
+                        const stored = await appendImportedField(tx, {
+                          subject: command.subject,
+                          candidate,
+                          revision,
+                          language: content.language,
+                          document: content.document,
+                          source: {
+                            source: source.source,
+                            external_id: source.external_id,
+                            record_revision: source.record_revision,
+                            digest: source.digest,
+                            converter_revision: source.converter_revision,
+                            field_group: 'summary',
+                            references: command.statement.references,
+                          },
+                          rights: {
+                            license: command.rights.license,
+                            obligations: command.rights.obligations,
+                            attribution: command.rights.attribution,
+                          },
+                        });
+                        body.value.content = { language: content.language, document: stored.id, digest: stored.digest };
+                        return;
+                      }
+                      if (typeof body.value.content !== 'string') throw new TypeError('Invalid cover media');
+                      await claimMedia(tx, {
+                        mediaIds: [body.value.content],
+                        containerId: command.subject,
+                        author: actor,
+                        reference: {
+                          kind: 'semantic_candidate',
+                          subjectId: command.subject,
+                          candidateId: candidate,
+                          revision,
+                        },
+                      });
+                    }
+                  : undefined,
+              });
+            } catch (error) {
+              if (imported && (error instanceof TypeError || error instanceof RangeError))
+                throw new SubjectInputError([{ pointer: '/statement/value/content', code: 'out_of_range' }]);
+              throw error;
+            }
             await tx.query(
               `INSERT INTO semantic.source_candidate
              (route, subject_id, source, external_id, field_group, statement_digest, candidate_id)

@@ -1,6 +1,7 @@
 import type { Release } from '@rezics/definitions';
 import type { Pool, PoolClient } from 'pg';
 import { discardConnection, withConnection } from '../database/pool.ts';
+import { withoutFencedEntries } from './fences.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import type { IndexedStatement, IndexedSubject, SubjectSnapshot, SubjectSource } from '../search/source.ts';
 import count from './search-source-count.sql';
@@ -177,7 +178,7 @@ async function inSnapshot<T>(pool: Pool, work: (client: PoolClient) => Promise<T
   });
 }
 
-export function subjectSource(pool: Pool): SubjectSource {
+export function subjectSource(pool: Pool, routeKey?: Uint8Array): SubjectSource {
   return {
     async read(partition, ids): Promise<SubjectSnapshot> {
       assertPartition(partition);
@@ -264,7 +265,11 @@ export function subjectSource(pool: Pool): SubjectSource {
           }
         }
 
-        const statements = entries.length ? ((await readStatements.run(client, { entries })) as StatementRow[]) : [];
+        const visible =
+          routeKey && entries.length ? await withoutFencedEntries(client, routeKey, entries) : entries;
+        const statements = visible.length
+          ? ((await readStatements.run(client, { entries: visible })) as StatementRow[])
+          : [];
         const digests = new Set<string>();
         for (const row of rows) if (row.currentRelease) digests.add(row.currentRelease);
         for (const row of statements) digests.add(row.release);

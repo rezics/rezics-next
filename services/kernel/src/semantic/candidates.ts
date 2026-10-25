@@ -4,6 +4,7 @@ import type { Release } from '@rezics/definitions';
 import type { Pool, PoolClient } from 'pg';
 import { runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
+import { fencedIds } from './fences.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccountActor } from '../request/access.ts';
 import { derivedId, partitionOf, routeOf } from '../route/route.ts';
@@ -13,7 +14,7 @@ import { redirectOf, SubjectRedirectError } from './merges.ts';
 import { GLOBAL_CONTEXT, readRelease } from './definitions.ts';
 import { LINKS_CHANGED } from './events.ts';
 import { SUBJECT_REVISED } from './events.ts';
-import { factDataTypes, itemFacts, resolveItem, SubjectInputError, type Violation } from './item.ts';
+import { factDataTypes, itemFacts, resolveItem, SubjectInputError, type Statement, type Violation } from './item.ts';
 import { linkChanges } from './link-changes.ts';
 import { PageCursorError } from './page.ts';
 import { rejectContent } from './rules.ts';
@@ -47,6 +48,7 @@ function validatedStatement(
   type: string,
   release: { digest: string; release: Release },
   raw: unknown,
+  allowContent = false,
 ) {
   const property = record(raw) && record(raw.property) && typeof raw.property.id === 'string' ? raw.property.id : '';
   const definition = Object.hasOwn(release.release.types, type) ? release.release.types[type] : undefined;
@@ -55,7 +57,11 @@ function validatedStatement(
     : !definition.properties.includes(property)
       ? [{ pointer: '/statement/property/id', code: 'unsupported' }]
       : [];
-  const checked = checkStatementInput(raw, subjectErrors.length ? undefined : release.release, { rejectContent });
+  const checked = checkStatementInput(
+    raw,
+    subjectErrors.length ? undefined : release.release,
+    allowContent ? {} : { rejectContent },
+  );
   const violations = [...subjectErrors, ...checked.violations];
   if (violations.length) throw new SubjectInputError(violations);
   const input = { type, labels: { en: 'Validation' }, statements: { [property]: [raw] } };
@@ -110,7 +116,13 @@ export async function proposeStatement(
 export async function writeProposal(
   tx: CommandTransaction,
   transactionId: string,
-  options: Pick<Parameters<typeof proposeStatement>[1], 'subject' | 'statement' | 'release'> & { source?: Source },
+  options: Pick<Parameters<typeof proposeStatement>[1], 'subject' | 'statement' | 'release'> & {
+    source?: Source;
+    /** Sourced bulk summary and cover store content's reference instead of rejecting the datatype. */
+    allowContent?: boolean;
+    /** Runs after the candidate id and revision are allocated and before the candidate row is inserted. */
+    install?: (allocated: { candidate: string; revision: number; body: unknown }) => Promise<void>;
+  },
 ) {
   const route = routeOf(options.subject)!;
   const subject = await tx.query<{ type: string; revision: number }>(
@@ -123,7 +135,13 @@ export async function writeProposal(
   if (!subject.rows[0]) throw new SubjectNotFoundError();
   const redirect = await redirectOf(tx, options.subject);
   if (redirect) throw new SubjectRedirectError(options.subject, redirect);
-  const input = validatedStatement(options.subject, subject.rows[0].type, options.release, options.statement);
+  const input = validatedStatement(
+    options.subject,
+    subject.rows[0].type,
+    options.release,
+    options.statement,
+    options.allowContent === true,
+  );
   const grouped = new Map<number, Set<string>>();
   for (const item of input.items) {
     const itemRoute = routeOf(item.id);
@@ -146,6 +164,7 @@ export async function writeProposal(
   if (errors.length) throw new SubjectInputError(errors);
   const revision = subject.rows[0].revision + 1;
   const candidate = derivedId(CANDIDATE_NS, `${options.subject}\n${revision}`, route);
+  if (options.install) await options.install({ candidate, revision, body: input.fact.body });
   try {
     await expandSlot(tx, options.subject, input.property, transactionId);
     await tx.query(
@@ -662,7 +681,7 @@ export function listRevisions(pool: Pool, ring: KeyRing, options: PageOptions) {
 export async function listCandidates(
   pool: Pool,
   ring: KeyRing,
-  options: PageOptions & { property: string; context: string },
+  options: PageOptions & { property: string; context: string; routeKey?: Uint8Array },
 ) {
   const contextRecord = options.context === GLOBAL_CONTEXT ? null : await contextSnapshot(pool, options.context);
   if (options.context !== GLOBAL_CONTEXT && !contextRecord) throw new SubjectNotFoundError();
@@ -756,7 +775,18 @@ export async function listCandidates(
           (fact.body as { rank?: 'normal' | 'preferred' | 'deprecated' }).rank ?? null,
         ]),
       );
-      const candidates = [];
+      let candidates: {
+        source: Source | null;
+        retracted: number | null;
+        retraction: { source: Source; references: BatchReference[] } | null;
+        id: string;
+        statement: Statement;
+        release: string;
+        revision: number;
+        decision: 'accepted' | 'rejected' | null;
+        head: number | null;
+        rank: 'normal' | 'preferred' | 'deprecated' | null;
+      }[] = [];
       for (const row of shown) {
         const provenance = await client.query<{
           source: Source | null;
@@ -793,6 +823,14 @@ export async function listCandidates(
           head: row.head,
           rank: ranks.get(row.candidate_id) ?? null,
         });
+      }
+      if (options.routeKey && candidates.length) {
+        const gone = await fencedIds(
+          client,
+          options.routeKey,
+          candidates.map((row) => ({ id: row.id, source: row.source })),
+        );
+        candidates = candidates.filter((row) => !gone.has(row.id));
       }
       const last = window.at(-1);
       return {

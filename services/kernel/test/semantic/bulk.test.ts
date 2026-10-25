@@ -243,21 +243,18 @@ test('a failing command does not stop the batch and a source retracts only its o
   expect(results(mixed.body)).toEqual([
     { key: 'bad', status: 400, code: 'invalid_request' },
     { key: 'unknown', status: 404, code: 'not_found' },
-    { key: 'summary', status: 400, code: 'invalid_request' },
-    { key: 'language-again', status: 200, value: { candidate, revision: 2 } },
+    { key: 'summary', status: 201, value: { candidate: expect.any(String), revision: 3 } },
+    { key: 'language-again', status: 200, value: { candidate, revision: 3 } },
     { key: 'other-source', status: 409, code: 'conflict' },
-    { key: 'retract', status: 200, value: { revision: 3 } },
+    { key: 'retract', status: 200, value: { revision: 4 } },
   ]);
   expect(mixed.body.results[0].problem.errors).toContainEqual({
     pointer: '/commands/0/statement/value/content',
     code: 'invalid_type',
   });
-  expect(mixed.body.results[2].problem.errors).toEqual([
-    { pointer: '/commands/2/source/field_group', code: 'unsupported' },
-  ]);
 
   const listing = await call('GET', `/v1/subjects/${id}/candidates?property=schema%3AinLanguage`);
-  expect(listing.body.candidates.map((row: Record<string, any>) => [row.id, row.retracted])).toEqual([[candidate, 3]]);
+  expect(listing.body.candidates.map((row: Record<string, any>) => [row.id, row.retracted])).toEqual([[candidate, 4]]);
   const again = await batch([
     {
       op: 'propose',
@@ -268,7 +265,7 @@ test('a failing command does not stop the batch and a source retracts only its o
     },
   ]);
   expect(results(again.body)).toEqual([
-    { key: 'after-retract', status: 201, value: { candidate: expect.any(String), revision: 4 } },
+    { key: 'after-retract', status: 201, value: { candidate: expect.any(String), revision: 5 } },
   ]);
   expect(again.body.results[0].value.candidate).not.toBe(candidate);
 });

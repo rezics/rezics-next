@@ -8,6 +8,7 @@ import { withConnection, discardConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccessCheck, AccountActor, Resource } from '../request/access.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../route/route.ts';
+import { fencedIds } from './fences.ts';
 import { factDataTypes, itemFacts, resolveItem, type FactRow, type Item } from './item.ts';
 import { SubjectInputError } from './item.ts';
 import { rejectContent } from './rules.ts';
@@ -228,11 +229,41 @@ async function rollback(client: PoolClient, error: unknown): Promise<never> {
   throw error;
 }
 
+async function withoutFencedFacts(
+  client: PoolClient,
+  routeKey: Uint8Array,
+  route: number,
+  subjectId: string,
+  facts: FactRow[],
+): Promise<FactRow[]> {
+  const revisions = [
+    ...new Set(facts.flatMap((fact) => (fact.statement_id && fact.fact_revision ? [fact.fact_revision] : []))),
+  ];
+  if (!revisions.length) return facts;
+  const result = await client.query<{ revision: number; source: Source | null }>(
+    `SELECT revision, source FROM semantic.revision
+     WHERE route = $1 AND subject_id = $2 AND revision = ANY($3::int[])`,
+    [route, subjectId, revisions],
+  );
+  const sources = new Map(result.rows.map((row) => [row.revision, row.source]));
+  const gone = await fencedIds(
+    client,
+    routeKey,
+    facts.flatMap((fact) =>
+      fact.statement_id && fact.fact_revision
+        ? [{ id: fact.statement_id, source: sources.get(fact.fact_revision) ?? null }]
+        : [],
+    ),
+  );
+  return facts.filter((fact) => fact.statement_id === null || !gone.has(fact.statement_id));
+}
+
 export async function readSubject(
   pool: Pool,
   id: string,
   authorize: (client: PoolClient) => Promise<boolean>,
   context = GLOBAL_CONTEXT,
+  routeKey?: Uint8Array,
 ): Promise<{ subject: Item; component: SubjectComponent } | null> {
   const route = routeOf(id);
   if (route === null) return null;
@@ -257,7 +288,7 @@ export async function readSubject(
       if (allowed && rows[0]!.redirect) throw new SubjectRedirectError(id, rows[0]!.redirect);
       const release = await getRelease(client, rows[0]!.release);
       if (!release) throw new Error('Subject revision release is missing');
-      const statementFacts: FactRow[] = [];
+      let statementFacts: FactRow[] = [];
       const resolution: Record<string, 'unresolved' | 'suppressed'> = {};
       if (allowed) {
         for (const property of release.types[rows[0]!.type]!.properties) {
@@ -265,6 +296,7 @@ export async function readSubject(
           statementFacts.push(...view.facts);
           if (view.resolution) resolution[property] = view.resolution;
         }
+        if (routeKey) statementFacts = await withoutFencedFacts(client, routeKey, route, id, statementFacts);
       }
       await client.query('COMMIT');
       if (!allowed) return null;

@@ -317,7 +317,9 @@ Structural limits apply to every release: decimal strings have at most 127
 characters and a time's year has at most 16 digits. An oversized value reports
 `out_of_range` at its decimal member or `/time`, without further value checks.
 The release value schemas retain their Wikibase shapes. Document and media
-values are portable; kernel writes still refuse them until content hooks exist.
+values are portable. Single-subject writes and single-statement routes still
+reject document and media contents as `unsupported`. A sourced bulk command
+can carry them, because that command has the provenance and rights the values need.
 
 ## Bulk subject writes
 
@@ -339,8 +341,9 @@ command is authorized as its single-command equivalent: create uses `subject:cre
 through parent authorization on the Global Context; propose and retract use
 `statement:propose`. This authorization also runs on every replay.
 
-The kernel currently serves `facts`. Any other field group receives a command-local
-400 with only `/commands/<i>/source/field_group` `unsupported`. Without an active
+The kernel serves `facts`, `summary`, and `cover` on this route. Any other field
+group receives a command-local 400 with only `/commands/<i>/source/field_group`
+`unsupported`. A create still rejects `summary` and `cover`. Without an active
 release the request receives 503 `semantic_not_ready`. Request-level shape errors
 receive 400 and nothing runs; command-level errors retain their original pointers
 and do not prevent valid peers from running.
@@ -364,23 +367,32 @@ a claim is never re-created or reassigned. Creates cannot carry statements: impo
 propose each fact to the returned id.
 
 Propose returns 201 `{ candidate, revision }`. A source's refresh with the same
-`(source, external_id, field_group)` and canonical property, value and qualifiers
-returns 200 with its existing candidate and the latest subject revision. References
-and rank do not change that identity. Refreshes cannot restore moderated content.
+`(source, external_id, field_group)` returns 200 with its existing candidate and
+the latest subject revision when the statement identity matches. Facts and covers
+use the canonical property, value, and qualifiers. A summary uses the property,
+language, and SHA-256 of `serializeDocument(document)`, computed before content's
+hook, so an unchanged summary appends no document. References and rank do not
+change that identity. Refreshes cannot restore moderated content. A hidden or
+taken-down candidate answers its id only to a command that is currently allowed.
 Retract requires a candidate proposed by the same source tuple; another source's
 candidate conflicts and an unknown candidate is not found. It appends a cited
 retraction revision, removes the source-candidate identity, and returns 200 `{ revision }`.
-A later proposal may then create a new candidate. Proposals and retractions leave
-Context adoptions unchanged.
+A retract in `summary` or `cover` uses those same 404 and 409 answers. It carries
+no rights, calls no content hook, and leaves the document and the media claim
+with content. A later proposal may then create a new candidate. Proposals and
+retractions leave Context adoptions unchanged.
 
 Revision listings include the source envelope or null for individual writes.
 Candidate listings expose the proposing `source`, latest `retracted` revision and
 `retraction: { source, references }`, each null when absent. Provenance follows the
-listing's usual visibility rules. Command failures include 400 `invalid_request`,
-403 `forbidden`, 404 `not_found`, 409 `conflict`, 422 `idempotency_conflict`, and
-503 as for an individual write. Retry a lost response with the same command key to
-replay its receipt. Content source fencing and the summary and cover write groups
-are subsequent integrations.
+listing's usual visibility rules. Every command with a source reads that tuple's fence through content's
+`readFences` before its receipt and before deduplication. A taken-down tuple is
+that command's 409 `fenced` with no effect, including an unchanged refresh and a
+replay of a command key. Subject views, candidate listings, and the search source
+read omit candidates whose source tuple is currently fenced. Command failures
+include 400 `invalid_request`, 403 `forbidden`, 404 `not_found`, 409 `conflict`,
+409 `fenced`, 422 `idempotency_conflict`, and 503 as for an individual write.
+Retry a lost response with the same command key to replay its receipt.
 
 The contract has no runtime path. `checkBatchWrite` is linear in request size, bounded by
 `BATCH_LIMIT` and the statement limits. Proposals require nonempty `references`;
@@ -603,8 +615,11 @@ multivalued, with one summary per language by convention.
 A cover value is an uploaded media object's UUID. Credit, licence and provenance
 belong to that media object. Rights on any command except a summary proposal are
 unsupported. Field/property compatibility belongs to release validation: summaries
-use `document` properties, covers use `media`, and facts use neither. Until content's
-hooks are wired, kernel writes reject document and media contents as `unsupported`.
+use `document` properties, covers use `media`, and facts use neither. The bulk
+route serves summary and cover through content's hooks. Semantic stores the
+document id and digest, or the media id, and never the summary body, a licence
+of its own, or a fence. Single-subject writes still reject document and media
+contents as `unsupported`.
 
 The launch profiles include books, editions, recipes, television series, albums,
 video games and visual novels. Identifier labels follow their Wikidata properties

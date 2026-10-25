@@ -435,7 +435,7 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
         const resource = { route, id: params.id };
         const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
         const result = await admission.run('normal', job, () =>
-          readSubject(pool, params.id, check, query.context ?? GLOBAL_CONTEXT).catch((error: unknown) => {
+          readSubject(pool, params.id, check, query.context ?? GLOBAL_CONTEXT, routeKey).catch((error: unknown) => {
             if (error instanceof SubjectRedirectError) return error;
             throw error;
           }),
@@ -1176,6 +1176,7 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
               limit: query.limit ?? 20,
               ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
               authorize: check,
+              routeKey,
             }),
           );
           session.record(component);
