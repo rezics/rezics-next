@@ -12,6 +12,14 @@ export const REPORT_EVENTS = {
     },
     { additionalProperties: false },
   ),
+  'com.rezics.content.report-target.projected.v1': Type.Object(
+    {
+      reportId: UUID,
+      targetKind: Type.Union([Type.Literal('board'), Type.Literal('thread'), Type.Literal('post')]),
+      targetId: UUID,
+    },
+    { additionalProperties: false },
+  ),
 } as const;
 
 export type ReportEventType = keyof typeof REPORT_EVENTS;

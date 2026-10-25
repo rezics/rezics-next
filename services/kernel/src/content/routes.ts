@@ -29,6 +29,7 @@ import {
 import { InvalidMediaClaimError } from './media.ts';
 import { DocumentTooLargeError, InvalidDocumentError, MAX_DOCUMENT_BYTES } from './document.ts';
 import { mediaImportRoutes } from './media-import-routes.ts';
+import { reportRoutes } from './report-routes.ts';
 import type { AnchoredPosition, ReadContext } from './model.ts';
 import { clearReaction, setReaction, type ReactionKind } from './reactions.ts';
 import type { ContentRuntime } from './runtime.ts';
@@ -263,9 +264,12 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
   });
 
   return documentRoutes(
-    mediaImportRoutes(
-      mediaModerationRoutes(
-        sourceFenceGovernanceRoutes(sourceFenceRoutes(app, dependencies), dependencies),
+    reportRoutes(
+      mediaImportRoutes(
+        mediaModerationRoutes(
+          sourceFenceGovernanceRoutes(sourceFenceRoutes(app, dependencies), dependencies),
+          dependencies,
+        ),
         dependencies,
       ),
       dependencies,

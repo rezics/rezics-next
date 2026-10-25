@@ -198,6 +198,19 @@ $$;
 
 
 --
+-- Name: guard_report(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.guard_report() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RAISE EXCEPTION 'Report records are immutable' USING ERRCODE = '23514';
+END;
+$$;
+
+
+--
 -- Name: guard_revision(); Type: FUNCTION; Schema: content; Owner: -
 --
 
@@ -565,6 +578,53 @@ CREATE TABLE content.reaction (
 
 
 --
+-- Name: report; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.report (
+    route integer NOT NULL,
+    report_id uuid NOT NULL,
+    target_kind text NOT NULL,
+    target_id uuid NOT NULL,
+    revision_id uuid,
+    reason text NOT NULL,
+    evidence text,
+    reporter_account_id uuid,
+    created_at timestamp with time zone NOT NULL,
+    recorded_transaction_id uuid NOT NULL,
+    recorded_xid xid8 DEFAULT pg_current_xact_id() NOT NULL,
+    CONSTRAINT report_check CHECK ((route = ((get_byte(uuid_send(report_id), 10) * 256) + get_byte(uuid_send(report_id), 11)))),
+    CONSTRAINT report_check1 CHECK (((octet_length(reason) + COALESCE(octet_length(evidence), 0)) <= 2097152)),
+    CONSTRAINT report_check2 CHECK (((revision_id IS NULL) OR (target_kind <> 'board'::text))),
+    CONSTRAINT report_evidence_check CHECK ((char_length(evidence) <= 4096)),
+    CONSTRAINT report_reason_check CHECK ((reason = ANY (ARRAY['off_topic'::text, 'inappropriate'::text, 'spam'::text, 'illegal'::text, 'other'::text]))),
+    CONSTRAINT report_reporter_account_id_check CHECK (((reporter_account_id IS NULL) OR (reporter_account_id <> '00000000-0000-0000-0000-000000000000'::uuid))),
+    CONSTRAINT report_required_evidence CHECK (((reason <> ALL (ARRAY['illegal'::text, 'other'::text])) OR ((evidence IS NOT NULL) AND (char_length(evidence) > 0)))),
+    CONSTRAINT report_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT report_target_kind_check CHECK ((target_kind = ANY (ARRAY['board'::text, 'thread'::text, 'post'::text])))
+);
+
+
+--
+-- Name: report_target; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.report_target (
+    route integer NOT NULL,
+    target_kind text NOT NULL,
+    target_id uuid NOT NULL,
+    report_route integer NOT NULL,
+    report_id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT report_target_check CHECK ((route = ((get_byte(uuid_send(target_id), 10) * 256) + get_byte(uuid_send(target_id), 11)))),
+    CONSTRAINT report_target_check1 CHECK ((report_route = ((get_byte(uuid_send(report_id), 10) * 256) + get_byte(uuid_send(report_id), 11)))),
+    CONSTRAINT report_target_report_route_check CHECK (((report_route >= 0) AND (report_route <= 65535))),
+    CONSTRAINT report_target_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT report_target_target_kind_check CHECK ((target_kind = ANY (ARRAY['board'::text, 'thread'::text, 'post'::text])))
+);
+
+
+--
 -- Name: revision; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -749,6 +809,22 @@ ALTER TABLE ONLY content.reaction
 
 
 --
+-- Name: report report_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.report
+    ADD CONSTRAINT report_pkey PRIMARY KEY (route, report_id);
+
+
+--
+-- Name: report_target report_target_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.report_target
+    ADD CONSTRAINT report_target_pkey PRIMARY KEY (route, target_kind, target_id, report_route, report_id);
+
+
+--
 -- Name: revision revision_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -845,6 +921,13 @@ CREATE INDEX post_thread_page_idx ON content.post USING btree (route, thread_id,
 
 
 --
+-- Name: report_target_page_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX report_target_page_idx ON content.report_target USING btree (route, target_kind, target_id, created_at DESC, report_id DESC) INCLUDE (report_route);
+
+
+--
 -- Name: revision_post_page_idx; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -905,6 +988,13 @@ CREATE TRIGGER post_erasure_guard BEFORE DELETE OR UPDATE ON content.post FOR EA
 --
 
 CREATE TRIGGER post_identity BEFORE UPDATE ON content.post FOR EACH ROW EXECUTE FUNCTION content.guard_identity('route', 'thread_id', 'post_id', 'reply_to_post_id', 'author_account_id', 'created_at');
+
+
+--
+-- Name: report report_immutable; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER report_immutable BEFORE DELETE OR UPDATE ON content.report FOR EACH ROW EXECUTE FUNCTION content.guard_report();
 
 
 --

@@ -12,6 +12,7 @@ import { Compile } from 'typebox/compile';
 import { REACTION_KINDS } from './events.ts';
 import type { BoardView } from './model.ts';
 import type { ItemView, ThreadView } from './reads.ts';
+import type { ReportView } from './reports.ts';
 
 type ViewerReactionKind = (typeof REACTION_KINDS)[number];
 type ViewerReactionSlot = { readonly viewerReaction?: ViewerReactionKind | null };
@@ -57,6 +58,58 @@ export const ContentIdSchema = t.String({
   pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
 });
 const nullableId = t.Union([ContentIdSchema, t.Null()]);
+const reportTarget = t.Object(
+  { kind: t.Union([t.Literal('board'), t.Literal('thread'), t.Literal('post')]), id: ContentIdSchema },
+  closed,
+);
+const reportReason = t.Union(
+  ['off_topic', 'inappropriate', 'spam', 'illegal', 'other'].map((value) => t.Literal(value)),
+);
+const reportInput = {
+  target: reportTarget,
+  revisionId: t.Optional(ContentIdSchema),
+  botToken: t.Optional(t.String({ minLength: 1, maxLength: 2048 })),
+};
+export const ReportInputSchema = t.Union([
+  t.Object(
+    {
+      ...reportInput,
+      reason: t.Union([t.Literal('off_topic'), t.Literal('inappropriate'), t.Literal('spam')]),
+      evidence: t.Optional(t.String({ maxLength: 4096 })),
+    },
+    closed,
+  ),
+  t.Object(
+    {
+      ...reportInput,
+      reason: t.Union([t.Literal('illegal'), t.Literal('other')]),
+      evidence: t.String({ minLength: 1, maxLength: 4096 }),
+    },
+    closed,
+  ),
+]);
+export const ReportReceiptSchema = t.Object({ reportId: ContentIdSchema }, closed);
+export const ReportResponseSchema = t.Object(
+  {
+    report: t.Unsafe<ReportView>(
+      t.Object(
+        {
+          id: ContentIdSchema,
+          partition: t.Integer({ minimum: 0, maximum: 4095 }),
+          target: reportTarget,
+          revisionId: nullableId,
+          reason: reportReason,
+          evidence: t.Union([t.String({ maxLength: 4096 }), t.Null()]),
+          reporterId: nullableId,
+          createdAt: t.String({ format: 'date-time' }),
+          transactionId: t.String({ format: 'uuid' }),
+        },
+        closed,
+      ),
+    ),
+  },
+  closed,
+);
 const subjects = t.Array(ContentIdSchema, { maxItems: 128, uniqueItems: true });
 const media = t.Array(ContentIdSchema, { maxItems: 32, uniqueItems: true });
 const licence = t.String({ minLength: 1, maxLength: 128 });

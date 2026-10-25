@@ -71,6 +71,11 @@ export declare const CONTENT_EVENTS: {
         targetId: Type.TString;
         revisionId: Type.TOptional<Type.TString>;
     }>;
+    readonly 'com.rezics.content.report-target.projected.v1': Type.TObject<{
+        reportId: Type.TString;
+        targetKind: Type.TUnion<[Type.TLiteral<"board">, Type.TLiteral<"thread">, Type.TLiteral<"post">]>;
+        targetId: Type.TString;
+    }>;
     readonly 'com.rezics.content.source_fence.taken_down.v1': Type.TObject<{
         route: Type.TInteger;
         source: Type.TString;
