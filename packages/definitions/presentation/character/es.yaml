@@ -1,2 +1,8 @@
 types:
   wd:Q95074: 'personaje'
+properties:
+  schema:gender: sexo o género
+  schema:height: altura
+  schema:weight: masa
+  wdt:P1853: grupo sanguíneo
+  wdt:P6296: identificador de personaje en Bangumi

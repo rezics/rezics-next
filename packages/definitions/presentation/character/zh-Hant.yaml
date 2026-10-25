@@ -1,2 +1,8 @@
 types:
   wd:Q95074: '虛構角色'
+properties:
+  schema:gender: 性別
+  schema:height: 高度
+  schema:weight: 質量
+  wdt:P1853: 血型
+  wdt:P6296: Bangumi角色識別碼

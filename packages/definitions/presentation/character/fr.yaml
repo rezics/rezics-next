@@ -1,2 +1,8 @@
 types:
   wd:Q95074: 'personnage de fiction'
+properties:
+  schema:gender: sexe ou genre
+  schema:height: hauteur
+  schema:weight: masse
+  wdt:P1853: groupe sanguin
+  wdt:P6296: identifiant de personnage Bangumi

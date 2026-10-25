@@ -34,3 +34,4 @@ properties:
   schema:character: '登場キャラクター'
   wdt:P179: 'シリーズ'
   rezics:spoilerLevel: 'ネタバレ度'
+  schema:alternateName: 別名

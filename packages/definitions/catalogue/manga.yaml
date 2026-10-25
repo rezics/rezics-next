@@ -37,6 +37,7 @@ classes:
       - publisher
       - contributor
       - character
+      - voiceActor
       - genre
       - keywords
       - partOfSeries
@@ -62,6 +63,7 @@ classes:
       - illustrator
       - publisher
       - character
+      - voiceActor
       - genre
       - keywords
       - partOfSeries

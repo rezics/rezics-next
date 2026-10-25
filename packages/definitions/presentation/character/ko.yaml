@@ -1,2 +1,8 @@
 types:
   wd:Q95074: '허구의 캐릭터'
+properties:
+  schema:gender: 성별
+  schema:height: 높이
+  schema:weight: 질량
+  wdt:P1853: 혈액형
+  wdt:P6296: Bangumi 캐릭터 ID

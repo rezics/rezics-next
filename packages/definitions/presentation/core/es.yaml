@@ -34,3 +34,4 @@ properties:
   schema:character: 'personajes'
   wdt:P179: 'serie'
   rezics:spoilerLevel: 'nivel de destripe'
+  schema:alternateName: nombre alternativo

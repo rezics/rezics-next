@@ -134,19 +134,12 @@ classes:
       - musicBy
       - contributor
       - character
+      - voiceActor
       - genre
       - keywords
     annotations:
       facets: isPartOf datePublished duration
 slots:
-  alternateName:
-    slot_uri: schema:alternateName
-    description: An alternate name or alias, preserving its source language and spelling.
-    multivalued: true
-    close_mappings:
-      - wd:P2561
-    annotations:
-      datatype: monolingualtext
   numberOfEpisodes:
     slot_uri: schema:numberOfEpisodes
     description: The number of episodes or installments in the work or season.

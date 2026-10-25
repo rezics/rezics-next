@@ -1,2 +1,8 @@
 types:
   wd:Q95074: '架空のキャラクター'
+properties:
+  schema:gender: 性別
+  schema:height: 全高
+  schema:weight: 質量
+  wdt:P1853: 血液型
+  wdt:P6296: 番組計画登場人物識別子

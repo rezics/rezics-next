@@ -1384,12 +1384,12 @@ tables:
         reason: MyAnimeList identifiers belong to the separately licensed anime dataset, outside the VN profile.
         licence: CC BY-NC-SA 4.0 (AniDB source); https://creativecommons.org/licenses/by-nc-sa/4.0/
   - name: chars
-    type: schema:Person
+    type: wd:Q95074
     columns:
       - name: id
         status: existing
         term: wdt:P3180
-        'on': schema:Person
+        'on': wd:Q95074
         mapping: wdt:P3180
         meaning: VNDB character identity.
         citations:
@@ -1397,14 +1397,18 @@ tables:
       - name: image
         status: existing
         term: schema:image
-        'on': schema:Person
+        'on': wd:Q95074
         mapping: wdt:P18
         meaning: Resolve the character image ID through the image group.
         citations: *id014
         licence: Image content has separate source conditions; download availability is not a republication grant.
       - name: bloodt
-        status: omitted
-        reason: Blood type is source-specific character trivia with no selected profile term.
+        status: existing
+        term: wdt:P1853
+        'on': wd:Q95074
+        mapping: wdt:P1853
+        meaning: The explicitly stated blood type, resolved to a concept.
+        citations: ['https://www.wikidata.org/wiki/Property:P1853']
       - name: cup_size
         status: omitted
         reason: Cup-size category is source-specific character trivia with no selected profile term.
@@ -1412,14 +1416,12 @@ tables:
         status: omitted
         reason: Sex classification is retained only as a source-specific enum; the profile maps gender, not this field.
       - name: spoil_sex
-        status: proposed
-        term: rezics:spoilerLevel
-        mapping: wdt:P1552
-        meaning: Platform mechanism for disclosing the spoiler level of a sex value; no standard property represents this qualifier.
-        citations: *id015
+        status: omitted
+        reason: Disclosure level for the omitted sex classification; no gender value is inferred from sex.
       - name: gender
-        status: proposed
+        status: existing
         term: schema:gender
+        'on': wd:Q95074
         mapping: wdt:P21
         meaning: Source-described gender of a fictional character.
         citations:
@@ -1429,8 +1431,9 @@ tables:
             'https://www.wikidata.org/wiki/Property:P21',
           ]
       - name: spoil_gender
-        status: proposed
+        status: existing
         term: rezics:spoilerLevel
+        'on': wd:Q95074
         mapping: wdt:P1552
         meaning: Platform mechanism for disclosing the spoiler level of a gender value; no standard property represents this qualifier.
         citations: *id015
@@ -1453,8 +1456,9 @@ tables:
         status: omitted
         reason: The dump stores a month/day without a year, so it cannot be represented as schema:birthDate.
       - name: height
-        status: proposed
+        status: existing
         term: schema:height
+        'on': wd:Q95074
         mapping: wdt:P2048
         meaning: Character height as a physical measurement.
         citations:
@@ -1464,8 +1468,9 @@ tables:
             'https://www.wikidata.org/wiki/Property:P2048',
           ]
       - name: weight
-        status: proposed
+        status: existing
         term: schema:weight
+        'on': wd:Q95074
         mapping: wdt:P2067
         meaning: Character weight as a physical measurement.
         citations:
@@ -1482,20 +1487,22 @@ tables:
         reason: Character description is creative text with separate source conditions and is not included in the profile.
         licence: Separate source conditions stated in the dump README; no blanket republication grant.
   - name: chars_alias
-    type: schema:Person
+    type: wd:Q95074
     columns:
       - name: id
         status: omitted
         reason: Character key joining the alias to its profile.
       - name: spoil
-        status: proposed
+        status: existing
         term: rezics:spoilerLevel
+        'on': wd:Q95074
         mapping: wdt:P1552
         meaning: Platform mechanism for disclosing a spoiler level on an alternative character name; no standard property represents this qualifier.
         citations: *id015
       - name: name
-        status: proposed
+        status: existing
         term: schema:alternateName
+        'on': wd:Q95074
         mapping: wdt:P2561
         meaning: An alternative character name.
         citations:
@@ -1505,58 +1512,59 @@ tables:
             'https://www.wikidata.org/wiki/Property:P2561',
           ]
       - name: latin
-        status: proposed
+        status: existing
         term: schema:alternateName
+        'on': wd:Q95074
         mapping: wdt:P2561
         meaning: Romanized alternative character name.
         citations: *id016
   - name: chars_names
-    type: schema:Person
+    type: wd:Q95074
     columns:
       - name: id
         status: omitted
         reason: Character key joining the localized name to its profile.
       - name: lang
-        status: proposed
-        term: schema:inLanguage
-        mapping: wdt:P407
-        meaning: Language of the character-name statement.
+        status: omitted
+        reason: The language is carried by the monolingual name value, not a separate character property.
         citations:
           &id024 [
             'https://schema.org/inLanguage',
             'https://www.wikidata.org/wiki/Property:407',
             'https://www.wikidata.org/wiki/Property:P407',
           ]
-        values: *id017
       - name: name
         status: existing
         term: schema:name
-        'on': schema:Person
+        'on': wd:Q95074
         mapping: wdt:P1476
         meaning: A character name in its stated language.
         citations: *id018
       - name: latin
-        status: proposed
+        status: existing
         term: schema:alternateName
+        'on': wd:Q95074
         mapping: wdt:P2561
         meaning: Romanized alternative form of a character name.
         citations: *id016
   - name: chars_traits
-    type: wd:Q151885
+    type: wd:Q95074
     columns:
       - name: id
         status: omitted
         reason: Character key anchoring the trait association.
       - name: tid
-        status: proposed
-        term: wdt:P1552
+        status: existing
+        term: schema:keywords
+        'on': wd:Q95074
         mapping: wdt:P1552
         meaning: A Wikidata-mapped trait concept associated with the character.
-        citations: *id015
+        citations: [https://schema.org/keywords, https://www.wikidata.org/wiki/Property:P1552]
         semantic_term: skos:Concept
       - name: spoil
-        status: proposed
+        status: existing
         term: rezics:spoilerLevel
+        'on': wd:Q95074
         mapping: wdt:P1552
         meaning: Platform mechanism for disclosing the spoiler level of a character trait; no standard property represents this qualifier.
         citations: *id015
@@ -1567,19 +1575,24 @@ tables:
     type: schema:character
     columns:
       - name: id
-        status: proposed
+        status: existing
         term: schema:character
+        'on': wd:Q689445
         mapping: wdt:P674
         meaning: Character who appears in the visual novel.
         citations: *id019
         qualifiers:
-          - term: wdt:P3831
+          - status: existing
+            'on': wd:Q689445
+            term: wdt:P3831
             mapping: wdt:P3831
             source_column: role
             meaning: Detailed appearance role concept.
             citations:
               - https://www.wikidata.org/wiki/Property:P3831
-          - term: rezics:spoilerLevel
+          - status: existing
+            'on': wd:Q689445
+            term: rezics:spoilerLevel
             mapping: wdt:P1552
             source_column: spoil
             meaning: Spoiler disclosure qualifier.
@@ -1592,8 +1605,9 @@ tables:
         status: omitted
         reason: Release key adds source-specific appearance context; no release-scoped appearance term is selected.
       - name: role
-        status: proposed
+        status: existing
         term: wdt:P3831
+        'on': wd:Q689445
         mapping: wdt:P3831
         meaning: Character appearance role as a concept-valued qualifier.
         citations: ['https://www.wikidata.org/wiki/Property:3831', 'https://www.wikidata.org/wiki/Property:P3831']
@@ -1601,8 +1615,9 @@ tables:
           - schema:character
         values: *id020
       - name: spoil
-        status: proposed
+        status: existing
         term: rezics:spoilerLevel
+        'on': wd:Q689445
         mapping: wdt:P1552
         meaning: Platform mechanism for disclosing the spoiler level of this character appearance; no standard property represents this qualifier.
         citations: *id015
@@ -2406,14 +2421,15 @@ tables:
         status: omitted
         reason: User-authored tag note is personal content and is excluded.
   - name: traits
-    type: wd:Q151885
+    type: skos:Concept
     columns:
       - name: id
         status: omitted
         reason: Internal trait concept identifier; the concept and source identity are retained by the taxonomy import.
       - name: gid
-        status: proposed
-        term: wdt:P361
+        status: existing
+        term: skos:inScheme
+        'on': skos:Concept
         mapping: wdt:P361
         meaning: Concept scheme or broader grouping for this character-trait concept.
         citations: *id035
@@ -2422,11 +2438,8 @@ tables:
         status: omitted
         reason: VNDB trait-group display order is source tree bookkeeping.
       - name: defaultspoil
-        status: proposed
-        term: rezics:spoilerLevel
-        mapping: wdt:P1552
-        meaning: Platform mechanism for disclosing a trait default spoiler level; no standard property represents this qualifier.
-        citations: *id015
+        status: omitted
+        reason: The source default is taxonomy disclosure policy, not a character fact; retain the explicit spoiler on each trait statement.
       - name: sexual
         status: omitted
         reason: VNDB trait classification flag is source-specific filtering metadata.
@@ -2437,19 +2450,16 @@ tables:
         status: omitted
         reason: VNDB applicability flag is catalogue bookkeeping, not concept meaning.
       - name: name
-        status: proposed
-        term: wdt:P1705
+        status: existing
+        term: schema:name
+        'on': skos:Concept
         mapping: wdt:P1705
         meaning: Preferred label of a character-trait concept.
         citations: *id039
         semantic_term: skos:prefLabel
       - name: alias
-        status: proposed
-        term: wdt:P2561
-        mapping: wdt:P2561
-        meaning: Alternative label of a character-trait concept.
-        citations: *id040
-        semantic_term: skos:altLabel
+        status: omitted
+        reason: Alternative taxonomy labels have no alias property on the bundled Concept profile; do not conflate them with preferred names.
       - name: description
         status: omitted
         reason: Long trait description is not part of the concise profile taxonomy projection.
@@ -2458,14 +2468,15 @@ tables:
       semantic_term: skos:ConceptScheme
       meaning: The VNDB character-trait taxonomy scheme.
   - name: traits_parents
-    type: wdt:P279
+    type: skos:Concept
     columns:
       - name: id
         status: omitted
         reason: Trait concept key anchoring a broader-concept edge.
       - name: parent
-        status: proposed
-        term: wdt:P279
+        status: existing
+        term: skos:broader
+        'on': skos:Concept
         mapping: wdt:P279
         meaning: Broader parent concept in the trait tree.
         citations: *id037
@@ -2722,11 +2733,11 @@ tables:
         reason: Visual-novel key supplies context for the character voice credit.
       - name: cid
         status: existing
-        term: schema:character
+        term: wdt:P453
         'on': wd:Q689445
-        mapping: wdt:P674
+        mapping: wdt:P453
         meaning: Character whose voice is credited.
-        citations: *id019
+        citations: [https://www.wikidata.org/wiki/Property:P453]
       - name: aid
         status: existing
         term: wdt:P725
@@ -2735,19 +2746,22 @@ tables:
         meaning: Voice actor credited for the associated character.
         citations: *id042
         qualifiers:
-          - term: wdt:P1932
+          - status: existing
+            'on': wd:Q689445
+            term: wdt:P1932
             mapping: wdt:P1932
             source_column: note
             meaning: Credited-as display name.
             citations:
               - https://www.wikidata.org/wiki/Property:P1932
-          - term: schema:character
-            mapping: wdt:P674
+          - status: existing
+            'on': wd:Q689445
+            term: wdt:P453
+            mapping: wdt:P453
             source_column: cid
             meaning: Character whose voice is credited.
             citations:
-              - https://schema.org/character
-              - https://www.wikidata.org/wiki/Property:P674
+              - https://www.wikidata.org/wiki/Property:P453
       - name: note
         status: existing
         term: wdt:P1932
@@ -2760,7 +2774,7 @@ tables:
       main_value: wdt:P725
       qualifiers:
         - wdt:P1932
-        - schema:character
+        - wdt:P453
       order_source: No source order column exists.
   - name: vn_staff
     type: schema:contributor

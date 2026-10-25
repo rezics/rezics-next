@@ -49,7 +49,8 @@
         "schema:name",
         "schema:sameAs",
         "schema:url",
-        "wdt:P179"
+        "wdt:P179",
+        "wdt:P725"
       ],
       "facets": ["schema:isPartOf", "schema:datePublished", "schema:duration"]
     },
@@ -277,10 +278,25 @@
         "zh-Hans": "虚构角色",
         "zh-Hant": "虛構角色"
       },
-      "mappings": [],
+      "mappings": ["wd:Q95074"],
       "bases": ["schema:Thing"],
-      "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url"],
-      "facets": []
+      "properties": [
+        "schema:abstract",
+        "schema:alternateName",
+        "schema:birthDate",
+        "schema:gender",
+        "schema:height",
+        "schema:image",
+        "schema:keywords",
+        "schema:name",
+        "schema:sameAs",
+        "schema:url",
+        "schema:weight",
+        "wdt:P1853",
+        "wdt:P3180",
+        "wdt:P6296"
+      ],
+      "facets": ["schema:keywords", "schema:gender", "wdt:P1853", "schema:birthDate", "schema:height", "schema:weight"]
     },
     "skos:Concept": {
       "iri": "http://www.w3.org/2004/02/skos/core#Concept",
@@ -551,7 +567,8 @@
         "schema:sameAs",
         "schema:url",
         "wdt:P179",
-        "wdt:P5732"
+        "wdt:P5732",
+        "wdt:P725"
       ],
       "facets": ["schema:keywords", "schema:genre", "schema:datePublished"]
     },
@@ -587,7 +604,8 @@
         "wdt:P1433",
         "wdt:P179",
         "wdt:P2635",
-        "wdt:P5732"
+        "wdt:P5732",
+        "wdt:P725"
       ],
       "facets": ["schema:keywords", "schema:genre", "schema:datePublished"]
     },
@@ -767,39 +785,6 @@
     }
   },
   "properties": {
-    "schema:alternateName": {
-      "iri": "http://schema.org/alternateName",
-      "labels": {
-        "de": "Alternativname",
-        "en": "alternate name",
-        "es": "nombre alternativo",
-        "fr": "autre nom",
-        "ja": "別名",
-        "ko": "다른 이름",
-        "zh-Hans": "别名",
-        "zh-Hant": "別名"
-      },
-      "mappings": [],
-      "datatype": "monolingualtext",
-      "multivalued": true,
-      "qualifiers": [],
-      "value": {
-        "type": "object",
-        "required": ["text", "language"],
-        "additionalProperties": false,
-        "properties": {
-          "text": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 1500
-          },
-          "language": {
-            "type": "string",
-            "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$"
-          }
-        }
-      }
-    },
     "schema:copyrightNotice": {
       "iri": "http://schema.org/copyrightNotice",
       "labels": {
@@ -1188,6 +1173,139 @@
       },
       "targets": ["schema:Organization", "schema:Person"]
     },
+    "wdt:P6296": {
+      "iri": "http://www.wikidata.org/prop/direct/P6296",
+      "labels": {
+        "de": "Bangumi-Charakterkennung",
+        "en": "bgm.tv character ID",
+        "es": "identificador de personaje en Bangumi",
+        "fr": "identifiant de personnage Bangumi",
+        "ja": "番組計画登場人物識別子",
+        "ko": "Bangumi 캐릭터 ID",
+        "zh-Hans": "Bangumi角色标识符",
+        "zh-Hant": "Bangumi角色識別碼"
+      },
+      "mappings": ["wd:P6296"],
+      "datatype": "external-id",
+      "multivalued": false,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1500,
+        "pattern": "^[1-9][0-9]*$"
+      }
+    },
+    "wdt:P1853": {
+      "iri": "http://www.wikidata.org/prop/direct/P1853",
+      "labels": {
+        "de": "Blutgruppe",
+        "en": "blood type",
+        "es": "grupo sanguíneo",
+        "fr": "groupe sanguin",
+        "ja": "血液型",
+        "ko": "혈액형",
+        "zh-Hans": "血型",
+        "zh-Hant": "血型"
+      },
+      "mappings": ["wd:P1853"],
+      "datatype": "wikibase-item",
+      "multivalued": false,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "targets": ["skos:Concept"]
+    },
+    "schema:gender": {
+      "iri": "http://schema.org/gender",
+      "labels": {
+        "de": "Geschlecht",
+        "en": "gender",
+        "es": "sexo o género",
+        "fr": "sexe ou genre",
+        "ja": "性別",
+        "ko": "성별",
+        "zh-Hans": "性别",
+        "zh-Hant": "性別"
+      },
+      "mappings": [],
+      "datatype": "wikibase-item",
+      "multivalued": false,
+      "qualifiers": ["rezics:spoilerLevel"],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "targets": ["skos:Concept"]
+    },
+    "schema:height": {
+      "iri": "http://schema.org/height",
+      "labels": {
+        "de": "Höhe",
+        "en": "height",
+        "es": "altura",
+        "fr": "hauteur",
+        "ja": "全高",
+        "ko": "높이",
+        "zh-Hans": "高度",
+        "zh-Hant": "高度"
+      },
+      "mappings": ["wd:P2048"],
+      "datatype": "quantity",
+      "multivalued": false,
+      "qualifiers": [],
+      "value": {
+        "type": "object",
+        "required": ["amount", "unit"],
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "type": "string",
+            "pattern": "^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"
+          },
+          "unit": {
+            "enum": ["http://www.wikidata.org/entity/Q11573", "http://www.wikidata.org/entity/Q174728"]
+          }
+        }
+      },
+      "units": ["http://www.wikidata.org/entity/Q11573", "http://www.wikidata.org/entity/Q174728"],
+      "minimum": 0
+    },
+    "schema:weight": {
+      "iri": "http://schema.org/weight",
+      "labels": {
+        "de": "Masse",
+        "en": "weight",
+        "es": "masa",
+        "fr": "masse",
+        "ja": "質量",
+        "ko": "질량",
+        "zh-Hans": "质量",
+        "zh-Hant": "質量"
+      },
+      "mappings": ["wd:P2067"],
+      "datatype": "quantity",
+      "multivalued": false,
+      "qualifiers": [],
+      "value": {
+        "type": "object",
+        "required": ["amount", "unit"],
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "type": "string",
+            "pattern": "^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"
+          },
+          "unit": {
+            "enum": ["http://www.wikidata.org/entity/Q11570", "http://www.wikidata.org/entity/Q41803"]
+          }
+        }
+      },
+      "units": ["http://www.wikidata.org/entity/Q11570", "http://www.wikidata.org/entity/Q41803"],
+      "minimum": 0
+    },
     "skos:broader": {
       "iri": "http://www.w3.org/2004/02/skos/core#broader",
       "labels": {
@@ -1325,6 +1443,39 @@
           },
           "document": {
             "type": "object"
+          }
+        }
+      }
+    },
+    "schema:alternateName": {
+      "iri": "http://schema.org/alternateName",
+      "labels": {
+        "de": "Alternativname",
+        "en": "alternate name",
+        "es": "nombre alternativo",
+        "fr": "autre nom",
+        "ja": "別名",
+        "ko": "다른 이름",
+        "zh-Hans": "别名",
+        "zh-Hant": "別名"
+      },
+      "mappings": [],
+      "datatype": "monolingualtext",
+      "multivalued": true,
+      "qualifiers": ["rezics:spoilerLevel"],
+      "value": {
+        "type": "object",
+        "required": ["text", "language"],
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1500
+          },
+          "language": {
+            "type": "string",
+            "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$"
           }
         }
       }

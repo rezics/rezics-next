@@ -34,3 +34,4 @@ properties:
   schema:character: 'personnages'
   wdt:P179: 'série'
   rezics:spoilerLevel: 'niveau de divulgation'
+  schema:alternateName: autre nom

@@ -62,6 +62,15 @@ classes:
     exact_mappings:
       - wd:Q43229
 slots:
+  alternateName:
+    slot_uri: schema:alternateName
+    description: An alternate name or alias, preserving its source language and spelling.
+    multivalued: true
+    close_mappings:
+      - wd:P2561
+    annotations:
+      datatype: monolingualtext
+      qualifiers: spoilerLevel
   url:
     slot_uri: schema:url
     description: The URL identifying this thing.

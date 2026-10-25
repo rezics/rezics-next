@@ -1,2 +1,8 @@
 types:
   wd:Q95074: 'fiktiver Charakter'
+properties:
+  schema:gender: Geschlecht
+  schema:height: Höhe
+  schema:weight: Masse
+  wdt:P1853: Blutgruppe
+  wdt:P6296: Bangumi-Charakterkennung

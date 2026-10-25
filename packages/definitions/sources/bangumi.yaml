@@ -55,6 +55,10 @@ notes:
     https://www.wikidata.org/wiki/Property:P1873 and https://www.wikidata.org/wiki/Property:P1872.
   - Bangumi game browser facets follow https://bgm.tv/game/browser. Source format and staff codes remain concepts;
     downloadable content is an add-on work only when independently referable, not a new type for every format value.
+  - Character appearances dispatch to the anime, game or manga work selected by the subject profile. Voice credits
+    use the same dispatch. The association mappings name TVSeries as a concrete example, not CreativeWork's shared slots.
+  - Character kind codes are keyword concepts; appearance role codes qualify schema:character with wdt:P3831.
+    No character-kind or appearance-role code creates a catalogue type.
 vocabulary:
   - &id010
     status: proposed
@@ -516,7 +520,7 @@ files:
         mapping: *id015
   - id: character
     type:
-      status: proposed
+      status: existing
       term: wd:Q95074
       'on': wd:Q95074
       wikidata: wd:Q95074
@@ -528,7 +532,7 @@ files:
       - *id017
       - id: id
         mapping:
-          status: proposed
+          status: existing
           term: wdt:P6296
           'on': wd:Q95074
           wikidata: wd:P6296
@@ -538,7 +542,7 @@ files:
       - *id013
       - id: name
         mapping: &id065
-          status: proposed
+          status: existing
           term: schema:name
           'on': wd:Q95074
           wikidata: wd:P2561
@@ -548,16 +552,17 @@ files:
             - https://www.wikidata.org/wiki/Property:P2561
       - id: role
         mapping:
-          status: proposed
-          term: wdt:P31
+          status: existing
+          term: schema:keywords
           'on': wd:Q95074
-          wikidata: wd:P31
-          meaning: The kind of fictional entity, using the character-kind enumeration.
+          wikidata: wd:P921
+          meaning: The source-described kind of fictional entity, retained as a descriptive keyword concept.
           sources:
-            - https://www.wikidata.org/wiki/Property:P31
+            - https://schema.org/keywords
+            - https://www.wikidata.org/wiki/Property:P921
       - id: summary
         mapping:
-          status: proposed
+          status: existing
           term: schema:abstract
           'on': wd:Q95074
           wikidata: wd:Q333291
@@ -726,25 +731,37 @@ files:
           meaning: Resolve the credited subject by its Bangumi identifier.
   - id: subject-characters
     type:
-      status: proposed
+      status: existing
       term: schema:character
-      'on': schema:CreativeWork
+      'on': schema:TVSeries
       wikidata: wd:P674
       meaning: A character appearing in the subject work, qualified by its appearance role.
       sources: *id028
       qualifiers:
-        role: *id001
-        order: *id024
+        role:
+          status: existing
+          term: wdt:P3831
+          'on': schema:TVSeries
+          wikidata: wd:P3831
+          meaning: The source appearance role concept.
+          sources:
+            - https://www.wikidata.org/wiki/Property:P3831
+        order:
+          status: omitted
+          reason: The shared appearance property has no order qualifier; do not treat role order as credit order.
     fields:
       - id: character_id
         mapping:
-          status: proposed
+          status: existing
           term: wdt:P6296
           'on': wd:Q95074
           wikidata: wd:P6296
           meaning: Resolve the appearing character by its Bangumi identifier.
           sources: *id029
-      - *id030
+      - id: order
+        mapping:
+          status: omitted
+          reason: The shared appearance property has no order qualifier; preserve no invented main property for appearance order.
       - id: subject_id
         mapping:
           status: existing
@@ -753,24 +770,42 @@ files:
           wikidata: wd:P5732
           meaning: Resolve the work in which the character appears.
       - id: type
-        mapping: *id001
+        mapping:
+          status: existing
+          term: wdt:P3831
+          'on': schema:TVSeries
+          wikidata: wd:P3831
+          meaning: The source appearance role concept.
+          sources:
+            - https://www.wikidata.org/wiki/Property:P3831
   - id: person-characters
     type:
-      status: proposed
+      status: existing
       term: wdt:P725
-      'on': schema:CreativeWork
+      'on': schema:TVSeries
       wikidata: wd:P725
       meaning: A voice actor on the subject work, qualified by the character voiced.
       sources:
         - https://www.wikidata.org/wiki/Property:P725
       qualifiers:
-        creditedAs: *id031
-        order: *id024
-        role: *id001
+        creditedAs:
+          status: existing
+          term: wdt:P1932
+          'on': schema:TVSeries
+          wikidata: wd:P1932
+          meaning: The credited spelling when a supporting source states it.
+          sources:
+            - https://www.wikidata.org/wiki/Property:P1932
+        order:
+          status: omitted
+          reason: The archive association supplies no voice-credit order; never infer one from another list.
+        role:
+          status: omitted
+          reason: The association has no published detailed voice-role code; leave this qualifier absent.
         character: &id032
-          status: proposed
+          status: existing
           term: wdt:P453
-          'on': schema:CreativeWork
+          'on': schema:TVSeries
           wikidata: wd:P453
           meaning: The character voiced by this credited performer in this work.
           sources:
@@ -794,14 +829,9 @@ files:
           meaning: Resolve the work for this voice credit.
       - id: summary
         mapping:
-          status: proposed
-          term: schema:abstract
-          'on': schema:CreativeWork
-          wikidata: wd:Q333291
-          meaning: The source summary retained as an attributed document, with a close conceptual Wikidata mapping.
-          sources: *id018
+          status: omitted
+          reason: Association commentary is not a summary of the fictional character or work; omit it rather than assign it to either profile.
           licence: *id014
-          mappingRelation: close
       - id: type
         mapping:
           status: omitted
@@ -1498,7 +1528,7 @@ infobox:
         mapping: *id065
       - id: 别名
         mapping:
-          status: proposed
+          status: existing
           term: schema:alternateName
           'on': wd:Q95074
           wikidata: wd:P2561
@@ -1507,7 +1537,7 @@ infobox:
           mappingRelation: close
       - id: 性别
         mapping:
-          status: proposed
+          status: existing
           term: schema:gender
           'on': wd:Q95074
           wikidata: wd:P21
@@ -1517,17 +1547,11 @@ infobox:
             - https://www.wikidata.org/wiki/Property:P21
       - id: 生日
         mapping:
-          status: proposed
-          term: schema:birthDate
-          'on': wd:Q95074
-          wikidata: wd:P569
-          meaning: The stated birthday; retain missing year and fictional calendar context.
-          sources:
-            - https://schema.org/birthDate
-            - https://www.wikidata.org/wiki/Property:P569
+          status: omitted
+          reason: Free-form birthdays may lack a year or use fictional calendars; no birthDate is inferred without a representable full date.
       - id: 血型
         mapping:
-          status: proposed
+          status: existing
           term: wdt:P1853
           'on': wd:Q95074
           wikidata: wd:P1853
@@ -1536,7 +1560,7 @@ infobox:
             - https://www.wikidata.org/wiki/Property:P1853
       - id: 身高
         mapping:
-          status: proposed
+          status: existing
           term: schema:height
           'on': wd:Q95074
           wikidata: wd:P2048
@@ -1546,7 +1570,7 @@ infobox:
             - https://www.wikidata.org/wiki/Property:P2048
       - id: 体重
         mapping:
-          status: proposed
+          status: existing
           term: schema:weight
           'on': wd:Q95074
           wikidata: wd:P2067
@@ -1562,15 +1586,8 @@ infobox:
             meaning.
       - id: 引用来源
         mapping:
-          status: proposed
-          term: schema:citation
-          'on': wd:Q95074
-          wikidata: wd:P248
-          meaning: A cited source for the infobox facts; a reference does not become a sameAs link.
-          sources:
-            - https://schema.org/citation
-            - https://www.wikidata.org/wiki/Property:P248
-          mappingRelation: close
+          status: omitted
+          reason: Infobox citation prose belongs to statement provenance, not a character property or an identity link.
   - id: doujinBook
     source: https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/wiki_template.yml
     fields:
@@ -1628,7 +1645,7 @@ infobox:
     fields:
       - id: 第二中文名
         mapping: &id072
-          status: proposed
+          status: existing
           term: schema:alternateName
           'on': wd:Q95074
           wikidata: wd:P2561
@@ -1774,6 +1791,7 @@ enumerations:
       - id: 1
         mapping:
           <<: *id010
+          status: existing
           concept:
             id: https://rezics.com/schemes/bangumi/character-kinds/1
             scheme: https://rezics.com/schemes/bangumi/character-kinds
@@ -1782,6 +1800,7 @@ enumerations:
       - id: 2
         mapping:
           <<: *id010
+          status: existing
           concept:
             id: https://rezics.com/schemes/bangumi/character-kinds/2
             scheme: https://rezics.com/schemes/bangumi/character-kinds
@@ -1790,6 +1809,7 @@ enumerations:
       - id: 3
         mapping:
           <<: *id010
+          status: existing
           concept:
             id: https://rezics.com/schemes/bangumi/character-kinds/3
             scheme: https://rezics.com/schemes/bangumi/character-kinds
@@ -1798,6 +1818,7 @@ enumerations:
       - id: 4
         mapping:
           <<: *id010
+          status: existing
           concept:
             id: https://rezics.com/schemes/bangumi/character-kinds/4
             scheme: https://rezics.com/schemes/bangumi/character-kinds
@@ -1808,6 +1829,7 @@ enumerations:
       - id: 1
         mapping:
           <<: *id010
+          status: existing
           concept:
             id: https://rezics.com/schemes/bangumi/appearance-roles/1
             scheme: https://rezics.com/schemes/bangumi/appearance-roles
@@ -1816,6 +1838,7 @@ enumerations:
       - id: 2
         mapping:
           <<: *id010
+          status: existing
           concept:
             id: https://rezics.com/schemes/bangumi/appearance-roles/2
             scheme: https://rezics.com/schemes/bangumi/appearance-roles
@@ -1824,6 +1847,7 @@ enumerations:
       - id: 3
         mapping:
           <<: *id010
+          status: existing
           concept:
             id: https://rezics.com/schemes/bangumi/appearance-roles/3
             scheme: https://rezics.com/schemes/bangumi/appearance-roles

@@ -34,3 +34,4 @@ properties:
   schema:character: 'characters'
   wdt:P179: 'part of the series'
   rezics:spoilerLevel: 'spoiler level'
+  schema:alternateName: alternate name

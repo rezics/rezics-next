@@ -34,3 +34,4 @@ properties:
   schema:character: '등장하는 캐릭터'
   wdt:P179: '시리즈'
   rezics:spoilerLevel: '스포일러 수준'
+  schema:alternateName: 다른 이름

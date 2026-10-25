@@ -34,3 +34,4 @@ properties:
   schema:character: 'Figuren'
   wdt:P179: 'Teil der Reihe oder Serie'
   rezics:spoilerLevel: 'Spoilerstufe'
+  schema:alternateName: Alternativname

@@ -1,17 +1,98 @@
 id: https://rezics.com/catalogue/character
 name: character
 version: 1.0.0
-description: Character profile terms.
+description: Fictional character profiles and descriptive terms.
 prefixes:
   linkml: https://w3id.org/linkml/
   schema: http://schema.org/
   wd: http://www.wikidata.org/entity/
+  wdt: http://www.wikidata.org/prop/direct/
 default_range: string
 imports:
   - linkml:types
   - core
+  - classification
 classes:
   FictionalCharacter:
     is_a: Character
     class_uri: wd:Q95074
-    description: A fictional character.
+    description: >-
+      An independently referable fictional character, including a fictional machine, ship or organization.
+      Source: https://www.wikidata.org/wiki/Q95074. Traits use keywords concepts with spoiler levels;
+      appearances and voice credits are statements on works, not lists on the character.
+      Browse facets follow traits and gender at https://vndb.org/c and
+      https://api.vndb.org/kana#post-character, and blood type, gender and birth month at
+      https://bgm.tv/character. Height and weight supplement these with VNDB's measurement filters.
+      Birth-date filtering requires an explicitly stated year; a birthday without a year is not a birth date.
+    exact_mappings:
+      - wd:Q95074
+    slots:
+      - abstract
+      - alternateName
+      - birthDate
+      - gender
+      - height
+      - weight
+      - bloodType
+      - keywords
+      - vndbId
+      - bangumiCharacterId
+    annotations:
+      facets: keywords gender bloodType birthDate height weight
+slots:
+  gender:
+    slot_uri: schema:gender
+    description: >-
+      The source-described gender of the fictional character, expressed as a concept.
+      Sources: https://schema.org/gender and https://www.wikidata.org/wiki/Property:P21.
+      The mapping is close because Wikidata also covers biological sex, which is not inferred here.
+    range: Concept
+    close_mappings:
+      - wd:P21
+    annotations:
+      datatype: wikibase-item
+      qualifiers: spoilerLevel
+  height:
+    slot_uri: schema:height
+    description: >-
+      The character's stated height, preserving the source unit.
+      Sources and mapping: https://schema.org/height and https://www.wikidata.org/wiki/Property:P2048.
+    range: decimal
+    minimum_value: 0
+    exact_mappings:
+      - wd:P2048
+    annotations:
+      datatype: quantity
+      units: wd:Q174728 wd:Q11573
+  weight:
+    slot_uri: schema:weight
+    description: >-
+      The character's stated mass, preserving the source unit.
+      Sources and mapping: https://schema.org/weight and https://www.wikidata.org/wiki/Property:P2067.
+    range: decimal
+    minimum_value: 0
+    exact_mappings:
+      - wd:P2067
+    annotations:
+      datatype: quantity
+      units: wd:Q11570 wd:Q41803
+  bloodType:
+    slot_uri: wdt:P1853
+    description: >-
+      The character's explicitly stated blood type as a concept.
+      Source and mapping: https://www.wikidata.org/wiki/Property:P1853.
+    range: Concept
+    exact_mappings:
+      - wd:P1853
+    annotations:
+      datatype: wikibase-item
+  bangumiCharacterId:
+    slot_uri: wdt:P6296
+    description: >-
+      The stable Bangumi character identifier.
+      Source and mapping: https://www.wikidata.org/wiki/Property:P6296.
+    pattern: '^[1-9][0-9]*$'
+    exact_mappings:
+      - wd:P6296
+    annotations:
+      datatype: external-id

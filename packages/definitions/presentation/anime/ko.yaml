@@ -4,7 +4,6 @@ types:
   schema:TVSeason: 시즌
   schema:TVSeries: 텔레비전 시리즈
 properties:
-  schema:alternateName: 다른 이름
   schema:copyrightNotice: 저작권 고지
   schema:duration: 다음 시간 동안 진행됨
   schema:endDate: 종료일

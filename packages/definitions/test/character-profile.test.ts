@@ -21,13 +21,7 @@ const characterProperties = [
   'wdt:P3180',
   'wdt:P6296',
 ];
-const newProperties = [
-  'schema:gender',
-  'schema:height',
-  'schema:weight',
-  'wdt:P1853',
-  'wdt:P6296',
-];
+const newProperties = ['schema:gender', 'schema:height', 'schema:weight', 'wdt:P1853', 'wdt:P6296'];
 
 type Decision = {
   status: string;

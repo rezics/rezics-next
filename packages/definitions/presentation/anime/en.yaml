@@ -4,7 +4,6 @@ types:
   schema:TVSeason: television series season
   schema:TVSeries: television series
 properties:
-  schema:alternateName: alternate name
   schema:copyrightNotice: copyright notice
   schema:duration: duration
   schema:endDate: end date

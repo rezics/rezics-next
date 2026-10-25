@@ -1,2 +1,8 @@
 types:
   wd:Q95074: 'character'
+properties:
+  schema:gender: gender
+  schema:height: height
+  schema:weight: weight
+  wdt:P1853: blood type
+  wdt:P6296: bgm.tv character ID

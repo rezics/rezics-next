@@ -4,7 +4,6 @@ types:
   schema:TVSeason: Staffel
   schema:TVSeries: Fernsehserie
 properties:
-  schema:alternateName: Alternativname
   schema:copyrightNotice: Urheberrechtshinweis
   schema:duration: Dauer
   schema:endDate: Endzeitpunkt

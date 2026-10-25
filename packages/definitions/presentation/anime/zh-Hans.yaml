@@ -4,7 +4,6 @@ types:
   schema:TVSeason: 编播季
   schema:TVSeries: 电视系列节目
 properties:
-  schema:alternateName: 别名
   schema:copyrightNotice: 版权声明
   schema:duration: 时长
   schema:endDate: 结束日期

@@ -34,3 +34,4 @@ properties:
   schema:character: '登场角色'
   wdt:P179: '系列'
   rezics:spoilerLevel: '剧透程度'
+  schema:alternateName: 别名
