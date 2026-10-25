@@ -309,6 +309,9 @@ async function membership(
   role: 'owner' | 'member' | null,
   transactionId: string,
 ) {
+  // Closure and insertion share the command's authoritative time. Native writes
+  // admit one ongoing interval; a future scheduling API needs bounded admission
+  // or a separately anchored workflow for its actual future interval changes.
   const input = {
     route: accountRoute(organizationId),
     organization_id: organizationId,
