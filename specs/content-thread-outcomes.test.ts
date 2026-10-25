@@ -2,7 +2,14 @@ import { afterEach, beforeEach, expect, setDefaultTimeout, test } from 'bun:test
 import { createHash } from 'node:crypto';
 import { isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import type { ApiResult, ContentThreadDriver, Fixture, ItemView, ThreadInput, ThreadView } from './content-thread-driver';
+import type {
+  ApiResult,
+  ContentThreadDriver,
+  Fixture,
+  ItemView,
+  ThreadInput,
+  ThreadView,
+} from './content-thread-driver';
 
 setDefaultTimeout(30_000);
 let documentText: typeof import('@rezics/document').documentText;
@@ -39,9 +46,13 @@ const digest = (body: Uint8Array) => createHash('sha256').update(body).digest('h
 const options = (key: string, actor = fixture.owner) => ({ actor, key: `"${key}"` });
 function input(patch: Partial<ThreadInput> = {}): ThreadInput {
   return {
-    title: 'Private authored title', body: fromPlainText('Authored body 漢字 e\u0301  \n  next'),
-    licence: 'LicenseRef-Author-Permission', subjectIds: fixture.subjectIds,
-    boardId: fixture.board.id, visibility: 'published', ...patch,
+    title: 'Private authored title',
+    body: fromPlainText('Authored body 漢字 e\u0301  \n  next'),
+    licence: 'LicenseRef-Author-Permission',
+    subjectIds: fixture.subjectIds,
+    boardId: fixture.board.id,
+    visibility: 'published',
+    ...patch,
   };
 }
 function ok<T>(result: ApiResult<T>, status = 201): T {
@@ -61,8 +72,12 @@ async function problem(result: ApiResult<unknown>, status: number) {
 }
 async function hidden(result: ApiResult<unknown>, effect: 'not_applicable' | 'not_applied') {
   expect(await problem(result, 404)).toEqual({
-    type: 'https://rezics.com/problems/not_found', title: 'Not Found', status: 404,
-    code: 'not_found', retryable: false, effect_status: effect,
+    type: 'https://rezics.com/problems/not_found',
+    title: 'Not Found',
+    status: 404,
+    code: 'not_found',
+    retryable: false,
+    effect_status: effect,
   });
   expect(result.response.headers.get('rezics-session-token')).toBeNull();
   expect(result.value).toBeNull();
@@ -71,14 +86,29 @@ async function unchanged(before: Awaited<ReturnType<ContentThreadDriver['inspect
   expect(await driver.inspect()).toEqual(before);
 }
 async function append(thread: ThreadView, key = 'post') {
-  return ok(await driver.createPost({
-    threadId: thread.id, body: fromPlainText('Subsequent post'), licence: 'CC-BY-4.0',
-  }, options(key)));
+  return ok(
+    await driver.createPost(
+      {
+        threadId: thread.id,
+        body: fromPlainText('Subsequent post'),
+        licence: 'CC-BY-4.0',
+      },
+      options(key),
+    ),
+  );
 }
 async function reply(thread: ThreadView, parent: ItemView, key = 'reply') {
-  return ok(await driver.reply({
-    threadId: thread.id, parentId: parent.id, body: fromPlainText('Nested reply'), licence: 'MIT',
-  }, options(key)));
+  return ok(
+    await driver.reply(
+      {
+        threadId: thread.id,
+        parentId: parent.id,
+        body: fromPlainText('Nested reply'),
+        licence: 'MIT',
+      },
+      options(key),
+    ),
+  );
 }
 /** A post id that was never created, on the same embedded route as `id`. */
 function unusedIdOnRoute(id: string): string {
@@ -99,9 +129,16 @@ test('anonymous reads published thread post and reply but cannot create or revis
   }
   const before = await driver.inspect();
   await problem(await driver.create(input(), { actor: null, key: '"anonymous"' }), 401);
-  await problem(await driver.revise({ threadId: thread.id, itemId: post.id, body: input().body }, {
-    actor: null, key: '"anonymous-edit"',
-  }), 401);
+  await problem(
+    await driver.revise(
+      { threadId: thread.id, itemId: post.id, body: input().body },
+      {
+        actor: null,
+        key: '"anonymous-edit"',
+      },
+    ),
+    401,
+  );
   await unchanged(before);
 });
 
@@ -111,8 +148,11 @@ test('author creates first post subsequent post and nested replies on the immuta
   const child = await reply(thread, post);
   const nested = await reply(thread, child, 'nested');
   expect(thread).toMatchObject({
-    title: input().title, authorId: fixture.owner.id, licence: input().licence,
-    boardId: fixture.board.id, subjectIds: fixture.subjectIds,
+    title: input().title,
+    authorId: fixture.owner.id,
+    licence: input().licence,
+    boardId: fixture.board.id,
+    subjectIds: fixture.subjectIds,
   });
   for (const item of [thread.firstPost, post, child, nested]) {
     expect(item).toMatchObject({ threadId: thread.id, route: thread.route, authorId: fixture.owner.id });
@@ -125,28 +165,54 @@ test('author creates first post subsequent post and nested replies on the immuta
   expect(post.parentId).toBeNull();
   const rows = await driver.inspect();
   expect(rows.semanticRows).toEqual([]);
-  expect(rows.threads.find(row => row.id === thread.id)).toMatchObject({ route: thread.route, authorId: fixture.owner.id });
+  expect(rows.threads.find((row) => row.id === thread.id)).toMatchObject({
+    route: thread.route,
+    authorId: fixture.owner.id,
+  });
   for (const item of [thread.firstPost, post, child, nested]) {
-    expect(rows.items.find(row => row.id === item.id)).toMatchObject({
-      threadId: thread.id, route: thread.route, parentId: item.parentId, authorId: fixture.owner.id,
+    expect(rows.items.find((row) => row.id === item.id)).toMatchObject({
+      threadId: thread.id,
+      route: thread.route,
+      parentId: item.parentId,
+      authorId: fixture.owner.id,
     });
-    expect(rows.revisions.find(row => row.id === item.revisionId)).toMatchObject({ threadId: thread.id, route: thread.route });
+    expect(rows.revisions.find((row) => row.id === item.revisionId)).toMatchObject({
+      threadId: thread.id,
+      route: thread.route,
+    });
   }
 });
 
 test('every thread post and reply preserves its own author declared licence subject references and board placement', async () => {
   const [a, b, c] = fixture.subjectIds;
   expect(new Set([a, b, c]).size).toBe(3);
-  expect([a, b, c].every(id => typeof id === 'string' && id.length > 0)).toBe(true);
+  expect([a, b, c].every((id) => typeof id === 'string' && id.length > 0)).toBe(true);
   const thread = await create({ subjectIds: [a!] });
-  const post = ok(await driver.createPost({
-    threadId: thread.id, body: fromPlainText('Post author references B and C'),
-    licence: 'CC-BY-4.0', subjectIds: [b!, c!], boardId: fixture.board.id,
-  }, options('own-refs', fixture.other)));
-  const child = ok(await driver.reply({
-    threadId: thread.id, parentId: post.id, body: fromPlainText('Reply author has no subject references'),
-    licence: 'MIT', subjectIds: [], boardId: fixture.board.id,
-  }, options('empty-refs')));
+  const post = ok(
+    await driver.createPost(
+      {
+        threadId: thread.id,
+        body: fromPlainText('Post author references B and C'),
+        licence: 'CC-BY-4.0',
+        subjectIds: [b!, c!],
+        boardId: fixture.board.id,
+      },
+      options('own-refs', fixture.other),
+    ),
+  );
+  const child = ok(
+    await driver.reply(
+      {
+        threadId: thread.id,
+        parentId: post.id,
+        body: fromPlainText('Reply author has no subject references'),
+        licence: 'MIT',
+        subjectIds: [],
+        boardId: fixture.board.id,
+      },
+      options('empty-refs'),
+    ),
+  );
   const inherited = await append(thread, 'default-refs');
   const rows = await driver.inspect();
   expect(rows.semanticRows).toEqual([]);
@@ -159,13 +225,21 @@ test('every thread post and reply preserves its own author declared licence subj
   ] as const) {
     const metadata = { subjectIds: [...subjectIds], licence, boardId: fixture.board.id };
     expect(item).toMatchObject({ ...metadata, authorId, threadId: thread.id, route: thread.route });
-    expect(rows.items.find(row => row.id === item.id)).toMatchObject({ authorId, threadId: thread.id, route: thread.route });
-    expect(rows.revisions.find(row => row.id === item.revisionId)).toMatchObject({
-      ...metadata, itemId: item.id, threadId: thread.id, route: thread.route, body: bytes(item.body),
+    expect(rows.items.find((row) => row.id === item.id)).toMatchObject({
+      authorId,
+      threadId: thread.id,
+      route: thread.route,
+    });
+    expect(rows.revisions.find((row) => row.id === item.revisionId)).toMatchObject({
+      ...metadata,
+      itemId: item.id,
+      threadId: thread.id,
+      route: thread.route,
+      body: bytes(item.body),
     });
     expect(ok(await driver.readItem(thread.id, item.id, null, item.revisionId), 200)).toEqual(item);
     expect(ok(await driver.readItem(thread.id, item.id, null), 200)).toEqual(item);
-    expect(ok(await driver.readItems(thread.id, null), 200).find(row => row.id === item.id)).toEqual(item);
+    expect(ok(await driver.readItems(thread.id, null), 200).find((row) => row.id === item.id)).toEqual(item);
   }
   expect(child.parentId).toBe(post.id);
   expect(ok(await driver.readThread(thread.id, null), 200)).toEqual(thread);
@@ -175,45 +249,91 @@ test('revising metadata preserves old exact revision metadata and body-only edit
   const [a, b, c] = fixture.subjectIds;
   const thread = await create({ subjectIds: [a!] });
   const oldBody = fromPlainText('Old post with author references');
-  const old = ok(await driver.createPost({
-    threadId: thread.id, body: oldBody, licence: 'CC-BY-4.0', subjectIds: [b!], boardId: fixture.board.id,
-  }, options('metadata-post', fixture.other)));
+  const old = ok(
+    await driver.createPost(
+      {
+        threadId: thread.id,
+        body: oldBody,
+        licence: 'CC-BY-4.0',
+        subjectIds: [b!],
+        boardId: fixture.board.id,
+      },
+      options('metadata-post', fixture.other),
+    ),
+  );
   const before = await driver.inspect();
   const body = fromPlainText('New post with changed author references and licence');
-  const updated = ok(await driver.revise({
-    threadId: thread.id, itemId: old.id, body, licence: 'MIT', subjectIds: [c!], boardId: fixture.board.id,
-  }, options('metadata-edit', fixture.other)), 200);
+  const updated = ok(
+    await driver.revise(
+      {
+        threadId: thread.id,
+        itemId: old.id,
+        body,
+        licence: 'MIT',
+        subjectIds: [c!],
+        boardId: fixture.board.id,
+      },
+      options('metadata-edit', fixture.other),
+    ),
+    200,
+  );
   expect(updated.id).toBe(old.id);
   expect(updated.revisionId).not.toBe(old.revisionId);
   expect(updated).toMatchObject({
-    body, licence: 'MIT', subjectIds: [c!], boardId: fixture.board.id,
-    authorId: fixture.other.id, threadId: thread.id, route: thread.route, parentId: null,
+    body,
+    licence: 'MIT',
+    subjectIds: [c!],
+    boardId: fixture.board.id,
+    authorId: fixture.other.id,
+    threadId: thread.id,
+    route: thread.route,
+    parentId: null,
   });
-  const bodyOnly = ok(await driver.revise({
-    threadId: thread.id, itemId: old.id, body: fromPlainText('Body only after metadata edit'),
-  }, options('metadata-body-only', fixture.other)), 200);
+  const bodyOnly = ok(
+    await driver.revise(
+      {
+        threadId: thread.id,
+        itemId: old.id,
+        body: fromPlainText('Body only after metadata edit'),
+      },
+      options('metadata-body-only', fixture.other),
+    ),
+    200,
+  );
   expect(bodyOnly.revisionId).not.toBe(updated.revisionId);
   expect(bodyOnly).toMatchObject({
-    id: old.id, licence: 'MIT', subjectIds: [c!], boardId: fixture.board.id, authorId: fixture.other.id,
+    id: old.id,
+    licence: 'MIT',
+    subjectIds: [c!],
+    boardId: fixture.board.id,
+    authorId: fixture.other.id,
   });
   const after = await driver.inspect();
   expect(after.threads).toEqual(before.threads);
   expect(after.items).toEqual(before.items);
   expect(after.semanticRows).toEqual([]);
   expect(after.revisions).toHaveLength(before.revisions.length + 2);
-  for (const row of before.revisions) expect(after.revisions.find(next => next.id === row.id)).toEqual(row);
+  for (const row of before.revisions) expect(after.revisions.find((next) => next.id === row.id)).toEqual(row);
   for (const [item, subjectIds, licence, expectedBody] of [
-    [old, [b!], 'CC-BY-4.0', oldBody], [updated, [c!], 'MIT', body],
+    [old, [b!], 'CC-BY-4.0', oldBody],
+    [updated, [c!], 'MIT', body],
     [bodyOnly, [c!], 'MIT', bodyOnly.body],
   ] as const) {
-    expect(after.revisions.find(row => row.id === item.revisionId)).toMatchObject({
-      itemId: old.id, threadId: thread.id, route: thread.route, subjectIds: [...subjectIds],
-      licence, boardId: fixture.board.id, body: bytes(expectedBody),
+    expect(after.revisions.find((row) => row.id === item.revisionId)).toMatchObject({
+      itemId: old.id,
+      threadId: thread.id,
+      route: thread.route,
+      subjectIds: [...subjectIds],
+      licence,
+      boardId: fixture.board.id,
+      body: bytes(expectedBody),
     });
     expect(ok(await driver.readItem(thread.id, old.id, null, item.revisionId), 200)).toEqual(item);
   }
   expect(ok(await driver.readItem(thread.id, old.id, null), 200)).toEqual(bodyOnly);
-  expect(ok(await driver.readHistory(thread.id, old.id, fixture.other), 200)).toEqual(expect.arrayContaining([old, updated, bodyOnly]));
+  expect(ok(await driver.readHistory(thread.id, old.id, fixture.other), 200)).toEqual(
+    expect.arrayContaining([old, updated, bodyOnly]),
+  );
 });
 
 test('invalid subject IDs licences and conflicting item boards reject atomically without semantic dependencies', async () => {
@@ -221,8 +341,10 @@ test('invalid subject IDs licences and conflicting item boards reject atomically
   const post = await append(thread);
   const before = await driver.inspect();
   const invalidMetadata = [
-    { subjectIds: ['not-a-subject-id'] }, { subjectIds: [''] },
-    { licence: 'not-an-SPDX-licence' }, { licence: 'MIT AND' },
+    { subjectIds: ['not-a-subject-id'] },
+    { subjectIds: [''] },
+    { licence: 'not-an-SPDX-licence' },
+    { licence: 'MIT AND' },
   ];
   for (const [index, metadata] of invalidMetadata.entries()) {
     await problem(await driver.create(input(metadata), options(`invalid-thread-${index}`)), 400);
@@ -242,9 +364,18 @@ test('invalid subject IDs licences and conflicting item boards reject atomically
       await unchanged(before);
     }
   }
-  await hidden(await driver.createPost({
-    threadId: fixture.unknownThread, body: fromPlainText('Missing thread'), licence: 'MIT', subjectIds: fixture.subjectIds,
-  }, options('missing-thread-refs')), 'not_applied');
+  await hidden(
+    await driver.createPost(
+      {
+        threadId: fixture.unknownThread,
+        body: fromPlainText('Missing thread'),
+        licence: 'MIT',
+        subjectIds: fixture.subjectIds,
+      },
+      options('missing-thread-refs'),
+    ),
+    'not_applied',
+  );
   await unchanged(before);
 });
 
@@ -269,25 +400,39 @@ test('canonical property order preserves Unicode and authored whitespace and rej
   const reverseKeys = (value: unknown): unknown => {
     if (Array.isArray(value)) return value.map(reverseKeys);
     if (value && typeof value === 'object') {
-      return Object.fromEntries(Object.entries(value).reverse().map(([key, entry]) => [key, reverseKeys(entry)]));
+      return Object.fromEntries(
+        Object.entries(value)
+          .reverse()
+          .map(([key, entry]) => [key, reverseKeys(entry)]),
+      );
     }
     return value;
   };
   const reordered = reverseKeys(body);
   const thread = await create({ body });
-  const post = ok(await driver.createPost({ threadId: thread.id, body: reordered, licence: 'MIT' }, options('reordered')));
+  const post = ok(
+    await driver.createPost({ threadId: thread.id, body: reordered, licence: 'MIT' }, options('reordered')),
+  );
   const rows = await driver.inspect();
-  const a = rows.revisions.find(row => row.id === thread.firstPost.revisionId)!;
-  const b = rows.revisions.find(row => row.id === post.revisionId)!;
+  const a = rows.revisions.find((row) => row.id === thread.firstPost.revisionId)!;
+  const b = rows.revisions.find((row) => row.id === post.revisionId)!;
   expect(a.body).toEqual(bytes(body));
   expect(b.body).toEqual(a.body);
   expect(a.sha256).toBe(digest(bytes(body)));
   expect(b.sha256).toBe(a.sha256);
   expect(a.searchText).toBe(documentText(body));
   expect(b.searchText).toBe(documentText(body));
-  expect(serializeDocument(ok(await driver.readItem(thread.id, post.id, null), 200).body)).toBe(serializeDocument(body));
+  expect(serializeDocument(ok(await driver.readItem(thread.id, post.id, null), 200).body)).toBe(
+    serializeDocument(body),
+  );
   const before = await driver.inspect();
-  await problem(await driver.create(input({ body: { version: body.version, profile: 'text', doc: { type: 'unknown' } } }), options('invalid')), 400);
+  await problem(
+    await driver.create(
+      input({ body: { version: body.version, profile: 'text', doc: { type: 'unknown' } } }),
+      options('invalid'),
+    ),
+    400,
+  );
   await unchanged(before);
 });
 
@@ -311,7 +456,10 @@ test('PostgreSQL independently checks SHA-256 and two MiB body limit with lz4 by
 test('API rejects oversized document without partial thread revision receipt claim or outbox writes', async () => {
   await create();
   const before = await driver.inspect();
-  await problem(await driver.create(input({ body: fromPlainText('漢'.repeat(2 * 1024 * 1024 / 3 + 1)) }), options('oversize')), 413);
+  await problem(
+    await driver.create(input({ body: fromPlainText('漢'.repeat((2 * 1024 * 1024) / 3 + 1)) }), options('oversize')),
+    413,
+  );
   await unchanged(before);
 });
 
@@ -323,36 +471,71 @@ test('revision appends immutable bytes and search text while exact old revision 
   const updated = ok(await driver.revise({ threadId: thread.id, itemId: old.id, body }, options('revise')), 200);
   expect(updated.id).toBe(old.id);
   expect(updated.revisionId).not.toBe(old.revisionId);
-  expect(updated).toMatchObject({ threadId: thread.id, route: thread.route, authorId: old.authorId, licence: old.licence });
+  expect(updated).toMatchObject({
+    threadId: thread.id,
+    route: thread.route,
+    authorId: old.authorId,
+    licence: old.licence,
+  });
   expect(updated).toMatchObject({ subjectIds: old.subjectIds, boardId: old.boardId });
   const after = await driver.inspect();
   expect(after.threads).toEqual(before.threads);
   expect(after.revisions.length).toBe(before.revisions.length + 1);
-  for (const row of before.revisions) expect(after.revisions.find(next => next.id === row.id)).toEqual(row);
-  expect(after.revisions.find(row => row.id === updated.revisionId)).toMatchObject({
-    body: bytes(body), sha256: digest(bytes(body)), searchText: documentText(body), route: thread.route,
+  for (const row of before.revisions) expect(after.revisions.find((next) => next.id === row.id)).toEqual(row);
+  expect(after.revisions.find((row) => row.id === updated.revisionId)).toMatchObject({
+    body: bytes(body),
+    sha256: digest(bytes(body)),
+    searchText: documentText(body),
+    route: thread.route,
   });
   expect(ok(await driver.readItem(thread.id, old.id, null, old.revisionId), 200)).toEqual(old);
   expect(ok(await driver.readItem(thread.id, old.id, null), 200)).toEqual(updated);
-  expect(ok(await driver.readHistory(thread.id, old.id, fixture.owner), 200).map(item => item.revisionId).sort())
-    .toEqual([old.revisionId, updated.revisionId].sort());
+  expect(
+    ok(await driver.readHistory(thread.id, old.id, fixture.owner), 200)
+      .map((item) => item.revisionId)
+      .sort(),
+  ).toEqual([old.revisionId, updated.revisionId].sort());
 });
 
 test('non-author and moderator cannot revise another author and body authorId cannot spoof identity', async () => {
   const thread = await create();
   const before = await driver.inspect();
   for (const actor of [fixture.other, fixture.moderator]) {
-    await problem(await driver.revise({ threadId: thread.id, itemId: thread.firstPost.id, body: input().body }, options(actor.id, actor)), 403);
+    await problem(
+      await driver.revise(
+        { threadId: thread.id, itemId: thread.firstPost.id, body: input().body },
+        options(actor.id, actor),
+      ),
+      403,
+    );
   }
-  await problem(await driver.create(input({ authorId: fixture.owner.id }), options('spoof-create', fixture.other)), 400);
-  await problem(await driver.revise({
-    threadId: thread.id, itemId: thread.firstPost.id, body: input().body, authorId: fixture.other.id,
-  }, options('spoof-edit')), 400);
+  await problem(
+    await driver.create(input({ authorId: fixture.owner.id }), options('spoof-create', fixture.other)),
+    400,
+  );
+  await problem(
+    await driver.revise(
+      {
+        threadId: thread.id,
+        itemId: thread.firstPost.id,
+        body: input().body,
+        authorId: fixture.other.id,
+      },
+      options('spoof-edit'),
+    ),
+    400,
+  );
   await unchanged(before);
   const own = ok(await driver.create(input(), options('other-own', fixture.other)));
   expect(own.authorId).toBe(fixture.other.id);
   expect(own.firstPost.authorId).toBe(fixture.other.id);
-  ok(await driver.revise({ threadId: own.id, itemId: own.firstPost.id, body: fromPlainText('Own edit') }, options('own-edit', fixture.other)), 200);
+  ok(
+    await driver.revise(
+      { threadId: own.id, itemId: own.firstPost.id, body: fromPlainText('Own edit') },
+      options('own-edit', fixture.other),
+    ),
+    200,
+  );
 });
 
 test('suspended account authentication denies create and edit with previously valid credentials', async () => {
@@ -360,7 +543,13 @@ test('suspended account authentication denies create and edit with previously va
   await driver.fixtures.suspend(fixture.owner.id);
   const before = await driver.inspect();
   await problem(await driver.create(input(), options('suspended-create')), 401);
-  await problem(await driver.revise({ threadId: thread.id, itemId: thread.firstPost.id, body: input().body }, options('suspended-edit')), 401);
+  await problem(
+    await driver.revise(
+      { threadId: thread.id, itemId: thread.firstPost.id, body: input().body },
+      options('suspended-edit'),
+    ),
+    401,
+  );
   await unchanged(before);
   expect(ok(await driver.create(input(), options('active-control', fixture.other))).authorId).toBe(fixture.other.id);
 });
@@ -370,13 +559,21 @@ test('missing cross-thread and cross-route containment references fail atomicall
   const sibling = await create({}, 'sibling');
   const before = await driver.inspect();
   for (const parentId of [fixture.unknownItem, sibling.firstPost.id, fixture.foreignItem.id]) {
-    const result = await driver.reply({ threadId: thread.id, parentId, body: input().body, licence: 'MIT' }, options(parentId));
+    const result = await driver.reply(
+      { threadId: thread.id, parentId, body: input().body, licence: 'MIT' },
+      options(parentId),
+    );
     await hidden(result, 'not_applied');
     await unchanged(before);
   }
-  const wrongRoute = await driver.revise({
-    threadId: fixture.foreignThread.id, itemId: unusedIdOnRoute(fixture.foreignThread.id), body: input().body,
-  }, options('wrong-route'));
+  const wrongRoute = await driver.revise(
+    {
+      threadId: fixture.foreignThread.id,
+      itemId: unusedIdOnRoute(fixture.foreignThread.id),
+      body: input().body,
+    },
+    options('wrong-route'),
+  );
   await hidden(wrongRoute, 'not_applied');
   await unchanged(before);
   expect(fixture.foreignThread.route).not.toBe(thread.route);
@@ -393,7 +590,7 @@ async function concealed(thread: ThreadView, child: ItemView) {
       await hidden(await driver.readHistory(thread.id, item.id, actor), 'not_applicable');
     }
     const list = await driver.readList(thread.boardId, actor);
-    expect(ok(list, 200).some(entry => entry.id === thread.id)).toBe(false);
+    expect(ok(list, 200).some((entry) => entry.id === thread.id)).toBe(false);
     const raw = JSON.stringify(await list.response.clone().json());
     for (const secret of [thread.id, thread.title, child.id, child.revisionId]) expect(raw).not.toContain(secret);
   }
@@ -429,9 +626,10 @@ test('draft protected and taken-down parent hides nested reply and exact history
       ok(visibleThread, 200);
       const listed = await driver.readItems(thread.id, actor);
       const visibleItems = ok(listed, 200);
-      expect(visibleItems.some(item => item.id === parent.id || item.id === child.id)).toBe(false);
+      expect(visibleItems.some((item) => item.id === parent.id || item.id === child.id)).toBe(false);
       const raw = JSON.stringify([await visibleThread.response.clone().json(), await listed.response.clone().json()]);
-      for (const secret of [parent.id, child.id, parent.revisionId, child.revisionId]) expect(raw).not.toContain(secret);
+      for (const secret of [parent.id, child.id, parent.revisionId, child.revisionId])
+        expect(raw).not.toContain(secret);
       for (const item of [parent, child]) {
         await hidden(await driver.readItem(thread.id, item.id, actor), 'not_applicable');
         await hidden(await driver.readItem(thread.id, item.id, actor, item.revisionId), 'not_applicable');
@@ -441,7 +639,6 @@ test('draft protected and taken-down parent hides nested reply and exact history
     if (state === 'draft') expect(ok(await driver.readItem(thread.id, child.id, fixture.owner), 200)).toEqual(child);
   }
 });
-
 
 test('private container chain hides published content even when anonymous public read succeeds', async () => {
   const publicThread = await create();
@@ -463,11 +660,13 @@ test('unknown and hidden resources have identical RFC 9457 problems with no exis
   expect(ok(await driver.readThread(thread.id, fixture.owner), 200)).toEqual(thread);
   for (const actor of [null, fixture.other]) {
     for (const result of [
-      await driver.readThread(thread.id, actor), await driver.readThread(fixture.unknownThread, actor),
+      await driver.readThread(thread.id, actor),
+      await driver.readThread(fixture.unknownThread, actor),
       await driver.readItem(thread.id, thread.firstPost.id, actor, thread.firstPost.revisionId),
       await driver.readItem(fixture.unknownThread, fixture.unknownItem, actor, thread.firstPost.revisionId),
       await driver.readHistory(fixture.unknownThread, fixture.unknownItem, actor),
-    ]) await hidden(result, 'not_applicable');
+    ])
+      await hidden(result, 'not_applicable');
   }
 });
 
@@ -477,12 +676,12 @@ test('parent create grant authorizes before receipt and body with no new-ID gran
   const trace = await driver.commandTrace();
   expect(trace.throughRunCommand).toBe(true);
   expect(trace.stages).toEqual(['authorize', 'receipt', 'body', 'write']);
-  const check = trace.checks.find(entry => entry.action === 'thread:create');
+  const check = trace.checks.find((entry) => entry.action === 'thread:create');
   expect(check).toMatchObject({ resourceId: fixture.board.id, partition: fixture.board.route >>> 4 });
   expect(Number.isFinite(Date.parse(check!.at))).toBe(true);
   expect(Number.isInteger(check!.statement)).toBe(true);
   expect(check!.statement).toBeGreaterThan(0);
-  expect(trace.checks.some(entry => entry.resourceId === thread.id)).toBe(false);
+  expect(trace.checks.some((entry) => entry.resourceId === thread.id)).toBe(false);
   expect(trace.writePartitions).toEqual([thread.route >>> 4]);
   const session = await driver.session(response.response, fixture.owner);
   expect(session.token.length).toBeGreaterThan(0);
@@ -498,7 +697,7 @@ test('revoked parent grant denies identical replay before receipt without stored
   const request = input();
   const thread = ok(await driver.create(request, options('revoke-replay')));
   const before = await driver.inspect();
-  expect(before.outbox.filter(row => row.envelope.threadId === thread.id)).toHaveLength(1);
+  expect(before.outbox.filter((row) => row.envelope.threadId === thread.id)).toHaveLength(1);
   await driver.fixtures.revokeParentCreate(fixture.owner.id, fixture.board.id);
   const denied = await driver.create(request, options('revoke-replay'));
   expect(await problem(denied, 403)).toMatchObject({ code: 'forbidden', effect_status: 'not_applied' });
@@ -524,29 +723,50 @@ test('commands carry session headers and transactional outbox envelopes and inje
   const session = await driver.session(response.response, fixture.owner);
   expect(session.token.length).toBeGreaterThan(0);
   expect(response.response.headers.get('rezics-session-token')).toBe(session.token);
-  const postResponse = await driver.createPost({ threadId: thread.id, body: fromPlainText('With session'), licence: 'MIT' }, {
-    ...options('session-post'), session: session.token,
-  });
+  const postResponse = await driver.createPost(
+    { threadId: thread.id, body: fromPlainText('With session'), licence: 'MIT' },
+    {
+      ...options('session-post'),
+      session: session.token,
+    },
+  );
   const post = ok(postResponse);
   expect((await driver.session(postResponse.response, fixture.owner)).partitions).toEqual([thread.route >>> 4]);
-  const childResponse = await driver.reply({
-    threadId: thread.id, parentId: post.id, body: fromPlainText('Reply effect'), licence: 'MIT',
-  }, options('effect-reply'));
+  const childResponse = await driver.reply(
+    {
+      threadId: thread.id,
+      parentId: post.id,
+      body: fromPlainText('Reply effect'),
+      licence: 'MIT',
+    },
+    options('effect-reply'),
+  );
   const child = ok(childResponse);
-  const editResponse = await driver.revise({ threadId: thread.id, itemId: post.id, body: fromPlainText('Edited effect') }, options('effect-edit'));
+  const editResponse = await driver.revise(
+    { threadId: thread.id, itemId: post.id, body: fromPlainText('Edited effect') },
+    options('effect-edit'),
+  );
   const edited = ok(editResponse, 200);
   for (const result of [childResponse, editResponse]) {
     expect((await driver.session(result.response, fixture.owner)).partitions).toEqual([thread.route >>> 4]);
   }
   const after = await driver.inspect();
-  const effects = after.outbox.filter(row => !before.outbox.some(old => old.id === row.id));
+  const effects = after.outbox.filter((row) => !before.outbox.some((old) => old.id === row.id));
   expect(effects).toHaveLength(4);
   for (const item of [thread.firstPost, post, child, edited]) {
-    const effect = effects.find(row => row.envelope.revisionId === item.revisionId)!;
-    expect(effect).toMatchObject({ partition: thread.route >>> 4, envelope: {
-      threadId: thread.id, itemId: item.id, revisionId: item.revisionId, actorId: fixture.owner.id,
-    } });
-    expect(after.receipts.some(row => row.command === effect.command && row.partition === effect.partition)).toBe(true);
+    const effect = effects.find((row) => row.envelope.revisionId === item.revisionId)!;
+    expect(effect).toMatchObject({
+      partition: thread.route >>> 4,
+      envelope: {
+        threadId: thread.id,
+        itemId: item.id,
+        revisionId: item.revisionId,
+        actorId: fixture.owner.id,
+      },
+    });
+    expect(after.receipts.some((row) => row.command === effect.command && row.partition === effect.partition)).toBe(
+      true,
+    );
   }
   const retryInput = input();
   await driver.fixtures.failBeforeOutbox();
