@@ -8,6 +8,13 @@ Run `bun run db up` from `services/kernel` to create or start the local PostgreS
 its connection string to `.env`. Use `bun run db down` to stop it while keeping its volume, `bun run db reset` to remove
 and recreate the database, and `bun run db dump` to update the committed schema dump.
 
+## Run the kernel
+
+Run `bun run db up`, then `bun run dev` from this workspace to serve the API locally. The server reads
+`DATABASE_URL` (required), `KERNEL_ROUTE_KEY` (required), and `KERNEL_SESSION_KEYS` (required) from the environment.
+`KERNEL_HOSTNAME` defaults to `127.0.0.1` and `KERNEL_PORT` defaults to `4100`. `db up` generates the development
+secrets once and keeps them in `.env` across restarts.
+
 ## Check
 
 Run `bun run check` from this workspace. It starts a disposable PostgreSQL database, applies migrations and checks the

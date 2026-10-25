@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,6 +31,28 @@ function command(
 
 function databaseUrl(databasePort: number): string {
   return `postgres://rezics:rezics@127.0.0.1:${databasePort}/rezics?sslmode=disable`;
+}
+
+/** Keep these secrets stable across restarts; a new route key would orphan receipts of retried creates. */
+export function developmentEnv(existing: string, url: string): string {
+  const lines = existing.split('\n');
+  if (lines.at(-1) === '') lines.pop();
+  let hasDatabaseUrl = false;
+  let hasRouteKey = false;
+  let hasSessionKeys = false;
+  const updated = lines.map((line) => {
+    if (line.startsWith('DATABASE_URL=')) {
+      hasDatabaseUrl = true;
+      return `DATABASE_URL=${url}`;
+    }
+    if (line.startsWith('KERNEL_ROUTE_KEY=')) hasRouteKey = true;
+    if (line.startsWith('KERNEL_SESSION_KEYS=')) hasSessionKeys = true;
+    return line;
+  });
+  if (!hasDatabaseUrl) updated.push(`DATABASE_URL=${url}`);
+  if (!hasRouteKey) updated.push(`KERNEL_ROUTE_KEY=${randomBytes(32).toString('base64url')}`);
+  if (!hasSessionKeys) updated.push(`KERNEL_SESSION_KEYS=1:${randomBytes(32).toString('base64url')}`);
+  return `${updated.join('\n')}\n`;
 }
 
 function modules(root: string): string[] {
@@ -167,7 +190,9 @@ async function up(): Promise<void> {
   }
   const url = databaseUrl(port);
   migrate(url);
-  await Bun.write(resolve(directory, '.env'), `DATABASE_URL=${url}\n`);
+  const envFile = resolve(directory, '.env');
+  const existingEnv = (await Bun.file(envFile).exists()) ? await Bun.file(envFile).text() : '';
+  await Bun.write(envFile, developmentEnv(existingEnv, url));
 }
 
 async function main(): Promise<void> {
