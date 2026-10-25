@@ -114,26 +114,41 @@ test('recorded-only outcomes never wake a manager and notifications track goal u
   } finally { await s.close(); }
 });
 
-test('limits count turns and decisions, pause the manager and notify the supermanager', async () => {
-  for (const reason of ['turns', 'no-decision', 'wall']) {
+test('turn and wall-clock limits replace the session without waking the supermanager', async () => {
+  for (const reason of ['turns', 'wall']) {
     const s = await setup();
     try {
-      const spec = { ...s.spec, limits: { turns: 1, turnsWithoutDecision: 1, wallMs: 3_600_000 } };
-      if (reason === 'no-decision') spec.limits.turns = 10;
+      const spec = { ...s.spec, limits: { turns: 1, turnsWithoutDecision: 10, wallMs: 3_600_000 } };
       const state = await s.managers.start(spec); await s.managers.flush();
       if (reason === 'wall') s.advance(spec.limits.wallMs + 1);
       await s.notify({ method: 'turn/completed', params: { threadId: state.threadId, turn: { id: state.activeTurnId, status: 'completed' } } });
-      if (reason !== 'wall') {
-        await s.notify({ method: 'turn/started', params: { threadId: state.threadId, turn: { id: 'next', status: 'inProgress' } } });
-        if (reason === 'no-decision') await s.notify({ method: 'turn/completed', params: { threadId: state.threadId, turn: { id: 'next', status: 'completed' } } });
-      }
+      if (reason === 'turns') await s.notify({ method: 'turn/started', params: { threadId: state.threadId, turn: { id: 'next', status: 'inProgress' } } });
       await s.managers.flush();
-      expect(s.managers.get(state.id).status).toBe('paused');
-      expect(s.inbox.pending('supervisor')[0]?.event.kind).toBe('round-limit');
-      expect(s.requests().some(r => r.method === 'thread/goal/set' && r.params.status === 'paused')).toBe(true);
-      expect(s.removed).toContain(state.id);
+      const renewed = s.managers.get(state.id);
+      expect(renewed.status).toBe('running');
+      expect(renewed.threadId).not.toBe(state.threadId);
+      expect(renewed.history?.map(entry => entry.threadId)).toEqual([state.threadId]);
+      expect(s.inbox.pending('supervisor')).toHaveLength(0);
+      expect(s.requests().some(r => r.method === 'thread/goal/set' && r.params.threadId === state.threadId && r.params.status === 'paused')).toBe(true);
+      expect(s.requests().filter(r => r.method === 'thread/start')).toHaveLength(2);
     } finally { await s.close(); }
   }
+});
+
+test('turns without a decision pause the manager and notify the supermanager', async () => {
+  const s = await setup();
+  try {
+    const spec = { ...s.spec, limits: { turns: 10, turnsWithoutDecision: 1, wallMs: 3_600_000 } };
+    const state = await s.managers.start(spec); await s.managers.flush();
+    await s.notify({ method: 'turn/completed', params: { threadId: state.threadId, turn: { id: state.activeTurnId, status: 'completed' } } });
+    await s.notify({ method: 'turn/started', params: { threadId: state.threadId, turn: { id: 'next', status: 'inProgress' } } });
+    await s.notify({ method: 'turn/completed', params: { threadId: state.threadId, turn: { id: 'next', status: 'completed' } } });
+    await s.managers.flush();
+    expect(s.managers.get(state.id).status).toBe('paused');
+    expect(s.inbox.pending('supervisor')[0]?.event.kind).toBe('round-limit');
+    expect(s.requests().some(r => r.method === 'thread/goal/set' && r.params.status === 'paused')).toBe(true);
+    expect(s.removed).toContain(state.id);
+  } finally { await s.close(); }
 });
 
 test('a control-plane decision prevents the turn from counting as empty', async () => {
@@ -228,18 +243,15 @@ test('host recovery rejoins an existing thread and dispatches committed events w
   } finally { await recovered?.close(); closeTransport(); await s.close(); }
 });
 
-test('the wall-clock deadline pauses a sleeping manager without waiting for a notification', async () => {
+test('the wall-clock deadline renews a sleeping manager without waiting for a notification', async () => {
   const s = await setup();
   try {
     s.services.now = Date.now;
     const state = await s.managers.start({ ...s.spec, limits: { ...s.spec.limits, wallMs: 80 } });
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(new Error('Wall deadline did not fire')), 1500);
-    try {
-      const events = await s.inbox.wait('supervisor', controller.signal);
-      expect(events[0]?.event.summary).toContain('wall-clock limit');
-      expect(s.managers.get(state.id).status).toBe('paused');
-    } finally { clearTimeout(timeout); }
+    const deadline = Date.now() + 1500;
+    while (!s.managers.get(state.id).history?.length && Date.now() < deadline) await Bun.sleep(10);
+    expect(s.managers.get(state.id).history?.[0]?.threadId).toBe(state.threadId);
+    expect(s.inbox.pending('supervisor')).toHaveLength(0);
   } finally { await s.close(); }
 });
 

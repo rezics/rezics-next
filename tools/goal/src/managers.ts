@@ -227,13 +227,16 @@ export class ManagerSessions {
       this.validateSpec(spec);
       const current = this.get(id);
       if (current.status !== 'paused') throw new Error(`Manager must be paused to renew: ${id}`);
-      // Reapply the stop operation because a paused record can still have a live turn or viewer left behind.
-      await this.stopInternal(id);
-      const stopped = this.get(id);
-      const { history: _history, ...snapshot } = stopped;
-      const history = [...(stopped.history ?? []), snapshot];
-      return this.startSession(spec, history);
+      return this.renewInternal(id, spec);
     });
+  }
+  private async renewInternal(id: string, spec: ManagerSpec): Promise<ManagerState> {
+    // Reapply the stop operation because a paused record can still have a live turn or viewer left behind.
+    await this.stopInternal(id);
+    const stopped = this.get(id);
+    const { history: _history, ...snapshot } = stopped;
+    const history = [...(stopped.history ?? []), snapshot];
+    return this.startSession(spec, history);
   }
   private turnStarted(state: ManagerState, turn: string): void {
     if (state.countedTurn !== turn) { state.turns++; state.decision = false; state.countedTurn = turn; }
@@ -264,6 +267,7 @@ export class ManagerSessions {
   }
   private armDeadline(state: ManagerState): void {
     clearTimeout(this.timers.get(state.id));
+    if (this.closed) return;
     const remaining = state.startedAt + state.limits.wallMs - this.now();
     this.timers.set(state.id, setTimeout(() => this.background(state.id, async () => {
       const current = this.get(state.id); await this.checkLimits(current);
@@ -274,6 +278,15 @@ export class ManagerSessions {
     const reason = state.turns > state.limits.turns ? 'turn limit' : state.turnsWithoutDecision > state.limits.turnsWithoutDecision
       ? 'turns without a decision limit' : this.now() - state.startedAt > state.limits.wallMs ? 'wall-clock limit' : null;
     if (!reason) { this.armDeadline(state); return false; }
+    // Turn and wall-clock limits bound one session's context, so the host replaces the session and the brief carries
+    // the work over. A manager that keeps turning without a decision stops for the supermanager to look at.
+    if (reason !== 'turns without a decision limit') {
+      const { threadId: _thread, activeTurnId: _turn, status: _status, startedAt: _started, turns: _turns,
+        turnsWithoutDecision: _empty, decision: _decision, countedTurn: _counted, goalState: _goal, usage: _usage,
+        history: _history, ...spec } = state;
+      try { await this.renewInternal(state.id, spec); return true; }
+      catch (error) { this.error(error); }
+    }
     try { await this.stopInternal(state.id); }
     catch (error) { this.error(error); }
     this.inbox.deliver({ managerId: state.supermanager, kind: 'round-limit', summary: `Manager ${state.id} paused after exceeding its ${reason}.` });
