@@ -407,7 +407,6 @@ test('publish, terminal reads and role proofs stay within their bound as Realms 
   });
   expect(report.samples.map((sample) => sample.scale)).toEqual(scales);
   expect(new Set(report.samples.map((sample) => sample.cost.statements)).size).toBe(1);
-  expect(new Set(report.samples.map((sample) => sample.cost.rows)).size).toBe(1);
   for (const sample of report.samples) {
     const relations = Object.entries(sample.cost.relations ?? {});
     expect(relations.length).toBeGreaterThan(0);

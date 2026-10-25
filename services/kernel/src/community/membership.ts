@@ -102,7 +102,7 @@ function realmRoute(realmId: string): number {
 }
 
 /** Accounts owns the workflow. This adapter publishes and proves the Realm side. */
-export function createRealmMembership(config: RealmMembershipDependencies): RealmMembership {
+export function createRealmMembership(config: RealmMembershipDependencies) {
   const { pool, access } = config;
 
   async function readTerminal(client: AccessClient, input: MembershipReservation) {
@@ -191,6 +191,8 @@ export function createRealmMembership(config: RealmMembershipDependencies): Real
     key: string,
   ) {
     if (input.role === 'owner') throw new RealmMembershipRoleError();
+    if (input.role !== 'member' && input.role !== null) throw new GrantDeniedError();
+    const role = input.role;
     const actor = {
       kind: 'account' as const,
       accountId: request.actor.accountId,
@@ -202,7 +204,6 @@ export function createRealmMembership(config: RealmMembershipDependencies): Real
     const realmId = input.principal.id;
     const route = realmRoute(realmId);
     denyUnless(input.kind === 'membership' && input.principal.kind === 'realm');
-    denyUnless(input.role === 'member' || input.role === null);
     denyUnless(reservation.accountId === input.memberAccountId);
     denyUnless(reservation.principal.kind === 'realm' && reservation.principal.id === realmId);
     denyUnless(input.reservationId === undefined || input.reservationId === reservation.reservationId);
@@ -223,7 +224,7 @@ export function createRealmMembership(config: RealmMembershipDependencies): Real
       realmId,
       memberAccountId: input.memberAccountId,
       reservationId: reservation.reservationId,
-      role: input.role,
+      role,
     };
     const identity = principalCommandIdentity(actor);
     return runCommand(
@@ -246,7 +247,7 @@ export function createRealmMembership(config: RealmMembershipDependencies): Real
           realmId,
           accountId: input.memberAccountId,
           reservationId: reservation.reservationId,
-          role: input.role,
+          role,
           at,
           transactionId: command.transactionId,
         });
@@ -256,7 +257,7 @@ export function createRealmMembership(config: RealmMembershipDependencies): Real
           realmId,
           accountId: input.memberAccountId,
           reservationId: reservation.reservationId,
-          role: input.role,
+          role,
           at,
           transactionId: command.transactionId,
         };
@@ -321,7 +322,12 @@ export function createRealmMembership(config: RealmMembershipDependencies): Real
     );
   }
 
-  return { authority: { readTerminal, readChange }, publish, terminalize, roleReader };
+  return {
+    authority: { readTerminal, readChange },
+    publish,
+    terminalize,
+    roleReader,
+  } satisfies RealmMembership;
 }
 
 async function writeMembership(

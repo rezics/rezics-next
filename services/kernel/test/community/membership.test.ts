@@ -399,11 +399,13 @@ test('leave commits a terminal slot so release completes, terminalize closes onl
   );
   expect(joinReplay.replayed).toBe(true);
   expect(joinReplay.transactionId).toBe(joinedRow.transaction_id);
-  const reserveReplay = await ports().reserve({
-    accountId: installed.memberId,
-    principal,
-    key: `wf:${joinId}:reserve`,
-  });
+  const reserveReplay = command(
+    await ports().reserve({
+      accountId: installed.memberId,
+      principal,
+      key: `wf:${joinId}:reserve`,
+    }),
+  );
   expect(reserveReplay.replayed).toBe(true);
   expect(reserveReplay.value.reservationId).toBe(joined.reservationId);
 
@@ -463,7 +465,7 @@ test('leave commits a terminal slot so release completes, terminalize closes onl
   );
   expect(leaveReplay.replayed).toBe(true);
   expect(leaveReplay.transactionId).toBe(interval[0]!.transaction_id);
-  const releaseReplay = await ports().release({ ...held, key: `wf:${leaveId}:release` });
+  const releaseReplay = command(await ports().release({ ...held, key: `wf:${leaveId}:release` }));
   expect(releaseReplay.replayed).toBe(true);
   const repeated = await (
     await enqueueMembership(client, leaveId, {
@@ -492,8 +494,8 @@ test('leave commits a terminal slot so release completes, terminalize closes onl
     await ports().reserve({ accountId: freshId, principal, key: `direct-reserve-${crypto.randomUUID()}` })
   ).value;
   const terminalKey = `direct-terminal-${crypto.randomUUID()}`;
-  const first = await ports().terminalize(freshHeld, terminalKey);
-  const second = await ports().terminalize(freshHeld, terminalKey);
+  const first = command(await ports().terminalize(freshHeld, terminalKey));
+  const second = command(await ports().terminalize(freshHeld, terminalKey));
   expect(second.replayed).toBe(true);
   expect(second.transactionId).toBe(first.transactionId);
   await expect(ports().terminalize(freshHeld, `direct-terminal-${crypto.randomUUID()}`)).rejects.toThrow();
@@ -534,14 +536,29 @@ test('leave commits a terminal slot so release completes, terminalize closes onl
       .rows[0].n,
   ).toBe(0);
   const blockedHeld = { accountId: blockedId, principal, reservationId: blockedTerminal[0]!.reservation_id };
-  const reservedAgain = await ports().reserve({ accountId: blockedId, principal, key: `wf:${failedId}:reserve` });
+  const reservedAgain = command(
+    await ports().reserve({ accountId: blockedId, principal, key: `wf:${failedId}:reserve` }),
+  );
   expect(reservedAgain.replayed).toBe(true);
   expect(reservedAgain.value.reservationId).toBe(blockedHeld.reservationId);
   const terminalAgain = await membership.terminalize(blockedHeld, `wf:${failedId}:terminalize`);
   expect(terminalAgain.replayed).toBe(true);
-  const releasedAgain = await ports().release({ ...blockedHeld, key: `wf:${failedId}:release` });
+  const releasedAgain = command(await ports().release({ ...blockedHeld, key: `wf:${failedId}:release` }));
   expect(releasedAgain.replayed).toBe(true);
 }, 120_000);
+
+type CommandResult = {
+  replayed: boolean;
+  transactionId: string;
+  value: { reservationId: string };
+};
+
+/** Workflow ports type the step result as unknown. The command outcome still carries the receipt. */
+function command(value: unknown): CommandResult {
+  if (!value || typeof value !== 'object' || !('replayed' in value) || !('transactionId' in value))
+    throw new Error('Missing command result');
+  return value as CommandResult;
+}
 
 function ports() {
   return createMembershipWorkPorts(
