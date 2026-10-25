@@ -198,7 +198,8 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
       },
     });
     rmSync(runtime.managerSocket, { force: true });
-    await recoverOrphans();
+    // Recovery waits for adopted workers, which can run for an hour; the socket must not wait with it.
+    void recoverOrphans().catch(error => console.error(error));
     await managers.recover();
     if (stopRequested) return;
     await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(runtime.managerSocket, resolve); });
