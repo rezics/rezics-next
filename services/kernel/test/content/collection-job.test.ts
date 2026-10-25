@@ -10,7 +10,7 @@ import { CONTENT_EVENTS } from '../../src/content/events.ts';
 import { authoritativeTimeValue, runCommand } from '../../src/command/command.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { capture, checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { capture, checkGrowth, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -439,27 +439,127 @@ test('processing started after a committed collection fence never writes', async
 test('checkGrowth measures three scales of unrelated and same-partition rows through the real production pool', async () => {
   const db = await openGrowthDatabase(url);
   async function grow(db: GrowthDatabase, scale: number, previous: number) {
-    // Setup is outside capture. Equal populations grow on the hot route and another partition.
-    for (let i = previous; i < scale; i++) {
-      for (const r of [route, route + 1, route + 16]) {
-        const m = await media('reserved', young, r);
-        if (r === route + 1)
-          await db.admin.query(
-            `UPDATE content.media SET state='available',actual_byte_count=byte_count,
-          sha256=$3,claimed_at=$4 WHERE route=$1 AND media_id=$2`,
-            [r, m.id, hash(Buffer.from('original')), at],
-          );
-      }
-    }
+    // Bulk fixture setup is outside measurement. Grow the same hot routes and
+    // another partition, including variants and command history, at every scale.
+    await seed(
+      db,
+      {
+        name: 'collection-distractors',
+        hotPartition: partition,
+        rows: ({ ordinal }) => {
+          const mediaRows = [route, route + 1, route + 16].map((r) => {
+            const id = newId(r);
+            const claimed = r === route + 1;
+            return {
+              route: r,
+              media_id: id,
+              container_id: newId(r),
+              uploader_id: newId(99),
+              reservation_request_id: id,
+              purpose: 'post-image',
+              media_type: 'image/png',
+              byte_count: 8,
+              actual_byte_count: claimed ? 8 : null,
+              sha256: claimed ? hash(Buffer.from('original')) : null,
+              state: claimed ? 'available' : 'reserved',
+              key: `m/${id}/original`,
+              claimed_at: claimed ? at : null,
+              created_at: young,
+              transaction_id: randomUUID(),
+            };
+          });
+          const variantRows = mediaRows
+            .filter((m) => m.claimed_at !== null)
+            .flatMap((m) =>
+              ['webp', 'avif'].map((format) => ({
+                route: m.route,
+                media_id: m.media_id,
+                format,
+                width: 320,
+                height: 160,
+                media_type: `image/${format}`,
+                byte_count: 4,
+                sha256: hash(Buffer.from(format)),
+                key: `m/${m.media_id}/${format}-320`,
+                transaction_id: randomUUID(),
+              })),
+            );
+          const history = [partition, partition + 1].map((p) => ({
+            partition_no: p,
+            position: ordinal * 100 + 100,
+            epoch: 1,
+            transaction_id: randomUUID(),
+            actor_account_id: newId(99),
+            media_id: newId(p * 16),
+            container_id: newId(p * 16),
+          }));
+          return {
+            'content.media': mediaRows,
+            'content.media_variant': variantRows,
+            'core.receipt': history.map((h) => ({
+              partition_no: h.partition_no,
+              actor_account_id: h.actor_account_id,
+              command_kind: 'content.media.collection.fence',
+              idempotency_key: h.media_id,
+              request_digest: createHash('sha256').update(`content.media.collection.fence:${h.media_id}`).digest(),
+              epoch: h.epoch,
+              position: h.position,
+              transaction_id: h.transaction_id,
+              response: { mediaId: h.media_id, containerId: h.container_id },
+            })),
+            'core.outbox': history.map((h) => ({
+              partition_no: h.partition_no,
+              position: h.position,
+              event_seq: 0,
+              event_count: 1,
+              epoch: h.epoch,
+              id: randomUUID(),
+              type: 'com.rezics.content.media.collection-pending.v1',
+              subject: h.media_id,
+              data: { mediaId: h.media_id, containerId: h.container_id },
+            })),
+            'editorial.write_basis': history.map((h) => ({
+              partition_no: h.partition_no,
+              transaction_id: h.transaction_id,
+              epoch: h.epoch,
+              position: h.position,
+              actor_account_id: h.actor_account_id,
+              client_id: 'website',
+              requested_by: null,
+            })),
+          };
+        },
+        finish: async (admin) => {
+          // Leave gaps for measured command positions between successive ranges.
+          await admin.query('UPDATE core.partition SET position=$2 WHERE partition_no=ANY($1::integer[])', [
+            [partition, partition + 1],
+            scale * 100,
+          ]);
+        },
+      },
+      { from: previous, to: scale },
+    );
     // Two measured runs consume one fresh object each; new IDs give new command receipts.
     await media('reserved');
     await media('reserved');
     await db.admin.query('VACUUM (ANALYZE) content.media');
+    for (const relation of [
+      'content.media',
+      'content.media_variant',
+      'core.partition',
+      'core.receipt',
+      'core.outbox',
+      'editorial.write_basis',
+    ]) {
+      // Population counts validate fixture setup only; they are never measured work.
+      const count = await db.admin.query(`SELECT count(*)::integer AS rows FROM ${relation}`);
+      expect(count.rows[0].rows).toBeGreaterThanOrEqual(500);
+    }
   }
   try {
     const report = await checkGrowth(db, {
       name: 'partition media collection',
-      scales: [32, 256, 2048],
+      scales: [256, 2048, 16384],
       repetitions: 2,
       warmups: 0,
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
@@ -469,7 +569,16 @@ test('checkGrowth measures three scales of unrelated and same-partition rows thr
       },
     });
     console.log('GrowthReport', JSON.stringify(report));
-    expect(report.samples.map((s) => s.scale)).toEqual([32, 256, 2048]);
+    expect(report.samples.map((s) => s.scale)).toEqual([256, 2048, 16384]);
+    for (const sample of report.samples) {
+      expect(sample.cost.relations).toBeDefined();
+      if (!sample.cost.relations) throw new Error(`Missing relation costs at scale ${sample.scale}`);
+      const relations = Object.entries(sample.cost.relations).filter(([name]) => name.startsWith('content.'));
+      expect(relations.map(([name]) => name).sort()).toEqual(['content.media', 'content.media_variant']);
+      for (const [name, cost] of relations) {
+        expect(cost.sequentialScans, `${sample.scale}: ${name}`).toBe(0);
+      }
+    }
     const observed = await capture(db, () => job(db.pool).collectPartition(partition, 1));
     const plans = JSON.stringify(observed.capture.plans);
     expect(plans).toContain('media_collection_eligible_idx');
