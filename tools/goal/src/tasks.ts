@@ -1,8 +1,8 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { parseBrief, readRiskOwnership } from './briefs.ts';
-import { acquireDirectoryLease } from './lease.ts';
+import { acquireDirectoryLeaseWaiting } from './lease.ts';
 import { classifyTask, readRouting, routeTask } from './routing.ts';
 import { choosePool } from './allowance.ts';
 import { readPool, type PoolReader } from './usage.ts';
@@ -17,6 +17,28 @@ export function git(cwd: string, args: string[]): string {
   const result = spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
   if (result.status !== 0) throw new Error(`git ${args[0]}: ${result.stderr.trim()}`);
   return result.stdout.trimEnd();
+}
+function installWorktreeDependencies(worktree: string): void {
+  if (!existsSync(join(worktree, 'package.json'))) return;
+  const result = spawnSync('bun', ['install', '--frozen-lockfile'], { cwd: worktree, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
+  if (result.status !== 0) throw new Error(`Dependency install failed in ${worktree}: ${result.stderr || result.error?.message || `bun exited ${result.status}`}`);
+  const manifest = JSON.parse(readFileSync(join(worktree, 'package.json'), 'utf8')) as { workspaces?: string[] | { packages?: string[] } };
+  const patterns = Array.isArray(manifest.workspaces) ? manifest.workspaces : manifest.workspaces?.packages ?? [];
+  for (const pattern of patterns) {
+    const wildcard = pattern.indexOf('*');
+    const parent = wildcard < 0 ? pattern : pattern.slice(0, wildcard).replace(/\/$/, '');
+    const candidates = wildcard < 0 ? [parent] : readdirSync(join(worktree, parent)).map(name => join(parent, name));
+    for (const relative of candidates) {
+      const packageFile = join(worktree, relative, 'package.json');
+      if (!existsSync(packageFile)) continue;
+      const workspace = JSON.parse(readFileSync(packageFile, 'utf8')) as { name?: string };
+      if (!workspace.name) continue;
+      const link = join(worktree, 'node_modules', workspace.name);
+      if (existsSync(link)) continue;
+      mkdirSync(dirname(link), { recursive: true });
+      symlinkSync(join(worktree, relative), link, 'dir');
+    }
+  }
 }
 export type RetryOptions = { brief?: string; profile?: Profile; fixRound?: number; consulted?: boolean; escalation?: string; evidence?: string; consultation?: string; excludePools?: string[]; conflictFiles?: string[] };
 export class HeldTaskConflictError extends Error {
@@ -41,13 +63,14 @@ export class WorkerTasks {
     const branch = `${this.settings.branchPrefix}${id}`;
     const worktree = join(this.settings.worktreeRoot, id);
     const briefPath = join(this.settings.stateDirectory, 'briefs', `${id}.md`);
-    const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', 'dispatch'));
+    const lease = acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', 'dispatch'));
     try {
       const base = git(this.settings.mainCheckout, ['rev-parse', '--verify', this.settings.mainBranch]);
       mkdirSync(dirname(worktree), { recursive: true });
       mkdirSync(dirname(briefPath), { recursive: true });
       writeFileSync(briefPath, brief.markdown, { flag: 'wx' });
       git(this.settings.mainCheckout, ['worktree', 'add', '-b', branch, worktree, this.settings.mainBranch]);
+      installWorktreeDependencies(worktree);
       return this.store.createTask(brief, { branch, worktree, briefPath, base }, taskClass, id);
     } finally { lease.release(); }
   }
@@ -58,7 +81,7 @@ export class WorkerTasks {
     return this.retryTask(taskId, {}, true);
   }
   private async retryTask(taskId: string, options: RetryOptions, refreshHeldBase: boolean): Promise<RunningWorker> {
-    const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
+    const lease = acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', taskId));
     try {
       let task = this.store.task(taskId);
       if (refreshHeldBase) {
@@ -70,6 +93,7 @@ export class WorkerTasks {
         const branch = git(task.worktree, ['branch', '--show-current']);
         if (branch !== task.branch) throw new Error(`held task worktree is on ${branch || 'detached HEAD'}, expected ${task.branch}`);
         git(task.worktree, ['reset', '--hard', main]);
+        installWorktreeDependencies(task.worktree);
         task = this.store.updateTask({ taskId, attempt: 0 }, current => { current.base = main; });
       }
       if (!task.branch || !task.base) throw new Error('Imported attempts need a dispatchable contract before retry');
@@ -134,6 +158,7 @@ export class WorkerTasks {
             files = git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z']).split('\0').filter(Boolean);
             if (!files.length) throw error;
           }
+          if (!files.length) installWorktreeDependencies(task.worktree);
           if (!files.length) files = options.conflictFiles ?? [];
           prompt = workerPrompt(task, options.evidence, options.consultation, files);
         } else prompt = workerPrompt(task, options.evidence, options.consultation);
@@ -151,7 +176,7 @@ export class WorkerTasks {
     } finally { lease.release(); }
   }
   async stop(taskId: string, cancelled = false): Promise<void> {
-    const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
+    const lease = acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', taskId));
     try {
       const task = this.store.task(taskId);
       const ref = { taskId, attempt: task.currentAttempt };

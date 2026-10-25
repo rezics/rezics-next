@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { acquireDirectoryLease } from './lease.ts';
+import { acquireDirectoryLease, acquireDirectoryLeaseWaiting } from './lease.ts';
 import { processIdentity, sameProcess } from './process.ts';
 import { temporaryDirectory } from './test-support.ts';
 
@@ -53,4 +53,26 @@ test('two separate processes cannot both acquire a train lease', async () => {
     for (const child of children) { child.stdin.write('stop\n'); child.stdin.end(); }
     await Promise.all(children.map(child => child.exited));
   } finally { for (const child of children) child.kill(); t.close(); }
+});
+
+test('concurrent dispatch processes wait for the lifecycle lease to be released', async () => {
+  const t = temporaryDirectory();
+  const source = `import { acquireDirectoryLeaseWaiting } from ${JSON.stringify(join(import.meta.dir, 'lease.ts'))};
+    const lease = acquireDirectoryLeaseWaiting(process.env.TEST_LEASE!, 5000); console.log('acquired');
+    await new Promise(resolve => setTimeout(resolve, Number(process.env.HOLD_MS)));
+    lease.release();`;
+  const env = { ...process.env, TEST_LEASE: join(t.path, 'dispatch.lease') };
+  const first = Bun.spawn([process.execPath, '-e', source], { env: { ...env, HOLD_MS: '1100' }, stdout: 'pipe', stderr: 'pipe' });
+  let second: ReturnType<typeof Bun.spawn> | undefined;
+  try {
+    const firstReader = first.stdout.getReader();
+    const started = await firstReader.read(); firstReader.releaseLock();
+    expect(new TextDecoder().decode(started.value).trim()).toBe('acquired');
+    second = Bun.spawn([process.execPath, '-e', source], { env: { ...env, HOLD_MS: '0' }, stdout: 'pipe', stderr: 'pipe' });
+    const secondReader = second.stdout.getReader();
+    const acquired = await secondReader.read(); secondReader.releaseLock();
+    expect(new TextDecoder().decode(acquired.value).trim()).toBe('acquired');
+    expect(await first.exited).toBe(0);
+    expect(await second.exited).toBe(0);
+  } finally { first.kill(); second?.kill(); t.close(); }
 });

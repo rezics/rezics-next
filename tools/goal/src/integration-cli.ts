@@ -158,15 +158,16 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
   if (command === 'inbox' && id) {
     if (subcommand === 'send') {
       const [kind, summary, ...options] = flags;
-      if (!kind || !summary) return 2;
+      if (!kind || !summary) throw new Error('usage: inbox send <manager> <kind> <summary> [--task <task>] [--evidence <path>]');
       const values = new Map<string, string>();
       for (let index = 0; index < options.length; index += 2) {
         const option = options[index]; const value = options[index + 1];
-        if ((option !== '--task' && option !== '--evidence') || !value || values.has(option)) return 2;
+        if ((option !== '--task' && option !== '--evidence') || !value || values.has(option)) throw new Error(`invalid inbox send option: ${option ?? '(missing value)'}`);
         values.set(option, value);
       }
-      const allowed = new Set(['spec-conflict', 'scope-growth', 'round-limit', 'stalled', 'failed-after-consult', 'goal-unmet', 'instruction']);
-      if (!allowed.has(kind) || /[\r\n]/.test(summary)) return 2;
+      const allowed = ['spec-conflict', 'scope-growth', 'round-limit', 'stalled', 'failed-after-consult', 'goal-unmet', 'instruction'];
+      if (!allowed.includes(kind)) throw new Error(`unknown inbox event kind: ${kind}. Valid kinds: ${allowed.join(', ')}`);
+      if (/[\r\n]/.test(summary)) throw new Error('inbox event summary must be one line');
       await recordManagerCommand(runtime);
       inbox.deliver({ managerId: id, kind: kind as ManagerEventKind, summary,
         from: process.env.GOAL_MANAGER || runtime.supermanager || 'supermanager',
@@ -177,7 +178,7 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
       if (subcommand === 'wait') console.log(JSON.stringify(await inbox.wait(id)));
       else if (subcommand === 'read') console.log(JSON.stringify(inbox.read(id)));
       else if (subcommand === 'ack') inbox.acknowledge(id, flags.length ? flags.map(Number) : undefined);
-      else return 2;
+      else throw new Error(`unknown inbox command: ${subcommand ?? '(missing)'}`);
     }
     return 0;
   }
@@ -185,7 +186,8 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
     if (subcommand === 'start') {
       const option = (name: string) => flags[flags.indexOf(name) + 1];
       const engine = option('--engine'); const budget = Number(option('--budget'));
-      if (!flags.includes('--engine') || (engine !== 'codex' && engine !== 'claude') || !flags.includes('--budget') || !Number.isSafeInteger(budget) || budget <= 0) return 2;
+      if (!flags.includes('--engine') || (engine !== 'codex' && engine !== 'claude') || !flags.includes('--budget') || !Number.isSafeInteger(budget) || budget <= 0)
+        throw new Error('usage: manager start <goal> --engine <codex|claude> --budget <positive integer>');
       await ensureHost(runtime);
       await recordManagerCommand(runtime);
       console.log(JSON.stringify(await hostRequest(runtime.managerSocket, { command: 'start', spec: runtime.manager(id, engine, budget) })));
@@ -193,10 +195,10 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
       if (subcommand === 'complete' || subcommand === 'stop') await recordManagerCommand(runtime);
       const result = await hostRequest(runtime.managerSocket, { command: subcommand as HostRequest['command'], manager: id });
       if (subcommand === 'complete' && result === false) return 1;
-    } else return 2;
+    } else throw new Error(`unknown manager command: ${subcommand ?? '(missing)'}`);
     return 0;
   }
-  return 2;
+  throw new Error(`invalid command arguments: ${argv.join(' ')}`);
 }
 
 /** Public control-plane command modules use this to attribute a manager's command to its turn. */

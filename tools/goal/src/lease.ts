@@ -22,6 +22,20 @@ export class LeaseHeldError extends Error {}
 
 export type DirectoryLease = { release(): void };
 
+/** Synchronous callers wait briefly for lifecycle leases, then fail with the same identifiable error. */
+export function acquireDirectoryLeaseWaiting(directory: string, timeoutMs = 30_000): DirectoryLease {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try { return acquireDirectoryLease(directory); }
+    catch (error) {
+      if (!(error instanceof LeaseHeldError)) throw error;
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) throw new LeaseHeldError(`Lease held after waiting ${timeoutMs}ms: ${directory}`);
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.min(50, remaining));
+    }
+  }
+}
+
 /** Fail closed while a new owner is writing its identity. No age limit evicts a live owner. */
 export function acquireDirectoryLease(directory: string): DirectoryLease {
   mkdirSync(dirname(directory), { recursive: true });
@@ -61,20 +75,26 @@ export function acquireDirectoryLease(directory: string): DirectoryLease {
 }
 
 /** Subscribe before checking ownership; a release or owner exit cannot be missed between those operations. */
-export async function waitForDirectoryLease(directory: string): Promise<DirectoryLease> {
+export async function waitForDirectoryLease(directory: string, timeoutMs = 30_000): Promise<DirectoryLease> {
   mkdirSync(dirname(directory), { recursive: true });
+  const deadline = Date.now() + timeoutMs;
   for (;;) {
     const abort = new AbortController();
     let wake!: () => void;
     const changed = new Promise<void>(resolve => { wake = resolve; });
     const watcher = watch(dirname(directory), (_, name) => { if (name === directory.split('/').at(-1)) wake(); });
     let ownerExit: Promise<void> | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       try { return acquireDirectoryLease(directory); }
       catch (error) { if (!(error instanceof LeaseHeldError)) throw error; }
       const owner = readOwner(directory);
       ownerExit = owner ? waitForProcess(owner, abort.signal) : Promise.resolve();
-      await Promise.race([changed, ownerExit]);
-    } finally { watcher.close(); abort.abort(); await ownerExit; }
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) throw new LeaseHeldError(`Lease held after waiting ${timeoutMs}ms: ${directory}`);
+      await Promise.race([changed, ownerExit, new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new LeaseHeldError(`Lease held after waiting ${timeoutMs}ms: ${directory}`)), remaining);
+      })]);
+    } finally { if (timer) clearTimeout(timer); watcher.close(); abort.abort(); await ownerExit; }
   }
 }
