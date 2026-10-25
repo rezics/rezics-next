@@ -25,6 +25,7 @@ import { REACTION_KINDS } from './events.ts';
 import { pagePostCandidates } from './post-pages.ts';
 import { pageRevisionCandidates } from './revision-pages.ts';
 import read from './read-chain.sql';
+import pageCounts from './reaction-count-page.sql';
 import viewerReactions from './reaction-viewer.sql';
 
 const reactionKinds: ReadonlySet<string> = new Set(REACTION_KINDS);
@@ -366,6 +367,83 @@ export async function withViewerReactions<T extends { readonly id: string }>(
     kinds.set(targetId, kind as ViewerReactionKind);
   }
   return targets.map((target) => ({ ...target, viewerReaction: kinds.get(target.id) ?? null }));
+}
+
+export type ReactionCountFreshness = Readonly<{ epoch: number; position: string }>;
+type ReactionCountMap = Partial<Record<ViewerReactionKind, number>>;
+
+/** One index seek per partition over the page's targets. Zero kinds are omitted.
+ * The freshness is the oldest source watermark among the count rows actually read. */
+export async function withReactionCounts<T extends { readonly id: string }>(
+  dependencies: ContentReadDependencies,
+  targets: readonly T[],
+  deadline: number,
+): Promise<{
+  readonly items: readonly (T & { readonly reactions: ReactionCountMap })[];
+  readonly reactionsAsOf: ReactionCountFreshness | null;
+}> {
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const target of targets) {
+    if (seen.has(target.id)) continue;
+    seen.add(target.id);
+    ids.push(target.id);
+  }
+  if (ids.length > 100) throw new RangeError('At most 100 reaction count targets');
+  const groups = new Map<number, { ids: string[]; routes: number[] }>();
+  for (const id of ids) {
+    const home = route(id);
+    const partition = partitionOf(home);
+    const group = groups.get(partition) ?? { ids: [], routes: [] };
+    group.ids.push(id);
+    group.routes.push(home);
+    groups.set(partition, group);
+  }
+  const sums = new Map<string, Map<ViewerReactionKind, number>>();
+  let oldest: { epoch: number; position: bigint } | null = null;
+  for (const [partition, group] of groups) {
+    const parameters = { partition, target_ids: group.ids, routes: group.routes };
+    const rows = await within(deadline, () =>
+      withConnection(dependencies.pool, (client) =>
+        client.query<(typeof pageCounts)['~reylo']['element']>(
+          pageCounts.sql,
+          pageCounts.params.map((name) => parameters[name as keyof typeof parameters]),
+        ),
+      ),
+    );
+    for (const row of rows.rows) {
+      const kind = row.kind;
+      if (typeof row.targetId !== 'string' || typeof kind !== 'string' || !reactionKinds.has(kind))
+        throw new TypeError('Invalid reaction count');
+      if (!Number.isSafeInteger(row.count) || row.count < 0) throw new TypeError('Invalid reaction count');
+      if (!Number.isSafeInteger(row.sourceEpoch) || row.sourceEpoch < 1) throw new TypeError('Invalid reaction count');
+      const position = BigInt(row.sourcePosition);
+      if (position < 1n) throw new TypeError('Invalid reaction count');
+      const counted = sums.get(row.targetId) ?? new Map<ViewerReactionKind, number>();
+      const reactionKind = kind as ViewerReactionKind;
+      counted.set(reactionKind, (counted.get(reactionKind) ?? 0) + row.count);
+      sums.set(row.targetId, counted);
+      if (
+        oldest === null ||
+        row.sourceEpoch < oldest.epoch ||
+        (row.sourceEpoch === oldest.epoch && position < oldest.position)
+      ) {
+        oldest = { epoch: row.sourceEpoch, position };
+      }
+    }
+  }
+  return {
+    items: targets.map((target) => {
+      const counted = sums.get(target.id);
+      const reactions: ReactionCountMap = {};
+      for (const kind of REACTION_KINDS) {
+        const count = counted?.get(kind) ?? 0;
+        if (count > 0) reactions[kind] = count;
+      }
+      return { ...target, reactions };
+    }),
+    reactionsAsOf: oldest === null ? null : { epoch: oldest.epoch, position: oldest.position.toString() },
+  };
 }
 
 export async function readThread(

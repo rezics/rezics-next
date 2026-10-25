@@ -39547,7 +39547,21 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                             firstPost: import("../content/reads.ts").ItemView;
                         }> & {
                             readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
+                        } & {
+                            readonly reactions?: {
+                                readonly downvote?: number;
+                                readonly insightful?: number;
+                                readonly laugh?: number;
+                                readonly like?: number;
+                                readonly love?: number;
+                                readonly sad?: number;
+                                readonly upvote?: number;
+                            };
                         };
+                        reactionsAsOf?: {
+                            epoch: number;
+                            position: string;
+                        } | null;
                     };
                     400: {
                         type: unknown;
@@ -39710,7 +39724,21 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                 firstPost: import("../content/reads.ts").ItemView;
                             }> & {
                                 readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
+                            } & {
+                                readonly reactions?: {
+                                    readonly downvote?: number;
+                                    readonly insightful?: number;
+                                    readonly laugh?: number;
+                                    readonly like?: number;
+                                    readonly love?: number;
+                                    readonly sad?: number;
+                                    readonly upvote?: number;
+                                };
                             };
+                            reactionsAsOf?: {
+                                epoch: number;
+                                position: string;
+                            } | null;
                         };
                         400: {
                             type: unknown;
@@ -39816,6 +39844,16 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                             201: {
                                 post: import("../content/reads.ts").ItemView & {
                                     readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
+                                } & {
+                                    readonly reactions?: {
+                                        readonly downvote?: number;
+                                        readonly insightful?: number;
+                                        readonly laugh?: number;
+                                        readonly like?: number;
+                                        readonly love?: number;
+                                        readonly sad?: number;
+                                        readonly upvote?: number;
+                                    };
                                 };
                             };
                             400: {
@@ -39970,8 +40008,22 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                             200: {
                                 posts: (import("../content/reads.ts").ItemView & {
                                     readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
+                                } & {
+                                    readonly reactions?: {
+                                        readonly downvote?: number;
+                                        readonly insightful?: number;
+                                        readonly laugh?: number;
+                                        readonly like?: number;
+                                        readonly love?: number;
+                                        readonly sad?: number;
+                                        readonly upvote?: number;
+                                    };
                                 })[];
                                 next: string | null;
+                                reactionsAsOf?: {
+                                    epoch: number;
+                                    position: string;
+                                } | null;
                             };
                             400: {
                                 type: unknown;
@@ -40076,6 +40128,16 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                         200: {
                             post: import("../content/reads.ts").ItemView & {
                                 readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
+                            } & {
+                                readonly reactions?: {
+                                    readonly downvote?: number;
+                                    readonly insightful?: number;
+                                    readonly laugh?: number;
+                                    readonly like?: number;
+                                    readonly love?: number;
+                                    readonly sad?: number;
+                                    readonly upvote?: number;
+                                };
                             };
                         };
                         400: {
@@ -40326,6 +40388,16 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                             200: {
                                 post: import("../content/reads.ts").ItemView & {
                                     readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
+                                } & {
+                                    readonly reactions?: {
+                                        readonly downvote?: number;
+                                        readonly insightful?: number;
+                                        readonly laugh?: number;
+                                        readonly like?: number;
+                                        readonly love?: number;
+                                        readonly sad?: number;
+                                        readonly upvote?: number;
+                                    };
                                 };
                             };
                             400: {
@@ -40494,6 +40566,16 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                             200: {
                                 revisions: (import("../content/reads.ts").ItemView & {
                                     readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
+                                } & {
+                                    readonly reactions?: {
+                                        readonly downvote?: number;
+                                        readonly insightful?: number;
+                                        readonly laugh?: number;
+                                        readonly like?: number;
+                                        readonly love?: number;
+                                        readonly sad?: number;
+                                        readonly upvote?: number;
+                                    };
                                 })[];
                                 next: string | null;
                             };
@@ -40603,6 +40685,16 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                 200: {
                                     post: import("../content/reads.ts").ItemView & {
                                         readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
+                                    } & {
+                                        readonly reactions?: {
+                                            readonly downvote?: number;
+                                            readonly insightful?: number;
+                                            readonly laugh?: number;
+                                            readonly like?: number;
+                                            readonly love?: number;
+                                            readonly sad?: number;
+                                            readonly upvote?: number;
+                                        };
                                     };
                                 };
                                 400: {
@@ -40719,6 +40811,16 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                     firstPost: import("../content/reads.ts").ItemView;
                                 }> & {
                                     readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
+                                } & {
+                                    readonly reactions?: {
+                                        readonly downvote?: number;
+                                        readonly insightful?: number;
+                                        readonly laugh?: number;
+                                        readonly like?: number;
+                                        readonly love?: number;
+                                        readonly sad?: number;
+                                        readonly upvote?: number;
+                                    };
                                 })[];
                                 next: string | null;
                             };

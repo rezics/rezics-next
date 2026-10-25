@@ -42,6 +42,7 @@ import {
   readPost,
   readThread,
   type ThreadView,
+  withReactionCounts,
   withViewerReactions,
 } from './reads.ts';
 import {
@@ -426,7 +427,10 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             session.record(sessionComponent(result.anchor));
             const [thread] = await withViewerReactions(dependencies, actor, [result.value], job.deadline);
             if (!thread) throw new ProblemError('not_found');
-            return { thread };
+            const counted = await withReactionCounts(dependencies, [thread], job.deadline);
+            const shown = counted.items[0];
+            if (!shown) throw new ProblemError('not_found');
+            return { thread: shown, reactionsAsOf: counted.reactionsAsOf };
           }),
         );
       },
@@ -490,7 +494,8 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             );
             session.record(sessionComponent(page.anchor));
             const posts = await withViewerReactions(dependencies, actor, page.entries, job.deadline);
-            return { posts: [...posts], next: page.nextCursor };
+            const counted = await withReactionCounts(dependencies, posts, job.deadline);
+            return { posts: [...counted.items], next: page.nextCursor, reactionsAsOf: counted.reactionsAsOf };
           }),
         );
       },

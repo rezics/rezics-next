@@ -37,6 +37,21 @@ export declare function withViewerReactions<T extends {
 }>(dependencies: ContentReadDependencies, actor: Actor, targets: readonly T[], deadline: number): Promise<readonly (T & {
     viewerReaction?: ViewerReactionKind | null;
 })[]>;
+export type ReactionCountFreshness = Readonly<{
+    epoch: number;
+    position: string;
+}>;
+type ReactionCountMap = Partial<Record<ViewerReactionKind, number>>;
+/** One index seek per partition over the page's targets. Zero kinds are omitted.
+ * The freshness is the oldest source watermark among the count rows actually read. */
+export declare function withReactionCounts<T extends {
+    readonly id: string;
+}>(dependencies: ContentReadDependencies, targets: readonly T[], deadline: number): Promise<{
+    readonly items: readonly (T & {
+        readonly reactions: ReactionCountMap;
+    })[];
+    readonly reactionsAsOf: ReactionCountFreshness | null;
+}>;
 export declare function readThread(dependencies: ContentReadDependencies, threadId: ThreadId, context: ReadContext): Promise<Anchored<ThreadView | null>>;
 export declare function readPost(dependencies: ContentReadDependencies, threadId: ThreadId, postId: PostId, context: ReadContext, revisionId?: RevisionId): Promise<Anchored<ItemView | null>>;
 export declare function listThreadPosts(dependencies: ContentReadDependencies, threadId: ThreadId, context: ReadContext, cursor?: string, limit?: number): Promise<Page<ItemView>>;

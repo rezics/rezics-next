@@ -2677,6 +2677,41 @@
                                       "null"
                                     ]
                                   },
+                                  "reactions": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "downvote": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "insightful": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "laugh": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "like": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "love": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "sad": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "upvote": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [],
+                                    "type": "object"
+                                  },
                                   "revisedAt": {
                                     "format": "date-time",
                                     "type": [
@@ -2807,6 +2842,41 @@
                                       "null"
                                     ]
                                   },
+                                  "reactions": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "downvote": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "insightful": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "laugh": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "like": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "love": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "sad": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "upvote": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [],
+                                    "type": "object"
+                                  },
                                   "removed": {
                                     "const": true,
                                     "type": "boolean"
@@ -2904,6 +2974,41 @@
                             "maxLength": 128,
                             "minLength": 1,
                             "type": "string"
+                          },
+                          "reactions": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "downvote": {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "insightful": {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "laugh": {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "like": {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "love": {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "sad": {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "upvote": {
+                                "minimum": 1,
+                                "type": "integer"
+                              }
+                            },
+                            "required": [],
+                            "type": "object"
                           },
                           "route": {
                             "maximum": 65535,
@@ -45280,6 +45385,41 @@
                                 "null"
                               ]
                             },
+                            "reactions": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "downvote": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "insightful": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "laugh": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "like": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "love": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "sad": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "upvote": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [],
+                              "type": "object"
+                            },
                             "revisedAt": {
                               "format": "date-time",
                               "type": [
@@ -45409,6 +45549,41 @@
                                 "string",
                                 "null"
                               ]
+                            },
+                            "reactions": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "downvote": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "insightful": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "laugh": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "like": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "love": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "sad": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "upvote": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [],
+                              "type": "object"
                             },
                             "removed": {
                               "const": true,
@@ -48609,6 +48784,41 @@
                                   "null"
                                 ]
                               },
+                              "reactions": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "downvote": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "insightful": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "laugh": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "like": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "love": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "sad": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "upvote": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": [],
+                                "type": "object"
+                              },
                               "revisedAt": {
                                 "format": "date-time",
                                 "type": [
@@ -48738,6 +48948,41 @@
                                   "string",
                                   "null"
                                 ]
+                              },
+                              "reactions": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "downvote": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "insightful": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "laugh": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "like": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "love": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "sad": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "upvote": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": [],
+                                "type": "object"
                               },
                               "removed": {
                                 "const": true,
@@ -49464,6 +49709,41 @@
                                 "null"
                               ]
                             },
+                            "reactions": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "downvote": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "insightful": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "laugh": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "like": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "love": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "sad": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "upvote": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [],
+                              "type": "object"
+                            },
                             "revisedAt": {
                               "format": "date-time",
                               "type": [
@@ -49593,6 +49873,41 @@
                                 "string",
                                 "null"
                               ]
+                            },
+                            "reactions": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "downvote": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "insightful": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "laugh": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "like": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "love": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "sad": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "upvote": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [],
+                              "type": "object"
                             },
                             "removed": {
                               "const": true,
@@ -50700,6 +51015,41 @@
                                 "null"
                               ]
                             },
+                            "reactions": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "downvote": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "insightful": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "laugh": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "like": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "love": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "sad": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "upvote": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [],
+                              "type": "object"
+                            },
                             "revisedAt": {
                               "format": "date-time",
                               "type": [
@@ -50829,6 +51179,41 @@
                                 "string",
                                 "null"
                               ]
+                            },
+                            "reactions": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "downvote": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "insightful": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "laugh": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "like": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "love": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "sad": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "upvote": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [],
+                              "type": "object"
                             },
                             "removed": {
                               "const": true,
@@ -100462,6 +100847,27 @@
                 "schema": {
                   "additionalProperties": false,
                   "properties": {
+                    "reactionsAsOf": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "epoch": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "position": {
+                          "pattern": "^[1-9][0-9]*$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "epoch",
+                        "position"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
                     "thread": {
                       "additionalProperties": false,
                       "properties": {
@@ -100539,6 +100945,41 @@
                                     "string",
                                     "null"
                                   ]
+                                },
+                                "reactions": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "downvote": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "insightful": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "laugh": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "like": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "love": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "sad": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "upvote": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [],
+                                  "type": "object"
                                 },
                                 "revisedAt": {
                                   "format": "date-time",
@@ -100670,6 +101111,41 @@
                                     "null"
                                   ]
                                 },
+                                "reactions": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "downvote": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "insightful": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "laugh": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "like": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "love": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "sad": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "upvote": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [],
+                                  "type": "object"
+                                },
                                 "removed": {
                                   "const": true,
                                   "type": "boolean"
@@ -100767,6 +101243,41 @@
                           "maxLength": 128,
                           "minLength": 1,
                           "type": "string"
+                        },
+                        "reactions": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "downvote": {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "insightful": {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "laugh": {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "like": {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "love": {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "sad": {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "upvote": {
+                              "minimum": 1,
+                              "type": "integer"
+                            }
+                          },
+                          "required": [],
+                          "type": "object"
                         },
                         "route": {
                           "maximum": 65535,
@@ -101706,6 +102217,27 @@
                 "schema": {
                   "additionalProperties": false,
                   "properties": {
+                    "reactionsAsOf": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "epoch": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "position": {
+                          "pattern": "^[1-9][0-9]*$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "epoch",
+                        "position"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
                     "thread": {
                       "additionalProperties": false,
                       "properties": {
@@ -101783,6 +102315,41 @@
                                     "string",
                                     "null"
                                   ]
+                                },
+                                "reactions": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "downvote": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "insightful": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "laugh": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "like": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "love": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "sad": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "upvote": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [],
+                                  "type": "object"
                                 },
                                 "revisedAt": {
                                   "format": "date-time",
@@ -101914,6 +102481,41 @@
                                     "null"
                                   ]
                                 },
+                                "reactions": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "downvote": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "insightful": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "laugh": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "like": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "love": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "sad": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "upvote": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [],
+                                  "type": "object"
+                                },
                                 "removed": {
                                   "const": true,
                                   "type": "boolean"
@@ -102011,6 +102613,41 @@
                           "maxLength": 128,
                           "minLength": 1,
                           "type": "string"
+                        },
+                        "reactions": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "downvote": {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "insightful": {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "laugh": {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "like": {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "love": {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "sad": {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "upvote": {
+                              "minimum": 1,
+                              "type": "integer"
+                            }
+                          },
+                          "required": [],
+                          "type": "object"
                         },
                         "route": {
                           "maximum": 65535,
@@ -102678,6 +103315,41 @@
                                   "null"
                                 ]
                               },
+                              "reactions": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "downvote": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "insightful": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "laugh": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "like": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "love": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "sad": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "upvote": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": [],
+                                "type": "object"
+                              },
                               "revisedAt": {
                                 "format": "date-time",
                                 "type": [
@@ -102808,6 +103480,41 @@
                                   "null"
                                 ]
                               },
+                              "reactions": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "downvote": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "insightful": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "laugh": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "like": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "love": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "sad": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "upvote": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": [],
+                                "type": "object"
+                              },
                               "removed": {
                                 "const": true,
                                 "type": "boolean"
@@ -102899,6 +103606,27 @@
                       },
                       "maxItems": 100,
                       "type": "array"
+                    },
+                    "reactionsAsOf": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "epoch": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "position": {
+                          "pattern": "^[1-9][0-9]*$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "epoch",
+                        "position"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
                     }
                   },
                   "required": [
@@ -103533,6 +104261,41 @@
                                 "null"
                               ]
                             },
+                            "reactions": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "downvote": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "insightful": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "laugh": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "like": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "love": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "sad": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "upvote": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [],
+                              "type": "object"
+                            },
                             "revisedAt": {
                               "format": "date-time",
                               "type": [
@@ -103662,6 +104425,41 @@
                                 "string",
                                 "null"
                               ]
+                            },
+                            "reactions": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "downvote": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "insightful": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "laugh": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "like": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "love": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "sad": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "upvote": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [],
+                              "type": "object"
                             },
                             "removed": {
                               "const": true,

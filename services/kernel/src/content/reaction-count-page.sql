@@ -1,0 +1,19 @@
+-- One index seek per target in this partition: at most seven kind rows each.
+WITH input AS NOT MATERIALIZED (
+  SELECT :partition::integer AS partition_no
+)
+SELECT requested.target_id AS "targetId",
+       stored.kind,
+       stored.count,
+       stored.source_epoch AS "sourceEpoch",
+       stored.source_position AS "sourcePosition"
+FROM unnest(:target_ids::uuid[], :routes::integer[]) AS requested(target_id, route)
+JOIN LATERAL (
+  SELECT count_row.kind, count_row.count, count_row.source_epoch, count_row.source_position
+  FROM content.reaction_count AS count_row
+  CROSS JOIN input
+  WHERE count_row.route = requested.route
+    AND count_row.target_id = requested.target_id
+    AND count_row.route >= input.partition_no * 16
+    AND count_row.route < (input.partition_no + 1) * 16
+) AS stored ON true;

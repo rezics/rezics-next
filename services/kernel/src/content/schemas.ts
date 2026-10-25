@@ -17,6 +17,8 @@ import type { Operation } from './operation-contract.ts';
 
 type ViewerReactionKind = (typeof REACTION_KINDS)[number];
 type ViewerReactionSlot = { readonly viewerReaction?: ViewerReactionKind | null };
+type ReactionCountMap = { readonly [kind in ViewerReactionKind]?: number };
+type ReactionCountsSlot = { readonly reactions?: ReactionCountMap };
 
 /** Validate the published TypeBox shape without Elysia removing unknown input or response fields. */
 export function strictContentSchema<S extends TSchema>(
@@ -120,6 +122,27 @@ const document = t.Unsafe<DocumentSnapshot>(DocumentSnapshotSchema);
 const visibility = t.Union(['published', 'draft', 'protected', 'taken_down'].map((value) => t.Literal(value)));
 const reactionKind = t.Unsafe<ViewerReactionKind>(t.Union(REACTION_KINDS.map((kind) => t.Literal(kind))));
 const viewerReaction = { viewerReaction: t.Optional(t.Union([reactionKind, t.Null()])) };
+const reactionCount = t.Integer({ minimum: 1 });
+const reactions = {
+  reactions: t.Optional(
+    t.Object(
+      {
+        upvote: t.Optional(reactionCount),
+        downvote: t.Optional(reactionCount),
+        like: t.Optional(reactionCount),
+        love: t.Optional(reactionCount),
+        laugh: t.Optional(reactionCount),
+        insightful: t.Optional(reactionCount),
+        sad: t.Optional(reactionCount),
+      },
+      closed,
+    ),
+  ),
+};
+const reactionFreshness = t.Union([
+  t.Object({ epoch: t.Integer({ minimum: 1 }), position: t.String({ pattern: '^[1-9][0-9]*$' }) }, closed),
+  t.Null(),
+]);
 const availability = t.Union([t.Literal('available'), t.Literal('erased')]);
 const metadata = {
   id: ContentIdSchema,
@@ -140,10 +163,11 @@ const item = {
   mediaIds: media,
   revisedAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
   ...viewerReaction,
+  ...reactions,
 };
 
 /** The erased variant cannot carry authored bytes, even to an authorized reader. */
-export const ItemViewSchema = t.Unsafe<ItemView & ViewerReactionSlot>(
+export const ItemViewSchema = t.Unsafe<ItemView & ViewerReactionSlot & ReactionCountsSlot>(
   t.Union([
     t.Object({ ...item, availability: t.Literal('available'), body: document }, closed),
     t.Object(
@@ -152,7 +176,7 @@ export const ItemViewSchema = t.Unsafe<ItemView & ViewerReactionSlot>(
     ),
   ]),
 );
-export const ThreadViewSchema = t.Unsafe<ThreadView & ViewerReactionSlot>(
+export const ThreadViewSchema = t.Unsafe<ThreadView & ViewerReactionSlot & ReactionCountsSlot>(
   t.Object(
     {
       ...metadata,
@@ -162,6 +186,7 @@ export const ThreadViewSchema = t.Unsafe<ThreadView & ViewerReactionSlot>(
       availability,
       firstPost: ItemViewSchema,
       ...viewerReaction,
+      ...reactions,
     },
     closed,
   ),
@@ -209,11 +234,18 @@ export const ContentPageQuerySchema = t.Object(
 );
 export const ReactionInputSchema = t.Object({ kind: reactionKind }, closed);
 export const ReactionResponseSchema = t.Object({ kind: reactionKind }, closed);
-export const ThreadResponseSchema = t.Object({ thread: ThreadViewSchema }, closed);
+export const ThreadResponseSchema = t.Object(
+  { thread: ThreadViewSchema, reactionsAsOf: t.Optional(reactionFreshness) },
+  closed,
+);
 export const PostResponseSchema = t.Object({ post: ItemViewSchema }, closed);
 export const BoardResponseSchema = t.Object({ board: BoardViewSchema }, closed);
 export const PostPageResponseSchema = t.Object(
-  { posts: t.Array(ItemViewSchema, { maxItems: 100 }), next: t.Union([t.String(), t.Null()]) },
+  {
+    posts: t.Array(ItemViewSchema, { maxItems: 100 }),
+    next: t.Union([t.String(), t.Null()]),
+    reactionsAsOf: t.Optional(reactionFreshness),
+  },
   closed,
 );
 export const RevisionPageResponseSchema = t.Object(

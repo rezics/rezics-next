@@ -45,7 +45,7 @@ if (process.argv.includes('--reaction-count-worker')) {
   type CountedPage = { posts: { id: string; reactions: Counts }[]; reactionsAsOf: Freshness };
 
   let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
-  let authPool: Pool;
+  let authPool: InstanceType<typeof Pool>;
   let authDatabaseName = '';
   let host: Awaited<ReturnType<typeof createAuthHost>>;
   let service: Awaited<ReturnType<typeof createAuthHost>>['service'];
