@@ -201,6 +201,34 @@ export function docker(args: string[]): string {
   return run('docker', args);
 }
 
+type DockerCommand = (args: string[]) => string;
+
+export function startPostgresContainer(dockerCommand: DockerCommand = docker): string {
+  return dockerCommand([
+    'run',
+    '-d',
+    '--label',
+    `rezics.kernel.check.pid=${pid}`,
+    '-p',
+    '127.0.0.1::5432',
+    '--tmpfs',
+    '/var/lib/postgresql:rw,size=1g',
+    '-e',
+    'POSTGRES_USER=rezics',
+    '-e',
+    'POSTGRES_PASSWORD=rezics',
+    '-e',
+    'POSTGRES_DB=rezics',
+    POSTGRES_IMAGE,
+    '-c',
+    'fsync=off',
+    '-c',
+    'synchronous_commit=off',
+    '-c',
+    'full_page_writes=off',
+  ]);
+}
+
 export function cleanupStale(kind: 'check' | 'derived' = 'check'): void {
   // One listing carries each owner, so a concurrent run that exits meanwhile cannot fail an inspect.
   const rows = docker([
@@ -224,14 +252,34 @@ export function cleanupStale(kind: 'check' | 'derived' = 'check'): void {
   }
 }
 
-export function cleanup(containers: readonly string[] = [searchContainer, container]): void {
+export function cleanup(
+  containers: readonly string[] = [searchContainer, container],
+  dockerCommand: DockerCommand = docker,
+): void {
   for (const id of containers) {
     if (!id) continue;
     try {
-      docker(['rm', '-f', id]);
+      dockerCommand(['rm', '-f', id]);
     } catch (error) {
       console.error(error);
     }
+  }
+}
+
+function logPostgresIfStopped(containerId: string): void {
+  if (!containerId) return;
+
+  try {
+    if (docker(['inspect', '--format', '{{.State.Running}}', containerId]) === 'true') return;
+  } catch {
+    // Try to fetch logs even if inspect cannot find the container.
+  }
+
+  try {
+    const logs = docker(['logs', '--tail', '50', containerId]);
+    if (logs) process.stderr.write(`${logs}\n`);
+  } catch (error) {
+    console.error(error);
   }
 }
 
@@ -249,30 +297,7 @@ async function main(): Promise<void> {
 
   cleanupStale();
   const searchImage = buildSearchImage();
-  container = docker([
-    'run',
-    '-d',
-    '--rm',
-    '--label',
-    `rezics.kernel.check.pid=${pid}`,
-    '-p',
-    '127.0.0.1::5432',
-    '--tmpfs',
-    '/var/lib/postgresql:rw,size=1g',
-    '-e',
-    'POSTGRES_USER=rezics',
-    '-e',
-    'POSTGRES_PASSWORD=rezics',
-    '-e',
-    'POSTGRES_DB=rezics',
-    POSTGRES_IMAGE,
-    '-c',
-    'fsync=off',
-    '-c',
-    'synchronous_commit=off',
-    '-c',
-    'full_page_writes=off',
-  ]);
+  container = startPostgresContainer();
   searchContainer = docker([
     'run',
     '-d',
@@ -402,6 +427,7 @@ if (import.meta.main) {
   try {
     await main();
   } catch (error) {
+    logPostgresIfStopped(container);
     console.error(error);
     process.exitCode = 1;
   } finally {
