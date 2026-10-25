@@ -10,9 +10,9 @@ export function useDialogOpen({
   onOpenChange,
   pending,
 }: {
-  open?: boolean;
-  defaultOpen?: boolean;
-  onOpenChange?: (details: OpenChangeDetails) => void;
+  open?: boolean | undefined;
+  defaultOpen?: boolean | undefined;
+  onOpenChange?: ((details: OpenChangeDetails) => void) | undefined;
   pending: boolean;
 }) {
   const [localOpen, setLocalOpen] = React.useState(defaultOpen ?? false);

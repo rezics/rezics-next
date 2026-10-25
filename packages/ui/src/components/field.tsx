@@ -74,7 +74,7 @@ export const FieldControl = ({ children }: FieldControlProps) => {
   const field = useArkFieldContext();
 
   return cloneElement(children, {
-    'aria-errormessage': field?.invalid ? field.ids.errorText : undefined,
+    ...(field?.invalid ? { 'aria-errormessage': field.ids.errorText } : {}),
   });
 };
 

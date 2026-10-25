@@ -3,7 +3,7 @@
   "compilerOptions": {
     "jsx": "react-jsx",
     "lib": ["DOM", "DOM.Iterable", "ESNext"],
-    // Storybook and Ark UI expose optional properties typed incompatibly with their own consumers under exact optional checking.
+    // The relaxed setting is for stories only; the consumer type test checks package sources strictly.
     "exactOptionalPropertyTypes": false
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", ".storybook/**/*.ts", ".storybook/**/*.tsx"]

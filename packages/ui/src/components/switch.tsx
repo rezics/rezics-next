@@ -8,7 +8,7 @@ export const useSwitch = useSwitchContext;
 /** Keep the native checkbox aligned when a controlled consumer declines a
  * change (e.g. a cancelled age prompt or a rejected save). Zag's defaultChecked
  * alone leaves the DOM checked until its logical value changes. */
-function SwitchInput({ tabIndex }: { tabIndex?: number }) {
+function SwitchInput({ tabIndex }: { tabIndex?: number | undefined }) {
   const state = useSwitchContext();
   return <ArkSwitch.HiddenInput role="switch" tabIndex={tabIndex} defaultChecked={undefined}
     checked={state.checked} onChange={() => { /* Ark dispatches the change through its click handler. */ }} />;

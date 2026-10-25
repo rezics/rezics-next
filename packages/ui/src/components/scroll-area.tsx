@@ -92,7 +92,7 @@ export const ScrollAreaScrollbar = (
         className,
       )}
       data-slot="scroll-area-scrollbar"
-      orientation={orientation}
+      {...(orientation === undefined ? {} : { orientation })}
       {...rest}
     >
       <ArkScrollArea.Thumb
