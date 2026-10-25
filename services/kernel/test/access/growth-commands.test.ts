@@ -319,6 +319,7 @@ async function clearFixtureRows(): Promise<void> {
       access.lifecycle_coordination,
       access.lifecycle_fence_receipt,
       access.lifecycle_membership_slot,
+      access.membership_inverse,
       access.organization_member,
       access.principal_assignment,
       access.resource_denial,
@@ -455,7 +456,8 @@ function commandHistory(
     const { value, subject } = commandHistoryValue(route, ordinal, index, entry, actorAccountId);
     receipts.push({
       partition_no: partition,
-      actor_account_id: actorAccountId,
+      principal_kind: 'account',
+      principal_id: actorAccountId,
       command_kind: `access.${entry.kind}`,
       idempotency_key: `${route}:growth:${ordinal}:${index}`,
       request_digest: new Uint8Array(32).fill(106),
@@ -480,7 +482,8 @@ function commandHistory(
       transaction_id: transactionId,
       epoch: 1,
       position,
-      actor_account_id: actorAccountId,
+      principal_kind: 'account',
+      principal_id: actorAccountId,
       client_id: 'growth-access-test',
       requested_by: null,
     });
@@ -884,7 +887,7 @@ function resourceRolePopulation(name: string, hotPartition: number): Population 
   };
 }
 
-// These accounts, holds, fence receipts, permission rows and history match lifecycle coordination and fence writes.
+// These accounts, inverse membership holds, fence receipts, permission rows and history match the measured commands.
 function coordinationAndFencePopulation(name: string, hotPartition: number): Population {
   return {
     name,
@@ -895,6 +898,7 @@ function coordinationAndFencePopulation(name: string, hotPartition: number): Pop
       const authorizationRows = permissionRows(route);
       const accountId = newId(route);
       const reservationId = newId(route);
+      const groupId = newId(route);
       const receiptId = newId(route);
       const accountTransactionId = newId(route);
       const holdTransactionId = newId(route);
@@ -904,12 +908,23 @@ function coordinationAndFencePopulation(name: string, hotPartition: number): Pop
         'access.account': [
           { route, account_id: accountId, kind: 'actor', state: 'active', transaction_id: accountTransactionId },
         ],
+        'access.membership_inverse': [
+          {
+            route,
+            account_id: accountId,
+            kind: 'organization',
+            group_id: groupId,
+            reservation_id: reservationId,
+            transaction_id: holdTransactionId,
+            source_transaction_id: null,
+          },
+        ],
         'access.lifecycle_coordination': [
           {
             route,
             account_id: accountId,
             reservation_id: reservationId,
-            related_account_id: newId(route),
+            related_account_id: groupId,
             purpose: 'membership',
             transaction_id: holdTransactionId,
           },
