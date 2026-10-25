@@ -494,7 +494,8 @@ test('checkGrowth with actual formula across three informative scales and no con
           })),
           'core.receipt': subjects.map((row) => ({
             partition_no: selectedPartition,
-            actor_account_id: moderatorId,
+            principal_kind: 'account',
+            principal_id: moderatorId,
             command_kind: 'content.media.takedown',
             idempotency_key: row.account_id,
             request_digest: Buffer.alloc(32),
