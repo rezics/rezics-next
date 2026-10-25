@@ -1,10 +1,13 @@
 import type { Pool } from 'pg';
-import { type Item } from '../semantic/item.ts';
-import { type DataType } from '../semantic/profile.ts';
-import { createApp } from './app.ts';
+import { type Item } from '../item.ts';
+import { createApp } from '../../http/app.ts';
 export declare const ItemSchema: import("typebox").TObject<{
     id: import("typebox").TString;
-    type: import("typebox").TLiteral<"schema:Book">;
+    type: import("typebox").TString;
+    revision: import("typebox").TInteger;
+    release: import("typebox").TString;
+    context: import("typebox").TString;
+    resolution: import("typebox").TRecord<"^.*$", import("typebox").TAny>;
     labels: import("typebox").TRecord<"^.*$", import("typebox").TString>;
     descriptions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
     aliases: import("typebox").TRecord<"^.*$", import("typebox").TArray<import("typebox").TString>>;
@@ -13,7 +16,7 @@ export declare const ItemSchema: import("typebox").TObject<{
         rank: import("typebox").TUnion<[import("typebox").TLiteral<"normal">, import("typebox").TLiteral<"preferred">, import("typebox").TLiteral<"deprecated">]>;
         property: import("typebox").TObject<{
             id: import("typebox").TString;
-            data_type: import("typebox").TUnsafe<DataType>;
+            data_type: import("typebox").TUnsafe<"document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item">;
         }>;
         value: import("typebox").TUnion<[import("typebox").TObject<{
             type: import("typebox").TLiteral<"value">;
@@ -26,7 +29,7 @@ export declare const ItemSchema: import("typebox").TObject<{
         qualifiers: import("typebox").TArray<import("typebox").TObject<{
             property: import("typebox").TObject<{
                 id: import("typebox").TString;
-                data_type: import("typebox").TUnsafe<DataType>;
+                data_type: import("typebox").TUnsafe<"document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item">;
             }>;
             value: import("typebox").TUnion<[import("typebox").TObject<{
                 type: import("typebox").TLiteral<"value">;
@@ -41,7 +44,7 @@ export declare const ItemSchema: import("typebox").TObject<{
             parts: import("typebox").TArray<import("typebox").TObject<{
                 property: import("typebox").TObject<{
                     id: import("typebox").TString;
-                    data_type: import("typebox").TUnsafe<DataType>;
+                    data_type: import("typebox").TUnsafe<"document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item">;
                 }>;
                 value: import("typebox").TUnion<[import("typebox").TObject<{
                     type: import("typebox").TLiteral<"value">;
@@ -54,9 +57,14 @@ export declare const ItemSchema: import("typebox").TObject<{
             }>>;
             hash: import("typebox").TString;
         }>>;
+        rezics: import("typebox").TObject<{
+            release: import("typebox").TString;
+            revision: import("typebox").TInteger;
+        }>;
     }>>>;
 }>;
 export declare const ItemInputSchema: import("typebox").TObject<{
+    type: import("typebox").TString;
     labels: import("typebox").TRecord<"^.*$", import("typebox").TAny>;
     descriptions: import("typebox").TOptional<import("typebox").TRecord<"^.*$", import("typebox").TAny>>;
     aliases: import("typebox").TOptional<import("typebox").TRecord<"^.*$", import("typebox").TAny>>;
@@ -102,6 +110,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
         subjects: {
             post: {
                 body: {
+                    type: string;
                     labels: Record<string, any>;
                     descriptions?: Record<string, any>;
                     aliases?: Record<string, any>;
@@ -119,7 +128,11 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                     201: {
                         subject: {
                             id: string;
-                            type: "schema:Book";
+                            type: string;
+                            revision: number;
+                            release: string;
+                            context: string;
+                            resolution: Record<string, any>;
                             labels: Record<string, string>;
                             descriptions: Record<string, string>;
                             aliases: Record<string, string[]>;
@@ -128,7 +141,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                                 rank: "deprecated" | "normal" | "preferred";
                                 property: {
                                     id: string;
-                                    data_type: DataType;
+                                    data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
                                 };
                                 value: {
                                     type: "value";
@@ -141,7 +154,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                                 qualifiers: {
                                     property: {
                                         id: string;
-                                        data_type: DataType;
+                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
                                     };
                                     value: {
                                         type: "value";
@@ -156,7 +169,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                                     parts: {
                                         property: {
                                             id: string;
-                                            data_type: DataType;
+                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
                                         };
                                         value: {
                                             type: "value";
@@ -169,6 +182,10 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                                     }[];
                                     hash: string;
                                 }[];
+                                rezics: {
+                                    release: string;
+                                    revision: number;
+                                };
                             }[]>;
                         };
                     };
@@ -249,18 +266,18 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
     };
 }, import("elysia").DefaultEphemeral, {
     derive: {
-        readonly admission: import("./admission.ts").Admission;
+        readonly admission: import("../../http/admission.ts").Admission;
         readonly job: {
             deadline: number;
             signal: AbortSignal;
         };
-        readonly actor: import("../request/access.ts").Actor;
+        readonly actor: import("../../request/access.ts").Actor;
         readonly session: {
-            readonly components: import("../tokens/session.ts").SessionComponent[];
-            record(component: import("../tokens/session.ts").SessionComponent): void;
+            readonly components: import("../../tokens/session.ts").SessionComponent[];
+            record(component: import("../../tokens/session.ts").SessionComponent): void;
         };
-        readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-        readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+        readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../../request/access.ts").AccessCheck>;
+        readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
     };
     schema: {};
     schemas: {};
@@ -274,7 +291,11 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
         200: import("typebox").TObject<{
             subject: import("typebox").TObject<{
                 id: import("typebox").TString;
-                type: import("typebox").TLiteral<"schema:Book">;
+                type: import("typebox").TString;
+                revision: import("typebox").TInteger;
+                release: import("typebox").TString;
+                context: import("typebox").TString;
+                resolution: import("typebox").TRecord<"^.*$", import("typebox").TAny>;
                 labels: import("typebox").TRecord<"^.*$", import("typebox").TString>;
                 descriptions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
                 aliases: import("typebox").TRecord<"^.*$", import("typebox").TArray<import("typebox").TString>>;
@@ -283,7 +304,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                     rank: import("typebox").TUnion<[import("typebox").TLiteral<"normal">, import("typebox").TLiteral<"preferred">, import("typebox").TLiteral<"deprecated">]>;
                     property: import("typebox").TObject<{
                         id: import("typebox").TString;
-                        data_type: import("typebox").TUnsafe<DataType>;
+                        data_type: import("typebox").TUnsafe<"document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item">;
                     }>;
                     value: import("typebox").TUnion<[import("typebox").TObject<{
                         type: import("typebox").TLiteral<"value">;
@@ -296,7 +317,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                     qualifiers: import("typebox").TArray<import("typebox").TObject<{
                         property: import("typebox").TObject<{
                             id: import("typebox").TString;
-                            data_type: import("typebox").TUnsafe<DataType>;
+                            data_type: import("typebox").TUnsafe<"document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item">;
                         }>;
                         value: import("typebox").TUnion<[import("typebox").TObject<{
                             type: import("typebox").TLiteral<"value">;
@@ -311,7 +332,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                         parts: import("typebox").TArray<import("typebox").TObject<{
                             property: import("typebox").TObject<{
                                 id: import("typebox").TString;
-                                data_type: import("typebox").TUnsafe<DataType>;
+                                data_type: import("typebox").TUnsafe<"document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item">;
                             }>;
                             value: import("typebox").TUnion<[import("typebox").TObject<{
                                 type: import("typebox").TLiteral<"value">;
@@ -324,6 +345,10 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                         }>>;
                         hash: import("typebox").TString;
                     }>>;
+                    rezics: import("typebox").TObject<{
+                        release: import("typebox").TString;
+                        revision: import("typebox").TInteger;
+                    }>;
                 }>>>;
             }>;
             related: import("typebox").TRecord<"^.*$", import("typebox").TObject<{
@@ -332,6 +357,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
         }> & {
             headers: {
                 readonly "rezics-session-token": import("typebox").TString;
+                readonly etag: import("typebox").TString;
             };
         };
         401: import("typebox").TObject<{
@@ -386,7 +412,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
             bearerAuth?: never;
         })[];
     };
-}, {}, "/v1/subjects/:id">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params, authorize, admission, job, session }: {
+}, {}, "/v1/subjects/:id">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params, authorize, admission, job, session, set }: {
     server: import("elysia").Server | null;
     redirect: import("elysia").redirect;
     set: {
@@ -399,7 +425,11 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
         200: {
             subject: {
                 id: string;
-                type: "schema:Book";
+                type: string;
+                revision: number;
+                release: string;
+                context: string;
+                resolution: Record<string, any>;
                 labels: Record<string, string>;
                 descriptions: Record<string, string>;
                 aliases: Record<string, string[]>;
@@ -408,7 +438,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                     rank: "deprecated" | "normal" | "preferred";
                     property: {
                         id: string;
-                        data_type: DataType;
+                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
                     };
                     value: {
                         type: "value";
@@ -421,7 +451,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                     qualifiers: {
                         property: {
                             id: string;
-                            data_type: DataType;
+                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
                         };
                         value: {
                             type: "value";
@@ -436,7 +466,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                         parts: {
                             property: {
                                 id: string;
-                                data_type: DataType;
+                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
                             };
                             value: {
                                 type: "value";
@@ -449,6 +479,10 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                         }[];
                         hash: string;
                     }[];
+                    rezics: {
+                        release: string;
+                        revision: number;
+                    };
                 }[]>;
             };
             related: Record<string, {
@@ -502,7 +536,11 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
         200: {
             subject: {
                 id: string;
-                type: "schema:Book";
+                type: string;
+                revision: number;
+                release: string;
+                context: string;
+                resolution: Record<string, any>;
                 labels: Record<string, string>;
                 descriptions: Record<string, string>;
                 aliases: Record<string, string[]>;
@@ -511,7 +549,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                     rank: "deprecated" | "normal" | "preferred";
                     property: {
                         id: string;
-                        data_type: DataType;
+                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
                     };
                     value: {
                         type: "value";
@@ -524,7 +562,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                     qualifiers: {
                         property: {
                             id: string;
-                            data_type: DataType;
+                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
                         };
                         value: {
                             type: "value";
@@ -539,7 +577,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                         parts: {
                             property: {
                                 id: string;
-                                data_type: DataType;
+                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
                             };
                             value: {
                                 type: "value";
@@ -552,6 +590,10 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                         }[];
                         hash: string;
                     }[];
+                    rezics: {
+                        release: string;
+                        revision: number;
+                    };
                 }[]>;
             };
             related: Record<string, {
@@ -609,7 +651,11 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
             200: import("typebox").TObject<{
                 subject: import("typebox").TObject<{
                     id: import("typebox").TString;
-                    type: import("typebox").TLiteral<"schema:Book">;
+                    type: import("typebox").TString;
+                    revision: import("typebox").TInteger;
+                    release: import("typebox").TString;
+                    context: import("typebox").TString;
+                    resolution: import("typebox").TRecord<"^.*$", import("typebox").TAny>;
                     labels: import("typebox").TRecord<"^.*$", import("typebox").TString>;
                     descriptions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
                     aliases: import("typebox").TRecord<"^.*$", import("typebox").TArray<import("typebox").TString>>;
@@ -618,7 +664,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                         rank: import("typebox").TUnion<[import("typebox").TLiteral<"normal">, import("typebox").TLiteral<"preferred">, import("typebox").TLiteral<"deprecated">]>;
                         property: import("typebox").TObject<{
                             id: import("typebox").TString;
-                            data_type: import("typebox").TUnsafe<DataType>;
+                            data_type: import("typebox").TUnsafe<"document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item">;
                         }>;
                         value: import("typebox").TUnion<[import("typebox").TObject<{
                             type: import("typebox").TLiteral<"value">;
@@ -631,7 +677,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                         qualifiers: import("typebox").TArray<import("typebox").TObject<{
                             property: import("typebox").TObject<{
                                 id: import("typebox").TString;
-                                data_type: import("typebox").TUnsafe<DataType>;
+                                data_type: import("typebox").TUnsafe<"document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item">;
                             }>;
                             value: import("typebox").TUnion<[import("typebox").TObject<{
                                 type: import("typebox").TLiteral<"value">;
@@ -646,7 +692,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                             parts: import("typebox").TArray<import("typebox").TObject<{
                                 property: import("typebox").TObject<{
                                     id: import("typebox").TString;
-                                    data_type: import("typebox").TUnsafe<DataType>;
+                                    data_type: import("typebox").TUnsafe<"document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item">;
                                 }>;
                                 value: import("typebox").TUnion<[import("typebox").TObject<{
                                     type: import("typebox").TLiteral<"value">;
@@ -659,6 +705,10 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                             }>>;
                             hash: import("typebox").TString;
                         }>>;
+                        rezics: import("typebox").TObject<{
+                            release: import("typebox").TString;
+                            revision: import("typebox").TInteger;
+                        }>;
                     }>>>;
                 }>;
                 related: import("typebox").TRecord<"^.*$", import("typebox").TObject<{
@@ -667,6 +717,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
             }> & {
                 headers: {
                     readonly "rezics-session-token": import("typebox").TString;
+                    readonly etag: import("typebox").TString;
                 };
             };
             401: import("typebox").TObject<{
@@ -723,18 +774,18 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
         };
     }, {}, "/v1/subjects/:id">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
         derive: {
-            readonly admission: import("./admission.ts").Admission;
+            readonly admission: import("../../http/admission.ts").Admission;
             readonly job: {
                 deadline: number;
                 signal: AbortSignal;
             };
-            readonly actor: import("../request/access.ts").Actor;
+            readonly actor: import("../../request/access.ts").Actor;
             readonly session: {
-                readonly components: import("../tokens/session.ts").SessionComponent[];
-                record(component: import("../tokens/session.ts").SessionComponent): void;
+                readonly components: import("../../tokens/session.ts").SessionComponent[];
+                record(component: import("../../tokens/session.ts").SessionComponent): void;
             };
-            readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-            readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+            readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../../request/access.ts").AccessCheck>;
+            readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
         };
     }>>) => import("elysia/types").MaybePromise<void>;
     readonly path: string;
@@ -749,18 +800,18 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
     };
     headers: Record<string, string | undefined>;
     cookie: Record<string, import("elysia").Cookie<unknown>>;
-    readonly admission: import("./admission.ts").Admission;
+    readonly admission: import("../../http/admission.ts").Admission;
     readonly job: {
         deadline: number;
         signal: AbortSignal;
     };
-    readonly actor: import("../request/access.ts").Actor;
+    readonly actor: import("../../request/access.ts").Actor;
     readonly session: {
-        readonly components: import("../tokens/session.ts").SessionComponent[];
-        record(component: import("../tokens/session.ts").SessionComponent): void;
+        readonly components: import("../../tokens/session.ts").SessionComponent[];
+        record(component: import("../../tokens/session.ts").SessionComponent): void;
     };
-    readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
-    readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
+    readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../../request/access.ts").AccessCheck>;
+    readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
     subject: Item;
     related: Record<string, {
@@ -774,7 +825,11 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
         200: import("typebox").TObject<{
             subject: import("typebox").TObject<{
                 id: import("typebox").TString;
-                type: import("typebox").TLiteral<"schema:Book">;
+                type: import("typebox").TString;
+                revision: import("typebox").TInteger;
+                release: import("typebox").TString;
+                context: import("typebox").TString;
+                resolution: import("typebox").TRecord<"^.*$", import("typebox").TAny>;
                 labels: import("typebox").TRecord<"^.*$", import("typebox").TString>;
                 descriptions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
                 aliases: import("typebox").TRecord<"^.*$", import("typebox").TArray<import("typebox").TString>>;
@@ -783,7 +838,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                     rank: import("typebox").TUnion<[import("typebox").TLiteral<"normal">, import("typebox").TLiteral<"preferred">, import("typebox").TLiteral<"deprecated">]>;
                     property: import("typebox").TObject<{
                         id: import("typebox").TString;
-                        data_type: import("typebox").TUnsafe<DataType>;
+                        data_type: import("typebox").TUnsafe<"document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item">;
                     }>;
                     value: import("typebox").TUnion<[import("typebox").TObject<{
                         type: import("typebox").TLiteral<"value">;
@@ -796,7 +851,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                     qualifiers: import("typebox").TArray<import("typebox").TObject<{
                         property: import("typebox").TObject<{
                             id: import("typebox").TString;
-                            data_type: import("typebox").TUnsafe<DataType>;
+                            data_type: import("typebox").TUnsafe<"document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item">;
                         }>;
                         value: import("typebox").TUnion<[import("typebox").TObject<{
                             type: import("typebox").TLiteral<"value">;
@@ -811,7 +866,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                         parts: import("typebox").TArray<import("typebox").TObject<{
                             property: import("typebox").TObject<{
                                 id: import("typebox").TString;
-                                data_type: import("typebox").TUnsafe<DataType>;
+                                data_type: import("typebox").TUnsafe<"document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item">;
                             }>;
                             value: import("typebox").TUnion<[import("typebox").TObject<{
                                 type: import("typebox").TLiteral<"value">;
@@ -824,6 +879,10 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                         }>>;
                         hash: import("typebox").TString;
                     }>>;
+                    rezics: import("typebox").TObject<{
+                        release: import("typebox").TString;
+                        revision: import("typebox").TInteger;
+                    }>;
                 }>>>;
             }>;
             related: import("typebox").TRecord<"^.*$", import("typebox").TObject<{
@@ -832,6 +891,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
         }> & {
             headers: {
                 readonly "rezics-session-token": import("typebox").TString;
+                readonly etag: import("typebox").TString;
             };
         };
         401: import("typebox").TObject<{

@@ -5,7 +5,7 @@ import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccessCheck, AccountActor, Resource } from '../request/access.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../route/route.ts';
-import { itemFacts, resolveItem } from './item.ts';
+import { itemFacts } from './item.ts';
 import insertContext from './create-context.sql';
 import contextPublicExists from './context-public-exists.sql';
 import readContextStatement from './read-context.sql';
@@ -132,7 +132,11 @@ export async function readContext(
 }
 
 export function contextLabels(id: string, input: unknown): Record<string, string> {
-  return resolveItem(id, itemFacts(id, input)).labels;
+  const labels: Record<string, string> = {};
+  for (const fact of itemFacts(id, input)) {
+    if (fact.kind === 'label' && fact.language !== null) labels[fact.language] = fact.body as string;
+  }
+  return labels;
 }
 
 export function publicContextEligibility(resource: Resource) {

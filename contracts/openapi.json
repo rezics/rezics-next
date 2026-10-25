@@ -8743,15 +8743,15 @@
                                     "properties": {
                                       "data_type": {
                                         "enum": [
-                                          "document",
-                                          "media",
                                           "wikibase-item",
                                           "string",
                                           "external-id",
                                           "url",
                                           "monolingualtext",
                                           "quantity",
-                                          "time"
+                                          "time",
+                                          "document",
+                                          "media"
                                         ],
                                         "type": "string"
                                       },
@@ -8774,15 +8774,15 @@
                                           "properties": {
                                             "data_type": {
                                               "enum": [
-                                                "document",
-                                                "media",
                                                 "wikibase-item",
                                                 "string",
                                                 "external-id",
                                                 "url",
                                                 "monolingualtext",
                                                 "quantity",
-                                                "time"
+                                                "time",
+                                                "document",
+                                                "media"
                                               ],
                                               "type": "string"
                                             },
@@ -8874,15 +8874,15 @@
                                                 "properties": {
                                                   "data_type": {
                                                     "enum": [
-                                                      "document",
-                                                      "media",
                                                       "wikibase-item",
                                                       "string",
                                                       "external-id",
                                                       "url",
                                                       "monolingualtext",
                                                       "quantity",
-                                                      "time"
+                                                      "time",
+                                                      "document",
+                                                      "media"
                                                     ],
                                                     "type": "string"
                                                   },
@@ -9661,15 +9661,15 @@
                                     "properties": {
                                       "data_type": {
                                         "enum": [
-                                          "document",
-                                          "media",
                                           "wikibase-item",
                                           "string",
                                           "external-id",
                                           "url",
                                           "monolingualtext",
                                           "quantity",
-                                          "time"
+                                          "time",
+                                          "document",
+                                          "media"
                                         ],
                                         "type": "string"
                                       },
@@ -9692,15 +9692,15 @@
                                           "properties": {
                                             "data_type": {
                                               "enum": [
-                                                "document",
-                                                "media",
                                                 "wikibase-item",
                                                 "string",
                                                 "external-id",
                                                 "url",
                                                 "monolingualtext",
                                                 "quantity",
-                                                "time"
+                                                "time",
+                                                "document",
+                                                "media"
                                               ],
                                               "type": "string"
                                             },
@@ -9792,15 +9792,15 @@
                                                 "properties": {
                                                   "data_type": {
                                                     "enum": [
-                                                      "document",
-                                                      "media",
                                                       "wikibase-item",
                                                       "string",
                                                       "external-id",
                                                       "url",
                                                       "monolingualtext",
                                                       "quantity",
-                                                      "time"
+                                                      "time",
+                                                      "document",
+                                                      "media"
                                                     ],
                                                     "type": "string"
                                                   },

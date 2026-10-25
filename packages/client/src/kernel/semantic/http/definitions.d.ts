@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import type { subjectRoutes } from '../../http/subjects.ts';
+import type { subjectRoutes } from './subjects.ts';
 export declare function definitionRoutes(app: ReturnType<typeof subjectRoutes>, { pool }: {
     pool: Pool;
 }): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
@@ -38,6 +38,7 @@ export declare function definitionRoutes(app: ReturnType<typeof subjectRoutes>, 
         subjects: {
             post: {
                 body: {
+                    type: string;
                     labels: Record<string, any>;
                     descriptions?: Record<string, any>;
                     aliases?: Record<string, any>;
@@ -55,7 +56,11 @@ export declare function definitionRoutes(app: ReturnType<typeof subjectRoutes>, 
                     201: {
                         subject: {
                             id: string;
-                            type: "schema:Book";
+                            type: string;
+                            revision: number;
+                            release: string;
+                            context: string;
+                            resolution: Record<string, any>;
                             labels: Record<string, string>;
                             descriptions: Record<string, string>;
                             aliases: Record<string, string[]>;
@@ -64,7 +69,7 @@ export declare function definitionRoutes(app: ReturnType<typeof subjectRoutes>, 
                                 rank: "deprecated" | "normal" | "preferred";
                                 property: {
                                     id: string;
-                                    data_type: import("../profile.ts").DataType;
+                                    data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
                                 };
                                 value: {
                                     type: "value";
@@ -77,7 +82,7 @@ export declare function definitionRoutes(app: ReturnType<typeof subjectRoutes>, 
                                 qualifiers: {
                                     property: {
                                         id: string;
-                                        data_type: import("../profile.ts").DataType;
+                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
                                     };
                                     value: {
                                         type: "value";
@@ -92,7 +97,7 @@ export declare function definitionRoutes(app: ReturnType<typeof subjectRoutes>, 
                                     parts: {
                                         property: {
                                             id: string;
-                                            data_type: import("../profile.ts").DataType;
+                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
                                         };
                                         value: {
                                             type: "value";
@@ -105,6 +110,10 @@ export declare function definitionRoutes(app: ReturnType<typeof subjectRoutes>, 
                                     }[];
                                     hash: string;
                                 }[];
+                                rezics: {
+                                    release: string;
+                                    revision: number;
+                                };
                             }[]>;
                         };
                     };
@@ -198,7 +207,11 @@ export declare function definitionRoutes(app: ReturnType<typeof subjectRoutes>, 
                         200: {
                             subject: {
                                 id: string;
-                                type: "schema:Book";
+                                type: string;
+                                revision: number;
+                                release: string;
+                                context: string;
+                                resolution: Record<string, any>;
                                 labels: Record<string, string>;
                                 descriptions: Record<string, string>;
                                 aliases: Record<string, string[]>;
@@ -207,7 +220,7 @@ export declare function definitionRoutes(app: ReturnType<typeof subjectRoutes>, 
                                     rank: "deprecated" | "normal" | "preferred";
                                     property: {
                                         id: string;
-                                        data_type: import("../profile.ts").DataType;
+                                        data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
                                     };
                                     value: {
                                         type: "value";
@@ -220,7 +233,7 @@ export declare function definitionRoutes(app: ReturnType<typeof subjectRoutes>, 
                                     qualifiers: {
                                         property: {
                                             id: string;
-                                            data_type: import("../profile.ts").DataType;
+                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
                                         };
                                         value: {
                                             type: "value";
@@ -235,7 +248,7 @@ export declare function definitionRoutes(app: ReturnType<typeof subjectRoutes>, 
                                         parts: {
                                             property: {
                                                 id: string;
-                                                data_type: import("../profile.ts").DataType;
+                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
                                             };
                                             value: {
                                                 type: "value";
@@ -248,6 +261,10 @@ export declare function definitionRoutes(app: ReturnType<typeof subjectRoutes>, 
                                         }[];
                                         hash: string;
                                     }[];
+                                    rezics: {
+                                        release: string;
+                                        revision: number;
+                                    };
                                 }[]>;
                             };
                             related: Record<string, {
