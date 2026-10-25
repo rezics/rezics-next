@@ -1,13 +1,15 @@
 import { afterEach, expect, mock, spyOn, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import sharp from 'sharp';
+import sharp, { type SharpInput, type SharpOptions } from 'sharp';
+
+const realSharp = sharp;
 
 // Observe the dependency boundary while forwarding every operation to real Sharp.
-const invocations: { input: unknown; options: sharp.SharpOptions | undefined }[] = [];
+const invocations: { input: unknown; options: SharpOptions | undefined }[] = [];
 mock.module('sharp', () => ({
-  default: (input: sharp.SharpInput, options?: sharp.SharpOptions) => {
+  default: (input: SharpInput, options?: SharpOptions) => {
     invocations.push({ input, options });
-    return sharp(input, options);
+    return realSharp(input, options);
   },
 }));
 const { transformImage, ImageDecodeRejection } = await import('../../src/content/image-transform');
@@ -16,10 +18,10 @@ afterEach(() => mock.restore());
 const digest = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 
 async function source(width: number, height: number, orientation = 1) {
-  return sharp({ create: { width, height, channels: 3, background: '#e02020' } })
+  return realSharp({ create: { width, height, channels: 3, background: '#e02020' } })
     .composite([
       {
-        input: await sharp({ create: { width: (width / 2) | 0, height, channels: 3, background: '#2020e0' } })
+        input: await realSharp({ create: { width: (width / 2) | 0, height, channels: 3, background: '#2020e0' } })
           .png()
           .toBuffer(),
         left: (width / 2) | 0,
@@ -41,7 +43,7 @@ async function assertOutputs(input: Uint8Array, width: number, height: number, w
   invocations.length = 0;
   const result = await transformImage(input);
   const calls = [...invocations];
-  expect(sharp.versions.sharp).toMatch(/^0\.35\./);
+  expect(realSharp.versions.sharp).toMatch(/^0\.35\./);
   expect(result).toMatchObject({ width, height });
   expect(input).toEqual(before);
   expect(calls.length).toBeGreaterThan(0);
@@ -60,7 +62,7 @@ async function assertOutputs(input: Uint8Array, width: number, height: number, w
     expect(variant.sha256).toBe(digest(variant.bytes));
     expect(variant.sha256).not.toBe(digest(input));
     expect(variant.mediaType).toBe(`image/${variant.format}`);
-    const metadata = await sharp(variant.bytes).metadata();
+    const metadata = await realSharp(variant.bytes).metadata();
     // libvips describes AVIF as HEIF with AV1 compression.
     expect(metadata.format).toBe(variant.format === 'avif' ? 'heif' : 'webp');
     if (variant.format === 'avif') expect(metadata.compression).toBe('av1');
@@ -70,7 +72,7 @@ async function assertOutputs(input: Uint8Array, width: number, height: number, w
     for (const field of ['exif', 'xmp', 'icc', 'iptc', 'orientation', 'comments'] as const) {
       expect(metadata[field]).toBeUndefined();
     }
-    const decoded = await sharp(variant.bytes, { failOn: 'warning' }).raw().toBuffer({ resolveWithObject: true });
+    const decoded = await realSharp(variant.bytes, { failOn: 'warning' }).raw().toBuffer({ resolveWithObject: true });
     expect(decoded.data.length).toBe(variant.width * variant.height * decoded.info.channels);
     if (height > width) {
       const top =
@@ -89,7 +91,7 @@ test('real Sharp emits the exact landscape ladder with decoded bytes and hashes'
 
 test('EXIF 6 rotates pixels and source dimensions before selecting sanitized widths', async () => {
   const input = await source(1200, 800, 6);
-  const metadata = await sharp(input).metadata();
+  const metadata = await realSharp(input).metadata();
   expect([metadata.width, metadata.height, metadata.orientation]).toEqual([1200, 800, 6]);
   // Little-endian EXIF GPSInfo pointer, latitude/longitude refs and rational tags.
   for (const tag of [0x8825, 1, 2, 3, 4]) {
@@ -108,11 +110,11 @@ test('tiny inputs produce two sanitized source-width derivatives without upscali
 test('overpixel, truncated intact-header and malformed bytes reject before derivative work', async () => {
   const complete = await source(1200, 800);
   const truncated = complete.subarray(0, complete.length - 100);
-  expect((await sharp(truncated).metadata()).width).toBe(1200);
-  const oversized = await sharp({ create: { width: 8000, height: 5001, channels: 3, background: 'white' } })
+  expect((await realSharp(truncated).metadata()).width).toBe(1200);
+  const oversized = await realSharp({ create: { width: 8000, height: 5001, channels: 3, background: 'white' } })
     .png()
     .toBuffer();
-  expect((await sharp(oversized).metadata()).width).toBe(8000);
+  expect((await realSharp(oversized).metadata()).width).toBe(8000);
   for (const bytes of [oversized, truncated, new Uint8Array([1, 2, 3]), new Uint8Array()]) {
     invocations.length = 0;
     const start = performance.now();
@@ -126,16 +128,29 @@ test('overpixel, truncated intact-header and malformed bytes reject before deriv
   }
 }, 15_000);
 
+test('truncated PNG and AVIF decoder diagnostics are permanent rejections', async () => {
+  for (const format of ['png', 'avif'] as const) {
+    const bytes = await realSharp({ create: { width: 1200, height: 800, channels: 3, background: 'red' } })
+      .toFormat(format)
+      .toBuffer();
+    invocations.length = 0;
+    await expect(transformImage(bytes.subarray(0, Math.floor(bytes.length * 0.85)))).rejects.toBeInstanceOf(
+      ImageDecodeRejection,
+    );
+    expect(invocations).toHaveLength(1);
+  }
+});
+
 test('unexpected runtime and encoder errors keep their identity', async () => {
   const input = await source(127, 61);
   const failure = new Error('Unexpected runtime failure');
-  const toBuffer = spyOn(sharp.prototype, 'toBuffer').mockImplementation(() => {
+  const toBuffer = spyOn(realSharp.prototype, 'toBuffer').mockImplementation(() => {
     throw failure;
   });
   await expect(transformImage(input)).rejects.toBe(failure);
   toBuffer.mockRestore();
   const encoderFailure = new Error('Encoder resource unavailable');
-  spyOn(sharp.prototype, 'avif').mockImplementation(() => {
+  spyOn(realSharp.prototype, 'avif').mockImplementation(() => {
     throw encoderFailure;
   });
   await expect(transformImage(input)).rejects.toBe(encoderFailure);
