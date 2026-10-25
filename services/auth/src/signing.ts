@@ -2,11 +2,11 @@ import { importJWK, jwtVerify, SignJWT, type JWK } from 'jose';
 import type { Pool, PoolClient } from 'pg';
 import type { AccessTokenClaims, AuthServiceOptions, PublicJwks, SigningControl, SigningState } from './index.ts';
 
-// Native access tokens live 300 seconds; there is no native ID-token issuer.
-// Reserve the same maximum for ID tokens, a 300s recent-expired logout hint,
+// Native access and ID tokens live 300 seconds. Reserve that maximum plus
+// the ten-minute recent-session logout hint horizon,
 // 30s verifier cache and 60s clock allowance. Issuance rechecks the generation
 // on every call, so there is no stale process signing lease to add here.
-const retentionSeconds = 300 + 300 + 30 + 60;
+const retentionSeconds = 300 + 600 + 30 + 60;
 const importCacheMilliseconds = 30_000;
 type PrivateSigningKey = JWK & { kty: 'EC'; crv: 'P-256'; x: string; y: string; d: string; kid: string };
 type Snapshot = {

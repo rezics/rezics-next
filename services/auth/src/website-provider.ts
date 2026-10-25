@@ -18,7 +18,7 @@ export const websiteSchema = {
  * so the provider seeds no resources at startup.
  */
 export function websiteProvider(scopes: string[], claims?: () => Promise<Record<string, unknown>>) {
-  return oauthProvider({
+  const provider = oauthProvider({
     schema: websiteSchema,
     loginPage: '/login',
     consentPage: '/consent',
@@ -41,4 +41,17 @@ export function websiteProvider(scopes: string[], claims?: () => Promise<Record<
       resolve: ({ session }) => ({ amr: String(session.authMethods).split(' ') }),
     },
   });
+  const initialize = provider.init;
+  return {
+    ...provider,
+    async init(context: Parameters<typeof initialize>[0]) {
+      await initialize(context);
+      // The sole native OAuth client has no front/back-channel logout delivery.
+      // The provider's optional delivery hooks enumerate the session's complete
+      // token history even when no notifications are registered. Do not install
+      // those hooks: RP-initiated logout still deletes the real native session,
+      // Access-first deletion hooks raise its floor, and every token admission
+      // requires that same live session. Physical token retention is a batch job.
+    },
+  };
 }

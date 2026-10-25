@@ -4,6 +4,7 @@ import { compactVerify, createLocalJWKSet, decodeProtectedHeader, jwtVerify } fr
 import type { JWTPayload } from 'jose';
 import type { Pool } from 'pg';
 import type { BetterAuthPlugin } from 'better-auth';
+import { APIError } from 'better-auth/api';
 import type { AuthServiceOptions, PublicJwks, SessionProof, WebsiteClientRegistration } from './index.ts';
 import { publicCredential } from './key-credentials.ts';
 import { issuerOrigin } from './issuer.ts';
@@ -60,7 +61,7 @@ export function websiteRoutes(input: {
     ).rows[0];
     return row ?? deny();
   }
-  async function proof(session: Session, scopes: string[]) {
+  async function proof(session: Session, scopes: string[], initialAuthorization = false) {
     const account = await options.trustedAccess.readAccount(session.userId);
     if (
       !account ||
@@ -87,8 +88,19 @@ export function websiteRoutes(input: {
         [session.userId, WEBSITE_CLIENT_ID],
       )
     ).rows[0];
-    if (consent && scopes.some((scope) => !consent.scopes.includes(scope))) deny();
+    if ((!consent && !initialAuthorization) || (consent && scopes.some((scope) => !consent.scopes.includes(scope))))
+      deny();
     return session;
+  }
+  /** Issuance hooks run inside the native token endpoint. A concurrent Access
+   * invalidation or revocation is a refused grant there, never a server error. */
+  async function recheck(session: Session, scopes: string[]) {
+    try {
+      await proof(session, scopes);
+    } catch (error) {
+      if (error instanceof ProtocolDenied) throw new APIError('BAD_REQUEST', { error: 'invalid_grant' });
+      throw error;
+    }
   }
   async function nativeSession(id: string): Promise<Session> {
     return (await database.query<Session>('SELECT * FROM session WHERE id=$1', [id])).rows[0] ?? deny();
@@ -240,7 +252,7 @@ export function websiteRoutes(input: {
     },
     async claims() {
       const selected = issuance.getStore() ?? deny();
-      await proof(selected.session, selected.scopes);
+      await recheck(selected.session, selected.scopes);
       return { authn_epoch: selected.session.authnEpoch };
     },
     async accessClaims(payload: JWTPayload) {
@@ -251,7 +263,7 @@ export function websiteRoutes(input: {
         payload.sid !== selected.session.id
       )
         deny();
-      await proof(selected.session, selected.scopes);
+      await recheck(selected.session, selected.scopes);
       return {
         ...payload,
         aud: options.audience,
@@ -425,14 +437,16 @@ export function websiteRoutes(input: {
             .api.getSession({ headers: request.headers, query: { disableCookieCache: true, disableRefresh: true } });
           if (current) {
             await input.sessionProof(request.headers);
-            await proof(current.session, scopes);
+            await proof(current.session, scopes, true);
           }
           return input.withIssuance(WEBSITE_CLIENT_ID, async () => {
-            if (current)
+            if (current) {
               await database.query(
                 `INSERT INTO auth_consent (account_id,client_id,scopes) VALUES ($1,$2,$3) ON CONFLICT (account_id,client_id) DO NOTHING`,
                 [current.session.userId, WEBSITE_CLIENT_ID, registered.scopes],
               );
+              await proof(current.session, scopes);
+            }
             return input.native().handler(nativeRequest(request, '/oauth2/authorize', fields));
           });
         }
@@ -443,29 +457,58 @@ export function websiteRoutes(input: {
           const base = ['client_id', 'client_assertion_type', 'client_assertion', 'resource'];
           if (url.pathname === '/revoke') {
             only(fields, [...base, 'token', 'token_type_hint']);
-            const row = (
+            let row = (
               await database.query<{ sessionId: string; clientId: string }>(
                 'SELECT "sessionId","clientId" FROM "oauthRefreshToken" WHERE token=$1',
                 [hash(fields.get('token') ?? '')],
               )
             ).rows[0];
-            return input.withIssuance(WEBSITE_CLIENT_ID, () =>
-              assertionAdmission.run(
-                async () => {
-                  // An ended session was already invalidated Access-first by logout or
-                  // revocation; the native family revocation still follows.
-                  const session =
-                    row && row.clientId === WEBSITE_CLIENT_ID && row.sessionId
-                      ? (await database.query<Session>('SELECT * FROM session WHERE id=$1', [row.sessionId])).rows[0]
-                      : undefined;
-                  if (session) {
-                    await remember(session);
-                    await invalidate(session, 'session-revocation');
-                  }
-                },
-                () => input.native().handler(nativeRequest(request, '/oauth2/revoke', fields)),
-              ),
+            if (!row && fields.get('token_type_hint') !== 'refresh_token') {
+              try {
+                const { payload } = await jwtVerify(
+                  fields.get('token') ?? '',
+                  createLocalJWKSet(await input.getJwks()),
+                  {
+                    issuer: options.issuer,
+                    audience: options.audience,
+                    algorithms: ['ES256'],
+                    typ: 'at+jwt',
+                  },
+                );
+                if (payload.client_id === WEBSITE_CLIENT_ID && typeof payload.sid === 'string')
+                  row = { sessionId: payload.sid, clientId: WEBSITE_CLIENT_ID };
+              } catch {
+                // RFC 7009: an unknown or expired token is a successful no-op.
+              }
+            }
+            // Revocation cannot issue authority. Do not hold the issuance
+            // connection while native JWT verification fetches public JWKS.
+            let invalidated = false;
+            const response = await assertionAdmission.run(
+              async () => {
+                // An ended session was already invalidated Access-first by logout or
+                // revocation; the native family revocation still follows.
+                const session =
+                  row && row.clientId === WEBSITE_CLIENT_ID && row.sessionId
+                    ? (await database.query<Session>('SELECT * FROM session WHERE id=$1', [row.sessionId])).rows[0]
+                    : undefined;
+                if (session) {
+                  await remember(session);
+                  await invalidate(session, 'session-revocation');
+                  invalidated = true;
+                }
+              },
+              () => input.native().handler(nativeRequest(request, '/oauth2/revoke', fields)),
             );
+            // Native RFC 7009 cannot revoke self-contained JWTs. Our existing
+            // Access floor does, after native confidential proof admission.
+            if (
+              invalidated &&
+              response.status === 400 &&
+              (await response.clone().json()).error === 'unsupported_token_type'
+            )
+              return Response.json(null, { headers: { 'cache-control': 'no-store' } });
+            return response;
           }
           resource(fields);
           const grant = fields.get('grant_type');
@@ -523,6 +566,10 @@ export function websiteRoutes(input: {
           if (!['GET', 'POST'].includes(request.method)) deny();
           const fields = request.method === 'GET' ? unique(url.searchParams) : await form(request);
           if (request.method === 'POST' && url.search) deny();
+          if (url.pathname === '/logout/confirm') {
+            if (request.method !== 'POST') deny();
+            only(fields, ['action']);
+          }
           if (url.pathname === '/logout') {
             only(fields, ['client_id', 'id_token_hint', 'post_logout_redirect_uri', 'state']);
             const registered = await client();
@@ -561,7 +608,7 @@ export function websiteRoutes(input: {
               if (current?.session.id === hint.sid && hinted && current.session.userId !== hint.sub) deny();
             }
           }
-          return logoutAdmission.run(true, () =>
+          const response = await logoutAdmission.run(true, () =>
             input
               .native()
               .handler(
@@ -572,6 +619,26 @@ export function websiteRoutes(input: {
                 ),
               ),
           );
+          // Keep the provider's signed, session-bound confirmation state and
+          // HTML form, adapting only its private endpoint path to the alias.
+          const headers = new Headers(response.headers);
+          headers.delete('set-cookie');
+          for (const cookie of response.headers.getSetCookie())
+            headers.append(
+              'set-cookie',
+              cookie.replace('Path=/api/auth/oauth2/end-session/confirm', 'Path=/logout/confirm'),
+            );
+          if (response.headers.get('content-type')?.startsWith('text/html')) {
+            headers.delete('content-length');
+            return new Response(
+              (await response.text()).replaceAll(
+                `${options.issuer}/api/auth/oauth2/end-session/confirm`,
+                `${options.issuer}/logout/confirm`,
+              ),
+              { status: response.status, headers },
+            );
+          }
+          return new Response(response.body, { status: response.status, headers });
         }
         // Browser login uses the public signin alias, whose real Better Auth
         // credential/session hooks retain their origin and rate protections.
