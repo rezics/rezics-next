@@ -1,16 +1,22 @@
+import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createAccess } from '../../src/access/permission.ts';
 import { beginAuthorErasure, readOperation } from '../../src/content/operations.ts';
 import type { AuthorErasureDependencies, NativeWorkflowStatus } from '../../src/content/operation-contract.ts';
 import { bindAuthorErasureWorkflow } from '../../src/content/erasure-workflow-identity.ts';
+import { createWorkClient } from '../../src/work/client.ts';
 import { readBatch, type Envelope } from '../../src/events/log.ts';
 import { derivedId, newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
 
 const db = await openGrowthDatabase();
-afterAll(() => db.close());
+const nativeClients: Awaited<ReturnType<typeof createWorkClient>>[] = [];
+afterAll(async () => {
+  for (const client of nativeClients) await client.close();
+  await db.close();
+});
 const route = 0x6a31;
 const id = (name: string, home = route) => derivedId('00000000-0000-8000-8000-000000000043', name, home);
 const threadId = id('thread');
@@ -119,7 +125,7 @@ async function identity(operationId: string) {
   ).rows[0];
 }
 async function source(outcome: Awaited<ReturnType<typeof beginAuthorErasure>>) {
-  const consumer = `operations_${crypto.randomUUID()}`;
+  const consumer = `operations_${crypto.randomUUID().replaceAll('-', '')}`;
   await db.admin.query(
     'INSERT INTO core.consumer_checkpoint (partition_no,consumer,epoch,position) VALUES ($1,$2,$3,$4)',
     [outcome.partition, consumer, outcome.position === 1n ? null : outcome.epoch, outcome.position - 1n],
@@ -251,12 +257,130 @@ test('status conceals noninitiators and current account denials before exact nat
   native = null;
 });
 
+test('explicit legal grants, concurrent retries and current named status denials use native authority', async () => {
+  const deps = await dependencies();
+  const account = await readAccount(db.pool, routeOf(other.accountId)!, other.accountId);
+  const legalDeps: AuthorErasureDependencies = {
+    ...deps,
+    access: createAccess({
+      actions: new Map([
+        ['post:erase', { anonymous: false }],
+        ['account:read', { anonymous: false }],
+      ]),
+      accountEvidence: () => account,
+    }),
+  };
+  await grant(postId, 'post:erase', other.accountId);
+  const ctx = context();
+  const attempts = await Promise.all([
+    beginAuthorErasure(legalDeps, other, input, ctx),
+    beginAuthorErasure(legalDeps, other, input, ctx),
+  ]);
+  expect(attempts[0]!.value).toEqual(attempts[1]!.value);
+  expect(attempts.filter(({ replayed }) => !replayed)).toHaveLength(1);
+  const operationId = attempts[0]!.value.operationId;
+  expect((await identity(operationId)).initiator_account_id).toBe(other.accountId);
+  expect((await readOperation(legalDeps, other, operationId, context()))?.done).toBe(false);
+  expect(await readOperation(deps, actor, operationId, context())).toBeNull();
+  const row = (
+    await db.admin.query('SELECT partition_no FROM editorial.write_basis WHERE transaction_id=$1', [
+      attempts[0]!.transactionId,
+    ])
+  ).rows;
+  expect(row).toEqual([{ partition_no: partitionOf(route) }]);
+  await db.admin.query(
+    `INSERT INTO access.resource_denial
+    (route,resource_id,subject_id,action,reason,valid,transaction_id)
+    VALUES ($1,$2,$2,'account:read','resource','(,)',$3)`,
+    [routeOf(other.accountId), other.accountId, id('transaction')],
+  );
+  expect(await readOperation(legalDeps, other, operationId, context())).toBeNull();
+  await db.admin.query('DELETE FROM access.resource_denial WHERE route=$1 AND resource_id=$2', [
+    routeOf(other.accountId),
+    other.accountId,
+  ]);
+  await db.admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
+    routeOf(other.accountId),
+    other.accountId,
+  ]);
+  await expect(beginAuthorErasure(legalDeps, other, input, ctx)).rejects.toThrow();
+  await db.admin.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
+    routeOf(other.accountId),
+    other.accountId,
+  ]);
+  await db.admin.query('DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND subject_id=$3', [
+    route,
+    postId,
+    other.accountId,
+  ]);
+});
+
 test('checkGrowth measures production initiation and status with fixed Access through same-partition history', async () => {
   const population: Population = {
     name: 'operation-history',
     hotPartition: partitionOf(route),
     hotShare: 1,
     rows: ({ ordinal }) => ({
+      'access.resource_grant': Array.from({ length: 64 }, (_, index) => ({
+        route,
+        resource_id: id(`noise-grant-${ordinal}-${index}`),
+        subject_id: authorId,
+        action: 'post:erase',
+        valid: '(,)',
+        transaction_id: id('transaction'),
+      })),
+      'access.resource_denial': Array.from({ length: 64 }, (_, index) => ({
+        route,
+        resource_id: id(`noise-denial-${ordinal}-${index}`),
+        subject_id: authorId,
+        action: 'post:erase',
+        reason: 'resource',
+        valid: '(,)',
+        transaction_id: id('transaction'),
+      })),
+      'content.post': [
+        {
+          route,
+          thread_id: threadId,
+          post_id: id(`history-post-${ordinal}`),
+          author_account_id: ordinal % 2 ? authorId : other.accountId,
+          head_revision_id: id(`history-revision-${ordinal}`),
+          visibility: 'published',
+          security_revision: 1,
+          recorded_transaction_id: id('transaction'),
+          created_at: new Date('2020-06-01T00:00:00Z'),
+        },
+      ],
+      'content.revision': [
+        {
+          route,
+          thread_id: threadId,
+          post_id: id(`history-post-${ordinal}`),
+          revision_id: id(`history-revision-${ordinal}`),
+          body: Buffer.from('fixed'),
+          body_sha256: createHash('sha256').update('fixed').digest(),
+          search_text: 'fixed',
+          licence: 'CC0-1.0',
+          subject_ids: [],
+          board_id: id('board'),
+          availability: 'available',
+          recorded_transaction_id: id('transaction'),
+        },
+        {
+          route,
+          thread_id: threadId,
+          post_id: postId,
+          revision_id: id(`old-revision-${ordinal}`),
+          body: Buffer.from('fixed'),
+          body_sha256: createHash('sha256').update('fixed').digest(),
+          search_text: 'fixed',
+          licence: 'CC0-1.0',
+          subject_ids: [],
+          board_id: id('board'),
+          availability: 'available',
+          recorded_transaction_id: id('transaction'),
+        },
+      ],
       'content.operation': [
         {
           route,
@@ -279,19 +403,85 @@ test('checkGrowth measures production initiation and status with fixed Access th
       ],
     }),
   };
+  // A fixed cap-sized actor roster exercises the canonical inverse, not a fake Access.
+  await db.admin.query(
+    `INSERT INTO access.membership_inverse
+    (route,account_id,kind,group_id,reservation_id,transaction_id)
+    SELECT $1,$2,'organization',g,g,$4 FROM unnest($3::uuid[]) g`,
+    [
+      routeOf(authorId),
+      authorId,
+      Array.from({ length: 1000 }, (_, i) => id(`membership-${i}`, 0x9231)),
+      id('transaction'),
+    ],
+  );
   const deps = await dependencies();
+  const client = await createWorkClient(db.url, db.openPool());
+  nativeClients.push(client);
+  await client.registerQueue('governance', { workerConcurrency: 2 });
+  const operation = await beginAuthorErasure(deps, actor, input, context());
+  const envelope = await source(operation);
+  const workflowId = await bindAuthorErasureWorkflow(db.pool, operation.value.operationId, envelope, 0);
+  const nativeDeps: AuthorErasureDependencies = {
+    ...deps,
+    workflows: {
+      enqueue: deps.workflows.enqueue,
+      async status(exactId) {
+        expect(exactId).toBe(workflowId);
+        const status = await client.getWorkflow(exactId);
+        if (!status) return null;
+        const progress = await client.getEvent<{ processedPosts: number; erasedRevisions: number }>(
+          exactId,
+          'progress',
+          0,
+        );
+        return { done: false, progress: progress ?? { processedPosts: 0, erasedRevisions: 0 } };
+      },
+    },
+  };
+  expect((await readOperation(nativeDeps, actor, operation.value.operationId, context()))?.done).toBe(false);
+  // Relay can retry after a crash between binding and enqueue. DBOS owns deduplication.
+  for (let attempt = 0; attempt < 2; attempt++)
+    await client.enqueue(
+      {
+        queueName: 'governance',
+        workflowName: 'content.authorErase',
+        workflowID: workflowId,
+        workflowIDReusePolicy: 'return-existing',
+      },
+      { operationId: operation.value.operationId },
+    );
+  expect((await client.getWorkflow(workflowId))?.status).toBe('ENQUEUED');
   const report = await checkGrowth(db, {
     name: 'author erasure initiation and status',
     scales: [32, 256, 2048],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     grow: async (_db, scale, previous) => {
       await seed(db, population, { from: previous, to: scale });
+      // Grow native identities too; the observed target and its bounded inputs stay fixed.
+      for (let ordinal = previous; ordinal < scale; ordinal++)
+        await client.enqueue(
+          {
+            queueName: 'governance',
+            workflowName: 'content.authorErase',
+            workflowID: `operations-growth-${ordinal}`,
+          },
+          { operationId: id(`noise-${ordinal}`) },
+        );
+      await db.admin.query('ANALYZE dbos.workflow_status');
     },
     operation: async () => {
       const outcome = await beginAuthorErasure(deps, actor, input, context());
       expect((await readOperation(deps, actor, outcome.value.operationId, context()))?.done).toBe(false);
+      expect((await readOperation(nativeDeps, actor, operation.value.operationId, context()))?.done).toBe(false);
     },
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([32, 256, 2048]);
   expect(report.samples.every(({ cost }) => cost.rows > 0 && cost.statements > 0)).toBe(true);
+  const largest = report.samples.at(-1)!.cost;
+  expect(largest.relations!['content.post']?.sequentialScans).toBe(0);
+  expect(largest.relations!['content.post']?.rows).toBe(2);
+  expect(largest.relations!['access.membership_inverse']?.rows).toBeGreaterThanOrEqual(1000);
+  expect(Object.keys(largest.relations!)).not.toContain('dbos.operation_outputs');
+  await client.close();
 }, 90_000);
