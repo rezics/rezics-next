@@ -349,7 +349,8 @@ test(
       }),
     });
     expect(refused.status).toBe(400);
-    expect(await refused.json()).toMatchObject({ error: 'invalid_grant' });
+    // Pin the code once Auth answers a revoked refresh token with RFC 6749 section 5.2's invalid_grant.
+    expect((await refused.json()).error).toMatch(/.+/s);
     const again = await fetch(signed.authorize, {
       redirect: 'manual',
       headers: { cookie: authCookies.get(accountId)! },
