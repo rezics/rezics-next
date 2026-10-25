@@ -8,11 +8,13 @@ export type ContentBoardDependencies = ContentReadDependencies & {
 export type BoardPageInput = {
     cursor?: string;
     limit?: number;
-    sort?: BoardCursorSort;
+    sort?: BoardCursorSort | 'active';
     query?: string;
 };
 export type BoardThreadPage = Page<ThreadView> & {
     anchors: readonly AnchoredPosition[];
+    /** The oldest returned active-rank row's materialization time, or null when no active row was returned. */
+    rankRefreshedAt: string | null;
 };
 export type RealmBoardPageInput = {
     cursor?: string;

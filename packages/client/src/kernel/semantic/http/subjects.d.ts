@@ -1,6 +1,7 @@
 import type { KeyRing } from '../../tokens/seal.ts';
 import type { Pool } from 'pg';
 import { type Item } from '../item.ts';
+import type { Access, Resource } from '../../request/access.ts';
 import { createApp } from '../../http/app.ts';
 export declare const ItemSchema: import("typebox").TObject<{
     id: import("typebox").TString;
@@ -75,8 +76,9 @@ type SubjectRouteDependencies = {
     pool: Pool;
     routeKey: Uint8Array;
     tokens: KeyRing;
+    access: () => Access;
 };
-declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, tokens }: SubjectRouteDependencies): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
+declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, tokens, access }: SubjectRouteDependencies): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
     typebox: {};
     error: [{
         error: Error;
@@ -2171,8 +2173,8 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
             readonly components: import("../../tokens/session.ts").SessionComponent[];
             record(component: import("../../tokens/session.ts").SessionComponent): void;
         };
-        readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../../request/access.ts").AccessCheck>;
-        readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
+        readonly authorize: (resource: Resource) => Promise<import("../../request/access.ts").AccessCheck>;
+        readonly authorizeCommand: (resource: Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
     };
     schema: {};
     schemas: {};
@@ -2561,8 +2563,8 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                 readonly components: import("../../tokens/session.ts").SessionComponent[];
                 record(component: import("../../tokens/session.ts").SessionComponent): void;
             };
-            readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../../request/access.ts").AccessCheck>;
-            readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
+            readonly authorize: (resource: Resource) => Promise<import("../../request/access.ts").AccessCheck>;
+            readonly authorizeCommand: (resource: Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
         };
     }>>) => import("elysia/types").MaybePromise<void>;
     readonly path: string;
@@ -2591,8 +2593,8 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
         readonly components: import("../../tokens/session.ts").SessionComponent[];
         record(component: import("../../tokens/session.ts").SessionComponent): void;
     };
-    readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../../request/access.ts").AccessCheck>;
-    readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
+    readonly authorize: (resource: Resource) => Promise<import("../../request/access.ts").AccessCheck>;
+    readonly authorizeCommand: (resource: Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
     links: import("../links.ts").SubjectLink[];
     freshness: {

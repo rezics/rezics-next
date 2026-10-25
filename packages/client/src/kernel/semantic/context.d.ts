@@ -4,6 +4,11 @@ import { type CommandAuthorization } from '../command/command.ts';
 import type { AccessCheck, AccountActor, Resource } from '../request/access.ts';
 export declare const CREATE_CONTEXT = "context.create";
 export declare const globalContextAnchor: ParentAnchor;
+/** A server-bound editorial Context anchor. The caller chooses a Context id;
+ * this binding fixes its route and verifies the community row on the released
+ * authorization connection before Access evaluates the grant at command T.
+ */
+export declare function editorialContextAnchor(id: string): ParentAnchor;
 export declare function contextTarget(routeKey: Uint8Array, accountId: string, idempotencyKey: string): Resource;
 export declare class ContextAccessDeniedError extends Error {
     constructor();
