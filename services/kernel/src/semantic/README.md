@@ -40,7 +40,7 @@ Contention retries stop at three attempts; fence waits and retries use the deadl
 
 Batch label fill can examine a whole anchor partition because its subject lookup supplies a leading-key route range rather than exact routes; a favourable planner choice alone cannot establish the required bound.
 Fact reads and label projections consume all revisions, with F bounded by the sole creation writer on this base but not by SQL constraints or read limits, so the uncapped-F bounds describe the storage contract's gap rather than an existing subject-update endpoint.
-Subject payload blocks B are not bounded by F alone because quantity amounts lack a length cap, so shared-block growth claims must keep payload size fixed.
+Structural value limits bound subject payload blocks B by F for accepted inputs; shared-block growth checks keep payload size fixed.
 Batch ids are uncapped at `readLabels`, and HTTP related-label work fans out per id instead of issuing a capped batch.
 Default authorization has separately anchored but uncapped evidence fan-out; its costs cannot be proved bounded using subject and definition counts alone.
 All writes serialize on their own `core.partition.position` counter, with definitions sharing partition 0; this is a partition-local lock/counter, not a global counter across all subject partitions.
