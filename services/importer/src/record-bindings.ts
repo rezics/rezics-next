@@ -22,10 +22,15 @@ const { Errors } = createRequire(import.meta.resolve('@rezics/definitions/media-
   Errors(schema: unknown, input: unknown): [unknown, Iterable<unknown>];
 };
 
+/** Exact source alias and external record key; this identity survives coordinator runs. */
 export type Owner = { source: string; external_id: string };
+/** Send bytes unchanged with key. Signature is caller-supplied planner identity, not a native ID. */
 export type Journal = { key: string; bytes: string; signature: string };
+/** A currently owned, acknowledged candidate with its original request attachment. */
 export type Candidate = Journal & { candidate: string; subject: string; field_group: FieldGroup };
+/** Bootstrap observation only; full record baselines and run acknowledgements belong to RunStore. */
 export type Claim = { state: 'pending' } | { state: 'bound'; subject: string } | { state: 'taken-down' };
+/** The exact POST and observed responses; a reserved receipt does not make its media available. */
 export type PendingMedia = Journal & { accepted: MediaImportAccepted | null; status: MediaImportStatus | null };
 
 type Binding = {
@@ -252,7 +257,11 @@ export class RecordBindings {
     );
   }
 
-  /** Reserve one create/propose/retract request before sending. Replay must match bytes and signature. */
+  /**
+   * Reserve one create/propose/retract request before sending. Replay must match bytes and signature.
+   * Recover an uncertain bootstrap through journal(owner, originalKey), even if source data changed.
+   * Pending proposals reserve the same capacity as current acknowledged candidates until retracted.
+   */
   prepare(input: Owner, signature: string, request: BatchWriteRequest): Journal {
     const o = ownerInput(input);
     text(signature, 128);
