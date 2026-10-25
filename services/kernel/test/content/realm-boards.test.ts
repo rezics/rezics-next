@@ -380,7 +380,29 @@ test.serial(
       await expectHiddenAsMissing('/v1/boards/' + board.id + '/threads', missingBoard, token);
       await expectHiddenAsMissing('/v1/boards/' + board.id, '/v1/boards/' + newId(board.route), token);
     }
-    expect(actionCatalogue(kernel).has('account:suspend')).toBe(false);
+    const suspended = await person(
+      'realm_boards_suspended',
+      [...actionCatalogue(kernel).keys()].filter((action) => action !== 'media:complete'),
+    );
+    const suspension = await call('POST', `/v1/accounts/${suspended.accountId}:suspend`, {
+      bearer: governance.bearer,
+      key: crypto.randomUUID(),
+      body: { reason: 'Suspended board creator fixture' },
+    });
+    expect(suspension.response.status).toBe(200);
+    const suspendedConceptId = await createSubject('skos:Concept', schemeId);
+    const beforeSuspended = await writeSnapshot();
+    const refusedSuspended = await call('POST', `/v1/realms/${publicRealm.realmId}/boards`, {
+      bearer: suspended.bearer,
+      key: crypto.randomUUID(),
+      body: {
+        conceptId: suspendedConceptId,
+        title: 'Board for suspended creator',
+        visibility: 'published',
+      },
+    });
+    expect(refusedSuspended.response.status).toBe(401);
+    expect(await writeSnapshot()).toEqual(beforeSuspended);
   },
 );
 
