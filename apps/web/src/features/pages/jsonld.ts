@@ -1,7 +1,12 @@
 import type { Related, Subject } from '../../subject/types.ts';
 
 type JsonValue = string | number | JsonValue[] | { [key: string]: JsonValue };
-type Statement = Subject['statements'][string][number];
+// The kernel client infers statement values as one union. Indexing it is too large for the compiler,
+// and every field below is checked again at run time.
+type Statement = {
+  value: { type: string; content?: unknown };
+  property: { data_type: string };
+};
 
 const idBase = 'https://rezics.com/id/';
 const prefixes = new Map([
