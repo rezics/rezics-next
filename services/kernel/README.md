@@ -15,6 +15,12 @@ schema dump, runs TypeScript, lint and formatting checks, then runs each test fi
 database. A plain `bun test` shares one database across files, so run a single file when not running the check. The test
 database is removed at the end.
 
+## HTTP contract
+
+When the HTTP contract changes, regenerate both `contracts/openapi.json` with `bun run openapi` and the client
+declarations with `bun run client` while the development database is up. Tests fail while either generated contract is
+stale.
+
 ## Database changes
 
 Kernel-owned migrations live in `db/migrations/` and their dump lives in `db/schema.sql`. Each module has its code and
