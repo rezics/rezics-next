@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { DBOS } from '@dbos-inc/dbos-sdk';
-import { randomBytes } from 'node:crypto';
 import pg from 'pg';
 import { createPool } from '../src/database/pool.ts';
 import {
@@ -12,7 +11,8 @@ import {
 } from '../src/events/effects.ts';
 import type { CloudEvent } from '../src/events/log.ts';
 import scanPartitions from '../src/events/scan-partitions.sql';
-import { readConfig, startServer } from '../src/server.ts';
+import { readWorkerConfig, startWorker } from '../src/worker.ts';
+import type { WorkContext } from '../src/work/registry.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from './support/growth.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -76,16 +76,17 @@ afterAll(async () => {
   await admin.end();
 });
 
-test('the server relays a committed event to its effect without a caller naming the partition', async () => {
-  const config = readConfig({
-    DATABASE_URL: databaseUrl,
-    KERNEL_ROUTE_KEY: randomBytes(32).toString('base64url'),
-    KERNEL_SESSION_KEYS: `1:${randomBytes(32).toString('base64url')}`,
-    KERNEL_PORT: '0',
-  });
+test('the worker relays a committed event to its effect without a caller naming the partition', async () => {
   const partition = freshPartition();
   const emptyPartition = freshPartition();
-  const server = await startServer(config, { effects: [effect] });
+  const module = {
+    name: 'relay_test',
+    register(context: WorkContext) {
+      (context as WorkContext & { addEffects(effects: Effect[]): void }).addEffects([effect]);
+    },
+  };
+  const env = { DATABASE_URL: databaseUrl, KERNEL_EXECUTOR_ID: `relay-test-${crypto.randomUUID()}` };
+  const worker = await startWorker(readWorkerConfig(env), [module], env);
   try {
     const { epoch, position, subject } = await append(partition);
     await until(async () => (await checkpoint(partition)) === String(position));
@@ -96,7 +97,7 @@ test('the server relays a committed event to its effect without a caller naming 
     expect(recorded.filter((event) => event.subject === subject)).toHaveLength(1);
     expect(await checkpoint(emptyPartition)).toBeUndefined();
   } finally {
-    await server.stop();
+    await worker.stop();
   }
 }, 30_000);
 
