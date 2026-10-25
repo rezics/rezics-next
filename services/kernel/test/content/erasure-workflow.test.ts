@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { DBOS } from '@dbos-inc/dbos-sdk';
+import { Pool } from 'pg';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { runCommand, type AuthoritativeTime, type CommandTransaction } from '../../src/command/command.ts';
 import { erasePostLogical } from '../../src/content/erase-post.ts';
@@ -18,6 +19,7 @@ import { standingFixture } from '../access/standing-fixture.ts';
 let fixture: Awaited<ReturnType<typeof standingFixture>>;
 let client: Awaited<ReturnType<typeof createWorkClient>>;
 let work: Awaited<ReturnType<typeof composeWork>>;
+let systemPool: Pool;
 const route = 0x6798;
 const partition = partitionOf(route);
 const routeKey = new Uint8Array(32).fill(7);
@@ -29,6 +31,7 @@ const context = () => ({
 
 beforeAll(async () => {
   fixture = await standingFixture();
+  systemPool = new Pool({ connectionString: process.env.DATABASE_URL!, max: 10 });
   client = await createWorkClient(process.env.DATABASE_URL!);
   work = await composeWork(
     [
@@ -63,7 +66,7 @@ beforeAll(async () => {
         },
       },
     ],
-    { databaseUrl: process.env.DATABASE_URL!, pool: fixture.pool, client },
+    { databaseUrl: process.env.DATABASE_URL!, pool: systemPool, client },
   );
   await work.launch();
 });
@@ -71,6 +74,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await work?.shutdown();
   await client?.close();
+  await systemPool?.end();
   await fixture?.close();
 });
 
