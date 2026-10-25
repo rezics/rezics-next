@@ -500,6 +500,16 @@ The principal creates that row through `createDelegationCommands(...).create`
 using an actor returned by the real Access authenticator. Bootstrap rows without
 creator provenance cannot support delegation tokens.
 
+Final drivers use these existing entry points for the complete request:
+
+| Boundary             | Composition                                                                                                                                                                                 |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Principal assignment | `createDelegationCommands({ pool, access, action }).create({ pool, deadline, actor }, input)`, with the principal's authenticated actor and ordinary delegation grant/scope.                |
+| Issuance proof       | `AuthServiceOptions.trustedAccess.readAssignment(reference, actorId)` bound to the exported Access `readAssignment` reader; `readAccount` bound to the authoritative Access account reader. |
+| Token issuance       | `service.handler` at `POST /token`, with the actor's real session cookie and `{ requested_by: reference }`.                                                                                 |
+| Bearer verification  | `createAccess({ actions, auth: service.verifier }).authenticate(token, { pool, deadline })`, using only the public JWKS endpoint.                                                           |
+| Resource execution   | `accessCheck` or `accessCommandAuthorization` with that verified actor; commands execute through `runCommand` with the actor, client and unchanged assignment reference in their basis.     |
+
 Auth rejects a malformed reference before calling the port, verifies every
 returned identity against the reference and cookie subject, and uses
 `trustedAccess.readAccount(principalId)` for a further active actor/fence check.
