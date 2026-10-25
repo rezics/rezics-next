@@ -380,11 +380,15 @@ async function publishMain(options: PromotionOptions, run: PromotionRun): Promis
 /** Gate integrated work, publish passing commits on main, or isolate the first failing task on dev. */
 export async function promote(options: PromotionOptions): Promise<void> {
   const { settings, job } = options, store = job.tasks.store;
+  // A local switch: while dev is known to be red, gating and bisecting it only spends the machine.
+  const paused = () => existsSync(join(settings.stateDirectory, 'promotion.paused'));
+  if (paused()) return;
   let lease;
   try { lease = acquireDirectoryLease(join(settings.stateDirectory, 'promotion.lease')); }
   catch (error) { if (error instanceof LeaseHeldError) return; throw error; }
   try {
     for (;;) {
+      if (paused()) return;
       let run = store.promotion();
       const main = head(settings.mainCheckout, settings.mainBranch);
       let dev: string;
