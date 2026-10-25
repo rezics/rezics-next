@@ -55,7 +55,7 @@ export type PromotionGateResult = {
 export type PromotionRun = {
   id: string;
   phase: 'gate-head' | 'classify-main' | 'classify-prefixes' | 'revert-planned' | 'revert-published'
-    | 'route-culprit' | 'gate-remainder' | 'publish-main' | 'report-environment';
+    | 'route-culprit' | 'gate-remainder' | 'publish-main' | 'report-environment' | 'blocked';
   mainBase: string; devHead: string; taskIds: string[];
   rootGate: string[]; promotionParallelism: number;
   boundaries: { taskId: string; commit: string }[];
@@ -64,6 +64,8 @@ export type PromotionRun = {
   mainResult?: PromotionGateResult; culpritAttempt?: number;
   culpritTaskId?: string; closureTaskIds?: string[]; remainingTaskIds?: string[];
   revertBase?: string; revertCommit?: string;
+  /** A culprit that later tasks build on is fixed forward; promotion waits for its next integrated attempt. */
+  blockedOn?: { taskId: string; attempt: number };
   promoteHead?: string; promoteTaskIds?: string[];
 };
 export type AttemptFailure = 'spec-conflict' | 'scope-growth' | 'pool-exhausted' | 'tool';
