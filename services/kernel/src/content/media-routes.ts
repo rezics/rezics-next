@@ -7,9 +7,11 @@ import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
 import { AuthenticationError } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
+import { threadTarget } from './commands.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import {
   reserveMedia,
+  NewThreadTargetExistsError,
   completeMedia,
   readReservation,
   decideDownload,
@@ -44,6 +46,7 @@ const readFailures = {
 const writeFailures = {
   ...readFailures,
   403: problemSchema('forbidden'),
+  409: problemSchema('conflict'),
   422: problemSchema('idempotency_conflict', 'too_many_events'),
   429: problemSchema('rate_limited'),
   503: problemSchema(
@@ -74,6 +77,7 @@ async function mutation<T>(work: () => Promise<T>) {
     return await work();
   } catch (error) {
     if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
+    if (error instanceof NewThreadTargetExistsError) throw new ProblemError('conflict');
     throw error;
   }
 }
@@ -118,7 +122,14 @@ export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependenci
         mutation(() =>
           admission.run('normal', job, async () => {
             if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
-            const result = await reserveMedia(dependencies, actor, body, context(request, job.deadline));
+            const target =
+              'newThread' in body
+                ? {
+                    thread: threadTarget(dependencies.routeKey, actor.accountId, body.newThread.idempotencyKey),
+                    boardId: body.newThread.boardId,
+                  }
+                : undefined;
+            const result = await reserveMedia(dependencies, actor, body, context(request, job.deadline), target);
             session.record(result);
             const media = await readReservation(dependencies, result.value.mediaId, { actor, deadline: job.deadline });
             if (!media) throw new ProblemError('not_found');

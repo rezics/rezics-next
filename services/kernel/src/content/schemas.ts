@@ -107,6 +107,7 @@ export const ThreadInputSchema = t.Object(
     body: document,
     ...references,
     visibility: t.Union([t.Literal('published'), t.Literal('draft')]),
+    mediaIds: t.Optional(media),
   },
   closed,
 );
@@ -171,22 +172,28 @@ export const BoardThreadsResponseSchema = t.Object(
 const mediaDigest = t.String({ pattern: '^[0-9a-f]{64}$' });
 const mediaLength = t.Integer({ minimum: 1, maximum: 20 * 1024 * 1024 });
 const reservationRequestId = t.String({ minLength: 1, maxLength: 255 });
-export const MediaReservationInputSchema = t.Object(
-  {
-    containerId: ContentIdSchema,
-    purpose: t.Literal('post-image'),
-    mediaType: t.Union([
-      t.Literal('image/avif'),
-      t.Literal('image/gif'),
-      t.Literal('image/jpeg'),
-      t.Literal('image/png'),
-      t.Literal('image/webp'),
-    ]),
-    byteCount: mediaLength,
-    sha256: t.Optional(mediaDigest),
-  },
-  closed,
-);
+const mediaReservationFields = {
+  purpose: t.Literal('post-image'),
+  mediaType: t.Union([
+    t.Literal('image/avif'),
+    t.Literal('image/gif'),
+    t.Literal('image/jpeg'),
+    t.Literal('image/png'),
+    t.Literal('image/webp'),
+  ]),
+  byteCount: mediaLength,
+  sha256: t.Optional(mediaDigest),
+};
+export const MediaReservationInputSchema = t.Union([
+  t.Object({ containerId: ContentIdSchema, ...mediaReservationFields }, closed),
+  t.Object(
+    {
+      newThread: t.Object({ boardId: ContentIdSchema, idempotencyKey: reservationRequestId }, closed),
+      ...mediaReservationFields,
+    },
+    closed,
+  ),
+]);
 export const MediaCompletionInputSchema = t.Object(
   {
     containerId: ContentIdSchema,

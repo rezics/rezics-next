@@ -16702,11 +16702,20 @@ export declare function createKernel(dependencies: KernelDependencies): import("
         media: {
             post: {
                 body: {
-                    containerId: string;
                     purpose: "post-image";
                     mediaType: "image/avif" | "image/gif" | "image/jpeg" | "image/png" | "image/webp";
                     byteCount: number;
                     sha256?: string;
+                    containerId: string;
+                } | {
+                    purpose: "post-image";
+                    mediaType: "image/avif" | "image/gif" | "image/jpeg" | "image/png" | "image/webp";
+                    byteCount: number;
+                    sha256?: string;
+                    newThread: {
+                        boardId: string;
+                        idempotencyKey: string;
+                    };
                 };
                 params: {};
                 query: unknown;
@@ -16770,6 +16779,20 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                         }[];
                     };
                     404: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    409: {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -17014,6 +17037,20 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                 }[];
                             };
                             404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            409: {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -20812,6 +20849,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                     title: string;
                     body: import("@rezics/document").DocumentSnapshot;
                     visibility: "draft" | "published";
+                    mediaIds?: string[];
                 };
                 params: {};
                 query: unknown;

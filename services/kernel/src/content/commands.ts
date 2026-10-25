@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
 import {
@@ -22,7 +22,7 @@ import { accessCheck, type Access, type AccessClient, type Actor, type Resource 
 import { readPartition } from '../partition/partition.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../route/route.ts';
 import { InvalidDocumentError, validateContentDocument } from './document.ts';
-import { claimMedia } from './media.ts';
+import { claimMedia, InvalidMediaClaimError } from './media.ts';
 import { mediaParentSnapshot } from './media-parent.ts';
 import type { ContentCommandValue, PostInput, RequestContext, RevisionInput, ThreadInput } from './model.ts';
 import readBoard from './read-board.sql';
@@ -41,6 +41,7 @@ export type ContentCommandDependencies = Readonly<{
   clock?: () => Date;
 }>;
 export type ThreadTarget = Resource;
+type ThreadCreationInput = ThreadInput & Readonly<{ mediaIds?: readonly string[] }>;
 const CREATE_THREAD = 'content.thread.create';
 const CREATE_POST = 'content.post.create';
 const REVISE_POST = 'content.post.revise';
@@ -67,8 +68,18 @@ function route(id: string): number {
   return value;
 }
 export function threadTarget(routeKey: Uint8Array, accountId: string, idempotencyKey: string): Resource {
-  const r = anchorRoute(routeKey, `${accountId}\n${CREATE_THREAD}\n${idempotencyKey}`);
-  return { route: r, id: newId(r) };
+  const identity = `${accountId}\n${CREATE_THREAD}\n${idempotencyKey}`;
+  const r = anchorRoute(routeKey, identity);
+  const bytes = createHmac('sha256', routeKey).update(`content.thread.target.id\n${identity}`).digest().subarray(0, 16);
+  bytes[6] = (bytes[6]! & 0x0f) | 0x80;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  bytes[10] = r >>> 8;
+  bytes[11] = r & 0xff;
+  const hex = bytes.toString('hex');
+  return {
+    route: r,
+    id: `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`,
+  };
 }
 function options(
   dependencies: ContentCommandDependencies,
@@ -157,13 +168,13 @@ function sameChain(left: Chain, right: Chain): boolean {
   return signature(left) === signature(right);
 }
 function mediaReferences(value: unknown, r: number): string[] {
-  if (!Array.isArray(value) || value.length > 32) throw new InvalidDocumentError('Invalid media references');
+  if (!Array.isArray(value) || value.length > 32) throw new InvalidMediaClaimError();
   const ids: string[] = [];
   for (const id of value as unknown[]) {
-    if (typeof id !== 'string' || routeOf(id) !== r) throw new InvalidDocumentError('Invalid media references');
+    if (typeof id !== 'string' || routeOf(id) !== r) throw new InvalidMediaClaimError();
     ids.push(id);
   }
-  if (new Set(ids).size !== ids.length) throw new InvalidDocumentError('Duplicate media references');
+  if (new Set(ids).size !== ids.length) throw new InvalidMediaClaimError();
   return ids;
 }
 function document(body: unknown, licence: string, subjectIds: readonly (string | null)[]) {
@@ -332,7 +343,7 @@ function result(value: ContentCommandValue, actor: Actor, noun: 'thread' | 'post
 export async function createThread(
   dependencies: ContentCommandDependencies,
   actor: Actor,
-  input: ThreadInput,
+  input: ThreadCreationInput,
   context: RequestContext,
 ): Promise<CommandOutcome<ContentCommandValue>> {
   const author = account(actor);
@@ -398,6 +409,7 @@ export async function createThread(
         (body.visibility !== 'published' && body.visibility !== 'draft')
       )
         throw new InvalidDocumentError();
+      const mediaIds = mediaReferences(body.mediaIds === undefined ? [] : body.mediaIds, target.route);
       const at = authoritativeTimeValue(command.time);
       await insertThread.run(tx, {
         route: target.route,
@@ -428,12 +440,21 @@ export async function createThread(
         body.licence,
         body.subjectIds,
         body.boardId,
-        [],
+        mediaIds,
         command.transactionId,
         command.time,
       );
       inserted.set(tx, command.transactionId);
       for (const entry of entries) await initializeResourceGrants(tx, entry);
+      if (mediaIds.length)
+        await claimMedia(tx, {
+          mediaIds,
+          containerId: value.threadId,
+          author,
+          itemId: value.itemId,
+          revisionId: value.revisionId,
+          boardId: body.boardId,
+        });
       return result(value, actor, 'thread');
     },
   );

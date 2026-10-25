@@ -15,6 +15,7 @@ import {
 import { initializeResourceGrants, parentCreationAuthorization } from '../access/index.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { accessCheck, accessCommandAuthorization, type AccessCheck } from '../request/access.ts';
+import { readPartition } from '../partition/partition.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import reserveStatement from './reserve-media.sql';
 import completeStatement from './complete-media.sql';
@@ -22,7 +23,7 @@ import readStatement from './read-media.sql';
 import claimStatement from './claim-media.sql';
 import { claimCoverMedia } from './cover-reference.ts';
 import { mediaParentBoard, mediaParentChain, mediaParentSnapshot, type MediaParent } from './media-parent.ts';
-import type { Access, Actor } from '../request/access.ts';
+import type { Access, Actor, Resource } from '../request/access.ts';
 import type { ImportedSource, Rights } from './imported-contract.ts';
 import type { MediaId, PostId, ReadContext, RequestContext, RevisionId, ThreadId } from './model.ts';
 import { downloadMedia, type DownloadContext } from './media-download.ts';
@@ -69,13 +70,18 @@ export type MediaMetadata =
         rights: Rights;
         source: ImportedSource;
       }>);
-export type MediaReservationInput = Readonly<{
-  containerId: ThreadId | PostId;
+type MediaReservationFields = Readonly<{
   purpose: 'post-image';
   mediaType: string;
   byteCount: number;
   sha256?: string;
 }>;
+export type MediaReservationInput = MediaReservationFields &
+  (
+    | Readonly<{ containerId: ThreadId | PostId; newThread?: never }>
+    | Readonly<{ newThread: Readonly<{ boardId: string; idempotencyKey: string }>; containerId?: never }>
+  );
+export type NewThreadMediaTarget = Readonly<{ thread: Resource; boardId: string }>;
 export type MediaCompletionInput = Readonly<{
   containerId: ThreadId | PostId;
   reservationRequestId: string;
@@ -106,6 +112,7 @@ type ClaimMediaBase = Readonly<{
   mediaIds: readonly MediaId[];
   containerId: ThreadId | PostId;
   author: Actor;
+  boardId?: string;
 }>;
 export type ClaimMediaInput = ClaimMediaBase &
   (
@@ -121,6 +128,18 @@ export type ClaimMediaInput = ClaimMediaBase &
         revisionId?: never;
       }>
   );
+export class NewThreadTargetExistsError extends Error {
+  constructor() {
+    super('The requested thread already exists');
+    this.name = 'NewThreadTargetExistsError';
+  }
+}
+export class InvalidMediaClaimError extends Error {
+  constructor() {
+    super('The media references cannot be claimed');
+    this.name = 'InvalidMediaClaimError';
+  }
+}
 const imageTypes = new Set(['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp']);
 const digestPattern = /^[0-9a-f]{64}(?![\s\S])/;
 function account(actor: Actor) {
@@ -171,33 +190,61 @@ export async function reserveMedia(
   actor: Actor,
   input: MediaReservationInput,
   context: RequestContext,
+  newThreadTarget?: NewThreadMediaTarget,
 ): Promise<CommandOutcome<Readonly<{ mediaId: MediaId }>>> {
   const owner = account(actor);
-  const r = route(input.containerId);
+  const newThread = 'newThread' in input ? input.newThread : undefined;
+  if (Boolean(newThread) !== Boolean(newThreadTarget)) throw new TypeError('Invalid new-thread media target');
+  if (newThread) {
+    requestKey(newThread.idempotencyKey);
+    if (newThreadTarget!.boardId !== newThread.boardId) throw new TypeError('Invalid new-thread board');
+  }
+  const containerId = newThreadTarget?.thread.id ?? ('containerId' in input ? input.containerId : undefined);
+  if (!containerId) throw new TypeError('Missing media container');
+  const r = route(containerId);
+  if (newThreadTarget && newThreadTarget.thread.route !== r) throw new TypeError('Invalid media target route');
   if (input.purpose !== 'post-image' || !imageTypes.has(input.mediaType))
     throw new TypeError('Invalid media purpose or type');
   length(input.byteCount);
   if (input.sha256 !== undefined) digest(input.sha256);
-  const body = {
-    containerId: input.containerId,
-    purpose: input.purpose,
-    mediaType: input.mediaType,
-    byteCount: input.byteCount,
-    ...(input.sha256 === undefined ? {} : { sha256: input.sha256 }),
-  };
+  const body = newThread
+    ? {
+        newThread: { boardId: newThread.boardId, idempotencyKey: newThread.idempotencyKey },
+        purpose: input.purpose,
+        mediaType: input.mediaType,
+        byteCount: input.byteCount,
+        ...(input.sha256 === undefined ? {} : { sha256: input.sha256 }),
+      }
+    : {
+        containerId,
+        purpose: input.purpose,
+        mediaType: input.mediaType,
+        byteCount: input.byteCount,
+        ...(input.sha256 === undefined ? {} : { sha256: input.sha256 }),
+      };
   const mediaId = newId(r);
   const resource = { route: r, id: mediaId };
   let insertedTransaction: string | undefined;
   let preparedChain: MediaParent[] = [];
   let disclosure: (AccessCheck | null)[] = [];
+  let boardRead: AccessCheck | undefined;
+  let threadCreate: AccessCheck | undefined;
+  const board = newThreadTarget ? { route: route(newThreadTarget.boardId), id: newThreadTarget.boardId } : undefined;
   const base = parentCreationAuthorization({
     access: dependencies.access,
     actor,
     action: 'media:create',
     parent: {
-      resource: { route: r, id: body.containerId },
+      resource: board ?? { route: r, id: containerId },
       async validate(client, time) {
-        const current = await mediaParentChain(client, body.containerId);
+        if (board) {
+          const partition = await readPartition(client, partitionOf(board.route));
+          if (!partition || partition.writeState === 'moved') return false;
+          const current = await mediaParentBoard(client, board.id);
+          if (current.visibility !== 'published' && !(await boardRead!(client, time))) return false;
+          return threadCreate!(client, time);
+        }
+        const current = await mediaParentChain(client, containerId);
         if (current.length !== preparedChain.length) return false;
         for (let i = 0; i < current.length; i++) {
           const row = current[i]!;
@@ -230,7 +277,7 @@ export async function reserveMedia(
             row.inserted_here === true &&
             row.transaction_id === insertedTransaction &&
             row.uploader_id === owner.accountId &&
-            row.container_id === body.containerId &&
+            row.container_id === containerId &&
             row.reservation_request_id === context.idempotencyKey &&
             Date.parse(row.created_at!) === Date.parse(authoritativeTimeValue(time))
           );
@@ -241,10 +288,21 @@ export async function reserveMedia(
   const authorization: CommandAuthorization = {
     ...base,
     async prepare(attempt) {
+      if (board) {
+        boardRead = await accessCheck(dependencies.access, actor, 'board:read', board, {
+          pool: dependencies.pool,
+          deadline: context.deadline,
+        });
+        threadCreate = await accessCheck(dependencies.access, actor, 'thread:create', board, {
+          pool: dependencies.pool,
+          deadline: context.deadline,
+        });
+        return base.prepare!(attempt);
+      }
       // Prepare private-ancestor formula evidence before the parent checkout.
       // Every retry resolves the bounded chain again; no resource connection is retained.
       preparedChain = await mediaParentSnapshot(dependencies.pool, r, context.deadline, (client) =>
-        mediaParentChain(client, body.containerId),
+        mediaParentChain(client, containerId),
       );
       disclosure = [];
       for (const row of preparedChain) {
@@ -263,7 +321,7 @@ export async function reserveMedia(
       const boardId = preparedChain.at(-1)!.board_id!;
       // Prepare independently, then read the board and apply the existing formula
       // on its own native anchor. Public visibility needs no private read grant.
-      const boardRead = await accessCheck(
+      const containerBoardRead = await accessCheck(
         dependencies.access,
         actor,
         'board:read',
@@ -272,11 +330,23 @@ export async function reserveMedia(
       );
       await mediaParentSnapshot(dependencies.pool, route(boardId), context.deadline, async (client) => {
         const board = await mediaParentBoard(client, boardId);
-        if (board.visibility !== 'published' && !(await boardRead(client, attempt.time))) throw new GrantDeniedError();
+        if (board.visibility !== 'published' && !(await containerBoardRead(client, attempt.time)))
+          throw new GrantDeniedError();
       });
       // Release the board checkout before parent-at-T authorization and the new
       // media-only write/initializer. These independent anchors are not atomic.
       return base.prepare!(attempt);
+    },
+    async authorize(tx, attempt, evidence) {
+      const mode = await base.authorize(tx, attempt, evidence);
+      if (newThreadTarget) {
+        const rows = await tx.query<{ thread_id: string }>(
+          'SELECT thread_id FROM content.thread WHERE route=$1 AND thread_id=$2',
+          [r, containerId],
+        );
+        if (rows.rowCount !== 0) throw new NewThreadTargetExistsError();
+      }
+      return mode;
     },
   };
   return runCommand(
@@ -286,7 +356,7 @@ export async function reserveMedia(
       await reserveStatement.run(tx, {
         route: r,
         media_id: mediaId,
-        container_id: body.containerId,
+        container_id: containerId,
         uploader_id: owner.accountId,
         reservation_request_id: context.idempotencyKey,
         purpose: body.purpose,
@@ -305,7 +375,7 @@ export async function reserveMedia(
           {
             type: 'com.rezics.content.media.reserved.v1',
             subject: mediaId,
-            data: { mediaId, containerId: body.containerId, actorId: owner.accountId },
+            data: { mediaId, containerId, actorId: owner.accountId },
           },
         ],
       };
@@ -497,13 +567,14 @@ export async function claimMedia(transaction: CommandTransaction, input: ClaimMe
   const command = currentCommand(transaction);
   const owner = account(input.author);
   const r = route(input.containerId);
+  if (new Set(input.mediaIds).size !== input.mediaIds.length) throw new InvalidMediaClaimError();
   if (
     command.partition !== partitionOf(r) ||
     command.basis?.actorAccountId !== owner.accountId ||
     command.basis.clientId !== owner.clientId ||
     command.basis.requestedBy !== owner.requestedBy ||
     command.authorization?.mode !== 'execute' ||
-    command.authorization.resource.route !== r ||
+    (command.authorization.action !== 'thread:create' && command.authorization.resource.route !== r) ||
     input.mediaIds.length > 32
   )
     throw new GrantDeniedError();
@@ -522,14 +593,21 @@ export async function claimMedia(transaction: CommandTransaction, input: ClaimMe
   }
   if (
     input.reference !== undefined ||
-    (command.authorization.action !== 'post:create' && command.authorization.action !== 'post:revise') ||
+    (command.authorization.action !== 'thread:create' &&
+      command.authorization.action !== 'post:create' &&
+      command.authorization.action !== 'post:revise') ||
+    (command.authorization.action === 'thread:create' &&
+      (input.boardId === undefined ||
+        command.authorization.resource.id !== input.boardId ||
+        routeOf(input.boardId) !== command.authorization.resource.route)) ||
+    (command.authorization.action !== 'thread:create' && input.boardId !== undefined) ||
     (command.authorization.action === 'post:revise' && command.authorization.resource.id !== input.itemId) ||
     routeOf(input.itemId) !== r ||
     routeOf(input.revisionId) !== r
   )
     throw new GrantDeniedError();
   const ids = [...new Set(input.mediaIds)];
-  if (ids.some((id) => routeOf(id) !== r)) throw new GrantDeniedError();
+  if (ids.some((id) => routeOf(id) !== r)) throw new InvalidMediaClaimError();
   if (ids.length === 0) return;
   const rows = await claimStatement.run(transaction, {
     route: r,
@@ -538,10 +616,12 @@ export async function claimMedia(transaction: CommandTransaction, input: ClaimMe
     uploader_id: owner.accountId,
     item_id: input.itemId,
     revision_id: input.revisionId,
-    authorization_resource_id: command.authorization.resource.id,
+    authorization_resource_id:
+      command.authorization.action === 'thread:create' ? input.boardId! : command.authorization.resource.id,
+    new_thread: command.authorization.action === 'thread:create',
     at: authoritativeTimeValue(command.time),
   });
-  if (rows.length !== ids.length) throw new GrantDeniedError();
+  if (rows.length !== ids.length) throw new InvalidMediaClaimError();
 }
 export function decideDownload(
   dependencies: MediaDependencies,

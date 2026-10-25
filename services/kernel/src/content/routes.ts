@@ -21,6 +21,7 @@ import {
   revisePost,
   type ContentCommandDependencies,
 } from './commands.ts';
+import { InvalidMediaClaimError } from './media.ts';
 import { DocumentTooLargeError, InvalidDocumentError, MAX_DOCUMENT_BYTES } from './document.ts';
 import { mediaImportRoutes } from './media-import-routes.ts';
 import type { AnchoredPosition, ReadContext } from './model.ts';
@@ -139,6 +140,7 @@ async function contentOperation<T>(operation: () => Promise<T>): Promise<T> {
   } catch (error) {
     if (error instanceof DocumentTooLargeError) throw new ProblemError('content_too_large');
     if (error instanceof InvalidDocumentError) throw new ProblemError('invalid_request');
+    if (error instanceof InvalidMediaClaimError) throw new ProblemError('idempotency_conflict');
     if (error instanceof CommandNotFoundError || error instanceof ReadNotFoundError)
       throw new ProblemError('not_found');
     if (error instanceof ContentForbiddenError) throw new ProblemError('forbidden');

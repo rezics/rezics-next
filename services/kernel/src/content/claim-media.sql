@@ -2,7 +2,7 @@ WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route, :media_ids::uuid[] AS media_ids,
          :container_id::uuid AS container_id, :uploader_id::uuid AS uploader_id, :at::timestamptz AS at,
          :item_id::uuid AS item_id, :revision_id::uuid AS revision_id,
-         :authorization_resource_id::uuid AS authorization_resource_id
+         :authorization_resource_id::uuid AS authorization_resource_id, :new_thread::boolean AS new_thread
 ), locked AS MATERIALIZED (
   SELECT m.route, m.media_id, m.container_id, m.uploader_id, m.purpose, m.state,
          m.erased, m.collection_pending, m.taken_down, m.claimed_at
@@ -19,9 +19,14 @@ WITH input AS NOT MATERIALIZED (
       SELECT 1 FROM content.post p
       JOIN content.revision r ON r.route = i.route AND r.revision_id = i.revision_id
         AND r.post_id = p.post_id AND r.thread_id = p.thread_id
+      JOIN content.thread t ON t.route = i.route AND t.thread_id = p.thread_id
       WHERE p.route = i.route AND p.post_id = i.item_id
-        AND i.container_id IN (p.thread_id, p.post_id, p.reply_to_post_id)
-        AND i.authorization_resource_id IN (p.thread_id, p.post_id, p.reply_to_post_id)
+        AND (
+          (i.new_thread AND i.container_id = p.thread_id AND i.authorization_resource_id = t.board_id)
+          OR
+          (NOT i.new_thread AND i.container_id IN (p.thread_id, p.post_id, p.reply_to_post_id)
+            AND i.authorization_resource_id IN (p.thread_id, p.post_id, p.reply_to_post_id))
+        )
         AND p.availability = 'available' AND p.visibility <> 'taken_down' AND r.availability = 'available'
     )
 ), changed AS (
