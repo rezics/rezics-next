@@ -3,6 +3,7 @@ import { existsSync, readFileSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import defaults from '../defaults.json';
 import type { Pool, Settings } from './types.ts';
+import { validatePath } from './briefs.ts';
 
 import type { Database } from 'bun:sqlite';
 import { openDb } from './db.ts';
@@ -21,6 +22,22 @@ import type { IntegrationRuntime } from './integration-cli.ts';
 import type { ManagerServices, ManagerSpec } from './managers.ts';
 
 export type SettingsOptions = { cwd?: string; env?: NodeJS.ProcessEnv; localFile?: string };
+export type DerivedFile = { path: string; stage: 'integration' | 'promotion'; command: string[] };
+export function readDerivedFiles(value: unknown = defaults.derivedFiles): DerivedFile[] {
+  if (!Array.isArray(value)) throw new Error('derivedFiles must be an array');
+  return value.map((item, index) => {
+    const file = object(item, `derivedFiles[${index}]`);
+    keys(file, ['path', 'stage', 'command'], `derivedFiles[${index}]`);
+    const path = text(file.path, `derivedFiles[${index}].path`);
+    validatePath(path);
+    if (file.stage !== 'integration' && file.stage !== 'promotion') throw new Error(`invalid derivedFiles[${index}].stage`);
+    if (!Array.isArray(file.command) || !file.command.length || file.command.some(part => typeof part !== 'string' || !part))
+      throw new Error(`derivedFiles[${index}].command must be a command array`);
+    return { path, stage: file.stage, command: [...file.command] };
+  });
+}
+const packageDerivedFiles = readDerivedFiles();
+
 function object(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object`);
   return value as Record<string, unknown>;
@@ -133,7 +150,7 @@ export type Runtime = IntegrationRuntime & {
 export type RuntimeOptions = {
   settings?: Settings; db?: Database; tasks?: WorkerTasks; runGate?: GateRunner;
   managerServices?: Partial<ManagerServices>;
-  train?: Pick<TrainOptions, 'merge' | 'beforeRelease' | 'beforeIntegrationAdvance' | 'beforePromotionAdvance' | 'promote'>;
+  train?: Pick<TrainOptions, 'merge' | 'beforeRelease' | 'beforeIntegrationAdvance' | 'beforePromotionAdvance' | 'promote' | 'derivedFiles'>;
 };
 
 /** The only production composition: every module shares this database connection and worker fence. */
@@ -171,7 +188,9 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     worktreeRoot: settings.worktreeRoot, mainBranch: settings.mainBranch, integrationBranch: settings.integrationBranch,
     formatCommand: settings.formatCommand,
     queue, fence: store, sink: job,
-    promote: () => promote({ settings, job, runGate, ...(options.train?.beforePromotionAdvance ? { beforeAdvance: options.train.beforePromotionAdvance } : {}) }),
+    derivedFiles: options.train?.derivedFiles ?? packageDerivedFiles,
+    promote: () => promote({ settings, job, runGate, derivedFiles: options.train?.derivedFiles ?? packageDerivedFiles,
+      ...(options.train?.beforePromotionAdvance ? { beforeAdvance: options.train.beforePromotionAdvance } : {}) }),
     runGate, gateIdentity: JSON.stringify(settings.gate), codeIsCurrent, handOff, ...options.train });
   const landing: IntegrationRuntime['landing'] = taskId => {
     const task = store.task(taskId), ref = { taskId, attempt: task.currentAttempt };

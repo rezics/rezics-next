@@ -18,6 +18,9 @@ The controller rebases detached candidates onto the integration branch (by defau
 fast-forwards that branch without running a gate. Promotion to `main` is a separate step. A passing attempt record is
 finalized through the real integration outcome sink.
 
+Derived files declare an `integration` or `promotion` stage in `defaults.json`. The integration stage regenerates files
+during rebase; the promotion stage regenerates files on the `dev` head before promotion gates run.
+
 Briefs can carry frozen acceptance files in fenced blocks whose info string includes `path=<relative-path>`, such as
 ```` ```ts path=tools/example.test.ts ````. Each path must be inside the brief's declared paths. The controller writes
 and commits these files before launch, records their SHA-256 hashes, and refuses integration if a worker changes one.

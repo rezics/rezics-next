@@ -6,7 +6,18 @@
   "derivedFiles": [
     {
       "path": "bun.lock",
+      "stage": "integration",
       "command": ["bun", "install"]
+    },
+    {
+      "path": "packages/client/src/kernel/**",
+      "stage": "promotion",
+      "command": ["bun", "run", "--cwd", "services/kernel", "derived"]
+    },
+    {
+      "path": "contracts/openapi.json",
+      "stage": "promotion",
+      "command": ["bun", "run", "--cwd", "services/kernel", "derived"]
     }
   ],
   "integration": {

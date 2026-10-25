@@ -1,19 +1,76 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
+import defaults from '../defaults.json';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
+import { matchesPath } from './briefs.ts';
 import { firstFailure, gateRunner, git, type GateRunner } from './merge.ts';
+import type { DerivedFile } from './merge-train.ts';
 import type { PromotionGateResult, PromotionRun, Task } from './types.ts';
 import type { WorkerJob } from './job.ts';
 import type { Settings } from './types.ts';
 
-export type PromotionOptions = { settings: Settings; job: WorkerJob; runGate?: GateRunner; beforeAdvance?: () => void };
+const defaultDerivedFiles = defaults.derivedFiles as DerivedFile[];
+export type PromotionOptions = { settings: Settings; job: WorkerJob; runGate?: GateRunner; beforeAdvance?: () => void; derivedFiles?: DerivedFile[] };
 
 const ref = (branch: string) => `refs/heads/${branch}`;
 function isAncestor(cwd: string, older: string, newer: string): boolean {
   try { git(cwd, 'merge-base', '--is-ancestor', older, newer); return true; } catch { return false; }
 }
 function head(cwd: string, branch: string): string { return git(cwd, 'rev-parse', '--verify', ref(branch)); }
+function workingFiles(cwd: string): string[] {
+  const tracked = spawnSync('git', ['diff', '--name-only', '-z', 'HEAD', '--'], { cwd, encoding: 'utf8' });
+  const untracked = spawnSync('git', ['ls-files', '--others', '--exclude-standard', '-z'], { cwd, encoding: 'utf8' });
+  if (tracked.status !== 0 || untracked.status !== 0) throw new Error('Cannot read generated file changes');
+  return [...new Set([...tracked.stdout.split('\0'), ...untracked.stdout.split('\0')].filter(Boolean))];
+}
+
+async function regenerateDerivedHead(options: PromotionOptions, expected: string): Promise<{ head: string; retry: boolean }> {
+  const settings = options.settings, checkout = settings.mainCheckout;
+  const files = (options.derivedFiles ?? defaultDerivedFiles).filter(file => file.stage === 'promotion');
+  if (!files.length) return { head: expected, retry: head(checkout, settings.integrationBranch) !== expected };
+
+  const tree = join(settings.worktreeRoot, `promotion-derived-${randomUUID()}`);
+  const logPath = join(settings.stateDirectory, `promotion-derived-${randomUUID()}.log`);
+  mkdirSync(settings.worktreeRoot, { recursive: true }); mkdirSync(settings.stateDirectory, { recursive: true });
+  git(checkout, 'worktree', 'add', '--detach', tree, expected);
+  try {
+    const tracked = git(tree, 'ls-files', '-z').split('\0').filter(Boolean);
+    const commands = new Map<string, string[]>();
+    for (const file of files) if (tracked.some(path => matchesPath(path, [file.path])))
+      commands.set(JSON.stringify(file.command), file.command);
+    for (const command of commands.values()) {
+      const result = spawnSync(command[0]!, command.slice(1), { cwd: tree, encoding: 'utf8' });
+      const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+      appendFileSync(logPath, `$ ${command.join(' ')} (cwd: ${tree})\n${output}`);
+      if (result.status !== 0) throw new Error(`Failed to regenerate derived files: ${output || result.error?.message || 'command failed'}`);
+    }
+
+    const changes = workingFiles(tree);
+    const outside = changes.filter(path => !files.some(file => matchesPath(path, [file.path])));
+    if (outside.length) throw new Error(`Derived generator changed non-derived files: ${outside.join(', ')}`);
+    let candidate = expected;
+    if (changes.length) {
+      git(tree, 'add', '-A', '--', ...changes);
+      git(tree, 'commit', '-m', 'chore: regenerate derived files');
+      candidate = git(tree, 'rev-parse', 'HEAD');
+    }
+
+    if (head(checkout, settings.integrationBranch) !== expected) return { head: head(checkout, settings.integrationBranch), retry: true };
+    if (candidate !== expected) {
+      try { git(checkout, 'update-ref', ref(settings.integrationBranch), candidate, expected); }
+      catch (error) {
+        const current = head(checkout, settings.integrationBranch);
+        if (current !== expected) return { head: current, retry: true };
+        throw error;
+      }
+    }
+    const current = head(checkout, settings.integrationBranch);
+    return current === candidate ? { head: candidate, retry: false } : { head: current, retry: true };
+  } finally { git(checkout, 'worktree', 'remove', '--force', tree); }
+}
+
 function boundaryTasks(options: PromotionOptions, main: string, dev: string): Task[] {
   const store = options.job.tasks.store, checkout = options.settings.mainCheckout;
   const commits = git(options.settings.mainCheckout, 'rev-list', '--reverse', `${main}..${dev}`).split('\n').filter(Boolean);
@@ -282,17 +339,39 @@ export async function promote(options: PromotionOptions): Promise<void> {
       const main = head(settings.mainCheckout, settings.mainBranch);
       let dev: string;
       try { dev = head(settings.mainCheckout, settings.integrationBranch); } catch { return; }
+      let derivedPrepared = false;
       if (run?.phase === 'report-environment') {
         if (main === run.mainBase && dev === run.devHead) { reportEnvironment(options, run); return; }
         store.clearPromotion(); run = undefined;
       }
+      if (run?.phase === 'gate-head' && dev !== run.devHead) {
+        store.clearPromotion(); run = undefined;
+      }
       if (!run) {
         if (main === dev || !isAncestor(settings.mainCheckout, main, dev)) return;
-        const tasks = boundaryTasks(options, main, dev);
-        run = createRun(options, main, dev, tasks);
+        const prepared = await regenerateDerivedHead(options, dev);
+        if (prepared.retry) continue;
+        dev = prepared.head; derivedPrepared = true;
+        const currentMain = head(settings.mainCheckout, settings.mainBranch);
+        if (currentMain === dev || !isAncestor(settings.mainCheckout, currentMain, dev)) continue;
+        const tasks = boundaryTasks(options, currentMain, dev);
+        run = createRun(options, currentMain, dev, tasks);
         store.savePromotion(run);
       }
       if (run.phase === 'gate-head') {
+        if (!derivedPrepared) {
+          const currentDev = head(settings.mainCheckout, settings.integrationBranch);
+          if (currentDev !== run.devHead) { store.clearPromotion(); continue; }
+          const prepared = await regenerateDerivedHead(options, run.devHead);
+          if (prepared.retry) { store.clearPromotion(); continue; }
+          if (prepared.head !== run.devHead) {
+            const currentMain = head(settings.mainCheckout, settings.mainBranch);
+            if (!isAncestor(settings.mainCheckout, currentMain, prepared.head)) { store.clearPromotion(); continue; }
+            run = createRun(options, currentMain, prepared.head,
+              boundaryTasks(options, currentMain, prepared.head));
+            store.savePromotion(run);
+          }
+        }
         const tasks = run.taskIds.map(id => store.task(id));
         const checked = await gateAt(options, run, run.devHead, commandsFor(run.rootGate, tasks), 'head', 'headResults');
         run = await saveHeadDecision(options, run, checked);
@@ -328,8 +407,12 @@ export async function promote(options: PromotionOptions): Promise<void> {
         run.phase = 'gate-remainder'; store.savePromotion(run);
       }
       if (run.phase === 'gate-remainder') {
-        const promoteHead = head(settings.mainCheckout, settings.integrationBranch);
+        const currentDev = head(settings.mainCheckout, settings.integrationBranch);
+        const prepared = await regenerateDerivedHead(options, currentDev);
+        if (prepared.retry) continue;
+        const promoteHead = prepared.head;
         const remaining = (run.remainingTaskIds ?? []).map(id => store.task(id)).filter(task => task.state === 'integrated');
+        run.devHead = promoteHead;
         const checked = await gateAt(options, run, promoteHead, commandsFor(run.rootGate, remaining), 'remainder', 'headResults');
         const failed = checked.find(result => !result.passed);
         if (failed) {

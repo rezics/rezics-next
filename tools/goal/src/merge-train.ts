@@ -1,17 +1,29 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { Database } from 'bun:sqlite';
 import defaults from '../defaults.json';
+import { matchesPath } from './briefs.ts';
 import { StaleAttemptError } from './contracts.ts';
 import type { AttemptFence, AttemptRef, GateOutcome, GateOutcomeSink, GateStage } from './contracts.ts';
 import { SqliteLandingQueue, type LandingEntry } from './land.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import { changedFiles, diffLineCount, firstFailure, gateRunner, git, nonGeneratedFiles, outsideScope, type GateRunner } from './merge.ts';
 
-type DerivedFile = { path: string; command: string[] };
-const derivedFiles = defaults.derivedFiles as DerivedFile[];
+export type DerivedFile = { path: string; stage: 'integration' | 'promotion'; command: string[] };
+const defaultDerivedFiles = defaults.derivedFiles as DerivedFile[];
+
+function derivedForPath(path: string, files: readonly DerivedFile[]): DerivedFile[] {
+  return files.filter(file => matchesPath(path, [file.path]));
+}
+
+function changedWorkingFiles(cwd: string): string[] {
+  const tracked = spawnSync('git', ['diff', '--name-only', '-z', 'HEAD', '--'], { cwd, encoding: 'utf8' });
+  const untracked = spawnSync('git', ['ls-files', '--others', '--exclude-standard', '-z'], { cwd, encoding: 'utf8' });
+  if (tracked.status !== 0 || untracked.status !== 0) throw new Error('Cannot read generated file changes');
+  return [...new Set([...tracked.stdout.split('\0'), ...untracked.stdout.split('\0')].filter(Boolean))];
+}
 
 function unmergedFiles(cwd: string): string[] {
   return git(cwd, 'diff', '--name-only', '--diff-filter=U', '-z').split('\0').filter(Boolean);
@@ -36,7 +48,7 @@ function changedFrozenFiles(cwd: string, frozen: readonly { path: string; hash: 
 }
 
 function rebaseWithDerivedFiles(cwd: string, base: string, originalBase: string, logPath: string,
-  derivedByPath: ReadonlyMap<string, DerivedFile>): unknown | undefined {
+  files: readonly DerivedFile[]): unknown | undefined {
   try {
     git(cwd, '-c', 'rebase.updateRefs=false', 'rebase', '--onto', base, originalBase);
     return undefined;
@@ -45,20 +57,23 @@ function rebaseWithDerivedFiles(cwd: string, base: string, originalBase: string,
     for (;;) {
       const conflicts = unmergedFiles(cwd);
       if (!conflicts.length) throw rebaseError;
-      const derivedConflicts = conflicts.filter(path => derivedByPath.has(path));
+      const derivedConflicts = conflicts.filter(path => derivedForPath(path, files).length > 0);
       if (!derivedConflicts.length) return rebaseError;
 
       for (const path of derivedConflicts) git(cwd, 'checkout', '--ours', '--', path);
-      for (const path of derivedConflicts) {
-        const file = derivedByPath.get(path)!;
-        if (!file.command.length) throw new Error(`No regeneration command configured for ${path}`);
-        const commandCwd = dirname(join(cwd, file.path));
-        const result = spawnSync(file.command[0]!, file.command.slice(1), { cwd: commandCwd, encoding: 'utf8' });
-        const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
-        appendFileSync(logPath, `$ ${file.command.join(' ')} (cwd: ${commandCwd})\n${output}`);
-        if (result.status !== 0) throw new Error(`Failed to regenerate ${path}: ${output || result.error?.message || 'command failed'}`);
+      const integrationCommands = new Map<string, string[]>();
+      for (const path of derivedConflicts) for (const file of derivedForPath(path, files)) {
+        if (file.stage === 'integration') integrationCommands.set(JSON.stringify(file.command), file.command);
       }
-      git(cwd, 'add', '--', ...derivedConflicts);
+      for (const command of integrationCommands.values()) {
+        const result = spawnSync(command[0]!, command.slice(1), { cwd, encoding: 'utf8' });
+        const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+        appendFileSync(logPath, `$ ${command.join(' ')} (cwd: ${cwd})\n${output}`);
+        if (result.status !== 0) throw new Error(`Failed to regenerate derived files: ${output || result.error?.message || 'command failed'}`);
+      }
+      const stageFiles = new Set(derivedConflicts);
+      for (const path of changedWorkingFiles(cwd)) if (derivedForPath(path, files).length) stageFiles.add(path);
+      git(cwd, 'add', '-A', '--', ...stageFiles);
       if (derivedConflicts.length !== conflicts.length) return rebaseError;
       try {
         git(cwd, '-c', 'core.editor=true', 'rebase', '--continue');
@@ -66,18 +81,18 @@ function rebaseWithDerivedFiles(cwd: string, base: string, originalBase: string,
       } catch (continueError) {
         const nextConflicts = unmergedFiles(cwd);
         if (!nextConflicts.length) throw continueError;
-        if (nextConflicts.some(path => !derivedByPath.has(path))) return continueError;
+        if (nextConflicts.some(path => !derivedForPath(path, files).length)) return continueError;
         rebaseError = continueError;
       }
     }
   }
 }
 
-export function rebaseOnto(cwd: string, base: string, originalBase: string, logPath: string): void {
-  const derivedByPath = new Map(derivedFiles.map(file => [file.path, file]));
+export function rebaseOnto(cwd: string, base: string, originalBase: string, logPath: string,
+  files: readonly DerivedFile[] = defaultDerivedFiles): void {
   const originalSubjects = git(cwd, 'log', '--format=%s', '--reverse', `${originalBase}..HEAD`)
     .split('\n').filter(Boolean);
-  const initialConflict = rebaseWithDerivedFiles(cwd, base, originalBase, logPath, derivedByPath);
+  const initialConflict = rebaseWithDerivedFiles(cwd, base, originalBase, logPath, files);
   if (initialConflict === undefined) return;
 
   git(cwd, 'rebase', '--abort');
@@ -85,7 +100,7 @@ export function rebaseOnto(cwd: string, base: string, originalBase: string, logP
   const message = ['Squash worker branch changes', '', 'Original commits:', ...originalSubjects.map(subject => `- ${subject}`)].join('\n');
   git(cwd, 'commit', '--allow-empty', '-m', message);
 
-  const squashedConflict = rebaseWithDerivedFiles(cwd, base, originalBase, logPath, derivedByPath);
+  const squashedConflict = rebaseWithDerivedFiles(cwd, base, originalBase, logPath, files);
   if (squashedConflict !== undefined) throw squashedConflict;
 }
 
@@ -93,6 +108,7 @@ export type TrainOptions = {
   mainCheckout: string; stateDirectory: string; worktreeRoot: string;
   formatCommand?: string[];
   queue: SqliteLandingQueue; fence: AttemptFence; sink: GateOutcomeSink;
+  derivedFiles?: DerivedFile[];
   runGate?: GateRunner; gateIdentity?: string; mainBranch?: string; integrationBranch?: string;
   codeIsCurrent?: () => boolean; handOff?: () => void | Promise<void>;
   /** Runs after the landing lease is released, in the same process that drained the queue. */
@@ -213,7 +229,8 @@ export class MergeTrain {
         stage = 'rebase';
         git(trainTree, 'reset', '--hard', tip);
         git(trainTree, 'clean', '-fdx');
-        rebaseOnto(trainTree, base, originalBase, logPath);
+        const derivedFiles = o.derivedFiles ?? defaultDerivedFiles;
+        rebaseOnto(trainTree, base, originalBase, logPath, derivedFiles);
         const frozen = frozenFilesForTask(o.stateDirectory, request.taskId);
         const changedFrozen = changedFrozenFiles(trainTree, frozen);
         if (changedFrozen.length) {
@@ -231,7 +248,8 @@ export class MergeTrain {
         result.diffLines = diffLineCount(trainTree, base);
         result.nonGeneratedChangedFiles = nonGeneratedFiles(trainTree, result.changedFiles);
         result.nonGeneratedDiffLines = diffLineCount(trainTree, base, result.nonGeneratedChangedFiles);
-        const outside = outsideScope(result.changedFiles, request.declaredPaths);
+        const scopeCheckedFiles = result.changedFiles.filter(path => !derivedForPath(path, derivedFiles).length);
+        const outside = outsideScope(scopeCheckedFiles, request.declaredPaths);
         if (outside.length) throw new Error(`Changes outside declared paths: ${outside.join(', ')}`);
         if (integratesIntoDev) {
           const formatCommand = o.formatCommand ?? [resolve(o.mainCheckout, 'node_modules/.bin/oxfmt')];
@@ -253,7 +271,8 @@ export class MergeTrain {
             result.diffLines = diffLineCount(trainTree, base);
             result.nonGeneratedChangedFiles = nonGeneratedFiles(trainTree, result.changedFiles);
             result.nonGeneratedDiffLines = diffLineCount(trainTree, base, result.nonGeneratedChangedFiles);
-            const formattedOutside = outsideScope(result.changedFiles, request.declaredPaths);
+            const formattedScopeCheckedFiles = result.changedFiles.filter(path => !derivedForPath(path, derivedFiles).length);
+            const formattedOutside = outsideScope(formattedScopeCheckedFiles, request.declaredPaths);
             if (formattedOutside.length) throw new Error(`Changes outside declared paths: ${formattedOutside.join(', ')}`);
           }
         }
