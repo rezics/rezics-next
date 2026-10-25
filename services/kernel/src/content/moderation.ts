@@ -1,8 +1,8 @@
 import type { Pool } from 'pg';
 import type { CommandOutcome } from '../command/command.ts';
 import type { Access, Actor } from '../request/access.ts';
+import { erasePostLogical, mutateContentPoint, type ErasePostInput } from './erase-post.ts';
 import type { MediaId, PostId, RequestContext, ThreadId } from './model.ts';
-import { unfinishedPort } from './model.ts';
 
 export type ModerationDependencies = Readonly<{ pool: Pool; access: Access; routeKey: Uint8Array; clock?: () => Date }>;
 export type TakedownTarget =
@@ -10,33 +10,53 @@ export type TakedownTarget =
   | Readonly<{ kind: 'thread'; id: ThreadId }>
   | Readonly<{ kind: 'post'; id: PostId }>;
 export type TakedownInput = Readonly<{ target: TakedownTarget; reason: string }>;
-export type EraseAuthorScopeInput = Readonly<{
-  scope: Readonly<{ kind: 'thread'; id: ThreadId }>;
-  reason: string;
-}>;
 export type EraseStandaloneMediaInput = Readonly<{ mediaId: MediaId; reason: string }>;
-export type ModerationValue = Readonly<{ targetId: string }>;
+export type ModerationValue = Readonly<{ targetId: string; securityRevision: string }>;
+
 export function takedown(
-  _dependencies: ModerationDependencies,
-  _actor: Actor,
-  _input: TakedownInput,
-  _context: RequestContext,
+  dependencies: ModerationDependencies,
+  actor: Actor,
+  input: TakedownInput,
+  context: RequestContext,
 ): Promise<CommandOutcome<ModerationValue>> {
-  throw unfinishedPort('takedown');
+  if (!['board', 'thread', 'post'].includes(input.target.kind)) throw new RangeError('Invalid takedown target');
+  return mutateContentPoint(
+    dependencies,
+    actor,
+    {
+      action: 'moderation:takedown',
+      kind: input.target.kind,
+      id: input.target.id,
+      reason: input.reason,
+    },
+    context,
+  );
 }
-export function eraseAuthorScope(
-  _dependencies: ModerationDependencies,
-  _actor: Actor,
-  _input: EraseAuthorScopeInput,
-  _context: RequestContext,
-): Promise<CommandOutcome<ModerationValue>> {
-  throw unfinishedPort('eraseAuthorScope');
+
+export function erasePost(
+  dependencies: ModerationDependencies,
+  actor: Actor,
+  input: ErasePostInput,
+  context: RequestContext,
+): Promise<CommandOutcome<{ postId: string; securityRevision: string }>> {
+  return erasePostLogical(dependencies, actor, input, context);
 }
+
 export function eraseStandaloneMedia(
-  _dependencies: ModerationDependencies,
-  _actor: Actor,
-  _input: EraseStandaloneMediaInput,
-  _context: RequestContext,
+  dependencies: ModerationDependencies,
+  actor: Actor,
+  input: EraseStandaloneMediaInput,
+  context: RequestContext,
 ): Promise<CommandOutcome<ModerationValue>> {
-  throw unfinishedPort('eraseStandaloneMedia');
+  return mutateContentPoint(
+    dependencies,
+    actor,
+    {
+      action: 'media:erase',
+      kind: 'media',
+      id: input.mediaId,
+      reason: input.reason,
+    },
+    context,
+  );
 }

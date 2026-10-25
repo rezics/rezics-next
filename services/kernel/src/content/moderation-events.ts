@@ -12,8 +12,12 @@ export const MODERATION_EVENTS = {
     },
     { additionalProperties: false },
   ),
+  'com.rezics.content.post.erased.v1': Type.Object(
+    { postId: UUID, securityRevision: Type.String({ pattern: '^[1-9][0-9]*$' }) },
+    { additionalProperties: false },
+  ),
   'com.rezics.content.moderation.erasure.v1': Type.Object(
-    { threadId: UUID, postIds: Type.Array(UUID), mediaIds: Type.Array(UUID) },
+    { threadId: UUID, postIds: Type.Array(UUID, { maxItems: 100 }), mediaIds: Type.Array(UUID, { maxItems: 100 }) },
     { additionalProperties: false },
   ),
 } as const;
