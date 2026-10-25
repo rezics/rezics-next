@@ -8,6 +8,7 @@ import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/re
 import { AuthenticationError } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { threadTarget } from './commands.ts';
+import { mutateContentPoint } from './erase-post.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import {
   reserveMedia,
@@ -61,6 +62,7 @@ const writeFailures = {
 const sessionHeader = { [SESSION_HEADER]: t.String() };
 const commandHeaders = t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true });
 const upload = defineRateLimit({ family: 'upload', units: 1 });
+const write = defineRateLimit({ family: 'write', units: 1 });
 const secured = [{ bearerAuth: [] }];
 function context(request: Request, deadline: number) {
   return {
@@ -197,6 +199,40 @@ export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependenci
             };
           }),
         ),
+    )
+    .delete(
+      '/v1/media/:id',
+      {
+        params,
+        headers: commandHeaders,
+        response: {
+          204: withHeaders(t.Void(), sessionHeader),
+          ...writeFailures,
+        },
+        detail: {
+          operationId: 'media.erase',
+          'x-exposure': 'public',
+          'x-action': 'media:erase',
+          'x-rate-limit': write,
+          security: secured,
+        },
+      },
+      async ({ params: { id }, actor, request, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        existing(id);
+        await mutation(async () => {
+          const result = await admission.run('normal', job, () =>
+            mutateContentPoint(
+              dependencies,
+              actor,
+              { action: 'media:erase', kind: 'media', id, reason: 'Author deletion' },
+              context(request, job.deadline),
+            ),
+          );
+          session.record(result);
+          set.status = 204;
+        });
+      },
     )
     .get(
       customMethod('/v1/media/:id', 'authorizeDownload'),

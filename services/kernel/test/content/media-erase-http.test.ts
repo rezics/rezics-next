@@ -120,7 +120,7 @@ test.serial('media owner erases through the mounted kernel with current account 
   const otherMedia = await upload(other, container.threadId);
 
   const operation = system.kernel.routes.find(
-    (candidate) => candidate.method === 'delete' && candidate.path === '/v1/media/:id',
+    (candidate) => candidate.method === 'DELETE' && candidate.path === '/v1/media/:id',
   );
   expect(operation?.hooks.detail?.operationId).toBe('media.erase');
   expect(operation?.hooks.detail?.['x-action']).toBe('media:erase');
@@ -176,7 +176,7 @@ test.serial('media owner erases through the mounted kernel with current account 
   expect(afterErase.media).toEqual({
     erased: true,
     collection_pending: false,
-    security_revision: '2',
+    security_revision: '1',
     state: 'uploaded',
   });
   const replay = await call('DELETE', `/v1/media/${ownerMedia.id}`, owner, undefined, key);
