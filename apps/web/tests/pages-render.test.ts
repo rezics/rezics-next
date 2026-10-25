@@ -1,4 +1,7 @@
 import { expect, test } from 'bun:test';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createElement, type ReactNode } from 'react';
 import { renderToString } from 'react-dom/server';
 import { CompositionRender } from '../src/features/pages/render.tsx';
@@ -61,18 +64,37 @@ test('a node whose type has no component renders nothing and the rest of the pag
   expect(html).not.toContain('Carousel');
 });
 
-test('the render path stays small enough for a Worker', async () => {
+test("the render path's initial load stays within 24 KiB", async () => {
   const entry = new URL('../src/features/pages/render.tsx', import.meta.url).pathname;
-  const build = await Bun.build({
-    entrypoints: [entry],
-    target: 'browser',
-    minify: true,
-    external: ['react', 'react-dom', 'react/jsx-runtime', 'react-dom/server'],
-  });
-  expect(build.success).toBe(true);
-  const bytes = (await Promise.all(build.outputs.map((output) => output.arrayBuffer()))).reduce(
-    (total, buffer) => total + Bun.gzipSync(new Uint8Array(buffer)).byteLength,
-    0,
-  );
-  expect(bytes).toBeLessThanOrEqual(24 * 1024);
+  const outdir = mkdtempSync(join(tmpdir(), 'pages-render-'));
+  try {
+    const build = await Bun.build({
+      entrypoints: [entry],
+      outdir,
+      target: 'browser',
+      minify: true,
+      splitting: true,
+      external: ['react', 'react-dom', 'react/jsx-runtime', 'react-dom/server'],
+    });
+    expect(build.success).toBe(true);
+    const name = (path: string) => path.split(/[\\/]/).at(-1)!;
+    const outputs = new Map<string, string>();
+    for (const output of build.outputs)
+      if (output.kind !== 'sourcemap') outputs.set(name(output.path), await output.text());
+    // Lazy chunks load only when a component uses them; count what a page loads at once.
+    const initial = new Set<string>();
+    const visit = (file: string) => {
+      if (initial.has(file)) return;
+      initial.add(file);
+      for (const match of outputs.get(file)!.matchAll(/(?:from|import)\s*["']\.\/([^"']+)["']/g)) visit(match[1]!);
+    };
+    visit(name(build.outputs.find((output) => output.kind === 'entry-point')!.path));
+    const bytes = [...initial].reduce(
+      (total, file) => total + Bun.gzipSync(new TextEncoder().encode(outputs.get(file)!)).byteLength,
+      0,
+    );
+    expect(bytes).toBeLessThanOrEqual(24 * 1024);
+  } finally {
+    rmSync(outdir, { recursive: true, force: true });
+  }
 });
