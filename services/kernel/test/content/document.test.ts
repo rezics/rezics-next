@@ -40,12 +40,8 @@ test('reordered JSON keys produce identical canonical bytes and digest', () => {
 
 test('rejects invalid snapshots, licence identifiers, references and oversized canonical bytes', () => {
   expect(() => validateContentDocument(value({ version: 'wrong' }))).toThrow(InvalidDocumentError);
-  expect(() => validateContentDocument({ ...value(), licence: 'MIT AND Apache-2.0' })).toThrow(
-    InvalidDocumentError,
-  );
-  expect(() => validateContentDocument({ ...value(), subjectIds: ['not-a-subject-id'] })).toThrow(
-    InvalidDocumentError,
-  );
+  expect(() => validateContentDocument({ ...value(), licence: 'MIT AND Apache-2.0' })).toThrow(InvalidDocumentError);
+  expect(() => validateContentDocument({ ...value(), subjectIds: ['not-a-subject-id'] })).toThrow(InvalidDocumentError);
   expect(() => validateContentDocument(value(fromPlainText('x'.repeat(2 * 1024 * 1024))))).toThrow(
     DocumentTooLargeError,
   );
