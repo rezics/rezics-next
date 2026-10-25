@@ -2,7 +2,6 @@ types:
   wd:Q689445: visual novel
 properties:
   wdt:P144: based on
-  wdt:P155: follows
   wdt:P156: followed by
   wdt:P1889: different from
   wdt:P2512: has spin-off

@@ -7,6 +7,7 @@ properties:
   schema:gtin: GTIN
   wdt:P2899: 最低年龄
   wdt:P31: 隶属于
+  wdt:P155: 上一项
   wdt:P437: 发行方式
   wdt:P408: 软件引擎
   schema:numberOfPlayers: 游玩人数

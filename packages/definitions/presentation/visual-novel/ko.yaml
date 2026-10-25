@@ -2,7 +2,6 @@ types:
   wd:Q689445: 비주얼 노벨
 properties:
   wdt:P144: 다음에 기반을 두었음
-  wdt:P155: 이전
   wdt:P156: 다음
   wdt:P1889: 다음과 다름
   wdt:P2512: 스핀오프

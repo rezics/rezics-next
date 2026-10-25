@@ -2,7 +2,6 @@ types:
   wd:Q689445: 视觉小说
 properties:
   wdt:P144: 改编自
-  wdt:P155: 上一项
   wdt:P156: 下一项
   wdt:P1889: 区别于
   wdt:P2512: 派生作品

@@ -2,7 +2,6 @@ types:
   wd:Q689445: novela visual
 properties:
   wdt:P144: basado en
-  wdt:P155: precedido por
   wdt:P156: sucedido por
   wdt:P1889: diferente de
   wdt:P2512: serie derivada

@@ -7,6 +7,7 @@ properties:
   schema:gtin: GTIN
   wdt:P2899: Mindestalter
   wdt:P31: ist ein(e)
+  wdt:P155: Vorgänger
   wdt:P437: Auslieferungsmedium
   wdt:P408: Engine
   schema:numberOfPlayers: Spieleranzahl
