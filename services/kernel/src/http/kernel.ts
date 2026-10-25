@@ -134,7 +134,25 @@ export function createKernel(dependencies: KernelDependencies) {
     access: () => resolveAccess({ actions: actionCatalogue(collections) }),
   });
   declareKernelWriteRates(collections);
+  const parameterNames = new Map<string, { name: string; method: string; path: string }>();
   for (const route of collections.routes) {
+    const prefix: string[] = [];
+    for (const [position, segment] of route.path.split('/').entries()) {
+      if (segment.startsWith(':')) {
+        const name = segment.slice(1);
+        const key = JSON.stringify([prefix, position]);
+        const first = parameterNames.get(key);
+        if (first && first.name !== name) {
+          throw new Error(
+            `${first.method.toUpperCase()} ${first.path} and ${route.method.toUpperCase()} ${route.path}: inconsistent path parameter name at position ${position}`,
+          );
+        }
+        if (!first) parameterNames.set(key, { name, method: route.method, path: route.path });
+        prefix.push(':');
+      } else {
+        prefix.push(segment);
+      }
+    }
     if (route.hooks.detail?.hide === true) continue;
     try {
       parseExposure(route.hooks.detail);
