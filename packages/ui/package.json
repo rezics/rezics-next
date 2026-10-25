@@ -10,7 +10,8 @@
   },
   "scripts": {
     "storybook": "storybook dev -p 6006",
-    "check": "tsc --noEmit -p tsconfig.json && bun test"
+    "check": "tsc --noEmit -p tsconfig.json && bun run test #bun test",
+    "test": "bun scripts/isolated.ts bun test"
   },
   "dependencies": {
     "@ark-ui/react": "5.39.3",

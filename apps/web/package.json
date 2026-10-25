@@ -5,9 +5,10 @@
   "scripts": {
     "dev": "vite --config vite.config.ts",
     "build": "vite build --config vite.config.ts",
-    "check": "bun run generate && bun run generate:routes && tsc --noEmit -p tsconfig.json && bun test && bun run build",
+    "check": "bun run generate && bun run generate:routes && tsc --noEmit -p tsconfig.json && bun run test && bun run build",
     "generate": "bun scripts/generate.ts",
-    "generate:routes": "vite build --config vite.config.ts --mode development --emptyOutDir false"
+    "generate:routes": "vite build --config vite.config.ts --mode development --emptyOutDir false",
+    "test": "bun scripts/isolated.ts bun test"
   },
   "dependencies": {
     "@axe-core/playwright": "4.14.0",

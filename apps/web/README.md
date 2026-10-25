@@ -1,5 +1,6 @@
 Run the site locally with `bun run dev` from `apps/web`. Run `bun run check` to generate, type-check, test, and build.
 Browser tests wait for `html[data-hydrated]` before interacting with a page.
+Tests run in a private network namespace that holds only loopback, so changes to the host's network interfaces cannot interrupt browser requests. Run one test file with `bun run test <file>` to use the same isolation.
 
 The Cloudflare Vite plugin deploys with `cf deploy` (not run here).
 
