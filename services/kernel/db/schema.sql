@@ -226,6 +226,13 @@ ALTER TABLE ONLY public.schema_migrations
 
 
 --
+-- Name: consumer_checkpoint_consumer_idx; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE INDEX consumer_checkpoint_consumer_idx ON core.consumer_checkpoint USING btree (consumer, partition_no);
+
+
+--
 -- Name: consumer_checkpoint consumer_checkpoint_partition_no_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
 --
 
