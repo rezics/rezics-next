@@ -1,4 +1,5 @@
 import { expect, spyOn, test } from 'bun:test';
+import * as bun from 'bun';
 import { checkBatchWrite } from '@rezics/definitions/bulk';
 import { checkMediaImportRequest } from '@rezics/definitions/media-import';
 import { documentText, parseDocument, serializeDocument } from '@rezics/document';
@@ -93,13 +94,15 @@ test('fixed source conversion intercepts I/O at every unrelated population scale
   }
   try {
     deny(globalThis, 'fetch');
-    for (const key of ['SQL', 'file', 'write', 'spawn', 'spawnSync', 'connect', 'listen'] as const) deny(Bun, key);
+    if (typeof bun.SQL === 'function') deny(bun, 'SQL');
+    if (typeof Bun.SQL === 'function') deny(Bun, 'SQL');
+    for (const key of ['file', 'write', 'spawn', 'spawnSync', 'connect', 'listen'] as const) deny(Bun, key);
     for (const key of ['readFileSync', 'writeFileSync', 'openSync', 'readdirSync'] as const) deny(fs, key);
     for (const key of ['connect', 'createConnection'] as const) deny(net, key);
     for (const boundary of [http, https]) for (const key of ['get', 'request'] as const) deny(boundary, key);
     for (const key of ['exec', 'execSync', 'execFile', 'execFileSync', 'spawn', 'spawnSync', 'fork'] as const)
       deny(childProcess, key);
-    let baseline: unknown;
+    let baseline: ReturnType<typeof convertBangumi> | undefined;
     for (const scale of [1, 8, 64]) {
       // Unrelated N and U x t are deliberately inaccessible to the converter.
       const unrelated = { N: Array.from({ length: scale }, (_, id) => id), history: new Uint8Array(scale * scale) };
