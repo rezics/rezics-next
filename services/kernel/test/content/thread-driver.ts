@@ -52,7 +52,6 @@ import { createNativeContentSystem, type NativeContentSystem } from './support/n
 import { observeSql, type SqlObserver } from './support/sql-observer.ts';
 
 const AUDIENCE = 'https://content.test';
-const HOT_ROUTE = 131;
 const MEASURED_KEYS = 24;
 const suiteDrivers = new Set<ContentThreadDriver>();
 
@@ -421,11 +420,16 @@ export async function openMeasuredThreadCreate(database: { url: string; pool: Pg
     );
 
     const keys: string[] = [];
-    for (let attempt = 0; keys.length < MEASURED_KEYS && attempt < 2_000_000; attempt++) {
+    let hotRoute = -1;
+    // threadTarget spreads keys across the full route space. Keep searching until
+    // one route has enough fresh keys for every measured repetition.
+    for (let attempt = 0; keys.length < MEASURED_KEYS && attempt < 8_000_000; attempt++) {
       const key = `growth-${attempt}`;
-      if (threadTarget(routeKey, author.actor.accountId, key).route === HOT_ROUTE) keys.push(key);
+      const route = threadTarget(routeKey, author.actor.accountId, key).route;
+      if (hotRoute < 0) hotRoute = route;
+      if (route === hotRoute) keys.push(key);
     }
-    if (keys.length < MEASURED_KEYS) throw new Error('Could not anchor measured thread keys');
+    if (keys.length < MEASURED_KEYS || hotRoute < 0) throw new Error('Could not anchor measured thread keys');
     const seedBody = Buffer.from('unrelated measured neighbour');
     const seedDigest = createHash('sha256').update(seedBody).digest();
     const body = fromPlainText('Measured thread body');
@@ -440,9 +444,9 @@ export async function openMeasuredThreadCreate(database: { url: string; pool: Pg
         const revisionIds: string[] = [];
         const transactionIds: string[] = [];
         for (let index = 0; index < count; index++) {
-          threadIds.push(newId(HOT_ROUTE));
-          postIds.push(newId(HOT_ROUTE));
-          revisionIds.push(newId(HOT_ROUTE));
+          threadIds.push(newId(hotRoute));
+          postIds.push(newId(hotRoute));
+          revisionIds.push(newId(hotRoute));
           transactionIds.push(crypto.randomUUID());
         }
         const client = await db.admin.connect();
@@ -454,7 +458,7 @@ export async function openMeasuredThreadCreate(database: { url: string; pool: Pg
                 recorded_transaction_id, first_post_id, availability)
              SELECT $1, thread_id, $2, $3, 'Unrelated thread', 'published', 1, transaction_id, post_id, 'available'
              FROM unnest($4::uuid[], $5::uuid[], $6::uuid[]) AS row(thread_id, post_id, transaction_id)`,
-            [HOT_ROUTE, author.actor.accountId, board.id, threadIds, postIds, transactionIds],
+            [hotRoute, author.actor.accountId, board.id, threadIds, postIds, transactionIds],
           );
           await client.query(
             `INSERT INTO content.post
@@ -463,7 +467,7 @@ export async function openMeasuredThreadCreate(database: { url: string; pool: Pg
              SELECT $1, thread_id, post_id, NULL, $2, revision_id, 'published', 1, transaction_id, 'available'
              FROM unnest($3::uuid[], $4::uuid[], $5::uuid[], $6::uuid[])
                AS row(thread_id, post_id, revision_id, transaction_id)`,
-            [HOT_ROUTE, author.actor.accountId, threadIds, postIds, revisionIds, transactionIds],
+            [hotRoute, author.actor.accountId, threadIds, postIds, revisionIds, transactionIds],
           );
           await client.query(
             `INSERT INTO content.revision
@@ -473,7 +477,7 @@ export async function openMeasuredThreadCreate(database: { url: string; pool: Pg
                     transaction_id, '{}'::uuid[]
              FROM unnest($5::uuid[], $6::uuid[], $7::uuid[], $8::uuid[])
                AS row(thread_id, post_id, revision_id, transaction_id)`,
-            [HOT_ROUTE, seedBody, seedDigest, board.id, threadIds, postIds, revisionIds, transactionIds],
+            [hotRoute, seedBody, seedDigest, board.id, threadIds, postIds, revisionIds, transactionIds],
           );
           await client.query('COMMIT');
         } catch (error) {

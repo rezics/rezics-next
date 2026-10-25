@@ -59,10 +59,10 @@ async function problem(result: ApiResult<unknown>, status: number) {
   expect(typeof requestId).toBe('string');
   return body;
 }
-async function hidden(result: ApiResult<unknown>) {
+async function hidden(result: ApiResult<unknown>, effect: 'not_applicable' | 'not_applied') {
   expect(await problem(result, 404)).toEqual({
     type: 'https://rezics.com/problems/not_found', title: 'Not Found', status: 404,
-    code: 'not_found', retryable: false, effect_status: 'not_applicable',
+    code: 'not_found', retryable: false, effect_status: effect,
   });
   expect(result.response.headers.get('rezics-session-token')).toBeNull();
   expect(result.value).toBeNull();
@@ -236,7 +236,7 @@ test('invalid subject IDs licences and conflicting item boards reject atomically
   }
   await hidden(await driver.createPost({
     threadId: fixture.unknownThread, body: fromPlainText('Missing thread'), licence: 'MIT', subjectIds: fixture.subjectIds,
-  }, options('missing-thread-refs')));
+  }, options('missing-thread-refs')), 'not_applied');
   await unchanged(before);
 });
 
@@ -363,11 +363,11 @@ test('missing cross-thread and cross-route containment references fail atomicall
   const before = await driver.inspect();
   for (const parentId of [fixture.unknownItem, sibling.firstPost.id, fixture.foreignItem.id]) {
     const result = await driver.reply({ threadId: thread.id, parentId, body: input().body, licence: 'MIT' }, options(parentId));
-    await hidden(result);
+    await hidden(result, 'not_applied');
     await unchanged(before);
   }
   const wrongRoute = await driver.revise({ threadId: fixture.foreignThread.id, itemId: thread.firstPost.id, body: input().body }, options('wrong-route'));
-  await hidden(wrongRoute);
+  await hidden(wrongRoute, 'not_applied');
   await unchanged(before);
   expect(fixture.foreignThread.route).not.toBe(thread.route);
   expect((await reply(thread, thread.firstPost)).parentId).toBe(thread.firstPost.id);
@@ -375,12 +375,12 @@ test('missing cross-thread and cross-route containment references fail atomicall
 
 async function concealed(thread: ThreadView, child: ItemView) {
   for (const actor of [null, fixture.other]) {
-    await hidden(await driver.readThread(thread.id, actor));
-    await hidden(await driver.readItems(thread.id, actor));
+    await hidden(await driver.readThread(thread.id, actor), 'not_applicable');
+    await hidden(await driver.readItems(thread.id, actor), 'not_applicable');
     for (const item of [thread.firstPost, child]) {
-      await hidden(await driver.readItem(thread.id, item.id, actor));
-      await hidden(await driver.readItem(thread.id, item.id, actor, item.revisionId));
-      await hidden(await driver.readHistory(thread.id, item.id, actor));
+      await hidden(await driver.readItem(thread.id, item.id, actor), 'not_applicable');
+      await hidden(await driver.readItem(thread.id, item.id, actor, item.revisionId), 'not_applicable');
+      await hidden(await driver.readHistory(thread.id, item.id, actor), 'not_applicable');
     }
     const list = await driver.readList(thread.boardId, actor);
     expect(ok(list, 200).some(entry => entry.id === thread.id)).toBe(false);
@@ -423,9 +423,9 @@ test('draft protected and taken-down parent hides nested reply and exact history
       const raw = JSON.stringify([await visibleThread.response.clone().json(), await listed.response.clone().json()]);
       for (const secret of [parent.id, child.id, parent.revisionId, child.revisionId]) expect(raw).not.toContain(secret);
       for (const item of [parent, child]) {
-        await hidden(await driver.readItem(thread.id, item.id, actor));
-        await hidden(await driver.readItem(thread.id, item.id, actor, item.revisionId));
-        await hidden(await driver.readHistory(thread.id, item.id, actor));
+        await hidden(await driver.readItem(thread.id, item.id, actor), 'not_applicable');
+        await hidden(await driver.readItem(thread.id, item.id, actor, item.revisionId), 'not_applicable');
+        await hidden(await driver.readHistory(thread.id, item.id, actor), 'not_applicable');
       }
     }
     if (state === 'draft') expect(ok(await driver.readItem(thread.id, child.id, fixture.owner), 200)).toEqual(child);
@@ -440,11 +440,11 @@ test('private container chain hides published content even when anonymous public
   const child = await reply(thread, thread.firstPost);
   expect(ok(await driver.readThread(thread.id, fixture.owner), 200)).toEqual(thread);
   for (const actor of [null, fixture.other]) {
-    await hidden(await driver.readThread(thread.id, actor));
-    await hidden(await driver.readItems(thread.id, actor));
-    await hidden(await driver.readList(fixture.privateBoard.id, actor));
-    await hidden(await driver.readItem(thread.id, child.id, actor, child.revisionId));
-    await hidden(await driver.readHistory(thread.id, child.id, actor));
+    await hidden(await driver.readThread(thread.id, actor), 'not_applicable');
+    await hidden(await driver.readItems(thread.id, actor), 'not_applicable');
+    await hidden(await driver.readList(fixture.privateBoard.id, actor), 'not_applicable');
+    await hidden(await driver.readItem(thread.id, child.id, actor, child.revisionId), 'not_applicable');
+    await hidden(await driver.readHistory(thread.id, child.id, actor), 'not_applicable');
   }
 });
 
@@ -457,7 +457,7 @@ test('unknown and hidden resources have identical RFC 9457 problems with no exis
       await driver.readItem(thread.id, thread.firstPost.id, actor, thread.firstPost.revisionId),
       await driver.readItem(fixture.unknownThread, fixture.unknownItem, actor, thread.firstPost.revisionId),
       await driver.readHistory(fixture.unknownThread, fixture.unknownItem, actor),
-    ]) await hidden(result);
+    ]) await hidden(result, 'not_applicable');
   }
 });
 
