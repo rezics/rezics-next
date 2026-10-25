@@ -16,6 +16,7 @@ import {
   type Resource,
 } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
+import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
 import { commandAccessContext, requireCommandAdmission } from './command-admission.ts';
 
 /** Only kernel-authenticated actor objects belong in this context; request JSON
@@ -32,6 +33,17 @@ export function validActions(actions: readonly string[]): boolean {
     actions.length <= 1000 &&
     actions.every((action) => typeof action === 'string' && /^[a-z][a-z_]*:[a-z][a-z_]*$/.test(action))
   );
+}
+
+/** `<group>` in `gate:<group>`. `gate:any` is the covering action, not a group. */
+const GATE_GROUP = /^gate:[a-z][a-z_]{0,62}$/;
+
+function isGlobalContext(resource: Resource): boolean {
+  return resource.route === PLATFORM_RESOURCE.route && resource.id === PLATFORM_RESOURCE.id;
+}
+
+function delegableGate(action: string): boolean {
+  return action !== 'gate:any' && GATE_GROUP.test(action);
 }
 
 /** Prepare separate anchors before resource checkout, then reuse the original
@@ -74,9 +86,31 @@ export async function grantCommand<T>(
       try {
         const preparation = commandAccessContext(context, attempt);
         await requireCommandAdmission(config.access, actor, preparation);
+        const actions = [...new Set(options.actions)];
         const checks: AccessCheck[] = [];
-        for (const action of new Set(options.actions))
+        for (const action of actions)
           checks.push(await accessCheck(config.access, actor, action, options.resource, preparation));
+        // Holding gate:any covers every gate:<group> on the Global Context. One
+        // extra exact check, reused across those actions, is the whole exception.
+        // gate:any itself stays exact. No other action gains a wildcard.
+        const groups = isGlobalContext(options.resource) ? actions.filter(delegableGate) : [];
+        if (groups.length > 0) {
+          const gateAnyIndex = actions.indexOf('gate:any');
+          const gateAny =
+            gateAnyIndex >= 0
+              ? checks[gateAnyIndex]!
+              : await accessCheck(config.access, actor, 'gate:any', PLATFORM_RESOURCE, preparation);
+          let covered: Promise<boolean> | undefined;
+          for (const action of groups) {
+            const index = actions.indexOf(action);
+            const held = checks[index]!;
+            checks[index] = async (client, time) => {
+              if (await held(client, time)) return true;
+              covered ??= gateAny(client, time);
+              return covered;
+            };
+          }
+        }
         const proof = Object.freeze({});
         proofs.set(proof, { attempt, checks });
         return proof;
