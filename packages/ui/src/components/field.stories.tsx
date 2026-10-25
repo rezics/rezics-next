@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
+import { Checkbox } from './checkbox.tsx';
 import {
   Field,
   FieldContent,
-  FieldControl,
   FieldDescription,
   FieldError,
   FieldGroup,
@@ -16,6 +16,8 @@ import {
   FieldSetHelper,
 } from './field.tsx';
 import { Input } from './input.tsx';
+import { Switch } from './switch.tsx';
+import { Textarea } from './textarea.tsx';
 
 const meta = {
   title: 'Rezics UI/Field',
@@ -83,9 +85,7 @@ export const Invalid: Story = {
   render: (args) => (
     <Field {...args}>
       <FieldLabel>ISBN-13</FieldLabel>
-      <FieldControl>
-        <Input defaultValue="978-0-7653-8203" />
-      </FieldControl>
+      <Input defaultValue="978-0-7653-8203" />
       <FieldError>An ISBN-13 has 13 digits; this one has 12.</FieldError>
     </Field>
   ),
@@ -120,10 +120,10 @@ export const Horizontal: Story = {
             Reviews marked as spoilers stay blurred until you tap them.
           </FieldDescription>
         </FieldContent>
-        <input aria-label="Blur spoilers" type="checkbox" defaultChecked />
+        <Switch defaultChecked />
       </Field>
       <Field orientation="horizontal">
-        <input aria-label="Show adult Works in search" type="checkbox" />
+        <Checkbox />
         <FieldContent>
           <FieldLabel>Show adult Works in search</FieldLabel>
           <FieldDescription>
@@ -176,7 +176,7 @@ export const FieldSetWithLegend: Story = {
         <FieldSeparator>or</FieldSeparator>
         <Field>
           <FieldLabel>Notes for moderators</FieldLabel>
-          <textarea className="min-h-24 w-full rounded-xl border bg-background px-3 py-2 text-sm" placeholder="Where did you find this edition?" />
+          <Textarea placeholder="Where did you find this edition?" />
         </Field>
       </FieldGroup>
     </FieldSet>
@@ -249,7 +249,7 @@ export const Dark: Story = {
           <FieldLabel>Blur spoilers</FieldLabel>
           <FieldDescription>Reviews marked as spoilers stay blurred.</FieldDescription>
         </FieldContent>
-        <input aria-label="Blur spoilers" type="checkbox" defaultChecked />
+        <Switch defaultChecked />
       </Field>
     </FieldGroup>
   ),
