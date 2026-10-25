@@ -172,6 +172,7 @@ type Column = {
   status: string;
   term?: string;
   on?: string;
+  qualifies?: string;
   mapping?: string;
   meaning?: string;
   citations?: string[];
@@ -210,15 +211,20 @@ test('every table and column of the pinned VNDB dump is inventoried exactly once
 
 test('every inventoried term is bundled, proposed by the vocabulary rules, or omitted with a reason', () => {
   const inventory = readInventory();
-  const classes = bundledRelease.types as Record<string, { properties: string[] }>;
-  const properties = bundledRelease.properties as Record<string, unknown>;
+  const classes = bundledRelease.types;
+  const properties = bundledRelease.properties;
   for (const table of inventory.tables) {
     for (const column of table.columns) {
       if (column.status === 'existing') {
         expect(column.term).toBeTruthy();
         expect(column.on).toBeTruthy();
         expect(properties[column.term!]).toBeDefined();
-        expect(classes[column.on!]?.properties).toContain(column.term);
+        if (column.qualifies) {
+          expect(classes[column.on!]?.properties).toContain(column.qualifies);
+          expect(properties[column.qualifies]?.qualifiers).toContain(column.term);
+        } else {
+          expect(classes[column.on!]?.properties).toContain(column.term);
+        }
       } else if (column.status === 'proposed') {
         expect(column.term).toMatch(/^(schema|wd|wdt|rezics):[A-Za-z0-9_]+$/u);
         expect(column.mapping).toMatch(/^(wd:Q[0-9]+|wdt:P[0-9]+)$/u);

@@ -27,6 +27,7 @@ const vndb = () =>
       name: string;
       columns: {
         name: string;
+        qualifies?: string;
         values?: { value: string; term?: string; mapping?: string; status?: string; reason?: string }[];
       }[];
     }[];

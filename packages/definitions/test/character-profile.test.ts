@@ -27,6 +27,7 @@ type Decision = {
   status: string;
   term?: string;
   on?: string;
+  qualifies?: string;
   reason?: string;
   qualifiers?: Record<string, Decision> | Array<Decision | string>;
   profile?: Decision;

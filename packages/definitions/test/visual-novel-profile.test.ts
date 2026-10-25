@@ -61,7 +61,14 @@ test('VNDB visual novel, release and producer fields are bundled or omitted with
   const inventory = Bun.YAML.parse(source) as {
     tables: Array<{
       name: string;
-      columns: Array<{ name: string; status: string; term?: string; on?: string; reason?: string }>;
+      columns: Array<{
+        name: string;
+        status: string;
+        term?: string;
+        on?: string;
+        qualifies?: string;
+        reason?: string;
+      }>;
     }>;
   };
   const tables = inventory.tables.filter(({ name }) => visualNovelTablePrefix.test(name));
