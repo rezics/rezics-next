@@ -11,6 +11,7 @@ default_range: string
 imports:
   - linkml:types
   - core
+  - classification
 classes:
   Work:
     is_a: CreativeWork
@@ -25,6 +26,11 @@ classes:
       - bangumiSubjectId
       - datePublished
       - inLanguage
+      - genre
+      - keywords
+      - partOfSeries
+    annotations:
+      facets: author genre keywords partOfSeries datePublished
   Edition:
     is_a: CreativeWork
     class_uri: bf:Instance
@@ -41,6 +47,8 @@ classes:
       - numberOfPages
       - inLanguage
       - translator
+    annotations:
+      facets: exampleOfWork author translator publisher datePublished numberOfPages
 slots:
   exampleOfWork:
     slot_uri: schema:exampleOfWork

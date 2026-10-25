@@ -11,6 +11,7 @@ default_range: string
 imports:
   - linkml:types
   - core
+  - classification
 classes:
   Recipe:
     is_a: Thing
@@ -25,6 +26,9 @@ classes:
       - recipeIngredient
       - cookTime
       - recipeYield
+      - keywords
+    annotations:
+      facets: author keywords datePublished cookTime recipeYield
 slots:
   recipeIngredient:
     slot_uri: schema:recipeIngredient

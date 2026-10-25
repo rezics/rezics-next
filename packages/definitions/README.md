@@ -30,8 +30,7 @@ properties through catalogue data; they do not need package code. The compiled
 release is checked in at `release/rezics.json`, and `src/bundled.ts` discovers all
 catalogue, presentation, and context-settings YAML files for compilation. Each type
 release records its structural `bases` as CURIEs, nearest first, and its registered
-`facets` in display order. The bundled verticals declare no facets, so their types
-have empty facet lists.
+`facets` in display order. Each vertical declares its own facets.
 
 To add a vertical, add its schema as `catalogue/<vertical>.yaml`, add that schema
 to the imports in `catalogue/rezics.yaml`, and add one label file per locale at

@@ -224,7 +224,14 @@
         "wdt:P179",
         "wdt:P648"
       ],
-      "facets": []
+      "facets": [
+        "schema:exampleOfWork",
+        "schema:author",
+        "schema:translator",
+        "schema:publisher",
+        "schema:datePublished",
+        "schema:numberOfPages"
+      ]
     },
     "schema:Book": {
       "iri": "http://schema.org/Book",
@@ -256,7 +263,7 @@
         "wdt:P5732",
         "wdt:P648"
       ],
-      "facets": []
+      "facets": ["schema:author", "schema:genre", "schema:keywords", "wdt:P179", "schema:datePublished"]
     },
     "wd:Q95074": {
       "iri": "http://www.wikidata.org/entity/Q95074",
@@ -455,13 +462,14 @@
         "schema:cookTime",
         "schema:datePublished",
         "schema:image",
+        "schema:keywords",
         "schema:name",
         "schema:recipeIngredient",
         "schema:recipeYield",
         "schema:sameAs",
         "schema:url"
       ],
-      "facets": []
+      "facets": ["schema:author", "schema:keywords", "schema:datePublished", "schema:cookTime", "schema:recipeYield"]
     },
     "wd:Q7725310": {
       "iri": "http://www.wikidata.org/entity/Q7725310",
