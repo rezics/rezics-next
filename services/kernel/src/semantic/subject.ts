@@ -11,6 +11,8 @@ import { SubjectInputError } from './item.ts';
 import { rejectContent } from './rules.ts';
 import { GLOBAL_CONTEXT } from './definitions.ts';
 import { contextSnapshot } from './context.ts';
+import { LINKS_CHANGED } from './events.ts';
+import { linkChanges } from './link-changes.ts';
 import { slotView } from './slots.ts';
 import { matchesTarget } from './targets.ts';
 import createRevision from './create-revision.sql';
@@ -131,13 +133,24 @@ export async function createSubject(
         transaction_id: transactionId,
         facts,
       });
+      const events: { type: string; subject: string; data: unknown }[] = [
+        { type: 'com.rezics.subject.created.v1', subject: subjectId, data: { id: subjectId } },
+      ];
+      const changes = linkChanges([], facts, dataTypes);
+      if (changes.length > 0) {
+        events.push({
+          type: LINKS_CHANGED,
+          subject: subjectId,
+          data: { subject: subjectId, revision: 1, changes },
+        });
+      }
       return {
         value: resolveItem(subjectId, facts, String(input.type), dataTypes, {
           revision: 1,
           release: options.release.digest,
           context: CONTEXT,
         }),
-        events: [{ type: 'com.rezics.subject.created.v1', subject: subjectId, data: { id: subjectId } }],
+        events,
       };
     },
   );

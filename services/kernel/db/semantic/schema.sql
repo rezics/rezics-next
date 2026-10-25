@@ -230,6 +230,26 @@ CREATE TABLE semantic.fact (
 
 
 --
+-- Name: inbound_link; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.inbound_link (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    property text NOT NULL,
+    source_subject_id uuid NOT NULL,
+    statement_id uuid NOT NULL,
+    source_revision integer NOT NULL,
+    present boolean NOT NULL,
+    recorded_transaction_id uuid NOT NULL,
+    CONSTRAINT inbound_link_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
+    CONSTRAINT inbound_link_property_check CHECK ((char_length(property) >= 1)),
+    CONSTRAINT inbound_link_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT inbound_link_source_revision_check CHECK ((source_revision >= 1))
+);
+
+
+--
 -- Name: moderation; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -354,6 +374,14 @@ ALTER TABLE ONLY semantic.fact
 
 
 --
+-- Name: inbound_link inbound_link_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.inbound_link
+    ADD CONSTRAINT inbound_link_pkey PRIMARY KEY (route, subject_id, property, source_subject_id, statement_id);
+
+
+--
 -- Name: moderation moderation_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -403,6 +431,13 @@ CREATE INDEX fact_compact_candidate ON semantic.fact USING btree (route, subject
 --
 
 CREATE INDEX fact_terms ON semantic.fact USING btree (route, subject_id, slot_id, log_seq) WHERE (kind <> 'statement'::text);
+
+
+--
+-- Name: inbound_link_present; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX inbound_link_present ON semantic.inbound_link USING btree (route, subject_id, property, source_subject_id, statement_id) WHERE present;
 
 
 --

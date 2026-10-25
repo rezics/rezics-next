@@ -26,6 +26,7 @@ import { defineRateLimit } from '../../http/rate-limit.ts';
 import { ProblemError, problemSchema } from '../../http/problem.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, requestDigest, SESSION_HEADER } from '../../http/request.ts';
 import { subjectReadEligibility } from '../eligibility.ts';
+import { listSubjectLinks } from '../links.ts';
 import { customMethod } from '../../http/custom-method.ts';
 import {
   moderateSubject,
@@ -891,6 +892,67 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
               limit: query.limit ?? 20,
               ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
               authorize: check,
+            }),
+          );
+          session.record(component);
+          return result;
+        } catch (error) {
+          return candidateError(error);
+        }
+      },
+    )
+    .get(
+      '/v1/subjects/:id/links',
+      {
+        params: t.Object({ id: t.String() }),
+        query: t.Object({ ...pageQuery, property: t.Optional(t.String({ minLength: 1 })) }),
+        response: {
+          200: t.Object(
+            {
+              links: t.Array(
+                t.Object(
+                  { subject: t.String(), property: t.String(), statement: t.String() },
+                  { additionalProperties: false },
+                ),
+              ),
+              freshness: t.Object(
+                {
+                  consistency: t.Literal('eventual'),
+                  target_seconds: t.Literal(10),
+                  caught_up: t.Boolean(),
+                },
+                { additionalProperties: false },
+              ),
+              next: t.Union([t.String(), t.Null()]),
+            },
+            { additionalProperties: false },
+          ),
+          ...listingErrors,
+        },
+        detail: {
+          operationId: 'subject.links',
+          'x-action': 'subject:read',
+          security: [{ bearerAuth: [] }, {}],
+        },
+      },
+      async ({ params, query, authorize, admission, job, session }) => {
+        const route = routeOf(params.id);
+        if (route === null) throw new ProblemError('not_found');
+        const active = await activeRelease(pool);
+        if (!active) throw new ProblemError('semantic_not_ready');
+        if (query.property !== undefined && !Object.hasOwn(active.release.properties, query.property))
+          throw new ProblemError('invalid_request');
+        const resource = { route, id: params.id };
+        const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
+        try {
+          const { component, ...result } = await admission.run('normal', job, () =>
+            listSubjectLinks(pool, tokens, {
+              subject: params.id,
+              property: query.property ?? null,
+              limit: query.limit ?? 20,
+              ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+              authorize: check,
+              seen: [...session.components],
             }),
           );
           session.record(component);

@@ -56,6 +56,7 @@ const typed = [
   'POST /v1/subjects/:id/$adopt',
   'GET /v1/subjects/:id/candidates',
   'GET /v1/subjects/:id/revisions',
+  'GET /v1/subjects/:id/links',
   'POST /v1/definitions/releases',
   'GET /v1/definitions/releases/:digest',
   'GET /v1/definitions/active',
@@ -101,7 +102,7 @@ test("the kernel app's type, which is the Eden contract, carries exactly the rou
 
 test('semantic editorial listings document their default page size', () => {
   const paths = openApiDocument(createKernel({ pool, routeKey: new Uint8Array(32) })).paths;
-  for (const path of ['/v1/subjects/{id}/candidates', '/v1/subjects/{id}/revisions']) {
+  for (const path of ['/v1/subjects/{id}/candidates', '/v1/subjects/{id}/revisions', '/v1/subjects/{id}/links']) {
     expect(paths[path]!.get!.parameters).toContainEqual(
       expect.objectContaining({ name: 'limit', in: 'query', schema: expect.objectContaining({ default: 20 }) }),
     );

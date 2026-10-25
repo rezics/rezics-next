@@ -9,7 +9,9 @@ import { derivedId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding, type CursorKey } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { GLOBAL_CONTEXT, readRelease } from './definitions.ts';
+import { LINKS_CHANGED } from './events.ts';
 import { factDataTypes, itemFacts, resolveItem, SubjectInputError, type Violation } from './item.ts';
+import { linkChanges } from './link-changes.ts';
 import { PageCursorError } from './page.ts';
 import { rejectContent } from './rules.ts';
 import {
@@ -418,6 +420,8 @@ export async function adoptCandidates(
       if (!definition.multivalued && options.selection.length > 1)
         throw new SubjectInputError([{ pointer: '/selection', code: 'out_of_range' }]);
 
+      const beforeLinks =
+        options.context === GLOBAL_CONTEXT ? (await slotView(tx, options.subject, options.property)).facts : null;
       await expandSlot(tx, options.subject, options.property, transactionId);
       const revision = subject.rows[0].revision + 1;
       const selection = options.selection as Adoption['selection'];
@@ -449,6 +453,28 @@ export async function adoptCandidates(
               : await currentAcceptance(tx, options.subject, entry.candidate, GLOBAL_CONTEXT));
           if (effective?.verdict !== 'accept') throw new EditorialConflictError();
         }
+        const events: { type: string; subject: string; data: unknown }[] = [
+          {
+            type: 'com.rezics.subject.adopted.v1',
+            subject: options.subject,
+            data: { context: options.context, property: options.property, mode: options.mode, revision, head },
+          },
+        ];
+        if (beforeLinks) {
+          const afterFacts = (await slotView(tx, options.subject, options.property)).facts;
+          const changes = linkChanges(
+            beforeLinks,
+            afterFacts,
+            factDataTypes(options.release.release, [...beforeLinks, ...afterFacts]),
+          );
+          if (changes.length > 0) {
+            events.push({
+              type: LINKS_CHANGED,
+              subject: options.subject,
+              data: { subject: options.subject, revision, changes },
+            });
+          }
+        }
         return {
           value: {
             adoption: {
@@ -460,13 +486,7 @@ export async function adoptCandidates(
             },
             revision,
           },
-          events: [
-            {
-              type: 'com.rezics.subject.adopted.v1',
-              subject: options.subject,
-              data: { context: options.context, property: options.property, mode: options.mode, revision, head },
-            },
-          ],
+          events,
         };
       } catch (error) {
         retryEditorialUniqueness(error);

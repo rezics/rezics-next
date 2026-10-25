@@ -6,6 +6,7 @@ import { KERNEL_WORK_MODULES } from './work/modules.ts';
 import { composeWork, type WorkModule } from './work/registry.ts';
 import { effectsRelay } from './events/effects.ts';
 import { startRelays } from './events/relays.ts';
+import { linkProjection } from './semantic/links.ts';
 
 export type WorkerConfig = {
   databaseUrl: string;
@@ -95,7 +96,7 @@ export async function startWorker(
     starting = (async () => {
       work = await composeWork(modules, { ...config, pool, client, env });
       await work.launch();
-      relays = startRelays(pool, [effectsRelay(pool, work.effects)]);
+      relays = startRelays(pool, [effectsRelay(pool, work.effects), linkProjection(pool)]);
     })();
     await starting;
     return { stop };

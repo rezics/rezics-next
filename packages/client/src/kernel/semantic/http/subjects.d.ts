@@ -1481,6 +1481,104 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
             };
         };
     };
+} & {
+    v1: {
+        subjects: {
+            ":id": {
+                revisions: {
+                    get: {
+                        body: unknown;
+                        params: {
+                            id: string;
+                        };
+                        query: {
+                            limit?: string | number;
+                            cursor?: string;
+                        };
+                        headers: unknown;
+                        response: {
+                            200: {
+                                revisions: {
+                                    revision: number;
+                                    kind: string;
+                                    release: string;
+                                }[];
+                                next: string | null;
+                            };
+                            400: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            401: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: string;
+                            };
+                            503: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
 }, import("elysia").DefaultEphemeral, {
     derive: {
         readonly admission: import("../../http/admission.ts").Admission;
@@ -1500,13 +1598,14 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
     schemas: {};
     response: {};
     error: [];
-}, "get", "/v1/subjects/:id/revisions", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
+}, "get", "/v1/subjects/:id/links", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
     params: import("typebox").TObject<{
         id: import("typebox").TString;
     }>;
     query: import("typebox").TObject<{
         limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
         cursor: import("typebox").TOptional<import("typebox").TString>;
+        property: import("typebox").TOptional<import("typebox").TString>;
     }>;
     response: {
         400: import("typebox").TObject<{
@@ -1566,11 +1665,16 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
             }>>>;
         }>;
         200: import("typebox").TObject<{
-            revisions: import("typebox").TArray<import("typebox").TObject<{
-                revision: import("typebox").TInteger;
-                kind: import("typebox").TString;
-                release: import("typebox").TString;
+            links: import("typebox").TArray<import("typebox").TObject<{
+                subject: import("typebox").TString;
+                property: import("typebox").TString;
+                statement: import("typebox").TString;
             }>>;
+            freshness: import("typebox").TObject<{
+                consistency: import("typebox").TLiteral<"eventual">;
+                target_seconds: import("typebox").TLiteral<10>;
+                caught_up: import("typebox").TBoolean;
+            }>;
             next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
         }>;
     };
@@ -1583,7 +1687,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
             bearerAuth?: never;
         })[];
     };
-}, {}, "/v1/subjects/:id/revisions">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params, query, authorize, admission, job, session }: {
+}, {}, "/v1/subjects/:id/links">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params, query, authorize, admission, job, session }: {
     server: import("elysia").Server | null;
     redirect: import("elysia").redirect;
     set: {
@@ -1650,11 +1754,16 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
             }[];
         };
         200: {
-            revisions: {
-                revision: number;
-                kind: string;
-                release: string;
+            links: {
+                subject: string;
+                property: string;
+                statement: string;
             }[];
+            freshness: {
+                consistency: "eventual";
+                target_seconds: 10;
+                caught_up: boolean;
+            };
             next: string | null;
         };
     }>;
@@ -1716,11 +1825,16 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
             }[];
         };
         200: {
-            revisions: {
-                revision: number;
-                kind: string;
-                release: string;
+            links: {
+                subject: string;
+                property: string;
+                statement: string;
             }[];
+            freshness: {
+                consistency: "eventual";
+                target_seconds: 10;
+                caught_up: boolean;
+            };
             next: string | null;
         };
     }>;
@@ -1731,6 +1845,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
         query: import("typebox").TObject<{
             limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
             cursor: import("typebox").TOptional<import("typebox").TString>;
+            property: import("typebox").TOptional<import("typebox").TString>;
         }>;
         response: {
             400: import("typebox").TObject<{
@@ -1790,11 +1905,16 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                 }>>>;
             }>;
             200: import("typebox").TObject<{
-                revisions: import("typebox").TArray<import("typebox").TObject<{
-                    revision: import("typebox").TInteger;
-                    kind: import("typebox").TString;
-                    release: import("typebox").TString;
+                links: import("typebox").TArray<import("typebox").TObject<{
+                    subject: import("typebox").TString;
+                    property: import("typebox").TString;
+                    statement: import("typebox").TString;
                 }>>;
+                freshness: import("typebox").TObject<{
+                    consistency: import("typebox").TLiteral<"eventual">;
+                    target_seconds: import("typebox").TLiteral<10>;
+                    caught_up: import("typebox").TBoolean;
+                }>;
                 next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
             }>;
         };
@@ -1807,7 +1927,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                 bearerAuth?: never;
             })[];
         };
-    }, {}, "/v1/subjects/:id/revisions">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
+    }, {}, "/v1/subjects/:id/links">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
         derive: {
             readonly admission: import("../../http/admission.ts").Admission;
             readonly job: {
@@ -1832,6 +1952,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
     query: {
         limit?: number;
         cursor?: string;
+        property?: string;
     };
     params: {
         id: string;
@@ -1851,12 +1972,13 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
     readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../../request/access.ts").AccessCheck>;
     readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
+    links: import("../links.ts").SubjectLink[];
+    freshness: {
+        consistency: 'eventual';
+        target_seconds: 10;
+        caught_up: boolean;
+    };
     next: string | null;
-    revisions: {
-        revision: number;
-        kind: string;
-        release: string;
-    }[];
 }>, {
     params: import("typebox").TObject<{
         id: import("typebox").TString;
@@ -1864,6 +1986,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
     query: import("typebox").TObject<{
         limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
         cursor: import("typebox").TOptional<import("typebox").TString>;
+        property: import("typebox").TOptional<import("typebox").TString>;
     }>;
     response: {
         400: import("typebox").TObject<{
@@ -1923,11 +2046,16 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
             }>>>;
         }>;
         200: import("typebox").TObject<{
-            revisions: import("typebox").TArray<import("typebox").TObject<{
-                revision: import("typebox").TInteger;
-                kind: import("typebox").TString;
-                release: import("typebox").TString;
+            links: import("typebox").TArray<import("typebox").TObject<{
+                subject: import("typebox").TString;
+                property: import("typebox").TString;
+                statement: import("typebox").TString;
             }>>;
+            freshness: import("typebox").TObject<{
+                consistency: import("typebox").TLiteral<"eventual">;
+                target_seconds: import("typebox").TLiteral<10>;
+                caught_up: import("typebox").TBoolean;
+            }>;
             next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
         }>;
     };
