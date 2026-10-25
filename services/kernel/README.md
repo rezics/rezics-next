@@ -15,8 +15,15 @@ schema dump, runs TypeScript, lint and formatting checks, then runs the tests. T
 
 ## Database changes
 
-Migrations are forward only. Once merged, a migration is never edited. After adding one, run the development command and
-`bun run db dump`, then commit the resulting `db/schema.sql`.
+Kernel-owned migrations live in `db/migrations/` and their dump lives in `db/schema.sql`. Each module has its code and
+authoritative SQL statements in `src/<module>/`, its migrations in `db/<module>/migrations/`, and its dump in
+`db/<module>/schema.sql`. A module exists when its migrations directory exists, and its tables live in the PostgreSQL
+schema with the module's name. The module owner edits `src/<module>/`, `db/<module>/`, and that module's tests.
+
+Migration versions use UTC timestamps in `YYYYMMDDHHMMSS_<name>.sql` form and are unique across all migration
+directories. `0001_core_partition.sql` keeps its name and sorts first. Dbmate applies pending migrations from every
+directory in version order, so a module migration may merge behind a newer migration from another directory. Once a
+migration is merged, never rename or edit it. Run `bun run db dump` to update and commit every schema dump.
 
 A 16-bit route value maps to its partition by taking the top 12 bits.
 

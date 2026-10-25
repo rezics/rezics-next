@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { migrate, POSTGRES_IMAGE, schemaDump } from './database.ts';
+import { migrate, POSTGRES_IMAGE, schemaDumps } from './database.ts';
 
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const pid = String(process.pid);
@@ -76,8 +76,12 @@ async function main(): Promise<void> {
   const url = `postgres://rezics:rezics@127.0.0.1:${match[1]}/rezics?sslmode=disable`;
 
   migrate(url);
-  const expected = await Bun.file(resolve(directory, 'db/schema.sql')).text();
-  if (schemaDump(url) !== expected) fail('Schema dump differs from db/schema.sql; run `bun run db dump`');
+  for (const [path, dump] of Object.entries(schemaDumps(url))) {
+    const file = Bun.file(resolve(directory, path));
+    if (!(await file.exists()) || (await file.text()) !== dump) {
+      fail(`Schema dump differs from ${path}; run \`bun run db dump\``);
+    }
+  }
 
   const env = { ...process.env, DATABASE_URL: url };
   run(resolve(directory, '../../node_modules/.bin/tsc'), ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json'], env);

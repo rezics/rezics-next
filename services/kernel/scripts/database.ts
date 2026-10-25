@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { readdirSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -8,9 +9,13 @@ const container = 'rezics-kernel-dev';
 const volume = 'rezics-kernel-dev';
 const port = Number(process.env.KERNEL_DATABASE_PORT ?? '54329');
 
-function command(program: string, args: string[], options: { input?: string; env?: NodeJS.ProcessEnv } = {}): string {
+function command(
+  program: string,
+  args: string[],
+  options: { input?: string; env?: NodeJS.ProcessEnv; cwd?: string } = {},
+): string {
   const result = spawnSync(program, args, {
-    cwd: directory,
+    cwd: options.cwd ?? directory,
     encoding: 'utf8',
     input: options.input,
     env: { ...process.env, ...options.env },
@@ -25,39 +30,90 @@ function databaseUrl(databasePort: number): string {
   return `postgres://rezics:rezics@127.0.0.1:${databasePort}/rezics?sslmode=disable`;
 }
 
-export function migrate(url: string): void {
-  command(resolve(directory, 'node_modules/.bin/dbmate'), [
-    '--url',
-    url,
-    '--migrations-dir',
-    'db/migrations',
-    '--no-dump-schema',
-    '--migration-lock',
-    '--wait',
-    'up',
-    '--strict',
-  ]);
+function modules(root: string): string[] {
+  const db = resolve(root, 'db');
+  return readdirSync(db, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .filter((entry) => {
+      const migrations = resolve(db, entry.name, 'migrations');
+      try {
+        return statSync(migrations).isDirectory();
+      } catch {
+        return false;
+      }
+    })
+    .map((entry) => {
+      if (!/^[a-z][a-z0-9_]*$/.test(entry.name) || entry.name === 'migrations') {
+        throw new Error(`Invalid database module name: ${entry.name}`);
+      }
+      return entry.name;
+    })
+    .sort();
 }
 
-export function schemaDump(url: string): string {
-  const dump = command('docker', [
-    'run',
-    '--rm',
-    '--network',
-    'host',
-    '-e',
-    'PGPASSWORD=rezics',
-    POSTGRES_IMAGE,
-    'pg_dump',
-    '--schema-only',
-    '--no-owner',
-    '--no-privileges',
-    url,
-  ]);
+export function migrate(url: string, root = directory): void {
+  const migrationDirectories = ['db/migrations', ...modules(root).map((name) => `db/${name}/migrations`)];
+  command(
+    resolve(directory, 'node_modules/.bin/dbmate'),
+    [
+      '--url',
+      url,
+      ...migrationDirectories.flatMap((path) => ['--migrations-dir', path]),
+      '--no-dump-schema',
+      '--migration-lock',
+      '--wait',
+      'up',
+    ],
+    { cwd: root },
+  );
+}
+
+function schemaDumpWith(url: string, options: string[] = [], root = directory): string {
+  const dump = command(
+    'docker',
+    [
+      'run',
+      '--rm',
+      '--network',
+      'host',
+      '-e',
+      'PGPASSWORD=rezics',
+      POSTGRES_IMAGE,
+      'pg_dump',
+      '--schema-only',
+      '--no-owner',
+      '--no-privileges',
+      ...options,
+      url,
+    ],
+    { cwd: root },
+  );
   return dump
     .split('\n')
     .filter((line) => !/^\\(?:un)?restrict\b/.test(line) && !/^-- Dumped (?:from|by)\b/.test(line))
     .join('\n');
+}
+
+export function schemaDumps(url: string, root = directory): Record<string, string> {
+  const moduleNames = modules(root);
+  const dumps: Record<string, string> = {};
+  dumps['db/schema.sql'] = schemaDumpWith(
+    url,
+    moduleNames.map((name) => `--exclude-schema=${name}`),
+    root,
+  );
+  for (const name of moduleNames) {
+    dumps[`db/${name}/schema.sql`] = schemaDumpWith(url, [`--schema=${name}`], root);
+  }
+  return dumps;
+}
+
+export function schemaDump(url: string, root = directory): string {
+  return schemaDumpWith(
+    url,
+    modules(root).map((name) => `--exclude-schema=${name}`),
+    root,
+  );
 }
 
 function docker(args: string[]): string {
@@ -111,7 +167,9 @@ async function main(): Promise<void> {
     await up();
   } else if (action === 'dump') {
     const url = databaseUrl(port);
-    await Bun.write(resolve(directory, 'db/schema.sql'), schemaDump(url));
+    for (const [path, dump] of Object.entries(schemaDumps(url))) {
+      await Bun.write(resolve(directory, path), dump);
+    }
   } else throw new Error(`Unknown database action: ${action}`);
 }
 
