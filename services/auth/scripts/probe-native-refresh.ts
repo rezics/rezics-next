@@ -5,7 +5,7 @@ import { getMigrations } from 'better-auth/db/migration';
 import { getCurrentAdapter, runWithTransaction } from '@better-auth/core/context';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { Pool } from 'pg';
-import { createAuthService, type AccessAccount } from '../src/index.ts';
+import { createAuthService, WEBSITE_CLIENT_ID, type AccessAccount, type PublicJwks } from '../src/index.ts';
 import { testDatabase } from './database.ts';
 import { nativeProbeOptions } from './probe-native-worker.ts';
 
@@ -111,21 +111,17 @@ try {
     .map((value) => value.split(';')[0])
     .join('; ');
   const clientKey = await generateKeyPair('ES256', { extractable: true });
-  const client = await native.api.adminCreateOAuthClient({
-    headers: new Headers({ cookie }),
-    body: {
-      redirect_uris: [redirectUri],
-      scope: selectedScopes.join(' '),
-      token_endpoint_auth_method: 'private_key_jwt',
-      jwks: { keys: [{ ...(await exportJWK(clientKey.publicKey)), kid: 'probe-client', alg: 'ES256', use: 'sig' }] },
-      grant_types: ['authorization_code', 'refresh_token'],
-      response_types: ['code'],
-      resources: [audience],
-      skip_consent: true,
-      require_pkce: true,
-      enable_end_session: true,
-    },
+  // Register through the real bootstrap path; the native provider reads the
+  // same single client registry that production composition uses.
+  await service.internal.registerWebsiteClient({
+    publicJwks: {
+      keys: [{ ...(await exportJWK(clientKey.publicKey)), kid: 'probe-client', alg: 'ES256', use: 'sig' }],
+    } as PublicJwks,
+    redirectUris: [redirectUri],
+    postLogoutRedirectUris: ['https://website.rezics.test/'],
+    scopes: [...selectedScopes, 'media:complete'],
   });
+  const client = { client_id: WEBSITE_CLIENT_ID };
   async function token(fields: Record<string, string>, origin = issuer) {
     const now = Math.floor(Date.now() / 1000);
     // Native 1.7.12 uses the endpoint audience. The website's stricter issuer
@@ -208,22 +204,26 @@ try {
 
   const reachedInsert = Promise.withResolvers<void>();
   const releaseInsert = Promise.withResolvers<void>();
-  const guarded = (await database.query(`SELECT to_regclass('"oauthRefreshFamily"') IS NOT NULL AS guarded`)).rows[0].guarded;
   let pause = true;
-  const pauseCreate = (originalCreate: typeof context.adapter.create): typeof context.adapter.create => async (input) => {
-    if (input.model === 'oauthRefreshToken' && pause) {
-      pause = false;
-      reachedInsert.resolve();
-      await releaseInsert.promise;
-    }
-    return originalCreate(input);
-  };
+  let guarded = false;
+  let refreshRowsAfterReplay = -1;
+  const pauseCreate =
+    (originalCreate: typeof context.adapter.create): typeof context.adapter.create =>
+    async (input) => {
+      if (input.model === 'oauthRefreshToken' && pause) {
+        pause = false;
+        reachedInsert.resolve();
+        await releaseInsert.promise;
+      }
+      return originalCreate(input);
+    };
   context.adapter.create = pauseCreate(context.adapter.create.bind(context.adapter));
   const originalTransaction = context.adapter.transaction.bind(context.adapter);
-  context.adapter.transaction = (action) => originalTransaction(async (transaction) => {
-    transaction.create = pauseCreate(transaction.create.bind(transaction));
-    return action(transaction);
-  });
+  context.adapter.transaction = (action) =>
+    originalTransaction(async (transaction) => {
+      transaction.create = pauseCreate(transaction.create.bind(transaction));
+      return action(transaction);
+    });
   const rotation = token({ grant_type: 'refresh_token', refresh_token: issued.refresh_token });
   let deadline: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -236,33 +236,40 @@ try {
     // Rotation has atomically revoked the parent, but has not inserted the child.
     const hooksBeforeReplay = issuanceHooks;
     const replayRequest = token({ grant_type: 'refresh_token', refresh_token: issued.refresh_token }, workerOrigin);
-    if (guarded) {
-      // Synchronize on the real PostgreSQL lock wait, not elapsed time. The
-      // observer never participates in the one-connection native runtime pool.
-      const end = Date.now() + 10000;
-      while (true) {
-        const waiting = await observer.query(`SELECT 1 FROM pg_stat_activity
-          WHERE application_name='native-refresh-probe-worker'
-          AND cardinality(pg_blocking_pids(pid))>0`);
-        if (waiting.rowCount) break;
-        if (Date.now() > end) throw new Error('Replay did not wait for its durable family guard');
-        await Bun.sleep(10);
+    // Synchronize on observable state, never elapsed time: either the replay
+    // finishes while the rotation is paused (no durable family guard), or the
+    // replay process waits on a real PostgreSQL lock held by the paused rotation.
+    // The observer never participates in the one-connection native runtime pool.
+    const settled = replayRequest.then(
+      () => 'replied' as const,
+      () => 'replied' as const,
+    );
+    const end = Date.now() + 10000;
+    while (true) {
+      if ((await Promise.race([settled, Bun.sleep(10).then(() => 'pending' as const)])) === 'replied') break;
+      const waiting = await observer.query(`SELECT 1 FROM pg_stat_activity
+        WHERE application_name='native-refresh-probe-worker'
+        AND cardinality(pg_blocking_pids(pid))>0`);
+      if (waiting.rowCount) {
+        guarded = true;
+        releaseInsert.resolve();
+        break;
       }
-      releaseInsert.resolve();
+      if (Date.now() > end) throw new Error('Replay neither completed nor waited for a family lock');
     }
     const replay = await replayRequest;
     assert.equal(replay.status, 400, 'native replay is detected');
     assert.equal(issuanceHooks, hooksBeforeReplay, 'replay cannot reach the other process issuance hooks');
     const workerHooks = await (await fetch(`${workerOrigin}/probe/hooks`)).json();
     assert.equal(workerHooks.issuanceHooks, 0, 'native replay skips both hooks in the replay process');
-    if (!guarded) {
-      const afterReplay = await database.query(
-        'SELECT count(*)::int AS count FROM "oauthRefreshToken" WHERE "clientId"=$1',
-        [client.client_id],
-      );
-      assert.equal(afterReplay.rows[0].count, 0, 'native replay cleanup completed');
-    }
-
+    const afterReplay = await database.query(
+      'SELECT count(*)::int AS count FROM "oauthRefreshToken" WHERE "clientId"=$1',
+      [client.client_id],
+    );
+    refreshRowsAfterReplay = afterReplay.rows[0].count;
+    // Unguarded native cleanup deletes the whole client/user history; a family
+    // guard instead retains the rows and revokes the family permanently.
+    if (!guarded) assert.equal(refreshRowsAfterReplay, 0, 'native replay cleanup completed');
   } finally {
     clearTimeout(deadline);
     releaseInsert.resolve();
@@ -283,7 +290,7 @@ try {
       restartedReplayProcess: true,
       directReadUsesTransaction,
       replayStatus: 400,
-      refreshRowsImmediatelyAfterReplay: guarded ? 2 : 0,
+      refreshRowsImmediatelyAfterReplay: refreshRowsAfterReplay,
       concurrentRotationStatus: rotated.status,
       childRefreshAfterReplayStatus: survived.status,
       issuanceHooksDuringReplay: 0,

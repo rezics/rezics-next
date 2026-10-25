@@ -3,6 +3,7 @@ import { jwt } from 'better-auth/plugins';
 import { oauthProvider } from '@better-auth/oauth-provider';
 import type { Pool } from 'pg';
 import { betterAuthOptions, credentialOwnerSchema } from '../src/better-auth.ts';
+import { websiteSchema } from '../src/website-provider.ts';
 
 /** Shared by both diagnostic processes; never mounted by the Auth service. */
 export function nativeProbeOptions(
@@ -20,6 +21,8 @@ export function nativeProbeOptions(
       credentialOwnerSchema,
       jwt({ jwt: { issuer }, jwks: { keyPairConfig: { alg: 'ES256' as const } } }),
       oauthProvider({
+        // The probe shares the production client/consent registry mapping.
+        schema: websiteSchema,
         loginPage: '/signin',
         consentPage: '/consent',
         scopes,
@@ -54,7 +57,11 @@ if (import.meta.main) {
     scopes: string[];
   } = JSON.parse(await Bun.stdin.text());
   const { Pool: PostgresPool } = await import('pg');
-  const database = new PostgresPool({ connectionString: configuration.url, max: 1, application_name: 'native-refresh-probe-worker' });
+  const database = new PostgresPool({
+    connectionString: configuration.url,
+    max: 1,
+    application_name: 'native-refresh-probe-worker',
+  });
   let issuanceHooks = 0;
   const native = betterAuth(
     nativeProbeOptions(
