@@ -200,7 +200,9 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
     stop() {
       return (stopping ??= (async () => {
         try {
-          await server.stop(true);
+          // Stop accepting requests but let active handlers finish before their
+          // database clients are closed below.
+          await server.stop(false);
           await Promise.all([...activeRequests]);
         } finally {
           try {
