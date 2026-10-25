@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, hkdfSync, randomBytes } from 'node:crypto';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { coordinateMembership } from './membership-workflows.ts';
+import { sanitizedClientIp, verifyTurnstile, type TurnstileConfiguration } from './turnstile.ts';
 import type { Pool } from 'pg';
 import type { AuthService } from './index.ts';
 
@@ -156,6 +157,8 @@ export interface AccountWorkflowOptions<Context = WorkflowContext> {
   handleSignals?: boolean;
   /** Persistent Auth-only 32-byte key, independent of Better Auth/signing keys. */
   stagingKey: Uint8Array;
+  /** Siteverify is mandatory for public registration; absent configuration denies availability. */
+  turnstile?: TurnstileConfiguration;
   auth: AuthService;
   access: AccountWorkflowPorts<Context>;
   clock?: () => Date;
@@ -178,6 +181,20 @@ type Stage = {
   expired_at: Date | null;
 };
 type RegistrationInput = { registrationId: string };
+type RegistrationStartEvent = RegistrationReference | { error: 'handle_unavailable' };
+type RegistrationCredentialEvent = { accountId: string } | { error: 'registration_denied' };
+type RegistrationFailureCode = 'handle_unavailable' | 'registration_denied';
+class RegistrationFailure extends Error {
+  constructor(readonly code: RegistrationFailureCode) {
+    super('Registration failed');
+  }
+}
+function isUniqueViolation(error: unknown): boolean {
+  return !!error && typeof error === 'object' && 'code' in error && error.code === '23505';
+}
+function isLifecycleDenied(error: unknown): boolean {
+  return error instanceof Error && error.name === 'LifecycleDeniedError';
+}
 let owner: object | undefined;
 function denied(): never {
   throw new Error('Account workflow denied');
@@ -309,7 +326,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       row.account_id !== accountId ||
       (sealed && !row.credential_digest?.equals(sealed.digest))
     )
-      denied();
+      throw new RegistrationFailure('registration_denied');
     return row;
   }
   async function approved(input: AccountOperation): Promise<Context> {
@@ -383,6 +400,22 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
           })
         ).value,
     );
+    const reservePublicRegistration = step('reserve-public-registration-handle', async (row: Stage) => {
+      try {
+        return {
+          claim: (
+            await access.reserveHandle({
+              handle: row.handle,
+              accountId: row.account_id,
+              key: commandKey('reserve-handle'),
+            })
+          ).value,
+        } as const;
+      } catch (error) {
+        if (isLifecycleDenied(error)) return { error: 'handle_unavailable' as const };
+        throw error;
+      }
+    });
     const pending = step('pending-account', async (claim: Reservation, id: string, request?: AccountOperation) => {
       const result = await access.createPending({ ...claim, key: await authorizedKey(request, 'pending-account') });
       await database.query(
@@ -395,39 +428,48 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       const row = await stage(id);
       return !!row.expired_at || required(row.expires_at).getTime() <= now().getTime();
     });
-    const provision = step('install-credential', async (id: string, request?: AccountOperation) => {
-      if (request) await approved(request);
-      const row = await stage(id);
-      if (row.expired_at || required(row.expires_at).getTime() <= now().getTime())
-        return { accountId: row.account_id, expired: true as const };
-      const authorization = await access.provisioningReference({
-        accountId: row.account_id,
-        reservationId: required(row.reservation_id),
-        ...(request ? { operation: await currentOperation(request) } : {}),
-      });
-      const encrypted = required(
-        (
-          await database.query<{ ciphertext: Buffer }>(
-            'SELECT ciphertext FROM auth_registration_stage WHERE registration_id=$1',
-            [id],
-          )
-        ).rows[0]?.ciphertext,
-      );
-      const decipher = createDecipheriv('aes-256-gcm', key, encrypted.subarray(0, 12));
-      decipher.setAAD(Buffer.from(JSON.stringify([id, row.account_id, row.handle])));
-      decipher.setAuthTag(encrypted.subarray(12, 28));
-      const clear = Buffer.concat([decipher.update(encrypted.subarray(28)), decipher.final()]);
-      try {
-        const credential = JSON.parse(clear.toString('utf8')) as { email: string; password: string };
-        return await auth.internal.provisionPassword({
-          authorization,
-          ...credential,
-          idempotencyKey: `registration:${id}`,
+    const provision = step(
+      'install-credential',
+      async (id: string, request?: AccountOperation, publicRegistration = false) => {
+        if (request) await approved(request);
+        const row = await stage(id);
+        if (row.expired_at || required(row.expires_at).getTime() <= now().getTime())
+          return { accountId: row.account_id, expired: true as const };
+        const authorization = await access.provisioningReference({
+          accountId: row.account_id,
+          reservationId: required(row.reservation_id),
+          ...(request ? { operation: await currentOperation(request) } : {}),
         });
-      } finally {
-        clear.fill(0);
-      }
-    });
+        const encrypted = required(
+          (
+            await database.query<{ ciphertext: Buffer }>(
+              'SELECT ciphertext FROM auth_registration_stage WHERE registration_id=$1',
+              [id],
+            )
+          ).rows[0]?.ciphertext,
+        );
+        const decipher = createDecipheriv('aes-256-gcm', key, encrypted.subarray(0, 12));
+        decipher.setAAD(Buffer.from(JSON.stringify([id, row.account_id, row.handle])));
+        decipher.setAuthTag(encrypted.subarray(12, 28));
+        const clear = Buffer.concat([decipher.update(encrypted.subarray(28)), decipher.final()]);
+        try {
+          const credential = JSON.parse(clear.toString('utf8')) as { email: string; password: string };
+          try {
+            return await auth.internal.provisionPassword({
+              authorization,
+              ...credential,
+              idempotencyKey: `registration:${id}`,
+            });
+          } catch (error) {
+            if (publicRegistration && isUniqueViolation(error))
+              return { accountId: row.account_id, conflict: 'registration_denied' as const };
+            throw error;
+          }
+        } finally {
+          clear.fill(0);
+        }
+      },
+    );
     const evidence = step('provisioning-evidence', async (claim: Reservation, request?: AccountOperation) => {
       if (request) await approved(request);
       return access.provisioningEvidence(claim);
@@ -492,7 +534,12 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     registration = DBOS.registerWorkflow(
       async (input: RegistrationInput) => {
         const row = await read(input.registrationId);
-        const claim = await reserve(row);
+        const reserved = await reservePublicRegistration(row);
+        if ('error' in reserved) {
+          await DBOS.setEvent('pending', reserved);
+          return { accountId: row.account_id, error: reserved.error };
+        }
+        const claim = reserved.claim;
         await pending(claim, input.registrationId);
         const ref = {
           registrationId: input.registrationId,
@@ -503,7 +550,16 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         await DBOS.setEvent('pending', ref);
         const first = await DBOS.recv<string>('credential', { deadlineEpochMS: Date.parse(claim.expiresAt) });
         if (first !== 'expire' && !(await isExpired(input.registrationId))) {
-          const installed = await provision(input.registrationId);
+          const installed = await provision(input.registrationId, undefined, true);
+          if ('conflict' in installed) {
+            await expire(claim);
+            await release(claim);
+            await erase(row.account_id);
+            await expired(input.registrationId);
+            const deniedEvent = { error: 'registration_denied' as const };
+            await DBOS.setEvent('credential', deniedEvent);
+            return { accountId: row.account_id, error: deniedEvent.error };
+          }
           if (!('expired' in installed)) {
             const proof = await evidence(claim);
             const claimed = await claimHandle(claim, proof, input.registrationId);
@@ -944,9 +1000,11 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     await DBOS.startWorkflow(registration, { workflowID: workflowId(`registration:${row.request_key}`) })({
       registrationId: row.registration_id,
     });
-    return required(
-      await DBOS.getEvent<RegistrationReference>(workflowId(`registration:${row.request_key}`), 'pending', 30),
+    const result = required(
+      await DBOS.getEvent<RegistrationStartEvent>(workflowId(`registration:${row.request_key}`), 'pending', 30),
     );
+    if ('error' in result) throw new RegistrationFailure(result.error);
+    return result;
   }
   async function install(input: { registrationId: string; email: string; password: string }) {
     active();
@@ -957,10 +1015,12 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       'UPDATE auth_registration_stage SET ciphertext=CASE WHEN credential_digest IS NULL THEN $2 ELSE ciphertext END, credential_digest=$3 WHERE registration_id=$1 AND (credential_digest IS NULL OR credential_digest=$3) RETURNING registration_id',
       [row.registration_id, ciphertext, digest],
     );
-    if (!changed.rowCount) denied();
+    if (!changed.rowCount) throw new RegistrationFailure('registration_denied');
     const ref = reference(row);
     await DBOS.send(ref.workflowId, 'install', 'credential', `${ref.workflowId}:install`);
-    return required(await DBOS.getEvent<{ accountId: string }>(ref.workflowId, 'credential', 30));
+    const result = required(await DBOS.getEvent<RegistrationCredentialEvent>(ref.workflowId, 'credential', 30));
+    if ('error' in result) throw new RegistrationFailure(result.error);
+    return result;
   }
   async function activateRegistration(id: string) {
     active();
@@ -1309,33 +1369,67 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
             const next = await reader.read();
             if (next.done) break;
             size += next.value.byteLength;
-            if (size > 16384) return response({ error: 'registration_denied' }, 413);
+            if (size > 16384) return response({ error: 'registration_denied' }, 400);
             chunks.push(next.value);
           }
         } finally {
           await reader.cancel();
         }
-        const body: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+        let body: unknown;
+        try {
+          body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+        } catch {
+          return response({ error: 'registration_denied' }, 400);
+        }
         if (
           !body ||
           typeof body !== 'object' ||
           Array.isArray(body) ||
-          Object.keys(body).some((field) => !['key', 'handle', 'email', 'password'].includes(field))
+          Object.keys(body).some((field) => !['key', 'handle', 'email', 'password', 'turnstile_token'].includes(field))
         )
           return response({ error: 'registration_denied' }, 400);
         const input = body as Record<string, unknown>;
-        if (['key', 'handle', 'email', 'password'].some((field) => typeof input[field] !== 'string'))
+        if (
+          ['key', 'handle', 'email', 'password', 'turnstile_token'].some((field) => typeof input[field] !== 'string') ||
+          !(input.key as string) ||
+          (input.key as string).length > 128 ||
+          !/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(input.handle as string) ||
+          !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email as string) ||
+          (input.email as string).length > 254 ||
+          (input.password as string).length < 8 ||
+          (input.password as string).length > 128 ||
+          !(input.turnstile_token as string) ||
+          (input.turnstile_token as string).length > 4096
+        )
           return response({ error: 'registration_denied' }, 400);
-        const ref = await begin(
-          { key: input.key as string, handle: input.handle as string },
-          { email: input.email as string, password: input.password as string },
-        );
-        await install({
-          registrationId: ref.registrationId,
-          email: input.email as string,
-          password: input.password as string,
-        });
-        return response(await activateRegistration(ref.registrationId), 201);
+        if (!options.turnstile) return response({ error: 'registration_denied' }, 503);
+        let verified: boolean;
+        const remoteIp = sanitizedClientIp(request);
+        try {
+          verified = await verifyTurnstile(options.turnstile, {
+            token: input.turnstile_token as string,
+            hostname: new URL(auth.verifier.issuer).hostname,
+            ...(remoteIp ? { remoteIp } : {}),
+          });
+        } catch {
+          return response({ error: 'registration_denied' }, 503);
+        }
+        if (!verified) return response({ error: 'registration_denied' }, 400);
+        try {
+          const ref = await begin(
+            { key: input.key as string, handle: input.handle as string },
+            { email: input.email as string, password: input.password as string },
+          );
+          await install({
+            registrationId: ref.registrationId,
+            email: input.email as string,
+            password: input.password as string,
+          });
+          return response(await activateRegistration(ref.registrationId), 201);
+        } catch (error) {
+          if (error instanceof RegistrationFailure) return response({ error: error.code }, 409);
+        }
+        return response({ error: 'registration_denied' }, 503);
       } catch {
         return response({ error: 'registration_denied' }, 503);
       }

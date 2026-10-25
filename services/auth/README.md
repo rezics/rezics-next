@@ -460,12 +460,17 @@ The returned host exports:
 - `reduceClientScopes` and `resumeClientReduction` for bounded client reductions;
 - `openOperatorSession` for immediate native Access approval and Auth issuance;
 - `handler(Request): Promise<Response>`, which adds strict `POST /signup` with
-  `{ key, handle, email, password }` and delegates other routes to the guarded Auth handler.
+  `{ key, handle, email, password, turnstile_token }`. It verifies each token with
+  Cloudflare Siteverify before registration work and delegates other routes to the
+  guarded Auth handler.
 
 Production uses `await createAuthHost(options)`, exported from `src/index.ts` with
 `AuthHostOptions` and `AuthHostConfigurationError`. Supply the migrated Auth
 `database` pool, the existing service options, persistent Auth-only 32-byte
-`stagingKey`, and account-workflow `access` ports. Call `await host.start()` before
+`stagingKey`, account-workflow `access` ports, and `turnstile: { secret }` for
+Cloudflare Siteverify. `AuthHostOptions.turnstile.fetch` can inject the Siteverify
+transport for tests. Without Turnstile configuration, `/signup` answers 503. Call
+`await host.start()` before
 serving `host.handler`; `host.service`, `host.workflows` and nonsecret `host.config`
 are also exported. Call `await host.stop()` at shutdown. Repeated/concurrent starts
 launch once, and repeated stops join the same shutdown. SIGINT/SIGTERM stop DBOS

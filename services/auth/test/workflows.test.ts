@@ -193,6 +193,15 @@ beforeAll(async () => {
     database: pool,
     systemDatabaseUrl: systemUrl.href,
     stagingKey,
+    turnstile: {
+      secret: 'workflow-test-secret',
+      fetch: (async () =>
+        Response.json({
+          success: true,
+          action: 'signup',
+          hostname: new URL(issuer).hostname,
+        })) as unknown as typeof fetch,
+    },
     auth: { ...auth, internal: effects },
     access: ports,
     clock: () => new Date(instant),
@@ -297,6 +306,7 @@ test('strict signup endpoint composes Auth while rejecting public account author
         handle: 'unsafe',
         email,
         password,
+        turnstile_token: 'workflow-test-token',
         account_id: 'chosen',
         kind: 'organization',
         authn_epoch: 100,
@@ -308,6 +318,7 @@ test('strict signup endpoint composes Auth while rejecting public account author
     handle: 'http-human',
     email: 'http-workflow@example.test',
     password,
+    turnstile_token: 'workflow-test-token',
   });
   expect(signup.status).toBe(201);
   expect(await signup.json()).toEqual({ accountId: 'workflow-account-http-human' });
@@ -322,6 +333,7 @@ test('public signup binds credentials atomically and cannot take over a trusted 
     handle: 'private-stage',
     email: 'takeover@example.test',
     password,
+    turnstile_token: 'workflow-test-token',
   });
   expect(takeover.status).toBeGreaterThanOrEqual(400);
   await workflows.installRegistrationCredential({
@@ -331,14 +343,20 @@ test('public signup binds credentials atomically and cannot take over a trusted 
   });
   expect(await workflows.activateRegistration(ref.registrationId)).toEqual({ accountId: ref.accountId });
 
-  const payload = { key: 'bound-signup', handle: 'bound-signup', email: 'bound-signup@example.test', password };
+  const payload = {
+    key: 'bound-signup',
+    handle: 'bound-signup',
+    email: 'bound-signup@example.test',
+    password,
+    turnstile_token: 'workflow-test-token',
+  };
   const competing = { ...payload, password: `${password}-changed` };
   const responses = await Promise.all([request('/signup', payload), request('/signup', competing)]);
   expect(responses.filter((response) => response.status === 201)).toHaveLength(1);
   expect(responses.filter((response) => response.status >= 400)).toHaveLength(1);
   const accepted = responses[0]!.status === 201 ? payload : competing;
   instant += 1800001;
-  expect((await request('/signup', accepted)).status).toBe(201);
+  expect((await request('/signup', { ...accepted, turnstile_token: 'workflow-retry-token' })).status).toBe(201);
   expect((await pool.query('SELECT id FROM "user" WHERE id=$1', ['workflow-account-bound-signup'])).rows).toHaveLength(
     1,
   );

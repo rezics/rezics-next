@@ -31,6 +31,7 @@ export { createAuthHost, AuthHostConfigurationError } from './host.ts';
 export type { AuthHostOptions } from './host.ts';
 export { SigningRotationPending } from './signing.ts';
 export { createAccountWorkflows } from './workflows.ts';
+export type { TurnstileConfiguration } from './turnstile.ts';
 export type {
   AccountWorkflowOptions,
   AccountWorkflowPorts,

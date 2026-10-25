@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { createAuthService, type AuthServiceOptions } from './index.ts';
 import { credentialEffects, CredentialEffectDenied } from './credential-effects.ts';
 import { createAccountWorkflows, type AccountWorkflowPorts, type WorkflowContext } from './workflows.ts';
+import type { TurnstileConfiguration } from './turnstile.ts';
 import { AUTH_MAINTENANCE_CRON, AUTH_SYSTEM_SCHEMA, registerAuthMaintenance } from './maintenance.ts';
 
 export class AuthHostConfigurationError extends Error {
@@ -17,6 +18,8 @@ export interface AuthHostOptions<Context = WorkflowContext> extends AuthServiceO
   /** Defaults to database.options.connectionString; must name the same Auth DB. */
   systemDatabaseUrl?: string;
   stagingKey: Uint8Array;
+  /** Cloudflare Siteverify configuration for the public sign-up endpoint. */
+  turnstile?: TurnstileConfiguration;
   access: AccountWorkflowPorts<Context>;
   executorId?: string;
   /** UTC five- or six-field numeric cron expression. */
@@ -98,6 +101,7 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
     systemDatabaseSchemaName: AUTH_SYSTEM_SCHEMA,
     ...(options.systemDatabasePool ? { systemDatabasePool: options.systemDatabasePool } : {}),
     stagingKey: options.stagingKey,
+    ...(options.turnstile ? { turnstile: options.turnstile } : {}),
     auth: service,
     access: options.access,
     executorId,
