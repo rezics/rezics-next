@@ -28,8 +28,12 @@ function request(path: string, body?: unknown, session = cookie, headers: Record
     }),
   );
 }
-async function signin(accountId = person) {
-  const response = await request('/signin', { account_id: accountId, password, client_id: web, scope: ['read'] }, '');
+async function signin(accountId = person, clientId = web) {
+  const response = await request(
+    '/signin',
+    { account_id: accountId, password, client_id: clientId, scope: ['read'] },
+    '',
+  );
   expect(response.status).toBe(200);
   return response.headers
     .getSetCookie()
@@ -184,7 +188,16 @@ test("sessions list returns only this person's sessions and marks the current on
   expect(sessions[0]).toMatchObject({ id: secondId, client_id: web, user_agent: 'Pages Browser', current: false });
   expect(sessions.filter((entry: { current: boolean }) => entry.current)).toHaveLength(1);
   for (const entry of sessions) {
-    expect(Object.keys(entry).sort()).toEqual(['client_id', 'created_at', 'current', 'expires_at', 'id', 'user_agent']);
+    expect(Object.keys(entry).sort()).toEqual([
+      'client_display_name',
+      'client_id',
+      'created_at',
+      'current',
+      'expires_at',
+      'id',
+      'user_agent',
+    ]);
+    expect(entry.client_display_name).toBeNull();
     expect(Number.isFinite(Date.parse(entry.created_at))).toBe(true);
     expect(Date.parse(entry.expires_at)).toBeGreaterThan(Date.now());
     const stored = (await database.query('SELECT token,"userId" FROM session WHERE id=$1', [entry.id])).rows[0];
@@ -193,6 +206,63 @@ test("sessions list returns only this person's sessions and marks the current on
     expect(JSON.stringify(sessions)).not.toContain(stored.token);
   }
   expect((await request('/session', undefined, expired)).status).toBe(401);
+});
+
+test('sessions carry registered names including reduced clients and null for unnamed or missing clients', async () => {
+  await service.internal.registerClient({
+    clientId: external,
+    firstParty: false,
+    scopes: ['read', 'write'],
+    displayName: '  Session Client  ',
+  });
+  const id = await sessionId(await signin(person, external));
+  const listed = async () => {
+    const response = await request('/sessions');
+    expect(response.status).toBe(200);
+    return (await response.json()).sessions as { id: string; client_id: string; client_display_name: string | null }[];
+  };
+  try {
+    const consent = await request(`/consent/${external}`);
+    expect(consent.status).toBe(200);
+    const { display_name } = await consent.json();
+    expect(display_name).toBe('Session Client');
+    for (const session of await listed())
+      expect(session.client_display_name).toBe(session.client_id === external ? display_name : null);
+    for (const reduced of [false, true]) {
+      if (reduced)
+        await database.query("INSERT INTO auth_client_reduction VALUES ($1,$2,ARRAY['read'],false)", [
+          external,
+          `${prefix}-session-reduction`,
+        ]);
+      else await database.query('UPDATE auth_client_coverage SET ready=false WHERE client_id=$1', [external]);
+      expect((await listed()).find((session) => session.id === id)).toMatchObject({
+        client_id: external,
+        client_display_name: display_name,
+      });
+      await database.query('UPDATE auth_client_coverage SET ready=true WHERE client_id=$1', [external]);
+    }
+    await database.query('UPDATE auth_client SET display_name=NULL WHERE client_id=$1', [external]);
+    expect((await listed()).find((session) => session.id === id)?.client_display_name).toBeNull();
+    const connection = await database.connect();
+    try {
+      await connection.query('BEGIN');
+      // Model an orphaned historical session despite the current foreign key.
+      await connection.query('SET LOCAL session_replication_role=replica');
+      await connection.query('UPDATE session SET "clientId"=$2 WHERE id=$1', [id, `${prefix}-missing`]);
+      await connection.query('COMMIT');
+    } finally {
+      await connection.query('ROLLBACK');
+      connection.release();
+    }
+    expect((await listed()).find((session) => session.id === id)).toMatchObject({
+      client_id: `${prefix}-missing`,
+      client_display_name: null,
+    });
+  } finally {
+    await database.query('DELETE FROM session WHERE id=$1', [id]);
+    await database.query('DELETE FROM auth_client_reduction WHERE client_id=$1', [external]);
+    await database.query('UPDATE auth_client_coverage SET ready=true WHERE client_id=$1', [external]);
+  }
 });
 
 test('revoking an own session ends it and revoking the current one clears the cookie', async () => {

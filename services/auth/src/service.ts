@@ -1403,10 +1403,12 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           const human = await humanProof(request.headers);
           const currentId = proofSources.get(human)!.id;
           const sessions = await database.query(
-            `SELECT id,"clientId" AS client_id,"createdAt" AS created_at,"expiresAt" AS expires_at,
-                    "userAgent" AS user_agent,id=$2 AS current
-             FROM session WHERE "userId"=$1 AND "expiresAt">CURRENT_TIMESTAMP
-             ORDER BY "createdAt" DESC,id DESC LIMIT 64`,
+            `SELECT s.id,s."clientId" AS client_id,c.display_name AS client_display_name,
+                    s."createdAt" AS created_at,s."expiresAt" AS expires_at,
+                    s."userAgent" AS user_agent,s.id=$2 AS current
+             FROM session s LEFT JOIN auth_client c ON c.client_id=s."clientId"
+             WHERE s."userId"=$1 AND s."expiresAt">CURRENT_TIMESTAMP
+             ORDER BY s."createdAt" DESC,s.id DESC LIMIT 64`,
             [human.account_id, currentId],
           );
           return json({ sessions: sessions.rows });

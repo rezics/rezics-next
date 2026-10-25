@@ -84,7 +84,7 @@ for (const axis of ['sessions', 'clients', 'consents'] as const) {
         `INSERT INTO session (id,token,"userId","clientId","createdAt","updatedAt","expiresAt","grantedScope","authnEpoch","authTime","authMethods")
         SELECT $1||'-own-'||i,$1||'-token-'||i,$2,$3,now()-i*interval '1 second',now(),now()+interval '1 day','read',1,extract(epoch FROM now())::integer,'pwd'
         FROM generate_series(1,63) i`,
-        [prefix, person.accountId, web],
+        [prefix, person.accountId, external],
       );
       const reports = [];
       for (const path of [`/consent/${external}`, '/sessions']) {
@@ -149,10 +149,14 @@ for (const axis of ['sessions', 'clients', 'consents'] as const) {
               expect(body.sessions).toHaveLength(64);
               expect(body.sessions[0]).toMatchObject({ id: current, current: true });
               expect(body.sessions.filter((session: { current: boolean }) => session.current)).toHaveLength(1);
+              for (const session of body.sessions)
+                expect(session.client_display_name).toBe(session.client_id === external ? 'Selected Client' : null);
             }
           },
         });
         expect(report.samples.map((sample) => sample.scale)).toEqual([1, 8, 64]);
+        expect(new Set(report.samples.map(({ cost }) => cost.rows)).size).toBe(1);
+        expect(new Set(report.samples.map(({ cost }) => cost.statements)).size).toBe(1);
         for (const { cost } of report.samples) {
           // Full handler capture includes native cookie/session and authorization reads.
           expect(cost.statements).toBeLessThanOrEqual(10);

@@ -315,7 +315,7 @@ Better Auth. Host consent UI must show the selected client and scopes explicitly
 | `GET /session`               | Cookie; returns only `SessionProof`, with a database session read and current Access/consent validation                                                                                                                                                                                             |
 | `POST /token`                | Cookie and `{ requested_by?: string }`; returns `{ access_token, token_type: "Bearer", expires_in: 300 }`                                                                                                                                                                                           |
 | `GET /consent/<client_id>`   | Cookie; returns `{ client_id, display_name, scopes, granted }` for a covered third-party client; 401 for an invalid human session, 404 for unknown, first-party, uncovered or reducing clients                                                                                                      |
-| `GET /sessions`              | Cookie; returns `{ sessions: [{ id, client_id, created_at, expires_at, user_agent, current }] }`, only this person's unexpired sessions, newest first, at most 64; IDs are opaque native row IDs, never cookie tokens                                                                               |
+| `GET /sessions`              | Cookie; returns `{ sessions: [{ id, client_id, client_display_name, created_at, expires_at, user_agent, current }] }`, only this person's unexpired sessions, newest first, at most 64; IDs are opaque native row IDs, never cookie tokens                                                          |
 | `POST /sessions/revoke`      | Cookie and `{ session_id }`; deletes an own session and returns `{}` without step-up; clears cookies when revoking the current session; unknown or foreign IDs return 404 without mutation                                                                                                          |
 | `POST /consent`              | Cookie and `{ client_id, scope: string[] }`; explicitly replaces this actor's third-party consent and returns those fields                                                                                                                                                                          |
 | `POST /signout`              | Cookie and `{}`; Better Auth deletes the session and clears its cookie                                                                                                                                                                                                                              |
@@ -338,7 +338,8 @@ error code on failure. POSTs retain the issuer Origin and closed JSON body rules
 Consent reads use one client point read with coverage/reduction checks and one
 consent point read, O(log C + log K). Session lists use the existing
 `session_owner_oldest ("userId", "createdAt", id)` index in reverse order with
-`LIMIT 64`, O(log S + 64) for the bounded native session neighborhood. Revocation
+`LIMIT 64`, O(log S + 64) for the bounded native session neighborhood. The left join
+adds at most 64 primary-key probes on `auth_client`, so the list stays O(log S + 64 log C). Revocation
 adds one session ID point read and one owner-checked delete.
 `pages-consent-sessions.test.ts` exercises the real handler and database;
 `growth-pages-reads.test.ts` captures full handler SQL with `checkGrowth` at
