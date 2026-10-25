@@ -13,6 +13,8 @@ export type Actor = AccountActor | { kind: 'anonymous' };
 
 export type Resource = { route: number; id: string };
 
+export type ActionCatalogue = ReadonlyMap<string, { anonymous: boolean }>;
+
 export type AccessContext = { pool: Pool; deadline: number };
 
 export type AccessClient = Pick<PoolClient, 'query'>;
@@ -73,6 +75,6 @@ export const anonymousAccess: Access = {
     throw new AuthenticationError(401, 'Bearer error="invalid_token"');
   },
   async authorize(_client, _actor, action) {
-    return action.slice(action.lastIndexOf('.') + 1) === 'read';
+    return action.endsWith(':read');
   },
 };

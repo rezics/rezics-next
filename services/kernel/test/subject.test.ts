@@ -22,7 +22,7 @@ const actor: AccountActor = {
   kind: 'account',
   accountId: '019a1b2c-3d4e-7f00-8a00-beef00000001',
   clientId: 'web',
-  scopes: ['subject.create'],
+  scopes: ['subject:create'],
   requestedBy: null,
   authnEpoch: 1,
 };

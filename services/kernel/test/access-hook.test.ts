@@ -15,7 +15,7 @@ const account: AccountActor = {
   kind: 'account',
   accountId: '019a1b2c-3d4e-7f00-8a00-beef00000001',
   clientId: 'web',
-  scopes: ['subject.read'],
+  scopes: ['subject:read'],
   requestedBy: null,
   authnEpoch: 3,
 };
@@ -75,7 +75,7 @@ test('until the access module is installed, reads are allowed and every other ac
   const installed: Access = access;
   expect(typeof installed.authenticate).toBe('function');
   const client = {} as never;
-  expect(await anonymousAccess.authorize(client, { kind: 'anonymous' }, 'subject.read', subject)).toBe(true);
-  expect(await anonymousAccess.authorize(client, { kind: 'anonymous' }, 'subject.create', subject)).toBe(false);
-  expect(await anonymousAccess.authorize(client, account, 'subject.create', subject)).toBe(false);
+  expect(await anonymousAccess.authorize(client, { kind: 'anonymous' }, 'subject:read', subject)).toBe(true);
+  expect(await anonymousAccess.authorize(client, { kind: 'anonymous' }, 'subject:create', subject)).toBe(false);
+  expect(await anonymousAccess.authorize(client, account, 'subject:create', subject)).toBe(false);
 });
