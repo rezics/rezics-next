@@ -6,6 +6,7 @@ import { WorkerStore } from './store.ts';
 import { WorkerTasks } from './tasks.ts';
 import { WorkerJob } from './job.ts';
 import { importAttempt, importRunDirectory } from './import-attempt.ts';
+import { report } from './report.ts';
 import type { LandingQueue, ManagerInbox } from './contracts.ts';
 import type { AttemptRecord, Effort, Settings, Tokens } from './types.ts';
 
@@ -25,7 +26,7 @@ export async function runWorkerCommand(command: string, argv: string[], options:
   const env = options.env ?? process.env;
   try {
     // A worker's inherited sequence fences every mutating command before it can dispatch another task or retry itself.
-    if (!['status', 'attempts'].includes(command) && env.GOAL_TASK_ID && env.GOAL_ATTEMPT) {
+    if (!['status', 'attempts', 'report'].includes(command) && env.GOAL_TASK_ID && env.GOAL_ATTEMPT) {
       store.assertCurrent({ taskId: env.GOAL_TASK_ID, attempt: Number(env.GOAL_ATTEMPT) });
     }
     const [arg] = argv;
@@ -38,6 +39,20 @@ export async function runWorkerCommand(command: string, argv: string[], options:
     } else if (command === 'attempts') {
       if (argv.some(a => a !== '--json')) throw new Error('usage: attempts [--json]');
       print(argv.includes('--json') ? JSON.stringify(store.records(), null, 2) : store.attempts().map(a => `${a.taskId} ${a.attempt} ${a.state} ${a.profile.model}/${a.profile.effort} ${a.pool}`).join('\n'));
+    } else if (command === 'report') {
+      if (argv.some(a => a !== '--json')) throw new Error('usage: report [--json]');
+      const result = report(store.records());
+      if (argv.includes('--json')) print(JSON.stringify(result, null, 2));
+      else {
+        const rate = (value: number | null) => value === null ? 'n/a' : `${(value * 100).toFixed(1)}%`;
+        const duration = (value: number | null) => value === null ? 'n/a' : `${(value / 60_000).toFixed(1)} min`;
+        print([
+          `Attempts: ${result.attempts}; tasks: ${result.tasks}; passed: ${result.passedTasks}.`,
+          `Attempts per passed task: ${result.attemptsPerPassedTask?.toFixed(2) ?? 'n/a'}; first-attempt pass rate: ${rate(result.firstAttemptPassRate)}.`,
+          `Consult hit rate: ${rate(result.consultHitRate)}; early-stop rate: ${rate(result.earlyStopRate)}.`,
+          `Wall clock to pass p50/p90: critical path ${duration(result.wallClockToPassMs.criticalPath.p50)}/${duration(result.wallClockToPassMs.criticalPath.p90)}; other ${duration(result.wallClockToPassMs.other.p50)}/${duration(result.wallClockToPassMs.other.p90)}.`,
+        ].join('\n'));
+      }
     } else if (command === 'retry' || command === 'stop' || command === 'consult') {
       if (!arg || argv.length !== 1) throw new Error(`usage: ${command} <task>`);
       if (command === 'retry') await job.start(arg);

@@ -168,6 +168,7 @@ bun tools/goal/src/cli.ts retry <task>
 bun tools/goal/src/cli.ts stop <task>
 bun tools/goal/src/cli.ts consult <task>
 bun tools/goal/src/cli.ts attempts --json
+bun tools/goal/src/cli.ts report [--json]
 bun tools/goal/src/cli.ts land <task>
 bun tools/goal/src/cli.ts train
 bun tools/goal/src/cli.ts manager start <goal> --engine codex --budget 20000
