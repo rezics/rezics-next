@@ -21,6 +21,9 @@ export const PROBLEMS = {
   transaction_retry_exhausted: { status: 503, title: 'Transaction Retry Exhausted', retryable: true },
   deadline_exceeded: { status: 503, title: 'Deadline Exceeded', retryable: true },
   dependency_unavailable: { status: 503, title: 'Dependency Unavailable', retryable: true },
+  index_not_ready: { status: 503, title: 'Search Index Not Ready', retryable: true },
+  search_restart_required: { status: 409, title: 'Search Restart Required', retryable: false },
+  unsupported_query: { status: 422, title: 'Unsupported Query', retryable: false },
 } as const;
 
 export type ProblemCode = keyof typeof PROBLEMS;
