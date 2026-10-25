@@ -53,23 +53,15 @@ export function createBangumiDriver(): BangumiDriver {
         const root = commands[i]!;
         const common = { command: root, fieldGroup: `${root}/source/field_group` };
         if (command.op === 'create') {
-          const entries = Object.entries(command.subject.statements ?? {});
-          const cited = entries.flatMap(([property, statements]) =>
-            statements.flatMap((statement, index) =>
-              referencePointers(
-                statement.references,
-                `${root}/subject/statements/${escape(property)}/${index}/references`,
-                actual.sourceMetadata.recordUrl,
-              ),
-            ),
-          );
-          fields.push({ ...common, role: 'type', value: `${root}/subject/type`, references: cited });
+          if (Object.prototype.hasOwnProperty.call(command.subject, 'statements'))
+            throw new TypeError('Bootstrap must contain metadata only');
+          fields.push({ ...common, role: 'type', value: `${root}/subject/type`, references: [] });
           for (const language of Object.keys(command.subject.labels)) {
             fields.push({
               ...common,
               role: language === 'zh' ? 'chinese-label' : 'title',
               value: `${root}/subject/labels/${escape(language)}`,
-              references: cited,
+              references: [],
             });
           }
           return;

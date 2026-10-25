@@ -15,6 +15,9 @@
     "@better-auth/oauth-provider@1.8.0-beta.2": "patches/@better-auth%2Foauth-provider@1.8.0-beta.2.patch"
   },
   "devDependencies": {
+    "@rezics/auth": "workspace:*",
+    "@rezics/client": "workspace:*",
+    "@rezics/definitions": "workspace:*",
     "@rezics/document": "workspace:*",
     "@types/bun": "1.4.4",
     "oxfmt": "0.74.0",

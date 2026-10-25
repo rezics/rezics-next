@@ -25,7 +25,7 @@ test('source digests and command keys are canonical deterministic and input sens
 });
 
 test('source URLs and text documents remain bounded without ambient I/O',()=>{
-  const fetch=spyOn(globalThis,'fetch').mockImplementation((()=>{throw new Error('unexpected fetch')}) as typeof globalThis.fetch);
+  const fetch=spyOn(globalThis,'fetch').mockImplementation(Object.assign((_input: RequestInfo | URL, _init?: RequestInit)=>{throw new Error('unexpected fetch')},{preconnect:globalThis.fetch.preconnect}));
   try {
     expect(safeSourceUrl('https://lain.bgm.tv/pic/cover/l/12.jpg',['lain.bgm.tv'])).toBe('https://lain.bgm.tv/pic/cover/l/12.jpg');
     for(const url of ['javascript:alert(1)','http://127.0.0.1/x','https://lain.bgm.tv.evil.test/x','https://u:p@lain.bgm.tv/x','https://lain.bgm.tv:8443/x','https://lain.bgm.tv/x\r\nX:bad'])expect(()=>safeSourceUrl(url,['lain.bgm.tv'])).toThrow();

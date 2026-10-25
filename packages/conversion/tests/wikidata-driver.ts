@@ -9,16 +9,12 @@ declare module 'bun:test' {
   function spyOn(object: typeof Bun, key: 'SQL'): import('bun:test').Mock<() => never>;
 }
 
-const escape = (key: string) => key.replaceAll('~', '~0').replaceAll('/', '~1');
 function statementLocations(command: BatchCommand, root: string): { pointer: string; references: BatchReference[] }[] {
   if (command.op === 'propose') return [{ pointer: `${root}/statement`, references: command.statement.references }];
   if (command.op === 'retract') return [];
-  return Object.entries(command.subject.statements ?? {}).flatMap(([key, statements]) =>
-    statements.map((statement, i) => ({
-      pointer: `${root}/subject/statements/${escape(key)}/${i}`,
-      references: statement.references,
-    })),
-  );
+  if (Object.prototype.hasOwnProperty.call(command.subject, 'statements'))
+    throw new TypeError('Bootstrap must contain metadata only');
+  return [];
 }
 
 export function createWikidataDriver(): WikidataDriver {

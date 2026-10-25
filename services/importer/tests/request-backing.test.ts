@@ -10,10 +10,10 @@ function client() {
       observed.tokens++;
       return 'ordinary-token';
     },
-    fetch: (async () => {
+    fetch: Object.assign(async (_input: RequestInfo | URL, _init?: RequestInit) => {
       observed.fetches++;
       return Response.json({ ok: true });
-    }) as typeof fetch,
+    }, { preconnect: globalThis.fetch.preconnect }),
   });
   return { fetch, observed };
 }

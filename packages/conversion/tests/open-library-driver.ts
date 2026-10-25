@@ -76,7 +76,8 @@ export function createOpenLibraryDriver(): OpenLibraryDriver {
         if (command.op === 'create') {
           if (checkTyped(bundledRelease, bundledDigest, command.subject).violations.length)
             throw new TypeError('Released catalogue rejected bootstrap');
-          if (command.subject.statements !== undefined) throw new TypeError('Bootstrap must contain metadata only');
+          if (Object.prototype.hasOwnProperty.call(command.subject, 'statements'))
+            throw new TypeError('Bootstrap must contain metadata only');
           return;
         }
         if (command.op !== 'propose') throw new TypeError('Unexpected source command');
