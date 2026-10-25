@@ -8,6 +8,8 @@ export type GrowthDatabase = {
   readonly pool: Pool;
   /** A plain pg.Pool (max 2), not instrumented, for seeding, VACUUM/ANALYZE and assertions. */
   readonly admin: pg.Pool;
+  /** A plain pg.Pool for a library that takes its own pool; instrumented like `pool` and recorded in the same captures. */
+  openPool(config?: Omit<pg.PoolConfig, 'connectionString'>): pg.Pool;
   close(): Promise<void>;
 };
 
@@ -72,22 +74,33 @@ function instrument(client: PoolClient, state: CaptureState): void {
   }) as PoolClient['query'];
 }
 
+function instrumentPool(pool: Pool, state: CaptureState): void {
+  pool.on('connect', (client) => instrument(client, state));
+}
+
 export async function openGrowthDatabase(url = process.env.DATABASE_URL): Promise<GrowthDatabase> {
   if (!url) throw new Error('DATABASE_URL must name the migrated test database');
 
   const pool = createPool(url);
   const admin = new pg.Pool({ connectionString: url, max: 2 });
+  const libraryPools = new Set<pg.Pool>();
+  const state: CaptureState = { active: undefined, setupTasks: new Set() };
   const database: GrowthDatabase = {
     url,
     pool,
     admin,
+    openPool: (config = {}) => {
+      const libraryPool = new pg.Pool({ ...config, connectionString: url });
+      instrumentPool(libraryPool, state);
+      libraryPools.add(libraryPool);
+      return libraryPool;
+    },
     close: async () => {
-      await Promise.all([pool.end(), admin.end()]);
+      await Promise.all([pool.end(), admin.end(), ...Array.from(libraryPools, (libraryPool) => libraryPool.end())]);
     },
   };
-  const state: CaptureState = { active: undefined, setupTasks: new Set() };
   states.set(database, state);
-  pool.on('connect', (client) => instrument(client, state));
+  instrumentPool(pool, state);
 
   try {
     const result = await capture(database, () => withConnection(pool, (client) => client.query('SELECT 1')));
