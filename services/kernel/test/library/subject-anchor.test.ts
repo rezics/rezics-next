@@ -5,20 +5,26 @@ import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createAccess } from '../../src/access/permission.ts';
 import type { Account } from '../../src/access/account-data.ts';
 import { readAccount } from '../../src/access/account-data.ts';
-import { createPool } from '../../src/database/pool.ts';
 import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import type { Access, AccountActor, Actor } from '../../src/request/access.ts';
-import { assertGrowth, measure, openGrowthDatabase, type GrowthDatabase, type GrowthSample } from '../support/growth.ts';
+import {
+  assertGrowth,
+  measure,
+  openGrowthDatabase,
+  type GrowthDatabase,
+  type GrowthSample,
+} from '../support/growth.ts';
 import type { Pool } from 'pg';
 import { resolveSubject, readableSubjects } from '../../src/library/subject-anchor.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 
-const pool = createPool(databaseUrl);
-const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
+let pool: Pool;
+let admin: pg.Pool;
+let growthDatabase: GrowthDatabase;
 const accountId = '019a1b2c-3d4e-7f00-8a00-beef00000001';
 const actor: AccountActor = {
   kind: 'account',
@@ -37,7 +43,8 @@ let access: Access;
 async function installAccount(targetPool: Pool, targetAdmin: pg.Pool): Promise<Account> {
   await targetAdmin.query(
     `INSERT INTO access.account(route, account_id, kind, state, transaction_id, membership_inverse_complete)
-     VALUES ($1, $2, 'actor', 'active', $2, true)`,
+     VALUES ($1, $2, 'actor', 'active', $2, true)
+     ON CONFLICT (route, account_id) DO NOTHING`,
     [accountRoute, accountId],
   );
   const current = await readAccount(targetPool, accountRoute, accountId);
@@ -52,7 +59,7 @@ function accessFor(current: Account): Access {
   });
 }
 
-async function createReadableSubject(targetPool: Pool, label = randomUUID()): Promise<string> {
+async function createReadableSubject(targetPool: Pool, label: string = randomUUID()): Promise<string> {
   const key = `library-subject-anchor-${randomUUID()}`;
   const result = await createSubject(targetPool, {
     actor,
@@ -78,13 +85,16 @@ async function denyAccountRead(targetAdmin: pg.Pool, subjectId: string): Promise
 }
 
 beforeAll(async () => {
+  growthDatabase = await openGrowthDatabase(databaseUrl);
+  pool = growthDatabase.pool;
+  admin = growthDatabase.admin;
   await bootstrapRelease(pool, bundledRelease);
   account = await installAccount(pool, admin);
   access = accessFor(account);
 });
 
 afterAll(async () => {
-  await Promise.all([pool.end(), admin.end()]);
+  if (growthDatabase) await growthDatabase.close();
 });
 
 test('a library write resolves an existing subject readable by the actor', async () => {
@@ -123,6 +133,13 @@ test('a members page preserves input order and removes unreadable IDs and duplic
     second,
     first,
   ]);
+  expect(
+    await readableSubjects(
+      { pool, access },
+      actor,
+      Array.from({ length: 100 }, () => first),
+    ),
+  ).toEqual([first]);
 });
 
 async function createGrowthSubject(database: GrowthDatabase): Promise<string> {
@@ -130,35 +147,26 @@ async function createGrowthSubject(database: GrowthDatabase): Promise<string> {
 }
 
 test('subject anchoring has constant resolve cost and input-bounded page cost as unrelated subjects grow', async () => {
-  const database = await openGrowthDatabase(databaseUrl);
-  try {
-    await bootstrapRelease(database.pool, bundledRelease);
-    const growthAccount = await installAccount(database.pool, database.admin);
-    const growthAccess = accessFor(growthAccount);
-    const anchorId = await createReadableSubject(database.pool, 'Growth anchor');
-    const unrelatedIds: string[] = [];
-    const scales = [1, 8, 64] as const;
-    const resolveSamples: GrowthSample[] = [];
-    const pageSamples: GrowthSample[] = [];
+  const database = growthDatabase;
+  const anchorId = await createReadableSubject(database.pool, 'Growth anchor');
+  const unrelatedIds: string[] = [];
+  const scales = [1, 8, 64] as const;
+  const resolveSamples: GrowthSample[] = [];
+  const pageSamples: GrowthSample[] = [];
 
-    for (const scale of scales) {
-      while (unrelatedIds.length < scale) unrelatedIds.push(await createGrowthSubject(database));
+  for (const scale of scales) {
+    while (unrelatedIds.length < scale) unrelatedIds.push(await createGrowthSubject(database));
 
-      const resolved = await measure(database, () => resolveSubject({ pool: database.pool, access: growthAccess }, actor, anchorId));
-      expect(resolved.value).toEqual({ subjectId: anchorId, requestedSubjectId: null });
-      resolveSamples.push({ scale, cost: resolved.cost });
+    const resolved = await measure(database, () => resolveSubject({ pool: database.pool, access }, actor, anchorId));
+    expect(resolved.value).toEqual({ subjectId: anchorId, requestedSubjectId: null });
+    resolveSamples.push({ scale, cost: resolved.cost });
 
-      const pageIds = unrelatedIds.slice(0, scale);
-      const page = await measure(database, () =>
-        readableSubjects({ pool: database.pool, access: growthAccess }, actor, pageIds),
-      );
-      expect(page.value).toEqual(pageIds);
-      pageSamples.push({ scale, cost: page.cost });
-    }
-
-    assertGrowth(resolveSamples, { rows: 'constant', blocks: 'logarithmic', statements: 'constant' });
-    assertGrowth(pageSamples, { rows: 'linear', blocks: 'linear', statements: 'linear' });
-  } finally {
-    await database.close();
+    const pageIds = unrelatedIds.slice(0, scale);
+    const page = await measure(database, () => readableSubjects({ pool: database.pool, access }, actor, pageIds));
+    expect(page.value).toEqual(pageIds);
+    pageSamples.push({ scale, cost: page.cost });
   }
+
+  assertGrowth(resolveSamples, { rows: 'constant', blocks: 'logarithmic', statements: 'constant' });
+  assertGrowth(pageSamples, { rows: 'linear', blocks: 'linear', statements: 'linear' });
 }, 90_000);
