@@ -15,7 +15,8 @@
     "commerce.offer.standing": ["order:create"],
     "commerce.payout.owner": ["payout_statement:list", "payout_statement:read"],
     "semantic.context.owner": ["context:accept", "context:adopt", "access:grant"],
-    "semantic.context.moderator": ["context:accept"]
+    "semantic.context.moderator": ["context:accept"],
+    "library.collection.owner": ["collection:read", "collection:update", "collection:delete"]
   },
   "types": {
     "community.realm": {
@@ -51,6 +52,10 @@
     },
     "semantic.context": {
       "owner": "semantic.context.owner",
+      "standing": []
+    },
+    "library.collection": {
+      "owner": "library.collection.owner",
       "standing": []
     }
   }

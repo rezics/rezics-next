@@ -21,6 +21,7 @@ export const PROBLEMS = {
   invalid_cursor: { status: 400, title: 'Invalid Cursor', retryable: false },
   stale_cursor: { status: 409, title: 'Stale Cursor', retryable: false },
   conflict: { status: 409, title: 'Conflict', retryable: false },
+  collection_full: { status: 409, title: 'Collection Full', retryable: false },
   semantic_not_ready: { status: 503, title: 'Semantic Layer Not Ready', retryable: true },
   not_found: { status: 404, title: 'Not Found', retryable: false },
   internal_error: { status: 500, title: 'Internal Server Error', retryable: false },
