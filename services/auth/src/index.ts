@@ -1,4 +1,5 @@
 export { createBarrierProofVerifier, type BarrierProof } from './barrier-proofs.ts';
+export { createRecoveryEstablishmentVerifier, type RecoveryEstablishmentEvidence } from './recovery-establishment.ts';
 export { createProvisioningEvidenceVerifier } from './provisioning-evidence.ts';
 export type {
   ProvisioningAuthorization,
@@ -114,6 +115,10 @@ export interface TrustedAccessPorts {
     proofReference?: string;
     operationKey?: string;
   }): Promise<InvalidationReceipt>;
+  /** Trusted Auth-host composition only, after a successful native credential
+   * transaction commits. The nonsecret bounded locator must resolve to verified
+   * establishment evidence; the current Access receipt is checked separately. */
+  completeRecovery?: (reference: string) => Promise<void>;
 }
 
 export interface AuthServiceOptions {
