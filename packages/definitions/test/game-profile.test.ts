@@ -99,9 +99,7 @@ test('a game, its releases by platform and language and its add-ons are catalogu
   expect(release?.facets).toEqual(
     expect.arrayContaining(['schema:gamePlatform', 'schema:datePublished', 'schema:exampleOfWork']),
   );
-  expect(properties['schema:exampleOfWork']?.targets).toEqual(
-    expect.arrayContaining(['schema:VideoGame', 'wd:Q209163']),
-  );
+  expect(properties['schema:exampleOfWork']?.targets).toEqual(['schema:CreativeWork']);
   expect(properties['schema:gamePlatform']).toMatchObject({
     datatype: 'wikibase-item',
     multivalued: true,

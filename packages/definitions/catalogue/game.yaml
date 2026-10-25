@@ -185,13 +185,13 @@ slots:
   numberOfPlayers:
     slot_uri: schema:numberOfPlayers
     description: >-
-      A supported player count. For a source range, the amount is its upper endpoint and the
+      The maximum supported player count. For a source range, the amount is its upper endpoint and the
       minimumPlayerCount qualifier preserves the lower endpoint; a lone count has no inferred minimum.
       Unstructured play modes are not converted to counts. Sources: https://schema.org/numberOfPlayers
-      and https://www.wikidata.org/wiki/Property:P1873, whose maximum-only meaning is a close mapping.
+      and https://www.wikidata.org/wiki/Property:P1873.
     range: integer
     minimum_value: 1
-    close_mappings:
+    exact_mappings:
       - wd:P1873
     annotations:
       datatype: quantity

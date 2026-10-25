@@ -1357,11 +1357,12 @@ infobox:
           term: schema:numberOfPlayers
           'on': schema:VideoGame
           wikidata: wd:P1873
-          meaning: The supported number or range of players; the maximum-player Wikidata mapping is close.
+          meaning: >-
+            The maximum supported player count; the minimumPlayerCount qualifier preserves the lower endpoint
+            of a source range.
           sources:
             - https://schema.org/numberOfPlayers
             - https://www.wikidata.org/wiki/Property:P1873
-          mappingRelation: close
       - id: 发行日期
         mapping: &id071
           status: existing

@@ -385,19 +385,96 @@
       "properties": [
         "schema:abstract",
         "schema:alternateName",
+        "schema:author",
+        "schema:character",
         "schema:contributor",
         "schema:datePublished",
+        "schema:director",
+        "schema:gamePlatform",
         "schema:genre",
+        "schema:illustrator",
         "schema:image",
         "schema:inLanguage",
         "schema:keywords",
+        "schema:musicBy",
         "schema:name",
+        "schema:numberOfPlayers",
+        "schema:producer",
+        "schema:productionCompany",
+        "schema:publisher",
         "schema:sameAs",
         "schema:url",
+        "wdt:P178",
         "wdt:P179",
-        "wdt:P5732"
+        "wdt:P408",
+        "wdt:P5732",
+        "wdt:P58",
+        "wdt:P725",
+        "wdt:P973"
       ],
-      "facets": []
+      "facets": [
+        "schema:gamePlatform",
+        "schema:genre",
+        "schema:keywords",
+        "schema:datePublished",
+        "wdt:P408",
+        "schema:numberOfPlayers"
+      ]
+    },
+    "wd:Q209163": {
+      "iri": "http://www.wikidata.org/entity/Q209163",
+      "labels": {
+        "de": "Computerspiel-Erweiterung",
+        "en": "expansion add-on",
+        "es": "expansión",
+        "fr": "extension de jeu vidéo",
+        "ja": "拡張パック",
+        "ko": "확장팩",
+        "zh-Hans": "资料片",
+        "zh-Hant": "資料片"
+      },
+      "mappings": ["wd:Q209163"],
+      "bases": ["schema:CreativeWork", "schema:Thing"],
+      "properties": [
+        "schema:abstract",
+        "schema:alternateName",
+        "schema:author",
+        "schema:character",
+        "schema:contributor",
+        "schema:datePublished",
+        "schema:director",
+        "schema:gamePlatform",
+        "schema:genre",
+        "schema:illustrator",
+        "schema:image",
+        "schema:inLanguage",
+        "schema:keywords",
+        "schema:musicBy",
+        "schema:name",
+        "schema:numberOfPlayers",
+        "schema:producer",
+        "schema:productionCompany",
+        "schema:publisher",
+        "schema:sameAs",
+        "schema:url",
+        "wdt:P178",
+        "wdt:P179",
+        "wdt:P408",
+        "wdt:P5732",
+        "wdt:P58",
+        "wdt:P725",
+        "wdt:P8646",
+        "wdt:P973"
+      ],
+      "facets": [
+        "schema:gamePlatform",
+        "schema:genre",
+        "schema:keywords",
+        "schema:datePublished",
+        "wdt:P408",
+        "schema:numberOfPlayers",
+        "wdt:P8646"
+      ]
     },
     "wd:Q20631656": {
       "iri": "http://www.wikidata.org/entity/Q20631656",
@@ -1969,6 +2046,28 @@
       },
       "targets": ["skos:Concept"]
     },
+    "wdt:P8646": {
+      "iri": "http://www.wikidata.org/prop/direct/P8646",
+      "labels": {
+        "de": "Erweiterung von",
+        "en": "expansion of",
+        "es": "expansión de",
+        "fr": "extension de",
+        "ja": "以下の拡張パック",
+        "ko": "다음의 확장팩임",
+        "zh-Hans": "资料片原作",
+        "zh-Hant": "資料片原作"
+      },
+      "mappings": ["wd:P8646"],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "targets": ["schema:VideoGame"]
+    },
     "wdt:P155": {
       "iri": "http://www.wikidata.org/prop/direct/P155",
       "labels": {
@@ -2036,6 +2135,72 @@
         "pattern": "^(?:[0-9]{8}|[0-9]{12,14})$"
       }
     },
+    "schema:minValue": {
+      "iri": "http://schema.org/minValue",
+      "labels": {
+        "de": "Mindestwert",
+        "en": "minimum value",
+        "es": "valor mínimo",
+        "fr": "valeur minimale",
+        "ja": "最小値",
+        "ko": "최솟값",
+        "zh-Hans": "最小值",
+        "zh-Hant": "最小值"
+      },
+      "mappings": [],
+      "datatype": "quantity",
+      "multivalued": false,
+      "qualifiers": [],
+      "value": {
+        "type": "object",
+        "required": ["amount", "unit"],
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "type": "string",
+            "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+          },
+          "unit": {
+            "enum": ["1"]
+          }
+        }
+      },
+      "units": ["1"],
+      "minimum": 1
+    },
+    "schema:numberOfPlayers": {
+      "iri": "http://schema.org/numberOfPlayers",
+      "labels": {
+        "de": "Spieleranzahl",
+        "en": "number of players",
+        "es": "número de jugadores",
+        "fr": "nombre de joueurs",
+        "ja": "プレイ人数",
+        "ko": "플레이어 수",
+        "zh-Hans": "游玩人数",
+        "zh-Hant": "遊玩人數"
+      },
+      "mappings": ["wd:P1873"],
+      "datatype": "quantity",
+      "multivalued": false,
+      "qualifiers": ["schema:minValue"],
+      "value": {
+        "type": "object",
+        "required": ["amount", "unit"],
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "type": "string",
+            "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+          },
+          "unit": {
+            "enum": ["1"]
+          }
+        }
+      },
+      "units": ["1"],
+      "minimum": 1
+    },
     "wdt:P31": {
       "iri": "http://www.wikidata.org/prop/direct/P31",
       "labels": {
@@ -2049,6 +2214,28 @@
         "zh-Hant": "隸屬於"
       },
       "mappings": ["wd:P31"],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "targets": ["skos:Concept"]
+    },
+    "wdt:P408": {
+      "iri": "http://www.wikidata.org/prop/direct/P408",
+      "labels": {
+        "de": "Engine",
+        "en": "software engine",
+        "es": "motor",
+        "fr": "moteur logiciel",
+        "ja": "ソフトウェアエンジン",
+        "ko": "소프트웨어 엔진",
+        "zh-Hans": "软件引擎",
+        "zh-Hant": "引擎"
+      },
+      "mappings": ["wd:P408"],
       "datatype": "wikibase-item",
       "multivalued": true,
       "qualifiers": [],
