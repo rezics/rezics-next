@@ -14,6 +14,7 @@ import { nativeVerificationPlugin, pruneExpiredVerifications } from './verificat
 import { clientAuthority } from './account-workflows.ts';
 import { createBarrierProofVerifier, type BarrierProof } from './barrier-proofs.ts';
 import { createRecoveryEstablishmentVerifier } from './recovery-establishment.ts';
+import { recoveryDelivery } from './recovery-delivery.ts';
 import type { PoolClient } from 'pg';
 import {
   createProvisioningEvidenceVerifier,
@@ -129,7 +130,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
   const proofSources = new WeakMap<SessionProof, { id: string; expiresAt: number }>();
   const proofScope = new AsyncLocalStorage<{ proof: SessionProof; live: boolean }>();
   const binding = new AsyncLocalStorage<Binding>();
-  const recoveryBinding = new AsyncLocalStorage<{ accountId: string; epoch: number }>();
+  const recoveryBinding = recoveryDelivery(database, options.recoveryDelivery);
   // Native router admission runs before this private alias dispatch hook. A
   // request cannot install it through a header, body or native endpoint name.
   const attemptDispatch = new AsyncLocalStorage<() => Promise<Response>>();
@@ -263,22 +264,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         disableSignUp: true,
         resetPasswordTokenExpiresIn: 300,
         revokeSessionsOnPasswordReset: true,
-        async sendResetPassword({ user, token }) {
-          const selected = recoveryBinding.getStore();
-          if (!selected || selected.accountId !== user.id || !options.recoveryDelivery) throw new Denied();
-          const expiresAt = new Date(Date.now() + 300000);
-          try {
-            await database.query(
-              'INSERT INTO auth_recovery (proof_hash, account_id, authn_epoch, expires_at) VALUES ($1,$2,$3,$4)',
-              [proofHash(token), user.id, selected.epoch, expiresAt],
-            );
-            await options.recoveryDelivery.deliver({ accountId: user.id, email: user.email, token, expiresAt });
-          } catch (error) {
-            await (await getContext()).internalAdapter.deleteVerificationByIdentifier(`reset-password:${token}`);
-            await database.query('DELETE FROM auth_recovery WHERE proof_hash=$1', [proofHash(token)]);
-            throw error;
-          }
-        },
+        sendResetPassword: recoveryBinding.send,
       },
       plugins: [
         credentialOwnerSchema,
@@ -321,6 +307,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         },
       ],
       databaseHooks: {
+        verification: recoveryBinding.hooks,
         session: {
           create: {
             before: async (session) => {
