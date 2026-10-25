@@ -343,6 +343,10 @@ test('native website, password, key and delegated issuance materialize implicit 
     await pool.query(`INSERT INTO session (id,token,"userId","clientId","grantedScope","authnEpoch","authTime","authMethods","createdAt","updatedAt","expiresAt")
       SELECT 'retained-'||i,'retained-token-'||i,'native-password','native-default','read',1,1,'pwd',now(),now(),now()+interval '1 day'
       FROM generate_series(1,201) i`);
+    // Native admission caps all stored sessions; the bounded cleanup can remove this entire cohort.
+    expect(
+      (await pool.query(`SELECT count(*)::integer AS n FROM session WHERE "userId"='native-password'`)).rows[0].n,
+    ).toBe(64);
     await auth.internal.revokeSessions('native-key');
     await workflows.reduceClientScopes({
       key: 'reduce-native',
@@ -353,7 +357,7 @@ test('native website, password, key and delegated issuance materialize implicit 
     });
     expect(
       (await pool.query(`SELECT count(*)::integer AS n FROM session WHERE "userId"='native-password'`)).rows[0].n,
-    ).toBe(102);
+    ).toBe(0);
     const floor = (await pool.query("SELECT value FROM reduction_floor WHERE value->>'accountId'='native-password'"))
       .rows[0].value;
     await auth.internal.revokeSessions('native-password', {
@@ -362,7 +366,7 @@ test('native website, password, key and delegated issuance materialize implicit 
     });
     expect(
       (await pool.query(`SELECT count(*)::integer AS n FROM session WHERE "userId"='native-password'`)).rows[0].n,
-    ).toBe(102);
+    ).toBe(0);
     expect((await request('/token', {}, cookieOf(human))).status).toBeGreaterThanOrEqual(400);
     for (const id of ['native-bot', 'native-human', 'native-key', 'native-password'])
       expect((await readAccount(id))?.fenced).toBe(true);
