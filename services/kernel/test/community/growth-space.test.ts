@@ -1,0 +1,241 @@
+import { randomUUID } from 'node:crypto';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
+import { createAuthService } from '@rezics/auth';
+import { exportJWK, generateKeyPair } from 'jose';
+import { Pool } from 'pg';
+import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
+import { createAccess } from '../../src/access/index.ts';
+import { readAccount } from '../../src/access/account-data.ts';
+import { type AccountActor } from '../../src/request/access.ts';
+import { anchorRoute, newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+
+const routeKey = new Uint8Array(32).fill(37);
+const root = { route: 0, id: GLOBAL_CONTEXT };
+const input = { title: 'First community', summary: 'A shared place' };
+const context = (idempotencyKey = randomUUID()) => ({ idempotencyKey, deadline: Date.now() + 90_000 });
+
+// Privileged setup only; commands use genuine Auth tokens and production Access.
+async function fixture(pool: Pool, admin: Pool) {
+  const url = new URL(process.env.DATABASE_URL!);
+  const database = `community_auth_${process.pid}`;
+  await admin.query(`CREATE DATABASE ${database}`);
+  url.pathname = `/${database}`;
+  migrateAuth(url.href);
+  const authPool = new Pool({ connectionString: url.href });
+  const issuer = 'https://community.auth.test';
+  const signingKey = {
+    ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
+    kid: 'community',
+  };
+  const ids = [newId(0x1234), newId(0x2345)];
+  const approvals = new Set(ids);
+  const actions = ['space:create', 'space:manage', 'space:read'];
+  const password = 'community test password with enough entropy';
+  const auth = await createAuthService({
+    database: authPool,
+    issuer,
+    audience: 'https://community.api.test',
+    secret: 'community-test-secret-with-at-least-32-bytes',
+    signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
+    trustedAccess: {
+      async readAccount(id) {
+        const row = await readAccount(admin, routeOf(id)!, id);
+        return (
+          row && {
+            accountId: row.accountId,
+            kind: row.kind,
+            state: row.state,
+            authnEpoch: Number(row.minimumAuthnEpoch),
+            automated: false,
+          }
+        );
+      },
+      async authorizeProvisioning(reference) {
+        if (!approvals.delete(reference)) throw new Error('Unknown fixture provisioning reference');
+        return { accountId: reference };
+      },
+    },
+  });
+  await auth.internal.registerClient({ clientId: 'community-test', firstParty: true, scopes: actions });
+  const access = createAccess({
+    actions: new Map(actions.map((action) => [action, { anonymous: action === 'space:read' }])),
+    auth: {
+      issuer,
+      audience: 'https://community.api.test',
+      jwksUrl: `${issuer}/.well-known/jwks.json`,
+      fetch: async (url, init) => auth.handler(new Request(url, init)),
+    },
+  });
+  const actors: AccountActor[] = [];
+  for (const id of ids) {
+    await admin.query(
+      "INSERT INTO access.account (route, account_id, kind, state, transaction_id) VALUES ($1,$2,'actor','pending',$2)",
+      [routeOf(id), id],
+    );
+    await auth.internal.provisionPassword({ authorization: id, email: `${id}@community.test`, password });
+    await admin.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [routeOf(id), id]);
+    const signin = await auth.handler(
+      new Request(`${issuer}/signin`, {
+        method: 'POST',
+        headers: { origin: issuer, 'content-type': 'application/json' },
+        body: JSON.stringify({ email: `${id}@community.test`, password, client_id: 'community-test', scope: actions }),
+      }),
+    );
+    expect(signin.status).toBe(200);
+    const cookie = signin.headers
+      .getSetCookie()
+      .map((value) => value.split(';')[0])
+      .join('; ');
+    const issued = await auth.handler(
+      new Request(`${issuer}/token`, {
+        method: 'POST',
+        headers: { origin: issuer, 'content-type': 'application/json', cookie },
+        body: '{}',
+      }),
+    );
+    expect(issued.status).toBe(200);
+    const token = ((await issued.json()) as { access_token: string }).access_token;
+    const actor = await access.authenticate(token, { pool, deadline: Date.now() + 600_000 });
+    if (actor.kind !== 'account') throw new Error('Auth did not issue an account actor');
+    actors.push(actor);
+  }
+  async function grant(id: string, target = root) {
+    await admin.query(
+      "INSERT INTO access.resource_grant (route,resource_id,subject_id,action,valid,transaction_id) VALUES ($1,$2,$3,'space:create','(,)'::tstzrange,$3) ON CONFLICT DO NOTHING",
+      [target.route, target.id, id],
+    );
+  }
+  return {
+    access,
+    actor: actors[0]!,
+    other: actors[1]!,
+    grant,
+    async close() {
+      await authPool.end();
+      await admin.query(`DROP DATABASE ${database} WITH (FORCE)`);
+    },
+  };
+}
+
+let db: GrowthDatabase;
+let f: Awaited<ReturnType<typeof fixture>>;
+let space: typeof import('../../src/community/space.ts');
+const scales = [256, 2048, 16384] as const;
+const bounds = { rows: 'constant', blocks: 'logarithmic', statements: 'constant' } as const;
+beforeAll(async () => {
+  db = await openGrowthDatabase();
+  db.pool.options.max = 1;
+  f = await fixture(db.pool, db.admin);
+  await f.grant(f.actor.accountId);
+  space = await import('../../src/community/space.ts');
+});
+afterAll(async () => {
+  await f?.close();
+  await db?.close();
+});
+const deps = () => ({ pool: db.pool, access: f.access, routeKey });
+
+for (const operation of ['create', 'read', 'update'] as const)
+  test(`Space ${operation} stays bounded at 256, 2048 and 16384 Spaces and revisions`, async () => {
+    await db.admin.query(
+      'TRUNCATE community.space, community.space_revision, access.resource_initialization, access.resource_role_grant, core.receipt, core.outbox, editorial.write_basis CASCADE',
+    );
+    const probe = await space.createSpace(deps(), f.actor, input, context());
+    const route = routeOf(probe.value.spaceId)!;
+    const hotPartition = partitionOf(route);
+    let head = probe.value.revisionId;
+    const population: Population = {
+      name: `community-${operation}-${randomUUID()}`,
+      hotPartition,
+      hotShare: 1,
+      rows: ({ route }) => {
+        const spaceId = newId(route),
+          revisionId = newId(route);
+        const at = '2026-10-25T00:00:00.000Z';
+        return {
+          'community.space': [
+            {
+              route,
+              space_id: spaceId,
+              state: 'active',
+              head_revision_id: revisionId,
+              created_at: at,
+              creator: f.actor.accountId,
+            },
+          ],
+          'community.space_revision': [
+            {
+              route,
+              space_id: spaceId,
+              revision_id: revisionId,
+              predecessor: null,
+              title: 'Neighbour',
+              summary: '',
+              created_at: at,
+              author: f.actor.accountId,
+            },
+          ],
+          'access.resource_initialization': [
+            {
+              route,
+              resource_id: spaceId,
+              resource_type: 'community.space',
+              creator_id: f.actor.accountId,
+              initialized_at: at,
+            },
+          ],
+          'access.resource_role_grant': [
+            {
+              route,
+              resource_id: spaceId,
+              subject_kind: 'identity',
+              subject_id: f.actor.accountId,
+              grant_role: 'community.space.owner',
+              valid: '(,)',
+              transaction_id: randomUUID(),
+            },
+          ],
+        };
+      },
+    };
+    let createdKeys = 0;
+    function key() {
+      for (;;) {
+        const value = `growth-${operation}-${createdKeys++}`;
+        if (
+          partitionOf(anchorRoute(routeKey, `${f.actor.accountId}\ncommunity.space.create\n${value}`)) === hotPartition
+        )
+          return value;
+      }
+    }
+    const report = await checkGrowth(db, {
+      name: `community Space ${operation}`,
+      scales,
+      bounds,
+      async grow(_, scale, previous) {
+        // Other identities grow; the probe is never replaced or lengthened by seeding.
+        await seed({ pool: db.pool, admin: db.admin }, population, { from: previous, to: scale });
+      },
+      async operation() {
+        if (operation === 'create') return space.createSpace(deps(), f.actor, input, context(key()));
+        if (operation === 'read') return space.readSpace(db.pool, probe.value.spaceId, new Date().toISOString());
+        const result = await space.updateSpace(
+          deps(),
+          f.actor,
+          { spaceId: probe.value.spaceId, expectedHead: head, summary: 'Fixed update' },
+          context(),
+        );
+        head = result.value.revisionId;
+        return result;
+      },
+    });
+    expect(report.samples.map((sample) => sample.scale)).toEqual(scales);
+    for (const sample of report.samples) {
+      const relations = Object.entries(sample.cost.relations).filter(([name]) => name.startsWith('community.'));
+      expect(relations.length).toBeGreaterThan(0);
+      for (const [, cost] of relations) expect(cost.sequentialScans).toBe(0);
+    }
+    expect(new Set(report.samples.map((sample) => sample.cost.statements)).size).toBe(1);
+  }, 120_000);
