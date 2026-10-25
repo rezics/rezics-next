@@ -8,6 +8,8 @@ type Schema = {
   const?: unknown;
   anyOf?: Schema[];
   properties?: Record<string, Schema>;
+  additionalProperties?: unknown;
+  patternProperties?: unknown;
   items?: Schema;
   minimum?: number;
   maximum?: number;
@@ -55,8 +57,21 @@ function curie(schema: Schema): boolean {
   return schema['~kind'] === 'String' && schema['~safety'] === 'curie';
 }
 
+function href(schema: Schema): boolean {
+  return schema['~kind'] === 'String' && schema['~safety'] === 'href';
+}
+
 function curieArray(schema: Schema): boolean {
   return schema['~kind'] === 'Array' && schema.items !== undefined && curie(schema.items);
+}
+
+function closedObject(schema: Schema | undefined): schema is Schema {
+  return (
+    schema !== undefined &&
+    schema['~kind'] === 'Object' &&
+    schema.additionalProperties === false &&
+    schema.patternProperties === undefined
+  );
 }
 
 function unsupported(component: string, prop: string): never {
@@ -67,7 +82,7 @@ function displayName(locale: string): string {
   return new Intl.DisplayNames([locale], { type: 'language' }).of(locale) ?? locale;
 }
 
-function fieldFor(schema: Schema, component: string, prop: string) {
+function fieldFor(schema: Schema, component: string, prop: string, locale = 'en'): Record<string, unknown> {
   const values = enumeration(schema);
   if (values !== null) {
     return {
@@ -93,7 +108,7 @@ function fieldFor(schema: Schema, component: string, prop: string) {
     };
   }
 
-  if (curie(schema)) return { type: 'text' };
+  if (curie(schema) || href(schema)) return { type: 'text' };
 
   if (curieArray(schema)) {
     return {
@@ -102,6 +117,22 @@ function fieldFor(schema: Schema, component: string, prop: string) {
       ...(schema.minItems !== undefined ? { min: schema.minItems } : {}),
       ...(schema.maxItems !== undefined ? { max: schema.maxItems } : {}),
       defaultItemProps: { value: 'schema:name' },
+    };
+  }
+
+  const itemSchema = schema['~kind'] === 'Array' ? schema.items : undefined;
+  if (closedObject(itemSchema)) {
+    return {
+      type: 'array',
+      arrayFields: Object.fromEntries(
+        Object.entries(schemaProperties(itemSchema)).map(([field, fieldSchema]) => [
+          field,
+          fieldFor(fieldSchema, component, `${prop}.${field}`, locale),
+        ]),
+      ),
+      ...(schema.minItems !== undefined ? { min: schema.minItems } : {}),
+      ...(schema.maxItems !== undefined ? { max: schema.maxItems } : {}),
+      defaultItemProps: defaultFor(itemSchema, component, prop, locale),
     };
   }
 
@@ -137,6 +168,7 @@ function defaultFor(schema: Schema, component: string, prop: string, locale: str
   if (values !== null) return values[0];
   if (localized(schema)) return { [UI_LOCALES.includes(locale as (typeof UI_LOCALES)[number]) ? locale : 'en']: '' };
   if (schema['~kind'] === 'Integer') return integerDefault(schema);
+  if (href(schema)) return '/';
   if (curie(schema)) return 'schema:name';
   if (curieArray(schema)) {
     const count = Math.max(0, schema.minItems ?? 0);
@@ -144,6 +176,22 @@ function defaultFor(schema: Schema, component: string, prop: string, locale: str
       throw new TypeError(`No valid default for ${component}.${prop}`);
     }
     return Array.from({ length: count }, (_, index) => ({ value: `schema:property${index + 1}` }));
+  }
+  const itemSchema = schema['~kind'] === 'Array' ? schema.items : undefined;
+  if (closedObject(itemSchema)) {
+    const count = Math.max(0, schema.minItems ?? 0);
+    if (schema.maxItems !== undefined && count > schema.maxItems) {
+      throw new TypeError(`No valid default for ${component}.${prop}`);
+    }
+    return Array.from({ length: count }, () => defaultFor(itemSchema, component, prop, locale));
+  }
+  if (closedObject(schema)) {
+    return Object.fromEntries(
+      Object.entries(schemaProperties(schema)).map(([field, fieldSchema]) => [
+        field,
+        defaultFor(fieldSchema, component, `${prop}.${field}`, locale),
+      ]),
+    );
   }
   if (schema['~kind'] === 'Boolean') return false;
   return unsupported(component, prop);
@@ -159,11 +207,24 @@ function registryComponents(registry: CompositionRegistry): Map<string, Registry
   return components;
 }
 
-function transformValue(value: unknown, schema: Schema, direction: 'to' | 'from'): unknown {
+function transformValue(
+  value: unknown,
+  schema: Schema,
+  direction: 'to' | 'from',
+  path: (string | number)[],
+  scalarPaths: string[],
+  sourceScalarPaths: Set<string>,
+): unknown {
   if (localized(schema)) {
-    if (direction === 'from' && typeof value === 'string') return { en: value };
+    if (direction === 'from' && typeof value === 'string') {
+      scalarPaths.push(JSON.stringify(path));
+      return { en: value };
+    }
     if (direction === 'to' && value !== null && typeof value === 'object' && !Array.isArray(value)) {
       const entries = Object.entries(value as Record<string, unknown>).filter(([, text]) => text !== '');
+      if (sourceScalarPaths.has(JSON.stringify(path)) && entries.length === 1 && entries[0]?.[0] === 'en') {
+        return entries[0][1];
+      }
       return entries.length > 0 ? Object.fromEntries(entries) : { en: '' };
     }
     return value;
@@ -180,6 +241,32 @@ function transformValue(value: unknown, schema: Schema, direction: 'to' | 'from'
         });
   }
 
+  const itemSchema = schema['~kind'] === 'Array' ? schema.items : undefined;
+  if (closedObject(itemSchema) && Array.isArray(value)) {
+    return value.map((item, index) =>
+      item !== null && typeof item === 'object' && !Array.isArray(item)
+        ? transformValue(item, itemSchema, direction, [...path, index], scalarPaths, sourceScalarPaths)
+        : item,
+    );
+  }
+
+  if (closedObject(schema) && value !== null && typeof value === 'object' && !Array.isArray(value)) {
+    const result = { ...(value as Record<string, unknown>) };
+    for (const [prop, propSchema] of Object.entries(schemaProperties(schema))) {
+      if (Object.hasOwn(result, prop)) {
+        result[prop] = transformValue(
+          result[prop],
+          propSchema,
+          direction,
+          [...path, prop],
+          scalarPaths,
+          sourceScalarPaths,
+        );
+      }
+    }
+    return result;
+  }
+
   return value;
 }
 
@@ -193,27 +280,12 @@ function transformNode(
   const slots = definition?.slots ?? [];
   const props: Record<string, unknown> = { ...node.props };
   const localizedScalars: string[] = [];
+  const sourceScalarPaths = new Set(direction === 'to' ? (node._localizedScalars ?? []) : []);
 
   if (schema !== undefined) {
     for (const [prop, propSchema] of Object.entries(schemaProperties(schema))) {
       if (Object.hasOwn(props, prop)) {
-        if (direction === 'from' && localized(propSchema) && typeof props[prop] === 'string') {
-          localizedScalars.push(prop);
-        }
-        props[prop] = transformValue(props[prop], propSchema, direction);
-        if (direction === 'to' && node._localizedScalars?.includes(prop)) {
-          const value = props[prop];
-          if (
-            value !== null &&
-            typeof value === 'object' &&
-            !Array.isArray(value) &&
-            Object.keys(value).length === 1 &&
-            Object.hasOwn(value, 'en') &&
-            (value as Record<string, unknown>).en !== ''
-          ) {
-            props[prop] = (value as Record<string, unknown>).en;
-          }
-        }
+        props[prop] = transformValue(props[prop], propSchema, direction, [prop], localizedScalars, sourceScalarPaths);
       }
     }
   }
@@ -245,7 +317,7 @@ export function editorConfig(registry: CompositionRegistry, { locale }: { locale
     const defaultProps: Record<string, unknown> = {};
 
     for (const [prop, propSchema] of Object.entries(schemaProperties(schema))) {
-      fields[prop] = fieldFor(propSchema, component.type, prop);
+      fields[prop] = fieldFor(propSchema, component.type, prop, locale);
       defaultProps[prop] = defaultFor(propSchema, component.type, prop, locale);
     }
     for (const slot of component.slots) {
@@ -262,7 +334,7 @@ export function editorConfig(registry: CompositionRegistry, { locale }: { locale
   const rootFields: Record<string, unknown> = {};
   for (const name of appearanceNames) {
     const schema = appearanceProperties[name];
-    if (schema !== undefined) rootFields[name] = fieldFor(schema, 'root', name);
+    if (schema !== undefined) rootFields[name] = fieldFor(schema, 'root', name, locale);
   }
 
   return { components, root: { fields: rootFields } } as Config;

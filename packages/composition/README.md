@@ -119,27 +119,34 @@ tokens: `density` (`compact` or `comfortable`), `radius` (`sm`, `md` or `lg`), `
 or `lg`). Every token is optional. Colours and type faces are not tokens; pages share the
 REZICS visual language.
 
-| Component        | Props                                                                       | Slots          |
-| ---------------- | --------------------------------------------------------------------------- | -------------- |
-| `Stack`          | `gap`: `sm`, `md` or `lg`                                                   | `children`     |
-| `Columns`        | `split`: `even`, `start` or `end`                                           | `start`, `end` |
-| `Heading`        | `text` (localized text, 200), `level`: 2, 3 or 4                            |                |
-| `Text`           | `text` (localized text, 2,000)                                              |                |
-| `Slot`           | `name`: one of `SLOT_NAMES`                                                 | `children`     |
-| `SubjectHeader`  | none                                                                        |                |
-| `Statements`     | `properties`: 1–32 unique `curie()` values                                  |                |
-| `MoreStatements` | none                                                                        |                |
-| `SubjectList`    | `title` (localized text, 120), `property`: `curie()`, `limit`: integer 1–24 |                |
+| Component        | Props                                                                                                               | Slots          |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------- | -------------- |
+| `Stack`          | `gap`: `sm`, `md` or `lg`                                                                                           | `children`     |
+| `Columns`        | `split`: `even`, `start` or `end`                                                                                   | `start`, `end` |
+| `Heading`        | `text` (localized text, 200), `level`: 2, 3 or 4                                                                    |                |
+| `Text`           | `text` (localized text, 2,000)                                                                                      |                |
+| `Slot`           | `name`: one of `SLOT_NAMES`                                                                                         | `children`     |
+| `SubjectHeader`  | none                                                                                                                |                |
+| `Statements`     | `properties`: 1–32 unique `curie()` values                                                                          |                |
+| `MoreStatements` | none                                                                                                                |                |
+| `SubjectList`    | `title` (localized text, 120), `property`: `curie()`, `limit`: integer 1–24                                         |                |
+| `SearchBox`      | `placeholder` (localized text, 80)                                                                                  |                |
+| `LinkGrid`       | `links`: 1–12 `{ label: localized text (60), href: href() }` entries                                                |                |
+| `TypeList`       | `title` (localized text, 120), `types`: 1–8 unique `curie()` values, `sort`: `name` or `collections`, `limit`: 1–24 |                |
 
 `SLOT_NAMES` is `header`, `hero`, `entity`, `aside` and `footer`. `Slot` is the platform's
 rendering; reviewed first-party Zone code may wrap or replace it.
 
-All four data components read nothing when `page.subject` is `null`. `SubjectHeader`,
-`Statements` and `MoreStatements` otherwise read the page subject. `Statements` shows the
-named properties; `MoreStatements` shows the subject's statements whose properties no
+`SearchBox` and `LinkGrid` read nothing. A `LinkGrid` `href` starting with `/` is a site path
+without the locale; the website renderer adds the locale.
+
+`SubjectHeader`, `Statements`, `MoreStatements` and `SubjectList` read nothing when
+`page.subject` is `null`. The first three otherwise read the page subject. `Statements` shows
+the named properties; `MoreStatements` shows the subject's statements whose properties no
 `Statements` node on the page names. `shownProperties(document)` lists those named properties
 once, in document order. `SubjectList` reads subjects whose `property` statement points at the
-page subject, sorted by name and bounded by `limit`.
+page subject, sorted by name and bounded by `limit`. `TypeList` reads subjects matching its
+`types` on any page, sorted by name or by most public Collections first, and bounded by `limit`.
 
 ## Read planning
 
@@ -149,18 +156,27 @@ the registry. It is absent from the generated JSON Schema, and documents cannot 
 `PageRead` is either:
 
 ```ts
-{ kind: 'subject'; id: string }
+{
+  kind: 'subject';
+  id: string;
+}
 // GET /v1/subjects/{id}
 
-{ kind: 'search'; body: {
-  filter: { statement: { property: string; in: string[] } };
-  sort: 'name';
-  limit: number;
-} }
+{
+  kind: 'search';
+  body: {
+    filter: PageFilter;
+    sort: 'name' | 'collections';
+    limit: number;
+  }
+}
 // POST /v1/subjects:search
+
+type PageFilter = { statement: { property: string; in: [string] } } | { type: { in: string[] } };
 ```
 
 `SubjectList` uses its `property` and `limit` with `in: [page.subject]`.
+`TypeList` uses `{ type: { in: types } }` and is independent of `page.subject`.
 `planReads(registry, document, page)` accepts a valid document and returns `{ reads, nodes }`.
 It walks parents before their slot children, with slots in registry order. Descriptors with
 equal RFC 8785 canonical JSON share a read. `reads` assigns `r0`, `r1`, … in order of first
@@ -185,11 +201,11 @@ whatever the document or subject.
 
 ## Localized text
 
-`Heading.text` (200), `Text.text` (2,000) and `SubjectList.title` (120) are
-`localizedText`. A string is checked as `plainText`. An object reports a bad key as
-`invalid` at that key, a bad value as `unsafe` or `invalid` at that value, and too few or
-too many entries as `invalid` at the property. Any other JSON value is `invalid` at the
-property.
+`Heading.text` (200), `Text.text` (2,000), `SubjectList.title` and `TypeList.title` (120),
+`SearchBox.placeholder` (80), and each `LinkGrid` link label (60) are `localizedText`. A
+string is checked as `plainText`. An object reports a bad key as `invalid` at that key, a bad
+value as `unsafe` or `invalid` at that value, and too few or too many entries as `invalid` at
+the property. Any other JSON value is `invalid` at the property.
 
 `pickText(value, locale)` returns `{ text, lang }`. A string yields `{ text: value, lang: null }`.
 An object yields the entry for `locale`, otherwise an entry whose primary subtag equals the

@@ -8,6 +8,7 @@ export type {
   CompositionViolationCode,
   ComponentDefinition,
   PageContext,
+  PageFilter,
   PageRead,
 } from './registry.ts';
 export {

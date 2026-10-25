@@ -9,6 +9,7 @@ import {
   PLAIN_TEXT_PATTERN,
   type SafetyKind,
   curie,
+  href,
   localizedText,
   safetyKind,
 } from './strings.ts';
@@ -17,16 +18,28 @@ export interface PageContext {
   subject: string | null;
 }
 
+export type PageFilter = { statement: { property: string; in: [string] } } | { type: { in: string[] } };
+
+type InferredStatementRead = {
+  kind: 'search';
+  body: {
+    filter: { statement: { property: string; in: string[] } };
+    sort: 'name';
+    limit: number;
+  };
+};
+
 export type PageRead =
   | { kind: 'subject'; id: string }
   | {
       kind: 'search';
       body: {
-        filter: { statement: { property: string; in: string[] } };
-        sort: 'name';
+        filter: PageFilter;
+        sort: 'name' | 'collections';
         limit: number;
       };
-    };
+    }
+  | InferredStatementRead;
 
 type ComponentRead = (props: CompositionNode['props'], page: PageContext) => PageRead | null;
 
@@ -317,6 +330,42 @@ export const platformRegistry = defineRegistry({
                 limit: props.limit as number,
               },
             },
+    },
+    {
+      type: 'SearchBox',
+      props: Type.Object({ placeholder: localizedText({ maxLength: 80 }) }, closed),
+    },
+    {
+      type: 'LinkGrid',
+      props: Type.Object(
+        {
+          links: Type.Array(Type.Object({ label: localizedText({ maxLength: 60 }), href: href() }, closed), {
+            minItems: 1,
+            maxItems: 12,
+          }),
+        },
+        closed,
+      ),
+    },
+    {
+      type: 'TypeList',
+      props: Type.Object(
+        {
+          title: localizedText({ maxLength: 120 }),
+          types: Type.Array(curie(), { minItems: 1, maxItems: 8, uniqueItems: true }),
+          sort: enumeration(['name', 'collections']),
+          limit: Type.Integer({ minimum: 1, maximum: 24 }),
+        },
+        closed,
+      ),
+      read: (props) => ({
+        kind: 'search',
+        body: {
+          filter: { type: { in: props.types as string[] } },
+          sort: props.sort as 'name' | 'collections',
+          limit: props.limit as number,
+        },
+      }),
     },
   ],
 });
