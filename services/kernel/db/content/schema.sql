@@ -48,6 +48,35 @@ $$;
 
 
 --
+-- Name: guard_operation_identity(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.guard_operation_identity() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'Operation identity must survive erasure' USING ERRCODE = '23514';
+  END IF;
+  IF TG_OP = 'INSERT' THEN
+    IF num_nonnulls(NEW.native_workflow_id, NEW.source_epoch, NEW.source_partition,
+        NEW.source_position, NEW.source_event_index) <> 0 THEN
+      RAISE EXCEPTION 'Operation source is bound only after recording' USING ERRCODE = '23514';
+    END IF;
+  ELSIF (to_jsonb(NEW) - ARRAY['native_workflow_id','source_epoch','source_partition','source_position','source_event_index'])
+      IS DISTINCT FROM
+      (to_jsonb(OLD) - ARRAY['native_workflow_id','source_epoch','source_partition','source_position','source_event_index'])
+    OR (OLD.native_workflow_id IS NOT NULL AND ROW(NEW.native_workflow_id, NEW.source_epoch,
+        NEW.source_partition, NEW.source_position, NEW.source_event_index) IS DISTINCT FROM
+      ROW(OLD.native_workflow_id, OLD.source_epoch, OLD.source_partition, OLD.source_position, OLD.source_event_index)) THEN
+    RAISE EXCEPTION 'Operation identity and source binding are immutable' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: guard_revision(); Type: FUNCTION; Schema: content; Owner: -
 --
 
@@ -83,6 +112,22 @@ CREATE FUNCTION content.media_routes_match(route integer, media_ids uuid[]) RETU
     route = get_byte(uuid_send(media_id), 10) * 256 + get_byte(uuid_send(media_id), 11)), true)
   FROM unnest(media_ids) AS media_id
 $$;
+
+
+--
+-- Name: operation_scopes_valid(text[]); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.operation_scopes_valid(scopes text[]) RETURNS boolean
+    LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+    AS $_$
+  SELECT (cardinality(scopes) = 0 OR array_ndims(scopes) = 1)
+    AND cardinality(scopes) <= 6450
+    AND octet_length(array_to_string(scopes, ' ')) <= 12900
+    AND COALESCE(bool_and(scope IS NOT NULL AND scope ~ '^[!-~]{1,128}$'
+      AND position('"' in scope) = 0 AND position(chr(92) in scope) = 0), true)
+  FROM unnest(scopes) AS scope
+$_$;
 
 
 SET default_tablespace = '';
@@ -179,6 +224,47 @@ CREATE TABLE content.media_variant (
     CONSTRAINT media_variant_sha256_check CHECK ((sha256 ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT media_variant_width_check CHECK (((width >= 1) AND (width <= 2560))),
     CONSTRAINT media_variant_width_ladder_check CHECK (((width < 320) OR (width = ANY (ARRAY[320, 640, 960, 1280, 1920, 2560]))))
+);
+
+
+--
+-- Name: operation; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.operation (
+    route integer NOT NULL,
+    operation_id uuid NOT NULL,
+    initiator_account_id uuid NOT NULL,
+    author_account_id uuid NOT NULL,
+    thread_id uuid NOT NULL,
+    actor_kind text NOT NULL,
+    actor_account_id uuid NOT NULL,
+    actor_client_id text NOT NULL,
+    actor_scopes text[] NOT NULL,
+    actor_requested_by text,
+    actor_authn_epoch bigint NOT NULL,
+    empty_scope boolean NOT NULL,
+    upper_created_at timestamp with time zone,
+    upper_post_id uuid,
+    requested_at timestamp with time zone NOT NULL,
+    recorded_transaction_id uuid NOT NULL,
+    native_workflow_id text,
+    source_epoch integer,
+    source_partition integer,
+    source_position bigint,
+    source_event_index integer,
+    CONSTRAINT operation_actor_authn_epoch_check CHECK (((actor_authn_epoch >= 1) AND (actor_authn_epoch <= '9007199254740991'::bigint))),
+    CONSTRAINT operation_actor_client_id_check CHECK (((char_length(actor_client_id) >= 1) AND (char_length(actor_client_id) <= 1024))),
+    CONSTRAINT operation_actor_kind_check CHECK ((actor_kind = 'account'::text)),
+    CONSTRAINT operation_actor_requested_by_check CHECK ((actor_requested_by ~ '^urn:rezics:request:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'::text)),
+    CONSTRAINT operation_actor_scopes_check CHECK (content.operation_scopes_valid(actor_scopes)),
+    CONSTRAINT operation_check CHECK ((actor_account_id = initiator_account_id)),
+    CONSTRAINT operation_check1 CHECK ((route = ((get_byte(uuid_send(operation_id), 10) * 256) + get_byte(uuid_send(operation_id), 11)))),
+    CONSTRAINT operation_check2 CHECK (((route >> 4) = (((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)) >> 4))),
+    CONSTRAINT operation_check3 CHECK (((empty_scope AND (upper_created_at IS NULL) AND (upper_post_id IS NULL)) OR ((NOT empty_scope) AND (upper_created_at IS NOT NULL) AND (upper_post_id IS NOT NULL) AND isfinite(upper_created_at) AND (upper_created_at <= requested_at) AND (SUBSTRING(uuid_send(upper_post_id) FROM 11 FOR 2) = SUBSTRING(uuid_send(thread_id) FROM 11 FOR 2))))),
+    CONSTRAINT operation_check4 CHECK (((num_nonnulls(native_workflow_id, source_epoch, source_partition, source_position, source_event_index) = 0) OR ((num_nonnulls(native_workflow_id, source_epoch, source_partition, source_position, source_event_index) = 5) AND (source_epoch > 0) AND (source_partition = (route >> 4)) AND (source_position > 0) AND (source_event_index >= 0) AND (native_workflow_id = ((((((((('fx:'::text || source_epoch) || ':'::text) || source_partition) || ':'::text) || source_position) || ':'::text) || source_event_index) || ':content_author_erase_'::text) || operation_id))))),
+    CONSTRAINT operation_requested_at_check CHECK (isfinite(requested_at)),
+    CONSTRAINT operation_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
 
@@ -318,6 +404,14 @@ ALTER TABLE ONLY content.media_variant
 
 
 --
+-- Name: operation operation_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.operation
+    ADD CONSTRAINT operation_pkey PRIMARY KEY (route, operation_id);
+
+
+--
 -- Name: post post_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -412,6 +506,13 @@ CREATE INDEX revision_post_page_idx ON content.revision USING btree (route, post
 --
 
 CREATE TRIGGER board_identity BEFORE UPDATE ON content.board FOR EACH ROW EXECUTE FUNCTION content.guard_identity('route', 'board_id', 'subject_id', 'created_at');
+
+
+--
+-- Name: operation operation_identity; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER operation_identity BEFORE INSERT OR DELETE OR UPDATE ON content.operation FOR EACH ROW EXECUTE FUNCTION content.guard_operation_identity();
 
 
 --
