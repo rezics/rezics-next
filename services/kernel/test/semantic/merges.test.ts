@@ -1,0 +1,360 @@
+import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
+import pg from 'pg';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { createPool } from '../../src/database/pool.ts';
+import { startRelays } from '../../src/events/relays.ts';
+import { createKernel } from '../../src/http/kernel.ts';
+import { openApiDocument } from '../../src/http/openapi.ts';
+import { AuthenticationError, type Access, type AccountActor } from '../../src/request/access.ts';
+import { newId, routeOf } from '../../src/route/route.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { linkProjection } from '../../src/semantic/links.ts';
+import type { KeyRing } from '../../src/tokens/seal.ts';
+
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
+const pool = createPool(databaseUrl);
+const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
+const relays = startRelays(pool, [linkProjection(pool)], { intervalMs: 50 });
+beforeAll(async () => {
+  expect(await bootstrapRelease(pool, bundledRelease)).toBe(bundledDigest);
+});
+afterAll(async () => {
+  await relays.stop();
+  await pool.end();
+  await admin.end();
+});
+
+const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(3)]]) };
+const ACTIONS = [
+  'subject:create',
+  'subject:read',
+  'statement:propose',
+  'context:accept',
+  'context:adopt',
+  'subject:merge',
+];
+const account = (accountId: string): AccountActor => ({
+  kind: 'account',
+  accountId,
+  clientId: 'web',
+  scopes: ACTIONS,
+  requestedBy: null,
+  authnEpoch: 1,
+});
+const actors: Record<string, AccountActor> = {
+  editor: account('019a1b2c-3d4e-7f00-8a00-ed170e000001'),
+  acceptor: account('019a1b2c-3d4e-7f00-8a00-acce97000002'),
+  outsider: account('019a1b2c-3d4e-7f00-8a00-0075de000003'),
+};
+const grants = new Set([
+  'editor subject:create',
+  'editor statement:propose',
+  'acceptor context:accept',
+  'acceptor context:adopt',
+  'acceptor subject:merge',
+]);
+const checks: { action: string; route: number; id: string }[] = [];
+const access: Access = {
+  async authenticate(token) {
+    const actor = actors[token];
+    if (!actor) throw new AuthenticationError(401, 'Bearer error="invalid_token"');
+    return actor;
+  },
+  async authorize(_client, actor, action, resource) {
+    if (action === 'subject:read') return true;
+    checks.push({ action, route: resource.route, id: resource.id });
+    const persona = Object.keys(actors).find(
+      (name) => actor.kind === 'account' && actors[name]!.accountId === actor.accountId,
+    );
+    return resource.id === GLOBAL_CONTEXT && grants.has(`${persona} ${action}`);
+  },
+};
+const kernel = createKernel({
+  pool,
+  access,
+  tokens,
+  routeKey: new Uint8Array(32).fill(4),
+  writeRate: {
+    async spend() {
+      return { allowed: true };
+    },
+  },
+});
+
+const sessions: Record<string, string> = {};
+async function call(method: string, path: string, options: { as?: string; key?: string; body?: unknown } = {}) {
+  const headers: Record<string, string> = {};
+  if (options.as) {
+    headers.authorization = `Bearer ${options.as}`;
+    const session = sessions[options.as];
+    if (session) headers['rezics-session-token'] = session;
+  }
+  if (options.key !== undefined) headers['idempotency-key'] = options.key;
+  if (options.body !== undefined) headers['content-type'] = 'application/json';
+  const response = await kernel.handle(
+    new Request(`http://kernel.test${path}`, {
+      method,
+      headers,
+      ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
+    }),
+  );
+  const session = response.headers.get('rezics-session-token');
+  if (options.as && session) sessions[options.as] = session;
+  return { response, body: (await response.json()) as Record<string, any> };
+}
+const key = () => `"${randomUUID()}"`;
+const statement = (property: string, content: unknown) => ({
+  property: { id: property },
+  value: { type: 'value', content },
+});
+const reference = { parts: [statement('schema:url', 'https://www.aozora.gr.jp/cards/000148/card773.html')] };
+async function created(body: unknown): Promise<Record<string, any>> {
+  const answer = await call('POST', '/v1/subjects', { as: 'editor', key: key(), body });
+  expect(answer.response.status).toBe(201);
+  return answer.body.subject;
+}
+const person = (name: string) =>
+  created({
+    type: 'schema:Person',
+    labels: { en: name },
+    statements: { 'schema:url': [statement('schema:url', `https://example.org/${randomUUID()}`)] },
+  });
+const work = (title: string, author: Record<string, any>) =>
+  created({
+    type: 'schema:Book',
+    labels: { en: title },
+    statements: { 'schema:author': [statement('schema:author', author.id)] },
+  });
+const edition = (title: string, workId: string) =>
+  created({
+    type: 'bf:Instance',
+    labels: { en: title },
+    statements: { 'schema:exampleOfWork': [statement('schema:exampleOfWork', workId)] },
+  });
+const byId = <T extends { id: string }>(a: T, b: T) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+const linkOf = (source: Record<string, any>, property: string) => ({
+  subject: source.id as string,
+  property,
+  statement: source.statements[property][0].id as string,
+});
+const sorted = (links: { subject: string }[]) =>
+  [...links].sort((a, b) => (a.subject < b.subject ? -1 : a.subject > b.subject ? 1 : 0));
+const fresh = { consistency: 'eventual', target_seconds: 10, caught_up: true };
+const merge = (body: unknown, options: { as?: string | null; key?: string } = {}) =>
+  call('POST', '/v1/subjects:merge', {
+    ...(options.as === null ? {} : { as: options.as ?? 'acceptor' }),
+    key: options.key ?? key(),
+    body,
+  });
+async function links(id: string, persona: string) {
+  const answer = await call('GET', `/v1/subjects/${id}/links`, { as: persona });
+  expect(answer.response.status).toBe(200);
+  return answer.body;
+}
+async function revisions(id: string) {
+  const { rows } = await admin.query(
+    'SELECT revision, kind, route FROM semantic.revision WHERE subject_id = $1 ORDER BY revision',
+    [id],
+  );
+  return rows;
+}
+
+test('a merge redirects the larger id to the smallest with one revision in the redirected partition', async () => {
+  const first = await person('Natsume Sōseki');
+  const second = await person('Sōseki Natsume');
+  const [survivor, redirected] = [first, second].sort(byId) as [Record<string, any>, Record<string, any>];
+  const book = await work('Kokoro', redirected);
+  const survivorBefore = await revisions(survivor.id);
+  const token = key();
+  const body = { subjects: [first.id, second.id] };
+  const merged = await merge(body, { key: token });
+  expect(merged.response.status).toBe(200);
+  expect(merged.body).toEqual({ survivor: survivor.id, redirected: redirected.id, revision: 2 });
+  expect(checks.at(-1)).toEqual({ action: 'subject:merge', route: 0, id: GLOBAL_CONTEXT });
+  const redirect = await call('GET', `/v1/subjects/${redirected.id}?context=${GLOBAL_CONTEXT}`);
+  expect(redirect.response.status).toBe(308);
+  expect(redirect.response.headers.get('location')).toBe(`/v1/subjects/${survivor.id}?context=${GLOBAL_CONTEXT}`);
+  expect(redirect.body).toEqual({ redirect: { from: redirected.id, to: survivor.id } });
+  const plain = await call('GET', `/v1/subjects/${redirected.id}`);
+  expect([plain.response.status, plain.response.headers.get('location')]).toEqual([308, `/v1/subjects/${survivor.id}`]);
+  const read = await call('GET', `/v1/subjects/${book.id}`);
+  expect(read.body.subject.statements).toEqual(book.statements);
+  expect(read.body.related[redirected.id]).toEqual({ redirect: survivor.id, labels: survivor.labels });
+  expect(await revisions(survivor.id)).toEqual(survivorBefore);
+  expect((await revisions(redirected.id)).map((row) => [row.revision, row.kind, row.route])).toEqual([
+    [1, 'create', routeOf(redirected.id)],
+    [2, 'merge', routeOf(redirected.id)],
+  ]);
+  const history = await call('GET', `/v1/subjects/${redirected.id}/revisions`);
+  expect(history.response.status).toBe(200);
+  expect(history.body.revisions.map((row: any) => [row.revision, row.kind])).toEqual([
+    [2, 'merge'],
+    [1, 'create'],
+  ]);
+  expect((await merge(body, { key: token })).body).toEqual(merged.body);
+  const conflict = await merge({ subjects: [second.id, first.id] }, { key: token });
+  expect([conflict.response.status, conflict.body.code]).toEqual([422, 'idempotency_conflict']);
+});
+
+test('merges are refused for redirected, identical, mismatched and unknown subjects and write nothing', async () => {
+  const people = [await person('Natsume Sōseki'), await person('Sōseki Natsume')].sort(byId);
+  const [survivor, redirected] = people as [Record<string, any>, Record<string, any>];
+  const third = await person('Natsume Kinnosuke');
+  const book = await work('Kokoro', third);
+  const proposal = await call('POST', `/v1/subjects/${redirected.id}/candidates`, {
+    as: 'editor',
+    key: key(),
+    body: { statement: { ...statement('schema:url', 'https://www.aozora.gr.jp/'), references: [reference] } },
+  });
+  expect(proposal.response.status).toBe(201);
+  expect((await merge({ subjects: [survivor.id, redirected.id] })).response.status).toBe(200);
+  const subjects = [survivor, redirected, third, book];
+  const before = await Promise.all(subjects.map((subject) => revisions(subject.id)));
+  for (const [pair, status, code] of [
+    [[survivor.id, redirected.id], 409, 'conflict'],
+    [[redirected.id, third.id], 409, 'conflict'],
+    [[survivor.id, survivor.id], 409, 'conflict'],
+    [[third.id, book.id], 409, 'conflict'],
+    [[third.id, newId(routeOf(third.id)!)], 404, 'not_found'],
+    [['01890000-0000-7000-8000-000000000000', third.id], 404, 'not_found'],
+  ] as const) {
+    const answer = await merge({ subjects: pair });
+    expect([pair, answer.response.status, answer.body.code]).toEqual([pair, status, code]);
+  }
+  for (const body of [{}, { subjects: [third.id] }, { subjects: [third.id, survivor.id, book.id] }]) {
+    expect((await merge(body)).response.status).toBe(400);
+  }
+  const malformed = await merge({ subjects: [third.id, 'not-an-id'] });
+  expect(malformed.response.status).toBe(400);
+  expect(malformed.body.errors).toContainEqual({ pointer: '/subjects/1', code: 'invalid_format' });
+  for (const [as, status, code] of [
+    [null, 401, 'authentication_required'],
+    ['editor', 403, 'forbidden'],
+    ['outsider', 403, 'forbidden'],
+  ] as const) {
+    const answer = await merge({ subjects: [survivor.id, third.id] }, { as });
+    expect([as, answer.response.status, answer.body.code]).toEqual([as, status, code]);
+  }
+  const candidate = proposal.body.candidate as string;
+  const writes = [
+    await call('POST', `/v1/subjects/${redirected.id}/candidates`, {
+      as: 'editor',
+      key: key(),
+      body: { statement: { ...statement('schema:url', 'https://www.aozora.gr.jp/'), references: [reference] } },
+    }),
+    await call('POST', `/v1/subjects/${redirected.id}/candidates/${candidate}:accept`, {
+      as: 'acceptor',
+      key: key(),
+      body: { context: GLOBAL_CONTEXT, expected_head: null },
+    }),
+    await call('POST', `/v1/subjects/${redirected.id}:adopt`, {
+      as: 'acceptor',
+      key: key(),
+      body: {
+        context: GLOBAL_CONTEXT,
+        property: 'schema:url',
+        mode: 'replace',
+        selection: [],
+        expected_head: 1,
+      },
+    }),
+  ];
+  expect(writes.map((answer) => [answer.response.status, answer.body.code])).toEqual([
+    [409, 'conflict'],
+    [409, 'conflict'],
+    [409, 'conflict'],
+  ]);
+  const listing = await call('GET', `/v1/subjects/${redirected.id}/candidates?property=schema%3Aurl`);
+  expect(listing.response.status).toBe(200);
+  expect(listing.body.candidates.map((row: any) => row.id)).toContain(candidate);
+  expect(await Promise.all(subjects.map((subject) => revisions(subject.id)))).toEqual(before);
+});
+
+test('the survivor gathers the links of the redirected subject, whose own links disappear', async () => {
+  const soseki = await person('Natsume Sōseki');
+  const works = [await work('Kokoro', soseki), await work('Kokoro (duplicate)', soseki)].sort(byId);
+  const [kept, gone] = works as [Record<string, any>, Record<string, any>];
+  const keptEdition = await edition('Kokoro, Penguin Classics', kept.id);
+  const goneEdition = await edition('Kokoro, Tuttle', gone.id);
+  expect((await links(soseki.id, 'editor')).links).toEqual(
+    sorted([linkOf(kept, 'schema:author'), linkOf(gone, 'schema:author')]),
+  );
+  expect((await merge({ subjects: [gone.id, kept.id] })).response.status).toBe(200);
+  const later = await edition('Kokoro, Vintage', gone.id);
+  expect(later.statements['schema:exampleOfWork'][0].value.content).toBe(gone.id);
+  expect(await links(soseki.id, 'acceptor')).toEqual({
+    links: [linkOf(kept, 'schema:author')],
+    freshness: fresh,
+    next: null,
+  });
+  expect((await links(kept.id, 'acceptor')).links).toEqual(
+    expect.arrayContaining([linkOf(keptEdition, 'schema:exampleOfWork'), linkOf(goneEdition, 'schema:exampleOfWork')]),
+  );
+  expect(await links(kept.id, 'editor')).toEqual({
+    links: sorted([keptEdition, goneEdition, later].map((source) => linkOf(source, 'schema:exampleOfWork'))),
+    freshness: fresh,
+    next: null,
+  });
+  const redirect = await call('GET', `/v1/subjects/${gone.id}/links?property=schema%3AexampleOfWork`);
+  expect(redirect.response.status).toBe(308);
+  expect(redirect.response.headers.get('location')).toBe(
+    `/v1/subjects/${kept.id}/links?property=schema%3AexampleOfWork`,
+  );
+  expect((await call('GET', `/v1/subjects/${later.id}`)).body.related[gone.id]).toEqual({
+    redirect: kept.id,
+    labels: kept.labels,
+  });
+});
+
+test('merging a survivor again repoints every redirect to the final survivor', async () => {
+  const people = [await person('Natsume Sōseki'), await person('Sōseki Natsume'), await person('Natsume Kinnosuke')];
+  const [smallest, middle, largest] = people.sort(byId) as [
+    Record<string, any>,
+    Record<string, any>,
+    Record<string, any>,
+  ];
+  const book = await work('Kokoro', largest);
+  expect((await links(largest.id, 'editor')).links).toEqual([linkOf(book, 'schema:author')]);
+  expect((await merge({ subjects: [largest.id, middle.id] })).body).toEqual({
+    survivor: middle.id,
+    redirected: largest.id,
+    revision: 2,
+  });
+  expect((await merge({ subjects: [middle.id, smallest.id] })).body).toEqual({
+    survivor: smallest.id,
+    redirected: middle.id,
+    revision: 2,
+  });
+  expect(await links(smallest.id, 'acceptor')).toEqual({
+    links: [linkOf(book, 'schema:author')],
+    freshness: fresh,
+    next: null,
+  });
+  for (const id of [largest.id, middle.id]) {
+    const answer = await call('GET', `/v1/subjects/${id}`);
+    expect([id, answer.response.status, answer.response.headers.get('location')]).toEqual([
+      id,
+      308,
+      `/v1/subjects/${smallest.id}`,
+    ]);
+  }
+  expect((await call('GET', `/v1/subjects/${book.id}`)).body.related[largest.id]).toEqual({
+    redirect: smallest.id,
+    labels: smallest.labels,
+  });
+  expect((await revisions(largest.id)).map((row) => row.kind)).toEqual(['create', 'merge']);
+  const refused = await merge({ subjects: [largest.id, smallest.id] });
+  expect([refused.response.status, refused.body.code]).toEqual([409, 'conflict']);
+});
+
+test('the kernel contract documents merges and redirects', () => {
+  const paths = openApiDocument(kernel).paths;
+  const operation = paths['/v1/subjects:merge']!.post!;
+  expect(operation.operationId).toBe('subject.merge');
+  expect(Object.keys(operation.responses!).sort()).toEqual(['200', '400', '401', '403', '404', '409', '422', '503']);
+  for (const path of ['/v1/subjects/{id}', '/v1/subjects/{id}/links']) {
+    expect([path, Object.keys(paths[path]!.get!.responses!)]).toEqual([path, expect.arrayContaining(['308'])]);
+  }
+});
