@@ -20,7 +20,7 @@ import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { createWorkClient } from '../../../src/work/client.ts';
 import { KERNEL_WORK_MODULES } from '../../../src/work/modules.ts';
 import { startWorker } from '../../../src/worker.ts';
-import { measure, openGrowthDatabase } from '../../support/growth.ts';
+import { capture, costOf, openGrowthDatabase } from '../../support/growth.ts';
 import { startFakeStripe } from './fake-stripe.ts';
 
 // A separate process owns DBOS's process-global registrations for each isolated driver.
@@ -255,10 +255,12 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
     );
   }
   let child: ReturnType<typeof Bun.spawn> | undefined;
+  let workerFailure: string | undefined;
   let held = true;
   const disputes = new Map<string, string>();
   let seeded = 0;
   let seedOffer: string | undefined;
+  const measurements: { seeded: number; statements: readonly string[]; buffers: number }[] = [];
   async function stopWorker() {
     if (!child) return;
     child.kill('SIGKILL');
@@ -295,12 +297,20 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
       },
     });
     const running = child;
+    let diagnostics = '';
+    const readDiagnostics = (async () => {
+      const decoder = new TextDecoder();
+      for await (const chunk of running.stderr as ReadableStream<Uint8Array>) {
+        diagnostics += decoder.decode(chunk, { stream: true });
+        workerFailure ??= diagnostics.match(/Relay effects stopped[^\n]*\n/)?.[0]?.trim();
+      }
+      diagnostics += decoder.decode();
+    })();
     await Promise.race([
       readiness,
       running.exited.then(async (code) => {
-        throw new Error(
-          `Commerce executor exited ${code}: ${await new Response(running.stderr as ReadableStream<Uint8Array>).text()}`,
-        );
+        await readDiagnostics;
+        throw new Error(`Commerce executor exited ${code}: ${diagnostics}`);
       }),
     ]);
     held = false;
@@ -404,6 +414,9 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
     async settle() {
       await startExecutor();
       for (;;) {
+        // Surface the production relay's stop reason instead of waiting forever
+        // for a checkpoint it explicitly refused to advance. Never skip its events.
+        if (workerFailure) throw new Error(`Production commerce executor: ${workerFailure}`);
         const pending = (await client.listWorkflows({ limit: 10000 })).filter((row) => row.status !== 'SUCCESS');
         if (pending.length) {
           const runnable = pending.filter((row) => row.status !== 'DELAYED');
@@ -548,11 +561,19 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
     },
     async measure(operation) {
       await driver.holdWork();
-      const result = await measure(db, operation);
+      const result = await capture(db, operation);
+      const cost = costOf(result.capture);
+      measurements.push({ seeded, statements: result.capture.statements, buffers: cost.blocks });
+      // Keep the actual SQL available for comparing scales and runs when the
+      // frozen suite reports a count mismatch. Trace I/O is outside the capture.
+      await Bun.write(
+        new URL(`../../../../../.temp/commerce-outcome-${suffix}.json`, import.meta.url),
+        JSON.stringify(measurements, null, 2),
+      );
       return {
         value: result.value,
-        statements: result.cost.statements + result.cost.controlStatements,
-        buffers: result.cost.blocks,
+        statements: result.capture.statements.length,
+        buffers: cost.blocks,
       };
     },
     async close() {
