@@ -13,7 +13,8 @@ and Access-first consent reduction. The explicit account workflow host adds DBOS
 registration, organization and membership coordination, operator creation and transfer,
 deletion, fencing fanout, authorized rename and Access-first authority reductions.
 OIDC authorization, token exchange, CIBA and device authorization remain outside
-this service. Unverified
+this service. Token issuance accepts `requested_by` only after current Access
+proof of a principal-created assignment for the authenticated actor. Unverified
 `requested_by` and all caller-supplied `act` values are rejected.
 
 ## Database and checks
@@ -507,6 +508,15 @@ The account adapter maps Access `minimumAuthnEpoch` to `authnEpoch`, preserves
 unresolved proofs and dependency failures deny issuance. Auth owns its separate
 database and signer; it imports no kernel pool or permission SQL. No assignment
 proof or principal identity is persisted in the Better Auth session.
+
+The additional proof work uses the exact principal/request key in
+`principal_assignment_pkey(route, principal_id, request_id)` and the principal's
+`account_pkey(route, account_id)`, touching at most two Access anchors including
+the actor. These point reads examine O(1) rows with logarithmic index-buffer growth
+in relevant authority rows; they enumerate no assignments, memberships or resource
+ACLs. This is an access-path bound, not growth measurement evidence. The existing
+resource permission formula and its organization-candidate fanout remain separate
+from assignment proof.
 
 For verification, compose `createAccess` from `services/kernel/src/access/index.ts`
 with the route action catalogue and `auth: { issuer, audience, jwksUrl }` from
