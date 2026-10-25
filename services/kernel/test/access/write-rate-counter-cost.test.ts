@@ -1,9 +1,13 @@
 import { afterAll, expect, test } from 'bun:test';
 import { Pool, type QueryConfig } from 'pg';
 import type { AccessClient } from '../../src/request/access.ts';
+import { newId, routeOf } from '../../src/route/route.ts';
+import { checkStatement } from '../support/partition-binding.ts';
+import product from '../../src/access/write-rate-counter.sql';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
+const route = routeOf(newId(0x7310))!;
 const pool = new Pool({ connectionString: url, max: 1 });
 afterAll(() => pool.end());
 
@@ -33,10 +37,10 @@ test('one seed at three scales proves constant rows and one statement', async ()
     for (const scale of [1, 8, 64]) {
       const size = 1024 * scale;
       await client.query(
-        `INSERT INTO access.write_rate_counter (identity_digest, family, count, expires_at)
-        SELECT md5(i::text) || md5(i::text), family, 0, statement_timestamp() + interval '1 day'
+        `INSERT INTO access.write_rate_counter (route, identity_digest, family, count, expires_at)
+        SELECT $3::integer, md5(i::text) || md5(i::text), family, 0, statement_timestamp() + interval '1 day'
         FROM generate_series($1::integer, $2::integer) i CROSS JOIN (VALUES ('write'), ('unrelated')) f(family)`,
-        [previous + 1, size],
+        [previous + 1, size, route],
       );
       previous = size;
       await client.query('ANALYZE access.write_rate_counter');
@@ -50,8 +54,8 @@ test('one seed at three scales proves constant rows and one statement', async ()
         for (const allowed of [true, false]) {
           await client.query(
             `UPDATE access.write_rate_counter SET count = $1
-          WHERE identity_digest = md5('1') || md5('1') AND family = 'write'`,
-            [allowed ? 0 : 1000],
+          WHERE route = $2 AND identity_digest = md5('1') || md5('1') AND family = 'write'`,
+            [allowed ? 0 : 1000, route],
           );
           const statements: QueryConfig[] = [];
           const captured = Object.create(client) as AccessClient;
@@ -60,6 +64,7 @@ test('one seed at three scales proves constant rows and one statement', async ()
             return client.query(query);
           }) as AccessClient['query'];
           const result = await spendWriteRateCounter(captured, {
+            route,
             identityDigest: 'c4ca4238a0b923820dcc509a6f75849b'.repeat(2),
             family: 'write',
             units,
@@ -69,8 +74,13 @@ test('one seed at three scales proves constant rows and one statement', async ()
           expect(statements).toHaveLength(1);
           const statement = statements[0]!;
           expect(statement.text).toMatch(/^\s*INSERT\s+INTO\s+access\.write_rate_counter/i);
-          expect(statement.text).toMatch(/ON CONFLICT\s*\(identity_digest, family\) DO UPDATE/i);
+          expect(statement.text).toMatch(/ON CONFLICT\s*\(route, identity_digest, family\) DO UPDATE/i);
           expect(statement.text).not.toMatch(/\b(?:SELECT|DELETE|BEGIN|COMMIT)\b/i);
+          expect(statement.values?.[product.params.indexOf('route')]).toBe(route);
+          expect(await checkStatement(client, { sql: statement.text!, params: [...product.params] })).toEqual({
+            bound: true,
+            parameter: 'route',
+          });
           // Explain the exact captured product SQL and parameters, without planner overrides.
           const explained = await client.query({
             text: `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${statement.text}`,

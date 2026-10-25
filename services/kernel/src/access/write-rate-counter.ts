@@ -17,18 +17,24 @@ const spend = defineQuery<
   cardinality: statement.cardinality,
 });
 
-/** Internal storage primitive. The trusted write stage supplies identity and current budget. */
+/** Internal storage primitive. The trusted stage supplies the verified acting
+ * account's canonical route or the anonymous digest's tuple-home route, plus
+ * identity and current budget. This primitive preserves that supplied placement. */
 export async function spendWriteRateCounter(
   client: AccessClient,
   input: {
+    route: number;
     identityDigest: string;
     family: string;
     units: number;
     budget: { maximum: number; seconds: number };
   },
 ): Promise<{ allowed: true } | { allowed: false; retryAfter: number }> {
-  const { identityDigest, family, units, budget } = input;
+  const { route, identityDigest, family, units, budget } = input;
   if (
+    !Number.isInteger(route) ||
+    route < 0 ||
+    route > 65535 ||
     typeof identityDigest !== 'string' ||
     !/^[a-f0-9]{64}$/.test(identityDigest) ||
     typeof family !== 'string' ||
@@ -45,6 +51,7 @@ export async function spendWriteRateCounter(
   )
     throw new RangeError('Invalid write rate counter input');
   const row = await spend.run(client, {
+    route,
     identity_digest: identityDigest,
     family,
     admitted_units: units <= budget.maximum ? units : 0,

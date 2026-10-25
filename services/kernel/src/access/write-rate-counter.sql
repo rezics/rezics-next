@@ -1,7 +1,7 @@
-INSERT INTO access.write_rate_counter AS counter (identity_digest, family, count, expires_at)
-VALUES (:identity_digest::text, :family::text, :admitted_units::integer,
+INSERT INTO access.write_rate_counter AS counter (route, identity_digest, family, count, expires_at)
+VALUES (:route::integer, :identity_digest::text, :family::text, :admitted_units::integer,
         statement_timestamp() + :seconds::integer * interval '1 second')
-ON CONFLICT (identity_digest, family) DO UPDATE
+ON CONFLICT (route, identity_digest, family) DO UPDATE
 SET count = CASE
       WHEN counter.expires_at <= statement_timestamp() THEN EXCLUDED.count
       WHEN counter.count <= :maximum::integer - EXCLUDED.count THEN counter.count + EXCLUDED.count

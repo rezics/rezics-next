@@ -1,13 +1,21 @@
 import { afterAll, beforeEach, expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import type { AccessClient } from '../../src/request/access.ts';
+import { newId, routeOf } from '../../src/route/route.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = new Pool({ connectionString: url, max: 8 });
 afterAll(() => pool.end());
 beforeEach(() => pool.query('TRUNCATE access.write_rate_counter'));
-const input = { identityDigest: 'a'.repeat(64), family: 'write', units: 3, budget: { maximum: 10, seconds: 60 } };
+const accountId = newId(0x7310);
+const input = {
+  route: routeOf(accountId)!,
+  identityDigest: 'a'.repeat(64),
+  family: 'write',
+  units: 3,
+  budget: { maximum: 10, seconds: 60 },
+};
 async function spend(client: AccessClient = pool, value = input) {
   const { spendWriteRateCounter } = await import('../../src/access/write-rate-counter.ts');
   return spendWriteRateCounter(client, value);
@@ -22,8 +30,8 @@ test('unlogged native counter spends all units atomically with a single point up
   expect(metadata.rows).toEqual([{ relpersistence: 'u', relkind: 'r' }]);
   const indexes = await pool.query(`SELECT indexdef FROM pg_indexes
     WHERE schemaname = 'access' AND tablename = 'write_rate_counter'`);
-  expect(indexes.rows.some((row) => /UNIQUE.*\(identity_digest, family\)/.test(row.indexdef))).toBe(true);
-  expect(indexes.rows.some((row) => /\(expires_at\)/.test(row.indexdef))).toBe(true);
+  expect(indexes.rows.some((row) => /UNIQUE.*\(route, identity_digest, family\)/.test(row.indexdef))).toBe(true);
+  expect(indexes.rows.some((row) => /\(route, expires_at, identity_digest, family\)/.test(row.indexdef))).toBe(true);
   expect(await spend()).toEqual({ allowed: true });
   expect(await spend(pool, { ...input, units: 7 })).toEqual({ allowed: true });
   expect((await stored()).map((row) => row.count)).toEqual([10]);
@@ -66,8 +74,8 @@ test('concurrent admission never exceeds maximum', async () => {
       if (expired)
         await clients[0]!.query(
           `INSERT INTO access.write_rate_counter
-        (identity_digest, family, count, expires_at) VALUES ($1, $2, 10, statement_timestamp() - interval '1 second')`,
-          [input.identityDigest, input.family],
+        (route, identity_digest, family, count, expires_at) VALUES ($1, $2, $3, 10, statement_timestamp() - interval '1 second')`,
+          [input.route, input.identityDigest, input.family],
         );
       const decisions = await Promise.all(clients.flatMap((client) => Array.from({ length: 4 }, () => spend(client))));
       expect(decisions.filter((decision) => decision.allowed)).toHaveLength(3);
@@ -90,9 +98,9 @@ test('expiry boundary uses database statement time and resets lazily', async () 
     await client.query('SELECT pg_sleep(0.03)');
     // Expiry equals this statement timestamp, after transaction start. now() would reject.
     await client.query(
-      `INSERT INTO access.write_rate_counter (identity_digest, family, count, expires_at)
-      VALUES ($1, $2, 10, statement_timestamp())`,
-      [input.identityDigest, input.family],
+      `INSERT INTO access.write_rate_counter (route, identity_digest, family, count, expires_at)
+      VALUES ($1, $2, $3, 10, statement_timestamp())`,
+      [input.route, input.identityDigest, input.family],
     );
     expect(await spend(client, { ...input, units: 7, budget: { maximum: 7, seconds: 90 } })).toEqual({ allowed: true });
     const row = (
@@ -126,9 +134,9 @@ test('class budget changes share a key without shortening, extending or decremen
 
 test('maximum count cannot overflow and denials never decrement it', async () => {
   await pool.query(
-    `INSERT INTO access.write_rate_counter (identity_digest, family, count, expires_at)
-    VALUES ($1, $2, 2147483646, statement_timestamp() + interval '60 seconds')`,
-    [input.identityDigest, input.family],
+    `INSERT INTO access.write_rate_counter (route, identity_digest, family, count, expires_at)
+    VALUES ($1, $2, $3, 2147483646, statement_timestamp() + interval '60 seconds')`,
+    [input.route, input.identityDigest, input.family],
   );
   const budget = { maximum: 2147483647, seconds: 60 };
   expect((await spend(pool, { ...input, units: 100, budget })).allowed).toBe(false);
@@ -148,6 +156,7 @@ test('invalid trusted-stage inputs fail before any I/O', async () => {
     },
   } as unknown as AccessClient;
   const invalid = [
+    ...[-1, 65536, 1.5, NaN, Infinity].map((route) => ({ ...input, route })),
     ...['', 'x'.repeat(64), 'a'.repeat(63), 'a'.repeat(65), 'A'.repeat(64)].map((identityDigest) => ({
       ...input,
       identityDigest,
@@ -175,4 +184,25 @@ test('storage errors and missing results cannot become admissions', async () => 
   const closed = new Pool({ connectionString: url });
   await closed.end();
   await expect(spend(closed)).rejects.toThrow();
+});
+
+test('trusted account and anonymous routes isolate the same identity in different home partitions', async () => {
+  // The account route deliberately differs from the digest-derived anonymous home.
+  const anonymousRoute = Number.parseInt(input.identityDigest.slice(0, 4), 16);
+  expect(input.route).not.toBe(anonymousRoute);
+  expect(await spend(pool, { ...input, units: 10 })).toEqual({ allowed: true });
+  expect(await spend(pool, { ...input, route: anonymousRoute, units: 10 })).toEqual({ allowed: true });
+  expect((await spend()).allowed).toBe(false);
+  const rows = await pool.query(`SELECT route, count FROM access.write_rate_counter ORDER BY route`);
+  expect(rows.rows).toEqual([
+    { route: input.route, count: 10 },
+    { route: anonymousRoute, count: 10 },
+  ]);
+  for (const route of [0, 65535]) {
+    expect(await spend(pool, { ...input, route })).toEqual({ allowed: true });
+  }
+  await expect(pool.query('UPDATE access.write_rate_counter SET route = -1')).rejects.toMatchObject({ code: '23514' });
+  await expect(pool.query('UPDATE access.write_rate_counter SET route = 65536')).rejects.toMatchObject({
+    code: '23514',
+  });
 });
