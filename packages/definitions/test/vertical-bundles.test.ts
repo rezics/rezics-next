@@ -82,16 +82,7 @@ test('every launch vertical ships Context settings, saved filters and a Zone sta
     .sort();
   const verticals = schemas.filter((name) => !SHARED_SCHEMAS.includes(name));
   expect(verticals).toEqual([...VERTICALS].sort());
-  expect(verticals).toEqual([
-    'anime',
-    'book',
-    'character',
-    'game',
-    'manga',
-    'recipe',
-    'series',
-    'visual-novel',
-  ]);
+  expect(verticals).toEqual(['anime', 'book', 'character', 'game', 'manga', 'recipe', 'series', 'visual-novel']);
 });
 
 test("every Zone starter home lists its vertical's works", () => {
