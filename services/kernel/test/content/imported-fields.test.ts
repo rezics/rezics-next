@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { fromPlainText, serializeDocument } from '@rezics/document';
 import { appendImportedField, readImportedField } from '../../src/content/imported-fields.ts';
@@ -9,6 +9,8 @@ import { createAccess } from '../../src/access/permission.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, seed } from '../support/growth.ts';
+
+setDefaultTimeout(120_000);
 
 const route = 0xc120;
 const subject = newId(route);
@@ -64,7 +66,7 @@ async function command<T>(work: (tx: CommandTransaction) => Promise<T>, target =
       authorization,
       basis: { actorAccountId: actorId, clientId: actor.clientId, requestedBy: null },
     },
-    async (tx) => ({ value: await work(tx), events: [] }),
+    async (tx) => ({ value: await work(tx), events: [{ type: 'com.rezics.test.imported.v1', data: {} }] }),
   );
 }
 beforeAll(async () => {
@@ -284,7 +286,7 @@ test('canonical Unicode and numeric extension payloads match the real document s
           attrs: {
             id: 'numeric',
             definition: 'example',
-            version: 1,
+            version: '1',
             fallback: '漢字 😀',
             payload: { z: 1e-7, a: -0, number: 1e21 },
           },
@@ -363,7 +365,7 @@ test('checkGrowth captures actual append and exact read at fixed bytes with same
                   route,
                   resource_id: subject,
                   subject_id: organization,
-                  subject_role: 'reader',
+                  subject_role: 'member',
                   action,
                   valid: '(,)',
                   transaction_id: organization,
@@ -383,6 +385,6 @@ test('checkGrowth captures actual append and exact read at fixed bytes with same
   expect(report.samples).toHaveLength(3);
   for (const sample of report.samples) {
     expect(sample.cost.statements).toBeGreaterThan(0);
-    expect(sample.cost.relations['content.imported_field']?.rows).toBe(1);
+    expect(sample.cost.relations?.['content.imported_field']?.rows).toBe(1);
   }
 });

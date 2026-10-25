@@ -683,6 +683,78 @@ ALTER TABLE ONLY content.thread
 
 
 --
+-- Name: guard_imported_field(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.guard_imported_field() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'Imported document identity must survive erasure' USING ERRCODE = '23514';
+  END IF;
+  IF ROW(NEW.route, NEW.id, NEW.subject, NEW.body_sha256, NEW.source, NEW.rights,
+         NEW.language, NEW.recorded_xid, NEW.recorded_at)
+     IS DISTINCT FROM
+     ROW(OLD.route, OLD.id, OLD.subject, OLD.body_sha256, OLD.source, OLD.rights,
+         OLD.language, OLD.recorded_xid, OLD.recorded_at)
+     OR OLD.availability <> 'available' OR NEW.availability <> 'erased' OR NEW.body IS NOT NULL THEN
+    RAISE EXCEPTION 'Imported documents are immutable except explicit erasure' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: imported_field; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.imported_field (
+    route integer NOT NULL,
+    id uuid NOT NULL,
+    subject uuid NOT NULL,
+    body bytea,
+    body_sha256 bytea NOT NULL,
+    source jsonb NOT NULL,
+    rights jsonb NOT NULL,
+    language text NOT NULL,
+    availability text NOT NULL,
+    recorded_xid xid8 DEFAULT pg_current_xact_id() NOT NULL,
+    recorded_at timestamp with time zone DEFAULT transaction_timestamp() NOT NULL,
+    CONSTRAINT imported_field_availability_check CHECK ((availability = ANY (ARRAY['available'::text, 'erased'::text]))),
+    CONSTRAINT imported_field_body_digest CHECK ((body_sha256 = sha256(body))),
+    CONSTRAINT imported_field_body_sha256_check CHECK ((octet_length(body_sha256) = 32)),
+    CONSTRAINT imported_field_body_size CHECK ((octet_length(body) <= 2097152)),
+    CONSTRAINT imported_field_check CHECK ((route = ((get_byte(uuid_send(id), 10) * 256) + get_byte(uuid_send(id), 11)))),
+    CONSTRAINT imported_field_check1 CHECK ((route = ((get_byte(uuid_send(subject), 10) * 256) + get_byte(uuid_send(subject), 11)))),
+    CONSTRAINT imported_field_check2 CHECK ((((availability = 'available'::text) AND (body IS NOT NULL)) OR ((availability = 'erased'::text) AND (body IS NULL)))),
+    CONSTRAINT imported_field_language_check CHECK (((length(language) >= 1) AND (length(language) <= 128))),
+    CONSTRAINT imported_field_rights_check CHECK ((jsonb_typeof(rights) = 'object'::text)),
+    CONSTRAINT imported_field_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT imported_field_source_check CHECK ((jsonb_typeof(source) = 'object'::text)),
+    CONSTRAINT imported_field_source_check1 CHECK (((source ->> 'field_group'::text) = 'summary'::text)),
+    CONSTRAINT imported_field_source_check2 CHECK (((jsonb_typeof((source -> 'references'::text)) = 'array'::text) AND (jsonb_array_length((source -> 'references'::text)) <= 128)))
+);
+ALTER TABLE ONLY content.imported_field ALTER COLUMN body SET COMPRESSION lz4;
+
+
+--
+-- Name: imported_field imported_field_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.imported_field
+    ADD CONSTRAINT imported_field_pkey PRIMARY KEY (route, id);
+
+
+--
+-- Name: imported_field imported_field_immutable; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER imported_field_immutable BEFORE DELETE OR UPDATE ON content.imported_field FOR EACH ROW EXECUTE FUNCTION content.guard_imported_field();
+
+
+--
 -- PostgreSQL database dump complete
 --
 
