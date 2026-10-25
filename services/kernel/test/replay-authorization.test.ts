@@ -9,6 +9,7 @@ import { requestDigest } from '../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../src/route/route.ts';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { bootstrapRelease } from '../src/semantic/definitions.ts';
+import { delegatedAssignmentFixture } from './access/delegated-auth-fixture.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -35,6 +36,7 @@ const actorId = newId(0xc100);
 const principalId = newId(0xc110);
 const assignmentId = newId(0xc110);
 const item = { type: 'schema:Book', labels: { en: 'receipt secret' }, descriptions: {}, aliases: {}, statements: {} };
+let assignments: Awaited<ReturnType<typeof delegatedAssignmentFixture>>;
 let trace: string[] = [];
 pool.on('connect', (client) => {
   const query = client.query.bind(client);
@@ -53,13 +55,16 @@ beforeAll(async () => {
       `INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES ($1,$2,'actor','active',$3)`,
       [routeOf(id), id, Bun.randomUUIDv7()],
     );
-  await admin.query(
-    `INSERT INTO access.principal_assignment(route,principal_id,request_id,assigned_actor_id,valid,transaction_id)
-     VALUES ($1,$2,$3,$4,'(,)',$5)`,
-    [routeOf(principalId), principalId, assignmentId, actorId, Bun.randomUUIDv7()],
-  );
-});
+  assignments = await delegatedAssignmentFixture(admin);
+  await assignments.create({
+    principalId,
+    requestId: assignmentId,
+    assignedActorId: actorId,
+    valid: '(,)',
+  });
+}, 60_000);
 afterAll(async () => {
+  await assignments?.close();
   await pool.end();
   await admin.end();
 });
