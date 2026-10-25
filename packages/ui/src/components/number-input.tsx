@@ -9,9 +9,7 @@ import { type InputProps, inputVariants } from './input.tsx';
 
 export const useNumberInput = useNumberInputContext;
 
-interface NumberInputProps
-  extends React.ComponentProps<typeof ArkNumberInput.Root>,
-    Pick<InputProps, 'size'> {}
+interface NumberInputProps extends React.ComponentProps<typeof ArkNumberInput.Root>, Pick<InputProps, 'size'> {}
 
 export const NumberInput = (props: NumberInputProps) => {
   const { size = 'md', translations, className, ...rest } = props;
@@ -63,9 +61,7 @@ export const NumberInputGroup = (props: React.ComponentProps<typeof ArkNumberInp
   );
 };
 
-export const NumberInputDecrement = (
-  props: React.ComponentProps<typeof ArkNumberInput.DecrementTrigger>,
-) => {
+export const NumberInputDecrement = (props: React.ComponentProps<typeof ArkNumberInput.DecrementTrigger>) => {
   const { className, ...rest } = props;
 
   return (
@@ -91,9 +87,7 @@ export const NumberInputDecrement = (
   );
 };
 
-export const NumberInputIncrement = (
-  props: React.ComponentProps<typeof ArkNumberInput.IncrementTrigger>,
-) => {
+export const NumberInputIncrement = (props: React.ComponentProps<typeof ArkNumberInput.IncrementTrigger>) => {
   const { className, ...rest } = props;
 
   return (
@@ -147,9 +141,7 @@ export const NumberInputInput = (
 
 // The label stays a <label>; the scrubber is a span inside it, since the scrubber's
 // role="presentation" is not allowed on a label.
-export const NumberInputScrubber = (
-  props: React.ComponentProps<typeof ArkNumberInput.Scrubber>,
-) => {
+export const NumberInputScrubber = (props: React.ComponentProps<typeof ArkNumberInput.Scrubber>) => {
   const { className, children, ...rest } = props;
 
   return (

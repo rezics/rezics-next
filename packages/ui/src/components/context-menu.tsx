@@ -1,4 +1,3 @@
-
 import { Menu as ArkMenu, useMenuContext } from '@ark-ui/react/menu';
 import type React from 'react';
 import { cn } from '../utils.ts';
@@ -40,11 +39,7 @@ export const ContextMenuTrigger = (props: React.ComponentProps<typeof ArkMenu.Co
   const { className, ...rest } = props;
 
   return (
-    <ArkMenu.ContextTrigger
-      className={cn('cursor-default', className)}
-      data-slot="context-menu-trigger"
-      {...rest}
-    />
+    <ArkMenu.ContextTrigger className={cn('cursor-default', className)} data-slot="context-menu-trigger" {...rest} />
   );
 };
 

@@ -40,9 +40,7 @@ const Signature = ({ dark = false, disabled = false }: { dark?: boolean; disable
         control: 'Moderator acknowledgement signature',
       }}
     />
-    <p className="mt-2 text-sm text-muted-foreground">
-      Draw a signature, or record your name in the moderation note.
-    </p>
+    <p className="mt-2 text-sm text-muted-foreground">Draw a signature, or record your name in the moderation note.</p>
   </div>
 );
 

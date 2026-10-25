@@ -16,9 +16,7 @@ const meta = {
   },
   decorators: [
     (Story) => (
-      <main
-        className={'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'}
-      >
+      <main className={'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'}>
         <Story />
       </main>
     ),
@@ -31,10 +29,7 @@ type Story = StoryObj<typeof meta>;
 const RealmCode = ({ dark = false }: { dark?: boolean }) => (
   <div className={dark ? 'rounded-2xl bg-background p-6 text-foreground' : 'p-6'}>
     <figure className="grid justify-items-center gap-3">
-      <QrCode
-        data-testid="science-fiction-realm-code"
-        value="https://rezics.com/realms/science-fiction"
-      >
+      <QrCode data-testid="science-fiction-realm-code" value="https://rezics.com/realms/science-fiction">
         <div aria-label="QR code for the Science Fiction Realm" role="img">
           <QrCodeFrame />
         </div>
@@ -58,9 +53,7 @@ export const RealmLink: Story = {
   render: () => <RealmCode />,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(
-      canvas.getByRole('img', { name: 'QR code for the Science Fiction Realm' }),
-    ).toBeInTheDocument();
+    await expect(canvas.getByRole('img', { name: 'QR code for the Science Fiction Realm' })).toBeInTheDocument();
     await expect(canvas.getByRole('button', { name: 'Download QR code' })).toBeEnabled();
   },
 };

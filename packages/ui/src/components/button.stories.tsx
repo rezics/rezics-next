@@ -24,13 +24,11 @@ export const Default: Story = {};
 export const Variants: Story = {
   render: () => (
     <div className="flex flex-wrap items-center gap-3">
-      {(['default', 'secondary', 'outline', 'soft', 'ghost', 'link', 'destructive'] as const).map(
-        (variant) => (
-          <Button key={variant} variant={variant}>
-            {variant}
-          </Button>
-        ),
-      )}
+      {(['default', 'secondary', 'outline', 'soft', 'ghost', 'link', 'destructive'] as const).map((variant) => (
+        <Button key={variant} variant={variant}>
+          {variant}
+        </Button>
+      ))}
     </div>
   ),
 };
@@ -51,9 +49,10 @@ export const Sizes: Story = {
 export const CallerDisabled: Story = {
   args: { 'aria-disabled': true },
   async play({ canvasElement }) {
-    await expect(
-      within(canvasElement).getByRole('button', { name: 'Add to shelf' }),
-    ).toHaveAttribute('aria-disabled', 'true');
+    await expect(within(canvasElement).getByRole('button', { name: 'Add to shelf' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
   },
 };
 

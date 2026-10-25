@@ -1,4 +1,3 @@
-
 import { Popover as ArkPopover } from '@ark-ui/react/popover';
 import { Portal } from '@ark-ui/react/portal';
 import React from 'react';
@@ -12,13 +11,7 @@ import { Popover, PopoverTrigger, usePopoverLabelling } from './popover.tsx';
  * a popover when the hint needs a title, links or actions.
  */
 export const ToggleTooltip = (props: React.ComponentProps<typeof ArkPopover.Root>) => {
-  const {
-    positioning = { placement: 'top' },
-    lazyMount = true,
-    unmountOnExit = true,
-    modal = false,
-    ...rest
-  } = props;
+  const { positioning = { placement: 'top' }, lazyMount = true, unmountOnExit = true, modal = false, ...rest } = props;
 
   return (
     <Popover

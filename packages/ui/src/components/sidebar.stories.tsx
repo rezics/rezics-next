@@ -72,9 +72,7 @@ const Shell = (props: ShellProps) => {
     <SidebarProvider defaultOpen={defaultOpen}>
       <Sidebar {...sidebar}>
         <SidebarHeader>
-          <span className="px-2 py-1 font-semibold tracking-[0.3em] group-data-[collapsible=icon]:hidden">
-            REZICS
-          </span>
+          <span className="px-2 py-1 font-semibold tracking-[0.3em] group-data-[collapsible=icon]:hidden">REZICS</span>
         </SidebarHeader>
         <SidebarContent>
           <nav aria-label="Main">
@@ -174,9 +172,7 @@ const Shell = (props: ShellProps) => {
                 </Avatar>
                 <span className="flex min-w-0 flex-col text-start leading-tight">
                   <span className="truncate font-medium">Ye Wenjie</span>
-                  <span className="truncate text-muted-foreground text-xs">
-                    Acting as moderator
-                  </span>
+                  <span className="truncate text-muted-foreground text-xs">Acting as moderator</span>
                 </span>
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -217,10 +213,7 @@ export const Default: Story = {
   async play({ canvasElement }) {
     const scope = within(await openIfPhone(canvasElement));
     const main = scope.getByRole('navigation', { name: 'Main' });
-    await expect(within(main).getByRole('link', { name: 'Home' })).toHaveAttribute(
-      'aria-current',
-      'page',
-    );
+    await expect(within(main).getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
     await expect(within(main).getByRole('link', { name: 'Hard SF' })).toBeVisible();
   },
 };
@@ -248,10 +241,7 @@ export const KeyboardShortcut: Story = {
     if (isPhone()) {
       await expect(await screen.findByRole('dialog')).toBeInTheDocument();
     } else {
-      await expect(canvasElement.querySelector('[data-slot=sidebar]')).toHaveAttribute(
-        'data-state',
-        'collapsed',
-      );
+      await expect(canvasElement.querySelector('[data-slot=sidebar]')).toHaveAttribute('data-state', 'collapsed');
     }
   },
 };
@@ -327,10 +317,7 @@ export const Chinese: Story = {
       await userEvent.click(within(canvasElement).getByRole('button', { name: '切换侧边栏' }));
     }
     const nav = await screen.findByRole('navigation', { name: '主导航' });
-    await expect(within(nav).getByRole('link', { name: '「三体」读书会' })).toHaveAttribute(
-      'aria-current',
-      'page',
-    );
+    await expect(within(nav).getByRole('link', { name: '「三体」读书会' })).toHaveAttribute('aria-current', 'page');
   },
 };
 

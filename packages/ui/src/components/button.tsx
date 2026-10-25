@@ -72,14 +72,7 @@ export const buttonVariants = tv({
       ],
     },
     size: {
-      xs: [
-        'h-6',
-        'gap-1.5',
-        'px-2.5',
-        'text-xs',
-        'rounded-lg',
-        "[&_svg:not([class*='size-'])]:size-2.5",
-      ],
+      xs: ['h-6', 'gap-1.5', 'px-2.5', 'text-xs', 'rounded-lg', "[&_svg:not([class*='size-'])]:size-2.5"],
       sm: ['h-8', 'px-3.5', 'gap-1.5', 'text-xs', "[&_svg:not([class*='size-'])]:size-3.5"],
       md: ['h-9', 'px-5', 'py-2'],
       lg: ['h-10', 'px-6', 'text-[15px]'],
@@ -112,9 +105,7 @@ export const buttonVariants = tv({
   },
 });
 
-export interface ButtonProps
-  extends React.ComponentProps<typeof ark.button>,
-    VariantProps<typeof buttonVariants> {
+export interface ButtonProps extends React.ComponentProps<typeof ark.button>, VariantProps<typeof buttonVariants> {
   /**
    * Apply a click effect to the button
    *

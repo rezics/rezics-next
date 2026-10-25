@@ -32,9 +32,7 @@ const onDismiss = fn();
 const ModerationQueue = ({ initialSelection = [] }: { initialSelection?: string[] }) => {
   const [selected, setSelected] = useState<string[]>(initialSelection);
   const toggle = (id: string) =>
-    setSelected((current) =>
-      current.includes(id) ? current.filter((value) => value !== id) : [...current, id],
-    );
+    setSelected((current) => (current.includes(id) ? current.filter((value) => value !== id) : [...current, id]));
 
   return (
     <>
@@ -141,9 +139,7 @@ export const CloseButton: Story = {
     await expect(positioner).toHaveAttribute('inert');
     await expect(positioner).toHaveAttribute('aria-hidden', 'true');
     await waitFor(() => expect(page.queryByRole('toolbar')).not.toBeInTheDocument());
-    await expect(
-      within(canvasElement).getByRole('checkbox', { name: /Spoilers/ }),
-    ).not.toBeChecked();
+    await expect(within(canvasElement).getByRole('checkbox', { name: /Spoilers/ })).not.toBeChecked();
   },
 };
 
@@ -151,9 +147,7 @@ export const WithTrigger: Story = {
   name: 'Uncontrolled with trigger',
   render: () => (
     <ActionBar>
-      <ActionBarTrigger className={buttonVariants({ variant: 'outline' })}>
-        Edit shelf
-      </ActionBarTrigger>
+      <ActionBarTrigger className={buttonVariants({ variant: 'outline' })}>Edit shelf</ActionBarTrigger>
       <ActionBarContent aria-label="Shelf actions">
         <ActionBarBody>
           <Button size="sm" variant="ghost">

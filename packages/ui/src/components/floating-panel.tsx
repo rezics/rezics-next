@@ -1,9 +1,5 @@
-
 import { ark } from '@ark-ui/react/factory';
-import {
-  FloatingPanel as ArkFloatingPanel,
-  useFloatingPanelContext,
-} from '@ark-ui/react/floating-panel';
+import { FloatingPanel as ArkFloatingPanel, useFloatingPanelContext } from '@ark-ui/react/floating-panel';
 import { Portal } from '@ark-ui/react/portal';
 import { Maximize, MaximizeIcon, MinimizeIcon, MinusIcon } from 'lucide-react';
 import type React from 'react';
@@ -24,18 +20,13 @@ export const FloatingPanel = (props: React.ComponentProps<typeof ArkFloatingPane
   const { lazyMount = true, unmountOnExit = true, ...rest } = props;
 
   return (
-    <ArkFloatingPanel.Root
-      data-slot="floating-panel"
-      lazyMount={lazyMount}
-      unmountOnExit={unmountOnExit}
-      {...rest}
-    />
+    <ArkFloatingPanel.Root data-slot="floating-panel" lazyMount={lazyMount} unmountOnExit={unmountOnExit} {...rest} />
   );
 };
 
-export const FloatingPanelTrigger = (
-  props: React.ComponentProps<typeof ArkFloatingPanel.Trigger>,
-) => <ArkFloatingPanel.Trigger data-slot="floating-panel-trigger" {...props} />;
+export const FloatingPanelTrigger = (props: React.ComponentProps<typeof ArkFloatingPanel.Trigger>) => (
+  <ArkFloatingPanel.Trigger data-slot="floating-panel-trigger" {...props} />
+);
 
 interface FloatingPanelContentProps extends React.ComponentProps<typeof ArkFloatingPanel.Content> {
   /**
@@ -51,10 +42,7 @@ export const FloatingPanelContent = (props: FloatingPanelContentProps) => {
 
   return (
     <Portal>
-      <ArkFloatingPanel.Positioner
-        className="inset-s-(--x) top-(--y) z-50"
-        data-slot="floating-panel-positioner"
-      >
+      <ArkFloatingPanel.Positioner className="inset-s-(--x) top-(--y) z-50" data-slot="floating-panel-positioner">
         <ArkFloatingPanel.Content
           className={cn(
             '[--space:--spacing(4)]',
@@ -94,13 +82,11 @@ export const FloatingPanelContent = (props: FloatingPanelContentProps) => {
   );
 };
 
-export const FloatingPanelDragTrigger = (
-  props: React.ComponentProps<typeof ArkFloatingPanel.DragTrigger>,
-) => <ArkFloatingPanel.DragTrigger data-slot="floating-panel-drag-trigger" {...props} />;
+export const FloatingPanelDragTrigger = (props: React.ComponentProps<typeof ArkFloatingPanel.DragTrigger>) => (
+  <ArkFloatingPanel.DragTrigger data-slot="floating-panel-drag-trigger" {...props} />
+);
 
-export const FloatingPanelHeader = (
-  props: React.ComponentProps<typeof ArkFloatingPanel.Header>,
-) => {
+export const FloatingPanelHeader = (props: React.ComponentProps<typeof ArkFloatingPanel.Header>) => {
   const { className, ...rest } = props;
 
   return (
@@ -123,22 +109,16 @@ export const FloatingPanelHeader = (
   );
 };
 
-export const FloatingPanelControl = (
-  props: React.ComponentProps<typeof ArkFloatingPanel.Control>,
-) => {
+export const FloatingPanelControl = (props: React.ComponentProps<typeof ArkFloatingPanel.Control>) => {
   const { className, ...rest } = props;
 
   return (
-    <ArkFloatingPanel.Control
-      className={cn('ms-auto flex items-center gap-2 rtl:me-auto', className)}
-      {...rest}
-    />
+    <ArkFloatingPanel.Control className={cn('ms-auto flex items-center gap-2 rtl:me-auto', className)} {...rest} />
   );
 };
 
 interface FloatingPanelStageTriggerProps
-  extends Omit<React.ComponentProps<typeof ArkFloatingPanel.StageTrigger>, 'stage'>,
-    ButtonProps {}
+  extends Omit<React.ComponentProps<typeof ArkFloatingPanel.StageTrigger>, 'stage'>, ButtonProps {}
 
 export const FloatingPanelMinimize = (props: FloatingPanelStageTriggerProps) => {
   const { size = 'icon-xs', variant = 'ghost', ...rest } = props;
@@ -197,17 +177,17 @@ export const FloatingPanelTitle = (props: React.ComponentProps<typeof ArkFloatin
   );
 };
 
-export const FloatingPanelResizeTrigger = (
-  props: React.ComponentProps<typeof ArkFloatingPanel.ResizeTrigger>,
-) => <ArkFloatingPanel.ResizeTrigger data-slot="floating-panel-resize-trigger" {...props} />;
+export const FloatingPanelResizeTrigger = (props: React.ComponentProps<typeof ArkFloatingPanel.ResizeTrigger>) => (
+  <ArkFloatingPanel.ResizeTrigger data-slot="floating-panel-resize-trigger" {...props} />
+);
 
-export const FloatingPanelStageTrigger = (
-  props: React.ComponentProps<typeof ArkFloatingPanel.StageTrigger>,
-) => <ArkFloatingPanel.StageTrigger data-slot="floating-panel-stage-trigger" {...props} />;
+export const FloatingPanelStageTrigger = (props: React.ComponentProps<typeof ArkFloatingPanel.StageTrigger>) => (
+  <ArkFloatingPanel.StageTrigger data-slot="floating-panel-stage-trigger" {...props} />
+);
 
-export const FloatingPanelCloseTrigger = (
-  props: React.ComponentProps<typeof ArkFloatingPanel.CloseTrigger>,
-) => <ArkFloatingPanel.CloseTrigger data-slot="floating-panel-close-trigger" {...props} />;
+export const FloatingPanelCloseTrigger = (props: React.ComponentProps<typeof ArkFloatingPanel.CloseTrigger>) => (
+  <ArkFloatingPanel.CloseTrigger data-slot="floating-panel-close-trigger" {...props} />
+);
 
 interface FloatingPanelBodyProps extends React.ComponentProps<typeof ArkFloatingPanel.Body> {
   /**

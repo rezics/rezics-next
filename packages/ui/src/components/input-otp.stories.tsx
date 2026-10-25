@@ -66,16 +66,10 @@ const Completed = () => {
   return (
     <Field>
       <FieldLabel>Verification code</FieldLabel>
-      <InputOTP
-        onValueChange={({ valueAsString }) =>
-          setCode(valueAsString.length === 6 ? valueAsString : '')
-        }
-      >
+      <InputOTP onValueChange={({ valueAsString }) => setCode(valueAsString.length === 6 ? valueAsString : '')}>
         <Slots />
       </InputOTP>
-      <FieldHelper>
-        {code ? `Checking ${code}…` : 'Paste or type the code from your email.'}
-      </FieldHelper>
+      <FieldHelper>{code ? `Checking ${code}…` : 'Paste or type the code from your email.'}</FieldHelper>
     </Field>
   );
 };
@@ -96,12 +90,7 @@ export const Sizes: Story = {
   render: () => (
     <div className="flex flex-col gap-4">
       {(['sm', 'md', 'lg'] as const).map((size) => (
-        <InputOTP
-          aria-label={`Code (${size})`}
-          defaultValue={['1', '9', '7']}
-          key={size}
-          size={size}
-        >
+        <InputOTP aria-label={`Code (${size})`} defaultValue={['1', '9', '7']} key={size} size={size}>
           <Slots />
         </InputOTP>
       ))}

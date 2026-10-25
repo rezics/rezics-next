@@ -55,24 +55,13 @@ export const Default: Story = {
   render: (args) => <RealmRules {...args} />,
   async play({ args, canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('button', { name: 'Mark spoilers' })).toHaveAttribute(
-      'aria-expanded',
-      'true',
-    );
+    await expect(canvas.getByRole('button', { name: 'Mark spoilers' })).toHaveAttribute('aria-expanded', 'true');
     await userEvent.click(canvas.getByRole('button', { name: 'Rate what you read' }));
-    await expect(canvas.getByRole('button', { name: 'Rate what you read' })).toHaveAttribute(
-      'aria-expanded',
-      'true',
-    );
+    await expect(canvas.getByRole('button', { name: 'Rate what you read' })).toHaveAttribute('aria-expanded', 'true');
     await waitFor(() =>
-      expect(canvas.getByRole('button', { name: 'Mark spoilers' })).toHaveAttribute(
-        'aria-expanded',
-        'false',
-      ),
+      expect(canvas.getByRole('button', { name: 'Mark spoilers' })).toHaveAttribute('aria-expanded', 'false'),
     );
-    await expect(args.onValueChange).toHaveBeenCalledWith(
-      expect.objectContaining({ value: ['ratings'] }),
-    );
+    await expect(args.onValueChange).toHaveBeenCalledWith(expect.objectContaining({ value: ['ratings'] }));
   },
 };
 
@@ -83,14 +72,9 @@ export const KeyboardNavigation: Story = {
     await userEvent.tab();
     await expect(canvas.getByRole('button', { name: 'Mark spoilers' })).toHaveFocus();
     await userEvent.keyboard('{ArrowDown}');
-    await waitFor(() =>
-      expect(canvas.getByRole('button', { name: 'Rate what you read' })).toHaveFocus(),
-    );
+    await waitFor(() => expect(canvas.getByRole('button', { name: 'Rate what you read' })).toHaveFocus());
     await userEvent.keyboard('{Enter}');
-    await expect(canvas.getByRole('button', { name: 'Rate what you read' })).toHaveAttribute(
-      'aria-expanded',
-      'true',
-    );
+    await expect(canvas.getByRole('button', { name: 'Rate what you read' })).toHaveAttribute('aria-expanded', 'true');
   },
 };
 
@@ -99,14 +83,8 @@ export const Multiple: Story = {
   render: (args) => <RealmRules {...args} />,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('button', { name: 'Mark spoilers' })).toHaveAttribute(
-      'aria-expanded',
-      'true',
-    );
-    await expect(canvas.getByRole('button', { name: 'Appeals' })).toHaveAttribute(
-      'aria-expanded',
-      'true',
-    );
+    await expect(canvas.getByRole('button', { name: 'Mark spoilers' })).toHaveAttribute('aria-expanded', 'true');
+    await expect(canvas.getByRole('button', { name: 'Appeals' })).toHaveAttribute('aria-expanded', 'true');
   },
 };
 
@@ -129,8 +107,7 @@ export const Chinese: Story = {
       <AccordionItem value="q1">
         <AccordionTrigger>为什么《三体》有两个评分？</AccordionTrigger>
         <AccordionContent className="text-muted-foreground">
-          上方是「科幻」Realm
-          成员的评分；出版方提供的汇总评分作为来源统计单独显示，因为它的评分语境未知。
+          上方是「科幻」Realm 成员的评分；出版方提供的汇总评分作为来源统计单独显示，因为它的评分语境未知。
         </AccordionContent>
       </AccordionItem>
       <AccordionItem value="q2">
@@ -142,9 +119,10 @@ export const Chinese: Story = {
     </Accordion>
   ),
   async play({ canvasElement }) {
-    await expect(
-      within(canvasElement).getByRole('button', { name: '为什么《三体》有两个评分？' }),
-    ).toHaveAttribute('aria-expanded', 'true');
+    await expect(within(canvasElement).getByRole('button', { name: '为什么《三体》有两个评分？' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
   },
 };
 

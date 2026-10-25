@@ -1,7 +1,4 @@
-import {
-  ImageCropper as ArkImageCropper,
-  useImageCropper as useArkImageCropper,
-} from '@ark-ui/react/image-cropper';
+import { ImageCropper as ArkImageCropper, useImageCropper as useArkImageCropper } from '@ark-ui/react/image-cropper';
 import type React from 'react';
 import { cn } from '../utils.ts';
 
@@ -9,19 +6,17 @@ export const useImageCropper = useArkImageCropper;
 
 interface ImageCropperProps extends React.ComponentProps<typeof ArkImageCropper.Root> {}
 
-const rootClassName = (className?: string) => cn(
-  '[--cropper-accent:var(--color-white)] [--cropper-handler-size:--spacing(2)] [--cropper-handler-width:--spacing(1)]',
-  'relative',
-  'w-full',
-  'aspect-video',
-  className,
-);
+const rootClassName = (className?: string) =>
+  cn(
+    '[--cropper-accent:var(--color-white)] [--cropper-handler-size:--spacing(2)] [--cropper-handler-width:--spacing(1)]',
+    'relative',
+    'w-full',
+    'aspect-video',
+    className,
+  );
 
 const Viewport = ({ children }: { children?: React.ReactNode }) => (
-  <ArkImageCropper.Viewport
-    className={cn('size-full', 'overflow-hidden')}
-    data-slot="image-cropper-viewport"
-  >
+  <ArkImageCropper.Viewport className={cn('size-full', 'overflow-hidden')} data-slot="image-cropper-viewport">
     {children}
   </ArkImageCropper.Viewport>
 );
@@ -67,8 +62,7 @@ export const ImageCropperImage = (props: React.ComponentProps<typeof ArkImageCro
   );
 };
 
-interface ImageCropperSelectionProps
-  extends React.ComponentProps<typeof ArkImageCropper.Selection> {
+interface ImageCropperSelectionProps extends React.ComponentProps<typeof ArkImageCropper.Selection> {
   /**
    * The axis of the grid to show.
    *

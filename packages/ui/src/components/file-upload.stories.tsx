@@ -19,9 +19,7 @@ const file = (name: string, type: string, size: number) =>
 
 // A 1x1 ink-blue PNG, so the list can show a real image preview.
 const pixel = Uint8Array.from(
-  atob(
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mPQT0z/DwADTwHVg3tMwQAAAABJRU5ErkJggg==',
-  ),
+  atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mPQT0z/DwADTwHVg3tMwQAAAABJRU5ErkJggg=='),
   (char) => char.charCodeAt(0),
 );
 const cover = new File([pixel], 'three-body-problem-cover.png', {
@@ -67,9 +65,7 @@ const meta = {
         </FileUploadDropzoneIcon>
         <FileUploadTitle>Drop a cover image here</FileUploadTitle>
         <FileUploadDescription>or choose one from your device</FileUploadDescription>
-        <FileUploadHelper>
-          PNG, JPG or WebP, up to 5 MB. Portrait covers look best.
-        </FileUploadHelper>
+        <FileUploadHelper>PNG, JPG or WebP, up to 5 MB. Portrait covers look best.</FileUploadHelper>
       </FileUploadDropzone>
       <FileUploadList />
     </FileUpload>
@@ -78,20 +74,15 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-const hiddenInput = (canvasElement: HTMLElement) =>
-  canvasElement.querySelector('input[type=file]') as HTMLInputElement;
+const hiddenInput = (canvasElement: HTMLElement) => canvasElement.querySelector('input[type=file]') as HTMLInputElement;
 
 export const Default: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.upload(hiddenInput(canvasElement), cover);
-    await waitFor(() =>
-      expect(canvas.getByText('three-body-problem-cover.png')).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(canvas.getByText('three-body-problem-cover.png')).toBeInTheDocument());
     await userEvent.click(canvas.getByRole('button', { name: /delete/i }));
-    await waitFor(() =>
-      expect(canvas.queryByText('three-body-problem-cover.png')).not.toBeInTheDocument(),
-    );
+    await waitFor(() => expect(canvas.queryByText('three-body-problem-cover.png')).not.toBeInTheDocument());
   },
 };
 
@@ -112,9 +103,7 @@ export const Multiple: Story = {
       <FileUploadDropzone aria-label="Attach evidence for your appealScreenshots, PDFs or the original chapter fileUp to 5 files, 5 MB each.">
         <FileUploadDropzoneIcon />
         <FileUploadTitle>Attach evidence for your appeal</FileUploadTitle>
-        <FileUploadDescription>
-          Screenshots, PDFs or the original chapter file
-        </FileUploadDescription>
+        <FileUploadDescription>Screenshots, PDFs or the original chapter file</FileUploadDescription>
         <FileUploadHelper>Up to 5 files, 5 MB each.</FileUploadHelper>
       </FileUploadDropzone>
       <FileUploadList />

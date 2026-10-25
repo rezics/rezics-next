@@ -5,9 +5,17 @@ import tailwindcss from '@tailwindcss/vite';
 
 const local = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 const components = local('../src/components');
-const arkEntries = [...new Set(readdirSync(components).filter(file => file.endsWith('.tsx'))
-  .flatMap(file => [...readFileSync(`${components}/${file}`, 'utf8')
-    .matchAll(/from ['"](@ark-ui\/react(?:\/[\w-]+)?)/g)].map(match => match[1]!)))].sort();
+const arkEntries = [
+  ...new Set(
+    readdirSync(components)
+      .filter((file) => file.endsWith('.tsx'))
+      .flatMap((file) =>
+        [...readFileSync(`${components}/${file}`, 'utf8').matchAll(/from ['"](@ark-ui\/react(?:\/[\w-]+)?)/g)].map(
+          (match) => match[1]!,
+        ),
+      ),
+  ),
+].sort();
 
 const config: StorybookConfig = {
   framework: { name: '@storybook/react-vite', options: {} },

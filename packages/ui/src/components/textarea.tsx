@@ -5,9 +5,8 @@ import { cn } from '../utils.ts';
 export const Textarea = (props: React.ComponentProps<typeof ArkField.Textarea>) => {
   const { className, ...rest } = props;
   const field = useFieldContext();
-  const errorId = field?.invalid && field.ariaDescribedby?.split(' ').includes(field.ids.errorText)
-    ? field.ids.errorText
-    : undefined;
+  const errorId =
+    field?.invalid && field.ariaDescribedby?.split(' ').includes(field.ids.errorText) ? field.ids.errorText : undefined;
 
   return (
     <ArkField.Textarea

@@ -61,11 +61,7 @@ export const ComboboxControl = (props: React.ComponentProps<typeof ArkCombobox.C
 
   return (
     <ArkCombobox.Control
-      className={cn(
-        'group/combobox-control',
-        'relative flex flex-wrap items-center gap-1',
-        className,
-      )}
+      className={cn('group/combobox-control', 'relative flex flex-wrap items-center gap-1', className)}
       data-slot="combobox-control"
       {...rest}
     />
@@ -73,8 +69,7 @@ export const ComboboxControl = (props: React.ComponentProps<typeof ArkCombobox.C
 };
 
 interface ComboboxInputProps
-  extends Omit<React.ComponentProps<typeof ArkCombobox.Input>, 'size'>,
-    VariantProps<typeof inputVariants> {
+  extends Omit<React.ComponentProps<typeof ArkCombobox.Input>, 'size'>, VariantProps<typeof inputVariants> {
   /**
    * Whether the control is disabled.
    *
@@ -97,14 +92,7 @@ interface ComboboxInputProps
 }
 
 export const ComboboxInput = (props: ComboboxInputProps) => {
-  const {
-    size = 'md',
-    showTrigger = true,
-    showClear = false,
-    className,
-    children,
-    ...rest
-  } = props;
+  const { size = 'md', showTrigger = true, showClear = false, className, children, ...rest } = props;
 
   const { inputValue } = useCombobox();
 
@@ -227,9 +215,7 @@ export const ComboboxGroup = (props: ComboboxGroupProps) => {
   );
 };
 
-export const ComboboxGroupLabel = (
-  props: React.ComponentProps<typeof ArkCombobox.ItemGroupLabel>,
-) => {
+export const ComboboxGroupLabel = (props: React.ComponentProps<typeof ArkCombobox.ItemGroupLabel>) => {
   const { className, ...rest } = props;
 
   return (
@@ -268,8 +254,7 @@ export const comboboxItemVariants = tv({
 });
 
 interface ComboboxItemProps
-  extends React.ComponentProps<typeof ArkCombobox.Item>,
-    VariantProps<typeof comboboxItemVariants> {}
+  extends React.ComponentProps<typeof ArkCombobox.Item>, VariantProps<typeof comboboxItemVariants> {}
 
 export const ComboboxItem = (props: ComboboxItemProps) => {
   const { showIndicator = true, className, children, ...rest } = props;
@@ -311,11 +296,5 @@ export const ComboboxEmpty = (props: React.ComponentProps<typeof ArkCombobox.Emp
 export const ComboboxList = (props: React.ComponentProps<typeof ArkComboboxList>) => {
   const { className, ...rest } = props;
 
-  return (
-    <ArkCombobox.List
-      className={cn('flex flex-col', className)}
-      data-slot="combobox-list"
-      {...rest}
-    />
-  );
+  return <ArkCombobox.List className={cn('flex flex-col', className)} data-slot="combobox-list" {...rest} />;
 };

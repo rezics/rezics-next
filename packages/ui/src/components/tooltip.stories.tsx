@@ -107,8 +107,8 @@ export const LongLabel: Story = {
           <Button variant="outline">Source statistic</Button>
         </TooltipTrigger>
         <TooltipContent className="max-w-64">
-          Tor Books reports 4.1 from 212,000 ratings. REZICS shows it apart from Realm ratings
-          because its Context is unknown.
+          Tor Books reports 4.1 from 212,000 ratings. REZICS shows it apart from Realm ratings because its Context is
+          unknown.
         </TooltipContent>
       </Tooltip>
     </div>

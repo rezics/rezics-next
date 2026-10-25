@@ -22,15 +22,7 @@ interface RatingProps extends React.ComponentProps<typeof ArkRatingGroup.Root> {
 }
 
 export const Rating = (props: RatingProps) => {
-  const {
-    icon = <StarIcon />,
-    size = 'md',
-    allowHalf = false,
-    count = 5,
-    className,
-    children,
-    ...rest
-  } = props;
+  const { icon = <StarIcon />, size = 'md', allowHalf = false, count = 5, className, children, ...rest } = props;
 
   return (
     <ArkRatingGroup.Root

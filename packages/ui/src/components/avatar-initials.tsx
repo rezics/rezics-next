@@ -4,9 +4,10 @@
 const ideographic = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
 // Alphabets whose initials combine. A second letter joins only from the same one,
 // so "Daniel Chen 陈丹尼" is DC and "Daniel 陈丹尼" is D, never D陈.
-const alphabets = ['Latin', 'Cyrillic', 'Greek', 'Armenian', 'Georgian', 'Hebrew', 'Arabic', 'Devanagari', 'Thai']
-  .map(script => new RegExp(`^\\p{Script=${script}}`, 'u'));
-const alphabetOf = (letter: string) => alphabets.findIndex(pattern => pattern.test(letter));
+const alphabets = ['Latin', 'Cyrillic', 'Greek', 'Armenian', 'Georgian', 'Hebrew', 'Arabic', 'Devanagari', 'Thai'].map(
+  (script) => new RegExp(`^\\p{Script=${script}}`, 'u'),
+);
+const alphabetOf = (letter: string) => alphabets.findIndex((pattern) => pattern.test(letter));
 
 /** A word's first letter, past any leading punctuation or digits. */
 const firstLetter = (word: string) => word.match(/\p{L}/u)?.[0] ?? '';
@@ -19,7 +20,7 @@ const firstLetter = (word: string) => word.match(/\p{L}/u)?.[0] ?? '';
  * 林梅" → LM, "élodie" → É). "·", "/", "|" and commas separate words.
  */
 export function initials(name: string, fallback = '?'): string {
-  const words = name.split(/[\s·・,，/|]+/u).filter(word => /\p{L}/u.test(word));
+  const words = name.split(/[\s·・,，/|]+/u).filter((word) => /\p{L}/u.test(word));
   const first = firstLetter(words[0] ?? '');
   if (!first) return name.match(/\p{N}/u)?.[0] ?? fallback;
   if (ideographic.test(first)) return first;

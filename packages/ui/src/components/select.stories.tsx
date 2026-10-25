@@ -113,16 +113,28 @@ type Story = StoryObj<typeof meta>;
 
 function PlainChoiceForm() {
   const [submitted, setSubmitted] = useState('');
-  return <form onSubmit={event => { event.preventDefault();
-    setSubmitted(String(new FormData(event.currentTarget).get('language') ?? '')); }}>
-    <Field>
-      <FieldLabel>Language</FieldLabel>
-      <ChoiceSelect name="language" required options={[{ value: '', label: 'Choose a language' },
-        { value: 'und', label: 'Undetermined' }]} />
-    </Field>
-    <button type="submit">Continue</button>
-    <output>{submitted}</output>
-  </form>;
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        setSubmitted(String(new FormData(event.currentTarget).get('language') ?? ''));
+      }}
+    >
+      <Field>
+        <FieldLabel>Language</FieldLabel>
+        <ChoiceSelect
+          name="language"
+          required
+          options={[
+            { value: '', label: 'Choose a language' },
+            { value: 'und', label: 'Undetermined' },
+          ]}
+        />
+      </Field>
+      <button type="submit">Continue</button>
+      <output>{submitted}</output>
+    </form>
+  );
 }
 
 export const PlainChoice: Story = {
@@ -183,12 +195,7 @@ export const Grouped: Story = {
   render: ({ defaultValue, defaultOpen, multiple }) => (
     <Field>
       <FieldLabel>Genre</FieldLabel>
-      <Select
-        collection={genres}
-        defaultOpen={defaultOpen}
-        defaultValue={defaultValue}
-        multiple={multiple}
-      >
+      <Select collection={genres} defaultOpen={defaultOpen} defaultValue={defaultValue} multiple={multiple}>
         <SelectTrigger className="w-full">
           <SelectValue placeholder="Choose a genre" />
         </SelectTrigger>
@@ -221,12 +228,7 @@ export const Multiple: Story = {
   render: ({ defaultValue, defaultOpen, multiple }) => (
     <Field>
       <FieldLabel>Genres</FieldLabel>
-      <Select
-        collection={genres}
-        defaultOpen={defaultOpen}
-        defaultValue={defaultValue}
-        multiple={multiple}
-      >
+      <Select collection={genres} defaultOpen={defaultOpen} defaultValue={defaultValue} multiple={multiple}>
         <SelectTrigger className="w-full" showClear>
           <SelectValue placeholder="Any genre" />
         </SelectTrigger>
@@ -309,10 +311,7 @@ export const Invalid: Story = {
     </Field>
   ),
   async play({ canvasElement }) {
-    await expect(within(canvasElement).getByRole('combobox')).toHaveAttribute(
-      'aria-invalid',
-      'true',
-    );
+    await expect(within(canvasElement).getByRole('combobox')).toHaveAttribute('aria-invalid', 'true');
   },
 };
 

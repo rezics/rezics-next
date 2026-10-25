@@ -2,14 +2,7 @@ import type { Decorator, Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import { cn } from '../utils.ts';
 import { Button } from './button.tsx';
-import {
-  Frame,
-  FrameDescription,
-  FrameFooter,
-  FrameHeader,
-  FramePanel,
-  FrameTitle,
-} from './frame.tsx';
+import { Frame, FrameDescription, FrameFooter, FrameHeader, FramePanel, FrameTitle } from './frame.tsx';
 
 const surface: Decorator = (Story, { parameters }) => (
   <div className={cn('max-w-xl bg-background p-6 font-sans text-foreground')}>
@@ -100,9 +93,9 @@ export const LongContent: Story = {
       />
       <FramePanel>
         <p className="text-sm leading-relaxed">
-          讨论《三体》《球状闪电》等作品时，请为第一章之后的情节加上剧透标记。English-language
-          discussion is welcome in every thread; please keep quotes from translations attributed to
-          the translator, for example Ken Liu or Joel Martinsen.
+          讨论《三体》《球状闪电》等作品时，请为第一章之后的情节加上剧透标记。English-language discussion is welcome in
+          every thread; please keep quotes from translations attributed to the translator, for example Ken Liu or Joel
+          Martinsen.
         </p>
       </FramePanel>
     </Frame>

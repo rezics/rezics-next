@@ -25,9 +25,7 @@ const meta = {
   },
   decorators: [
     (Story) => (
-      <main
-        className={'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'}
-      >
+      <main className={'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'}>
         <Story />
       </main>
     ),
@@ -46,8 +44,7 @@ const ReadingTimer = ({ dark = false }: { dark?: boolean }) => (
       startMs={90_000}
       targetMs={0}
       translations={{
-        areaLabel: (_time, formatted) =>
-          `${formatted.minutes} minutes and ${formatted.seconds} seconds remaining`,
+        areaLabel: (_time, formatted) => `${formatted.minutes} minutes and ${formatted.seconds} seconds remaining`,
       }}
     >
       <TimerArea>

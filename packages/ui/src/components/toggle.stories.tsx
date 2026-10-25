@@ -1,12 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import {
-  BellIcon,
-  BellOffIcon,
-  BoldIcon,
-  BookmarkIcon,
-  EyeOffIcon,
-  ItalicIcon,
-} from 'lucide-react';
+import { BellIcon, BellOffIcon, BoldIcon, BookmarkIcon, EyeOffIcon, ItalicIcon } from 'lucide-react';
 import { expect, userEvent, within } from 'storybook/test';
 import { Toggle, ToggleIndicator } from './toggle.tsx';
 
@@ -114,10 +107,7 @@ export const WithIndicator: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Follow thread' }));
-    await expect(canvas.getByRole('button', { name: 'Following' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    await expect(canvas.getByRole('button', { name: 'Following' })).toHaveAttribute('aria-pressed', 'true');
   },
 };
 

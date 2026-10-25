@@ -1,4 +1,3 @@
-
 import { ark } from '@ark-ui/react/factory';
 import { Field as ArkField, useFieldContext as useArkFieldContext } from '@ark-ui/react/field';
 import { Fieldset as ArkFieldset } from '@ark-ui/react/fieldset';
@@ -49,9 +48,7 @@ const fieldVariants = tv({
   },
 });
 
-interface FieldProps
-  extends React.ComponentProps<typeof ArkField.Root>,
-    VariantProps<typeof fieldVariants> {}
+interface FieldProps extends React.ComponentProps<typeof ArkField.Root>, VariantProps<typeof fieldVariants> {}
 
 export const Field = (props: FieldProps) => {
   const { orientation = 'vertical', reverse = false, className, ...rest } = props;
@@ -142,12 +139,7 @@ export const FieldContent = (props: React.ComponentProps<typeof ark.div>) => {
 
   return (
     <ark.div
-      className={cn(
-        'group/field-content',
-        'flex flex-1 flex-col gap-1.5',
-        'leading-snug',
-        className,
-      )}
+      className={cn('group/field-content', 'flex flex-1 flex-col gap-1.5', 'leading-snug', className)}
       data-slot="field-content"
       {...rest}
     />
@@ -181,11 +173,7 @@ export const FieldRequiredIndicator = (props: React.ComponentProps<typeof ark.sp
   return (
     <ArkField.RequiredIndicator
       aria-hidden
-      className={cn(
-        'select-none text-destructive text-sm',
-        'dark:text-destructive-foreground',
-        className,
-      )}
+      className={cn('select-none text-destructive text-sm', 'dark:text-destructive-foreground', className)}
       data-slot="field-required-indicator"
       {...rest}
     >
@@ -237,13 +225,7 @@ export const FieldSeparator = (props: React.ComponentProps<typeof ark.div>) => {
 
   return (
     <ark.div
-      className={cn(
-        'relative',
-        'h-5',
-        '-my-2 group-data-[variant=outline]/field-group:-mb-2',
-        'text-sm',
-        className,
-      )}
+      className={cn('relative', 'h-5', '-my-2 group-data-[variant=outline]/field-group:-mb-2', 'text-sm', className)}
       data-content={!!children}
       data-slot="field-separator"
       {...rest}
@@ -252,13 +234,7 @@ export const FieldSeparator = (props: React.ComponentProps<typeof ark.div>) => {
 
       {!!children && (
         <span
-          className={cn(
-            'relative block',
-            'w-fit',
-            'mx-auto px-2',
-            'bg-background',
-            'text-muted-foreground text-sm',
-          )}
+          className={cn('relative block', 'w-fit', 'mx-auto px-2', 'bg-background', 'text-muted-foreground text-sm')}
         >
           {children}
         </span>
@@ -315,11 +291,7 @@ export const FieldSetError = (props: React.ComponentProps<typeof ArkFieldset.Err
 
   return (
     <ArkFieldset.ErrorText
-      className={cn(
-        'font-normal text-destructive text-sm',
-        'dark:text-destructive-foreground',
-        className,
-      )}
+      className={cn('font-normal text-destructive text-sm', 'dark:text-destructive-foreground', className)}
       data-slot="field-set-error"
       {...rest}
     />

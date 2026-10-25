@@ -1,4 +1,3 @@
-
 import {
   ToggleGroup as ArkToggleGroup,
   useToggleGroupContext as useArkToggleGroupContext,
@@ -22,9 +21,7 @@ type ToggleGroupContextProps = Pick<ToggleProps, 'variant' | 'size'> & {
 
 const ToggleGroupContext = React.createContext({} as ToggleGroupContextProps);
 
-interface ToggleGroupProps
-  extends React.ComponentProps<typeof ArkToggleGroup.Root>,
-    ToggleGroupContextProps {}
+interface ToggleGroupProps extends React.ComponentProps<typeof ArkToggleGroup.Root>, ToggleGroupContextProps {}
 
 // Aura: items keep their own rounding. With no spacing, an outline group becomes one
 // bordered tray and its items drop their borders, like a segmented control.

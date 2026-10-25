@@ -1,4 +1,3 @@
-
 import { Format as ArkFormat } from '@ark-ui/react/format';
 
 export const FormatByte = (props: React.ComponentProps<typeof ArkFormat.Byte>) => (

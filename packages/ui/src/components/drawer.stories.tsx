@@ -35,10 +35,7 @@ const ShelfDrawer = (props: React.ComponentProps<typeof Drawer>) => (
       <Button>Add to shelf</Button>
     </DrawerTrigger>
     <DrawerContent>
-      <DrawerHeader
-        description="Liu Cixin · translated by Ken Liu · 2014"
-        title="The Three-Body Problem"
-      />
+      <DrawerHeader description="Liu Cixin · translated by Ken Liu · 2014" title="The Three-Body Problem" />
       <DrawerBody>
         <div className="flex flex-col gap-2">
           {shelves.map((shelf) => (
@@ -63,9 +60,7 @@ export const Bottom: Story = {
   render: () => <ShelfDrawer />,
   async play({ canvasElement }) {
     const drawer = await openDrawer(canvasElement);
-    await expect(
-      within(drawer).getByRole('heading', { name: 'The Three-Body Problem' }),
-    ).toBeVisible();
+    await expect(within(drawer).getByRole('heading', { name: 'The Three-Body Problem' })).toBeVisible();
     await expect(within(drawer).getByRole('button', { name: 'Want to read' })).toHaveFocus();
   },
 };
@@ -164,8 +159,8 @@ export const InsetWithFooter: Story = {
           title="Quick reply"
         />
         <DrawerBody className="text-start text-sm">
-          The dark forest reads better as a thought experiment about trust than as a prediction. The
-          sequel’s deterrence arc makes that explicit.
+          The dark forest reads better as a thought experiment about trust than as a prediction. The sequel’s deterrence
+          arc makes that explicit.
         </DrawerBody>
         <DrawerFooter>
           <Button>Post reply</Button>

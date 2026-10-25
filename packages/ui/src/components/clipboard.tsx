@@ -24,10 +24,7 @@ export const Clipboard = (props: ClipboardProps) => {
   return (
     <ArkClipboard.Root className={cn(rootClassName)} data-slot="clipboard" {...rest}>
       {label !== undefined && <ClipboardLabel>{label}</ClipboardLabel>}
-      <ArkClipboard.Control
-        className={cn('flex items-center gap-2', className)}
-        data-slot="clipboard-control"
-      >
+      <ArkClipboard.Control className={cn('flex items-center gap-2', className)} data-slot="clipboard-control">
         {children}
       </ArkClipboard.Control>
     </ArkClipboard.Root>
@@ -53,18 +50,11 @@ export const ClipboardTrigger = (props: React.ComponentProps<typeof ArkClipboard
 export const ClipboardInput = (props: React.ComponentProps<typeof ArkClipboard.Input>) => {
   const { className, ...rest } = props;
 
-  return (
-    <ArkClipboard.Input
-      className={cn(inputVariants(), className)}
-      data-slot="clipboard-input"
-      {...rest}
-    />
-  );
+  return <ArkClipboard.Input className={cn(inputVariants(), className)} data-slot="clipboard-input" {...rest} />;
 };
 
 interface ClipboardValueProps
-  extends React.ComponentProps<typeof ArkClipboard.ValueText>,
-    VariantProps<typeof inputVariants> {}
+  extends React.ComponentProps<typeof ArkClipboard.ValueText>, VariantProps<typeof inputVariants> {}
 
 export const ClipboardValue = (props: ClipboardValueProps) => {
   const { size, className, ...rest } = props;
@@ -72,11 +62,7 @@ export const ClipboardValue = (props: ClipboardValueProps) => {
   return (
     <ArkClipboard.ValueText
       // Shares the input surface so a copied value looks like a read-only field.
-      className={cn(
-        inputVariants({ size }),
-        'inline-flex items-center hover:border-border/80',
-        className,
-      )}
+      className={cn(inputVariants({ size }), 'inline-flex items-center hover:border-border/80', className)}
       data-slot="clipboard-value"
       {...rest}
     />

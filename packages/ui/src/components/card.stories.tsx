@@ -1,14 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Button } from './button.tsx';
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from './card.tsx';
+import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from './card.tsx';
 
 const meta = {
   title: 'Rezics UI/Card',

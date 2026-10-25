@@ -1,4 +1,3 @@
-
 import { ark } from '@ark-ui/react/factory';
 import React from 'react';
 import { tv, type VariantProps } from 'tailwind-variants';
@@ -68,9 +67,7 @@ const itemVariants = tv({
   },
 });
 
-interface ItemProps
-  extends React.ComponentProps<typeof ark.div>,
-    VariantProps<typeof itemVariants> {}
+interface ItemProps extends React.ComponentProps<typeof ark.div>, VariantProps<typeof itemVariants> {}
 
 export const Item = (props: ItemProps) => {
   const { variant = 'default', className, ...rest } = props;
@@ -112,9 +109,7 @@ const itemMediaVariants = tv({
   },
 });
 
-interface ItemMediaProps
-  extends React.ComponentProps<typeof ark.div>,
-    VariantProps<typeof itemMediaVariants> {}
+interface ItemMediaProps extends React.ComponentProps<typeof ark.div>, VariantProps<typeof itemMediaVariants> {}
 
 export const ItemMedia = (props: ItemMediaProps) => {
   const { variant = 'default', className, ...rest } = props;
@@ -134,11 +129,7 @@ export const ItemContent = (props: React.ComponentProps<typeof ark.div>) => {
 
   return (
     <ark.div
-      className={cn(
-        'flex flex-1 flex-col gap-0.5',
-        '[&+[data-slot=item-content]]:flex-none',
-        className,
-      )}
+      className={cn('flex flex-1 flex-col gap-0.5', '[&+[data-slot=item-content]]:flex-none', className)}
       data-slot="item-content"
       {...rest}
     />
@@ -183,13 +174,7 @@ export const ItemDescription = (props: React.ComponentProps<typeof ark.p>) => {
 export const ItemActions = (props: React.ComponentProps<typeof ark.div>) => {
   const { className, ...rest } = props;
 
-  return (
-    <ark.div
-      className={cn('flex items-center gap-2', className)}
-      data-slot="item-actions"
-      {...rest}
-    />
-  );
+  return <ark.div className={cn('flex items-center gap-2', className)} data-slot="item-actions" {...rest} />;
 };
 
 export const ItemHeader = (props: React.ComponentProps<typeof ark.div>) => {

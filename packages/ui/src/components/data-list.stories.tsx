@@ -40,9 +40,7 @@ const EditionList = (props: React.ComponentProps<typeof DataList>) => (
     {edition.map(([label, value]) => (
       <DataListItem key={label}>
         <DataListItemLabel>{label}</DataListItemLabel>
-        <DataListItemValue className={label === 'ISBN' ? 'font-mono' : undefined}>
-          {value}
-        </DataListItemValue>
+        <DataListItemValue className={label === 'ISBN' ? 'font-mono' : undefined}>{value}</DataListItemValue>
       </DataListItem>
     ))}
   </DataList>
@@ -106,9 +104,8 @@ export const LongContent: Story = {
       <DataListItem>
         <DataListItemLabel>简介</DataListItemLabel>
         <DataListItemValue>
-          文化大革命如火如荼进行的同时，军方探寻外星文明的绝秘计划「红岸工程」取得了突破性进展。The
-          novel was translated into English by Ken Liu and won the Hugo Award for Best Novel in
-          2015.
+          文化大革命如火如荼进行的同时，军方探寻外星文明的绝秘计划「红岸工程」取得了突破性进展。The novel was translated
+          into English by Ken Liu and won the Hugo Award for Best Novel in 2015.
         </DataListItemValue>
       </DataListItem>
     </DataList>

@@ -45,9 +45,7 @@ export const DatePickerTrigger = (props: React.ComponentProps<typeof ArkDatePick
   );
 };
 
-interface DatePickerInputProps
-  extends Omit<React.ComponentProps<typeof ArkDatePicker.Input>, 'size'>,
-    InputProps {}
+interface DatePickerInputProps extends Omit<React.ComponentProps<typeof ArkDatePicker.Input>, 'size'>, InputProps {}
 
 export const DatePickerInput = (props: DatePickerInputProps) => {
   const { size, className, ...rest } = props;
@@ -131,14 +129,10 @@ export const DatePickerValue = (props: React.ComponentProps<typeof ArkDatePicker
   const { className, ...rest } = props;
 
   return (
-    <ArkDatePicker.ValueText
-      className={cn('font-medium text-sm', className)}
-      data-slot="date-picker-value"
-      {...rest}
-    />
+    <ArkDatePicker.ValueText className={cn('font-medium text-sm', className)} data-slot="date-picker-value" {...rest} />
   );
 };
 
-export const DatePickerPresetTrigger = (
-  props: React.ComponentProps<typeof ArkDatePicker.PresetTrigger>,
-) => <CalendarPresetTrigger data-slot="date-picker-preset-trigger" {...props} />;
+export const DatePickerPresetTrigger = (props: React.ComponentProps<typeof ArkDatePicker.PresetTrigger>) => (
+  <CalendarPresetTrigger data-slot="date-picker-preset-trigger" {...props} />
+);

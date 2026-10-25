@@ -8,20 +8,13 @@ import { XIcon } from 'lucide-react';
 import type React from 'react';
 import { useUiCopy } from '../i18n/copy.ts';
 import { cn } from '../utils.ts';
-import {
-  InputGroup,
-  InputGroupButton,
-  InputGroupInput,
-  type InputGroupProps,
-} from './input-group.tsx';
+import { InputGroup, InputGroupButton, InputGroupInput, type InputGroupProps } from './input-group.tsx';
 
 export const useTagsInput = useArkTagsInput;
 export const useTagsInputContext = useArkTagsInputContext;
 export const TagsInputContext = ArkTagsInput.Context;
 
-interface TagsInputProps
-  extends React.ComponentProps<typeof ArkTagsInput.Root>,
-    Pick<InputGroupProps, 'size'> {
+interface TagsInputProps extends React.ComponentProps<typeof ArkTagsInput.Root>, Pick<InputGroupProps, 'size'> {
   /**
    * Whether to show the clear button.
    *
@@ -35,16 +28,7 @@ interface TagsInputProps
 }
 
 export const TagsInput = (props: TagsInputProps) => {
-  const {
-    size = 'md',
-    showClear,
-    placeholder,
-    editable = false,
-    tabIndex,
-    className,
-    children,
-    ...rest
-  } = props;
+  const { size = 'md', showClear, placeholder, editable = false, tabIndex, className, children, ...rest } = props;
 
   return (
     <ArkTagsInput.Root
@@ -66,8 +50,7 @@ export const TagsInput = (props: TagsInputProps) => {
 };
 
 interface TagsInputControlProps
-  extends React.ComponentProps<typeof ArkTagsInput.Control>,
-    Pick<InputGroupProps, 'size'> {
+  extends React.ComponentProps<typeof ArkTagsInput.Control>, Pick<InputGroupProps, 'size'> {
   /**
    * Whether to show the clear button.
    *
@@ -102,9 +85,7 @@ export const TagsInputControl = (props: TagsInputControlProps) => {
   );
 };
 
-interface TagsInputItemProps
-  extends React.ComponentProps<typeof ArkTagsInput.Item>,
-    Pick<InputGroupProps, 'size'> {
+interface TagsInputItemProps extends React.ComponentProps<typeof ArkTagsInput.Item>, Pick<InputGroupProps, 'size'> {
   /**
    * Whether to show the clear trigger.
    *
@@ -141,9 +122,7 @@ export const TagsInputItem = (props: TagsInputItemProps) => {
   );
 };
 
-export const TagsInputItemPreview = (
-  props: React.ComponentProps<typeof ArkTagsInput.ItemPreview>,
-) => {
+export const TagsInputItemPreview = (props: React.ComponentProps<typeof ArkTagsInput.ItemPreview>) => {
   const { className, ...rest } = props;
 
   return (
@@ -158,18 +137,10 @@ export const TagsInputItemPreview = (
 export const TagsInputItemText = (props: React.ComponentProps<typeof ArkTagsInput.ItemText>) => {
   const { className, ...rest } = props;
 
-  return (
-    <ArkTagsInput.ItemText
-      className={cn('truncate', className)}
-      data-slot="tags-input-item-text"
-      {...rest}
-    />
-  );
+  return <ArkTagsInput.ItemText className={cn('truncate', className)} data-slot="tags-input-item-text" {...rest} />;
 };
 
-export const TagsInputItemDeleteTrigger = (
-  props: React.ComponentProps<typeof ArkTagsInput.ItemDeleteTrigger>,
-) => {
+export const TagsInputItemDeleteTrigger = (props: React.ComponentProps<typeof ArkTagsInput.ItemDeleteTrigger>) => {
   const { className, children, ...rest } = props;
 
   return (
@@ -195,9 +166,7 @@ export const TagsInputItemDeleteTrigger = (
 
 export const TagsInputItemInput = (props: React.ComponentProps<typeof ArkTagsInput.ItemInput>) => (
   <ArkTagsInput.ItemInput asChild data-slot="tags-input-item-input" {...props}>
-    <InputGroupInput
-      className={cn('px-1 text-xs', 'h-6 in-data-[size=lg]:h-7 in-data-[size=sm]:h-5')}
-    />
+    <InputGroupInput className={cn('px-1 text-xs', 'h-6 in-data-[size=lg]:h-7 in-data-[size=sm]:h-5')} />
   </ArkTagsInput.ItemInput>
 );
 
@@ -215,27 +184,19 @@ export const TagsInputInput = (props: React.ComponentProps<typeof ArkTagsInput.I
       {...props}
     >
       <InputGroupInput
-        className={cn(
-          'w-0 min-w-24 max-w-full flex-1 px-2',
-          'h-7 in-data-[size=lg]:h-8 in-data-[size=sm]:h-6',
-        )}
+        className={cn('w-0 min-w-24 max-w-full flex-1 px-2', 'h-7 in-data-[size=lg]:h-8 in-data-[size=sm]:h-6')}
       />
     </ArkTagsInput.Input>
   );
 };
 
-export const TagsInputClearTrigger = (
-  props: React.ComponentProps<typeof ArkTagsInput.ClearTrigger>,
-) => {
+export const TagsInputClearTrigger = (props: React.ComponentProps<typeof ArkTagsInput.ClearTrigger>) => {
   const { className, children, ...rest } = props;
 
   return (
     <ArkTagsInput.ClearTrigger asChild data-slot="tags-input-clear-trigger" {...rest}>
       <InputGroupButton
-        className={cn(
-          'ms-auto shrink-0 self-center text-muted-foreground hover:text-foreground',
-          className,
-        )}
+        className={cn('ms-auto shrink-0 self-center text-muted-foreground hover:text-foreground', className)}
         size="icon-xs"
         variant="ghost"
       >
@@ -246,8 +207,7 @@ export const TagsInputClearTrigger = (
 };
 
 interface TagsInputRootProviderProps
-  extends React.ComponentProps<typeof ArkTagsInput.RootProvider>,
-    Pick<InputGroupProps, 'size'> {
+  extends React.ComponentProps<typeof ArkTagsInput.RootProvider>, Pick<InputGroupProps, 'size'> {
   /**
    * Whether to show the clear button.
    *

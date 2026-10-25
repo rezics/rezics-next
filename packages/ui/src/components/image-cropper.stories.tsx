@@ -34,24 +34,11 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-const Crop = ({
-  dark = false,
-  cropShape = 'rectangle',
-}: {
-  dark?: boolean;
-  cropShape?: 'rectangle' | 'circle';
-}) => (
+const Crop = ({ dark = false, cropShape = 'rectangle' }: { dark?: boolean; cropShape?: 'rectangle' | 'circle' }) => (
   <div className={dark ? 'rounded-2xl bg-background p-5 text-foreground' : undefined}>
     <p className="mb-3 font-medium text-foreground">Crop a Realm cover</p>
-    <ImageCropper
-      aria-label="Crop the Realm cover image"
-      aspectRatio={16 / 9}
-      cropShape={cropShape}
-    >
-      <ImageCropperImage
-        alt="Stylized mountain landscape titled Realm field notes"
-        src={coverArt}
-      />
+    <ImageCropper aria-label="Crop the Realm cover image" aspectRatio={16 / 9} cropShape={cropShape}>
+      <ImageCropperImage alt="Stylized mountain landscape titled Realm field notes" src={coverArt} />
       <ImageCropperSelection />
     </ImageCropper>
     <p className="mt-3 text-sm text-muted-foreground">
@@ -64,12 +51,8 @@ export const RealmCover: Story = {
   render: () => <Crop />,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(
-      canvas.getByRole('group', { name: 'Crop the Realm cover image' }),
-    ).toBeInTheDocument();
-    await expect(
-      canvas.getByRole('slider', { name: 'Crop selection area (rectangle)' }),
-    ).toBeInTheDocument();
+    await expect(canvas.getByRole('group', { name: 'Crop the Realm cover image' })).toBeInTheDocument();
+    await expect(canvas.getByRole('slider', { name: 'Crop selection area (rectangle)' })).toBeInTheDocument();
   },
 };
 

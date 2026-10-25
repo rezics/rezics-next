@@ -69,12 +69,7 @@ export const CommandDialogContent = (props: CommandDialogContentProps) => {
 
       <DialogPositioner>
         <ArkDialog.Content
-          className={cn(
-            'max-sm:row-start-1',
-            dialogContentVariants({ size }),
-            'border-0 p-0',
-            className,
-          )}
+          className={cn('max-sm:row-start-1', dialogContentVariants({ size }), 'border-0 p-0', className)}
           data-slot="command-dialog-content"
           ref={mergedRef}
           {...rest}
@@ -96,14 +91,7 @@ export const CommandDialogContent = (props: CommandDialogContentProps) => {
  * The popup dialog is labelled “Command palette” by default; pass `aria-label` to override it.
  */
 export const Command: ArkCombobox.RootComponent = (props) => {
-  const {
-    lazyMount = true,
-    unmountOnExit = true,
-    className,
-    children,
-    'aria-label': ariaLabelProp,
-    ...rest
-  } = props;
+  const { lazyMount = true, unmountOnExit = true, className, children, 'aria-label': ariaLabelProp, ...rest } = props;
   const copy = useUiCopy();
   const ariaLabel = ariaLabelProp ?? copy.commandPalette;
 

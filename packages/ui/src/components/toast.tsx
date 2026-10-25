@@ -1,11 +1,5 @@
-
 import { Portal } from '@ark-ui/react/portal';
-import {
-  Toast as ArkToast,
-  Toaster as ArkToaster,
-  createToaster,
-  useToastContext,
-} from '@ark-ui/react/toast';
+import { Toast as ArkToast, Toaster as ArkToaster, createToaster, useToastContext } from '@ark-ui/react/toast';
 import { CircleAlertIcon, CircleCheckIcon, InfoIcon, TriangleAlertIcon, XIcon } from 'lucide-react';
 import type React from 'react';
 import { cn } from '../utils.ts';
@@ -21,8 +15,7 @@ export const toast = createToaster({
   max: 3,
 });
 
-interface ToasterProps
-  extends Omit<React.ComponentProps<typeof ArkToaster>, 'toaster' | 'children'> {
+interface ToasterProps extends Omit<React.ComponentProps<typeof ArkToaster>, 'toaster' | 'children'> {
   /**
    * Toaster instance
    */
@@ -125,10 +118,7 @@ export const ToastItem = (props: ToastItemProps) => {
           </ArkToast.Title>
 
           {toastData.description && (
-            <ArkToast.Description
-              className="text-muted-foreground text-sm"
-              data-slot="toast-description"
-            >
+            <ArkToast.Description className="text-muted-foreground text-sm" data-slot="toast-description">
               {toastData.description}
             </ArkToast.Description>
           )}
@@ -137,11 +127,7 @@ export const ToastItem = (props: ToastItemProps) => {
 
       <div className="flex items-center gap-2">
         {toastData.action && (
-          <ArkToast.ActionTrigger
-            asChild
-            data-slot="toast-action-trigger"
-            onClick={toastData.action.onClick}
-          >
+          <ArkToast.ActionTrigger asChild data-slot="toast-action-trigger" onClick={toastData.action.onClick}>
             <Button size="sm" variant="secondary">
               {toastData.action.label}
             </Button>
@@ -150,12 +136,7 @@ export const ToastItem = (props: ToastItemProps) => {
 
         {!isExplicitClosable && (
           <ArkToast.CloseTrigger asChild data-slot="toast-close-trigger">
-            <Button
-              aria-label={copy.close}
-              className="opacity-64 hover:opacity-100"
-              size="icon-xs"
-              variant="ghost"
-            >
+            <Button aria-label={copy.close} className="opacity-64 hover:opacity-100" size="icon-xs" variant="ghost">
               <XIcon />
             </Button>
           </ArkToast.CloseTrigger>

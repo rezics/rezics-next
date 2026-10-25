@@ -2,15 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, screen, userEvent, within } from 'storybook/test';
 import { dismissed, settled, withSurface } from '../stories/support.tsx';
 import { Button } from './button.tsx';
-import {
-  Sheet,
-  SheetBody,
-  SheetClose,
-  SheetContent,
-  SheetFooter,
-  SheetHeader,
-  SheetTrigger,
-} from './sheet.tsx';
+import { Sheet, SheetBody, SheetClose, SheetContent, SheetFooter, SheetHeader, SheetTrigger } from './sheet.tsx';
 
 const meta = {
   title: 'Rezics UI/Sheet',
@@ -41,10 +33,7 @@ const RevisionSheet = (props: { placement?: Placement; variant?: 'default' | 'in
       <Button variant="outline">Revision history</Button>
     </SheetTrigger>
     <SheetContent placement={props.placement} variant={props.variant}>
-      <SheetHeader
-        description="Every published change to this Work, newest first."
-        title="The Three-Body Problem"
-      />
+      <SheetHeader description="Every published change to this Work, newest first." title="The Three-Body Problem" />
       <SheetBody>
         <ol className="flex flex-col gap-4 text-sm">
           {revisions.map(([id, text, when]) => (
@@ -107,9 +96,7 @@ export const CloseWithEscape: Story = {
     await openSheet(canvasElement);
     await userEvent.keyboard('{Escape}');
     await dismissed('dialog');
-    await expect(
-      within(canvasElement).getByRole('button', { name: 'Revision history' }),
-    ).toHaveFocus();
+    await expect(within(canvasElement).getByRole('button', { name: 'Revision history' })).toHaveFocus();
   },
 };
 
@@ -130,12 +117,10 @@ export const LongContent: Story = {
                   href={`#report-${1200 + index}`}
                 >
                   <span className="font-medium">
-                    Report #{1200 + index}:{' '}
-                    {index % 2 ? 'Untagged spoiler' : 'Off-topic self-promotion'}
+                    Report #{1200 + index}: {index % 2 ? 'Untagged spoiler' : 'Off-topic self-promotion'}
                   </span>
                   <span className="text-muted-foreground">
-                    On “Is the dark forest hypothesis still convincing in 2026?” · reported by 3
-                    readers
+                    On “Is the dark forest hypothesis still convincing in 2026?” · reported by 3 readers
                   </span>
                 </a>
               </li>
@@ -160,9 +145,7 @@ export const Chinese: Story = {
       <SheetContent>
         <SheetHeader description="只显示符合条件的帖子。" title="筛选「科幻」Realm 的帖子" />
         <SheetBody>
-          <p className="text-sm">
-            当前条件：讨论《三体》（The Three-Body Problem）· 最近 30 天 · 至少 10 个赞同。
-          </p>
+          <p className="text-sm">当前条件：讨论《三体》（The Three-Body Problem）· 最近 30 天 · 至少 10 个赞同。</p>
         </SheetBody>
         <SheetFooter>
           <SheetClose asChild>
@@ -175,9 +158,7 @@ export const Chinese: Story = {
   ),
   async play({ canvasElement }) {
     const sheet = await openSheet(canvasElement, '筛选');
-    await expect(
-      within(sheet).getByRole('heading', { name: '筛选「科幻」Realm 的帖子' }),
-    ).toBeVisible();
+    await expect(within(sheet).getByRole('heading', { name: '筛选「科幻」Realm 的帖子' })).toBeVisible();
   },
 };
 

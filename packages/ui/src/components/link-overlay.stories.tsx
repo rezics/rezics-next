@@ -42,9 +42,7 @@ const WorkCard = ({ lang }: { lang?: string }) => {
         </a>
       </span>
       <h3 className="font-heading font-medium text-lg">
-        <LinkOverlay href="#work">
-          {chinese ? '《三体》The Three-Body Problem' : 'The Dispossessed'}
-        </LinkOverlay>
+        <LinkOverlay href="#work">{chinese ? '《三体》The Three-Body Problem' : 'The Dispossessed'}</LinkOverlay>
       </h3>
       <p className="text-muted-foreground text-sm">
         {chinese ? '作者 ' : 'by '}
@@ -55,9 +53,7 @@ const WorkCard = ({ lang }: { lang?: string }) => {
       <p className="flex items-center gap-1 text-sm">
         <StarIcon aria-hidden className="size-4 fill-rating text-rating" />
         <span className="tabular-nums">{chinese ? '8.8' : '4.3'}</span>
-        <span className="text-muted-foreground">
-          {chinese ? '· 12,480 人评分' : '· 2,309 ratings in this Realm'}
-        </span>
+        <span className="text-muted-foreground">{chinese ? '· 12,480 人评分' : '· 2,309 ratings in this Realm'}</span>
       </p>
     </LinkBox>
   );
@@ -87,9 +83,7 @@ export const Default: Story = {
       await expect(target).toBe(overlay);
     }
     const authorRect = author.getBoundingClientRect();
-    await expect(
-      document.elementFromPoint(authorRect.left + 4, authorRect.top + authorRect.height / 2),
-    ).toBe(author);
+    await expect(document.elementFromPoint(authorRect.left + 4, authorRect.top + authorRect.height / 2)).toBe(author);
   },
 };
 

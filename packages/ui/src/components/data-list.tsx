@@ -1,4 +1,3 @@
-
 import { ark } from '@ark-ui/react/factory';
 import type React from 'react';
 import { cn } from '../utils.ts';
@@ -64,11 +63,5 @@ export const DataListItemLabel = (props: React.ComponentProps<typeof ark.dt>) =>
 export const DataListItemValue = (props: React.ComponentProps<typeof ark.dd>) => {
   const { className, ...rest } = props;
 
-  return (
-    <ark.dd
-      className={cn('flex-1', 'text-foreground', className)}
-      data-slot="data-list-item-value"
-      {...rest}
-    />
-  );
+  return <ark.dd className={cn('flex-1', 'text-foreground', className)} data-slot="data-list-item-value" {...rest} />;
 };

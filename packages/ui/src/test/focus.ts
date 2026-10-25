@@ -3,8 +3,11 @@
  * An overlay may also accept its associated input (comboboxes keep focus there).
  * The same active element must hold focus for two frames, rejecting transient autofocus.
  */
-export function waitForFocus(target: HTMLElement | readonly HTMLElement[], timeoutMs = 1000,
-  refocus?: () => void): Promise<void> {
+export function waitForFocus(
+  target: HTMLElement | readonly HTMLElement[],
+  timeoutMs = 1000,
+  refocus?: () => void,
+): Promise<void> {
   const targets: readonly HTMLElement[] = Array.isArray(target) ? target : [target as HTMLElement];
   const document = targets[0]?.ownerDocument;
   const window = document?.defaultView;
@@ -20,8 +23,8 @@ export function waitForFocus(target: HTMLElement | readonly HTMLElement[], timeo
     }, timeoutMs);
     const check = () => {
       const active = document!.activeElement;
-      const intended = active && targets.some(element => element.isConnected && element.contains(active));
-      focusedFrames = intended ? active === previous ? focusedFrames + 1 : 1 : 0;
+      const intended = active && targets.some((element) => element.isConnected && element.contains(active));
+      focusedFrames = intended ? (active === previous ? focusedFrames + 1 : 1) : 0;
       previous = active;
       // A modal's delayed focus move can undo the user's field selection. Restore
       // that explicit choice, then require two later frames to agree before typing.

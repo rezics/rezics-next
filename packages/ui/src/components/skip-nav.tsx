@@ -1,4 +1,3 @@
-
 import { ark } from '@ark-ui/react/factory';
 import type React from 'react';
 import { cn } from '../utils.ts';
@@ -61,12 +60,6 @@ export const SkipNavContent = (props: SkipNavContentProps) => {
   const { id = SKIP_NAV_ID, className, ...rest } = props;
 
   return (
-    <ark.div
-      className={cn('outline-none', className)}
-      data-slot="skip-nav-content"
-      id={id}
-      tabIndex={-1}
-      {...rest}
-    />
+    <ark.div className={cn('outline-none', className)} data-slot="skip-nav-content" id={id} tabIndex={-1} {...rest} />
   );
 };

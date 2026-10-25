@@ -92,12 +92,7 @@ const TreeNode = ({ node, indexPath, checkable }: NodeProps) => (
         </TreeViewBranchItem>
         <TreeViewBranchContent>
           {node.children.map((child, index) => (
-            <TreeNode
-              checkable={checkable}
-              indexPath={[...indexPath, index]}
-              key={child.id}
-              node={child}
-            />
+            <TreeNode checkable={checkable} indexPath={[...indexPath, index]} key={child.id} node={child} />
           ))}
         </TreeViewBranchContent>
       </TreeViewBranch>
@@ -162,16 +157,12 @@ export const Keyboard: Story = {
     const tree = canvas.getByRole('tree');
     await userEvent.tab();
     const sf = within(tree).getByRole('treeitem', { name: 'Science fiction' });
-    await waitFor(() =>
-      expect(sf.querySelector('[data-slot="tree-view-branch-control"]')).toHaveFocus(),
-    );
+    await waitFor(() => expect(sf.querySelector('[data-slot="tree-view-branch-control"]')).toHaveFocus());
 
     await userEvent.keyboard('{ArrowRight}');
     await waitFor(() => expect(sf).toHaveAttribute('aria-expanded', 'true'));
     await userEvent.keyboard('{ArrowDown}');
-    await waitFor(() =>
-      expect(within(tree).getByRole('treeitem', { name: 'Hard science fiction' })).toHaveFocus(),
-    );
+    await waitFor(() => expect(within(tree).getByRole('treeitem', { name: 'Hard science fiction' })).toHaveFocus());
     await userEvent.keyboard('{ArrowLeft}{ArrowLeft}');
     await waitFor(() => expect(sf).toHaveAttribute('aria-expanded', 'false'));
   },

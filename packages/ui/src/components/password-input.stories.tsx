@@ -1,12 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { Field, FieldError, FieldHelper, FieldLabel } from './field.tsx';
-import {
-  PasswordInput,
-  PasswordInputGroup,
-  PasswordInputInput,
-  PasswordInputTrigger,
-} from './password-input.tsx';
+import { PasswordInput, PasswordInputGroup, PasswordInputInput, PasswordInputTrigger } from './password-input.tsx';
 
 const meta = {
   title: 'Rezics UI/Password Input',
@@ -108,9 +103,7 @@ export const NewPassword: Story = {
           <PasswordInputTrigger />
         </PasswordInputGroup>
       </PasswordInput>
-      <FieldHelper>
-        At least 12 characters. A passphrase like “dark forest sophon” works well.
-      </FieldHelper>
+      <FieldHelper>At least 12 characters. A passphrase like “dark forest sophon” works well.</FieldHelper>
     </Field>
   ),
 };

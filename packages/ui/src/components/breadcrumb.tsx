@@ -1,4 +1,3 @@
-
 import { ark } from '@ark-ui/react/factory';
 import { ChevronRightIcon, MoreHorizontalIcon } from 'lucide-react';
 import type React from 'react';
@@ -47,13 +46,7 @@ export const BreadcrumbList = (props: React.ComponentProps<typeof ark.ol>) => {
 export const BreadcrumbItem = (props: React.ComponentProps<typeof ark.li>) => {
   const { className, ...rest } = props;
 
-  return (
-    <ark.li
-      className={cn('inline-flex items-center gap-1.5', className)}
-      data-slot="breadcrumb-item"
-      {...rest}
-    />
-  );
+  return <ark.li className={cn('inline-flex items-center gap-1.5', className)} data-slot="breadcrumb-item" {...rest} />;
 };
 
 export const BreadcrumbLink = (props: React.ComponentProps<typeof ark.a>) => {

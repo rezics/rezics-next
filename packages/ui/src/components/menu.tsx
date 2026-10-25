@@ -1,4 +1,3 @@
-
 import { Portal } from '@ark-ui/react';
 import { ark } from '@ark-ui/react/factory';
 import { Menu as ArkMenu, type MenuContentProps, useMenuContext } from '@ark-ui/react/menu';
@@ -17,12 +16,7 @@ export const useMenu = useMenuContext;
  * separator. For navigation between pages use links, not a menu.
  */
 export const Menu = (props: React.ComponentProps<typeof ArkMenu.Root>) => {
-  const {
-    lazyMount = true,
-    positioning = { placement: 'bottom-end' },
-    unmountOnExit = true,
-    ...rest
-  } = props;
+  const { lazyMount = true, positioning = { placement: 'bottom-end' }, unmountOnExit = true, ...rest } = props;
 
   return (
     <ArkMenu.Root
@@ -42,13 +36,7 @@ export const MenuTrigger = (props: React.ComponentProps<typeof ArkMenu.Trigger>)
 export const MenuPositioner = (props: React.ComponentProps<typeof ArkMenu.Positioner>) => {
   const { className, ...rest } = props;
 
-  return (
-    <ArkMenu.Positioner
-      className={cn('outline-none', className)}
-      data-slot="menu-positioner"
-      {...rest}
-    />
-  );
+  return <ArkMenu.Positioner className={cn('outline-none', className)} data-slot="menu-positioner" {...rest} />;
 };
 
 export const menuContentVariants = tv({
@@ -84,11 +72,7 @@ export const MenuContent = (props: MenuContentProps & { inline?: boolean }) => {
   return (
     <Portal disabled={inline}>
       <MenuPositioner>
-        <ArkMenu.Content
-          className={cn(menuContentVariants(), className)}
-          data-slot="menu-content"
-          {...rest}
-        >
+        <ArkMenu.Content className={cn(menuContentVariants(), className)} data-slot="menu-content" {...rest}>
           {children}
         </ArkMenu.Content>
       </MenuPositioner>
@@ -157,9 +141,7 @@ const menuItemVariants = tv({
   },
 });
 
-interface MenuItemProps
-  extends React.ComponentProps<typeof ArkMenu.Item>,
-    VariantProps<typeof menuItemVariants> {}
+interface MenuItemProps extends React.ComponentProps<typeof ArkMenu.Item>, VariantProps<typeof menuItemVariants> {}
 
 export const MenuItem = (props: MenuItemProps) => {
   const { variant = 'default', className, ...rest } = props;
@@ -200,12 +182,7 @@ export const MenuCheckboxItem = (props: React.ComponentProps<typeof ArkMenu.Chec
       {...rest}
     >
       <ArkMenu.ItemIndicator
-        className={cn(
-          'absolute inset-s-3',
-          'size-4',
-          'flex items-center justify-center',
-          'pointer-events-none',
-        )}
+        className={cn('absolute inset-s-3', 'size-4', 'flex items-center justify-center', 'pointer-events-none')}
       >
         <CheckIcon />
       </ArkMenu.ItemIndicator>
@@ -239,12 +216,7 @@ export const MenuGroupLabel = (props: React.ComponentProps<typeof ArkMenu.ItemGr
 
   return (
     <ArkMenu.ItemGroupLabel
-      className={cn(
-        'px-3 py-1.5',
-        'font-medium text-muted-foreground text-xs',
-        'pointer-events-none',
-        className,
-      )}
+      className={cn('px-3 py-1.5', 'font-medium text-muted-foreground text-xs', 'pointer-events-none', className)}
       data-slot="menu-group-label"
       {...rest}
     />
@@ -269,23 +241,15 @@ export const MenuRadioItem = (props: React.ComponentProps<typeof ArkMenu.RadioIt
   );
 };
 
-export const MenuSub = (props: React.ComponentProps<typeof Menu>) => (
-  <Menu data-slot="menu-sub" {...props} />
-);
+export const MenuSub = (props: React.ComponentProps<typeof Menu>) => <Menu data-slot="menu-sub" {...props} />;
 
-export const MenuSubContent = (
-  props: React.ComponentProps<typeof ArkMenu.Content> & { inline?: boolean },
-) => {
+export const MenuSubContent = (props: React.ComponentProps<typeof ArkMenu.Content> & { inline?: boolean }) => {
   const { className, inline = false, ...rest } = props;
 
   return (
     <Portal disabled={inline}>
       <MenuPositioner data-slot="menu-sub-positioner">
-        <ArkMenu.Content
-          className={cn(menuContentVariants(), className)}
-          data-slot="menu-sub-content"
-          {...rest}
-        />
+        <ArkMenu.Content className={cn(menuContentVariants(), className)} data-slot="menu-sub-content" {...rest} />
       </MenuPositioner>
     </Portal>
   );

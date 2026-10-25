@@ -46,10 +46,7 @@ export const Default: Story = {
   async play({ canvasElement }) {
     const nav = within(canvasElement).getByRole('navigation', { name: 'Breadcrumb' });
     await expect(within(nav).getAllByRole('link')).toHaveLength(3);
-    await expect(within(nav).getByText('Is the dark forest still convincing?')).toHaveAttribute(
-      'aria-current',
-      'page',
-    );
+    await expect(within(nav).getByText('Is the dark forest still convincing?')).toHaveAttribute('aria-current', 'page');
   },
 };
 
@@ -153,9 +150,7 @@ export const Chinese: Story = {
     </Breadcrumb>
   ),
   async play({ canvasElement }) {
-    await expect(
-      within(canvasElement).getByRole('navigation', { name: '面包屑导航' }),
-    ).toBeVisible();
+    await expect(within(canvasElement).getByRole('navigation', { name: '面包屑导航' })).toBeVisible();
   },
 };
 

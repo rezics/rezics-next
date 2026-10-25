@@ -38,9 +38,7 @@ const meta = {
   },
   decorators: [
     (Story) => (
-      <main
-        className={'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'}
-      >
+      <main className={'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'}>
         <Story />
       </main>
     ),
@@ -62,9 +60,7 @@ const Picker = ({ dark = false, disabled = false }: { dark?: boolean; disabled?:
         >
           <ColorPickerLabel>Realm accent color</ColorPickerLabel>
           <div className="flex items-center gap-3">
-            <ColorPickerTrigger
-              className="flex h-10 items-center gap-2 rounded-xl border border-border/60 bg-card px-3 text-sm text-foreground shadow-xs/5 focus-visible:outline-2 focus-visible:outline-ring"
-            >
+            <ColorPickerTrigger className="flex h-10 items-center gap-2 rounded-xl border border-border/60 bg-card px-3 text-sm text-foreground shadow-xs/5 focus-visible:outline-2 focus-visible:outline-ring">
               <ColorPickerValueSwatch aria-hidden="true" />
               Realm accent color
             </ColorPickerTrigger>
@@ -78,11 +74,7 @@ const Picker = ({ dark = false, disabled = false }: { dark?: boolean; disabled?:
             <ColorPickerInput aria-label="Hex color" channel="hex" />
             <ColorPickerSwatchGroup aria-label="REZICS palette">
               {palette.map((color) => (
-                <ColorPickerSwatchTrigger
-                  aria-label={color.name}
-                  key={color.value}
-                  value={color.value}
-                >
+                <ColorPickerSwatchTrigger aria-label={color.name} key={color.value} value={color.value}>
                   <ColorPickerSwatch value={color.value}>
                     <ColorPickerSwatchIndicator />
                   </ColorPickerSwatch>

@@ -1,4 +1,3 @@
-
 import { Avatar as ArkAvatar, useAvatarContext } from '@ark-ui/react/avatar';
 import { ark } from '@ark-ui/react/factory';
 import type React from 'react';
@@ -31,20 +30,13 @@ const avatarVariants = tv({
   },
 });
 
-interface AvatarProps
-  extends React.ComponentProps<typeof ArkAvatar.Root>,
-    VariantProps<typeof avatarVariants> {}
+interface AvatarProps extends React.ComponentProps<typeof ArkAvatar.Root>, VariantProps<typeof avatarVariants> {}
 
 export const Avatar = (props: AvatarProps) => {
   const { size = 'md', className, ...rest } = props;
 
   return (
-    <ArkAvatar.Root
-      className={cn(avatarVariants({ size }), className)}
-      data-size={size}
-      data-slot="avatar"
-      {...rest}
-    />
+    <ArkAvatar.Root className={cn(avatarVariants({ size }), className)} data-size={size} data-slot="avatar" {...rest} />
   );
 };
 
@@ -81,8 +73,7 @@ export const AvatarFallback = (props: React.ComponentProps<typeof ArkAvatar.Fall
 };
 
 interface AvatarBadgeProps
-  extends React.ComponentProps<typeof ark.span>,
-    Pick<VariantProps<typeof statusVariants>, 'variant'> {}
+  extends React.ComponentProps<typeof ark.span>, Pick<VariantProps<typeof statusVariants>, 'variant'> {}
 
 export const AvatarBadge = (props: AvatarBadgeProps) => {
   const { variant, className, ...rest } = props;
@@ -109,11 +100,7 @@ export const AvatarGroup = (props: React.ComponentProps<typeof ark.div>) => {
 
   return (
     <ark.div
-      className={cn(
-        'flex -space-x-2',
-        '**:data-[slot=avatar]:ring-2 **:data-[slot=avatar]:ring-background',
-        className,
-      )}
+      className={cn('flex -space-x-2', '**:data-[slot=avatar]:ring-2 **:data-[slot=avatar]:ring-background', className)}
       data-slot="avatar-group"
       {...rest}
     />

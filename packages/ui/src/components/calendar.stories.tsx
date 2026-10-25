@@ -79,15 +79,11 @@ export const Default: Story = {
     await expect(canvas.getByRole('grid')).toBeInTheDocument();
     await userEvent.click(canvas.getByRole('button', { name: /October 21, 2026/ }));
     await waitFor(() =>
-      expect(canvas.getByRole('button', { name: /October 21, 2026/ })).toHaveAttribute(
-        'data-selected',
-      ),
+      expect(canvas.getByRole('button', { name: /October 21, 2026/ })).toHaveAttribute('data-selected'),
     );
     await userEvent.keyboard('{ArrowRight}{Enter}');
     await waitFor(() =>
-      expect(canvas.getByRole('button', { name: /October 22, 2026/ })).toHaveAttribute(
-        'data-selected',
-      ),
+      expect(canvas.getByRole('button', { name: /October 22, 2026/ })).toHaveAttribute('data-selected'),
     );
     await userEvent.click(canvas.getByRole('button', { name: /next/i }));
     await expect(canvas.getByText('November 2026')).toBeInTheDocument();
@@ -176,11 +172,7 @@ export const Dark: Story = {
       <Calendar {...args}>
         <Month selects />
       </Calendar>
-      <Calendar
-        {...args}
-        defaultValue={[parseDate('2026-10-05'), parseDate('2026-10-18')]}
-        selectionMode="range"
-      >
+      <Calendar {...args} defaultValue={[parseDate('2026-10-05'), parseDate('2026-10-18')]} selectionMode="range">
         <Month />
       </Calendar>
     </div>

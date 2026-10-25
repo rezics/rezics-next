@@ -40,9 +40,7 @@ const meta = {
   },
   decorators: [
     (Story) => (
-      <main
-        className={'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'}
-      >
+      <main className={'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'}>
         <div className="w-full max-w-3xl px-14">
           <Story />
         </div>
@@ -56,11 +54,7 @@ type Story = StoryObj<typeof meta>;
 
 const FeaturedWorks = ({ dark = false }: { dark?: boolean }) => (
   <div className={dark ? 'rounded-2xl bg-background p-6 text-foreground' : undefined}>
-    <Carousel
-      aria-label="Featured Works in the Science Fiction Realm"
-      slideCount={works.length}
-      slidesPerPage={1}
-    >
+    <Carousel aria-label="Featured Works in the Science Fiction Realm" slideCount={works.length} slidesPerPage={1}>
       <CarouselContent>
         {works.map((work, index) => (
           <CarouselItem index={index} key={work.title}>
@@ -88,14 +82,12 @@ export const Featured: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Next' }));
-    await expect(
-      canvas.getByRole('button', { name: 'Show Notes on a City of Rivers' }),
-    ).toHaveAttribute('data-current', '');
-    await userEvent.click(canvas.getByRole('button', { name: 'Show 《三体》讨论' }));
-    await expect(canvas.getByRole('button', { name: 'Show 《三体》讨论' })).toHaveAttribute(
+    await expect(canvas.getByRole('button', { name: 'Show Notes on a City of Rivers' })).toHaveAttribute(
       'data-current',
       '',
     );
+    await userEvent.click(canvas.getByRole('button', { name: 'Show 《三体》讨论' }));
+    await expect(canvas.getByRole('button', { name: 'Show 《三体》讨论' })).toHaveAttribute('data-current', '');
   },
 };
 
@@ -106,8 +98,7 @@ export const LongMultilingualTitle: Story = {
         <CarouselItem index={0}>
           <article className="rounded-2xl border border-border/60 bg-card p-6">
             <h2 className="break-words font-semibold text-foreground text-xl">
-              《三体》与跨文化阅读：Notes from a community conversation across languages and
-              editions
+              《三体》与跨文化阅读：Notes from a community conversation across languages and editions
             </h2>
           </article>
         </CarouselItem>

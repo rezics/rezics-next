@@ -1,4 +1,3 @@
-
 import { ark } from '@ark-ui/react/factory';
 import type React from 'react';
 import { cn } from '../utils.ts';
@@ -17,14 +16,7 @@ export const AspectRatio = (props: AspectRatioProps) => {
 
   return (
     <ark.div
-      className={cn(
-        '[--ratio:1]',
-        'relative',
-        'w-full',
-        'aspect-(--ratio)',
-        'overflow-hidden',
-        className,
-      )}
+      className={cn('[--ratio:1]', 'relative', 'w-full', 'aspect-(--ratio)', 'overflow-hidden', className)}
       data-slot="aspect-ratio"
       style={ratio === undefined ? style : ({ '--ratio': ratio, ...style } as React.CSSProperties)}
       {...rest}

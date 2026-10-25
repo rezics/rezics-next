@@ -33,8 +33,7 @@ const buttonGroupVariants = tv({
 });
 
 interface ButtonGroupProps
-  extends React.ComponentProps<typeof ark.fieldset>,
-    VariantProps<typeof buttonGroupVariants> {}
+  extends React.ComponentProps<typeof ark.fieldset>, VariantProps<typeof buttonGroupVariants> {}
 
 export const ButtonGroup = (props: ButtonGroupProps) => {
   const { className, orientation, ...rest } = props;

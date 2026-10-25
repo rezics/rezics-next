@@ -1,4 +1,3 @@
-
 import { JsonTreeView as ArkJsonTreeView } from '@ark-ui/react/json-tree-view';
 import { ChevronRightIcon } from 'lucide-react';
 import { useEffect, useRef } from 'react';

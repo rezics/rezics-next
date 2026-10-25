@@ -8,7 +8,7 @@
     bottom: var(--hitbox-b, 0px);
     left: var(--hitbox-l, 0px);
     pointer-events: inherit;
-    content: "";
+    content: '';
     @apply border border-dashed border-info bg-info/10;
   }
 
@@ -27,7 +27,7 @@
     bottom: var(--hitbox-b, 0px);
     left: var(--hitbox-l, 0px);
     pointer-events: inherit;
-    content: "";
+    content: '';
   }
 }
 
@@ -49,7 +49,7 @@
     bottom: var(--hitbox-b, 0px);
     left: var(--hitbox-l, 0px);
     pointer-events: inherit;
-    content: "";
+    content: '';
   }
 }
 
@@ -65,7 +65,7 @@
     bottom: var(--hitbox-b, 0px);
     left: var(--hitbox-l, 0px);
     pointer-events: inherit;
-    content: "";
+    content: '';
   }
 }
 
@@ -81,7 +81,7 @@
     bottom: var(--hitbox-b, 0px);
     left: var(--hitbox-l, 0px);
     pointer-events: inherit;
-    content: "";
+    content: '';
   }
 }
 
@@ -97,7 +97,7 @@
     bottom: var(--hitbox-b, 0px);
     left: var(--hitbox-l, 0px);
     pointer-events: inherit;
-    content: "";
+    content: '';
   }
 }
 
@@ -113,7 +113,7 @@
     bottom: var(--hitbox-b, 0px);
     left: var(--hitbox-l, 0px);
     pointer-events: inherit;
-    content: "";
+    content: '';
   }
 }
 
@@ -131,7 +131,7 @@
     bottom: var(--hitbox-b, 0px);
     left: var(--hitbox-l, 0px);
     pointer-events: inherit;
-    content: "";
+    content: '';
   }
 }
 
@@ -149,6 +149,6 @@
     bottom: var(--hitbox-b, 0px);
     left: var(--hitbox-l, 0px);
     pointer-events: inherit;
-    content: "";
+    content: '';
   }
 }

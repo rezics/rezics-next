@@ -1,8 +1,4 @@
-
-import {
-  Highlight as ArkHighlight,
-  useHighlight as useArkHighlight,
-} from '@ark-ui/react/highlight';
+import { Highlight as ArkHighlight, useHighlight as useArkHighlight } from '@ark-ui/react/highlight';
 import type React from 'react';
 import { cn } from '../utils.ts';
 

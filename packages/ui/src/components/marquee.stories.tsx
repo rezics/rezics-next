@@ -1,13 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Marquee, MarqueeContent, MarqueeItem } from './marquee.tsx';
 
-const realms = [
-  'Science Fiction',
-  'Modern Poetry',
-  '城市与记忆',
-  'Community translations',
-  'Film adaptations',
-];
+const realms = ['Science Fiction', 'Modern Poetry', '城市与记忆', 'Community translations', 'Film adaptations'];
 
 const meta = {
   title: 'UI/Marquee',

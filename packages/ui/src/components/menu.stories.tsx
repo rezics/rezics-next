@@ -1,13 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import {
-  BookmarkIcon,
-  EllipsisIcon,
-  FlagIcon,
-  LinkIcon,
-  LibraryIcon,
-  PencilIcon,
-  Trash2Icon,
-} from 'lucide-react';
+import { BookmarkIcon, EllipsisIcon, FlagIcon, LinkIcon, LibraryIcon, PencilIcon, Trash2Icon } from 'lucide-react';
 import React from 'react';
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
 import { dismissed, settled, withSurface } from '../stories/support.tsx';
@@ -110,10 +102,7 @@ export const PostActions: Story = {
   async play({ canvasElement }) {
     const menu = await openMenu(canvasElement, 'Post actions');
     await expect(within(menu).getByRole('menuitem', { name: /Remove post/ })).toBeVisible();
-    await expect(within(menu).getByRole('menuitem', { name: /Edit/ })).toHaveAttribute(
-      'aria-disabled',
-      'true',
-    );
+    await expect(within(menu).getByRole('menuitem', { name: /Edit/ })).toHaveAttribute('aria-disabled', 'true');
   },
 };
 
@@ -127,15 +116,11 @@ export const SelectWithKeyboard: Story = {
     const menu = await settled(await screen.findByRole('menu'));
     // Opening from the keyboard highlights the first item; wait for it before moving on.
     await waitFor(() =>
-      expect(within(menu).getByRole('menuitem', { name: /Copy link/ })).toHaveAttribute(
-        'data-highlighted',
-      ),
+      expect(within(menu).getByRole('menuitem', { name: /Copy link/ })).toHaveAttribute('data-highlighted'),
     );
     await userEvent.keyboard('{ArrowDown}');
     await waitFor(() =>
-      expect(within(menu).getByRole('menuitem', { name: /Save post/ })).toHaveAttribute(
-        'data-highlighted',
-      ),
+      expect(within(menu).getByRole('menuitem', { name: /Save post/ })).toHaveAttribute('data-highlighted'),
     );
     await userEvent.keyboard('{Enter}');
     await dismissed('menu');
@@ -200,11 +185,7 @@ const FeedOptionsMenu = (props: React.ComponentProps<typeof Menu>) => {
         </MenuRadioGroup>
         <MenuSeparator />
         <MenuGroup heading="Display">
-          <MenuCheckboxItem
-            checked={blurSpoilers}
-            onCheckedChange={setBlurSpoilers}
-            value="spoilers"
-          >
+          <MenuCheckboxItem checked={blurSpoilers} onCheckedChange={setBlurSpoilers} value="spoilers">
             Blur spoilers
           </MenuCheckboxItem>
           <MenuCheckboxItem checked={compact} onCheckedChange={setCompact} value="compact">
@@ -224,9 +205,7 @@ export const FeedOptions: Story = {
     await userEvent.click(within(menu).getByRole('menuitemradio', { name: 'New' }));
     await expect(within(menu).getByRole('menuitemradio', { name: 'New' })).toBeChecked();
     await userEvent.click(within(menu).getByRole('menuitemcheckbox', { name: 'Compact cards' }));
-    await expect(
-      within(menu).getByRole('menuitemcheckbox', { name: 'Compact cards' }),
-    ).toBeChecked();
+    await expect(within(menu).getByRole('menuitemcheckbox', { name: 'Compact cards' })).toBeChecked();
   },
 };
 

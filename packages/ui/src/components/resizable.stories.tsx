@@ -56,8 +56,7 @@ export const Horizontal: Story = {
           <Pane>
             <p className="font-heading text-lg">The Dispossessed</p>
             <p className="leading-relaxed">
-              There was a wall. It did not look important. It was built of uncut rocks roughly
-              mortared.
+              There was a wall. It did not look important. It was built of uncut rocks roughly mortared.
             </p>
           </Pane>
         </ResizablePanel>
@@ -94,11 +93,7 @@ export const WithHandle: Story = {
         <ResizablePanel id="contents">
           <Pane className="bg-secondary/40">Moderation queue · 14 open cases</Pane>
         </ResizablePanel>
-        <ResizableResizeTrigger
-          aria-label="Resize queue and case"
-          id="contents:reader"
-          withHandle
-        />
+        <ResizableResizeTrigger aria-label="Resize queue and case" id="contents:reader" withHandle />
         <ResizablePanel id="reader">
           <Pane>Case MOD-2026-0413: spoilers in a review of Death's End</Pane>
         </ResizablePanel>
@@ -131,10 +126,7 @@ export const Vertical: Story = {
 export const Chinese: Story = {
   name: 'zh-CN',
   render: (args) => (
-    <div
-      className="h-60 max-w-2xl overflow-hidden rounded-2xl border border-border/60 bg-card"
-      lang="zh-CN"
-    >
+    <div className="h-60 max-w-2xl overflow-hidden rounded-2xl border border-border/60 bg-card" lang="zh-CN">
       <Resizable {...args}>
         <ResizablePanel id="contents">
           <Pane className="bg-secondary/40">目录：科学边界、台球、射手和农场主……</Pane>

@@ -69,7 +69,7 @@ export const EmptyFields: Story = {
   globals: { theme: 'light' },
   render: () => (
     <div className="flex flex-col gap-4">
-      {['bg-background', 'bg-card', 'bg-muted'].map(surface => (
+      {['bg-background', 'bg-card', 'bg-muted'].map((surface) => (
         <div className={`flex flex-col gap-4 rounded-2xl border p-4 ${surface}`} key={surface}>
           <Field>
             <FieldLabel>Realm address</FieldLabel>
@@ -122,11 +122,7 @@ export const Sizes: Story = {
           <InputGroupAddon>
             <SearchIcon aria-hidden />
           </InputGroupAddon>
-          <InputGroupInput
-            aria-label={`Search (${size})`}
-            placeholder={`Search, size ${size}`}
-            size={size}
-          />
+          <InputGroupInput aria-label={`Search (${size})`} placeholder={`Search, size ${size}`} size={size} />
         </InputGroup>
       ))}
     </>
@@ -208,12 +204,7 @@ const Reply = () => {
         />
         <InputGroupAddon align="block-end" className="border-t">
           <InputGroupText className="tabular-nums">{text.length}/500</InputGroupText>
-          <InputGroupButton
-            className="ms-auto"
-            disabled={text.length === 0}
-            size="sm"
-            variant="default"
-          >
+          <InputGroupButton className="ms-auto" disabled={text.length === 0} size="sm" variant="default">
             <SendIcon aria-hidden />
             Reply
           </InputGroupButton>
@@ -268,7 +259,9 @@ export const InvalidFields: Story = {
       <Field invalid>
         <FieldLabel>Realm address</FieldLabel>
         <InputGroup>
-          <InputGroupAddon><InputGroupText>rezics.com/r/</InputGroupText></InputGroupAddon>
+          <InputGroupAddon>
+            <InputGroupText>rezics.com/r/</InputGroupText>
+          </InputGroupAddon>
           <InputGroupInput defaultValue="" />
         </InputGroup>
         <FieldError>Choose an address for the Realm.</FieldError>
@@ -277,14 +270,18 @@ export const InvalidFields: Story = {
         <FieldLabel>Contact email</FieldLabel>
         <InputGroup>
           <InputGroupInput defaultValue="reader@" type="email" />
-          <InputGroupAddon align="inline-end"><InputGroupText>Email</InputGroupText></InputGroupAddon>
+          <InputGroupAddon align="inline-end">
+            <InputGroupText>Email</InputGroupText>
+          </InputGroupAddon>
         </InputGroup>
         <FieldError>Enter a complete email address.</FieldError>
       </Field>
       <Field invalid>
         <FieldLabel>Reply</FieldLabel>
         <InputGroup>
-          <InputGroupAddon align="block-start"><InputGroupText>Reply to @redcoast</InputGroupText></InputGroupAddon>
+          <InputGroupAddon align="block-start">
+            <InputGroupText>Reply to @redcoast</InputGroupText>
+          </InputGroupAddon>
           <InputGroupTextarea defaultValue="" />
         </InputGroup>
         <FieldError>Write a reply before sending.</FieldError>
@@ -322,15 +319,18 @@ export const InvalidFields: Story = {
 };
 
 export const InvalidFieldsDark: Story = {
-  ...InvalidFields, globals: { theme: 'dark', viewport: { value: 'desktop1440' } },
+  ...InvalidFields,
+  globals: { theme: 'dark', viewport: { value: 'desktop1440' } },
 };
 
 export const InvalidFieldsPhone: Story = {
-  ...InvalidFields, globals: { theme: 'light', viewport: { value: 'phone' } },
+  ...InvalidFields,
+  globals: { theme: 'light', viewport: { value: 'phone' } },
 };
 
 export const InvalidFieldsDarkPhone: Story = {
-  ...InvalidFields, globals: { theme: 'dark', viewport: { value: 'phone' } },
+  ...InvalidFields,
+  globals: { theme: 'dark', viewport: { value: 'phone' } },
 };
 
 export const Disabled: Story = {

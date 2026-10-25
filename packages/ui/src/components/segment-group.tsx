@@ -1,7 +1,4 @@
-import {
-  SegmentGroup as ArkSegmentGroup,
-  useSegmentGroupContext,
-} from '@ark-ui/react/segment-group';
+import { SegmentGroup as ArkSegmentGroup, useSegmentGroupContext } from '@ark-ui/react/segment-group';
 import type React from 'react';
 import { cn } from '../utils.ts';
 
@@ -81,23 +78,15 @@ export const SegmentGroupItem = (props: React.ComponentProps<typeof ArkSegmentGr
   );
 };
 
-export const SegmentGroupItemText = (
-  props: React.ComponentProps<typeof ArkSegmentGroup.ItemText>,
-) => {
+export const SegmentGroupItemText = (props: React.ComponentProps<typeof ArkSegmentGroup.ItemText>) => {
   const { className, ...rest } = props;
 
   return (
-    <ArkSegmentGroup.ItemText
-      className={cn('relative z-1', className)}
-      data-slot="segment-group-item-text"
-      {...rest}
-    />
+    <ArkSegmentGroup.ItemText className={cn('relative z-1', className)} data-slot="segment-group-item-text" {...rest} />
   );
 };
 
-export const SegmentGroupIndicator = (
-  props: React.ComponentProps<typeof ArkSegmentGroup.Indicator>,
-) => {
+export const SegmentGroupIndicator = (props: React.ComponentProps<typeof ArkSegmentGroup.Indicator>) => {
   const { className, ...rest } = props;
 
   return (

@@ -1,4 +1,3 @@
-
 import { Accordion as ArkAccordion, useAccordionContext } from '@ark-ui/react/accordion';
 import { ChevronDownIcon } from 'lucide-react';
 import type React from 'react';

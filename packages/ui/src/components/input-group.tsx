@@ -47,8 +47,7 @@ export const inputGroupVariants = tv({
 });
 
 export interface InputGroupProps
-  extends React.ComponentProps<typeof ark.div>,
-    VariantProps<typeof inputGroupVariants> {}
+  extends React.ComponentProps<typeof ark.div>, VariantProps<typeof inputGroupVariants> {}
 
 export const InputGroup = (props: InputGroupProps) => {
   const { size = 'md', className, ...rest } = props;
@@ -83,11 +82,7 @@ const inputGroupAddonVariants = tv({
   ],
   variants: {
     align: {
-      'inline-start': [
-        'order-first ps-3',
-        'has-[>button]:ms-[-0.45rem]',
-        'has-[>kbd]:ms-[-0.35rem]',
-      ],
+      'inline-start': ['order-first ps-3', 'has-[>button]:ms-[-0.45rem]', 'has-[>kbd]:ms-[-0.35rem]'],
       'inline-end': ['order-last pe-3', 'has-[>button]:me-[-0.45rem]', 'has-[>kbd]:me-[-0.35rem]'],
       'block-start': [
         'order-first w-full justify-start px-3 pt-3',
@@ -107,8 +102,7 @@ const inputGroupAddonVariants = tv({
 });
 
 interface InputGroupAddonProps
-  extends React.ComponentProps<typeof ark.div>,
-    VariantProps<typeof inputGroupAddonVariants> {}
+  extends React.ComponentProps<typeof ark.div>, VariantProps<typeof inputGroupAddonVariants> {}
 
 export const InputGroupAddon = (props: InputGroupAddonProps) => {
   const { className, align = 'inline-start', ...rest } = props;
@@ -140,14 +134,7 @@ const inputGroupButtonVariants = tv({
   ],
   variants: {
     size: {
-      xs: [
-        'h-6',
-        'gap-1',
-        'px-2',
-        'rounded-lg',
-        'has-[>svg]:px-2',
-        "[&_svg:not([class*='size-'])]:size-3.5",
-      ],
+      xs: ['h-6', 'gap-1', 'px-2', 'rounded-lg', 'has-[>svg]:px-2', "[&_svg:not([class*='size-'])]:size-3.5"],
       sm: ['h-8', 'gap-1.5', 'px-2.5', 'rounded-lg', 'has-[>svg]:px-2.5'],
       'icon-xs': ['size-6', 'rounded-lg', 'p-0', 'has-[>svg]:p-0'],
       'icon-sm': ['size-8', 'p-0', 'has-[>svg]:p-0'],
@@ -159,8 +146,7 @@ const inputGroupButtonVariants = tv({
 });
 
 interface InputGroupButtonProps
-  extends Omit<React.ComponentProps<typeof Button>, 'size'>,
-    VariantProps<typeof inputGroupButtonVariants> {}
+  extends Omit<React.ComponentProps<typeof Button>, 'size'>, VariantProps<typeof inputGroupButtonVariants> {}
 
 export const InputGroupButton = (props: InputGroupButtonProps) => {
   const { className, type = 'button', variant = 'ghost', size = 'xs', ...rest } = props;

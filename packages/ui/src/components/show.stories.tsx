@@ -17,9 +17,7 @@ const meta = {
   },
   decorators: [
     (Story) => (
-      <main
-        className={'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'}
-      >
+      <main className={'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'}>
         <Story />
       </main>
     ),
@@ -29,26 +27,16 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-const RatingSummary = ({
-  dark = false,
-  hasRatings = true,
-}: {
-  dark?: boolean;
-  hasRatings?: boolean;
-}) => (
+const RatingSummary = ({ dark = false, hasRatings = true }: { dark?: boolean; hasRatings?: boolean }) => (
   <section
     className={
-      dark
-        ? 'rounded-2xl bg-background p-6 text-foreground'
-        : 'rounded-2xl border border-border/60 bg-card p-6'
+      dark ? 'rounded-2xl bg-background p-6 text-foreground' : 'rounded-2xl border border-border/60 bg-card p-6'
     }
   >
     <h2 className="font-semibold text-foreground">《三体》 community rating</h2>
     <Show
       fallback={
-        <p className="mt-2 text-sm text-muted-foreground">
-          No member ratings yet. Be the first to rate this Work.
-        </p>
+        <p className="mt-2 text-sm text-muted-foreground">No member ratings yet. Be the first to rate this Work.</p>
       }
       when={hasRatings}
     >
@@ -62,9 +50,7 @@ export const Empty: Story = {
   render: () => <RatingSummary hasRatings={false} />,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(
-      canvas.getByText('No member ratings yet. Be the first to rate this Work.'),
-    ).toBeVisible();
+    await expect(canvas.getByText('No member ratings yet. Be the first to rate this Work.')).toBeVisible();
   },
 };
 export const DarkMode: Story = { globals: { theme: 'dark' }, render: () => <RatingSummary dark /> };

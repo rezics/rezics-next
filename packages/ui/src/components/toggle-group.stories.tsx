@@ -1,12 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import {
-  BoldIcon,
-  ItalicIcon,
-  LayoutGridIcon,
-  ListIcon,
-  StrikethroughIcon,
-  TableIcon,
-} from 'lucide-react';
+import { BoldIcon, ItalicIcon, LayoutGridIcon, ListIcon, StrikethroughIcon, TableIcon } from 'lucide-react';
 import { expect, userEvent, within } from 'storybook/test';
 import { ToggleGroup, ToggleGroupItem } from './toggle-group.tsx';
 
@@ -102,13 +95,7 @@ export const Sizes: Story = {
   render: (args) => (
     <>
       {(['sm', 'md', 'lg'] as const).map((size) => (
-        <ToggleGroup
-          {...args}
-          aria-label={`Formatting (${size})`}
-          key={size}
-          size={size}
-          variant="outline"
-        >
+        <ToggleGroup {...args} aria-label={`Formatting (${size})`} key={size} size={size} variant="outline">
           <ToggleGroupItem aria-label="Bold" value="bold">
             <BoldIcon />
           </ToggleGroupItem>

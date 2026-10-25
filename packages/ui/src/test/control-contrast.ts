@@ -4,7 +4,7 @@ import { settled } from '../stories/support.tsx';
 type Color = Uint8ClampedArray;
 
 function luminance(color: Color): number {
-  const linear = Array.from(color.slice(0, 3), channel => {
+  const linear = Array.from(color.slice(0, 3), (channel) => {
     const value = channel / 255;
     return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
   });
@@ -85,10 +85,16 @@ export async function expectInvalidFieldKeyboardFocus(control: HTMLElement, fram
   await expect(Number.parseFloat(focused.outlineWidth), 'focus adds a visible outline').toBeGreaterThan(outlineWidth);
   await expect(Number.parseFloat(focused.outlineWidth), 'focus outline remains discernible').toBeGreaterThanOrEqual(2);
   await expect(focused.outlineStyle).toBe('solid');
-  await expect(Number.parseFloat(focused.outlineOffset), 'focus is separated from the error boundary').toBeGreaterThanOrEqual(2);
+  await expect(
+    Number.parseFloat(focused.outlineOffset),
+    'focus is separated from the error boundary',
+  ).toBeGreaterThanOrEqual(2);
   const probe = colorProbe(frame);
   probe.paint(focused.outlineColor);
-  await expect(contrast(probe.color(), probe.outside), 'focus indicator against the adjacent surface').toBeGreaterThanOrEqual(3);
+  await expect(
+    contrast(probe.color(), probe.outside),
+    'focus indicator against the adjacent surface',
+  ).toBeGreaterThanOrEqual(3);
   await expect(focused.borderTopColor, 'error boundary survives focus').toBe(border);
   await expect(getComputedStyle(control).color, 'error text survives focus').toBe(text);
   await expectControlBoundary(frame);

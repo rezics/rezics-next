@@ -54,9 +54,7 @@ export const RemovePost: Story = {
     const alert = await openAlert(canvasElement, 'Remove post');
     await expect(within(alert).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
     await expect(within(alert).getByRole('button', { name: 'Keep post' })).toHaveFocus();
-    await expect(args.onOpenChange).toHaveBeenLastCalledWith(
-      expect.objectContaining({ open: true }),
-    );
+    await expect(args.onOpenChange).toHaveBeenLastCalledWith(expect.objectContaining({ open: true }));
   },
 };
 
@@ -112,10 +110,7 @@ export const Removing: Story = {
   ),
   async play({ canvasElement }) {
     const alert = await openAlert(canvasElement, 'Delete shelf');
-    await expect(within(alert).getByRole('button', { name: 'Delete shelf' })).toHaveAttribute(
-      'aria-busy',
-      'true',
-    );
+    await expect(within(alert).getByRole('button', { name: 'Delete shelf' })).toHaveAttribute('aria-busy', 'true');
     await userEvent.keyboard('{Escape}');
     await expect(alert).toBeVisible();
   },
@@ -165,9 +160,7 @@ export const Chinese: Story = {
   ),
   async play({ canvasElement }) {
     const alert = await openAlert(canvasElement, '封禁用户');
-    await expect(
-      within(alert).getByRole('heading', { name: '确定封禁 @luoji_2007 吗？' }),
-    ).toBeVisible();
+    await expect(within(alert).getByRole('heading', { name: '确定封禁 @luoji_2007 吗？' })).toBeVisible();
   },
 };
 

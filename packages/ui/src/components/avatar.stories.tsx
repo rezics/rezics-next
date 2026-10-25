@@ -2,14 +2,7 @@ import type { Decorator, Meta, StoryObj } from '@storybook/react-vite';
 import { UserIcon } from 'lucide-react';
 import { expect, waitFor, within } from 'storybook/test';
 import { cn } from '../utils.ts';
-import {
-  Avatar,
-  AvatarBadge,
-  AvatarFallback,
-  AvatarGroup,
-  AvatarGroupCount,
-  AvatarImage,
-} from './avatar.tsx';
+import { Avatar, AvatarBadge, AvatarFallback, AvatarGroup, AvatarGroupCount, AvatarImage } from './avatar.tsx';
 import { initials } from './avatar-initials.tsx';
 
 const surface: Decorator = (Story, { parameters }) => (
@@ -81,8 +74,16 @@ export const Fallback: Story = {
 export const Initials: Story = {
   render: () => (
     <ul className="grid gap-3 text-sm">
-      {['Daniel Chen 陈丹尼', 'Lin Mei 林梅', '陈丹尼', '月下书生 · Moonlit Scribe', '김민지', 'élodie', 'Daniel 陈丹尼',
-        'Анна Петрова'].map((name) => (
+      {[
+        'Daniel Chen 陈丹尼',
+        'Lin Mei 林梅',
+        '陈丹尼',
+        '月下书生 · Moonlit Scribe',
+        '김민지',
+        'élodie',
+        'Daniel 陈丹尼',
+        'Анна Петрова',
+      ].map((name) => (
         <li className="flex items-center gap-3" key={name}>
           <Avatar>
             <AvatarFallback>{initials(name)}</AvatarFallback>

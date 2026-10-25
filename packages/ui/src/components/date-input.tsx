@@ -10,12 +10,7 @@ import { cn } from '../utils.ts';
 import { FieldLabel } from './field.tsx';
 import type { InputProps } from './input.tsx';
 import { useLocale } from './locale.tsx';
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  type InputGroupProps,
-} from './input-group.tsx';
+import { InputGroup, InputGroupAddon, InputGroupButton, type InputGroupProps } from './input-group.tsx';
 
 export const useDateInput = useArkDateInput;
 
@@ -27,9 +22,7 @@ export const DateInputLabel = (props: React.ComponentProps<typeof ArkDateInput.L
 );
 export const useDateInputContext = useArkDateInputContext;
 
-interface DateInputProps
-  extends React.ComponentProps<typeof ArkDateInput.Root>,
-    Pick<InputProps, 'size'> {
+interface DateInputProps extends React.ComponentProps<typeof ArkDateInput.Root>, Pick<InputProps, 'size'> {
   /**
    * The separator to show between the date input fields.
    *
@@ -44,9 +37,7 @@ interface DateInputProps
   showClear?: boolean;
 }
 
-interface DateInputControlProps
-  extends React.ComponentProps<typeof ArkDateInput.Root>,
-    Pick<InputGroupProps, 'size'> {
+interface DateInputControlProps extends React.ComponentProps<typeof ArkDateInput.Root>, Pick<InputGroupProps, 'size'> {
   /**
    * Whether to show the clear button.
    *
@@ -96,9 +87,7 @@ export const DateInput = (props: DateInputProps) => {
         )}
       </DateInputControl>
       <ArkDateInput.HiddenInput index={0} key="date-input-hidden-0" />
-      {selectionMode === 'range' && (
-        <ArkDateInput.HiddenInput index={1} key="date-input-hidden-1" />
-      )}
+      {selectionMode === 'range' && <ArkDateInput.HiddenInput index={1} key="date-input-hidden-1" />}
     </ArkDateInput.Root>
   );
 };
@@ -155,9 +144,7 @@ const DateInputSegmentGroup = (props: React.ComponentProps<typeof ArkDateInput.S
       index={index}
       {...rest}
     >
-      <ArkDateInput.SegmentContext>
-        {(segment) => <DateInputSegment segment={segment} />}
-      </ArkDateInput.SegmentContext>
+      <ArkDateInput.SegmentContext>{(segment) => <DateInputSegment segment={segment} />}</ArkDateInput.SegmentContext>
     </ArkDateInput.SegmentGroup>
   );
 };

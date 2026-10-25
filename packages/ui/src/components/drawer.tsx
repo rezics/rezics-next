@@ -1,15 +1,10 @@
-
 import { Drawer as ArkDrawer, DrawerContext, useDrawerContext } from '@ark-ui/react/drawer';
 import { ark } from '@ark-ui/react/factory';
 import { Portal } from '@ark-ui/react/portal';
 import { XIcon } from 'lucide-react';
 import React from 'react';
 import { tv, type VariantProps } from 'tailwind-variants';
-import {
-  initialDialogFocus,
-  useDialogContentRef,
-  useDialogOpen,
-} from '../hooks/use-dialog-behavior.tsx';
+import { initialDialogFocus, useDialogContentRef, useDialogOpen } from '../hooks/use-dialog-behavior.tsx';
 import { useUiCopy } from '../i18n/copy.ts';
 import { cn } from '../utils.ts';
 import { Button } from './button.tsx';
@@ -152,11 +147,7 @@ export const DrawerOverlay = (props: React.ComponentProps<typeof ArkDrawer.Backd
   }
 
   return (
-    <ArkDrawer.Backdrop
-      className={cn(drawerOverlayVariants(), className)}
-      data-slot="drawer-backdrop"
-      {...rest}
-    />
+    <ArkDrawer.Backdrop className={cn(drawerOverlayVariants(), className)} data-slot="drawer-backdrop" {...rest} />
   );
 };
 
@@ -188,8 +179,7 @@ const drawerPositionerVariants = tv({
 });
 
 interface DrawerPositionerProps
-  extends React.ComponentProps<typeof ArkDrawer.Positioner>,
-    VariantProps<typeof drawerPositionerVariants> {}
+  extends React.ComponentProps<typeof ArkDrawer.Positioner>, VariantProps<typeof drawerPositionerVariants> {}
 
 export const DrawerPositioner = (props: DrawerPositionerProps) => {
   const { variant = 'default', className, ...rest } = props;
@@ -262,10 +252,7 @@ const drawerContentVariants = tv({
   variants: {
     variant: {
       default: '',
-      inset: [
-        'sm:rounded-3xl sm:border',
-        'sm:**:data-[slot=drawer-footer]:rounded-b-[calc(var(--radius-3xl)-1px)]',
-      ],
+      inset: ['sm:rounded-3xl sm:border', 'sm:**:data-[slot=drawer-footer]:rounded-b-[calc(var(--radius-3xl)-1px)]'],
     },
   },
   defaultVariants: {
@@ -284,8 +271,7 @@ function needsFullHeightForSnapPoints(snapPoints: SnapPoint[]): boolean {
 }
 
 interface DrawerContentProps
-  extends React.ComponentProps<typeof ArkDrawer.Content>,
-    VariantProps<typeof drawerContentVariants> {
+  extends React.ComponentProps<typeof ArkDrawer.Content>, VariantProps<typeof drawerContentVariants> {
   /**
    * Show the drag bar indicator
    *
@@ -301,16 +287,7 @@ interface DrawerContentProps
 }
 
 export const DrawerContent = (props: DrawerContentProps) => {
-  const {
-    variant = 'default',
-    showBar,
-    showCloseButton = false,
-    className,
-    children,
-    ref,
-    draggable,
-    ...rest
-  } = props;
+  const { variant = 'default', showBar, showCloseButton = false, className, children, ref, draggable, ...rest } = props;
   const { contentRef, pending } = _useDrawerModal();
   const copy = useUiCopy();
   const mergedRef = useDialogContentRef(contentRef, ref);
@@ -327,11 +304,7 @@ export const DrawerContent = (props: DrawerContentProps) => {
           return (
             <DrawerPositioner variant={variant}>
               <ArkDrawer.Content
-                className={cn(
-                  drawerContentVariants({ variant }),
-                  fullHeight && 'h-full',
-                  className,
-                )}
+                className={cn(drawerContentVariants({ variant }), fullHeight && 'h-full', className)}
                 data-slot="drawer-content"
                 draggable={pending ? false : draggable}
                 ref={mergedRef}
@@ -487,13 +460,7 @@ export const DrawerBody = (props: DrawerBodyProps) => {
 
 export const DrawerClose = (props: React.ComponentProps<typeof ArkDrawer.CloseTrigger>) => {
   const { pending } = _useDrawerModal();
-  return (
-    <ArkDrawer.CloseTrigger
-      data-slot="drawer-close"
-      {...props}
-      disabled={pending || props.disabled}
-    />
-  );
+  return <ArkDrawer.CloseTrigger data-slot="drawer-close" {...props} disabled={pending || props.disabled} />;
 };
 
 const drawerFooterVariants = tv({
@@ -509,20 +476,12 @@ const drawerFooterVariants = tv({
   },
 });
 
-interface DrawerFooterProps
-  extends React.ComponentProps<typeof ark.div>,
-    VariantProps<typeof drawerFooterVariants> {}
+interface DrawerFooterProps extends React.ComponentProps<typeof ark.div>, VariantProps<typeof drawerFooterVariants> {}
 
 export const DrawerFooter = (props: DrawerFooterProps) => {
   const { variant = 'default', className, ...rest } = props;
 
-  return (
-    <ark.div
-      className={cn(drawerFooterVariants({ variant }), className)}
-      data-slot="drawer-footer"
-      {...rest}
-    />
-  );
+  return <ark.div className={cn(drawerFooterVariants({ variant }), className)} data-slot="drawer-footer" {...rest} />;
 };
 
 const _useDrawerModal = () => {

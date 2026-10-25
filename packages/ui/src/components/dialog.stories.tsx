@@ -42,9 +42,15 @@ const NewShelf = (props: { invalid?: boolean; saving?: boolean }) => (
       <DialogBody>
         <div className="grid gap-2 text-sm font-medium">
           <label htmlFor="shelf-name">Shelf name</label>
-          <Input id="shelf-name" aria-invalid={props.invalid || undefined} defaultValue={props.invalid ? '' : 'Hard science fiction'} />
+          <Input
+            id="shelf-name"
+            aria-invalid={props.invalid || undefined}
+            defaultValue={props.invalid ? '' : 'Hard science fiction'}
+          />
           {props.invalid ? (
-            <span className="text-sm text-foreground" role="alert">Give the shelf a name.</span>
+            <span className="text-sm text-foreground" role="alert">
+              Give the shelf a name.
+            </span>
           ) : (
             <span className="text-sm text-muted-foreground">Visible on your profile to anyone you share it with.</span>
           )}
@@ -107,10 +113,7 @@ export const Invalid: Story = {
   async play({ canvasElement }) {
     const dialog = await openDialog(canvasElement, 'New shelf');
     await expect(within(dialog).getByText('Give the shelf a name.')).toBeVisible();
-    await expect(within(dialog).getByLabelText('Shelf name')).toHaveAttribute(
-      'aria-invalid',
-      'true',
-    );
+    await expect(within(dialog).getByLabelText('Shelf name')).toHaveAttribute('aria-invalid', 'true');
   },
 };
 
@@ -118,10 +121,7 @@ export const Saving: Story = {
   render: () => <NewShelf saving />,
   async play({ canvasElement }) {
     const dialog = await openDialog(canvasElement, 'New shelf');
-    await expect(within(dialog).getByRole('button', { name: 'Create shelf' })).toHaveAttribute(
-      'aria-busy',
-      'true',
-    );
+    await expect(within(dialog).getByRole('button', { name: 'Create shelf' })).toHaveAttribute('aria-busy', 'true');
     await userEvent.keyboard('{Escape}');
     await expect(dialog).toBeVisible();
     await expect(within(dialog).getByRole('button', { name: 'Close' })).toBeDisabled();
@@ -159,9 +159,7 @@ export const MenuLaunch: Story = {
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Post actions' }));
     await userEvent.click(screen.getByRole('menuitem', { name: 'New shelf' }));
     const dialog = await settled(await screen.findByRole('dialog'));
-    await waitFor(() =>
-      expect(within(dialog).getByRole('textbox', { name: 'Shelf name' })).toHaveFocus(),
-    );
+    await waitFor(() => expect(within(dialog).getByRole('textbox', { name: 'Shelf name' })).toHaveFocus());
     await new Promise((resolve) => setTimeout(resolve, 100));
     await expect(dialog).toBeVisible();
   },
@@ -209,9 +207,7 @@ export const ChainedDialogs: Story = {
     const first = await settled(await screen.findByRole('dialog', { name: 'First step' }));
     await userEvent.click(within(first).getByRole('button', { name: 'Continue' }));
     const second = await settled(await screen.findByRole('dialog', { name: 'Second step' }));
-    await waitFor(() =>
-      expect(within(second).getByRole('textbox', { name: 'Shelf name' })).toHaveFocus(),
-    );
+    await waitFor(() => expect(within(second).getByRole('textbox', { name: 'Shelf name' })).toHaveFocus());
     await new Promise((resolve) => setTimeout(resolve, 100));
     await expect(second).toBeVisible();
   },
@@ -264,22 +260,13 @@ export const OverflowingBodyFocus: Story = {
     const dialog = await openDialog(canvasElement, 'Realm guidelines');
     const close = within(dialog).getByRole('button', { name: 'Close' });
     await waitFor(() => expect(close).toHaveFocus());
-    await expect(dialog.querySelector('[data-slot="scroll-area-viewport"]')).toHaveAttribute(
-      'tabindex',
-      '0',
-    );
+    await expect(dialog.querySelector('[data-slot="scroll-area-viewport"]')).toHaveAttribute('tabindex', '0');
   },
 };
 
 const guidelines = [
-  [
-    'Stay on the Work',
-    'Discuss the Work, its editions and its reception. Off-topic threads move to the Realm lounge.',
-  ],
-  [
-    'Mark spoilers',
-    'Hide plot turns behind a spoiler tag, and name the chapter or volume they come from.',
-  ],
+  ['Stay on the Work', 'Discuss the Work, its editions and its reception. Off-topic threads move to the Realm lounge.'],
+  ['Mark spoilers', 'Hide plot turns behind a spoiler tag, and name the chapter or volume they come from.'],
   [
     'Rate what you read',
     'Ratings count only once you mark an edition as read. Re-rating after a re-read replaces the old score.',
@@ -401,15 +388,14 @@ export const Chinese: Story = {
         <Button>编辑作品信息</Button>
       </DialogTrigger>
       <DialogContent>
-        <DialogHeader
-          description="修改会进入修订记录，审核通过后对所有读者可见。"
-          title="编辑《三体》的作品信息"
-        />
+        <DialogHeader description="修改会进入修订记录，审核通过后对所有读者可见。" title="编辑《三体》的作品信息" />
         <DialogBody>
           <div className="grid gap-2 text-sm font-medium">
             <label htmlFor="work-title">作品标题</label>
             <Input id="work-title" defaultValue="三体 (The Three-Body Problem)" />
-            <span className="text-sm text-muted-foreground">原文标题在前，译名放在括号中，例如 Liu Cixin 的英文版。</span>
+            <span className="text-sm text-muted-foreground">
+              原文标题在前，译名放在括号中，例如 Liu Cixin 的英文版。
+            </span>
           </div>
         </DialogBody>
         <DialogFooter>
@@ -423,9 +409,7 @@ export const Chinese: Story = {
   ),
   async play({ canvasElement }) {
     const dialog = await openDialog(canvasElement, '编辑作品信息');
-    await expect(
-      within(dialog).getByRole('heading', { name: '编辑《三体》的作品信息' }),
-    ).toBeVisible();
+    await expect(within(dialog).getByRole('heading', { name: '编辑《三体》的作品信息' })).toBeVisible();
   },
 };
 

@@ -54,9 +54,7 @@ export const WithClear: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Clear date' }));
-    await waitFor(() =>
-      expect(canvas.queryByRole('button', { name: 'Clear date' })).not.toBeInTheDocument(),
-    );
+    await waitFor(() => expect(canvas.queryByRole('button', { name: 'Clear date' })).not.toBeInTheDocument());
   },
 };
 

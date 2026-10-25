@@ -1,4 +1,3 @@
-
 import { ark } from '@ark-ui/react/factory';
 import { Steps as ArkSteps, useStepsContext } from '@ark-ui/react/steps';
 import { CheckIcon } from 'lucide-react';
@@ -145,24 +144,14 @@ export const StepsSeparator = (props: React.ComponentProps<typeof ArkSteps.Separ
 export const StepsTitle = (props: React.ComponentProps<typeof ark.span>) => {
   const { className, ...rest } = props;
 
-  return (
-    <ark.span
-      className={cn('font-medium text-sm leading-none', className)}
-      data-slot="steps-title"
-      {...rest}
-    />
-  );
+  return <ark.span className={cn('font-medium text-sm leading-none', className)} data-slot="steps-title" {...rest} />;
 };
 
 export const StepsDescription = (props: React.ComponentProps<typeof ark.span>) => {
   const { className, ...rest } = props;
 
   return (
-    <ark.span
-      className={cn('text-muted-foreground text-xs', className)}
-      data-slot="steps-description"
-      {...rest}
-    />
+    <ark.span className={cn('text-muted-foreground text-xs', className)} data-slot="steps-description" {...rest} />
   );
 };
 
@@ -178,9 +167,7 @@ export const StepsContent = (props: React.ComponentProps<typeof ArkSteps.Content
   );
 };
 
-export const StepsCompletedContent = (
-  props: React.ComponentProps<typeof ArkSteps.CompletedContent>,
-) => {
+export const StepsCompletedContent = (props: React.ComponentProps<typeof ArkSteps.CompletedContent>) => {
   const { className, ...rest } = props;
 
   return (

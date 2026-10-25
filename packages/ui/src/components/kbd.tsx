@@ -1,4 +1,3 @@
-
 import { ark } from '@ark-ui/react/factory';
 import type React from 'react';
 import { tv, type VariantProps } from 'tailwind-variants';
@@ -38,11 +37,5 @@ export const Kbd = (props: KbdProps) => {
 export const KbdGroup = (props: React.ComponentProps<typeof ark.div>) => {
   const { className, ...rest } = props;
 
-  return (
-    <ark.div
-      className={cn('inline-flex items-center gap-1.5', className)}
-      data-slot="kbd-group"
-      {...rest}
-    />
-  );
+  return <ark.div className={cn('inline-flex items-center gap-1.5', className)} data-slot="kbd-group" {...rest} />;
 };

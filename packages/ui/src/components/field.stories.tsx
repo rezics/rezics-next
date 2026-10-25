@@ -75,9 +75,7 @@ export const Required: Story = {
     </Field>
   ),
   async play({ canvasElement }) {
-    await expect(
-      within(canvasElement).getByRole('textbox', { name: /Original title/ }),
-    ).toBeRequired();
+    await expect(within(canvasElement).getByRole('textbox', { name: /Original title/ })).toBeRequired();
   },
 };
 
@@ -119,9 +117,7 @@ export const Horizontal: Story = {
       <Field orientation="horizontal">
         <FieldContent>
           <FieldLabel>Blur spoilers</FieldLabel>
-          <FieldDescription>
-            Reviews marked as spoilers stay blurred until you tap them.
-          </FieldDescription>
+          <FieldDescription>Reviews marked as spoilers stay blurred until you tap them.</FieldDescription>
         </FieldContent>
         <Switch defaultChecked />
       </Field>
@@ -164,9 +160,7 @@ export const FieldSetWithLegend: Story = {
   render: () => (
     <FieldSet>
       <FieldLegend>Edition details</FieldLegend>
-      <FieldSetHelper>
-        Only the fields that differ from the first edition are required.
-      </FieldSetHelper>
+      <FieldSetHelper>Only the fields that differ from the first edition are required.</FieldSetHelper>
       <FieldGroup>
         <Field>
           <FieldLabel>Translator</FieldLabel>
@@ -185,9 +179,7 @@ export const FieldSetWithLegend: Story = {
     </FieldSet>
   ),
   async play({ canvasElement }) {
-    await expect(
-      within(canvasElement).getByRole('group', { name: 'Edition details' }),
-    ).toBeInTheDocument();
+    await expect(within(canvasElement).getByRole('group', { name: 'Edition details' })).toBeInTheDocument();
   },
 };
 
@@ -214,14 +206,12 @@ export const LongContent: Story = {
   render: () => (
     <Field>
       <FieldLabel>
-        Alternative titles, including romanised, translated and fan-community titles used in other
-        Realms
+        Alternative titles, including romanised, translated and fan-community titles used in other Realms
       </FieldLabel>
       <Input defaultValue="The Three-Body Problem; Remembrance of Earth's Past; San Ti; 地球往事" />
       <FieldHelper>
-        Separate titles with semicolons. Titles in any script are allowed, and search matches all of
-        them, so readers who know 《地球往事》 or “Remembrance of Earth’s Past” still find this
-        Work.
+        Separate titles with semicolons. Titles in any script are allowed, and search matches all of them, so readers
+        who know 《地球往事》 or “Remembrance of Earth’s Past” still find this Work.
       </FieldHelper>
     </Field>
   ),

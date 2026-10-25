@@ -10,14 +10,21 @@ test('the package sources type-check under the settings of the apps that import 
   const directory = mkdtempSync(join(root, '.consumer-types-'));
   try {
     const config = join(directory, 'tsconfig.json');
-    writeFileSync(config, JSON.stringify({
-      extends: join(root, '..', '..', 'tsconfig.base.json'),
-      compilerOptions: { jsx: 'react-jsx', lib: ['DOM', 'DOM.Iterable', 'ESNext'] },
-      include: [join(root, 'src', '**', '*.ts'), join(root, 'src', '**', '*.tsx')],
-      exclude: [join(root, 'src', '**', '*.stories.tsx'), join(root, 'src', 'stories'), join(root, 'src', 'test')],
-    }));
+    writeFileSync(
+      config,
+      JSON.stringify({
+        extends: join(root, '..', '..', 'tsconfig.base.json'),
+        compilerOptions: { jsx: 'react-jsx', lib: ['DOM', 'DOM.Iterable', 'ESNext'] },
+        include: [join(root, 'src', '**', '*.ts'), join(root, 'src', '**', '*.tsx')],
+        exclude: [join(root, 'src', '**', '*.stories.tsx'), join(root, 'src', 'stories'), join(root, 'src', 'test')],
+      }),
+    );
     const run = Bun.spawn(['bun', 'x', 'tsc', '--noEmit', '-p', config], { cwd: root, stdout: 'pipe', stderr: 'pipe' });
-    const [stdout, stderr, code] = await Promise.all([new Response(run.stdout).text(), new Response(run.stderr).text(), run.exited]);
+    const [stdout, stderr, code] = await Promise.all([
+      new Response(run.stdout).text(),
+      new Response(run.stderr).text(),
+      run.exited,
+    ]);
     expect(code, `${stdout}\n${stderr}`).toBe(0);
   } finally {
     rmSync(directory, { recursive: true, force: true });

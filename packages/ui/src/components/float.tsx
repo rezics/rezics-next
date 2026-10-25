@@ -1,4 +1,3 @@
-
 import { ark } from '@ark-ui/react/factory';
 import type React from 'react';
 import { tv, type VariantProps } from 'tailwind-variants';
@@ -24,9 +23,7 @@ const floatVariants = tv({
   },
 });
 
-interface FloatProps
-  extends React.ComponentProps<typeof ark.div>,
-    VariantProps<typeof floatVariants> {}
+interface FloatProps extends React.ComponentProps<typeof ark.div>, VariantProps<typeof floatVariants> {}
 
 export const Float = (props: FloatProps) => {
   const { placement = 'top-end', className, ...rest } = props;

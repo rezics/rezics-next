@@ -47,9 +47,7 @@ const meta = {
   },
   decorators: [
     (Story, context) => (
-      <main
-        className={'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'}
-      >
+      <main className={'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'}>
         <Story />
       </main>
     ),
@@ -83,15 +81,11 @@ export const GuidedReading: Story = {
   render: () => <ReadingTour />,
   async play({ canvasElement }) {
     const page = within(canvasElement.ownerDocument.body);
-    await userEvent.click(
-      within(canvasElement).getByRole('button', { name: 'Show reading guide' }),
-    );
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Show reading guide' }));
     await waitFor(() => expect(page.getByRole('alertdialog')).toBeVisible());
     await expect(page.getByRole('heading', { name: 'Start a personal shelf' })).toBeVisible();
     await userEvent.click(page.getByRole('button', { name: 'next step' }));
-    await waitFor(() =>
-      expect(page.getByRole('heading', { name: 'Join a Realm conversation' })).toBeVisible(),
-    );
+    await waitFor(() => expect(page.getByRole('heading', { name: 'Join a Realm conversation' })).toBeVisible());
     await userEvent.keyboard('{Escape}');
     await expect(page.getByRole('alertdialog')).toHaveAttribute('data-state', 'closed');
   },

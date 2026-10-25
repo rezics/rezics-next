@@ -1,4 +1,3 @@
-
 import { Tabs as ArkTabs, useTabsContext } from '@ark-ui/react/tabs';
 import type React from 'react';
 import { tv, type VariantProps } from 'tailwind-variants';
@@ -46,11 +45,7 @@ const tabsListVariants = tv({
     variant: {
       // Aura segmented list: a card-toned track with a tinted pill behind the selected tab.
       default: {
-        base: [
-          'p-1',
-          'bg-card/80',
-          'rounded-2xl border border-border/60 shadow-(--aura-shadow-card)',
-        ],
+        base: ['p-1', 'bg-card/80', 'rounded-2xl border border-border/60 shadow-(--aura-shadow-card)'],
         indicator: ['-z-1 start-(--left) top-(--top) rounded-xl bg-primary/10'],
       },
       underline: {
@@ -73,9 +68,7 @@ const tabsListVariants = tv({
     variant: 'default',
   },
 });
-interface TabsListProps
-  extends React.ComponentProps<typeof ArkTabs.List>,
-    VariantProps<typeof tabsListVariants> {}
+interface TabsListProps extends React.ComponentProps<typeof ArkTabs.List>, VariantProps<typeof tabsListVariants> {}
 
 export const TabsList = (props: TabsListProps) => {
   const { variant = 'default', className, children, ...rest } = props;
@@ -123,11 +116,5 @@ export const TabsTrigger = (props: React.ComponentProps<typeof ArkTabs.Trigger>)
 export const TabsContent = (props: React.ComponentProps<typeof ArkTabs.Content>) => {
   const { className, ...rest } = props;
 
-  return (
-    <ArkTabs.Content
-      className={cn('flex-1 outline-none', className)}
-      data-slot="tabs-content"
-      {...rest}
-    />
-  );
+  return <ArkTabs.Content className={cn('flex-1 outline-none', className)} data-slot="tabs-content" {...rest} />;
 };

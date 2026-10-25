@@ -10,13 +10,7 @@ export const useCheckbox = useCheckboxContext;
 export const CheckboxGroup = (props: React.ComponentProps<typeof ArkCheckbox.Group>) => {
   const { className, ...rest } = props;
 
-  return (
-    <ArkCheckbox.Group
-      className={cn('flex flex-col gap-2', className)}
-      data-slot="checkbox-group"
-      {...rest}
-    />
-  );
+  return <ArkCheckbox.Group className={cn('flex flex-col gap-2', className)} data-slot="checkbox-group" {...rest} />;
 };
 
 // A 24px control and native input meet WCAG 2.5.8 even in compact editor panels.
@@ -77,7 +71,6 @@ export const Checkbox = (props: React.ComponentProps<typeof ArkCheckbox.Root>) =
       </span>
 
       {children ? <ArkCheckbox.Label>{children}</ArkCheckbox.Label> : null}
-
     </ArkCheckbox.Root>
   );
 };
@@ -103,8 +96,14 @@ const CheckboxHiddenInput = (props: React.ComponentProps<typeof ArkCheckbox.Hidd
     }
   }, [indeterminate]);
 
-  return <ArkCheckbox.HiddenInput ref={ref} style={nativeControl}
-    className="outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background" {...props} />;
+  return (
+    <ArkCheckbox.HiddenInput
+      ref={ref}
+      style={nativeControl}
+      className="outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+      {...props}
+    />
+  );
 };
 
 // The native input is what pointers and automation reach: unpainted and the size of the control, at the
@@ -150,14 +149,7 @@ export const CheckboxIndicator = (props: React.ComponentProps<typeof ArkCheckbox
     className,
   );
   if (indeterminate)
-    return (
-      <ArkCheckbox.Indicator
-        indeterminate
-        className={classes}
-        data-slot="checkbox-indicator"
-        {...rest}
-      />
-    );
+    return <ArkCheckbox.Indicator indeterminate className={classes} data-slot="checkbox-indicator" {...rest} />;
   // Ark's hidden attribute is tied to machine state. Native :checked must be
   // able to reveal this indicator even before that machine has hydrated.
   const { hidden: _hidden, ...native } = context.getIndicatorProps();

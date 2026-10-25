@@ -1,4 +1,3 @@
-
 import { ark } from '@ark-ui/react/factory';
 import { Progress as ArkProgress, useProgressContext } from '@ark-ui/react/progress';
 import type React from 'react';
@@ -7,7 +6,8 @@ import { cn } from '../utils.ts';
 export const useCircularProgress = useProgressContext;
 
 interface CircularProgressProps
-  extends React.ComponentProps<typeof ArkProgress.Root>,
+  extends
+    React.ComponentProps<typeof ArkProgress.Root>,
     Pick<CircularProgressTrackProps, 'size' | 'thickness' | 'aria-label' | 'aria-labelledby'> {
   /**
    * Shows indeterminate progress.
@@ -32,12 +32,7 @@ export const CircularProgress = (props: CircularProgressProps) => {
 
   return (
     <ArkProgress.Root
-      className={cn(
-        'group/circular-progress',
-        'relative',
-        'inline-flex items-center justify-center',
-        className,
-      )}
+      className={cn('group/circular-progress', 'relative', 'inline-flex items-center justify-center', className)}
       data-slot="circular-progress"
       value={indeterminate ? null : value}
       {...rest}
@@ -126,9 +121,7 @@ export const CircularProgressTrack = (props: CircularProgressTrackProps) => {
   );
 };
 
-export const CircularProgressValue = (
-  props: React.ComponentProps<typeof ArkProgress.ValueText>,
-) => {
+export const CircularProgressValue = (props: React.ComponentProps<typeof ArkProgress.ValueText>) => {
   const { className, ...rest } = props;
 
   return (

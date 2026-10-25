@@ -18,9 +18,7 @@ const meta = {
   },
   decorators: [
     (Story) => (
-      <main
-        className={'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'}
-      >
+      <main className={'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'}>
         <Story />
       </main>
     ),
@@ -35,19 +33,14 @@ const ShelfFeedback = ({ dark = false }: { dark?: boolean }) => {
   return (
     <section
       className={
-        dark
-          ? 'rounded-2xl bg-background p-6 text-foreground'
-          : 'rounded-2xl border border-border/60 bg-card p-6'
+        dark ? 'rounded-2xl bg-background p-6 text-foreground' : 'rounded-2xl border border-border/60 bg-card p-6'
       }
     >
       <Button onClick={() => setVisible((current) => !current)} variant="outline">
         {visible ? 'Hide confirmation' : 'Show confirmation'}
       </Button>
       <Presence present={visible}>
-        <p
-          className="mt-4 rounded-xl bg-success/10 px-4 py-3 text-sm text-success-foreground"
-          role="status"
-        >
+        <p className="mt-4 rounded-xl bg-success/10 px-4 py-3 text-sm text-success-foreground" role="status">
           《三体》 was added to your reading shelf.
         </p>
       </Presence>

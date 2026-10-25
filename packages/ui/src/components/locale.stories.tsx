@@ -17,9 +17,7 @@ const meta = {
   },
   decorators: [
     (Story) => (
-      <main
-        className={'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'}
-      >
+      <main className={'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'}>
         <Story />
       </main>
     ),
@@ -34,9 +32,7 @@ const LocaleSummary = ({ dark = false }: { dark?: boolean }) => {
   return (
     <div
       className={
-        dark
-          ? 'rounded-2xl bg-background p-6 text-foreground'
-          : 'rounded-2xl border border-border/60 bg-card p-6'
+        dark ? 'rounded-2xl bg-background p-6 text-foreground' : 'rounded-2xl border border-border/60 bg-card p-6'
       }
     >
       <p className="text-sm text-muted-foreground">Current catalogue locale</p>
@@ -65,10 +61,7 @@ export const SimplifiedChinese: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByText('zh-CN')).toBeVisible();
-    await expect(canvas.getByText('《三体》 · Reading notes and editions')).toHaveAttribute(
-      'lang',
-      'zh-CN',
-    );
+    await expect(canvas.getByText('《三体》 · Reading notes and editions')).toHaveAttribute('lang', 'zh-CN');
   },
 };
 

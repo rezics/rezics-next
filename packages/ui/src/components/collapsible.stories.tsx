@@ -2,12 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import { withSurface } from '../stories/support.tsx';
 import { Button } from './button.tsx';
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleIndicator,
-  CollapsibleTrigger,
-} from './collapsible.tsx';
+import { Collapsible, CollapsibleContent, CollapsibleIndicator, CollapsibleTrigger } from './collapsible.tsx';
 
 const meta = {
   title: 'Rezics UI/Collapsible',
@@ -23,8 +18,7 @@ export const Spoiler: Story = {
   render: (args) => (
     <Collapsible className="flex max-w-xl flex-col gap-2" {...args}>
       <p className="text-sm">
-        The countdown only Wang Miao can see is the book’s best scene, and the reason why is worth
-        the wait.
+        The countdown only Wang Miao can see is the book’s best scene, and the reason why is worth the wait.
       </p>
       <CollapsibleTrigger asChild>
         <Button className="w-fit" size="sm" variant="secondary">
@@ -82,10 +76,7 @@ export const ReadMore: Story = {
     // A partial collapse keeps the preview mounted and readable.
     await expect(canvas.getByText(/A slow first third/)).toBeInTheDocument();
     await userEvent.click(canvas.getByRole('button', { name: 'Read the full review' }));
-    await expect(canvas.getByRole('button', { name: 'Read the full review' })).toHaveAttribute(
-      'aria-expanded',
-      'true',
-    );
+    await expect(canvas.getByRole('button', { name: 'Read the full review' })).toHaveAttribute('aria-expanded', 'true');
   },
 };
 

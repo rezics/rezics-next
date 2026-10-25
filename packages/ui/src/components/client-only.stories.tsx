@@ -17,9 +17,7 @@ const meta = {
   },
   decorators: [
     (Story) => (
-      <main
-        className={'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'}
-      >
+      <main className={'aura-canvas flex min-h-screen items-center justify-center bg-background p-6'}>
         <Story />
       </main>
     ),
@@ -32,20 +30,14 @@ type Story = StoryObj<typeof meta>;
 const ShelfPreview = ({ dark = false, empty = false }: { dark?: boolean; empty?: boolean }) => (
   <section
     className={
-      dark
-        ? 'rounded-2xl bg-background p-6 text-foreground'
-        : 'rounded-2xl border border-border/60 bg-card p-6'
+      dark ? 'rounded-2xl bg-background p-6 text-foreground' : 'rounded-2xl border border-border/60 bg-card p-6'
     }
   >
     <h2 className="font-semibold text-foreground">Continue reading</h2>
-    <ClientOnly
-      fallback={<p className="mt-3 text-sm text-muted-foreground">Restoring your reading shelf…</p>}
-    >
+    <ClientOnly fallback={<p className="mt-3 text-sm text-muted-foreground">Restoring your reading shelf…</p>}>
       {() => (
         <p className="mt-3 text-sm text-muted-foreground">
-          {empty
-            ? 'Your shelf has no Works yet.'
-            : '《三体》 · Chapter 4 · last opened on this device'}
+          {empty ? 'Your shelf has no Works yet.' : '《三体》 · Chapter 4 · last opened on this device'}
         </p>
       )}
     </ClientOnly>
@@ -56,9 +48,7 @@ export const RestoredShelf: Story = {
   render: () => <ShelfPreview />,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(
-      canvas.getByText('《三体》 · Chapter 4 · last opened on this device'),
-    ).toBeVisible();
+    await expect(canvas.getByText('《三体》 · Chapter 4 · last opened on this device')).toBeVisible();
   },
 };
 

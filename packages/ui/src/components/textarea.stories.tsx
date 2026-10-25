@@ -143,7 +143,9 @@ async function expectTextareaKeyboardFocus(textarea: HTMLElement): Promise<void>
   await expect(textarea.matches(':focus-visible')).toBe(true);
   const focused = getComputedStyle(textarea);
   await expect(focused.outlineStyle, 'keyboard focus adds a visible cue').toBe('solid');
-  await expect(Number.parseFloat(focused.outlineWidth), 'focus changes the field outline').toBeGreaterThan(visibleOutlineWidth);
+  await expect(Number.parseFloat(focused.outlineWidth), 'focus changes the field outline').toBeGreaterThan(
+    visibleOutlineWidth,
+  );
   await expectControlBoundary(textarea);
 }
 
@@ -151,7 +153,7 @@ export const EmptyFields: Story = {
   globals: { theme: 'light', viewport: { value: 'desktop1440' } },
   render: () => (
     <div className="flex flex-col gap-4">
-      {['bg-background', 'bg-card', 'bg-muted'].map(surface => (
+      {['bg-background', 'bg-card', 'bg-muted'].map((surface) => (
         <div className={`rounded-2xl border p-4 ${surface}`} key={surface}>
           <Field>
             <FieldLabel>Your review</FieldLabel>
@@ -182,15 +184,18 @@ export const EmptyFields: Story = {
 };
 
 export const EmptyFieldsDark: Story = {
-  ...EmptyFields, globals: { theme: 'dark', viewport: { value: 'desktop1440' } },
+  ...EmptyFields,
+  globals: { theme: 'dark', viewport: { value: 'desktop1440' } },
 };
 
 export const EmptyFieldsPhone: Story = {
-  ...EmptyFields, globals: { theme: 'light', viewport: { value: 'phone' } },
+  ...EmptyFields,
+  globals: { theme: 'light', viewport: { value: 'phone' } },
 };
 
 export const EmptyFieldsDarkPhone: Story = {
-  ...EmptyFields, globals: { theme: 'dark', viewport: { value: 'phone' } },
+  ...EmptyFields,
+  globals: { theme: 'dark', viewport: { value: 'phone' } },
 };
 
 export const InvalidFields: Story = {
@@ -224,15 +229,18 @@ export const InvalidFields: Story = {
 };
 
 export const InvalidFieldsDark: Story = {
-  ...InvalidFields, globals: { theme: 'dark', viewport: { value: 'desktop1440' } },
+  ...InvalidFields,
+  globals: { theme: 'dark', viewport: { value: 'desktop1440' } },
 };
 
 export const InvalidFieldsPhone: Story = {
-  ...InvalidFields, globals: { theme: 'light', viewport: { value: 'phone' } },
+  ...InvalidFields,
+  globals: { theme: 'light', viewport: { value: 'phone' } },
 };
 
 export const InvalidFieldsDarkPhone: Story = {
-  ...InvalidFields, globals: { theme: 'dark', viewport: { value: 'phone' } },
+  ...InvalidFields,
+  globals: { theme: 'dark', viewport: { value: 'phone' } },
 };
 
 export const Availability: Story = {
@@ -276,15 +284,18 @@ export const Availability: Story = {
 };
 
 export const AvailabilityDark: Story = {
-  ...Availability, globals: { theme: 'dark', viewport: { value: 'desktop1440' } },
+  ...Availability,
+  globals: { theme: 'dark', viewport: { value: 'desktop1440' } },
 };
 
 export const AvailabilityPhone: Story = {
-  ...Availability, globals: { theme: 'light', viewport: { value: 'phone' } },
+  ...Availability,
+  globals: { theme: 'light', viewport: { value: 'phone' } },
 };
 
 export const AvailabilityDarkPhone: Story = {
-  ...Availability, globals: { theme: 'dark', viewport: { value: 'phone' } },
+  ...Availability,
+  globals: { theme: 'dark', viewport: { value: 'phone' } },
 };
 
 export const ErrorRecovery: Story = {
@@ -296,7 +307,7 @@ export const ErrorRecovery: Story = {
         invalid={value.trim().length < 50}
       >
         <FieldLabel>Your review</FieldLabel>
-        <Textarea onChange={event => setValue(event.currentTarget.value)} value={value} />
+        <Textarea onChange={(event) => setValue(event.currentTarget.value)} value={value} />
         <FieldHelper>Share what other readers should know about this Work.</FieldHelper>
         <FieldError>Reviews need at least 50 characters. Add a few more thoughts.</FieldError>
       </Field>

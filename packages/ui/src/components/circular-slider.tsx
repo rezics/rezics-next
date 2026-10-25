@@ -1,4 +1,3 @@
-
 import { AngleSlider as ArkAngleSlider, useAngleSliderContext } from '@ark-ui/react/angle-slider';
 import React from 'react';
 import { cn } from '../utils.ts';
@@ -17,32 +16,22 @@ interface CircularSliderContextValue {
 const CircularSliderContext = React.createContext({} as CircularSliderContextValue);
 
 export interface CircularSliderProps
-  extends React.ComponentProps<typeof ArkAngleSlider.Root>,
+  extends
+    React.ComponentProps<typeof ArkAngleSlider.Root>,
     Partial<Pick<CircularSliderContextValue, 'thickness' | 'size'>> {
   markers?: boolean | number[];
   markersAtSteps?: boolean;
 }
 
 export const CircularSlider = (props: CircularSliderProps) => {
-  const {
-    className,
-    children,
-    size = 100,
-    thickness = 6,
-    markers,
-    markersAtSteps = false,
-    step = 1,
-    ...rest
-  } = props;
+  const { className, children, size = 100, thickness = 6, markers, markersAtSteps = false, step = 1, ...rest } = props;
 
   const markerValues = React.useMemo(() => {
     if (Array.isArray(markers) && markers.length > 0) {
       return markers;
     }
     if (markers === true) {
-      return markersAtSteps
-        ? Array.from({ length: Math.floor(360 / step) }, (_, i) => i * step)
-        : CLOCK_MARKER_ANGLES;
+      return markersAtSteps ? Array.from({ length: Math.floor(360 / step) }, (_, i) => i * step) : CLOCK_MARKER_ANGLES;
     }
     return null;
   }, [markers, markersAtSteps, step]);
@@ -185,8 +174,7 @@ export const CircularSliderThumb = (props: React.ComponentProps<typeof ArkAngleS
   );
 };
 
-interface CircularSliderValueProps
-  extends Omit<React.ComponentProps<typeof ArkAngleSlider.ValueText>, 'prefix'> {
+interface CircularSliderValueProps extends Omit<React.ComponentProps<typeof ArkAngleSlider.ValueText>, 'prefix'> {
   prefix?: React.ReactNode | string;
   suffix?: React.ReactNode | string;
 }
@@ -214,9 +202,7 @@ export const CircularSliderValue = (props: CircularSliderValueProps) => {
   );
 };
 
-export const CircularSliderMarkerGroup = (
-  props: React.ComponentProps<typeof ArkAngleSlider.MarkerGroup>,
-) => {
+export const CircularSliderMarkerGroup = (props: React.ComponentProps<typeof ArkAngleSlider.MarkerGroup>) => {
   const { className, ...rest } = props;
 
   return (

@@ -85,21 +85,12 @@ export const Default: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('listbox', { name: 'Post to Realm' })).toBeInTheDocument();
-    await expect(canvas.getByRole('option', { name: /r\/scifi 48k/ })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
+    await expect(canvas.getByRole('option', { name: /r\/scifi 48k/ })).toHaveAttribute('aria-selected', 'true');
     await userEvent.click(canvas.getByRole('option', { name: /r\/科幻/ }));
-    await expect(canvas.getByRole('option', { name: /r\/科幻/ })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
+    await expect(canvas.getByRole('option', { name: /r\/科幻/ })).toHaveAttribute('aria-selected', 'true');
     await userEvent.keyboard('{ArrowDown}{Enter}');
     await waitFor(() =>
-      expect(canvas.getByRole('option', { name: /r\/LiuCixin/ })).toHaveAttribute(
-        'aria-selected',
-        'true',
-      ),
+      expect(canvas.getByRole('option', { name: /r\/LiuCixin/ })).toHaveAttribute('aria-selected', 'true'),
     );
   },
 };
@@ -147,11 +138,7 @@ export const Actions: Story = {
       <ListboxLabel>Moderation action</ListboxLabel>
       <ListboxContent>
         {actions.items.map((item) => (
-          <ListboxItem
-            item={item}
-            key={item.value}
-            variant={item.value === 'remove' ? 'destructive' : 'default'}
-          >
+          <ListboxItem item={item} key={item.value} variant={item.value === 'remove' ? 'destructive' : 'default'}>
             {item.value === 'remove' ? <TrashIcon aria-hidden /> : <FlagIcon aria-hidden />}
             <ListboxItemText>{item.label}</ListboxItemText>
             <ListboxShortcut>{item.shortcut}</ListboxShortcut>
@@ -193,8 +180,7 @@ export const LongContent: Story = {
       items: [
         {
           value: 'a',
-          label:
-            'r/RemembranceOfEarthsPast — discussion of all three volumes, adaptations and fan translations',
+          label: 'r/RemembranceOfEarthsPast — discussion of all three volumes, adaptations and fan translations',
         },
         { value: 'b', label: 'r/地球往事三部曲读书会（含剧透讨论区与翻译对照）' },
       ],

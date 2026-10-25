@@ -16,8 +16,18 @@ export interface LocalizedValue {
  * leaving `lang` out would make the text inherit it.
  * https://www.w3.org/International/questions/qa-bidi-unicode-controls
  */
-export function LocalizedText({ text, as: Tag = 'bdi', className }: {
-  text: LocalizedValue; as?: 'bdi' | 'span'; className?: string;
+export function LocalizedText({
+  text,
+  as: Tag = 'bdi',
+  className,
+}: {
+  text: LocalizedValue;
+  as?: 'bdi' | 'span';
+  className?: string;
 }): React.ReactElement {
-  return <Tag lang={text.language} dir={text.direction} className={className}>{text.value}</Tag>;
+  return (
+    <Tag lang={text.language} dir={text.direction} className={className}>
+      {text.value}
+    </Tag>
+  );
 }

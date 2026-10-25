@@ -15,12 +15,7 @@ export const FileUpload = (props: React.ComponentProps<typeof ArkFileUpload.Root
 
   return (
     <ArkFileUpload.Root
-      className={cn(
-        'group/file-upload',
-        'relative',
-        'flex flex-col justify-center gap-4',
-        className,
-      )}
+      className={cn('group/file-upload', 'relative', 'flex flex-col justify-center gap-4', className)}
       data-slot="file-upload"
       {...rest}
     >
@@ -87,11 +82,7 @@ export const FileUploadTitle = (props: React.ComponentProps<typeof ark.div>) => 
   const { className, ...rest } = props;
 
   return (
-    <ark.div
-      className={cn('font-medium text-foreground text-sm', className)}
-      data-slot="file-upload-title"
-      {...rest}
-    />
+    <ark.div className={cn('font-medium text-foreground text-sm', className)} data-slot="file-upload-title" {...rest} />
   );
 };
 
@@ -99,11 +90,7 @@ export const FileUploadDescription = (props: React.ComponentProps<typeof ark.div
   const { className, ...rest } = props;
 
   return (
-    <ark.div
-      className={cn('text-muted-foreground text-sm', className)}
-      data-slot="file-upload-description"
-      {...rest}
-    />
+    <ark.div className={cn('text-muted-foreground text-sm', className)} data-slot="file-upload-description" {...rest} />
   );
 };
 
@@ -119,12 +106,11 @@ export const FileUploadHelper = (props: React.ComponentProps<typeof ark.div>) =>
   );
 };
 
-export const FileUploadItemGroup = (
-  props: React.ComponentProps<typeof ArkFileUpload.ItemGroup>,
-) => <ArkFileUpload.ItemGroup data-slot="file-upload-item-group" {...props} />;
+export const FileUploadItemGroup = (props: React.ComponentProps<typeof ArkFileUpload.ItemGroup>) => (
+  <ArkFileUpload.ItemGroup data-slot="file-upload-item-group" {...props} />
+);
 
-interface FileUploadListProps
-  extends Omit<React.ComponentProps<typeof ArkFileUpload.Item>, 'file'> {}
+interface FileUploadListProps extends Omit<React.ComponentProps<typeof ArkFileUpload.Item>, 'file'> {}
 
 export const FileUploadList = (props: FileUploadListProps) => {
   const { className, ...rest } = props;
@@ -161,15 +147,8 @@ export const FileUploadList = (props: FileUploadListProps) => {
             key={key}
             {...rest}
           >
-            <FileUploadItemPreview
-              className="size-8"
-              {...(isImage ? { type: 'image/*' } : { type: '.*' })}
-            >
-              {isImage ? (
-                <FileUploadItemPreviewImage />
-              ) : (
-                <span className="uppercase">{extension}</span>
-              )}
+            <FileUploadItemPreview className="size-8" {...(isImage ? { type: 'image/*' } : { type: '.*' })}>
+              {isImage ? <FileUploadItemPreviewImage /> : <span className="uppercase">{extension}</span>}
             </FileUploadItemPreview>
 
             <div className="min-w-0 flex-1 overflow-hidden">
@@ -201,17 +180,11 @@ export const FileUploadItem = (props: React.ComponentProps<typeof ArkFileUpload.
   const { className, ...rest } = props;
 
   return (
-    <ArkFileUpload.Item
-      className={cn('relative inline-flex', className)}
-      data-slot="file-upload-item"
-      {...rest}
-    />
+    <ArkFileUpload.Item className={cn('relative inline-flex', className)} data-slot="file-upload-item" {...rest} />
   );
 };
 
-export const FileUploadItemPreview = (
-  props: React.ComponentProps<typeof ArkFileUpload.ItemPreview>,
-) => {
+export const FileUploadItemPreview = (props: React.ComponentProps<typeof ArkFileUpload.ItemPreview>) => {
   const { className, ...rest } = props;
 
   return (
@@ -230,9 +203,7 @@ export const FileUploadItemPreview = (
   );
 };
 
-export const FileUploadItemPreviewImage = (
-  props: React.ComponentProps<typeof ArkFileUpload.ItemPreviewImage>,
-) => {
+export const FileUploadItemPreviewImage = (props: React.ComponentProps<typeof ArkFileUpload.ItemPreviewImage>) => {
   const { className, ...rest } = props;
 
   return (
@@ -256,9 +227,7 @@ export const FileUploadItemName = (props: React.ComponentProps<typeof ArkFileUpl
   );
 };
 
-export const FileUploadItemSize = (
-  props: React.ComponentProps<typeof ArkFileUpload.ItemSizeText>,
-) => {
+export const FileUploadItemSize = (props: React.ComponentProps<typeof ArkFileUpload.ItemSizeText>) => {
   const { className, ...rest } = props;
 
   return (
@@ -270,14 +239,14 @@ export const FileUploadItemSize = (
   );
 };
 
-export const FileUploadItemDeleteTrigger = (
-  props: React.ComponentProps<typeof ArkFileUpload.ItemDeleteTrigger>,
-) => <ArkFileUpload.ItemDeleteTrigger data-slot="file-upload-item-delete-trigger" {...props} />;
+export const FileUploadItemDeleteTrigger = (props: React.ComponentProps<typeof ArkFileUpload.ItemDeleteTrigger>) => (
+  <ArkFileUpload.ItemDeleteTrigger data-slot="file-upload-item-delete-trigger" {...props} />
+);
 
-export const FileUploadClearTrigger = (
-  props: React.ComponentProps<typeof ArkFileUpload.ClearTrigger>,
-) => <ArkFileUpload.ClearTrigger data-slot="file-upload-clear-trigger" {...props} />;
+export const FileUploadClearTrigger = (props: React.ComponentProps<typeof ArkFileUpload.ClearTrigger>) => (
+  <ArkFileUpload.ClearTrigger data-slot="file-upload-clear-trigger" {...props} />
+);
 
-export const FileUploadRootProvider = (
-  props: React.ComponentProps<typeof ArkFileUpload.RootProvider>,
-) => <ArkFileUpload.RootProvider data-slot="file-upload-root-provider" {...props} />;
+export const FileUploadRootProvider = (props: React.ComponentProps<typeof ArkFileUpload.RootProvider>) => (
+  <ArkFileUpload.RootProvider data-slot="file-upload-root-provider" {...props} />
+);

@@ -5,13 +5,34 @@ import { expectControlBoundary, expectInvalidFieldKeyboardFocus } from '../test/
 import { Input as BaseInput } from './input.tsx';
 
 const FieldState = createContext({ invalid: false, disabled: false });
-const Field = ({ children, invalid = false, disabled = false }: { children: ReactNode; invalid?: boolean; disabled?: boolean }) =>
-  <FieldState.Provider value={{ invalid, disabled }}><label className="flex flex-col gap-2">{children}</label></FieldState.Provider>;
+const Field = ({
+  children,
+  invalid = false,
+  disabled = false,
+}: {
+  children: ReactNode;
+  invalid?: boolean;
+  disabled?: boolean;
+}) => (
+  <FieldState.Provider value={{ invalid, disabled }}>
+    <label className="flex flex-col gap-2">{children}</label>
+  </FieldState.Provider>
+);
 const FieldLabel = ({ children }: { children: ReactNode }) => <span className="text-sm font-medium">{children}</span>;
-const FieldError = ({ children }: { children: ReactNode }) => <span aria-hidden="true" className="text-sm text-destructive-foreground">{children}</span>;
+const FieldError = ({ children }: { children: ReactNode }) => (
+  <span aria-hidden="true" className="text-sm text-destructive-foreground">
+    {children}
+  </span>
+);
 const Input = (props: ComponentProps<typeof BaseInput>) => {
   const state = useContext(FieldState);
-  return <BaseInput {...props} disabled={state.disabled || props.disabled} aria-invalid={state.invalid || props['aria-invalid']} />;
+  return (
+    <BaseInput
+      {...props}
+      disabled={state.disabled || props.disabled}
+      aria-invalid={state.invalid || props['aria-invalid']}
+    />
+  );
 };
 
 const meta = {
@@ -42,7 +63,7 @@ export const EmptyFields: Story = {
   globals: { theme: 'light' },
   render: () => (
     <div className="flex flex-col gap-4">
-      {['bg-background', 'bg-card', 'bg-muted'].map(surface => (
+      {['bg-background', 'bg-card', 'bg-muted'].map((surface) => (
         <div className={`flex flex-col gap-4 rounded-2xl border p-4 ${surface}`} key={surface}>
           <Field>
             <FieldLabel>Display name</FieldLabel>
@@ -144,15 +165,18 @@ export const InvalidFields: Story = {
 };
 
 export const InvalidFieldsDark: Story = {
-  ...InvalidFields, globals: { theme: 'dark', viewport: { value: 'desktop1440' } },
+  ...InvalidFields,
+  globals: { theme: 'dark', viewport: { value: 'desktop1440' } },
 };
 
 export const InvalidFieldsPhone: Story = {
-  ...InvalidFields, globals: { theme: 'light', viewport: { value: 'phone' } },
+  ...InvalidFields,
+  globals: { theme: 'light', viewport: { value: 'phone' } },
 };
 
 export const InvalidFieldsDarkPhone: Story = {
-  ...InvalidFields, globals: { theme: 'dark', viewport: { value: 'phone' } },
+  ...InvalidFields,
+  globals: { theme: 'dark', viewport: { value: 'phone' } },
 };
 
 export const Disabled: Story = {

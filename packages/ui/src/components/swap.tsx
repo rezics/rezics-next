@@ -1,4 +1,3 @@
-
 import { Swap as ArkSwap, useSwapContext } from '@ark-ui/react/swap';
 import type React from 'react';
 import { tv, type VariantProps } from 'tailwind-variants';
@@ -38,9 +37,7 @@ const swapIndicatorVariants = tv({
   },
 });
 
-interface SwapProps
-  extends React.ComponentProps<typeof ArkSwap.Root>,
-    VariantProps<typeof swapIndicatorVariants> {}
+interface SwapProps extends React.ComponentProps<typeof ArkSwap.Root>, VariantProps<typeof swapIndicatorVariants> {}
 
 export const Swap = (props: SwapProps) => {
   const { variant = 'fade', lazyMount = true, unmountOnExit = true, className, ...rest } = props;

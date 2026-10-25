@@ -6,11 +6,7 @@ import { buttonVariants } from './button.tsx';
 import { Hint, HintContent, HintTrigger } from './hint.tsx';
 
 const surface: Decorator = (Story, { parameters }) => (
-  <div
-    className={cn(
-      'flex min-h-48 items-center justify-center bg-background p-6 font-sans text-foreground',
-    )}
-  >
+  <div className={cn('flex min-h-48 items-center justify-center bg-background p-6 font-sans text-foreground')}>
     <Story />
   </div>
 );
@@ -76,9 +72,7 @@ export const Placements: Story = {
     <div className="grid grid-cols-2 gap-x-56 gap-y-20 py-8">
       {(['top', 'right', 'bottom', 'left'] as const).map((placement) => (
         <Hint defaultOpen key={placement} positioning={{ placement }}>
-          <HintTrigger className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-            {placement}
-          </HintTrigger>
+          <HintTrigger className={buttonVariants({ variant: 'outline', size: 'sm' })}>{placement}</HintTrigger>
           <HintContent>Source statistic</HintContent>
         </Hint>
       ))}

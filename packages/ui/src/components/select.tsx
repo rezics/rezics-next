@@ -1,4 +1,3 @@
-
 import { Portal } from '@ark-ui/react';
 import { ark } from '@ark-ui/react/factory';
 import { Select as ArkSelect, createListCollection, useSelectContext } from '@ark-ui/react/select';
@@ -36,30 +35,57 @@ export const Select: ArkSelect.RootComponent = (props) => {
 };
 
 /** A single choice from a short list, backed by the styled Ark Select. */
-export function ChoiceSelect({ options, value, defaultValue, onValueChange, className, size, placeholder, label,
-  portalled = true, ...props }: {
+export function ChoiceSelect({
+  options,
+  value,
+  defaultValue,
+  onValueChange,
+  className,
+  size,
+  placeholder,
+  label,
+  portalled = true,
+  ...props
+}: {
   options: readonly { value: string; label: string; lang?: string }[];
-  value?: string; defaultValue?: string; onValueChange?: (value: string) => void;
-  className?: string; size?: 'sm' | 'md' | 'lg'; placeholder?: string; label?: string;
-  name?: string; required?: boolean; disabled?: boolean; id?: string; portalled?: boolean;
+  value?: string;
+  defaultValue?: string;
+  onValueChange?: (value: string) => void;
+  className?: string;
+  size?: 'sm' | 'md' | 'lg';
+  placeholder?: string;
+  label?: string;
+  name?: string;
+  required?: boolean;
+  disabled?: boolean;
+  id?: string;
+  portalled?: boolean;
 }) {
   const collection = createListCollection({ items: [...options] });
-  return <Select collection={collection} value={value === undefined ? undefined : value ? [value] : []}
-    defaultValue={defaultValue === undefined ? undefined : defaultValue ? [defaultValue] : []}
-    onValueChange={details => onValueChange?.(details.value[0] ?? '')} {...props}>
-    <SelectTrigger className={cn('w-full', className)} size={size} aria-label={label}>
-      <SelectValue placeholder={placeholder ?? options.find(option => option.value === '')?.label} />
-    </SelectTrigger>
-    <SelectContent portalled={portalled}>
-      {options.map(option => <SelectItem key={option.value} item={option}
-        lang={option.lang}>{option.label}</SelectItem>)}
-    </SelectContent>
-  </Select>;
+  return (
+    <Select
+      collection={collection}
+      value={value === undefined ? undefined : value ? [value] : []}
+      defaultValue={defaultValue === undefined ? undefined : defaultValue ? [defaultValue] : []}
+      onValueChange={(details) => onValueChange?.(details.value[0] ?? '')}
+      {...props}
+    >
+      <SelectTrigger className={cn('w-full', className)} size={size} aria-label={label}>
+        <SelectValue placeholder={placeholder ?? options.find((option) => option.value === '')?.label} />
+      </SelectTrigger>
+      <SelectContent portalled={portalled}>
+        {options.map((option) => (
+          <SelectItem key={option.value} item={option} lang={option.lang}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
 }
 
 interface SelectTriggerProps
-  extends React.ComponentProps<typeof ArkSelect.Trigger>,
-    VariantProps<typeof inputVariants> {
+  extends React.ComponentProps<typeof ArkSelect.Trigger>, VariantProps<typeof inputVariants> {
   /**
    * Show clear trigger
    *
@@ -143,34 +169,34 @@ export const SelectContent = (props: React.ComponentProps<typeof ArkSelect.Conte
   const { className, portalled = true, ...rest } = props;
 
   const content = (
-      <ArkSelect.Positioner data-slot="select-positioner">
-        <ArkSelect.Content
-          className={cn(
-            'z-50',
-            'relative',
-            'max-h-96 min-w-(--reference-width)',
-            'p-1.5',
-            'bg-popover',
-            'text-popover-foreground',
-            'rounded-2xl border border-border/60 shadow-(--aura-shadow-float)',
-            'origin-(--transform-origin)',
-            'outline-none',
-            'overflow-y-auto',
-            'duration-100',
-            'data-[state=open]:animate-in',
-            'data-[state=open]:fade-in-0',
-            'data-[state=open]:zoom-in-[98%]',
-            'data-[placement=bottom]:slide-in-from-top-2',
-            'data-[placement=left]:slide-in-from-end-2',
-            'data-[placement=right]:slide-in-from-start-2',
-            'data-[placement=top]:slide-in-from-bottom-2',
-            'motion-reduce:animate-none!',
-            className,
-          )}
-          data-slot="select-content"
-          {...rest}
-        />
-      </ArkSelect.Positioner>
+    <ArkSelect.Positioner data-slot="select-positioner">
+      <ArkSelect.Content
+        className={cn(
+          'z-50',
+          'relative',
+          'max-h-96 min-w-(--reference-width)',
+          'p-1.5',
+          'bg-popover',
+          'text-popover-foreground',
+          'rounded-2xl border border-border/60 shadow-(--aura-shadow-float)',
+          'origin-(--transform-origin)',
+          'outline-none',
+          'overflow-y-auto',
+          'duration-100',
+          'data-[state=open]:animate-in',
+          'data-[state=open]:fade-in-0',
+          'data-[state=open]:zoom-in-[98%]',
+          'data-[placement=bottom]:slide-in-from-top-2',
+          'data-[placement=left]:slide-in-from-end-2',
+          'data-[placement=right]:slide-in-from-start-2',
+          'data-[placement=top]:slide-in-from-bottom-2',
+          'motion-reduce:animate-none!',
+          className,
+        )}
+        data-slot="select-content"
+        {...rest}
+      />
+    </ArkSelect.Positioner>
   );
   return portalled ? <Portal>{content}</Portal> : content;
 };
@@ -232,10 +258,7 @@ export const SelectItem = (props: React.ComponentProps<typeof ArkSelect.Item>) =
       data-slot="select-item"
       {...rest}
     >
-      <ArkSelect.ItemText
-        className="flex w-full flex-1 items-center gap-2"
-        data-slot="select-item-text"
-      >
+      <ArkSelect.ItemText className="flex w-full flex-1 items-center gap-2" data-slot="select-item-text">
         {children}
       </ArkSelect.ItemText>
 

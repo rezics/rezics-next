@@ -1,4 +1,3 @@
-
 import { ark } from '@ark-ui/react/factory';
 import { tv, type VariantProps } from 'tailwind-variants';
 import { cn } from '../utils.ts';
@@ -32,12 +31,7 @@ export const badgeVariants = tv({
         'focus-visible:border-foreground focus-visible:ring-foreground/50',
         '[a&]:hover:bg-secondary/90',
       ],
-      outline: [
-        'text-foreground',
-        'border-border',
-        '[a&]:hover:bg-accent',
-        '[a&]:hover:text-accent-foreground',
-      ],
+      outline: ['text-foreground', 'border-border', '[a&]:hover:bg-accent', '[a&]:hover:text-accent-foreground'],
       success: [
         'bg-success/10',
         'text-success-foreground',
@@ -92,9 +86,7 @@ export const badgeVariants = tv({
 
 export type BadgeVariant = VariantProps<typeof badgeVariants>['variant'];
 
-interface BadgeProps
-  extends React.ComponentProps<typeof ark.span>,
-    VariantProps<typeof badgeVariants> {}
+interface BadgeProps extends React.ComponentProps<typeof ark.span>, VariantProps<typeof badgeVariants> {}
 
 export const Badge = (props: BadgeProps) => {
   const { variant = 'default', size = 'md', pill = false, className, ...rest } = props;

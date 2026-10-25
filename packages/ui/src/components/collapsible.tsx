@@ -1,4 +1,3 @@
-
 import { Collapsible as ArkCollapsible, useCollapsibleContext } from '@ark-ui/react/collapsible';
 import { ChevronDownIcon } from 'lucide-react';
 import type React from 'react';
@@ -71,9 +70,7 @@ export const CollapsibleContent = (props: React.ComponentProps<typeof ArkCollaps
   );
 };
 
-export const CollapsibleIndicator = (
-  props: React.ComponentProps<typeof ArkCollapsible.Indicator>,
-) => {
+export const CollapsibleIndicator = (props: React.ComponentProps<typeof ArkCollapsible.Indicator>) => {
   const { className, ...rest } = props;
 
   return (

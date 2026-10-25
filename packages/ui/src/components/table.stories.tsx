@@ -4,16 +4,7 @@ import { useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { cn } from '../utils.ts';
 import { Badge } from './badge.tsx';
-import {
-  Table,
-  TableBody,
-  TableCaption,
-  TableCell,
-  TableFooter,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from './table.tsx';
+import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow } from './table.tsx';
 
 const surface: Decorator = (Story, { parameters }) => (
   <div className={cn('max-w-3xl bg-background p-6 font-sans text-foreground')}>
@@ -190,9 +181,7 @@ export const WithFooter: Story = {
 const SelectableTable = () => {
   const [selected, setSelected] = useState<string[]>([]);
   const toggle = (id: string) =>
-    setSelected((current) =>
-      current.includes(id) ? current.filter((value) => value !== id) : [...current, id],
-    );
+    setSelected((current) => (current.includes(id) ? current.filter((value) => value !== id) : [...current, id]));
 
   return (
     <Table aria-label="Reported reviews">

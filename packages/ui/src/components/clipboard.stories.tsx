@@ -2,13 +2,7 @@ import type { Decorator, Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, spyOn, userEvent, waitFor, within } from 'storybook/test';
 import { cn } from '../utils.ts';
 import { Button } from './button.tsx';
-import {
-  Clipboard,
-  ClipboardIndicator,
-  ClipboardInput,
-  ClipboardTrigger,
-  ClipboardValue,
-} from './clipboard.tsx';
+import { Clipboard, ClipboardIndicator, ClipboardInput, ClipboardTrigger, ClipboardValue } from './clipboard.tsx';
 
 const surface: Decorator = (Story, { parameters }) => (
   <div className={cn('max-w-md bg-background p-6 font-sans text-foreground')}>

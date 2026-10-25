@@ -1,4 +1,3 @@
-
 import { Carousel as ArkCarousel, useCarouselContext } from '@ark-ui/react/carousel';
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
 import type React from 'react';
@@ -88,9 +87,7 @@ export const Carousel = (props: React.ComponentProps<typeof ArkCarousel.Root>) =
     visibility();
     media.addEventListener('change', motion);
     document.addEventListener('visibilitychange', visibility);
-    const observer = new IntersectionObserver((entries) =>
-      setVisible(entries.some((entry) => entry.isIntersecting)),
-    );
+    const observer = new IntersectionObserver((entries) => setVisible(entries.some((entry) => entry.isIntersecting)));
     if (root.current) observer.observe(root.current);
     return () => {
       observer.disconnect();
@@ -166,11 +163,7 @@ export const Carousel = (props: React.ComponentProps<typeof ArkCarousel.Root>) =
         onTouchMoveCapture={(event) => {
           const point = event.touches[0],
             origin = touch.current;
-          if (
-            point &&
-            origin &&
-            Math.abs(point.clientX - origin.x) > Math.max(8, Math.abs(point.clientY - origin.y))
-          )
+          if (point && origin && Math.abs(point.clientX - origin.x) > Math.max(8, Math.abs(point.clientY - origin.y)))
             stop();
           rest.onTouchMoveCapture?.(event);
         }}
@@ -222,9 +215,7 @@ export const Carousel = (props: React.ComponentProps<typeof ArkCarousel.Root>) =
   );
 };
 
-export const CarouselAutoplayTrigger = (
-  props: React.ComponentProps<typeof ArkCarousel.AutoplayTrigger>,
-) => {
+export const CarouselAutoplayTrigger = (props: React.ComponentProps<typeof ArkCarousel.AutoplayTrigger>) => {
   const rotation = useContext(RotationContext);
   // Hover and focus can pause Ark before a click. Keep the action the pointer pressed.
   const pointerIntent = useRef<boolean | undefined>(undefined);
@@ -254,11 +245,7 @@ export const CarouselControl = (props: React.ComponentProps<typeof ArkCarousel.C
 
   return (
     <ArkCarousel.Control
-      className={cn(
-        'flex items-center justify-between gap-2',
-        'data-[orientation=vertical]:flex-col',
-        className,
-      )}
+      className={cn('flex items-center justify-between gap-2', 'data-[orientation=vertical]:flex-col', className)}
       data-slot="carousel-control"
       {...rest}
     />
@@ -325,9 +312,7 @@ export const CarouselNext = (props: React.ComponentProps<typeof ArkCarousel.Next
   );
 };
 
-export const CarouselIndicatorGroup = (
-  props: React.ComponentProps<typeof ArkCarousel.IndicatorGroup>,
-) => {
+export const CarouselIndicatorGroup = (props: React.ComponentProps<typeof ArkCarousel.IndicatorGroup>) => {
   const { className, ...rest } = props;
 
   return (
@@ -375,22 +360,14 @@ export const CarouselContent = (props: React.ComponentProps<typeof ArkCarousel.I
 
   return (
     <ArkCarousel.ItemGroup
-      className={cn(
-        'min-w-0',
-        '-my-4 py-4',
-        'flex flex-1 gap-4',
-        'overflow-hidden rounded-xl',
-        className,
-      )}
+      className={cn('min-w-0', '-my-4 py-4', 'flex flex-1 gap-4', 'overflow-hidden rounded-xl', className)}
       data-slot="carousel-group"
       {...rest}
     />
   );
 };
 
-export const CarouselItem = (
-  props: React.ComponentProps<typeof ArkCarousel.Item> & { coverImages?: boolean },
-) => {
+export const CarouselItem = (props: React.ComponentProps<typeof ArkCarousel.Item> & { coverImages?: boolean }) => {
   const { className, coverImages = true, ref, ...rest } = props;
   const api = useCarouselContext();
   const { slidesPerMove, visibilityThreshold } = useContext(RotationContext);
@@ -401,11 +378,7 @@ export const CarouselItem = (
     if (!element) return;
     const observer = new IntersectionObserver(
       (entries) =>
-        setInView(
-          entries.some(
-            (entry) => entry.isIntersecting && entry.intersectionRatio >= visibilityThreshold,
-          ),
-        ),
+        setInView(entries.some((entry) => entry.isIntersecting && entry.intersectionRatio >= visibilityThreshold)),
       { root: element.closest('[data-part="item-group"]'), threshold: visibilityThreshold },
     );
     observer.observe(element);

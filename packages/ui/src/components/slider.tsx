@@ -1,4 +1,3 @@
-
 import { Slider as ArkSlider, useSliderContext } from '@ark-ui/react/slider';
 import React from 'react';
 import { cn } from '../utils.ts';
@@ -166,9 +165,7 @@ export const Slider = (props: SliderProps) => {
                 )}
               />
 
-              <span className={cn('group-data-interval/marker:opacity-0')}>
-                {markerLabels?.[index] ?? min + index}
-              </span>
+              <span className={cn('group-data-interval/marker:opacity-0')}>{markerLabels?.[index] ?? min + index}</span>
             </ArkSlider.Marker>
           ))}
         </ArkSlider.MarkerGroup>
@@ -190,11 +187,7 @@ export const SliderValue = (props: React.ComponentProps<typeof ArkSlider.ValueTe
 
   return (
     <FieldLabel asChild>
-      <ArkSlider.ValueText
-        className={cn('ms-auto tabular-nums', className)}
-        data-slot="slider-value"
-        {...rest}
-      >
+      <ArkSlider.ValueText className={cn('ms-auto tabular-nums', className)} data-slot="slider-value" {...rest}>
         {/* Ark joins range values with a comma; a dash reads as a range. */}
         {children ?? value.join(' – ')}
       </ArkSlider.ValueText>

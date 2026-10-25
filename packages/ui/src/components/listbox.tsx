@@ -1,4 +1,3 @@
-
 import { Listbox as ArkListbox, useListboxContext } from '@ark-ui/react/listbox';
 import { CheckIcon } from 'lucide-react';
 import type React from 'react';
@@ -81,8 +80,7 @@ const listboxItemVariants = tv({
 });
 
 interface ListboxItemProps
-  extends React.ComponentProps<typeof ArkListbox.Item>,
-    VariantProps<typeof listboxItemVariants> {}
+  extends React.ComponentProps<typeof ArkListbox.Item>, VariantProps<typeof listboxItemVariants> {}
 
 export const ListboxItem = (props: ListboxItemProps) => {
   const { variant = 'default', className, ...rest } = props;
@@ -102,13 +100,7 @@ export const ListboxItemText = (props: React.ComponentProps<typeof ArkListbox.It
 
   return (
     <ArkListbox.ItemText
-      className={cn(
-        'min-w-0',
-        'flex-1',
-        'text-ellipsis whitespace-nowrap',
-        'overflow-hidden',
-        className,
-      )}
+      className={cn('min-w-0', 'flex-1', 'text-ellipsis whitespace-nowrap', 'overflow-hidden', className)}
       data-slot="listbox-item-text"
       {...rest}
     />
@@ -126,29 +118,18 @@ export const ListboxItemGroup = (props: ListboxItemGroupProps) => {
   const { heading, className, children, ...rest } = props;
 
   return (
-    <ArkListbox.ItemGroup
-      className={cn('flex flex-col gap-1', className)}
-      data-slot="listbox-item-group"
-      {...rest}
-    >
+    <ArkListbox.ItemGroup className={cn('flex flex-col gap-1', className)} data-slot="listbox-item-group" {...rest}>
       {!!heading && <ListboxItemGroupLabel>{heading}</ListboxItemGroupLabel>}
       {children}
     </ArkListbox.ItemGroup>
   );
 };
 
-export const ListboxItemGroupLabel = (
-  props: React.ComponentProps<typeof ArkListbox.ItemGroupLabel>,
-) => {
+export const ListboxItemGroupLabel = (props: React.ComponentProps<typeof ArkListbox.ItemGroupLabel>) => {
   const { className, ...rest } = props;
   return (
     <ArkListbox.ItemGroupLabel
-      className={cn(
-        'px-3 py-1.5',
-        'font-semibold text-muted-foreground text-xs',
-        'pointer-events-none',
-        className,
-      )}
+      className={cn('px-3 py-1.5', 'font-semibold text-muted-foreground text-xs', 'pointer-events-none', className)}
       data-slot="listbox-item-group-label"
       {...rest}
     />
@@ -158,18 +139,10 @@ export const ListboxItemGroupLabel = (
 export const ListboxValueText = (props: React.ComponentProps<typeof ArkListbox.ValueText>) => {
   const { className, ...rest } = props;
 
-  return (
-    <ArkListbox.ValueText
-      className={cn('font-normal', className)}
-      data-slot="listbox-value-text"
-      {...rest}
-    />
-  );
+  return <ArkListbox.ValueText className={cn('font-normal', className)} data-slot="listbox-value-text" {...rest} />;
 };
 
-export const ListboxItemIndicator = (
-  props: React.ComponentProps<typeof ArkListbox.ItemIndicator>,
-) => {
+export const ListboxItemIndicator = (props: React.ComponentProps<typeof ArkListbox.ItemIndicator>) => {
   const { className, children, ...rest } = props;
 
   return (

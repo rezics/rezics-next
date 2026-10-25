@@ -1,4 +1,3 @@
-
 import { ark } from '@ark-ui/react/factory';
 import {
   TreeView as ArkTreeView,
@@ -7,14 +6,7 @@ import {
   useTreeViewContext as useArkTreeViewContext,
   useTreeViewNodeContext,
 } from '@ark-ui/react/tree-view';
-import {
-  CheckIcon,
-  ChevronRightIcon,
-  FileIcon,
-  FolderIcon,
-  FolderOpenIcon,
-  MinusIcon,
-} from 'lucide-react';
+import { CheckIcon, ChevronRightIcon, FileIcon, FolderIcon, FolderOpenIcon, MinusIcon } from 'lucide-react';
 import React from 'react';
 import { tv } from 'tailwind-variants';
 import { cn } from '../utils.ts';
@@ -60,14 +52,7 @@ const TreeViewContext = React.createContext({} as TreeViewContextProps);
 interface TreeViewProps extends ArkTreeView.RootComponentProps, TreeViewContextProps {}
 
 export const TreeView: ArkTreeView.RootComponent<TreeViewProps> = (props) => {
-  const {
-    checkable = false,
-    fileIcons,
-    lazyMount = true,
-    unmountOnExit = true,
-    className,
-    ...rest
-  } = props;
+  const { checkable = false, fileIcons, lazyMount = true, unmountOnExit = true, className, ...rest } = props;
 
   return (
     <TreeViewContext.Provider value={{ checkable, ...(fileIcons === undefined ? {} : { fileIcons }) }}>
@@ -107,19 +92,14 @@ export const TreeViewTree = (props: React.ComponentProps<typeof ArkTreeView.Tree
 
   return (
     <ArkTreeView.Tree
-      className={cn(
-        'flex flex-col text-sm',
-        '[&_svg]:size-(--icon-size) [&_svg]:shrink-0',
-        className,
-      )}
+      className={cn('flex flex-col text-sm', '[&_svg]:size-(--icon-size) [&_svg]:shrink-0', className)}
       data-slot="tree-view-tree"
       {...rest}
     />
   );
 };
 
-export interface NodeProviderProps<T extends TreeNodeType = TreeNodeType>
-  extends ArkTreeView.NodeProviderProps<T> {}
+export interface NodeProviderProps<T extends TreeNodeType = TreeNodeType> extends ArkTreeView.NodeProviderProps<T> {}
 
 export const TreeViewNode = <T extends TreeNodeType>(props: NodeProviderProps<T>) => (
   <ArkTreeView.NodeProvider data-slot="tree-view-node" {...props} />
@@ -154,12 +134,7 @@ export const TreeViewBranch = (props: React.ComponentProps<typeof ArkTreeView.Br
   const { 'aria-checked': ariaChecked } = useCheckableNode();
 
   return (
-    <ArkTreeView.Branch
-      aria-checked={ariaChecked}
-      className={cn('relative')}
-      data-slot="tree-view-branch"
-      {...props}
-    />
+    <ArkTreeView.Branch aria-checked={ariaChecked} className={cn('relative')} data-slot="tree-view-branch" {...props} />
   );
 };
 
@@ -185,7 +160,8 @@ const treeViewControlVariants = tv({
 });
 
 interface TreeViewBranchItemProps
-  extends React.ComponentProps<typeof ArkTreeView.BranchControl>,
+  extends
+    React.ComponentProps<typeof ArkTreeView.BranchControl>,
     Pick<TreeViewBranchTitleProps, 'icon' | 'expandedIcon'> {}
 
 export const TreeViewBranchItem = (props: TreeViewBranchItemProps) => {
@@ -201,7 +177,10 @@ export const TreeViewBranchItem = (props: TreeViewBranchItemProps) => {
       {...rest}
     >
       <TreeViewBranchIndicator />
-      <TreeViewBranchTitle {...(expandedIcon === undefined ? {} : { expandedIcon })} {...(icon === undefined ? {} : { icon })}>
+      <TreeViewBranchTitle
+        {...(expandedIcon === undefined ? {} : { expandedIcon })}
+        {...(icon === undefined ? {} : { icon })}
+      >
         {children}
       </TreeViewBranchTitle>
     </ArkTreeView.BranchControl>
@@ -246,9 +225,7 @@ const TreeViewBranchTitle = (props: TreeViewBranchTitleProps) => {
                 <TreeViewItemIcon>{Icon ? <Icon /> : <FolderIcon />}</TreeViewItemIcon>
               )}
               {ExpandedIcon !== null && nodeState.expanded && (
-                <TreeViewItemIcon>
-                  {ExpandedIcon ? <ExpandedIcon /> : <FolderOpenIcon />}
-                </TreeViewItemIcon>
+                <TreeViewItemIcon>{ExpandedIcon ? <ExpandedIcon /> : <FolderOpenIcon />}</TreeViewItemIcon>
               )}
               {children}
             </ArkTreeView.BranchText>
@@ -259,9 +236,7 @@ const TreeViewBranchTitle = (props: TreeViewBranchTitleProps) => {
   );
 };
 
-export const TreeViewBranchIndicator = (
-  props: React.ComponentProps<typeof ArkTreeView.BranchIndicator>,
-) => {
+export const TreeViewBranchIndicator = (props: React.ComponentProps<typeof ArkTreeView.BranchIndicator>) => {
   const { className, ...rest } = props;
 
   return (
@@ -283,9 +258,7 @@ export const TreeViewBranchIndicator = (
   );
 };
 
-export const TreeViewBranchContent = (
-  props: React.ComponentProps<typeof ArkTreeView.BranchContent>,
-) => {
+export const TreeViewBranchContent = (props: React.ComponentProps<typeof ArkTreeView.BranchContent>) => {
   const { className, children, ...rest } = props;
 
   return (
@@ -307,9 +280,7 @@ export const TreeViewBranchContent = (
   );
 };
 
-const TreeViewBranchIndentGuide = (
-  props: React.ComponentProps<typeof ArkTreeView.BranchIndentGuide>,
-) => {
+const TreeViewBranchIndentGuide = (props: React.ComponentProps<typeof ArkTreeView.BranchIndentGuide>) => {
   const { className, ...rest } = props;
 
   return (
@@ -374,11 +345,7 @@ export const TreeViewItem = (props: TreeViewItemProps) => {
               <ResolvedIcon />
             </TreeViewItemIcon>
 
-            {nodeState.renaming ? (
-              <TreeViewNodeInput />
-            ) : (
-              <TreeViewItemTitle {...rest}>{children}</TreeViewItemTitle>
-            )}
+            {nodeState.renaming ? <TreeViewNodeInput /> : <TreeViewItemTitle {...rest}>{children}</TreeViewItemTitle>}
           </>
         );
       }}
@@ -391,10 +358,7 @@ const TreeViewItemIcon = (props: React.ComponentProps<typeof ark.span>) => {
 
   return (
     <ark.span
-      className={cn(
-        'in-[[data-slot=tree-view-item]:has([data-slot=tree-view-checkbox])]:hidden',
-        className,
-      )}
+      className={cn('in-[[data-slot=tree-view-item]:has([data-slot=tree-view-checkbox])]:hidden', className)}
       data-slot="tree-view-item-icon"
       {...rest}
     />

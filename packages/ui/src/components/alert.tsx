@@ -1,4 +1,3 @@
-
 import { ark } from '@ark-ui/react/factory';
 import type React from 'react';
 import { tv, type VariantProps } from 'tailwind-variants';
@@ -56,16 +55,12 @@ export const alertVariants = tv({
   },
 });
 
-interface AlertProps
-  extends React.ComponentProps<typeof ark.div>,
-    VariantProps<typeof alertVariants> {}
+interface AlertProps extends React.ComponentProps<typeof ark.div>, VariantProps<typeof alertVariants> {}
 
 export const Alert = (props: AlertProps) => {
   const { variant, className, ...rest } = props;
 
-  return (
-    <ark.div className={cn(alertVariants({ variant }), className)} data-slot="alert" {...rest} />
-  );
+  return <ark.div className={cn(alertVariants({ variant }), className)} data-slot="alert" {...rest} />;
 };
 
 export const AlertTitle = (props: React.ComponentProps<typeof ark.div>) => {
@@ -85,12 +80,7 @@ export const AlertDescription = (props: React.ComponentProps<typeof ark.div>) =>
 
   return (
     <ark.div
-      className={cn(
-        'flex flex-col gap-2.5',
-        'text-muted-foreground',
-        '[svg~&]:col-start-2',
-        className,
-      )}
+      className={cn('flex flex-col gap-2.5', 'text-muted-foreground', '[svg~&]:col-start-2', className)}
       data-slot="alert-description"
       {...rest}
     />

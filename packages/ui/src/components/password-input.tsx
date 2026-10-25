@@ -1,7 +1,4 @@
-import {
-  PasswordInput as ArkPasswordInput,
-  usePasswordInputContext,
-} from '@ark-ui/react/password-input';
+import { PasswordInput as ArkPasswordInput, usePasswordInputContext } from '@ark-ui/react/password-input';
 import { EyeIcon, EyeOffIcon } from 'lucide-react';
 import type React from 'react';
 import { cn } from '../utils.ts';
@@ -17,8 +14,7 @@ import {
 export const usePasswordInput = usePasswordInputContext;
 
 interface PasswordInputProps
-  extends Omit<React.ComponentProps<typeof ArkPasswordInput.Root>, 'size'>,
-    Pick<InputGroupProps, 'size'> {}
+  extends Omit<React.ComponentProps<typeof ArkPasswordInput.Root>, 'size'>, Pick<InputGroupProps, 'size'> {}
 
 export const PasswordInput = (props: PasswordInputProps) => {
   const { size = 'md', className, ...rest } = props;
@@ -33,9 +29,7 @@ export const PasswordInput = (props: PasswordInputProps) => {
   );
 };
 
-export const PasswordInputGroup = (
-  props: React.ComponentProps<typeof ArkPasswordInput.Control>,
-) => {
+export const PasswordInputGroup = (props: React.ComponentProps<typeof ArkPasswordInput.Control>) => {
   const { className, ...rest } = props;
 
   return (
@@ -53,8 +47,7 @@ export const PasswordInputGroup = (
 };
 
 export const PasswordInputInput = (
-  props: Omit<React.ComponentProps<typeof ArkPasswordInput.Input>, 'size'> &
-    Pick<InputProps, 'size'>,
+  props: Omit<React.ComponentProps<typeof ArkPasswordInput.Input>, 'size'> & Pick<InputProps, 'size'>,
 ) => {
   const { size, ...rest } = props;
 
@@ -65,9 +58,7 @@ export const PasswordInputInput = (
   );
 };
 
-export const PasswordInputTrigger = (
-  props: React.ComponentProps<typeof ArkPasswordInput.VisibilityTrigger>,
-) => {
+export const PasswordInputTrigger = (props: React.ComponentProps<typeof ArkPasswordInput.VisibilityTrigger>) => {
   const { children, ...rest } = props;
 
   return (
@@ -81,17 +72,11 @@ export const PasswordInputTrigger = (
   );
 };
 
-export const PasswordInputIndicator = (
-  props: React.ComponentProps<typeof ArkPasswordInput.Indicator>,
-) => {
+export const PasswordInputIndicator = (props: React.ComponentProps<typeof ArkPasswordInput.Indicator>) => {
   const { children, ...rest } = props;
 
   return (
-    <ArkPasswordInput.Indicator
-      data-slot="password-input-indicator"
-      fallback={<EyeOffIcon />}
-      {...rest}
-    >
+    <ArkPasswordInput.Indicator data-slot="password-input-indicator" fallback={<EyeOffIcon />} {...rest}>
       {children ?? <EyeIcon />}
     </ArkPasswordInput.Indicator>
   );

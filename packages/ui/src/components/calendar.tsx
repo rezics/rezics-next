@@ -31,11 +31,7 @@ export const Calendar = (props: React.ComponentProps<typeof ArkCalendar.Root>) =
 };
 
 export const CalendarControl = (props: React.ComponentProps<typeof ArkCalendar.Control>) => (
-  <ArkCalendar.Control
-    className="inline-flex items-center gap-2"
-    data-slot="calendar-control"
-    {...props}
-  />
+  <ArkCalendar.Control className="inline-flex items-center gap-2" data-slot="calendar-control" {...props} />
 );
 
 export const CalendarLabel = (props: React.ComponentProps<typeof ArkCalendar.Label>) => (
@@ -46,19 +42,15 @@ export const CalendarTrigger = (props: React.ComponentProps<typeof ArkCalendar.T
   <ArkCalendar.Trigger data-slot="calendar-trigger" {...props} />
 );
 
-export const CalendarPresetTrigger = (
-  props: React.ComponentProps<typeof ArkCalendar.PresetTrigger>,
-) => <ArkCalendar.PresetTrigger data-slot="calendar-preset-trigger" {...props} />;
+export const CalendarPresetTrigger = (props: React.ComponentProps<typeof ArkCalendar.PresetTrigger>) => (
+  <ArkCalendar.PresetTrigger data-slot="calendar-preset-trigger" {...props} />
+);
 
 export const CalendarViewDate = (props: React.ComponentProps<typeof ArkCalendar.RangeText>) => {
   const { className, ...rest } = props;
 
   return (
-    <ArkCalendar.RangeText
-      className={cn('font-medium text-sm', className)}
-      data-slot="calendar-range-text"
-      {...rest}
-    />
+    <ArkCalendar.RangeText className={cn('font-medium text-sm', className)} data-slot="calendar-range-text" {...rest} />
   );
 };
 
@@ -83,23 +75,16 @@ export const CalendarTodayTrigger = (props: React.ComponentProps<typeof Button>)
   );
 };
 
-export const CalendarClearTrigger = (
-  props: React.ComponentProps<typeof ArkCalendar.ClearTrigger>,
-) => <ArkCalendar.ClearTrigger data-slot="calendar-clear-trigger" {...props} />;
+export const CalendarClearTrigger = (props: React.ComponentProps<typeof ArkCalendar.ClearTrigger>) => (
+  <ArkCalendar.ClearTrigger data-slot="calendar-clear-trigger" {...props} />
+);
 
 export const CalendarYearSelect = (props: React.ComponentProps<typeof ArkCalendar.YearSelect>) => {
   const { className, ...rest } = props;
 
   return (
-    <div
-      className={cn('relative w-fit has-[select:disabled]:opacity-64')}
-      data-slot="calendar-year-select-wrapper"
-    >
-      <ArkCalendar.YearSelect
-        className={cn(nativeSelectVariants())}
-        data-slot="calendar-year-select"
-        {...rest}
-      />
+    <div className={cn('relative w-fit has-[select:disabled]:opacity-64')} data-slot="calendar-year-select-wrapper">
+      <ArkCalendar.YearSelect className={cn(nativeSelectVariants())} data-slot="calendar-year-select" {...rest} />
       <ChevronDownIcon
         className={cn(
           'absolute inset-e-2.5 top-1/2 -translate-y-1/2',
@@ -113,16 +98,11 @@ export const CalendarYearSelect = (props: React.ComponentProps<typeof ArkCalenda
   );
 };
 
-export const CalendarMonthSelect = (
-  props: React.ComponentProps<typeof ArkCalendar.MonthSelect>,
-) => {
+export const CalendarMonthSelect = (props: React.ComponentProps<typeof ArkCalendar.MonthSelect>) => {
   const { className, ...rest } = props;
 
   return (
-    <div
-      className={cn('relative w-fit has-[select:disabled]:opacity-64')}
-      data-slot="calendar-month-select-wrapper"
-    >
+    <div className={cn('relative w-fit has-[select:disabled]:opacity-64')} data-slot="calendar-month-select-wrapper">
       <ArkCalendar.MonthSelect
         className={cn(nativeSelectVariants(), className)}
         data-slot="calendar-month-select"
@@ -144,22 +124,14 @@ export const CalendarMonthSelect = (
 export const CalendarView = (props: React.ComponentProps<typeof ArkCalendar.View>) => {
   const { className, ...rest } = props;
 
-  return (
-    <ArkCalendar.View
-      className={cn('flex flex-col gap-1', className)}
-      data-slot="calendar-view"
-      {...rest}
-    />
-  );
+  return <ArkCalendar.View className={cn('flex flex-col gap-1', className)} data-slot="calendar-view" {...rest} />;
 };
 
 export const CalendarContext = (props: React.ComponentProps<typeof ArkCalendar.Context>) => (
   <ArkCalendar.Context data-slot="calendar-context" {...props} />
 );
 
-export const CalendarViewControl = (
-  props: React.ComponentProps<typeof ArkCalendar.ViewControl>,
-) => {
+export const CalendarViewControl = (props: React.ComponentProps<typeof ArkCalendar.ViewControl>) => {
   const { className, ...rest } = props;
 
   return (
@@ -171,9 +143,7 @@ export const CalendarViewControl = (
   );
 };
 
-export const CalendarPrevTrigger = (
-  props: React.ComponentProps<typeof ArkCalendar.PrevTrigger>,
-) => (
+export const CalendarPrevTrigger = (props: React.ComponentProps<typeof ArkCalendar.PrevTrigger>) => (
   <ArkCalendar.PrevTrigger asChild data-slot="calendar-prev-trigger" {...props}>
     <Button className="me-auto" size="icon-md" variant="ghost">
       <ChevronLeftIcon aria-hidden className="rtl:rotate-180" />
@@ -181,9 +151,7 @@ export const CalendarPrevTrigger = (
   </ArkCalendar.PrevTrigger>
 );
 
-export const CalendarNextTrigger = (
-  props: React.ComponentProps<typeof ArkCalendar.NextTrigger>,
-) => (
+export const CalendarNextTrigger = (props: React.ComponentProps<typeof ArkCalendar.NextTrigger>) => (
   <ArkCalendar.NextTrigger asChild data-slot="calendar-next-trigger" {...props}>
     <Button className="ms-auto" size="icon-md" variant="ghost">
       <ChevronRightIcon aria-hidden className="rtl:rotate-180" />
@@ -298,17 +266,11 @@ export const CalendarTableHead = (props: React.ComponentProps<typeof ArkCalendar
 export const CalendarTableRow = (props: React.ComponentProps<typeof ArkCalendar.TableRow>) => {
   const { className, ...rest } = props;
   return (
-    <ArkCalendar.TableRow
-      className={cn('mt-1 flex w-full', className)}
-      data-slot="calendar-table-row"
-      {...rest}
-    />
+    <ArkCalendar.TableRow className={cn('mt-1 flex w-full', className)} data-slot="calendar-table-row" {...rest} />
   );
 };
 
-export const CalendarTableHeader = (
-  props: React.ComponentProps<typeof ArkCalendar.TableHeader>,
-) => {
+export const CalendarTableHeader = (props: React.ComponentProps<typeof ArkCalendar.TableHeader>) => {
   const { className, ...rest } = props;
 
   return (

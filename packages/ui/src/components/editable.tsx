@@ -1,4 +1,3 @@
-
 import { Editable as ArkEditable, useEditableContext } from '@ark-ui/react/editable';
 import type React from 'react';
 import { cn } from '../utils.ts';
@@ -37,14 +36,11 @@ export const Editable = (props: EditableProps) => {
 export const EditableArea = (props: React.ComponentProps<typeof ArkEditable.Area>) => {
   const { className, ...rest } = props;
 
-  return (
-    <ArkEditable.Area className={cn('w-full', className)} data-slot="editable-area" {...rest} />
-  );
+  return <ArkEditable.Area className={cn('w-full', className)} data-slot="editable-area" {...rest} />;
 };
 
 export interface EditableInputProps
-  extends Omit<React.ComponentProps<typeof ArkEditable.Input>, 'size'>,
-    Pick<InputProps, 'size'> {}
+  extends Omit<React.ComponentProps<typeof ArkEditable.Input>, 'size'>, Pick<InputProps, 'size'> {}
 
 // Styled like Input; it renders the Ark part directly so zag keeps its focus and keys.
 export const EditableInput = (props: EditableInputProps) => {
@@ -107,14 +103,14 @@ export const EditableControl = (props: React.ComponentProps<typeof ArkEditable.C
   );
 };
 
-export const EditableEditTrigger = (
-  props: React.ComponentProps<typeof ArkEditable.EditTrigger>,
-) => <ArkEditable.EditTrigger data-slot="editable-edit-trigger" {...props} />;
+export const EditableEditTrigger = (props: React.ComponentProps<typeof ArkEditable.EditTrigger>) => (
+  <ArkEditable.EditTrigger data-slot="editable-edit-trigger" {...props} />
+);
 
-export const EditableCancelTrigger = (
-  props: React.ComponentProps<typeof ArkEditable.CancelTrigger>,
-) => <ArkEditable.CancelTrigger data-slot="editable-cancel-trigger" {...props} />;
+export const EditableCancelTrigger = (props: React.ComponentProps<typeof ArkEditable.CancelTrigger>) => (
+  <ArkEditable.CancelTrigger data-slot="editable-cancel-trigger" {...props} />
+);
 
-export const EditableSubmitTrigger = (
-  props: React.ComponentProps<typeof ArkEditable.SubmitTrigger>,
-) => <ArkEditable.SubmitTrigger data-slot="editable-submit-trigger" {...props} />;
+export const EditableSubmitTrigger = (props: React.ComponentProps<typeof ArkEditable.SubmitTrigger>) => (
+  <ArkEditable.SubmitTrigger data-slot="editable-submit-trigger" {...props} />
+);

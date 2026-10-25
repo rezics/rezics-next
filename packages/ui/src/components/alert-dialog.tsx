@@ -1,4 +1,3 @@
-
 import type React from 'react';
 import { cn } from '../utils.ts';
 import { Button, type ButtonProps } from './button.tsx';
@@ -22,12 +21,7 @@ import {
  * clear label.
  */
 export const AlertDialog = (props: React.ComponentProps<typeof Dialog>) => (
-  <Dialog
-    data-slot="alert-dialog-root"
-    {...props}
-    closeOnInteractOutside={false}
-    role="alertdialog"
-  />
+  <Dialog data-slot="alert-dialog-root" {...props} closeOnInteractOutside={false} role="alertdialog" />
 );
 
 export const AlertDialogTrigger = (props: React.ComponentProps<typeof DialogTrigger>) => (
@@ -43,10 +37,7 @@ export const AlertDialogBody = (props: React.ComponentProps<typeof DialogBody>) 
 
   return (
     <DialogBody
-      className={cn(
-        'in-[[data-slot=alert-dialog-content]:has([data-slot=alert-dialog-header])]:pt-0',
-        className,
-      )}
+      className={cn('in-[[data-slot=alert-dialog-content]:has([data-slot=alert-dialog-header])]:pt-0', className)}
       data-slot="alert-dialog-body"
       {...rest}
     />
@@ -73,9 +64,7 @@ export const AlertDialogFooter = (props: React.ComponentProps<typeof DialogFoote
   <DialogFooter data-slot="alert-dialog-footer" {...props} />
 );
 
-interface AlertDialogActionProps
-  extends React.ComponentProps<typeof DialogClose>,
-    Omit<ButtonProps, 'variant'> {
+interface AlertDialogActionProps extends React.ComponentProps<typeof DialogClose>, Omit<ButtonProps, 'variant'> {
   /**
    * The variant of the action button
    *
@@ -90,9 +79,7 @@ export const AlertDialogAction = (props: AlertDialogActionProps) => {
   return <Button variant={variant} {...rest} />;
 };
 
-interface AlertDialogCancelProps
-  extends React.ComponentProps<typeof DialogClose>,
-    Omit<ButtonProps, 'variant'> {}
+interface AlertDialogCancelProps extends React.ComponentProps<typeof DialogClose>, Omit<ButtonProps, 'variant'> {}
 
 export const AlertDialogCancel = (props: AlertDialogCancelProps) => (
   <AlertDialogClose asChild data-slot="alert-dialog-cancel">

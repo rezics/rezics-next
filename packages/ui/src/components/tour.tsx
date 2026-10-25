@@ -1,24 +1,12 @@
-
 import { Portal } from '@ark-ui/react';
 import { ark } from '@ark-ui/react/factory';
-import {
-  Tour as ArkTour,
-  type TourStepDetails,
-  type UseTourReturn,
-  useTour,
-} from '@ark-ui/react/tour';
+import { Tour as ArkTour, type TourStepDetails, type UseTourReturn, useTour } from '@ark-ui/react/tour';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import React from 'react';
 import { useUiCopy } from '../i18n/copy.ts';
 import { cn } from '../utils.ts';
 import { Button } from './button.tsx';
-import {
-  DialogBody,
-  DialogFooter,
-  DialogHeader,
-  type DialogOverlay,
-  dialogOverlayVariants,
-} from './dialog.tsx';
+import { DialogBody, DialogFooter, DialogHeader, type DialogOverlay, dialogOverlayVariants } from './dialog.tsx';
 
 export type TourStepType = TourStepDetails;
 
@@ -57,13 +45,7 @@ interface TourProps extends Omit<React.ComponentProps<typeof ArkTour.Root>, 'tou
 }
 
 export const Tour = (props: TourProps) => {
-  const {
-    steps = [],
-    keyboardNavigation = true,
-    lazyMount = true,
-    unmountOnExit = true,
-    ...rest
-  } = props;
+  const { steps = [], keyboardNavigation = true, lazyMount = true, unmountOnExit = true, ...rest } = props;
 
   const [isStarted, setIsStarted] = React.useState(false);
 
@@ -88,13 +70,7 @@ export const Tour = (props: TourProps) => {
 
   return (
     <TourProvider.Provider value={{ tour, handleStart }}>
-      <ArkTour.Root
-        data-slot="tour"
-        lazyMount={lazyMount}
-        tour={tour}
-        unmountOnExit={unmountOnExit}
-        {...rest}
-      />
+      <ArkTour.Root data-slot="tour" lazyMount={lazyMount} tour={tour} unmountOnExit={unmountOnExit} {...rest} />
     </TourProvider.Provider>
   );
 };
@@ -182,11 +158,7 @@ export const TourContent = (props: TourContentProps) => {
 
           {!!showCloseButton && (
             <TourClose asChild className="absolute top-4 right-4">
-              <Button
-                className="size-8 border-none opacity-70 hover:opacity-100"
-                size="icon-md"
-                variant="ghost"
-              >
+              <Button className="size-8 border-none opacity-70 hover:opacity-100" size="icon-md" variant="ghost">
                 <X />
 
                 <span className="sr-only">{copy.close}</span>
@@ -206,11 +178,7 @@ export const TourBody = (props: React.ComponentProps<typeof DialogBody>) => (
 );
 
 export const TourSpotlight = (props: React.ComponentProps<typeof ArkTour.Spotlight>) => (
-  <ArkTour.Spotlight
-    className="z-50 border-2 border-primary"
-    data-slot="tour-spotlight"
-    {...props}
-  />
+  <ArkTour.Spotlight className="z-50 border-2 border-primary" data-slot="tour-spotlight" {...props} />
 );
 
 export const TourHeader = (props: React.ComponentProps<typeof DialogHeader>) => (
@@ -295,12 +263,7 @@ export const TourActions = (props: React.ComponentProps<typeof DialogFooter>) =>
       <DialogFooter className={cn('flex flex-wrap gap-2', className)} data-slot="tour-actions">
         {actions.map((action) => (
           <TourActionTrigger action={action} asChild key={action.label}>
-            <Button
-              size="sm"
-              variant={
-                action.action === 'dismiss' || action.action === 'prev' ? 'outline' : 'default'
-              }
-            >
+            <Button size="sm" variant={action.action === 'dismiss' || action.action === 'prev' ? 'outline' : 'default'}>
               {action.action === 'prev' && <ChevronLeft />}
               {action.label}
               {action.action === 'next' && <ChevronRight />}
@@ -311,17 +274,12 @@ export const TourActions = (props: React.ComponentProps<typeof DialogFooter>) =>
     </ArkTour.Control>
   );
 };
-export const TourPreviousStep = (
-  props: Omit<React.ComponentProps<typeof TourActionTrigger>, 'action'>,
-) => {
+export const TourPreviousStep = (props: Omit<React.ComponentProps<typeof TourActionTrigger>, 'action'>) => {
   const { ...rest } = props;
 
   const { tour } = useTourContext();
 
-  const prevAction = React.useMemo(
-    () => tour.step?.actions?.find((action) => action.action === 'prev'),
-    [tour],
-  );
+  const prevAction = React.useMemo(() => tour.step?.actions?.find((action) => action.action === 'prev'), [tour]);
 
   if (!prevAction) {
     return null;
@@ -337,9 +295,7 @@ export const TourPreviousStep = (
   );
 };
 
-export const TourNextStep = (
-  props: Omit<React.ComponentProps<typeof TourActionTrigger>, 'action'>,
-) => {
+export const TourNextStep = (props: Omit<React.ComponentProps<typeof TourActionTrigger>, 'action'>) => {
   const { ...rest } = props;
 
   const { tour } = useTourContext();

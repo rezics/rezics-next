@@ -1,15 +1,10 @@
-
 import { Dialog as ArkDialog, useDialogContext } from '@ark-ui/react/dialog';
 import { ark } from '@ark-ui/react/factory';
 import { Portal } from '@ark-ui/react/portal';
 import { XIcon } from 'lucide-react';
 import React from 'react';
 import { tv, type VariantProps } from 'tailwind-variants';
-import {
-  initialDialogFocus,
-  useDialogContentRef,
-  useDialogOpen,
-} from '../hooks/use-dialog-behavior.tsx';
+import { initialDialogFocus, useDialogContentRef, useDialogOpen } from '../hooks/use-dialog-behavior.tsx';
 import { cn } from '../utils.ts';
 import { useUiCopy } from '../i18n/copy.ts';
 import { Button } from './button.tsx';
@@ -114,13 +109,7 @@ export const DialogOverlay = (props: React.ComponentProps<typeof ArkDialog.Backd
     return null;
   }
 
-  return (
-    <ArkDialog.Backdrop
-      className={cn(dialogOverlayVariants(), className)}
-      data-slot="dialog-overlay"
-      {...rest}
-    />
-  );
+  return <ArkDialog.Backdrop className={cn(dialogOverlayVariants(), className)} data-slot="dialog-overlay" {...rest} />;
 };
 
 export const DialogPositioner = (props: React.ComponentProps<typeof ArkDialog.Positioner>) => {
@@ -191,8 +180,7 @@ export const dialogContentVariants = tv({
 });
 
 interface DialogContentProps
-  extends React.ComponentProps<typeof ArkDialog.Content>,
-    VariantProps<typeof dialogContentVariants> {
+  extends React.ComponentProps<typeof ArkDialog.Content>, VariantProps<typeof dialogContentVariants> {
   /**
    * Stick the dialog to the bottom of the screen on mobile
    *
@@ -208,15 +196,7 @@ interface DialogContentProps
 }
 
 export const DialogContent = (props: DialogContentProps) => {
-  const {
-    showCloseButton = true,
-    bottomStickOnMobile = true,
-    size = 'md',
-    className,
-    children,
-    ref,
-    ...rest
-  } = props;
+  const { showCloseButton = true, bottomStickOnMobile = true, size = 'md', className, children, ref, ...rest } = props;
   const copy = useUiCopy();
   const { pending, ref: mergedRef } = useDialogContentBehavior(ref);
 
@@ -224,9 +204,7 @@ export const DialogContent = (props: DialogContentProps) => {
     <Portal>
       <DialogOverlay />
 
-      <DialogPositioner
-        className={cn(bottomStickOnMobile && 'max-sm:grid-rows-[1fr_auto] max-sm:p-0 max-sm:pt-12')}
-      >
+      <DialogPositioner className={cn(bottomStickOnMobile && 'max-sm:grid-rows-[1fr_auto] max-sm:p-0 max-sm:pt-12')}>
         <ArkDialog.Content
           className={cn(dialogContentVariants({ size, bottomStickOnMobile }), className)}
           data-slot="dialog-content"
@@ -344,13 +322,7 @@ export const DialogDescription = (props: React.ComponentProps<typeof ArkDialog.D
 
 export const DialogClose = (props: React.ComponentProps<typeof ArkDialog.CloseTrigger>) => {
   const { pending } = _useDialog();
-  return (
-    <ArkDialog.CloseTrigger
-      data-slot="dialog-close-trigger"
-      {...props}
-      disabled={pending || props.disabled}
-    />
-  );
+  return <ArkDialog.CloseTrigger data-slot="dialog-close-trigger" {...props} disabled={pending || props.disabled} />;
 };
 
 export const DialogFooter = (props: React.ComponentProps<typeof ark.div>) => {

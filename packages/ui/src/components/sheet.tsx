@@ -1,4 +1,3 @@
-
 import { Dialog as ArkDialog, useDialogContext } from '@ark-ui/react/dialog';
 import { Portal } from '@ark-ui/react/portal';
 import { XIcon } from 'lucide-react';
@@ -28,9 +27,7 @@ export const useSheet = useDialogContext;
  * variant floats the panel with a margin on wider screens. Use a drawer instead when phones need
  * swipe-to-dismiss.
  */
-export const Sheet = (props: React.ComponentProps<typeof Dialog>) => (
-  <Dialog data-slot="sheet" {...props} />
-);
+export const Sheet = (props: React.ComponentProps<typeof Dialog>) => <Dialog data-slot="sheet" {...props} />;
 
 export const SheetTrigger = (props: React.ComponentProps<typeof ArkDialog.Trigger>) => (
   <ArkDialog.Trigger data-slot="sheet-trigger" {...props} />
@@ -41,13 +38,7 @@ export const SheetOverlay = (props: React.ComponentProps<typeof DialogOverlay>) 
 );
 
 const sheetPositionerVariants = tv({
-  base: [
-    '[--inset:--spacing(0)]',
-    'fixed inset-0 z-50',
-    'h-svh w-screen',
-    'grid',
-    'overflow-hidden',
-  ],
+  base: ['[--inset:--spacing(0)]', 'fixed inset-0 z-50', 'h-svh w-screen', 'grid', 'overflow-hidden'],
   variants: {
     placement: {
       bottom: 'grid grid-rows-[1fr_auto] not-data-[variant=inset]:pt-12',
@@ -72,8 +63,7 @@ const sheetPositionerVariants = tv({
 });
 
 interface SheetPositionerProps
-  extends React.ComponentProps<typeof ArkDialog.Positioner>,
-    VariantProps<typeof sheetPositionerVariants> {}
+  extends React.ComponentProps<typeof ArkDialog.Positioner>, VariantProps<typeof sheetPositionerVariants> {}
 
 export const SheetPositioner = (props: SheetPositionerProps) => {
   const { variant = 'default', placement, className, ...rest } = props;
@@ -110,10 +100,7 @@ const sheetContentVariants = tv({
         'row-start-2 rounded-t-3xl border-t',
         'data-[state=closed]:slide-out-to-bottom-10 data-[state=open]:slide-in-from-bottom-10',
       ],
-      top: [
-        'rounded-b-3xl border-b',
-        'data-[state=closed]:slide-out-to-top-10 data-[state=open]:slide-in-from-top-10',
-      ],
+      top: ['rounded-b-3xl border-b', 'data-[state=closed]:slide-out-to-top-10 data-[state=open]:slide-in-from-top-10'],
       left: [
         'w-[calc(100%-(--spacing(12)))] max-w-md',
         'col-start-2',
@@ -130,10 +117,7 @@ const sheetContentVariants = tv({
     },
     variant: {
       default: '',
-      inset: [
-        'sm:rounded-3xl sm:border',
-        'sm:**:data-[slot=sheet-footer]:rounded-b-[calc(var(--radius-3xl)-1px)]',
-      ],
+      inset: ['sm:rounded-3xl sm:border', 'sm:**:data-[slot=sheet-footer]:rounded-b-[calc(var(--radius-3xl)-1px)]'],
     },
   },
   defaultVariants: {
@@ -143,8 +127,7 @@ const sheetContentVariants = tv({
 });
 
 interface SheetContentProps
-  extends React.ComponentProps<typeof ArkDialog.Content>,
-    VariantProps<typeof sheetContentVariants> {
+  extends React.ComponentProps<typeof ArkDialog.Content>, VariantProps<typeof sheetContentVariants> {
   /**
    * Show close button at the top right corner
    *
@@ -154,15 +137,7 @@ interface SheetContentProps
 }
 
 export const SheetContent = (props: SheetContentProps) => {
-  const {
-    showCloseButton = true,
-    placement = 'right',
-    variant = 'default',
-    className,
-    children,
-    ref,
-    ...rest
-  } = props;
+  const { showCloseButton = true, placement = 'right', variant = 'default', className, children, ref, ...rest } = props;
   const copy = useUiCopy();
   const { pending, ref: mergedRef } = useDialogContentBehavior(ref);
 
@@ -224,19 +199,11 @@ export const SheetBody = (props: React.ComponentProps<typeof DialogBody>) => {
 
 export const SheetClose = (props: React.ComponentProps<typeof ArkDialog.CloseTrigger>) => {
   const pending = useDialogPending();
-  return (
-    <ArkDialog.CloseTrigger
-      data-slot="sheet-close"
-      {...props}
-      disabled={pending || props.disabled}
-    />
-  );
+  return <ArkDialog.CloseTrigger data-slot="sheet-close" {...props} disabled={pending || props.disabled} />;
 };
 
 export const SheetFooter = (props: React.ComponentProps<typeof DialogFooter>) => {
   const { className, ...rest } = props;
 
-  return (
-    <DialogFooter className={cn('sm:rounded-none', className)} data-slot="sheet-footer" {...rest} />
-  );
+  return <DialogFooter className={cn('sm:rounded-none', className)} data-slot="sheet-footer" {...rest} />;
 };

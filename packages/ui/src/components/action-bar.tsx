@@ -1,4 +1,3 @@
-
 import { Portal } from '@ark-ui/react';
 import { ark } from '@ark-ui/react/factory';
 import { Presence } from '@ark-ui/react/presence';
@@ -276,12 +275,7 @@ export const ActionBarClose = (props: ActionBarCloseProps) => {
   return (
     <ark.button
       aria-label={copy.close}
-      className={cn(
-        'opacity-64 transition-opacity',
-        'hover:opacity-100',
-        'motion-reduce:transition-none!',
-        className,
-      )}
+      className={cn('opacity-64 transition-opacity', 'hover:opacity-100', 'motion-reduce:transition-none!', className)}
       data-slot="action-bar-close"
       data-state={isOpen ? 'open' : 'closed'}
       onClick={handleClick}
@@ -322,11 +316,7 @@ export const ActionBarBody = (props: React.ComponentProps<typeof ark.div>) => {
 
   return (
     <ark.div
-      className={cn(
-        'flex items-center gap-1',
-        '**:data-[slot=action-bar-separator]:h-2',
-        className,
-      )}
+      className={cn('flex items-center gap-1', '**:data-[slot=action-bar-separator]:h-2', className)}
       data-slot="action-bar-body"
       {...rest}
     />

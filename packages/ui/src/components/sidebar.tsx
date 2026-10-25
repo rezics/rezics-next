@@ -1,4 +1,3 @@
-
 import { ark } from '@ark-ui/react/factory';
 import { PanelLeftIcon } from 'lucide-react';
 import React from 'react';
@@ -51,14 +50,7 @@ interface SidebarProviderProps extends React.ComponentProps<'div'> {
 }
 
 export const SidebarProvider = (props: SidebarProviderProps) => {
-  const {
-    defaultOpen = true,
-    open: openProp,
-    onOpenChange: setOpenProp,
-    className,
-    style,
-    ...rest
-  } = props;
+  const { defaultOpen = true, open: openProp, onOpenChange: setOpenProp, className, style, ...rest } = props;
 
   const isMobile = useIsMobile();
   const [openMobile, setOpenMobile] = React.useState(false);
@@ -90,8 +82,11 @@ export const SidebarProvider = (props: SidebarProviderProps) => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === SIDEBAR_KEYBOARD_SHORTCUT && (event.metaKey || event.ctrlKey)) {
         const target = event.target;
-        if (target instanceof HTMLElement && (target.isContentEditable
-          || target.closest('[contenteditable="true"], input, textarea, [role="textbox"]'))) return;
+        if (
+          target instanceof HTMLElement &&
+          (target.isContentEditable || target.closest('[contenteditable="true"], input, textarea, [role="textbox"]'))
+        )
+          return;
         event.preventDefault();
         toggleSidebar();
       }
@@ -157,14 +152,7 @@ interface SidebarProps extends React.ComponentProps<typeof Sheet> {
  * `nav` landmark and mark the current page with `isActive`.
  */
 export const Sidebar = (props: SidebarProps) => {
-  const {
-    collapsible = 'offcanvas',
-    placement = 'left',
-    variant = 'sidebar',
-    className,
-    children,
-    ...rest
-  } = props;
+  const { collapsible = 'offcanvas', placement = 'left', variant = 'sidebar', className, children, ...rest } = props;
 
   const copy = useUiCopy();
   const { isMobile, state, openMobile, setOpenMobile } = useSidebar();
@@ -191,13 +179,7 @@ export const Sidebar = (props: SidebarProps) => {
     return (
       <Sheet {...props} onOpenChange={({ open }) => setOpenMobile(open)} open={openMobile}>
         <SheetContent
-          className={cn(
-            'w-(--sidebar-width)',
-            'p-0',
-            'bg-sidebar',
-            'text-sidebar-foreground',
-            '[&>button]:hidden',
-          )}
+          className={cn('w-(--sidebar-width)', 'p-0', 'bg-sidebar', 'text-sidebar-foreground', '[&>button]:hidden')}
           data-mobile="true"
           data-sidebar="sidebar"
           data-slot="sidebar"
@@ -208,11 +190,7 @@ export const Sidebar = (props: SidebarProps) => {
             } as React.CSSProperties
           }
         >
-          <SheetHeader
-            className="sr-only"
-            description={copy.sidebarDescription}
-            title={copy.sidebar}
-          />
+          <SheetHeader className="sr-only" description={copy.sidebarDescription} title={copy.sidebar} />
           <ark.div className="flex size-full flex-col">{children}</ark.div>
         </SheetContent>
       </Sheet>
@@ -743,10 +721,7 @@ export const SidebarMenuSub = (props: React.ComponentProps<typeof ark.ul>) => {
   );
 };
 
-export const SidebarMenuSubItem = ({
-  className,
-  ...props
-}: React.ComponentProps<typeof ark.li>) => (
+export const SidebarMenuSubItem = ({ className, ...props }: React.ComponentProps<typeof ark.li>) => (
   <ark.li
     className={cn('group/menu-sub-item relative', className)}
     data-sidebar="menu-sub-item"
@@ -755,9 +730,7 @@ export const SidebarMenuSubItem = ({
   />
 );
 
-interface SidebarMenuSubButtonProps
-  extends React.ComponentProps<typeof ark.a>,
-    VariantProps<typeof buttonVariants> {
+interface SidebarMenuSubButtonProps extends React.ComponentProps<typeof ark.a>, VariantProps<typeof buttonVariants> {
   isActive?: boolean;
 }
 

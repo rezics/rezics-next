@@ -80,9 +80,7 @@ export const Ratios: Story = {
         ] as const
       ).map(([label, ratio]) => (
         <AspectRatio className="w-40 rounded-xl bg-accent" key={label} ratio={ratio}>
-          <div className="flex size-full items-center justify-center text-accent-foreground text-sm">
-            {label}
-          </div>
+          <div className="flex size-full items-center justify-center text-accent-foreground text-sm">{label}</div>
         </AspectRatio>
       ))}
     </div>

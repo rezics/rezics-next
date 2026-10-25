@@ -43,9 +43,7 @@ export const Default: Story = {
   render: (args) => <ContextHint {...args} />,
   async play({ canvasElement }) {
     await userEvent.click(trigger(canvasElement));
-    await expect(await settled(await screen.findByRole('dialog'))).toHaveTextContent(
-      /Hard SF Realm/,
-    );
+    await expect(await settled(await screen.findByRole('dialog'))).toHaveTextContent(/Hard SF Realm/);
     await expect(trigger(canvasElement)).toHaveAttribute('aria-expanded', 'true');
   },
 };

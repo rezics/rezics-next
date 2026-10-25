@@ -8,7 +8,7 @@ derived from [SharkUI](https://github.com/sharkui-inc/shark-ui) at commit
 `d43c3c2c7a5e683d46930c2ce8eb22eca2f8a0a0` and are distributed under the
 following license:
 
-```text
+````text
 MIT License
 
 Copyright (c) 2026 Vinicius Vicentini
@@ -62,4 +62,4 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-```
+````

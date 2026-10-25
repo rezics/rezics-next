@@ -54,9 +54,10 @@ export const Default: Story = {
     await expect(select).toHaveValue('');
     await userEvent.selectOptions(select, 'reading');
     await expect(select).toHaveValue('reading');
-    await expect(
-      within(canvasElement).getByRole('option', { name: 'Currently reading' }),
-    ).toHaveProperty('selected', true);
+    await expect(within(canvasElement).getByRole('option', { name: 'Currently reading' })).toHaveProperty(
+      'selected',
+      true,
+    );
   },
 };
 
@@ -149,8 +150,7 @@ export const LongOption: Story = {
       <FieldLabel>Edition</FieldLabel>
       <NativeSelect {...args}>
         <NativeSelectOption value="long">
-          The Three-Body Problem (Remembrance of Earth’s Past, Book 1), Tor Books hardcover, 2014,
-          translated by Ken Liu
+          The Three-Body Problem (Remembrance of Earth’s Past, Book 1), Tor Books hardcover, 2014, translated by Ken Liu
         </NativeSelectOption>
         <NativeSelectOption value="short">三体 (重庆出版社, 2008)</NativeSelectOption>
       </NativeSelect>

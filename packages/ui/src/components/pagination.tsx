@@ -1,4 +1,3 @@
-
 import { ark } from '@ark-ui/react/factory';
 import { Pagination as ArkPagination, usePaginationContext } from '@ark-ui/react/pagination';
 import { ChevronLeft, ChevronRight, Ellipsis } from 'lucide-react';
@@ -67,9 +66,7 @@ export const Pagination = (props: PaginationProps) => {
 };
 
 // Children replace the English label, for example with 上一页 in zh-CN.
-export const PaginationPrevious = (
-  props: React.ComponentProps<typeof ArkPagination.PrevTrigger>,
-) => {
+export const PaginationPrevious = (props: React.ComponentProps<typeof ArkPagination.PrevTrigger>) => {
   const copy = useUiCopy();
   const { children = copy.previous, ...rest } = props;
 
@@ -119,9 +116,7 @@ export const PaginationItem = (props: React.ComponentProps<typeof ArkPagination.
   );
 };
 
-export const PaginationItems = (
-  props: Omit<React.ComponentProps<typeof ArkPagination.Context>, 'children'>,
-) => (
+export const PaginationItems = (props: Omit<React.ComponentProps<typeof ArkPagination.Context>, 'children'>) => (
   <ArkPagination.Context {...props}>
     {({ pages }) =>
       pages.map((page, index) =>

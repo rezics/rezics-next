@@ -1,8 +1,4 @@
-
-import {
-  SignaturePad as ArkSignaturePad,
-  useSignaturePadContext,
-} from '@ark-ui/react/signature-pad';
+import { SignaturePad as ArkSignaturePad, useSignaturePadContext } from '@ark-ui/react/signature-pad';
 import { RotateCcw } from 'lucide-react';
 import type React from 'react';
 import { useUiCopy } from '../i18n/copy.ts';

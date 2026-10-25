@@ -1,4 +1,3 @@
-
 import { Toggle as ArkToggle, useToggleContext } from '@ark-ui/react/toggle';
 import type React from 'react';
 import { tv, type VariantProps } from 'tailwind-variants';
@@ -34,9 +33,7 @@ export const toggleVariants = tv({
   },
 });
 
-export interface ToggleProps
-  extends React.ComponentProps<typeof ArkToggle.Root>,
-    VariantProps<typeof toggleVariants> {
+export interface ToggleProps extends React.ComponentProps<typeof ArkToggle.Root>, VariantProps<typeof toggleVariants> {
   /**
    * The variant of the toggle
    *
@@ -50,11 +47,7 @@ export const Toggle = (props: ToggleProps) => {
 
   return (
     <ArkToggle.Root
-      className={cn(
-        buttonVariants({ variant, clickEffect: false }),
-        toggleVariants({ variant, size }),
-        className,
-      )}
+      className={cn(buttonVariants({ variant, clickEffect: false }), toggleVariants({ variant, size }), className)}
       data-slot="toggle"
       {...rest}
     />

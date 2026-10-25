@@ -1,4 +1,3 @@
-
 /**
  * The document Ark components look up their parts in and portal their layers to. Wrap a subtree
  * rendered into another document, such as a same-origin iframe used as a preview window, so that

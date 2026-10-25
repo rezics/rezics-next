@@ -10,8 +10,17 @@ export const useSwitch = useSwitchContext;
  * alone leaves the DOM checked until its logical value changes. */
 function SwitchInput({ tabIndex }: { tabIndex?: number | undefined }) {
   const state = useSwitchContext();
-  return <ArkSwitch.HiddenInput role="switch" tabIndex={tabIndex} defaultChecked={undefined}
-    checked={state.checked} onChange={() => { /* Ark dispatches the change through its click handler. */ }} />;
+  return (
+    <ArkSwitch.HiddenInput
+      role="switch"
+      tabIndex={tabIndex}
+      defaultChecked={undefined}
+      checked={state.checked}
+      onChange={() => {
+        /* Ark dispatches the change through its click handler. */
+      }}
+    />
+  );
 }
 
 // Aura's sizes: sm 20x36, md 28x48, lg 32x56, each with a 2px transparent border
@@ -44,20 +53,13 @@ const switchVariants = tv({
   },
 });
 
-export interface SwitchProps
-  extends React.ComponentProps<typeof ArkSwitch.Root>,
-    VariantProps<typeof switchVariants> {}
+export interface SwitchProps extends React.ComponentProps<typeof ArkSwitch.Root>, VariantProps<typeof switchVariants> {}
 
 export const Switch = (props: SwitchProps) => {
   const { size = 'md', className, tabIndex, ...rest } = props;
 
   return (
-    <ArkSwitch.Root
-      className={cn(switchVariants({ size }), className)}
-      data-size={size}
-      data-slot="switch"
-      {...rest}
-    >
+    <ArkSwitch.Root className={cn(switchVariants({ size }), className)} data-size={size} data-slot="switch" {...rest}>
       <ArkSwitch.Control className="flex size-full items-center" data-slot="switch-control">
         <ArkSwitch.Thumb
           className={cn(

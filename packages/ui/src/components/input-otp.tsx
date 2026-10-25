@@ -1,13 +1,10 @@
-
 import { ark } from '@ark-ui/react/factory';
 import { PinInput as ArkPinInput } from '@ark-ui/react/pin-input';
 import type React from 'react';
 import { cn } from '../utils.ts';
 import { Input, type InputProps } from './input.tsx';
 
-interface InputOTPProps
-  extends React.ComponentProps<typeof ArkPinInput.Root>,
-    Pick<InputProps, 'size'> {}
+interface InputOTPProps extends React.ComponentProps<typeof ArkPinInput.Root>, Pick<InputProps, 'size'> {}
 
 export const InputOTP = (props: InputOTPProps) => {
   const { size = 'md', placeholder, otp = true, className, children, ...rest } = props;
@@ -45,9 +42,7 @@ export const InputOTPSlot = (props: React.ComponentProps<typeof ArkPinInput.Inpu
 
   return (
     <ArkPinInput.Input asChild data-slot="input-otp-input" {...rest}>
-      <Input
-        className={cn('relative p-0 text-center font-medium text-base tabular-nums', className)}
-      />
+      <Input className={cn('relative p-0 text-center font-medium text-base tabular-nums', className)} />
     </ArkPinInput.Input>
   );
 };

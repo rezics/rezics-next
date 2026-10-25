@@ -1,4 +1,3 @@
-
 import { ark } from '@ark-ui/react/factory';
 import { Popover as ArkPopover, usePopoverContext } from '@ark-ui/react/popover';
 import { Portal } from '@ark-ui/react/portal';
@@ -23,9 +22,7 @@ export const usePopoverLabelling = (content: React.RefObject<HTMLElement | null>
 
   React.useLayoutEffect(() => {
     setHasTitle(!!content.current?.querySelector('[data-scope=popover][data-part=title]'));
-    setHasDescription(
-      !!content.current?.querySelector('[data-scope=popover][data-part=description]'),
-    );
+    setHasDescription(!!content.current?.querySelector('[data-scope=popover][data-part=description]'));
   });
 
   return {
@@ -45,13 +42,7 @@ export const Popover = (props: React.ComponentProps<typeof ArkPopover.Root>) => 
   const { lazyMount = true, unmountOnExit = true, modal = true, ...rest } = props;
 
   return (
-    <ArkPopover.Root
-      data-slot="popover"
-      lazyMount={lazyMount}
-      modal={modal}
-      unmountOnExit={unmountOnExit}
-      {...rest}
-    />
+    <ArkPopover.Root data-slot="popover" lazyMount={lazyMount} modal={modal} unmountOnExit={unmountOnExit} {...rest} />
   );
 };
 

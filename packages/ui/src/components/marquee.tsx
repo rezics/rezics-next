@@ -1,4 +1,3 @@
-
 import { Marquee as ArkMarquee } from '@ark-ui/react/marquee';
 import type React from 'react';
 import { cn } from '../utils.ts';
@@ -78,13 +77,7 @@ export const MarqueeContent = (props: React.ComponentProps<typeof ArkMarquee.Con
 export const MarqueeItem = (props: React.ComponentProps<typeof ArkMarquee.Item>) => {
   const { className, ...rest } = props;
 
-  return (
-    <ArkMarquee.Item
-      className={cn('w-full text-nowrap', className)}
-      data-slot="marquee-item"
-      {...rest}
-    />
-  );
+  return <ArkMarquee.Item className={cn('w-full text-nowrap', className)} data-slot="marquee-item" {...rest} />;
 };
 
 export const MarqueeEdge = (props: React.ComponentProps<typeof ArkMarquee.Edge>) => {

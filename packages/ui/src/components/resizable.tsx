@@ -1,4 +1,3 @@
-
 import { Splitter as ArkSplitter, useSplitterContext } from '@ark-ui/react/splitter';
 import { GripVertical } from 'lucide-react';
 import type React from 'react';
@@ -10,17 +9,14 @@ export const useResizable = useSplitterContext;
 export const Resizable = (props: React.ComponentProps<typeof ArkSplitter.Root>) => {
   const { className, ...rest } = props;
 
-  return (
-    <ArkSplitter.Root className={cn('flex size-full', className)} data-slot="resizable" {...rest} />
-  );
+  return <ArkSplitter.Root className={cn('flex size-full', className)} data-slot="resizable" {...rest} />;
 };
 
 export const ResizablePanel = (props: React.ComponentProps<typeof ArkSplitter.Panel>) => (
   <ArkSplitter.Panel data-slot="resizable-panel" {...props} />
 );
 
-interface ResizableResizeTriggerProps
-  extends React.ComponentProps<typeof ArkSplitter.ResizeTrigger> {
+interface ResizableResizeTriggerProps extends React.ComponentProps<typeof ArkSplitter.ResizeTrigger> {
   /**
    * Whether to show the handle
    *

@@ -1,4 +1,3 @@
-
 import { ark } from '@ark-ui/react/factory';
 import { Timer as ArkTimer, useTimerContext as useArkTimer } from '@ark-ui/react/timer';
 import type React from 'react';
@@ -30,11 +29,7 @@ export const TimerArea = (props: React.ComponentProps<typeof ArkTimer.Area>) => 
 
   return (
     <ArkTimer.Area
-      className={cn(
-        'flex items-center gap-2',
-        'has-data-[slot=timer-item-label]:items-start',
-        className,
-      )}
+      className={cn('flex items-center gap-2', 'has-data-[slot=timer-item-label]:items-start', className)}
       data-slot="timer-area"
       {...rest}
     />
@@ -87,13 +82,7 @@ export const TimerItem = (props: React.ComponentProps<typeof ArkTimer.Item>) => 
 export const TimerItemLabel = (props: React.ComponentProps<typeof ark.div>) => {
   const { className, ...rest } = props;
 
-  return (
-    <ark.div
-      className={cn('text-muted-foreground text-xs', className)}
-      data-slot="timer-item-label"
-      {...rest}
-    />
-  );
+  return <ark.div className={cn('text-muted-foreground text-xs', className)} data-slot="timer-item-label" {...rest} />;
 };
 
 export const TimerSeparator = (props: React.ComponentProps<typeof ArkTimer.Separator>) => {
@@ -113,21 +102,14 @@ export const TimerSeparator = (props: React.ComponentProps<typeof ArkTimer.Separ
 export const TimerControl = (props: React.ComponentProps<typeof ArkTimer.Control>) => {
   const { className, ...rest } = props;
 
-  return (
-    <ArkTimer.Control
-      className={cn('flex items-center gap-2', className)}
-      data-slot="timer-control"
-      {...rest}
-    />
-  );
+  return <ArkTimer.Control className={cn('flex items-center gap-2', className)} data-slot="timer-control" {...rest} />;
 };
 
 export const TimerActionTrigger = (props: React.ComponentProps<typeof ArkTimer.ActionTrigger>) => (
   <ArkTimer.ActionTrigger data-slot="timer-action" {...props} />
 );
 
-interface TimerActionProps
-  extends Omit<React.ComponentProps<typeof ArkTimer.ActionTrigger>, 'action'> {}
+interface TimerActionProps extends Omit<React.ComponentProps<typeof ArkTimer.ActionTrigger>, 'action'> {}
 
 export const TimerPause = (props: TimerActionProps) => {
   const copy = useUiCopy();
@@ -151,14 +133,7 @@ export const TimerReset = (props: TimerActionProps) => {
 
 export const TimerRestart = (props: TimerActionProps) => {
   const copy = useUiCopy();
-  return (
-    <ArkTimer.ActionTrigger
-      aria-label={copy.restart}
-      data-slot="timer-restart"
-      {...props}
-      action="restart"
-    />
-  );
+  return <ArkTimer.ActionTrigger aria-label={copy.restart} data-slot="timer-restart" {...props} action="restart" />;
 };
 
 export const TimerPlay = (props: TimerActionProps) => {

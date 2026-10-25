@@ -114,10 +114,7 @@ const Palette = (props: {
       onInputValueChange={(details) => filter(details.inputValue)}
       onValueChange={props.onValueChange}
     >
-      <CommandInput
-        aria-label="Search REZICS"
-        placeholder={props.placeholder ?? 'Search Works, Realms and actions'}
-      />
+      <CommandInput aria-label="Search REZICS" placeholder={props.placeholder ?? 'Search Works, Realms and actions'} />
       <CommandEmpty>{props.emptyText}</CommandEmpty>
       <CommandContent>
         <CommandList>
@@ -128,9 +125,7 @@ const Palette = (props: {
                 <CommandItem item={item} key={item.value}>
                   {item.icon}
                   <span className="truncate">{item.label}</span>
-                  {item.hint ? (
-                    <span className="truncate text-muted-foreground text-xs">{item.hint}</span>
-                  ) : null}
+                  {item.hint ? <span className="truncate text-muted-foreground text-xs">{item.hint}</span> : null}
                   {item.shortcut ? <CommandShortcut>{item.shortcut}</CommandShortcut> : null}
                 </CommandItem>
               ))}
@@ -187,9 +182,7 @@ export const Filter: Story = {
     await expect(input).toHaveValue('forest');
     await waitFor(() => expect(canvas.getAllByRole('option')).toHaveLength(1));
     await userEvent.keyboard('{Enter}');
-    await expect(args.onValueChange).toHaveBeenCalledWith(
-      expect.objectContaining({ value: ['work:dark-forest'] }),
-    );
+    await expect(args.onValueChange).toHaveBeenCalledWith(expect.objectContaining({ value: ['work:dark-forest'] }));
   },
 };
 
@@ -219,9 +212,7 @@ export const Empty: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await typist.type(canvas.getByRole('combobox', { name: 'Search REZICS' }), 'foundation');
-    await expect(await canvas.findByRole('status')).toHaveTextContent(
-      /No Works, Realms or actions/,
-    );
+    await expect(await canvas.findByRole('status')).toHaveTextContent(/No Works, Realms or actions/);
     await expect(canvas.queryByRole('listbox')).not.toBeInTheDocument();
   },
 };
@@ -254,10 +245,7 @@ export const Dialog: Story = {
           <Kbd>⌘K</Kbd>
         </Button>
       </CommandDialogTrigger>
-      <CommandDialogContent
-        description="Jump to a Work, a Realm or an action."
-        title="Search REZICS"
-      >
+      <CommandDialogContent description="Jump to a Work, a Realm or an action." title="Search REZICS">
         <Palette onValueChange={args.onValueChange} />
       </CommandDialogContent>
     </CommandDialog>
@@ -265,9 +253,7 @@ export const Dialog: Story = {
   async play({ canvasElement }) {
     await userEvent.click(within(canvasElement).getByRole('button', { name: /Search REZICS/ }));
     const dialog = await settled(await screen.findByRole('dialog', { name: 'Search REZICS' }));
-    await waitFor(() =>
-      expect(within(dialog).getByRole('combobox', { name: 'Search REZICS' })).toHaveFocus(),
-    );
+    await waitFor(() => expect(within(dialog).getByRole('combobox', { name: 'Search REZICS' })).toHaveFocus());
   },
 };
 

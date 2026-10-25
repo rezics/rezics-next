@@ -1,15 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { Checkbox, CheckboxGroup } from './checkbox.tsx';
-import {
-  Field,
-  FieldContent,
-  FieldDescription,
-  FieldError,
-  FieldLabel,
-  FieldLegend,
-  FieldSet,
-} from './field.tsx';
+import { Field, FieldContent, FieldDescription, FieldError, FieldLabel, FieldLegend, FieldSet } from './field.tsx';
 
 const meta = {
   title: 'Rezics UI/Checkbox',
@@ -69,10 +61,12 @@ export const PointerReachesInput: Story = {
 };
 
 export const KeyboardFocusAndPlacement: Story = {
-  render: () => <form className="grid gap-3">
-    <Checkbox>Contains spoilers</Checkbox>
-    <button type="submit">Post message</button>
-  </form>,
+  render: () => (
+    <form className="grid gap-3">
+      <Checkbox>Contains spoilers</Checkbox>
+      <button type="submit">Post message</button>
+    </form>
+  ),
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const input = canvas.getByRole('checkbox', { name: 'Contains spoilers' });
@@ -83,7 +77,9 @@ export const KeyboardFocusAndPlacement: Story = {
     const control = canvasElement.querySelector('[data-slot="checkbox-control"]')!.getBoundingClientRect();
     await expect(Math.abs(box.x + box.width / 2 - control.x - control.width / 2)).toBeLessThan(1);
     await expect(Math.abs(box.y + box.height / 2 - control.y - control.height / 2)).toBeLessThan(1);
-    await expect(canvasElement.ownerDocument.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)).toBe(input);
+    await expect(canvasElement.ownerDocument.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)).toBe(
+      input,
+    );
     await userEvent.keyboard(' ');
     await expect(input).toBeChecked();
     await userEvent.tab();
@@ -134,9 +130,7 @@ export const WithDescription: Story = {
       <Checkbox {...args} />
       <FieldContent>
         <FieldLabel>Notify me about new chapters</FieldLabel>
-        <FieldDescription>
-          We send one digest a day for Works on your “Currently reading” shelf.
-        </FieldDescription>
+        <FieldDescription>We send one digest a day for Works on your “Currently reading” shelf.</FieldDescription>
       </FieldContent>
     </Field>
   ),
@@ -209,8 +203,8 @@ export const LongLabel: Story = {
     <Field className="max-w-xs" orientation="horizontal">
       <Checkbox {...args} />
       <FieldLabel>
-        Include fan translations of 《银河英雄传说》 (Legend of the Galactic Heroes) and other works
-        whose rights holders have not confirmed an official English edition
+        Include fan translations of 《银河英雄传说》 (Legend of the Galactic Heroes) and other works whose rights
+        holders have not confirmed an official English edition
       </FieldLabel>
     </Field>
   ),

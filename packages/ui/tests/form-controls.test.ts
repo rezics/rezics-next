@@ -6,9 +6,24 @@ const root = join(import.meta.dir, '..');
 const components = join(root, 'src', 'components');
 
 test('the form controls are ported with stories', () => {
-  for (const name of ['button-group', 'checkbox', 'clipboard', 'combobox', 'command', 'file-upload', 'image-cropper',
-    'input-group', 'native-select', 'password-input', 'qr-code', 'radio-group', 'rating', 'segment-group', 'switch',
-    'textarea']) {
+  for (const name of [
+    'button-group',
+    'checkbox',
+    'clipboard',
+    'combobox',
+    'command',
+    'file-upload',
+    'image-cropper',
+    'input-group',
+    'native-select',
+    'password-input',
+    'qr-code',
+    'radio-group',
+    'rating',
+    'segment-group',
+    'switch',
+    'textarea',
+  ]) {
     expect(existsSync(join(components, `${name}.tsx`)), `${name}.tsx`).toBe(true);
     expect(existsSync(join(components, `${name}.stories.tsx`)), `${name}.stories.tsx`).toBe(true);
   }

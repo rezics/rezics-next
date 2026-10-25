@@ -100,9 +100,7 @@ export const DisabledItem: Story = {
           {label}
         </RadioGroupItem>
       ))}
-      <FieldDescription className="ms-0">
-        Copyright reports go through the rights holder form.
-      </FieldDescription>
+      <FieldDescription className="ms-0">Copyright reports go through the rights holder form.</FieldDescription>
     </RadioGroup>
   ),
 };
@@ -124,9 +122,7 @@ export const Invalid: Story = {
   ),
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('radiogroup')).toHaveAccessibleName(
-      'Why are you reporting this review?',
-    );
+    await expect(canvas.getByRole('radiogroup')).toHaveAccessibleName('Why are you reporting this review?');
     await expect(canvas.getByText(/Choose a reason/)).toBeVisible();
   },
 };
@@ -149,8 +145,8 @@ export const LongLabels: Story = {
     <RadioGroup {...args} className="max-w-sm">
       <RadioGroupLabel>Why are you reporting this review?</RadioGroupLabel>
       <RadioGroupItem value="spoiler">
-        It reveals the ending of 《球状闪电》 without a spoiler tag, even though the Realm rules
-        require one for books published in the last two years
+        It reveals the ending of 《球状闪电》 without a spoiler tag, even though the Realm rules require one for books
+        published in the last two years
       </RadioGroupItem>
       <RadioGroupItem value="spam">Spam or advertising</RadioGroupItem>
     </RadioGroup>

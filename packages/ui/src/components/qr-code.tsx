@@ -27,14 +27,7 @@ export const QrCodeFrame = (props: React.ComponentProps<typeof ArkQrCode.Frame>)
 
   return (
     <ArkQrCode.Frame
-      className={cn(
-        'size-(--qr-code-size)',
-        'bg-white',
-        'fill-black',
-        'rounded-md',
-        'overflow-hidden',
-        className,
-      )}
+      className={cn('size-(--qr-code-size)', 'bg-white', 'fill-black', 'rounded-md', 'overflow-hidden', className)}
       data-slot="qr-code-frame"
       {...rest}
     >

@@ -93,10 +93,7 @@ export const Types: Story = {
 
 export const Loading: Story = {
   render: () => (
-    <Launcher
-      label="Publish revision"
-      toasts={[{ type: 'loading', title: 'Publishing revision…', closable: false }]}
-    />
+    <Launcher label="Publish revision" toasts={[{ type: 'loading', title: 'Publishing revision…', closable: false }]} />
   ),
   async play({ canvasElement }) {
     const status = await showToasts(canvasElement, 'Publish revision');

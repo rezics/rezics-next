@@ -1,4 +1,3 @@
-
 import { ark, Presence, type PresenceProps } from '@ark-ui/react';
 import React from 'react';
 import { tv } from 'tailwind-variants';
@@ -64,15 +63,7 @@ const HintContext = React.createContext({} as HintContextValue);
 const defaultPositioning = { placement: 'top', gutter: '10px' } as const;
 
 export const Hint = (props: HintProps) => {
-  const {
-    positioning,
-    className,
-    children,
-    defaultOpen = false,
-    onOpenChange,
-    open: openProp,
-    ...rest
-  } = props;
+  const { positioning, className, children, defaultOpen = false, onOpenChange, open: openProp, ...rest } = props;
 
   const positioningValue = {
     ...defaultPositioning,
@@ -192,8 +183,7 @@ const hintContentVariants = tv({
 });
 
 interface HintContentProps
-  extends React.ComponentProps<typeof ark.div>,
-    Pick<PresenceProps, 'lazyMount' | 'unmountOnExit'> {}
+  extends React.ComponentProps<typeof ark.div>, Pick<PresenceProps, 'lazyMount' | 'unmountOnExit'> {}
 
 export const HintContent = (props: HintContentProps) => {
   const { lazyMount = true, unmountOnExit = true, className, children, ...rest } = props;

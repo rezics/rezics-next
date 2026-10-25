@@ -71,9 +71,7 @@ const CreateRealm = (args: React.ComponentProps<typeof Steps>) => (
         {step.body}
       </StepsContent>
     ))}
-    <StepsCompletedContent className="text-sm">
-      Hard SF is live. Share it from the Realm page.
-    </StepsCompletedContent>
+    <StepsCompletedContent className="text-sm">Hard SF is live. Share it from the Realm page.</StepsCompletedContent>
     <div className="flex gap-2">
       <StepsPrevious asChild>
         <Button variant="outline">Back</Button>
@@ -109,10 +107,7 @@ export const JumpToStep: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('tab', { name: /Moderators/ }));
-    await expect(canvas.getByRole('tab', { name: /Moderators/ })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
+    await expect(canvas.getByRole('tab', { name: /Moderators/ })).toHaveAttribute('aria-selected', 'true');
     await expect(canvas.getByText(/Invite @ye_wenjie/)).toBeVisible();
   },
 };
@@ -157,10 +152,7 @@ export const Chinese: Story = {
     </Steps>
   ),
   async play({ canvasElement }) {
-    await expect(within(canvasElement).getByRole('tab', { name: /匹配版本/ })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
+    await expect(within(canvasElement).getByRole('tab', { name: /匹配版本/ })).toHaveAttribute('aria-selected', 'true');
   },
 };
 

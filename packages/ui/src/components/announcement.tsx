@@ -1,4 +1,3 @@
-
 import { ark } from '@ark-ui/react/factory';
 import type React from 'react';
 import { tv, type VariantProps } from 'tailwind-variants';
@@ -25,9 +24,7 @@ export const announcementVariants = tv({
   ],
 });
 
-interface AnnouncementProps
-  extends React.ComponentProps<typeof ark.div>,
-    VariantProps<typeof announcementVariants> {
+interface AnnouncementProps extends React.ComponentProps<typeof ark.div>, VariantProps<typeof announcementVariants> {
   /**
    * The ARIA role of the announcement. Ignored with `asChild`, so a link keeps
    * its link role.

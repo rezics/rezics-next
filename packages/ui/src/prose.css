@@ -136,11 +136,11 @@
   border: 1px solid var(--border);
 }
 
-.prose table:not(.not-prose table) th[align="center"] {
+.prose table:not(.not-prose table) th[align='center'] {
   text-align: center;
 }
 
-.prose table:not(.not-prose table) th[align="right"] {
+.prose table:not(.not-prose table) th[align='right'] {
   text-align: right;
 }
 .prose table:not(.not-prose table) tbody tr {
@@ -159,11 +159,11 @@
   border: 1px solid var(--border);
 }
 
-.prose table:not(.not-prose table) td[align="center"] {
+.prose table:not(.not-prose table) td[align='center'] {
   text-align: center;
 }
 
-.prose table:not(.not-prose table) td[align="right"] {
+.prose table:not(.not-prose table) td[align='right'] {
   text-align: right;
 }
 

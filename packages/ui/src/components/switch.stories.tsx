@@ -53,7 +53,7 @@ export const OnAndOff: Story = {
   globals: { theme: 'light' },
   render: () => (
     <div className="flex max-w-md flex-col gap-4">
-      {['bg-background', 'bg-card', 'bg-muted'].map(surface => (
+      {['bg-background', 'bg-card', 'bg-muted'].map((surface) => (
         <div className={`flex flex-col gap-4 rounded-2xl border p-4 ${surface}`} key={surface}>
           <Field orientation="horizontal">
             <Switch />
@@ -174,9 +174,7 @@ export const Chinese: Story = {
       </Field>
       <Field className="max-w-xs" orientation="horizontal">
         <Switch />
-        <FieldLabel>
-          当《银河英雄传说》有新的讨论帖时通知我，并在每日摘要中包含 Realm 精选
-        </FieldLabel>
+        <FieldLabel>当《银河英雄传说》有新的讨论帖时通知我，并在每日摘要中包含 Realm 精选</FieldLabel>
       </Field>
     </div>
   ),

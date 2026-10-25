@@ -81,9 +81,7 @@ export const VoteGroup: Story = {
       <Button aria-label="Upvote" size="icon-sm" variant="secondary">
         <ArrowBigUpIcon />
       </Button>
-      <ButtonGroupText className="h-8 border-0 bg-secondary px-1 text-foreground tabular-nums">
-        1.2k
-      </ButtonGroupText>
+      <ButtonGroupText className="h-8 border-0 bg-secondary px-1 text-foreground tabular-nums">1.2k</ButtonGroupText>
       <Button aria-label="Downvote" size="icon-sm" variant="secondary">
         <ArrowBigDownIcon />
       </Button>

@@ -1,4 +1,3 @@
-
 import type { Combobox as ArkCombobox } from '@ark-ui/react/combobox';
 import type React from 'react';
 import {
@@ -27,14 +26,7 @@ export const AutocompleteControl = (props: React.ComponentProps<typeof ComboboxC
 export const AutocompleteInput = (props: React.ComponentProps<typeof ComboboxInput>) => {
   const { showClear = false, showTrigger = false, ...rest } = props;
 
-  return (
-    <ComboboxInput
-      data-slot="autocomplete-input"
-      showClear={showClear}
-      showTrigger={showTrigger}
-      {...rest}
-    />
-  );
+  return <ComboboxInput data-slot="autocomplete-input" showClear={showClear} showTrigger={showTrigger} {...rest} />;
 };
 
 export const AutocompleteGroupLabel = (props: React.ComponentProps<typeof ComboboxGroupLabel>) => (

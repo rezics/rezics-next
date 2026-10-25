@@ -88,9 +88,7 @@ export const Chinese: Story = {
       </Announcement>
       <Announcement>
         <Badge variant="secondary">Realm</Badge>
-        <AnnouncementTitle>
-          硬科幻 Realm 的 Hugo Award 2026 shortlist 共读活动现已开放报名，名额有限
-        </AnnouncementTitle>
+        <AnnouncementTitle>硬科幻 Realm 的 Hugo Award 2026 shortlist 共读活动现已开放报名，名额有限</AnnouncementTitle>
       </Announcement>
     </div>
   ),

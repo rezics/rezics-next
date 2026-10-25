@@ -106,10 +106,7 @@ export const CloseWithEscape: Story = {
 
 export const LongTitle: Story = {
   render: (args) => (
-    <ShelfCover
-      {...args}
-      title="Remembrance of Earth’s Past: The Three-Body Trilogy (Collector’s Box Set)"
-    />
+    <ShelfCover {...args} title="Remembrance of Earth’s Past: The Three-Body Trilogy (Collector’s Box Set)" />
   ),
   async play({ canvasElement }) {
     const title = 'Remembrance of Earth’s Past: The Three-Body Trilogy (Collector’s Box Set)';

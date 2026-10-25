@@ -74,16 +74,7 @@ export const ScrollFade: Story = {
   render: Vertical.render,
 };
 
-const covers = [
-  '#2f63ad',
-  '#1d8a7a',
-  '#bf7a0e',
-  '#6a5bb5',
-  '#1f4a85',
-  '#c42840',
-  '#2c7a33',
-  '#8a5a00',
-];
+const covers = ['#2f63ad', '#1d8a7a', '#bf7a0e', '#6a5bb5', '#1f4a85', '#c42840', '#2c7a33', '#8a5a00'];
 
 export const Horizontal: Story = {
   render: () => (

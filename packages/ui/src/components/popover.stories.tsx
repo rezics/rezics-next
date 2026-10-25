@@ -42,8 +42,8 @@ const RatingContext = (props: React.ComponentProps<typeof Popover>) => (
         title="About this rating"
       />
       <PopoverBody className="text-sm">
-        4.3 out of 5 from 1,284 members of the Hard SF Realm who marked an edition as read. The
-        publisher’s own aggregate is shown separately as a source statistic.
+        4.3 out of 5 from 1,284 members of the Hard SF Realm who marked an edition as read. The publisher’s own
+        aggregate is shown separately as a source statistic.
       </PopoverBody>
       <PopoverFooter>
         <PopoverClose asChild>
@@ -76,9 +76,7 @@ export const CloseWithEscape: Story = {
     await openPopover(canvasElement, /Hard SF readers/);
     await userEvent.keyboard('{Escape}');
     await dismissed('dialog');
-    await expect(
-      within(canvasElement).getByRole('button', { name: /Hard SF readers/ }),
-    ).toHaveFocus();
+    await expect(within(canvasElement).getByRole('button', { name: /Hard SF readers/ })).toHaveFocus();
   },
 };
 
@@ -153,17 +151,17 @@ export const LongContent: Story = {
         <PopoverHeader title="Edition notes" />
         <PopoverBody className="flex flex-col gap-3 text-sm">
           <p>
-            The 2014 Tor edition follows Ken Liu’s translation, which restores the Cultural
-            Revolution opening that the 2006 serialisation moved to the middle of the book.
+            The 2014 Tor edition follows Ken Liu’s translation, which restores the Cultural Revolution opening that the
+            2006 serialisation moved to the middle of the book.
           </p>
           <p>
-            Chapter numbering differs from the 2008 Chongqing Publishing Group edition by three
-            chapters after “Red Coast”. Reading groups in the Translated Fiction Realm cite the
-            English numbering and give the Chinese chapter in brackets.
+            Chapter numbering differs from the 2008 Chongqing Publishing Group edition by three chapters after “Red
+            Coast”. Reading groups in the Translated Fiction Realm cite the English numbering and give the Chinese
+            chapter in brackets.
           </p>
           <p>
-            A 2023 revised printing corrects the orbital diagram in chapter 17. Ratings are not
-            split by printing; report errata as a revision to the edition instead.
+            A 2023 revised printing corrects the orbital diagram in chapter 17. Ratings are not split by printing;
+            report errata as a revision to the edition instead.
           </p>
         </PopoverBody>
       </PopoverContent>
@@ -182,13 +180,9 @@ export const Chinese: Story = {
         <Button variant="outline">评分说明</Button>
       </PopoverTrigger>
       <PopoverContent className="w-80" showCloseButton>
-        <PopoverHeader
-          description="REZICS 的评分总带有语境：谁评的，以什么为标准。"
-          title="关于《三体》的评分"
-        />
+        <PopoverHeader description="REZICS 的评分总带有语境：谁评的，以什么为标准。" title="关于《三体》的评分" />
         <PopoverBody className="text-sm">
-          4.6 分来自「科幻」Realm 中 3,902
-          位已标记读过的成员。出版方的汇总评分作为来源统计单独显示。
+          4.6 分来自「科幻」Realm 中 3,902 位已标记读过的成员。出版方的汇总评分作为来源统计单独显示。
         </PopoverBody>
       </PopoverContent>
     </Popover>

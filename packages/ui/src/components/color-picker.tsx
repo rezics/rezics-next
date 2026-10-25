@@ -14,8 +14,10 @@ import { Button, type ButtonProps } from './button.tsx';
 export const parseColor = parseColorArk;
 export const useColorPicker = useColorPickerContext;
 
-export interface ColorPickerProps
-  extends Omit<React.ComponentProps<typeof ArkColorPicker.Root>, 'defaultValue' | 'value'> {
+export interface ColorPickerProps extends Omit<
+  React.ComponentProps<typeof ArkColorPicker.Root>,
+  'defaultValue' | 'value'
+> {
   /**
    * The default value of the color picker.
    */
@@ -97,9 +99,7 @@ export const ColorPickerLabel = (props: React.ComponentProps<typeof ArkColorPick
   );
 };
 
-export const ColorPickerTransparencyGrid = (
-  props: React.ComponentProps<typeof ArkColorPicker.TransparencyGrid>,
-) => {
+export const ColorPickerTransparencyGrid = (props: React.ComponentProps<typeof ArkColorPicker.TransparencyGrid>) => {
   const { className, ...rest } = props;
 
   return (
@@ -157,9 +157,7 @@ export const ColorPickerView = (props: React.ComponentProps<typeof ArkColorPicke
   );
 };
 
-export const ColorPickerSlider = (
-  props: React.ComponentProps<typeof ArkColorPicker.ChannelSlider>,
-) => {
+export const ColorPickerSlider = (props: React.ComponentProps<typeof ArkColorPicker.ChannelSlider>) => {
   const { className, children, ...rest } = props;
 
   return (
@@ -205,8 +203,7 @@ export const ColorPickerSlider = (
 };
 
 interface ColorPickerEyeDropperTrigger
-  extends React.ComponentProps<typeof ArkColorPicker.EyeDropperTrigger>,
-    ButtonProps {}
+  extends React.ComponentProps<typeof ArkColorPicker.EyeDropperTrigger>, ButtonProps {}
 
 export const ColorPickerEyeDropperTrigger = (props: ColorPickerEyeDropperTrigger) => {
   const { variant = 'outline', size = 'icon-md', children, ...rest } = props;
@@ -220,9 +217,7 @@ export const ColorPickerEyeDropperTrigger = (props: ColorPickerEyeDropperTrigger
   );
 };
 
-export const ColorPickerSwatchGroup = (
-  props: React.ComponentProps<typeof ArkColorPicker.SwatchGroup>,
-) => {
+export const ColorPickerSwatchGroup = (props: React.ComponentProps<typeof ArkColorPicker.SwatchGroup>) => {
   const { className, ...rest } = props;
   return (
     <ArkColorPicker.SwatchGroup
@@ -233,9 +228,7 @@ export const ColorPickerSwatchGroup = (
   );
 };
 
-export const ColorPickerSwatchTrigger = (
-  props: React.ComponentProps<typeof ArkColorPicker.SwatchTrigger>,
-) => {
+export const ColorPickerSwatchTrigger = (props: React.ComponentProps<typeof ArkColorPicker.SwatchTrigger>) => {
   const { className, ...rest } = props;
 
   return (
@@ -280,9 +273,7 @@ export const ColorPickerSwatch = (props: React.ComponentProps<typeof ArkColorPic
   );
 };
 
-export const ColorPickerSwatchIndicator = (
-  props: React.ComponentProps<typeof ArkColorPicker.SwatchIndicator>,
-) => {
+export const ColorPickerSwatchIndicator = (props: React.ComponentProps<typeof ArkColorPicker.SwatchIndicator>) => {
   const { className, children, ...rest } = props;
 
   return (
@@ -317,19 +308,12 @@ export const ColorPickerValue = (props: React.ComponentProps<typeof ArkColorPick
   );
 };
 
-export const ColorPickerValueSwatch = (
-  props: React.ComponentProps<typeof ArkColorPicker.ValueSwatch>,
-) => {
+export const ColorPickerValueSwatch = (props: React.ComponentProps<typeof ArkColorPicker.ValueSwatch>) => {
   const { className, ...rest } = props;
 
   return (
     <ArkColorPicker.ValueSwatch
-      className={cn(
-        'relative size-8 shrink-0',
-        'overflow-hidden',
-        'rounded-full border',
-        className,
-      )}
+      className={cn('relative size-8 shrink-0', 'overflow-hidden', 'rounded-full border', className)}
       data-slot="color-picker-value-swatch"
       {...rest}
     />
@@ -362,19 +346,14 @@ export const ColorPickerArea = (props: ColorPickerAreaProps) => {
       data-slot="color-picker-area"
       {...rest}
     >
-      <ArkColorPicker.AreaBackground
-        className="size-full rounded-[inherit]"
-        data-slot="color-picker-area-background"
-      />
+      <ArkColorPicker.AreaBackground className="size-full rounded-[inherit]" data-slot="color-picker-area-background" />
 
       {children}
     </ArkColorPicker.Area>
   );
 };
 
-export const ColorPickerAreaThumb = (
-  props: React.ComponentProps<typeof ArkColorPicker.AreaThumb>,
-) => {
+export const ColorPickerAreaThumb = (props: React.ComponentProps<typeof ArkColorPicker.AreaThumb>) => {
   const { className, ...rest } = props;
 
   return (
@@ -392,9 +371,7 @@ export const ColorPickerAreaThumb = (
   );
 };
 
-export const ColorPickerInput = (
-  props: Partial<React.ComponentProps<typeof ArkColorPicker.ChannelInput>>,
-) => {
+export const ColorPickerInput = (props: Partial<React.ComponentProps<typeof ArkColorPicker.ChannelInput>>) => {
   const { channel = 'hex', ...rest } = props;
 
   return <ArkColorPicker.ChannelInput channel={channel} data-slot="color-picker-input" {...rest} />;

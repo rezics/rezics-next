@@ -1,4 +1,3 @@
-
 import { ark } from '@ark-ui/react/factory';
 import React from 'react';
 import { cn } from '../utils.ts';
@@ -31,9 +30,7 @@ const useOverflows = () => {
     }
 
     const measure = () =>
-      setOverflows(
-        element.scrollWidth > element.clientWidth || element.scrollHeight > element.clientHeight,
-      );
+      setOverflows(element.scrollWidth > element.clientWidth || element.scrollHeight > element.clientHeight);
     const observer = new ResizeObserver(measure);
     observer.observe(element);
     if (element.firstElementChild) {
@@ -64,13 +61,7 @@ export const Table = (props: TableProps) => {
       tabIndex={overflows ? 0 : undefined}
     >
       <ark.table
-        className={cn(
-          'group/table',
-          'w-full',
-          'caption-bottom',
-          'text-foreground text-sm',
-          className,
-        )}
+        className={cn('group/table', 'w-full', 'caption-bottom', 'text-foreground text-sm', className)}
         data-hoverable={isHoverable}
         data-slot="table"
         data-variant={variant}
@@ -97,13 +88,7 @@ export interface TableBodyProps extends React.ComponentProps<typeof ark.tbody> {
 export const TableBody = (props: TableBodyProps) => {
   const { className, ...rest } = props;
 
-  return (
-    <ark.tbody
-      className={cn('[&_tr:last-child]:border-0', className)}
-      data-slot="table-body"
-      {...rest}
-    />
-  );
+  return <ark.tbody className={cn('[&_tr:last-child]:border-0', className)} data-slot="table-body" {...rest} />;
 };
 
 export const TableFooter = (props: React.ComponentProps<typeof ark.tfoot>) => {
@@ -111,13 +96,7 @@ export const TableFooter = (props: React.ComponentProps<typeof ark.tfoot>) => {
 
   return (
     <ark.tfoot
-      className={cn(
-        'border-border/60 border-t',
-        'bg-secondary/40',
-        'font-medium',
-        'last:[&>tr]:border-b-0',
-        className,
-      )}
+      className={cn('border-border/60 border-t', 'bg-secondary/40', 'font-medium', 'last:[&>tr]:border-b-0', className)}
       data-slot="table-footer"
       {...rest}
     />

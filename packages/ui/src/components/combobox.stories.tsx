@@ -188,9 +188,7 @@ export const NoResults: Story = {
   async play({ canvasElement }) {
     const page = within(canvasElement.ownerDocument.body);
     await typeIntoPopup(within(canvasElement).getByRole('combobox'), 'Solaris');
-    await expect(
-      await page.findByText('No Works match. Try the original title.'),
-    ).toBeInTheDocument();
+    await expect(await page.findByText('No Works match. Try the original title.')).toBeInTheDocument();
   },
 };
 
