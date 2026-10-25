@@ -33,7 +33,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
     macro: {};
     macroFn: {};
     parser: {};
-    response: import("elysia/types").ExtractErrorFromHandle<Response>;
+    response: {};
 }, {
     health: {
         get: {
@@ -1678,7 +1678,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
     macro: {};
     macroFn: {};
     parser: {};
-    response: import("elysia/types").ExtractErrorFromHandle<Response>;
+    response: {};
 }, {
     health: {
         get: {

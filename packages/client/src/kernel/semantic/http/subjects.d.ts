@@ -89,7 +89,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
     macro: {};
     macroFn: {};
     parser: {};
-    response: import("elysia/types").ExtractErrorFromHandle<Response>;
+    response: {};
 }, {
     health: {
         get: {

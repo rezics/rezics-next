@@ -3,6 +3,7 @@ import { createAccess } from '../access/index.ts';
 import { payoutRoutes } from '../commerce/payout-routes.ts';
 import { commerceRoutes, type CommerceDependencies } from '../commerce/routes.ts';
 import type { Access, AccessConfig } from '../request/access.ts';
+import { searchRoutes, type SearchService } from '../search/http/routes.ts';
 import { definitionRoutes } from '../semantic/http/definitions.ts';
 import { contextRoutes } from '../semantic/http/contexts.ts';
 import { subjectRoutes } from '../semantic/http/subjects.ts';
@@ -13,6 +14,7 @@ import { declareKernelWriteRates } from './write-rate-routes.ts';
 export type KernelDependencies = Parameters<typeof createApp>[0] & {
   routeKey: Uint8Array;
   commerce?: CommerceDependencies;
+  search?: SearchService;
 };
 
 /** The route key must stay the same across restarts, or retries lose their receipts. */
@@ -27,15 +29,16 @@ export function createKernel(dependencies: KernelDependencies) {
     dependencies,
   );
   const payouts = payoutRoutes(app, dependencies);
-  const commerce = commerceRoutes(app, {
+  const commercial = commerceRoutes(app, {
     pool: dependencies.pool,
     tokens,
     access: () => resolveAccess({ actions: actionCatalogue(app) }),
     ...(dependencies.commerce === undefined ? {} : { commerce: dependencies.commerce }),
   });
-  const kernel = contextRoutes(commerce as unknown as ReturnType<typeof definitionRoutes>, dependencies);
-  declareKernelWriteRates(kernel);
-  return kernel as unknown as typeof commerce & typeof payouts & typeof kernel;
+  const contextual = contextRoutes(commercial as unknown as ReturnType<typeof definitionRoutes>, dependencies);
+  const searched = searchRoutes(contextual, dependencies);
+  declareKernelWriteRates(searched);
+  return searched as typeof searched & typeof payouts & typeof commercial & typeof contextual;
 }
 
 /** The app's type is the Eden contract. */

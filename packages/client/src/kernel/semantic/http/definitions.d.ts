@@ -17,7 +17,7 @@ export declare function definitionRoutes(app: ReturnType<typeof subjectRoutes>, 
     macro: {};
     macroFn: {};
     parser: {};
-    response: import("elysia/types").ExtractErrorFromHandle<Response>;
+    response: {};
 }, {
     health: {
         get: {

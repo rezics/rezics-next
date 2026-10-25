@@ -73,17 +73,13 @@ export function createApp({
       arrivals.set(request, Date.now());
     })
     .onError('global', ({ error, request, route }) => {
-      const mounted = mountedApp.routes.find(
-        (entry) =>
-          entry.path === (route ?? new URL(request.url).pathname) &&
-          (entry.method === request.method || entry.method === 'ALL' || entry.method === '*'),
-      );
-      const action = (mounted?.hooks?.detail as Record<string, unknown> | undefined)?.['x-action'];
-      return problemResponse(error, {
-        method: request.method,
-        id: idFor(request),
-        ...(typeof action === 'string' ? { action } : {}),
-      });
+      let action: string | undefined;
+      try {
+        action = actionForRequest(mountedApp, request, typeof route === 'string' ? route : undefined);
+      } catch {
+        action = undefined;
+      }
+      return problemResponse(error, { method: request.method, id: idFor(request), ...(action ? { action } : {}) });
     })
     .derive(async ({ request, route, set }) => {
       const job = { deadline: (arrivals.get(request) ?? Date.now()) + REQUEST_DEADLINE_MS, signal: request.signal };

@@ -208,9 +208,8 @@ function safeFieldErrors(errors: readonly FieldError[] | undefined): FieldError[
 }
 
 function effectStatus(method: string, action?: string): 'not_applicable' | 'not_applied' {
-  return action?.split(':')[1] === 'read' || ['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase())
-    ? 'not_applicable'
-    : 'not_applied';
+  if (action?.endsWith(':read')) return 'not_applicable';
+  return ['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase()) ? 'not_applicable' : 'not_applied';
 }
 
 function hasInvalidToken(challenge: string): boolean {
