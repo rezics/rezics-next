@@ -62,7 +62,7 @@ test('Auth-issued credentials verify exact subjects client scopes and current ac
       const jwks = await f.auth.handler(new Request(f.auth.verifier.jwksUrl));
       expect(jwks.status).toBe(200);
       const keys: PublicJwks = await jwks.json();
-      expect(f.client.firstParty).toBe(false);
+      expect(f.client.firstParty).toBe(true);
       expect(new Set([f.governance.accountId, f.bulk.accountId, f.ordinary.accountId]).size).toBe(3);
       for (const credential of [f.governance, f.bulk, f.ordinary]) {
         // Decoding is only observation; production Access below verifies the token.
