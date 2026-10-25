@@ -167,12 +167,12 @@ type TextQuery =
   | { match_phrase: Record<string, { query: string; _name: string }> }
   | { bool: { must?: TextQuery[]; must_not?: TextQuery[]; should?: TextQuery[]; minimum_should_match?: 1 } };
 
-type TextLeaf = { name: string; kind: 'term' | 'phrase'; value: string; negated: boolean };
+export type TextLeaf = { name: string; kind: 'term' | 'phrase'; value: string; negated: boolean };
 
 export function compileText(
   node: TextNode,
   { field, prefix }: { field: string; prefix: string },
-): { query: TextQuery; leaves: TextLeaf[] } {
+): { query: Record<string, unknown>; leaves: TextLeaf[] } {
   const leaves: TextLeaf[] = [];
   function compile(current: TextNode, negated: boolean): TextQuery {
     switch (current.kind) {
