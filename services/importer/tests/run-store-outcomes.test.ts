@@ -4,7 +4,7 @@ import { expect, test } from 'bun:test';
 test('the complete durable run-state outcomes pass with production indexed storage', async () => {
   const spec = 'specs/imports-run-store.test.ts';
   const declarations = (await Bun.file(spec).text()).match(/^test\(/gm)?.length ?? 0;
-  expect(declarations).toBe(15);
+  expect(declarations).toBeGreaterThanOrEqual(16);
   const child = Bun.spawn([process.execPath, 'test', spec], {
     env: { ...process.env, IMPORT_RUN_STORE_DRIVER: '../services/importer/tests/run-store-driver.ts' },
     stdout: 'pipe',

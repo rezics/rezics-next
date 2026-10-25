@@ -108,6 +108,33 @@ test('malformed source projections reject without executing descriptors or retai
       return secret;
     },
   });
+  const outerKindGetter = Object.defineProperty({ normalizedRecord: {} }, 'sourceKind', {
+    enumerable: true,
+    get() {
+      invoked++;
+      return 'bangumi';
+    },
+  });
+  const toJSONGetter = Object.defineProperty({}, 'toJSON', {
+    enumerable: true,
+    get() {
+      invoked++;
+      return () => secret;
+    },
+  });
+  const arrayGetter = Object.defineProperty([null], '0', {
+    enumerable: true,
+    get() {
+      invoked++;
+      return secret;
+    },
+  });
+  const arrayToJSON = Object.defineProperty([], 'toJSON', {
+    value() {
+      invoked++;
+      return secret;
+    },
+  });
   const invalid: unknown[] = [
     [],
     null,
@@ -116,12 +143,25 @@ test('malformed source projections reject without executing descriptors or retai
     { sourceKind: 'bangumi', normalizedRecord: {}, rawdump: secret },
     { sourceKind: 'bangumi' },
     outerGetter,
+    outerKindGetter,
+    Object.defineProperty({ sourceKind: 'bangumi' }, 'normalizedRecord', { value: secret }),
     Object.assign({ sourceKind: 'bangumi', normalizedRecord: {} }, { [Symbol('rawdump')]: secret }),
     ...[
       getter,
       setter,
       hidden,
       toJSON,
+      toJSONGetter,
+      arrayGetter,
+      arrayToJSON,
+      Object.defineProperty(Object.create(null), 'private', { value: secret }),
+      Object.defineProperty(Object.create(null), 'private', {
+        enumerable: true,
+        get() {
+          invoked++;
+          return secret;
+        },
+      }),
       cycle,
       new Date(),
       new Map(),
