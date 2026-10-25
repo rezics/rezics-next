@@ -12,6 +12,8 @@ export function launchCommand(options: LaunchOptions): [string, string[]] {
   if (!['codex', 'grok', 'cursor'].includes(profile.cli)) throw new Error('unsupported worker CLI');
   if (pool.cli !== profile.cli) throw new Error('profile and pool CLI disagree');
   if (profile.cli === 'grok') return [pool.command, ['-m', profile.model, '--reasoning-effort', profile.effort,
+    // No --json-schema: with it Grok answers in structured form only and stops using tools, so the parser reads its
+    // status object out of free text instead.
     '--permission-mode', 'bypassPermissions', '--no-subagents', '--output-format', 'json', '--cwd', worktree, `--single=${prompt}`]];
   if (profile.cli === 'cursor') return [pool.command, ['-p', '--model', `${profile.model}-${profile.effort}`, '--force', '--trust',
     '--sandbox', 'disabled', '--output-format', 'json', '--workspace', worktree, '--', prompt]];
