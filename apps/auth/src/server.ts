@@ -27,6 +27,10 @@ export default {
       const response = await paraglideMiddleware(request, () => fetchHandler(request));
       const headers = new Headers(response.headers);
       headers.set('Cache-Control', 'private, no-store');
+      if (url.pathname === '/recovery') {
+        headers.set('Cache-Control', 'no-store');
+        headers.set('Referrer-Policy', 'no-referrer');
+      }
       headers.set('Content-Security-Policy', "frame-ancestors 'none'");
       headers.set('X-Frame-Options', 'DENY');
       return new Response(response.body, {

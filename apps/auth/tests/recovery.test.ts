@@ -65,7 +65,9 @@ const fake = Bun.serve({
       }
       if (signInStatus === 429) headers.set('retry-after', String(retryAfter));
       return Response.json(
-        { code: signInStatus === 401 ? 'authentication_denied' : signInStatus === 429 ? 'rate_limited' : 'unavailable' },
+        {
+          code: signInStatus === 401 ? 'authentication_denied' : signInStatus === 429 ? 'rate_limited' : 'unavailable',
+        },
         { status: signInStatus, headers },
       );
     }
@@ -173,11 +175,15 @@ async function open(path = '/recovery', options: BrowserContextOptions = {}) {
   const urls: string[] = [];
   page.on('request', (request) => urls.push(request.url()));
   await page.addInitScript(() => {
+    const previousHash = window.sessionStorage.getItem('recovery-hash-at-request');
+    if (previousHash !== null)
+      (window as unknown as { recoveryHashAtRequest?: string }).recoveryHashAtRequest = previousHash;
     const nativeFetch = window.fetch;
     window.fetch = function (input, init) {
       const requestUrl = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
       if (/\/recovery\/(?:start|complete)$/.test(new URL(requestUrl, location.href).pathname)) {
         (window as unknown as { recoveryHashAtRequest?: string }).recoveryHashAtRequest = location.hash;
+        window.sessionStorage.setItem('recovery-hash-at-request', location.hash);
       }
       return nativeFetch.call(this, input, init);
     };
@@ -186,7 +192,7 @@ async function open(path = '/recovery', options: BrowserContextOptions = {}) {
     const response = await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
     expect(response?.status(), 'the documented dev server serves the page').toBe(200);
     await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
-    return { page, origin, urls };
+    return { page, origin, urls, responseHeaders: response?.headers() ?? {} };
   } catch (error) {
     await context.close();
     throw error;
@@ -280,9 +286,14 @@ test(
     completeStatus = 200;
     calls.length = 0;
     const fragment = `#account_id=${encodeURIComponent(accountId)}&token=${encodeURIComponent(token)}`;
-    const { page, origin, urls } = await open(`/recovery${fragment}`);
+    const { page, origin, urls, responseHeaders } = await open(`/recovery${fragment}`);
     try {
       expect(await page.evaluate(() => location.hash)).toBe('');
+      expect(responseHeaders['cache-control']).toBe('no-store');
+      expect(responseHeaders['referrer-policy']).toBe('no-referrer');
+      const recoveryDocument = await page.locator('html').evaluate((element) => element.outerHTML);
+      expect(recoveryDocument).not.toContain(token);
+      expect(recoveryDocument).not.toContain(encodeURIComponent(token));
       const form = await completeForm(page);
       await form.password.fill(newPassword);
       await Promise.all([
@@ -292,9 +303,9 @@ test(
       await page.waitForURL(`${origin}/login`);
       await page.getByRole('status').waitFor({ state: 'visible' });
 
-      expect(await page.evaluate(() => (window as unknown as { recoveryHashAtRequest?: string }).recoveryHashAtRequest)).toBe(
-        '',
-      );
+      expect(
+        await page.evaluate(() => (window as unknown as { recoveryHashAtRequest?: string }).recoveryHashAtRequest),
+      ).toBe('');
       expect(page.url()).toBe(`${origin}/login`);
       expect(await page.getByRole('status').innerText()).toMatch(/password (?:has been )?changed|reset/i);
       expect(recoveryCalls('complete')).toHaveLength(1);
@@ -328,7 +339,9 @@ test(
   async () => {
     completeStatus = 400;
     calls.length = 0;
-    const { page } = await open(`/recovery#account_id=${encodeURIComponent(accountId)}&token=${encodeURIComponent(token)}`);
+    const { page } = await open(
+      `/recovery#account_id=${encodeURIComponent(accountId)}&token=${encodeURIComponent(token)}`,
+    );
     try {
       const controls = await completeForm(page);
       for (const value of ['short7', 'x'.repeat(129)]) {

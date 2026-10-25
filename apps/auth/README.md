@@ -4,17 +4,49 @@ Auth is a TanStack Start app on Cloudflare Workers. Its page frame is served at 
 /consent, /recovery, /security and /step-up. Each page contains the REZICS brand header and a localized heading.
 Paraglide supplies the eight launch locales.
 
-The login page has labelled email and password fields with password-manager autocomplete. It sends JSON to the
-same-origin `/signin` endpoint from the browser with same-origin credentials. `src/sign-in.ts` holds the provisional
-client id (`login`), scope (`[]`) and parameters dropped when resuming authorization (`sig` and `exp`).
+## Sign-in
 
-After a successful sign-in, the browser navigates to `/authorize` with the received query, preserving repeated and
-empty parameters and removing every `sig` and `exp`. Without a remaining query it navigates to `/security`. The
-response body never supplies a navigation target. Recovery links to `/recovery`; sign-up preserves the login query.
+The sign-in page has labelled email and password fields with password-manager autocomplete. `src/sign-in.ts` holds the
+provisional client id (`login`) and scope (`[]`). It uses the shared `src/api.ts` client to send JSON to same-origin
+`/signin` with same-origin credentials. The browser supplies the issuer `Origin`; redirects fail closed, and network
+failures become an unavailable result.
 
-Empty fields and pending requests prevent submission. A refusal keeps the email, clears the password and focuses
-an alert: 401 reports incorrect email or password without identifying an account, 429 includes valid `Retry-After`
-seconds, and other responses or network failures report that sign-in is unavailable.
+After successful sign-in, the browser navigates to `/authorize` with the received query, preserving repeated and empty
+parameters and removing every `sig`, `exp` and `prompt`. It keeps `max_age`. Without a remaining query it navigates to
+`/security`. The response body never supplies a navigation target. Recovery links to `/recovery`; sign-up preserves
+the login query.
+
+Empty fields and pending requests prevent submission. A refusal keeps the email, clears the password and focuses an
+alert: 401 reports incorrect email or password without identifying an account, 429 includes valid `Retry-After`
+seconds, and other responses or network failures report an unavailable Auth service.
+
+## Recovery
+
+Recovery has an email-start form and a new-password form. Each submit makes one browser Auth request and no kernel
+reads. Every 200 start response shows the same confirmation while leaving the email editable. A recovery fragment is
+removed from browser history before the completion form can send a request. Completion sends the account id, token and
+new password as JSON; the token is not rendered in the page or placed in a request URL. The page sets
+`Referrer-Policy: no-referrer` and `Cache-Control: no-store`.
+
+Successful completion revokes the account's sessions and sends the person to `/login` with a localized success notice.
+An invalid or expired link offers a new recovery link. Rate limits show a valid `Retry-After` duration, and outages
+ask the person to try again later.
+
+## Sign-up
+
+Not built yet.
+
+## Consent
+
+Not built yet.
+
+## Security
+
+Not built yet.
+
+## Step-up
+
+Not built yet.
 
 ## Development
 
@@ -42,7 +74,8 @@ Production does not set AUTH_ORIGIN.
 
 The static page frames make zero K, D, R and A calls. Development forwarding makes one Auth request per forwarded
 request, streams both bodies, and buffers nothing. Both costs are constant per request.
-The login page makes no server reads. A sign-in adds one browser `POST /signin` and one navigation on success.
+The sign-in page makes no server reads. A sign-in adds one browser `POST /signin` and one navigation on success.
+Recovery makes no kernel reads and adds one Auth request per submit.
 
 ## Visual check
 

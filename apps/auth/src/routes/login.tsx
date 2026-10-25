@@ -5,6 +5,7 @@ import { Input } from '@rezics/ui/input';
 import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
+import { failureMessage, RECOVERY_COMPLETE_NOTICE_KEY } from '../api';
 import { signIn, signInTarget } from '../sign-in';
 
 export const Route = createFileRoute('/login')({
@@ -19,12 +20,20 @@ function LoginPage() {
   const [password, setPassword] = useState('');
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState('');
+  const [recoveryComplete, setRecoveryComplete] = useState(false);
   const submitting = useRef(false);
   const alert = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
     if (message) alert.current?.focus();
   }, [message]);
+
+  useLayoutEffect(() => {
+    if (window.sessionStorage.getItem(RECOVERY_COMPLETE_NOTICE_KEY) === '1') {
+      window.sessionStorage.removeItem(RECOVERY_COMPLETE_NOTICE_KEY);
+      setRecoveryComplete(true);
+    }
+  }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -42,12 +51,10 @@ function LoginPage() {
     setPending(false);
     setMessage(
       result.reason === 'credentials'
-        ? m.auth_login_invalid_credentials()
+        ? failureMessage(401, 'authentication_denied', null)
         : result.reason === 'rate-limited'
-          ? result.retryAfter === null
-            ? m.auth_login_rate_limited()
-            : m.auth_login_retry_after({ seconds: result.retryAfter })
-          : m.auth_login_unavailable(),
+          ? failureMessage(429, 'rate_limited', result.retryAfter)
+          : failureMessage(503, 'unavailable', null),
     );
   }
 
@@ -87,6 +94,11 @@ function LoginPage() {
           {m.auth_login_heading()}
         </Button>
       </form>
+      {recoveryComplete ? (
+        <div className="auth-login-alert" role="status">
+          {m.auth_login_recovery_success()}
+        </div>
+      ) : null}
       <nav className="auth-login-links" aria-label={m.auth_login_help()}>
         <a href="/recovery">{m.auth_login_recovery()}</a>
         <a href={`/signup${query}`}>{m.auth_login_signup()}</a>

@@ -5,7 +5,9 @@ import { join } from 'node:path';
 const messagesDirectory = join(import.meta.dir, '..', 'messages');
 
 test("every locale's messages have the same keys, sorted by key", () => {
-  const files = readdirSync(messagesDirectory).filter((file) => file.endsWith('.json')).sort();
+  const files = readdirSync(messagesDirectory)
+    .filter((file) => file.endsWith('.json'))
+    .sort();
   expect(files).toHaveLength(8);
 
   const locales = files.map((file) => ({
