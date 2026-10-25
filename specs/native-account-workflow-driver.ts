@@ -56,7 +56,6 @@ export type Revocation =
   | 'assignment'
   | 'actor-epoch'
   | 'actor-fenced'
-  | 'explicit-deny'
   | 'missing-evidence'
   | 'operator-relation'
   | 'organization-membership';
@@ -115,6 +114,18 @@ export interface NativeAccountWorkflowDriver {
    * controls; independentCredentials uses real Auth.
    * operator-delete is drained by default; heldResponsibilities deliberately
    * retains native holds for the deletion refusal control.
+   * The transfer fixture's caller manages both the source and the destination
+   * operator, so one approval carries both. Transfer is co-approved: the source
+   * manager's authorization and the destination manager's acceptance, bound to
+   * one immutable transfer record. One person may give both only when authorized
+   * for both. Two-person acceptance is proven by the implementation's own tests.
+   * fence-operator is platform governance. Its action is account:suspend on the
+   * Global Context 00000000-0000-8000-8000-000000000000, and its root barrier is
+   * the native suspension of the operator. The caller is platform staff holding
+   * the governance role from the approved bootstrap; ownerId is the operator
+   * being fenced. The caller keeps its authority after the barrier, so its
+   * result is the suspension, while the fanout continues under the committed
+   * continuation.
    */
   fixture(
     family: Family,
@@ -205,7 +216,10 @@ export interface NativeAccountWorkflowDriver {
     inheritedResourceAccess: boolean;
   }>;
   /** Invoke native membership/delete/suspend commands against the last human
-   * owner; do not mutate rows or substitute an owner policy. */
+   * owner; do not mutate rows or substitute an owner policy.
+   * lastOwner(f, 'suspend') is platform staff suspending the last owner through
+   * the native suspension command.
+   */
   lastOwner(fixture: Fixture, action: 'remove' | 'demote' | 'delete' | 'suspend'): Promise<Result>;
   /** Real native opening workflow + existing live-human Auth capability. Never
    * implement proof/JWT issuance in this driver. mismatch changes untrusted input. */

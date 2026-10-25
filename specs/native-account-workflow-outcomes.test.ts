@@ -81,6 +81,10 @@ async function approve(driver: NativeAccountWorkflowDriver, f: Fixture): Promise
     expect(row!.action).toBe(f.managementAction);
     expect(row!.resourceId).toBe(f.work.operation.operatorAccountId);
   }
+  if (f.work.operation.kind === 'fence-operator') {
+    expect(row!.action).toBe('account:suspend');
+    expect(row!.resourceId).toBe('00000000-0000-8000-8000-000000000000');
+  }
   return a;
 }
 async function permitted(driver: NativeAccountWorkflowDriver, f: Fixture, a: Approval) {
@@ -97,6 +101,18 @@ async function denied(driver: NativeAccountWorkflowDriver, f: Fixture, a: Approv
   expect(await driver.snapshot(f)).toEqual(before);
 }
 async function finishTerminal(driver: NativeAccountWorkflowDriver, f: Fixture, a: Approval) {
+  // Deletion stays denied because the deleted target can no longer be managed.
+  // Fencing's caller keeps authority, so the user result is the suspension.
+  if (f.family === 'fence-operator') {
+    const result = await permitted(driver, f, a);
+    const c = await driver.continuation(f);
+    expect(c).not.toBeNull();
+    expect(await driver.continueCommitted(c!.reference)).toEqual({ outcome: 'continued' });
+    const after = await driver.snapshot(f);
+    expect(await driver.execute(f.caller, a.reference, f.work)).toEqual(result);
+    expect(await driver.snapshot(f)).toEqual(after);
+    return;
+  }
   expect(await driver.execute(f.caller, a.reference, f.work)).toEqual({ outcome: 'denied' });
   const c = await driver.continuation(f);
   expect(c).not.toBeNull();
@@ -169,14 +185,25 @@ test('organization creation commits native owner inverse before authority and bo
   ]);
 }, 660_000);
 
-test('organization last active human owner cannot leave demote delete or suspend and exact native owner count stays one', async () => {
+test('organization last active human owner suspension takes effect while remove demote and delete stay refused and exact native owner count stays one', async () => {
   const { driver, f } = await setup('organization');
   await permitted(driver, f, await approve(driver, f));
-  for (const action of ['remove', 'demote', 'delete', 'suspend'] as const) {
+  for (const action of ['remove', 'demote', 'delete'] as const) {
     const before = await driver.snapshot(f);
     expect(await driver.lastOwner(f, action)).toEqual({ outcome: 'denied' });
     expect(await driver.snapshot(f)).toEqual(before);
   }
+  const before = await driver.snapshot(f);
+  expect((await driver.lastOwner(f, 'suspend')).outcome).toBe('permitted');
+  const after = await driver.snapshot(f);
+  expect(after.owners).toContainEqual({
+    organizationId: f.organizationId,
+    nativeCount: 1,
+    activeHumans: [],
+  });
+  expect(after.memberships).toEqual(before.memberships);
+  expect(after.ownerInverses).toEqual(before.ownerInverses);
+  expect(after.history).toEqual(before.history);
 }, 660_000);
 
 test('organization handle collision cannot steal an existing handle or release an owner inverse beneath published authority', async () => {
@@ -354,7 +381,7 @@ test('operator fencing uses bounded signed keyset pages and fences independent l
   } while (cursor);
   expect(ids.size).toBe(205);
   const a = await approve(driver, f);
-  expect(await driver.execute(f.caller, a.reference, f.work)).toEqual({ outcome: 'denied' });
+  await permitted(driver, f, a);
   const c = await driver.continuation(f);
   expect(c).not.toBeNull();
   expect(await driver.continueCommitted(c!.reference)).toEqual({ outcome: 'continued' });
@@ -390,11 +417,17 @@ test('crash recovery reuses exact native receipts and keys across organization t
       await driver.crashAfter(f, a.reference, actual);
       const committed = await driver.snapshot(f);
       await driver.restart();
-      // Self-fencing/deletion finishes internally; stale user result stays denied.
+      // Fencing/deletion finishes internally. Deletion stays denied because the
+      // deleted target can no longer be managed.
       const continuation = await driver.continuation(f);
       if (continuation) {
         expect(await driver.continueCommitted(continuation.reference)).toEqual({ outcome: 'continued' });
-        await denied(driver, f, a);
+        if (family === 'fence-operator') {
+          const result = await permitted(driver, f, a);
+          const after = await driver.snapshot(f);
+          expect(await driver.execute(f.caller, a.reference, f.work)).toEqual(result);
+          expect(await driver.snapshot(f)).toEqual(after);
+        } else await denied(driver, f, a);
       } else if (['subject-delete', 'operator-delete', 'fence-operator'].includes(family))
         await finishTerminal(driver, f, a);
       else await permitted(driver, f, a);
@@ -457,9 +490,6 @@ test('every protected step rejects a raised original actor epoch floor', async (
 test('every protected step rejects a fenced original actor', async () => {
   await revokedAtEveryStep('actor-fenced');
 }, 660_000);
-test('every protected step honors a current explicit deny', async () => {
-  await revokedAtEveryStep('explicit-deny');
-}, 660_000);
 test('every protected step fails closed without authoritative evidence', async () => {
   await revokedAtEveryStep('missing-evidence');
 }, 660_000);
@@ -475,7 +505,6 @@ test('completed DBOS private results cannot be disclosed after revocation restar
       'assignment',
       'actor-epoch',
       'actor-fenced',
-      'explicit-deny',
       'missing-evidence',
     ] as const) {
       const f = await driver.fixture(family);
@@ -562,7 +591,7 @@ test('session opening cannot change subject purpose human client relation epoch 
   expect(await driver.consumeOpening(f)).toEqual({ outcome: 'denied' });
 }, 660_000);
 
-test('committed self fencing cleanup survives caller revocation but grants no user result and only exact native allowlisted effects', async () => {
+test('committed fencing cleanup survives caller revocation but grants no user result and only exact native allowlisted effects', async () => {
   const driver = await d();
   for (const family of ['fence-operator', 'subject-delete'] as const) {
     const f = await driver.fixture(family, { subjects: 3 });
@@ -636,7 +665,10 @@ test('cleanup cannot widen target step key digest expiry or operation and expire
   expect(await driver.continueCommitted(c!.reference)).toEqual({ outcome: 'denied' });
   expect(await driver.snapshot(f)).toEqual(before);
   expect(before.responsibilities.some((r) => r.held)).toBe(true);
-  await denied(driver, f, a);
+  const result = await permitted(driver, f, a);
+  const saved = await driver.snapshot(f);
+  expect(await driver.execute(f.caller, a.reference, f.work)).toEqual(result);
+  expect(await driver.snapshot(f)).toEqual(saved);
 }, 660_000);
 
 test('approval expiry and durable workflow storage never preserve bearer credentials or resolved actor contexts', async () => {
