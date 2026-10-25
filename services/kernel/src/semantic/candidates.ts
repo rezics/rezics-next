@@ -12,6 +12,7 @@ import type { KeyRing } from '../tokens/seal.ts';
 import { redirectOf, SubjectRedirectError } from './merges.ts';
 import { GLOBAL_CONTEXT, readRelease } from './definitions.ts';
 import { LINKS_CHANGED } from './events.ts';
+import { SUBJECT_REVISED } from './events.ts';
 import { factDataTypes, itemFacts, resolveItem, SubjectInputError, type Violation } from './item.ts';
 import { linkChanges } from './link-changes.ts';
 import { PageCursorError } from './page.ts';
@@ -32,6 +33,8 @@ import {
 import readTypes from './read-item-types.sql';
 import { contextSnapshot } from './context.ts';
 import { matchesTarget } from './targets.ts';
+import changeCurrentFacts from './change-current-facts.sql';
+import updateSubjectRelease from './update-subject-release.sql';
 
 export class SubjectNotFoundError extends Error {}
 export class EditorialConflictError extends Error {}
@@ -150,6 +153,11 @@ export async function writeProposal(
          VALUES ($1, $2, $3, 'propose', $4, $5, $6)`,
       [route, options.subject, revision, options.release.digest, transactionId, options.source ?? null],
     );
+    await updateSubjectRelease.run(tx, {
+      route,
+      subject_id: options.subject,
+      release: options.release.digest,
+    });
     await tx.query(
       `INSERT INTO semantic.candidate
          (route, subject_id, candidate_id, slot_id, property, rank, statement, release, revision, origin)
@@ -179,7 +187,14 @@ export async function writeProposal(
   }
   return {
     value: { candidate, revision },
-    events: [{ type: 'com.rezics.statement.proposed.v1', subject: options.subject, data: { candidate, revision } }],
+    events: [
+      {
+        type: SUBJECT_REVISED,
+        subject: options.subject,
+        data: { id: options.subject, revision, kind: 'propose' },
+      },
+      { type: 'com.rezics.statement.proposed.v1', subject: options.subject, data: { candidate, revision } },
+    ],
   };
 }
 
@@ -208,6 +223,11 @@ async function appendEditorialRevision(
      VALUES ($1, $2, $3, $4, $5, $6)`,
     [input.route, input.subject, input.revision, input.kind, input.release, input.transactionId],
   );
+  await updateSubjectRelease.run(tx, {
+    route: input.route,
+    subject_id: input.subject,
+    release: input.release,
+  });
 }
 
 function retryEditorialUniqueness(error: unknown): void {
@@ -341,6 +361,11 @@ export async function decideCandidate(
           },
           events: [
             {
+              type: SUBJECT_REVISED,
+              subject: options.subject,
+              data: { id: options.subject, revision, kind: options.decision },
+            },
+            {
               type:
                 options.decision === 'accept' ? 'com.rezics.statement.accepted.v1' : 'com.rezics.statement.rejected.v1',
               subject: options.subject,
@@ -392,8 +417,13 @@ export async function adoptCandidates(
       authorization: options.authorization,
     },
     async (tx, { transactionId }) => {
-      const subject = await tx.query<{ type: string; revision: number; security_revision: string }>(
-        `SELECT s.type, latest.revision, s.security_revision::text AS security_revision
+      const subject = await tx.query<{
+        type: string;
+        revision: number;
+        security_revision: string;
+        current_facts: number;
+      }>(
+        `SELECT s.type, latest.revision, s.security_revision::text AS security_revision, s.current_facts
          FROM semantic.subject s
          JOIN LATERAL (
            SELECT revision FROM semantic.revision
@@ -456,9 +486,27 @@ export async function adoptCandidates(
 
       const beforeLinks =
         options.context === GLOBAL_CONTEXT ? (await slotView(tx, options.subject, options.property)).facts : null;
+      let oldGlobalCount = 0;
+      if (options.context === GLOBAL_CONTEXT) {
+        const global = await resolveSlot(tx, options.subject, options.property, GLOBAL_CONTEXT);
+        oldGlobalCount = global.expanded
+          ? global.adoption?.mode === 'replace'
+            ? global.adoption.selection.length
+            : 0
+          : global.compact.length;
+      }
       await expandSlot(tx, options.subject, options.property, transactionId);
       const revision = subject.rows[0].revision + 1;
       const selection = options.selection as Adoption['selection'];
+      if (options.context === GLOBAL_CONTEXT) {
+        const newGlobalCount = options.mode === 'replace' ? selection.length : 0;
+        const updated = await changeCurrentFacts.run(tx, {
+          route,
+          subject_id: options.subject,
+          delta: newGlobalCount - oldGlobalCount,
+        });
+        if (updated.length === 0) throw new EditorialConflictError();
+      }
       try {
         await appendEditorialRevision(tx, {
           subject: options.subject,
@@ -489,9 +537,9 @@ export async function adoptCandidates(
         }
         const events: { type: string; subject: string; data: unknown }[] = [
           {
-            type: 'com.rezics.subject.adopted.v1',
+            type: SUBJECT_REVISED,
             subject: options.subject,
-            data: { context: options.context, property: options.property, mode: options.mode, revision, head },
+            data: { id: options.subject, revision, kind: 'adopt' },
           },
         ];
         if (beforeLinks) {

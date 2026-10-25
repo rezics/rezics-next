@@ -5,6 +5,7 @@ import type { AccountActor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readRelease } from './definitions.ts';
 import { LINKS_CHANGED } from './events.ts';
+import changePartitionSubjectCountIfLive from './change-partition-subject-count-if-live.sql';
 import { factDataTypes, SubjectInputError, type FactRow, type Violation } from './item.ts';
 import { linkChanges } from './link-changes.ts';
 import readVisibility from './read-visibility.sql';
@@ -264,6 +265,19 @@ export async function moderateSubject(
         ],
       );
       const securityRevision = Number(revision);
+      const countDelta =
+        current.visibility === 'visible' && nextVisibility !== 'visible'
+          ? -1
+          : current.visibility !== 'visible' && nextVisibility === 'visible'
+            ? 1
+            : 0;
+      if (countDelta !== 0)
+        await changePartitionSubjectCountIfLive.run(tx, {
+          partition_no: partitionOf(route),
+          route,
+          subject_id: options.subject,
+          delta: countDelta,
+        });
       const after = nextVisibility === 'visible' ? await shownFacts(tx, options.subject) : [];
       const events: { type: string; subject: string; data: unknown }[] = [
         {

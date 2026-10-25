@@ -1,0 +1,153 @@
+import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
+import { bundledRelease } from '@rezics/definitions/bundled';
+import { createPool } from '../../src/database/pool.ts';
+import { createKernel } from '../../src/http/kernel.ts';
+import { AuthenticationError, type Access, type AccountActor } from '../../src/request/access.ts';
+import { subjectPartition } from '../../src/search/source.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { subjectSource } from '../../src/semantic/search-source.ts';
+import type { KeyRing } from '../../src/tokens/seal.ts';
+
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
+const pool = createPool(databaseUrl);
+const source = subjectSource(pool);
+const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(21)]]) };
+const ACTIONS = [
+  'subject:create',
+  'subject:read',
+  'subject:merge',
+  'statement:propose',
+  'context:accept',
+  'context:adopt',
+  'moderation:hide',
+  'moderation:takedown',
+];
+const editor: AccountActor = {
+  kind: 'account',
+  accountId: '019a1b2c-3d4e-7f00-8a00-ed170e000053',
+  clientId: 'web',
+  scopes: ACTIONS,
+  requestedBy: null,
+  authnEpoch: 1,
+};
+const access: Access = {
+  async authenticate(token) {
+    if (token !== 'editor') throw new AuthenticationError(401, 'Bearer error="invalid_token"');
+    return editor;
+  },
+  async authorize(_client, _actor, action, resource) {
+    return action === 'subject:read' || resource.id === GLOBAL_CONTEXT;
+  },
+};
+const kernel = createKernel({
+  pool,
+  access,
+  tokens,
+  routeKey: new Uint8Array(32).fill(22),
+  writeRate: {
+    async spend() {
+      return { allowed: true };
+    },
+  },
+});
+beforeAll(() => bootstrapRelease(pool, bundledRelease));
+afterAll(() => pool.end());
+
+async function create(body: unknown) {
+  const response = await kernel.handle(
+    new Request('http://kernel.test/v1/subjects', {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer editor',
+        'idempotency-key': `"${randomUUID()}"`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    }),
+  );
+  const result = (await response.json()) as { subject?: Record<string, any>; code?: string };
+  expect([response.status, result.code]).toEqual([201, undefined]);
+  return result.subject!;
+}
+const value = (content: unknown) => ({ type: 'value', content });
+const statement = (property: string, content: unknown, extra: Record<string, unknown> = {}) => ({
+  property: { id: property },
+  value: value(content),
+  ...extra,
+});
+
+test('the source marks facet-capable statements and retains only item-valued qualifiers', async () => {
+  const author = await create({ type: 'schema:Person', labels: { en: 'Author' } });
+  const role = await create({ type: 'skos:Concept', labels: { en: 'Author role' } });
+  const book = await create({
+    type: 'schema:Book',
+    labels: { en: 'Faceted book' },
+    statements: {
+      'schema:author': [
+        statement('schema:author', author.id, {
+          qualifiers: [statement('wdt:P1932', 'H. R. Haggard'), statement('wdt:P3831', role.id)],
+        }),
+      ],
+      'schema:inLanguage': [statement('schema:inLanguage', 'ja')],
+    },
+  });
+  const recipe = await create({
+    type: 'schema:Recipe',
+    labels: { en: 'Faceted recipe' },
+    statements: {
+      'schema:datePublished': [
+        statement('schema:datePublished', {
+          time: '-0500-00-00T00:00:00Z',
+          precision: 9,
+          calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+        }),
+      ],
+      'schema:recipeYield': [statement('schema:recipeYield', { amount: '+4', unit: '1' })],
+    },
+  });
+  const episode = await create({
+    type: 'schema:Episode',
+    labels: { en: 'Unpatterned string' },
+    statements: { 'schema:episodeNumber': [statement('schema:episodeNumber', 'Special episode')] },
+  });
+
+  const subjects = [book, recipe, episode];
+  const groups = new Map<number, string[]>();
+  for (const subject of subjects) {
+    const partition = subjectPartition(subject.id);
+    const ids = groups.get(partition) ?? [];
+    ids.push(subject.id);
+    groups.set(partition, ids);
+  }
+  const indexed = new Map<string, typeof book & { statements: Record<string, any>[] }>();
+  for (const [partition, ids] of groups) {
+    const snapshot = await source.read(partition, ids);
+    for (const subject of snapshot.subjects) indexed.set(subject.id, subject as never);
+  }
+
+  expect(indexed.get(book.id)!.statements.find(({ property }) => property === 'schema:author')).toEqual({
+    property: 'schema:author',
+    value: author.id,
+    facet: { kind: 'item' },
+    qualifiers: [{ property: 'wdt:P3831', value: role.id }],
+  });
+  expect(indexed.get(book.id)!.statements.find(({ property }) => property === 'schema:inLanguage')).toEqual({
+    property: 'schema:inLanguage',
+    value: 'ja',
+    facet: { kind: 'code' },
+  });
+  expect(indexed.get(recipe.id)!.statements.find(({ property }) => property === 'schema:datePublished')).toEqual({
+    property: 'schema:datePublished',
+    value: '-0500-00-00T00:00:00Z',
+    facet: { kind: 'time', year: -500 },
+  });
+  expect(indexed.get(recipe.id)!.statements.find(({ property }) => property === 'schema:recipeYield')).toEqual({
+    property: 'schema:recipeYield',
+    value: '+4',
+    facet: { kind: 'quantity', amount: 4, unit: '1' },
+  });
+  const unpatterned = indexed.get(episode.id)!.statements.find(({ property }) => property === 'schema:episodeNumber');
+  expect(unpatterned).toEqual({ property: 'schema:episodeNumber', value: 'Special episode' });
+});

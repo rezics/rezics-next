@@ -10,6 +10,8 @@ import { linkChanges } from './link-changes.ts';
 import { slotView } from './slots.ts';
 import type { Release } from '@rezics/definitions';
 import readRedirect from './read-redirect.sql';
+import changePartitionSubjectCount from './change-partition-subject-count.sql';
+import updateSubjectRelease from './update-subject-release.sql';
 
 export class SubjectRedirectError extends Error {
   constructor(
@@ -96,6 +98,12 @@ export async function mergeSubjects(
       VALUES ($1, $2, $3, 'merge', $4, $5)`,
         [route, redirected, revision, options.release.digest, transactionId],
       );
+      await updateSubjectRelease.run(tx, {
+        route,
+        subject_id: redirected,
+        release: options.release.digest,
+      });
+      await changePartitionSubjectCount.run(tx, { partition_no: partitionOf(route), delta: -1 });
       await tx.query(
         `INSERT INTO semantic.redirect (route, subject_id, sequence, target, recorded_transaction_id)
       VALUES ($1, $2, 1, $3, $4)`,

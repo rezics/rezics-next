@@ -20,6 +20,7 @@ import { matchesTarget } from './targets.ts';
 import createRevision from './create-revision.sql';
 import insertFacts from './insert-facts.sql';
 import insertSubject from './create-subject.sql';
+import changePartitionSubjectCount from './change-partition-subject-count.sql';
 import readLabelsStatement from './read-labels.sql';
 import readSubjectStatement from './read-subject.sql';
 import readTypesStatement from './read-item-types.sql';
@@ -141,6 +142,8 @@ export async function writeSubject(
     subject_id: subjectId,
     type: String(input.type),
     transaction_id: transactionId,
+    current_facts: facts.length,
+    current_release: options.release.digest,
   });
   await createRevision.run(tx, {
     route,
@@ -153,8 +156,9 @@ export async function writeSubject(
     route,
     subject_id: subjectId,
     transaction_id: transactionId,
-    facts,
+    facts: facts.map((fact) => ({ ...fact, release: fact.kind === 'statement' ? options.release.digest : null })),
   });
+  await changePartitionSubjectCount.run(tx, { partition_no: partitionOf(route), delta: 1 });
   const events: { type: string; subject: string; data: unknown }[] = [
     { type: 'com.rezics.subject.created.v1', subject: subjectId, data: { id: subjectId } },
   ];

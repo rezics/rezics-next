@@ -13,6 +13,7 @@ const linkChange = Type.Object(
 );
 
 export const SUBJECT_MERGED = 'com.rezics.subject.merged.v1' as const;
+export const SUBJECT_REVISED = 'com.rezics.subject.revised.v1' as const;
 export const LINKS_MOVING = 'com.rezics.semantic.links.moving.v1' as const;
 
 export const LINKS_CHANGED = 'com.rezics.semantic.links.changed.v1' as const;
@@ -21,6 +22,22 @@ export const LINKS_PROJECTED = 'com.rezics.semantic.links.projected.v1' as const
 /** Closed semantic event catalogue. Envelope identity and ordering belong to the kernel. */
 export const SEMANTIC_EVENTS = {
   [SUBJECT_MERGED]: Type.Object({ id: UUID, survivor: UUID }, { additionalProperties: false }),
+  [SUBJECT_REVISED]: Type.Object(
+    {
+      id: UUID,
+      revision,
+      kind: Type.Union([
+        Type.Literal('create'),
+        Type.Literal('propose'),
+        Type.Literal('accept'),
+        Type.Literal('reject'),
+        Type.Literal('adopt'),
+        Type.Literal('merge'),
+        Type.Literal('retract'),
+      ]),
+    },
+    { additionalProperties: false },
+  ),
   [LINKS_MOVING]: Type.Object(
     { id: UUID, survivor: UUID, cursor: Type.Array(Type.Union([Type.String(), Type.Integer()])) },
     { additionalProperties: false },

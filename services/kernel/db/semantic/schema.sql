@@ -235,10 +235,12 @@ CREATE TABLE semantic.fact (
     statement_id uuid,
     body jsonb NOT NULL,
     recorded_transaction_id uuid NOT NULL,
+    release text,
     CONSTRAINT fact_check CHECK ((((operation = 'expand'::text) AND (kind = 'statement'::text) AND (language IS NULL) AND (property IS NOT NULL) AND (statement_id IS NULL) AND (body = '{}'::jsonb)) OR ((operation <> 'expand'::text) AND (((kind = ANY (ARRAY['label'::text, 'description'::text, 'alias'::text])) AND (language IS NOT NULL) AND (property IS NULL) AND (statement_id IS NULL)) OR ((kind = 'statement'::text) AND (language IS NULL) AND (property IS NOT NULL) AND (statement_id IS NOT NULL)))))),
     CONSTRAINT fact_kind_check CHECK ((kind = ANY (ARRAY['label'::text, 'description'::text, 'alias'::text, 'statement'::text]))),
     CONSTRAINT fact_log_seq_check CHECK ((((log_seq >= 1) AND (log_seq <= 33)) AND ((log_seq <> 33) OR (operation = 'expand'::text)))),
     CONSTRAINT fact_operation_check CHECK ((operation = ANY (ARRAY['assert'::text, 'retract'::text, 'expand'::text]))),
+    CONSTRAINT fact_release_check CHECK ((((kind = 'statement'::text) AND (operation = 'assert'::text)) = (release IS NOT NULL))),
     CONSTRAINT fact_subject_route_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11))))
 );
 
@@ -322,6 +324,18 @@ CREATE TABLE semantic.moderation (
 
 
 --
+-- Name: partition_subjects; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.partition_subjects (
+    partition_no integer NOT NULL,
+    visible bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT partition_subjects_partition_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT partition_subjects_visible_check CHECK ((visible >= 0))
+);
+
+
+--
 -- Name: redirect; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -396,6 +410,8 @@ CREATE TABLE semantic.subject (
     recorded_transaction_id uuid NOT NULL,
     visibility text DEFAULT 'visible'::text NOT NULL,
     security_revision bigint DEFAULT 0 NOT NULL,
+    current_facts integer DEFAULT 0 NOT NULL,
+    current_release text NOT NULL,
     CONSTRAINT subject_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
     CONSTRAINT subject_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT subject_security_revision_check CHECK ((security_revision >= 0)),
@@ -506,6 +522,14 @@ ALTER TABLE ONLY semantic.merge_member
 
 ALTER TABLE ONLY semantic.moderation
     ADD CONSTRAINT moderation_pkey PRIMARY KEY (route, subject_id, security_revision);
+
+
+--
+-- Name: partition_subjects partition_subjects_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.partition_subjects
+    ADD CONSTRAINT partition_subjects_pkey PRIMARY KEY (partition_no);
 
 
 --

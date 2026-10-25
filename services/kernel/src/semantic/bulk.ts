@@ -17,6 +17,8 @@ import { readPartition } from '../partition/partition.ts';
 import { EditorialConflictError, SubjectNotFoundError, writeProposal } from './candidates.ts';
 import { redirectOf, SubjectRedirectError } from './merges.ts';
 import { writeSubject, type SubjectComponent } from './subject.ts';
+import { SUBJECT_REVISED } from './events.ts';
+import updateSubjectRelease from './update-subject-release.sql';
 
 export type BulkValue =
   | { id: string; revision: number }
@@ -203,6 +205,11 @@ export async function batchCommand(
            VALUES ($1, $2, $3, 'retract', $4, $5, $6)`,
             [route, command.subject, revision, options.release.digest, transactionId, source],
           );
+          await updateSubjectRelease.run(tx, {
+            route,
+            subject_id: command.subject,
+            release: options.release.digest,
+          });
           await tx.query(
             `INSERT INTO semantic.retraction (route, subject_id, candidate_id, revision, "references") VALUES ($1, $2, $3, $4, $5)`,
             [route, command.subject, command.candidate, revision, JSON.stringify(command.references)],
@@ -215,6 +222,11 @@ export async function batchCommand(
           return {
             value: { status: 200, value: { revision } },
             events: [
+              {
+                type: SUBJECT_REVISED,
+                subject: command.subject,
+                data: { id: command.subject, revision, kind: 'retract' },
+              },
               {
                 type: 'com.rezics.statement.retracted.v1',
                 subject: command.subject,

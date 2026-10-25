@@ -1,9 +1,9 @@
 INSERT INTO semantic.fact (
   route, subject_id, slot_id, log_seq, operation, kind, language, property, statement_id, body,
-  recorded_transaction_id
+  recorded_transaction_id, release
 )
 SELECT :route::integer, :subject_id::uuid, fact.slot_id, fact.log_seq, fact.operation, fact.kind, fact.language,
-       fact.property, fact.statement_id, fact.body, :transaction_id::uuid
+       fact.property, fact.statement_id, fact.body, :transaction_id::uuid, fact.release
 FROM jsonb_to_recordset(:facts::jsonb) AS fact(
   slot_id uuid,
   log_seq integer,
@@ -12,5 +12,6 @@ FROM jsonb_to_recordset(:facts::jsonb) AS fact(
   language text,
   property text,
   statement_id uuid,
-  body jsonb
+  body jsonb,
+  release text
 );
