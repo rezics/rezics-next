@@ -24,12 +24,20 @@ export type PublicAccount = {
     kind: string;
     state: 'deleted';
 };
+export type PublicIdentity = {
+    id: string;
+    handle: string | null;
+    displayName: string | null;
+    state: 'active' | 'deleted';
+};
 /** Internal Access/kernel point read: state, authentication floor and fence share one anchored row.
  * Trusted Auth composition must return unavailable for a fenced account before establishing a session.
  */
 export declare function readAccount(client: Queryable, route: number, accountId: string): Promise<Account | null>;
 /** Public allowlist; pending rows are hidden and deleted rows disclose only an identity tombstone. */
 export declare function readPublicAccount(client: Queryable, route: number, accountId: string): Promise<PublicAccount | null>;
+/** Public, bounded batch projection; callers pass request-ordered route and account ID arrays. */
+export declare function readPublicIdentities(client: Queryable, routes: readonly number[], accountIds: readonly string[]): Promise<PublicIdentity[]>;
 /** Reads a single member's role at the caller's authoritative request time on the organization anchor. */
 export declare function readOrganizationRole(client: Queryable, route: number, organizationId: string, memberAccountId: string, at: Date): Promise<OrganizationRole | null>;
 export {};

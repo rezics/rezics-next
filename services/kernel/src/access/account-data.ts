@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import accountRead from './account-read.sql';
+import publicPage from './account-public-page.sql';
 import publicRead from './account-public-read.sql';
 import organizationRoleRead from './account-organization-role.sql';
 
@@ -24,6 +25,13 @@ export type PublicAccount =
       operatorAccountId: string | null;
     }
   | { accountId: string; kind: string; state: 'deleted' };
+
+export type PublicIdentity = {
+  id: string;
+  handle: string | null;
+  displayName: string | null;
+  state: 'active' | 'deleted';
+};
 
 /** Internal Access/kernel point read: state, authentication floor and fence share one anchored row.
  * Trusted Auth composition must return unavailable for a fenced account before establishing a session.
@@ -53,6 +61,16 @@ export async function readPublicAccount(
     state: row.state,
     operatorAccountId: row.operatorAccountId,
   };
+}
+
+/** Public, bounded batch projection; callers pass request-ordered route and account ID arrays. */
+export async function readPublicIdentities(
+  client: Queryable,
+  routes: readonly number[],
+  accountIds: readonly string[],
+): Promise<PublicIdentity[]> {
+  const rows = await publicPage.run(client, { routes: [...routes], account_ids: [...accountIds] });
+  return rows.map((row) => ({ ...row, state: row.state === 'deleted' ? 'deleted' : 'active' }));
 }
 
 /** Reads a single member's role at the caller's authoritative request time on the organization anchor. */

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import type { Pool } from 'pg';
@@ -9,11 +10,21 @@ import { ProblemError, problemSchema } from '../http/problem.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
 import { AuthenticationError, type Access } from '../request/access.ts';
+import { readPublicIdentities } from './account-data.ts';
 import { createGrantCommands, GrantDeniedError } from './grant-commands.ts';
 import { createSuspensionCommands } from './suspension.ts';
 
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
+const publicIdentity = t.Object(
+  {
+    id,
+    handle: t.Union([t.String(), t.Null()]),
+    displayName: t.Union([t.String(), t.Null()]),
+    state: t.Union([t.Literal('active'), t.Literal('deleted')]),
+  },
+  closed,
+);
 const resource = t.Object({ route: t.Integer({ minimum: 0, maximum: 65535 }), id }, closed);
 const subject = t.Union([
   t.Object({ kind: t.Literal('active_accounts') }, closed),
@@ -86,6 +97,25 @@ const failures = {
     'rate_limit_unavailable',
   ),
 };
+const publicReadFailures = {
+  400: problemSchema('invalid_request'),
+  401: problemSchema('authentication_required', 'invalid_credentials'),
+  404: problemSchema('not_found'),
+  500: problemSchema('internal_error'),
+  503: problemSchema('overloaded', 'deadline_exceeded', 'partition_unavailable', 'transaction_retry_exhausted'),
+};
+const accountUuidPattern = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+const accountIdPattern = new RegExp(`^${accountUuidPattern}$`);
+const publicIdentityQuery = t.Object(
+  {
+    ids: t.String({
+      minLength: 36,
+      maxLength: 3699,
+      pattern: `^${accountUuidPattern}(?:,${accountUuidPattern}){0,99}$`,
+    }),
+  },
+  closed,
+);
 const response = <S extends TSchema>(schema: S) =>
   withHeaders(t.Object({ grant: schema }, closed), { [SESSION_HEADER]: t.String() });
 const detail = (operationId: string) => ({
@@ -123,6 +153,49 @@ export function accessRoutes(
       clock: dependencies.clock,
     }));
   return app
+    .get(
+      '/v1/accounts',
+      {
+        query: strict(publicIdentityQuery),
+        response: {
+          200: withHeaders(t.Object({ accounts: t.Array(publicIdentity) }, closed), {
+            etag: t.String(),
+            'cache-control': t.String(),
+          }),
+          ...publicReadFailures,
+        },
+        detail: {
+          operationId: 'account.read_public_identity',
+          'x-exposure': 'public',
+          'x-action': 'account:read_public_identity',
+          security: [{ bearerAuth: [] }, {}],
+        },
+      },
+      async ({ query, admission, job, set }) => {
+        const requested = query.ids.split(',');
+        if (
+          requested.length < 1 ||
+          requested.length > 100 ||
+          requested.some((accountId) => !accountIdPattern.test(accountId))
+        )
+          throw new ProblemError('invalid_request');
+
+        const seen = new Set<string>();
+        const accountIds = requested.filter((accountId) => {
+          if (seen.has(accountId)) return false;
+          seen.add(accountId);
+          return true;
+        });
+        // Account routes are the two bytes at offsets 10 and 11, as enforced by account_check.
+        const routes = accountIds.map((accountId) => Number.parseInt(accountId.slice(24, 28), 16));
+        const accounts = await admission.run('normal', job, () =>
+          readPublicIdentities(dependencies.pool, routes, accountIds),
+        );
+        set.headers.etag = `"${createHash('sha256').update(JSON.stringify(accounts)).digest('base64url')}"`;
+        set.headers['cache-control'] = 'no-cache';
+        return { accounts };
+      },
+    )
     .post(
       customMethod('/v1/accounts/:accountId', 'suspend'),
       {

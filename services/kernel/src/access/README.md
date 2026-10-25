@@ -174,6 +174,14 @@ Realm membership port dispatch adds no query. Each denial write and each Realm g
   with unrelated keys fixed, and unrelated keys with the key's history fixed; thousands of unrelated rows precede
   scale 1 and statistics are analyzed.
 
+### Public identity read
+
+- Touches: one statement; at most 100 `account_pkey(route, account_id)` probes on `access.account`.
+- Bound: O(k log N) for k <= 100 requested ids and N accounts; constant statements; rows at most k.
+- Growth check: `growth-public-identity-read.test.ts` with `checkGrowth` at [1, 8, 64], growing unrelated accounts with
+  the 100 requested ids fixed (seed thousands of accounts before scale 1 and analyze); constant rows and statements,
+  logarithmic buffers.
+
 ### Organization creation
 
 - Touches: one approval row and its receipts on the creator's anchor; per step one approval resolution (the creator's
