@@ -28,6 +28,7 @@ import { createRegistrationProofBindings } from './registration-proof.ts';
 import { createAuthBarrierCapabilities } from './auth-barriers.ts';
 import { createCredentialCapability } from './auth-credential-capability.ts';
 import { createOperatorSessionCapability } from './auth-session-capability.ts';
+import { createCommittedContinuations } from './committed-continuations.ts';
 import { createWorkflowApprovals, workflowApprovalBinding } from './workflow-approvals.ts';
 import { readAccount } from './account-data.ts';
 import { routeOf } from '../route/route.ts';
@@ -78,6 +79,7 @@ export type NativeAccountBindings = {
   operators: ReturnType<typeof createOperatorCommands>;
   grants: ReturnType<typeof createGrantCommands>;
   delegations: ReturnType<typeof createDelegationCommands>;
+  continuations: ReturnType<typeof createCommittedContinuations>;
 };
 
 export class NativeAccountBindingsUnavailableError extends Error {
@@ -138,7 +140,17 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
     provisioningEvidence: (evidence) => proofs.provisioning.resolve(evidence),
     recoveryEvidence: (evidence) => proofs.recoveryEvidence?.(evidence) ?? Promise.resolve(null),
   });
-  const lifecycle = createLifecycleCommands({ pool, access });
+  const lifecycle = createLifecycleCommands({
+    pool,
+    access,
+    ...(config.clock ? { clock: config.clock } : {}),
+  });
+  const continuations = createCommittedContinuations({
+    pool,
+    access,
+    referenceKeys,
+    ...(config.clock ? { clock: config.clock } : {}),
+  });
   const operators = createOperatorCommands({
     pool,
     access,
@@ -293,6 +305,9 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
     },
     actorAccountId: (context) => context.actor.accountId,
     stableCommandKey: (context, phase) => `${required(workflowApprovalBinding(context)).commandKeyPrefix}:${phase}`,
+    approvalBinding: (context) => workflowApprovalBinding(context),
+    readContinuation: (operationKey, accountId) => continuations.read(operationKey, accountId),
+    authorizeContinuation: (reference, entry) => continuations.authorizeStep(reference, entry),
     readAccount: async (accountId) => {
       const route = routeOf(accountId);
       return route === null ? null : readAccount(pool, route, accountId);
@@ -312,5 +327,6 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
     operators,
     grants,
     delegations,
+    continuations,
   };
 }

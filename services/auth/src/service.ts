@@ -978,7 +978,9 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         });
       },
       async eraseAccount(accountId) {
-        const account = await trustedAccess.readAccount(accountId);
+        const account = trustedAccess.readErasureAccount
+          ? await trustedAccess.readErasureAccount(accountId)
+          : await trustedAccess.readAccount(accountId);
         if (!account || account.state !== 'deleted' || !account.fenced) throw new Denied();
         await database.query('DELETE FROM "user" WHERE id=$1', [accountId]);
       },

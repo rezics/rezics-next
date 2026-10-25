@@ -26,6 +26,7 @@ import type {
 import type { createOperatorCommands } from '../../src/access/operator.ts';
 import type { createGrantCommands } from '../../src/access/grant-commands.ts';
 import type { createDelegationCommands } from '../../src/access/delegation-commands.ts';
+import type { CommittedContinuations } from '../../src/access/committed-continuations.ts';
 import type { Access, ActionCatalogue } from '../../src/request/access.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 import { systemClock } from '../../src/clock.ts';
@@ -55,6 +56,7 @@ test('ordinary durable composition requires actual native factories and Auth-hos
   expectTypeOf<NativeAccountBindings>().toEqualTypeOf<{
     trustedAccess: TrustedAccessPorts;
     workflowPorts: AccountWorkflowPorts<LifecycleRequest>;
+    continuations: CommittedContinuations;
     lifecycle: ReturnType<typeof createLifecycleCommands>;
     internalLifecycle: ReturnType<typeof createLifecycleInternals>;
     operators: ReturnType<typeof createOperatorCommands>;
@@ -95,6 +97,7 @@ test('pure construction never invokes Auth, proof capabilities or database I/O',
   };
   const bindings = createNativeAccountBindings(config);
   expect(Object.keys(bindings).sort()).toEqual([
+    'continuations',
     'delegations',
     'grants',
     'internalLifecycle',

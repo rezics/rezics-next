@@ -190,9 +190,29 @@ export function createAuthBindings(config: { pool: Pool } & AuthBindingCapabilit
     );
     return { receiptId: receipt.receiptId, accountId: receipt.accountId, minimumAuthnEpoch };
   }
+  async function erasure(id: string): Promise<AccessAccount | null> {
+    const current = await account(id);
+    if (!current || current.state !== 'deleted' || !current.fenced) return null;
+    if (current.kind !== 'actor' && current.kind !== 'organization') return null;
+    return {
+      accountId: current.accountId,
+      kind: current.kind,
+      state: 'deleted',
+      authnEpoch: floor(current.minimumAuthnEpoch),
+      automated: current.operatorAccountId !== null,
+      fenced: true,
+    };
+  }
   return {
     ...(config.completeRecovery ? { completeRecovery: config.completeRecovery } : {}),
     readAccount: (id) => read(id),
+    readErasureAccount: async (id) => {
+      try {
+        return await erasure(id);
+      } catch {
+        return null;
+      }
+    },
     async readProvisioningAccount(id, reference) {
       try {
         return await provisioning(id, reference);

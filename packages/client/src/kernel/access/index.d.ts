@@ -29,3 +29,4 @@ export { installStandingParentGrant } from './standing-parent.ts';
 export type { ResourceRoleCatalogue } from './resource-roles.ts';
 export { createWorkflowApprovals, sweepWorkflowApprovals, workflowApprovalBinding, MAX_WORKFLOW_APPROVAL_LIFETIME_MS, WorkflowApprovalUnavailableError, type WorkflowApproval, type WorkflowApprovalConfig, type WorkflowApprovalRequest, type WorkflowApprovalBinding, } from './workflow-approvals.ts';
 export { createCredentialCapability, type CredentialCapability, type CredentialCapabilityConfig, type CredentialOpeningLocator, } from './auth-credential-capability.ts';
+export { createCommittedContinuations, deletionAllowlist, COMMITTED_CONTINUATION_ACTIONS, COMMITTED_CONTINUATION_PURPOSE, COMMITTED_CONTINUATION_TTL_MS, ContinuationDeniedError, type CommittedContinuations, type ContinuationBinding, type ContinuationEntry, type ContinuationView, } from './committed-continuations.ts';

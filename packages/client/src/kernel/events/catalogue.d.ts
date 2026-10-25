@@ -409,6 +409,15 @@ declare const productEventTypes: {
         }>;
         actions: Type.TArray<Type.TString>;
     }>;
+    readonly 'com.rezics.access.cleanup-continuation.recorded.v1': Type.TObject<{
+        continuationId: Type.TString;
+        receiptId: Type.TString;
+    }>;
+    readonly 'com.rezics.access.cleanup-continuation.renewed.v1': Type.TObject<{
+        continuationId: Type.TString;
+        expiresAt: Type.TString;
+        receiptId: Type.TString;
+    }>;
     readonly 'com.rezics.commerce.payout_statement.updated.v1': Type.TObject<{
         statementId: Type.TString;
     }>;

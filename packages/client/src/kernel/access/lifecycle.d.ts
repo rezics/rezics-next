@@ -2,6 +2,7 @@ export { LifecycleDeniedError } from './lifecycle-20261025094010-command.ts';
 import type { Pool } from 'pg';
 import { type Access, type AccountActor, type ActionCatalogue } from '../request/access.ts';
 import type { PermissionContext } from './permission.ts';
+import { type ContinuationBinding } from './committed-continuations.ts';
 /** Authoritative application-clock policy: registration lasts 30 minutes and an
  * old handle redirects for 30 days. Neither clock nor timestamps come from JSON.
  * Coordination holds have NO expiry: only a durable workflow may resolve them.
@@ -342,5 +343,7 @@ export declare function createLifecycleCommands(config: Boundary & {
         reservationId: string;
         role: "member" | "owner" | null;
     }>>;
-    tombstone(context: LifecycleRequest, input: LifecycleCommand): Promise<import("../command/command.ts").CommandOutcome<LifecycleFenceReceipt>>;
+    tombstone(context: LifecycleRequest, input: LifecycleCommand & {
+        continuation?: ContinuationBinding;
+    }): Promise<import("../command/command.ts").CommandOutcome<LifecycleFenceReceipt>>;
 };

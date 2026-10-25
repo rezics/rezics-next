@@ -86,6 +86,53 @@ $$;
 
 
 --
+-- Name: committed_continuation_entries(jsonb, integer, integer, boolean); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.committed_continuation_entries(value jsonb, minimum integer, maximum integer, completed boolean) RETURNS boolean
+    LANGUAGE sql IMMUTABLE
+    AS $_$
+  SELECT jsonb_typeof(value) = 'array'
+    AND jsonb_array_length(value) BETWEEN minimum AND maximum
+    AND NOT EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements(value) AS elem
+      WHERE jsonb_typeof(elem) <> 'object'
+        OR (SELECT count(*) FROM jsonb_object_keys(elem) AS object_key) <> CASE WHEN completed THEN 5 ELSE 4 END
+        OR COALESCE(elem->>'step', '') !~ '^[a-z][a-z0-9-]{0,63}$'
+        OR COALESCE(length(elem->>'target'), 0) NOT BETWEEN 1 AND 128
+        OR COALESCE(length(elem->>'key'), 0) NOT BETWEEN 1 AND 240
+        OR COALESCE(elem->>'digest', '') !~ '^[0-9a-f]{64}$'
+        OR (completed AND COALESCE(elem->>'receiptId', '') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+        OR (NOT completed AND jsonb_exists(elem, 'receiptId'))
+    );
+$_$;
+
+
+--
+-- Name: committed_continuation_immutable(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.committed_continuation_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF (to_jsonb(OLD) - 'expires_at' - 'completions') = (to_jsonb(NEW) - 'expires_at' - 'completions')
+    AND (
+      (OLD.expires_at = NEW.expires_at
+        AND jsonb_array_length(NEW.completions) = jsonb_array_length(OLD.completions) + 1
+        AND NEW.completions @> OLD.completions)
+      OR (NEW.completions = OLD.completions AND NEW.expires_at > OLD.expires_at AND NEW.expires_at > OLD.created_at)
+    )
+  THEN
+    RETURN NEW;
+  END IF;
+  RAISE EXCEPTION 'Committed continuations are immutable';
+END;
+$$;
+
+
+--
 -- Name: guard_account_creation_time(); Type: FUNCTION; Schema: access; Owner: -
 --
 
@@ -290,6 +337,46 @@ CREATE TABLE access.account (
     CONSTRAINT account_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT account_service_tier_actor CHECK (((rate_tier <> 'service'::text) OR (kind = 'actor'::text))),
     CONSTRAINT account_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'active'::text, 'suspended'::text, 'deleted'::text])))
+);
+
+
+--
+-- Name: committed_continuation; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.committed_continuation (
+    route integer NOT NULL,
+    continuation_id uuid NOT NULL,
+    account_id uuid NOT NULL,
+    operation_key text NOT NULL,
+    operation_digest text NOT NULL,
+    command_key_prefix text NOT NULL,
+    barrier_receipt_id uuid NOT NULL,
+    barrier_transaction_id uuid NOT NULL,
+    minimum_authn_epoch bigint NOT NULL,
+    prior_handle text,
+    prior_operator_account_id uuid,
+    prior_reservation_id uuid,
+    allowlist jsonb NOT NULL,
+    digest text NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    committed_expires_at timestamp with time zone NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    completions jsonb DEFAULT '[]'::jsonb NOT NULL,
+    CONSTRAINT committed_continuation_allowlist_check CHECK (access.committed_continuation_entries(allowlist, 1, 4, false)),
+    CONSTRAINT committed_continuation_check CHECK ((route = ((get_byte(uuid_send(continuation_id), 10) * 256) + get_byte(uuid_send(continuation_id), 11)))),
+    CONSTRAINT committed_continuation_check1 CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT committed_continuation_check2 CHECK ((((prior_operator_account_id IS NULL) AND (prior_reservation_id IS NULL)) OR ((prior_operator_account_id IS NOT NULL) AND (prior_reservation_id IS NOT NULL)))),
+    CONSTRAINT committed_continuation_check3 CHECK ((committed_expires_at = (created_at + '00:05:00'::interval))),
+    CONSTRAINT committed_continuation_check4 CHECK ((expires_at >= committed_expires_at)),
+    CONSTRAINT committed_continuation_command_key_prefix_check CHECK ((command_key_prefix ~ '^wf:[0-9a-f]{64}$'::text)),
+    CONSTRAINT committed_continuation_completions_check CHECK (access.committed_continuation_entries(completions, 0, 4, true)),
+    CONSTRAINT committed_continuation_digest_check CHECK ((digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT committed_continuation_minimum_authn_epoch_check CHECK ((minimum_authn_epoch > 0)),
+    CONSTRAINT committed_continuation_operation_digest_check CHECK ((operation_digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT committed_continuation_operation_key_check CHECK (((length(operation_key) >= 1) AND (length(operation_key) <= 128))),
+    CONSTRAINT committed_continuation_prior_handle_check CHECK (((prior_handle IS NULL) OR (prior_handle ~ '^[a-z0-9][a-z0-9_-]{0,63}$'::text))),
+    CONSTRAINT committed_continuation_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
 
@@ -766,6 +853,22 @@ ALTER TABLE ONLY access.account
 
 
 --
+-- Name: committed_continuation committed_continuation_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.committed_continuation
+    ADD CONSTRAINT committed_continuation_pkey PRIMARY KEY (route, continuation_id);
+
+
+--
+-- Name: committed_continuation committed_continuation_route_operation_key_key; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.committed_continuation
+    ADD CONSTRAINT committed_continuation_route_operation_key_key UNIQUE (route, operation_key);
+
+
+--
 -- Name: credential_floor_receipt credential_floor_receipt_pkey; Type: CONSTRAINT; Schema: access; Owner: -
 --
 
@@ -1048,6 +1151,13 @@ CREATE TRIGGER assignment_identity BEFORE INSERT OR UPDATE ON access.principal_a
 
 
 --
+-- Name: committed_continuation committed_continuation_immutable; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER committed_continuation_immutable BEFORE UPDATE ON access.committed_continuation FOR EACH ROW EXECUTE FUNCTION access.committed_continuation_immutable();
+
+
+--
 -- Name: lifecycle_membership_slot lifecycle_membership_terminal_guard; Type: TRIGGER; Schema: access; Owner: -
 --
 
@@ -1087,6 +1197,14 @@ CREATE TRIGGER operator_relation_version BEFORE UPDATE ON access.account FOR EAC
 --
 
 CREATE TRIGGER workflow_approval_immutable BEFORE UPDATE ON access.workflow_approval FOR EACH ROW EXECUTE FUNCTION access.workflow_approval_immutable();
+
+
+--
+-- Name: committed_continuation committed_continuation_route_account_id_fkey; Type: FK CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.committed_continuation
+    ADD CONSTRAINT committed_continuation_route_account_id_fkey FOREIGN KEY (route, account_id) REFERENCES access.account(route, account_id);
 
 
 --

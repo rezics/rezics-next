@@ -339,3 +339,15 @@ export {
   type CredentialCapabilityConfig,
   type CredentialOpeningLocator,
 } from './auth-credential-capability.ts';
+export {
+  createCommittedContinuations,
+  deletionAllowlist,
+  COMMITTED_CONTINUATION_ACTIONS,
+  COMMITTED_CONTINUATION_PURPOSE,
+  COMMITTED_CONTINUATION_TTL_MS,
+  ContinuationDeniedError,
+  type CommittedContinuations,
+  type ContinuationBinding,
+  type ContinuationEntry,
+  type ContinuationView,
+} from './committed-continuations.ts';

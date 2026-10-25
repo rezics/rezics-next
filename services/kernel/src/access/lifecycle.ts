@@ -46,6 +46,11 @@ import expiryRead from './lifecycle-registration-expiry-read.sql';
 import registrationRelease from './lifecycle-registration-release.sql';
 import effectRead from './lifecycle-handle-effect-read.sql';
 import bootstrapOwner from './lifecycle-handle-bootstrap-owner.sql';
+import {
+  insertDeletionContinuation,
+  validateContinuationBinding,
+  type ContinuationBinding,
+} from './committed-continuations.ts';
 
 /** Authoritative application-clock policy: registration lasts 30 minutes and an
  * old handle redirects for 30 days. Neither clock nor timestamps come from JSON.
@@ -1355,9 +1360,11 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
         },
       );
     },
-    async tombstone(context: LifecycleRequest, input: LifecycleCommand) {
+    async tombstone(context: LifecycleRequest, input: LifecycleCommand & { continuation?: ContinuationBinding }) {
       input = { ...input };
       context = snapshotRequest(context);
+      const continuation = input.continuation;
+      if (continuation) validateContinuationBinding(continuation);
       const route = accountRoute(input.accountId);
       const authorization = await authorize(context, 'account:delete', input.accountId);
       const allowed = authorization.check;
@@ -1367,7 +1374,13 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
           id: input.accountId,
           kind: 'account-tombstoned',
           key: input.key,
-          input: {},
+          input: continuation
+            ? {
+                operationKey: continuation.operationKey,
+                operationDigest: continuation.operationDigest,
+                commandKeyPrefix: continuation.commandKeyPrefix,
+              }
+            : {},
           actor: context.actor,
           deadline: context.deadline,
           authorization,
@@ -1387,7 +1400,22 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
             });
             requireAllowed(owners && owners.owners === 0);
           }
+          const priorHandle = account.handle;
+          const priorOperatorAccountId = account.operatorAccountId;
+          const priorReservationId = account.operatorReservationId;
           const receipt = await fence(tx, account, true, transactionId);
+          if (continuation) {
+            await insertDeletionContinuation(tx, {
+              accountId: account.accountId,
+              handle: priorHandle,
+              operatorAccountId: priorOperatorAccountId,
+              reservationId: priorReservationId,
+              binding: continuation,
+              barrierReceiptId: receipt.receiptId,
+              minimumAuthnEpoch: receipt.minimumAuthnEpoch,
+              transactionId,
+            });
+          }
           requireAllowed(await allowed(tx));
           return receipt;
         },

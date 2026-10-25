@@ -275,4 +275,12 @@ export const ACCESS_EVENTS = {
     { resource, actions: Type.Array(action, { minItems: 1 }) },
     { additionalProperties: false },
   ),
+  'com.rezics.access.cleanup-continuation.recorded.v1': Type.Object(
+    { continuationId: identity, receiptId: identity },
+    { additionalProperties: false },
+  ),
+  'com.rezics.access.cleanup-continuation.renewed.v1': Type.Object(
+    { continuationId: identity, expiresAt: iso, receiptId: identity },
+    { additionalProperties: false },
+  ),
 } as const;

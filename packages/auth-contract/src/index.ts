@@ -164,6 +164,8 @@ export type AssignmentProof =
 /** Internal application ports. Never construct these results from HTTP fields. */
 export interface TrustedAccessPorts {
   readAccount(accountId: string): Promise<AccessAccount | null>;
+  /** Deleted and fenced accounts only. Ordinary reads stay empty for those rows. */
+  readErasureAccount?(accountId: string): Promise<AccessAccount | null>;
   /** Private pending read bound to the exact verified native registration command. */
   readProvisioningAccount?(
     accountId: string,
@@ -266,6 +268,17 @@ export type WorkflowFence = {
   kind: string;
   priorOperatorAccountId: string | null;
 };
+type ContinuationBinding = { operationKey: string; operationDigest: string; commandKeyPrefix: string };
+type ContinuationEntry = { step: string; target: string; key: string; digest: string };
+type ContinuationView = {
+  reference: string;
+  operationKey: string;
+  operationDigest: string;
+  commandKeyPrefix: string;
+  barrierReceiptId: string;
+  expiresAt: string;
+  allowlist: ContinuationEntry[];
+};
 export type AccountOperation =
   | { kind: 'rename'; accountId: string; handle: string; expectedHandle: string | null; authorization: string }
   | { kind: 'organization'; handle: string; authorization: string }
@@ -327,6 +340,10 @@ export interface AccountWorkflowPorts<Context = WorkflowContext> {
   authorizeUnprotectedOperation?(operation: AccountOperation): Promise<void>;
   actorAccountId?(context: Context): string;
   stableCommandKey?(context: Context, phase: string): string;
+  /** Durable approval metadata for the resolved context. Absent on historical hosts. */
+  approvalBinding?(context: Context): { operationKey: string; digest: string; commandKeyPrefix: string } | undefined;
+  readContinuation?(operationKey: string, accountId: string): Promise<ContinuationView | null>;
+  authorizeContinuation?(reference: string, entry: ContinuationEntry): Promise<{ receiptId: string }>;
   holdHandle?(input: WorkflowHandleTransition): Result<unknown>;
   transitionAccountHandle?(context: Context, input: WorkflowHandleTransition): Result<unknown>;
   finalizeHandleTransition?(input: WorkflowHandleTransition): Result<unknown>;
@@ -357,7 +374,7 @@ export interface AccountWorkflowPorts<Context = WorkflowContext> {
     limit?: number;
     cursor?: string;
   }): Promise<{ operators: { reservationId: string; subjectAccountId: string }[]; next: string | null }>;
-  tombstone?(context: Context, input: Command): Result<WorkflowFence>;
+  tombstone?(context: Context, input: Command & { continuation?: ContinuationBinding }): Result<WorkflowFence>;
   redirectHandle?(input: Command & { handle: string }): Result<unknown>;
   authorizeOpening?(
     context: Context,

@@ -231,6 +231,12 @@ Bound: with `R=N+U*t+M` (subjects/history, activity and media), exact approval l
 
 Growth: `test/access/growth-workflow-approvals.test.ts` captures native approve/resolve/denied replay/sweep at 1/8/64.
 
+### Committed cleanup continuation
+
+- Touches: one continuation insert in the barrier's transaction; per cleanup step one primary-key read of the row at T and one completion update; renewal adds one governance check on the Global Context and one update.
+- Bound: O(log R) per statement and a fixed allowlist of at most four entries for deletion, independent of other accounts and other continuations.
+- Growth check: `growth-committed-continuation.test.ts` with `checkGrowth` at [1, 8, 64], growing unrelated accounts and other continuations (live, completed and expired) with the deleted account fixed; constant rows and statements, logarithmic buffers.
+
 Permission preparation and the final formula use capped account inverses and exact temporal probes; integrated checks measure constant rows/statements and logarithmic blocks in ACL/history size at fixed admitted membership, and at most linear work through the 1000-per-account cap.
 Command freshness adds only the shared attempt seek to the installed actor-side formula `O((1+K)log G+matches)`, K<=1000 per actor/principal; bounded container/parent anchors, creation manifests and actual command changes retain their existing costs.
 The independently released account observation is not an atomically locked global snapshot. Bearer command evidence remains bounded by the original request deadline and JWT expiry; the read snapshot’s 180 s reuse window does not replace fresh command admission. Durable identities instead use the freshly verified step deadline and native evidence budget, without renewing a bearer or a workflow approval.

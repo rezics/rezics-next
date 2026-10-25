@@ -1,0 +1,513 @@
+import { createHash } from 'node:crypto';
+import canonicalize from 'canonicalize';
+import type { Pool } from 'pg';
+import {
+  authoritativeTimeValue,
+  currentCommand,
+  IdempotencyConflictError,
+  type CommandTransaction,
+} from '../command/command.ts';
+import type { Access, AccessContext, AccountActor, ActionCatalogue } from '../request/access.ts';
+import { withConnection } from '../database/pool.ts';
+import { derivedId, partitionOf, routeOf } from '../route/route.ts';
+import type { KeyRing } from '../tokens/seal.ts';
+import { seal, unseal } from '../tokens/seal.ts';
+import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
+import globalRead from './bootstrap-governance-read.sql';
+import { GrantDeniedError } from './grant-commands.ts';
+import { LifecycleDeniedError, lifecycleExecutor } from './lifecycle-20261025094010-command.ts';
+import { resourceAuthorization } from './resource-authorization.ts';
+import completeContinuation from './committed-continuation-complete.sql';
+import insertContinuation from './committed-continuation-insert.sql';
+import loadContinuation from './committed-continuation-load.sql';
+import readContinuation from './committed-continuation-read.sql';
+import renewContinuation from './committed-continuation-renew.sql';
+
+/** Distinct from workflow approvals. A sealed reference authorizes one allowlisted
+ * cleanup step and never a caller's result or a later permission. */
+export const COMMITTED_CONTINUATION_PURPOSE = 'access.committed-continuation.v1';
+export const COMMITTED_CONTINUATION_TTL_MS = 5 * 60 * 1000;
+/** Route-bearing continuation ids. Independent of the lifecycle fence namespace. */
+export const CONTINUATION_NAMESPACE = 'b7c3d1e2-4f50-4a61-8c70-0d1e2f304152';
+export const COMMITTED_CONTINUATION_ACTIONS: ActionCatalogue = new Map([
+  ['account:renew_cleanup', { anonymous: false }],
+]);
+const DIGEST = /^[0-9a-f]{64}$/;
+const PREFIX = /^wf:[0-9a-f]{64}$/;
+const STEP = /^[a-z][a-z0-9-]{0,63}$/;
+
+export class ContinuationDeniedError extends Error {
+  readonly status = 403;
+
+  constructor() {
+    super('Committed cleanup continuation denied');
+    this.name = 'ContinuationDeniedError';
+  }
+}
+
+export type ContinuationEntry = { step: string; target: string; key: string; digest: string };
+export type ContinuationBinding = { operationKey: string; operationDigest: string; commandKeyPrefix: string };
+export type ContinuationSnapshot = {
+  route: number;
+  continuationId: string;
+  accountId: string;
+  operationKey: string;
+  operationDigest: string;
+  commandKeyPrefix: string;
+  barrierReceiptId: string;
+  barrierTransactionId: string;
+  minimumAuthnEpoch: string;
+  priorHandle: string | null;
+  priorOperatorAccountId: string | null;
+  priorReservationId: string | null;
+  allowlist: ContinuationEntry[];
+  createdAt: string;
+  committedExpiresAt: string;
+};
+export type ContinuationView = {
+  reference: string;
+  operationKey: string;
+  operationDigest: string;
+  commandKeyPrefix: string;
+  barrierReceiptId: string;
+  expiresAt: string;
+  allowlist: ContinuationEntry[];
+};
+type Completion = ContinuationEntry & { receiptId: string };
+type StoredContinuation = {
+  continuationId: string;
+  accountId: string;
+  operationKey: string;
+  operationDigest: string;
+  commandKeyPrefix: string;
+  barrierReceiptId: string;
+  barrierTransactionId: string;
+  minimumAuthnEpoch: string;
+  priorHandle: string | null;
+  priorOperatorAccountId: string | null;
+  priorReservationId: string | null;
+  allowlist: unknown;
+  completions: unknown;
+  digest: string;
+  createdAt: unknown;
+  committedExpiresAt: unknown;
+  expiresAt: unknown;
+};
+
+const deny = () => new ContinuationDeniedError();
+function refused(value: unknown): asserts value {
+  if (!value) throw deny();
+}
+function one<T>(result: T | readonly T[] | null | undefined): T | null {
+  if (Array.isArray(result)) return (result[0] as T | undefined) ?? null;
+  if (result == null) return null;
+  return result as T;
+}
+async function oneRow<T>(work: () => Promise<T | readonly T[] | null>): Promise<T | null> {
+  try {
+    return one(await work());
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('Expected exactly one row')) return null;
+    throw error;
+  }
+}
+export function canonicalInstant(value: unknown): string {
+  const parsed = value instanceof Date ? value : typeof value === 'string' ? new Date(value) : new Date(NaN);
+  if (!Number.isFinite(parsed.getTime())) throw deny();
+  return parsed.toISOString();
+}
+function jsonValue(value: unknown): unknown {
+  return typeof value === 'string' ? (JSON.parse(value) as unknown) : value;
+}
+function entryShape(value: unknown, completed: boolean): (ContinuationEntry & { receiptId?: string }) | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record).sort();
+  const expected = completed ? ['digest', 'key', 'receiptId', 'step', 'target'] : ['digest', 'key', 'step', 'target'];
+  if (keys.join(',') !== expected.join(',')) return null;
+  const step = record.step;
+  const target = record.target;
+  const key = record.key;
+  const digest = record.digest;
+  if (typeof step !== 'string' || !STEP.test(step)) return null;
+  if (typeof target !== 'string' || target.length < 1 || target.length > 128) return null;
+  if (typeof key !== 'string' || key.length < 1 || key.length > 240) return null;
+  if (typeof digest !== 'string' || !DIGEST.test(digest)) return null;
+  const entry: ContinuationEntry & { receiptId?: string } = { step, target, key, digest };
+  if (completed) {
+    if (typeof record.receiptId !== 'string' || routeOf(record.receiptId) === null) return null;
+    entry.receiptId = record.receiptId;
+  }
+  return entry;
+}
+function entries(value: unknown): ContinuationEntry[] | null {
+  const parsed = jsonValue(value);
+  if (!Array.isArray(parsed) || parsed.length < 1 || parsed.length > 4) return null;
+  const allowlist: ContinuationEntry[] = [];
+  for (const item of parsed) {
+    const entry = entryShape(item, false);
+    if (!entry) return null;
+    allowlist.push({ step: entry.step, target: entry.target, key: entry.key, digest: entry.digest });
+  }
+  return allowlist;
+}
+function completions(value: unknown): Completion[] | null {
+  const parsed = jsonValue(value);
+  if (!Array.isArray(parsed) || parsed.length > 4) return null;
+  const recorded: Completion[] = [];
+  for (const item of parsed) {
+    const entry = entryShape(item, true);
+    if (!entry?.receiptId) return null;
+    recorded.push({
+      step: entry.step,
+      target: entry.target,
+      key: entry.key,
+      digest: entry.digest,
+      receiptId: entry.receiptId,
+    });
+  }
+  return recorded;
+}
+export function continuationEntryDigest(entry: Pick<ContinuationEntry, 'step' | 'target' | 'key'>): string {
+  return createHash('sha256')
+    .update(canonicalize({ step: entry.step, target: entry.target, key: entry.key })!)
+    .digest('hex');
+}
+export function committedContinuationDigest(snapshot: ContinuationSnapshot): string {
+  return createHash('sha256').update(canonicalize(snapshot)!).digest('hex');
+}
+function sameEntry(left: ContinuationEntry, right: ContinuationEntry): boolean {
+  return (
+    left.step === right.step && left.target === right.target && left.key === right.key && left.digest === right.digest
+  );
+}
+export function deletionAllowlist(input: {
+  accountId: string;
+  commandKeyPrefix: string;
+  handle: string | null;
+  operatorAccountId: string | null;
+  reservationId: string | null;
+}): ContinuationEntry[] | null {
+  if (!PREFIX.test(input.commandKeyPrefix) || routeOf(input.accountId) === null) return null;
+  const operator = input.operatorAccountId;
+  const reservation = input.reservationId;
+  if ((operator === null) !== (reservation === null)) return null;
+  if (operator !== null && reservation !== null && (routeOf(operator) === null || routeOf(reservation) === null))
+    return null;
+  if (input.handle !== null && !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(input.handle)) return null;
+  const allowlist: ContinuationEntry[] = [];
+  const push = (step: string, target: string) => {
+    const key = `${input.commandKeyPrefix}:${step}`;
+    if (key.length > 240 || target.length < 1 || target.length > 128) return false;
+    allowlist.push({ step, target, key, digest: continuationEntryDigest({ step, target, key }) });
+    return true;
+  };
+  if (!push('erase-auth-owner', input.accountId)) return null;
+  if (operator && reservation) {
+    if (!push('retire-operator', `${input.accountId}:${reservation}`)) return null;
+    if (!push('release-operator', `${operator}:${reservation}`)) return null;
+  }
+  if (input.handle && !push('redirect-deleted-handle', input.handle)) return null;
+  return allowlist.length >= 1 && allowlist.length <= 4 ? allowlist : null;
+}
+export function validateContinuationBinding(binding: ContinuationBinding): void {
+  if (
+    !binding ||
+    typeof binding.operationKey !== 'string' ||
+    binding.operationKey.length < 1 ||
+    binding.operationKey.length > 128 ||
+    !DIGEST.test(binding.operationDigest) ||
+    !PREFIX.test(binding.commandKeyPrefix)
+  )
+    throw new LifecycleDeniedError();
+}
+function snapshotOf(route: number, row: StoredContinuation, allowlist: ContinuationEntry[]): ContinuationSnapshot {
+  return {
+    route,
+    continuationId: row.continuationId,
+    accountId: row.accountId,
+    operationKey: row.operationKey,
+    operationDigest: row.operationDigest,
+    commandKeyPrefix: row.commandKeyPrefix,
+    barrierReceiptId: row.barrierReceiptId,
+    barrierTransactionId: row.barrierTransactionId,
+    minimumAuthnEpoch: row.minimumAuthnEpoch,
+    priorHandle: row.priorHandle,
+    priorOperatorAccountId: row.priorOperatorAccountId,
+    priorReservationId: row.priorReservationId,
+    allowlist,
+    createdAt: canonicalInstant(row.createdAt),
+    committedExpiresAt: canonicalInstant(row.committedExpiresAt),
+  };
+}
+function viewOf(keys: KeyRing, route: number, row: StoredContinuation): ContinuationView | null {
+  const allowlist = entries(row.allowlist);
+  if (!allowlist || row.digest !== committedContinuationDigest(snapshotOf(route, row, allowlist))) return null;
+  return {
+    reference: seal(keys, COMMITTED_CONTINUATION_PURPOSE, {
+      route,
+      continuationId: row.continuationId,
+      digest: row.digest,
+    }),
+    operationKey: row.operationKey,
+    operationDigest: row.operationDigest,
+    commandKeyPrefix: row.commandKeyPrefix,
+    barrierReceiptId: row.barrierReceiptId,
+    expiresAt: canonicalInstant(row.expiresAt),
+    allowlist,
+  };
+}
+
+/** The row commits in the tombstone transaction. Its sealed reference is derived
+ * later from the immutable digest; renewal changes only the live expiry. */
+export async function insertDeletionContinuation(
+  tx: CommandTransaction,
+  input: {
+    accountId: string;
+    handle: string | null;
+    operatorAccountId: string | null;
+    reservationId: string | null;
+    binding: ContinuationBinding;
+    barrierReceiptId: string;
+    minimumAuthnEpoch: string;
+    transactionId: string;
+  },
+): Promise<void> {
+  validateContinuationBinding(input.binding);
+  const route = routeOf(input.accountId);
+  const allowlist = deletionAllowlist({
+    accountId: input.accountId,
+    commandKeyPrefix: input.binding.commandKeyPrefix,
+    handle: input.handle,
+    operatorAccountId: input.operatorAccountId,
+    reservationId: input.reservationId,
+  });
+  if (route === null || !allowlist || routeOf(input.barrierReceiptId) === null) throw new LifecycleDeniedError();
+  const createdAt = canonicalInstant(authoritativeTimeValue(currentCommand(tx).time));
+  const committedExpiresAt = new Date(Date.parse(createdAt) + COMMITTED_CONTINUATION_TTL_MS).toISOString();
+  const continuationId = derivedId(CONTINUATION_NAMESPACE, `${input.accountId}:${input.binding.operationKey}`, route);
+  const snapshot: ContinuationSnapshot = {
+    route,
+    continuationId,
+    accountId: input.accountId,
+    operationKey: input.binding.operationKey,
+    operationDigest: input.binding.operationDigest,
+    commandKeyPrefix: input.binding.commandKeyPrefix,
+    barrierReceiptId: input.barrierReceiptId,
+    barrierTransactionId: input.transactionId,
+    minimumAuthnEpoch: input.minimumAuthnEpoch,
+    priorHandle: input.handle,
+    priorOperatorAccountId: input.operatorAccountId,
+    priorReservationId: input.reservationId,
+    allowlist,
+    createdAt,
+    committedExpiresAt,
+  };
+  const inserted = await oneRow(() =>
+    insertContinuation.run(tx, {
+      route,
+      continuation_id: continuationId,
+      account_id: input.accountId,
+      operation_key: input.binding.operationKey,
+      operation_digest: input.binding.operationDigest,
+      command_key_prefix: input.binding.commandKeyPrefix,
+      barrier_receipt_id: input.barrierReceiptId,
+      barrier_transaction_id: input.transactionId,
+      minimum_authn_epoch: input.minimumAuthnEpoch,
+      prior_handle: input.handle ?? '',
+      prior_operator_account_id: input.operatorAccountId ?? '',
+      prior_reservation_id: input.reservationId ?? '',
+      allowlist,
+      digest: committedContinuationDigest(snapshot),
+      created_at: createdAt,
+      committed_expires_at: committedExpiresAt,
+      expires_at: committedExpiresAt,
+    }),
+  );
+  if (!inserted) throw new LifecycleDeniedError();
+}
+
+export type CommittedContinuations = {
+  read(operationKey: string, accountId: string): Promise<ContinuationView | null>;
+  authorizeStep(reference: string, entry: ContinuationEntry): Promise<{ continuationId: string; receiptId: string }>;
+  renew(
+    token: string,
+    continuationId: string,
+  ): Promise<{ continuationId: string; expiresAt: string; receiptId: string }>;
+};
+
+/** Trusted server port. Callers pass a sealed reference, never request JSON. */
+export function createCommittedContinuations(config: {
+  pool: Pool;
+  access: Access;
+  referenceKeys: KeyRing;
+  clock?: () => Date;
+}): CommittedContinuations {
+  const execute = (clock?: () => Date) => lifecycleExecutor(config.pool, clock ?? config.clock);
+  function unsealed(reference: string): { route: number; continuationId: string; digest: string } {
+    const payload = unseal(config.referenceKeys, COMMITTED_CONTINUATION_PURPOSE, reference);
+    refused(payload && typeof payload === 'object' && !Array.isArray(payload));
+    const record = payload as Record<string, unknown>;
+    refused(Object.keys(record).sort().join(',') === 'continuationId,digest,route');
+    const { route, continuationId, digest } = record;
+    refused(
+      typeof route === 'number' &&
+        Number.isInteger(route) &&
+        typeof continuationId === 'string' &&
+        routeOf(continuationId) === route &&
+        typeof digest === 'string' &&
+        DIGEST.test(digest),
+    );
+    return { route, continuationId, digest };
+  }
+  return {
+    async read(operationKey, accountId) {
+      const route = routeOf(accountId);
+      if (route === null || typeof operationKey !== 'string' || operationKey.length < 1 || operationKey.length > 128)
+        return null;
+      const row = await withConnection(config.pool, (client) =>
+        oneRow(() => readContinuation.run(client, { route, operation_key: operationKey })),
+      );
+      return row ? viewOf(config.referenceKeys, route, row as StoredContinuation) : null;
+    },
+    async authorizeStep(reference, entry) {
+      let sealedReference: { route: number; continuationId: string; digest: string };
+      try {
+        sealedReference = unsealed(reference);
+      } catch (error) {
+        if (error instanceof ContinuationDeniedError) throw error;
+        throw deny();
+      }
+      const presented = entryShape(entry, false);
+      refused(presented && presented.digest === continuationEntryDigest(presented));
+      const commandKey = `committed:${presented.key}`;
+      refused(commandKey.length <= 240);
+      const receiptId = derivedId(
+        CONTINUATION_NAMESPACE,
+        `${sealedReference.continuationId}:${presented.step}:${presented.target}:${presented.key}`,
+        sealedReference.route,
+      );
+      try {
+        const outcome = await execute()(
+          {
+            route: sealedReference.route,
+            id: sealedReference.continuationId,
+            kind: 'cleanup-continuation.recorded',
+            key: commandKey,
+            input: {
+              continuationId: sealedReference.continuationId,
+              step: presented.step,
+              target: presented.target,
+              key: presented.key,
+              digest: presented.digest,
+            },
+          },
+          async (tx) => {
+            const row = await oneRow(() =>
+              loadContinuation.run(tx, {
+                route: sealedReference.route,
+                continuation_id: sealedReference.continuationId,
+              }),
+            );
+            refused(row);
+            const stored = row as StoredContinuation;
+            const allowlist = entries(stored.allowlist);
+            const recorded = completions(stored.completions);
+            refused(allowlist && recorded);
+            const snapshot = snapshotOf(sealedReference.route, stored, allowlist);
+            refused(
+              stored.digest === sealedReference.digest && stored.digest === committedContinuationDigest(snapshot),
+            );
+            const match = allowlist.find((item) => sameEntry(item, presented));
+            refused(match);
+            const prior = recorded.find((item) => sameEntry(item, presented));
+            if (prior) return { continuationId: stored.continuationId, receiptId: prior.receiptId };
+            const at = canonicalInstant(authoritativeTimeValue(currentCommand(tx).time));
+            refused(Date.parse(canonicalInstant(stored.expiresAt)) > Date.parse(at));
+            const updated = await oneRow(() =>
+              completeContinuation.run(tx, {
+                route: sealedReference.route,
+                continuation_id: stored.continuationId,
+                step: presented.step,
+                target: presented.target,
+                key: presented.key,
+                digest: presented.digest,
+                receipt_id: receiptId,
+                at,
+              }),
+            );
+            refused(updated);
+            return { continuationId: stored.continuationId, receiptId };
+          },
+        );
+        return outcome.value;
+      } catch (error) {
+        if (error instanceof ContinuationDeniedError) throw error;
+        if (error instanceof IdempotencyConflictError) throw deny();
+        throw error;
+      }
+    },
+    async renew(token, continuationId) {
+      const route = routeOf(continuationId);
+      if (route === null) throw new GrantDeniedError();
+      const at = config.clock?.() ?? new Date();
+      if (!Number.isFinite(at.getTime())) throw new GrantDeniedError();
+      const frozen = () => new Date(at.getTime());
+      const deadline = Date.now() + 10_000;
+      const context: AccessContext = { pool: config.pool, deadline };
+      let actor: AccountActor;
+      try {
+        actor = await config.access.authenticate(token, context);
+      } catch {
+        throw new GrantDeniedError();
+      }
+      const authorization = resourceAuthorization({
+        access: config.access,
+        actor,
+        action: 'account:renew_cleanup',
+        anchor: {
+          resource: PLATFORM_RESOURCE,
+          async validate(client) {
+            const global = await globalRead.run(client, {
+              route: PLATFORM_RESOURCE.route,
+              resource_id: PLATFORM_RESOURCE.id,
+            });
+            return global?.global === true;
+          },
+        },
+        context: { pool: config.pool, deadline, partition: partitionOf(route) },
+      });
+      const iso = at.toISOString();
+      try {
+        const outcome = await execute(frozen)(
+          {
+            route,
+            id: continuationId,
+            kind: 'cleanup-continuation.renewed',
+            key: `renew:${continuationId}:${iso}`,
+            input: { continuationId, at: iso },
+            actor,
+            deadline,
+            authorization,
+          },
+          async (tx) => {
+            const authoritative = canonicalInstant(authoritativeTimeValue(currentCommand(tx).time));
+            const expiresAt = new Date(Date.parse(authoritative) + COMMITTED_CONTINUATION_TTL_MS).toISOString();
+            const renewed = await oneRow(() =>
+              renewContinuation.run(tx, { route, continuation_id: continuationId, expires_at: expiresAt }),
+            );
+            if (!renewed) throw new GrantDeniedError();
+            const storedExpiry = canonicalInstant((renewed as { expiresAt: unknown }).expiresAt);
+            const receiptId = derivedId(CONTINUATION_NAMESPACE, `${continuationId}:renew:${storedExpiry}`, route);
+            return { continuationId, expiresAt: storedExpiry, receiptId };
+          },
+        );
+        return outcome.value;
+      } catch (error) {
+        if (error instanceof GrantDeniedError || error instanceof IdempotencyConflictError)
+          throw new GrantDeniedError();
+        throw error;
+      }
+    },
+  };
+}
