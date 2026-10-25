@@ -289,7 +289,9 @@ test(
     const { page, origin, urls, responseHeaders } = await open(`/recovery${fragment}`);
     try {
       expect(await page.evaluate(() => location.hash)).toBe('');
-      expect(responseHeaders['cache-control']).toBe('no-store');
+      expect(responseHeaders['cache-control']).toContain('no-store');
+      expect(responseHeaders['content-security-policy']).toContain("frame-ancestors 'none'");
+      expect(responseHeaders['x-frame-options']).toBe('DENY');
       expect(responseHeaders['referrer-policy']).toBe('no-referrer');
       const recoveryDocument = await page.locator('html').evaluate((element) => element.outerHTML);
       expect(recoveryDocument).not.toContain(token);

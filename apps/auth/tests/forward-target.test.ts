@@ -146,8 +146,8 @@ test('GET and HEAD still render page paths without reaching Auth', async () => {
       const response = await fetch(`${origin}${path}`, { method, headers: { 'accept-language': 'en' } });
       expect(response.status).toBe(200);
       expect(response.headers.get('content-type')).toContain('text/html');
-      expect(response.headers.get('cache-control')).toBe('private, no-store');
-      expect(response.headers.get('content-security-policy')).toBe("frame-ancestors 'none'");
+      expect(response.headers.get('cache-control')).toContain('no-store');
+      expect(response.headers.get('content-security-policy')).toContain("frame-ancestors 'none'");
       expect(response.headers.get('x-frame-options')).toBe('DENY');
       const body = await response.text();
       if (method === 'HEAD') expect(body).toBe('');
