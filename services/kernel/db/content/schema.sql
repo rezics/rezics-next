@@ -24,6 +24,24 @@ CREATE SCHEMA content;
 
 
 --
+-- Name: guard_board_thread(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.guard_board_thread() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF ROW(NEW.route, NEW.board_id, NEW.thread_id, NEW.created_at)
+     IS DISTINCT FROM ROW(OLD.route, OLD.board_id, OLD.thread_id, OLD.created_at)
+     OR ROW(NEW.source_epoch, NEW.source_position) <= ROW(OLD.source_epoch, OLD.source_position) THEN
+    RAISE EXCEPTION 'Board candidate identity, ordering and source watermark cannot regress' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: guard_identity(); Type: FUNCTION; Schema: content; Owner: -
 --
 
@@ -255,6 +273,26 @@ CREATE TABLE content.imported_field (
     CONSTRAINT imported_field_source_check2 CHECK (((source ? 'references'::text) AND (jsonb_typeof((source -> 'references'::text)) = 'array'::text) AND (jsonb_array_length((source -> 'references'::text)) <= 128)))
 );
 ALTER TABLE ONLY content.imported_field ALTER COLUMN body SET COMPRESSION lz4;
+
+
+--
+-- Name: board_thread; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.board_thread (
+    route integer NOT NULL,
+    board_id uuid NOT NULL,
+    thread_id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    source_epoch integer NOT NULL,
+    source_position bigint NOT NULL,
+    source_revision_id uuid,
+    CONSTRAINT board_thread_check CHECK ((route = ((get_byte(uuid_send(board_id), 10) * 256) + get_byte(uuid_send(board_id), 11)))),
+    CONSTRAINT board_thread_created_at_check CHECK (isfinite(created_at)),
+    CONSTRAINT board_thread_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT board_thread_source_epoch_check CHECK ((source_epoch > 0)),
+    CONSTRAINT board_thread_source_position_check CHECK ((source_position > 0))
+);
 
 
 --
@@ -502,6 +540,14 @@ ALTER TABLE ONLY content.imported_field
 
 
 --
+-- Name: board_thread board_thread_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.board_thread
+    ADD CONSTRAINT board_thread_pkey PRIMARY KEY (route, board_id, thread_id);
+
+
+--
 -- Name: media media_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -598,6 +644,13 @@ ALTER TABLE ONLY content.thread
 
 
 --
+-- Name: board_thread_page_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX board_thread_page_idx ON content.board_thread USING btree (route, board_id, created_at, thread_id);
+
+
+--
 -- Name: media_collection_eligible_idx; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -673,6 +726,13 @@ CREATE TRIGGER imported_field_immutable BEFORE DELETE OR UPDATE ON content.impor
 --
 
 CREATE TRIGGER media_security_guard BEFORE UPDATE ON content.media FOR EACH ROW EXECUTE FUNCTION content.guard_media_security();
+
+
+--
+-- Name: board_thread board_thread_identity; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER board_thread_identity BEFORE UPDATE ON content.board_thread FOR EACH ROW EXECUTE FUNCTION content.guard_board_thread();
 
 
 --

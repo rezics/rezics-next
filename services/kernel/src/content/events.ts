@@ -1,4 +1,5 @@
 import { Type, type Static } from 'typebox';
+import { BOARD_EVENTS } from './board-events.ts';
 import { MEDIA_EVENTS } from './media-events.ts';
 import { MODERATION_EVENTS } from './moderation-events.ts';
 import { OPERATION_EVENTS } from './operation-events.ts';
@@ -24,6 +25,7 @@ export const CONTENT_EVENTS = {
   ...MODERATION_EVENTS,
   ...REPORT_EVENTS,
   ...OPERATION_EVENTS,
+  ...BOARD_EVENTS,
 } as const;
 
 export type ContentEventType = keyof typeof CONTENT_EVENTS;
