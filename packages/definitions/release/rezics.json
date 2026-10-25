@@ -476,6 +476,45 @@
         }
       }
     },
+    "schema:dateModified": {
+      "iri": "http://schema.org/dateModified",
+      "labels": {
+        "en": "dateModified",
+        "ja": "最終更新日",
+        "zh-Hant": "最後更新"
+      },
+      "mappings": [
+        "wd:P5017"
+      ],
+      "datatype": "time",
+      "multivalued": false,
+      "qualifiers": [],
+      "value": {
+        "type": "object",
+        "required": [
+          "time",
+          "precision",
+          "calendarmodel"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "time": {
+            "type": "string",
+            "pattern": "^[+-][0-9]{4,}-[0-9]{2}-[0-9]{2}T00:00:00Z$"
+          },
+          "precision": {
+            "enum": [
+              9,
+              10,
+              11
+            ]
+          },
+          "calendarmodel": {
+            "const": "http://www.wikidata.org/entity/Q1985727"
+          }
+        }
+      }
+    },
     "schema:datePublished": {
       "iri": "http://schema.org/datePublished",
       "labels": {
@@ -695,6 +734,23 @@
         "type": "string",
         "maxLength": 1500,
         "pattern": "^https?://[^\\s]+$"
+      }
+    },
+    "schema:version": {
+      "iri": "http://schema.org/version",
+      "labels": {
+        "en": "version",
+        "ja": "バージョン",
+        "zh-Hant": "版本"
+      },
+      "mappings": [],
+      "datatype": "string",
+      "multivalued": false,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1500
       }
     },
     "wdt:P3180": {

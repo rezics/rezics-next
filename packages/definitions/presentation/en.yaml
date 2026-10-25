@@ -17,6 +17,8 @@ properties:
   schema:author: author
   schema:position: position
   schema:datePublished: publication date
+  schema:version: version
+  schema:dateModified: dateModified
   schema:inLanguage: language
   schema:exampleOfWork: edition of
   schema:isbn: ISBN-13

@@ -161,6 +161,36 @@ substitutes an external identifier for a REZICS subject id. If a converter has
 no identifier for a target, it proposes no relation for that target. Only
 `facts` supports `create` and `retract`. The following commands share this setup:
 
+Each imported record fact cites the exact source record with its URL, its
+catalogued source identifier property, its source revision in `schema:version`,
+and its last-modified date in `schema:dateModified`. For example, an Open Library
+work can use one reference with these four parts:
+
+```ts
+const openLibraryReference = {
+  parts: [
+    { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://openlibrary.org/works/OL45804W' } },
+    { property: { id: 'wdt:P648' }, value: { type: 'value', content: 'OL45804W' } },
+    { property: { id: 'schema:version' }, value: { type: 'value', content: revision } },
+    {
+      property: { id: 'schema:dateModified' },
+      value: {
+        type: 'value',
+        content: {
+          time: '+2024-01-11T00:00:00Z',
+          precision: 11,
+          calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+        },
+      },
+    },
+  ],
+};
+```
+
+Here `revision` is the revision value from the Open Library record, and the date
+is `last_modified` represented at day precision in UTC. Keep `record_revision`
+in the source envelope as its separate field.
+
 ```ts
 import { fromPlainText } from '@rezics/document';
 import type { BatchCommand, Source } from '@rezics/definitions/bulk';

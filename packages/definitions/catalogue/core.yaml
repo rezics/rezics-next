@@ -111,6 +111,19 @@ slots:
       - wd:P577
     annotations:
       datatype: time
+  version:
+    slot_uri: schema:version
+    description: The revision identifier stated by the source record.
+    annotations:
+      datatype: string
+  dateModified:
+    slot_uri: schema:dateModified
+    description: The date on which the source record was last modified.
+    range: date
+    exact_mappings:
+      - wd:P5017
+    annotations:
+      datatype: time
   inLanguage:
     slot_uri: schema:inLanguage
     description: The language used for the resource.

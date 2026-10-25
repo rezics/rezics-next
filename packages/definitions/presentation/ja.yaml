@@ -17,6 +17,8 @@ properties:
   schema:author: 著者
   schema:position: 順序
   schema:datePublished: 出版日
+  schema:version: バージョン
+  schema:dateModified: 最終更新日
   schema:inLanguage: 言語
   schema:exampleOfWork: 原作品
   schema:isbn: ISBN-13
