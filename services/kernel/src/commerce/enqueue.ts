@@ -1,11 +1,5 @@
 import type { DBOSClient } from '@dbos-inc/dbos-sdk';
-import {
-  COMMERCE_QUEUE,
-  STRIPE_EVENT_WORKFLOW,
-  stripeEventPartitionKey,
-  stripeEventWorkflowId,
-  type CommerceWork,
-} from './work-contract.ts';
+import { STRIPE_EVENT_WORKFLOW, stripeEventWorkflowId, WORKFLOWS_QUEUE, type CommerceWork } from './work-contract.ts';
 
 export function createCommerceWork(client: DBOSClient): CommerceWork {
   return {
@@ -13,9 +7,8 @@ export function createCommerceWork(client: DBOSClient): CommerceWork {
       await client.enqueue(
         {
           workflowName: STRIPE_EVENT_WORKFLOW,
-          queueName: COMMERCE_QUEUE,
+          queueName: WORKFLOWS_QUEUE,
           workflowID: stripeEventWorkflowId(ref.eventId),
-          queuePartitionKey: stripeEventPartitionKey(ref.eventId),
           workflowIDReusePolicy: 'return-existing',
         },
         ref,

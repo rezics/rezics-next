@@ -5,7 +5,7 @@ import { createCommerceWork } from '../../src/commerce/enqueue.ts';
 import { HANDLED_STRIPE_EVENTS, type StripeEventRef } from '../../src/commerce/model.ts';
 import { classifyStripeEvent, verifyStripeEvent, WebhookSignatureError } from '../../src/commerce/webhook.ts';
 import { stripeWebhookRoutes } from '../../src/commerce/webhook-routes.ts';
-import { COMMERCE_QUEUE, STRIPE_EVENT_WORKFLOW } from '../../src/commerce/work-contract.ts';
+import { STRIPE_EVENT_WORKFLOW, WORKFLOWS_QUEUE } from '../../src/commerce/work-contract.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createApp } from '../../src/http/app.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
@@ -105,8 +105,8 @@ for (const type of HANDLED_STRIPE_EVENTS) {
     expect(await client.getWorkflow(`stripe:${input.id}`)).toMatchObject({
       status: 'ENQUEUED',
       workflowName: STRIPE_EVENT_WORKFLOW,
-      queueName: COMMERCE_QUEUE,
-      queuePartitionKey: `stripe:${input.id}`,
+      queueName: WORKFLOWS_QUEUE,
+      queuePartitionKey: undefined,
       input: [ref],
     });
     expect((await client.getWorkflow(`stripe:${input.id}`))?.input).toEqual([ref]);
@@ -199,7 +199,8 @@ test('a failing DBOS client returns dependency_unavailable so Stripe retries', a
 });
 
 test('the route declares no Access action and needs no bearer token', () => {
-  expect(actionCatalogue(app)).toEqual([]);
+  expect(actionCatalogue(app)).toEqual(actionCatalogue(createApp({ pool })));
+  expect(actionCatalogue(app).size).toBe(0);
 });
 
 test('classification accepts expanded PaymentIntents and sessions with no PaymentIntent', () => {
