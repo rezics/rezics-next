@@ -1,10 +1,18 @@
 import { expect, test } from 'bun:test';
-import { compileText, parseText, positiveText, TEXT_LIMITS, TextSyntaxError } from '../../src/search/text.ts';
+import {
+  compileText,
+  parseText,
+  positiveText,
+  TEXT_LIMITS,
+  TextSyntaxError,
+  type TextNode,
+} from '../../src/search/text.ts';
 
-const term = (value: string) => ({ kind: 'term', value });
-const and = (...children: unknown[]) => ({ kind: 'and', children });
-const or = (...children: unknown[]) => ({ kind: 'or', children });
-const not = (child: unknown) => ({ kind: 'not', child });
+const term = (value: string): TextNode => ({ kind: 'term', value });
+const phrase = (value: string): TextNode => ({ kind: 'phrase', value });
+const and = (...children: TextNode[]): TextNode => ({ kind: 'and', children });
+const or = (...children: TextNode[]): TextNode => ({ kind: 'or', children });
+const not = (child: TextNode): TextNode => ({ kind: 'not', child });
 
 function failure(input: string): TextSyntaxError {
   try {
@@ -21,7 +29,7 @@ test('adjacent terms are AND, bar is OR, minus is NOT, quotes are phrases, and N
   expect(parseText('a b | c')).toEqual(or(and(term('a'), term('b')), term('c')));
   expect(parseText('a -b')).toEqual(and(term('a'), not(term('b'))));
   expect(parseText('"禁書 目録" | -(a | b) c')).toEqual(
-    or({ kind: 'phrase', value: '禁書 目録' }, and(not(or(term('a'), term('b'))), term('c'))),
+    or(phrase('禁書 目録'), and(not(or(term('a'), term('b'))), term('c'))),
   );
   expect(parseText('  single  ')).toEqual(term('single'));
   expect(parseText('foo-bar')).toEqual(term('foo-bar'));
@@ -34,7 +42,7 @@ test('backslash escapes only the six syntax characters', () => {
   expect(parseText('\\"quoted\\" \\-minus \\| \\( \\) \\\\')).toEqual(
     and(term('"quoted"'), term('-minus'), term('|'), term('('), term(')'), term('\\')),
   );
-  expect(parseText('"say \\"hi\\""')).toEqual({ kind: 'phrase', value: 'say "hi"' });
+  expect(parseText('"say \\"hi\\""')).toEqual(phrase('say "hi"'));
   for (const input of ['\\x', 'a\\', '\\n', '"\\a"']) expect(failure(input).code).toBe('unsupported');
 });
 
