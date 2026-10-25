@@ -1,6 +1,6 @@
 import { expect, spyOn, test } from 'bun:test';
 import { checkBatchWrite, type BatchCommand, type BatchReference } from '@rezics/definitions/bulk';
-import type { CoverCredit, CoverProvenance } from '@rezics/definitions/media-import';
+import type { CoverCredit, CoverProvenance, MediaImportRequest } from '@rezics/definitions/media-import';
 import * as fs from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
 import * as childProcess from 'node:child_process';
@@ -319,7 +319,13 @@ test('Open Library distinguishes edition bootstrap and actual independent unknow
   expect(final.accepted[field.command]).not.toHaveProperty('rights');
   const command = final.accepted[field.command]!;
   if (command.op !== 'propose') throw new Error('Expected cover proposal');
-  expect(JSON.stringify(command.statement.references)).toContain(JSON.stringify(sourceUrl));
+  const request = pointer(output.result, cover.mediaImportRequest!) as Omit<MediaImportRequest, 'containerId'>;
+  expect(cover.value).toBe(`${cover.mediaImportRequest}/sourceUrl`);
+  expect(request.sourceUrl).toBe(sourceUrl);
+  expect(request.credit).toEqual(credit);
+  expect(request.provenance).toEqual(provenance);
+  expect(request.provenance.references).toHaveLength(1);
+  recordCitation(request.provenance.references[0]!, record);
   // Content's API acceptance, not this pure suite, proves upload/re-encoding.
 });
 

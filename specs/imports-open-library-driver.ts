@@ -98,6 +98,8 @@ export interface OpenLibraryDriver {
       group: string;
       /** Pointer to the unchanged structured CoverCredit, not a display string. */
       credit?: string;
+      /** Pointer to the actual deferred cover asset or complete MediaImportRequest, never synthesized. */
+      mediaImportRequest?: string;
       provenance?: string;
       role?: string;
       takedownEligible?: string;
