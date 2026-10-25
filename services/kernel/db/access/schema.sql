@@ -143,8 +143,7 @@ BEGIN
        OR (OLD.revoked_at IS NOT NULL AND ROW(NEW.revoked_at, NEW.valid) IS DISTINCT FROM ROW(OLD.revoked_at, OLD.valid))
        OR (OLD.creator_principal_id IS NOT NULL AND NEW.revoked_at IS NULL AND NEW.valid IS DISTINCT FROM OLD.valid)
        OR (OLD.revoked_at IS NULL AND NEW.revoked_at IS NOT NULL
-           AND (NEW.revoked_at IS DISTINCT FROM transaction_timestamp()
-                OR NEW.valid IS DISTINCT FROM OLD.valid * tstzrange(NULL, transaction_timestamp(), '[)'))) THEN
+           AND NEW.valid IS DISTINCT FROM OLD.valid * tstzrange(NULL, NEW.revoked_at, '[)')) THEN
       RAISE EXCEPTION 'Assignment identity and revocation are immutable' USING ERRCODE = '23514';
     END IF;
   END IF;

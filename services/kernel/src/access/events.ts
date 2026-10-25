@@ -106,6 +106,7 @@ export const ACCESS_EVENTS = {
   'com.rezics.access.role-grant.change.v1': roleGrant,
   'com.rezics.access.role-grant.revoke.v1': roleGrant,
   'com.rezics.access.assignment.create.v1': assignment,
+  'com.rezics.access.assignment.revoke.v1': assignment,
   'com.rezics.access.governance.bootstrapped.v1': Type.Object(
     {
       accountId: Type.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' }),

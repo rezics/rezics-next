@@ -283,6 +283,9 @@ test('real access commands cover every registered event and the log reader accep
       key: key(),
     }),
   );
+  await step('assignment revoke', async () =>
+    delegations.revoke(await grantContext(), { principalId: governor.accountId, requestId, key: key() }),
+  );
   await step('standing parent', async () => {
     const live = await governorRequest();
     const authority = await accessCommandAuthorization(
