@@ -3,20 +3,81 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair } from 'jose';
+import { authRequest } from '../src/session/routes.ts';
+import { prepareSession } from '../src/session/request.ts';
+import { mediaRequest } from '../src/media/index.ts';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
 
 const app = join(import.meta.dir, '..');
-const clientKeys = await generateKeyPair('ES256', { extractable: true });
-const clientJwk = { ...(await exportJWK(clientKeys.privateKey)), alg: 'ES256', kid: 'request-cost' };
+const cookieId = 'a'.repeat(43);
+const keyPair = await generateKeyPair('ES256', { extractable: true });
+const clientJwk = { ...(await exportJWK(keyPair.privateKey)), alg: 'ES256', kid: 'request-cost' };
 const subjectId = (fixtures.subjects[0] as { id: string }).id;
 const fakeKernel = createFakeKernelFetch(fixtures);
 const kernelCalls: string[] = [];
+const authCalls: string[] = [];
+let subjectSize = 1;
 const kernel = Bun.serve({
   port: 0,
   hostname: '127.0.0.1',
-  fetch(request) {
+  async fetch(request) {
     const url = new URL(request.url);
+    if (url.pathname === '/auth/.well-known/openid-configuration') {
+      authCalls.push(url.pathname);
+      return Response.json({
+        issuer: `${url.origin}/auth`,
+        authorization_endpoint: `${url.origin}/auth/authorize`,
+        token_endpoint: `${url.origin}/auth/token`,
+        jwks_uri: `${url.origin}/auth/jwks`,
+        revocation_endpoint: `${url.origin}/auth/revoke`,
+        end_session_endpoint: `${url.origin}/auth/logout`,
+        response_types_supported: ['code'],
+        code_challenge_methods_supported: ['S256'],
+        id_token_signing_alg_values_supported: ['ES256'],
+        token_endpoint_auth_methods_supported: ['private_key_jwt'],
+        token_endpoint_auth_signing_alg_values_supported: ['ES256'],
+      });
+    }
+    if (url.pathname === '/auth/jwks') {
+      authCalls.push(url.pathname);
+      return Response.json({ keys: [] });
+    }
+    if (url.pathname.startsWith('/auth/')) {
+      authCalls.push(url.pathname);
+      return new Response(null, { status: 200 });
+    }
+    if (url.pathname === `/v1/subjects/${subjectId}`) {
+      kernelCalls.push(`${request.method} ${url.pathname}${url.search}`);
+      const response = await fakeKernel(request);
+      const body = (await response.json()) as Record<string, any>;
+      const subject = body.subject ?? body;
+      const each = Math.max(1, Math.floor(subjectSize / 4));
+      subject.labels = {
+        ...Object.fromEntries(Array.from({ length: each }, (_, i) => [`x${i}`, `Label ${i}`])),
+      };
+      subject.aliases = { en: Array.from({ length: subjectSize === 1 ? 0 : each }, (_, i) => `Alias ${i}`) };
+      subject.statements = Object.fromEntries(
+        Array.from({ length: subjectSize === 1 ? 0 : each }, (_, i) => [
+          `property-${i}`,
+          [
+            {
+              id: `statement-${i}`,
+              rank: 'normal',
+              property: { id: `property-${i}`, data_type: 'string' },
+              value: { type: 'value', content: `value-${i}` },
+              qualifiers: [],
+              references: [],
+            },
+          ],
+        ]),
+      );
+      subject.related_subjects = Array.from({ length: subjectSize === 1 ? 0 : subjectSize - each * 3 }, (_, i) => ({
+        id: `related-${i}`,
+        labels: { en: `Related ${i}` },
+      }));
+      return Response.json(body);
+    }
     kernelCalls.push(`${request.method} ${url.pathname}${url.search}`);
     return fakeKernel(request);
   },
@@ -32,7 +93,6 @@ function freePort(): Promise<number> {
     });
   });
 }
-
 let child: ChildProcess | undefined;
 let started: Promise<string> | undefined;
 function site(): Promise<string> {
@@ -47,24 +107,24 @@ function site(): Promise<string> {
       env: {
         ...process.env,
         KERNEL_ORIGIN: kernel.url.origin,
-        AUTH_ISSUER: 'https://auth.invalid',
+        AUTH_ISSUER: `${kernel.url.origin}/auth`,
         WEBSITE_CLIENT_ID: 'rezics-website',
         WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
         API_RESOURCE: 'https://api.rezics.test',
-        WEBSITE_SCOPES: 'media:create media:read_reservation media:read media:complete media:erase',
+        WEBSITE_SCOPES: 'media:create media:read media:complete media:erase',
       },
     });
     child.stdout!.on('data', keep);
     child.stderr!.on('data', keep);
-    const origin = `http://127.0.0.1:${port}`;
-    const deadline = Date.now() + 150_000;
+    const origin = `http://127.0.0.1:${port}`,
+      deadline = Date.now() + 150_000;
     for (;;) {
       if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
       try {
         if ((await fetch(`${origin}/en/`, { redirect: 'manual' })).status < 500) return origin;
       } catch {}
-      if (Date.now() > deadline) throw new Error(`dev server did not serve /en/ in time:\n${output}`);
-      await Bun.sleep(500);
+      if (Date.now() > deadline) throw new Error(`dev server did not start:\n${output}`);
+      await Bun.sleep(250);
     }
   })();
   return started;
@@ -78,32 +138,308 @@ afterAll(() => {
     } catch {}
 });
 
-for (const size of [1, 8, 64]) {
-  test(`subject page stays within its bound as s grows (${size})`, async () => {
-    const origin = await site();
+test('locale resolution stays within its bound as s grows', async () => {
+  const origin = await site();
+  for (const s of [1, 8, 64]) {
+    subjectSize = s;
+    kernelCalls.length = 0;
+    authCalls.length = 0;
+    const response = await fetch(`${origin}/`, { redirect: 'manual', headers: { 'accept-language': 'en' } });
+    expect(response.status).toBe(302);
+    expect(kernelCalls).toEqual([]);
+    expect(authCalls).toEqual([]);
+  }
+}, 300_000);
+test('home page stays within its bound as s grows', async () => {
+  const origin = await site();
+  for (const s of [1, 8, 64]) {
+    subjectSize = s;
+    kernelCalls.length = 0;
+    authCalls.length = 0;
+    const response = await fetch(`${origin}/en/`);
+    expect(response.status).toBe(200);
+    expect(kernelCalls).toEqual([]);
+    expect(authCalls).toEqual([]);
+  }
+}, 300_000);
+test('subject page stays within its bound as s grows', async () => {
+  const origin = await site();
+  // The development Worker hides its workerd-bound SESSIONS binding, so its page D count is derived from the route.
+  for (const s of [1, 8, 64]) {
+    subjectSize = s;
     kernelCalls.length = 0;
     const response = await fetch(`${origin}/en/subjects/${subjectId}`);
     expect(response.status).toBe(200);
     expect(kernelCalls).toEqual([`GET /v1/subjects/${subjectId}`]);
-  }, 300_000);
-}
+  }
+}, 300_000);
 
-for (const size of [1, 8, 64]) {
-  test(`home page stays within its bound as s grows (${size})`, async () => {
-    const origin = await site();
-    kernelCalls.length = 0;
-    const response = await fetch(`${origin}/en/`);
-    expect(response.status).toBe(200);
-    expect(kernelCalls).toEqual([]);
-  }, 300_000);
+type Counts = {
+  idFromName: number;
+  get: number;
+  credential: number;
+  signedIn: number;
+  create: number;
+  takeLogin: number;
+  end: number;
+  kernel: number;
+  r2get: number;
+  r2head: number;
+  r2put: number;
+  r2delete: number;
+  r2list: number;
+  auth: number;
+};
+function harness(
+  record: any = {
+    kind: 'session',
+    subject: 'person',
+    accessToken: 'access',
+    accessExpiresAt: Date.now() + 600_000,
+    refreshToken: 'refresh',
+    idToken: 'id-token',
+    expiresAt: Date.now() + 600_000,
+  },
+) {
+  const counts: Counts = {
+    idFromName: 0,
+    get: 0,
+    credential: 0,
+    signedIn: 0,
+    create: 0,
+    takeLogin: 0,
+    end: 0,
+    kernel: 0,
+    r2get: 0,
+    r2head: 0,
+    r2put: 0,
+    r2delete: 0,
+    r2list: 0,
+    auth: 0,
+  };
+  const stub = {
+    async credential() {
+      counts.credential++;
+      return record ? { status: 'active', accessToken: record.accessToken } : { status: 'absent' };
+    },
+    async signedIn() {
+      counts.signedIn++;
+      return Boolean(record);
+    },
+    async create(value: any) {
+      counts.create++;
+      record = value;
+    },
+    async takeLogin() {
+      counts.takeLogin++;
+      const v = record?.kind === 'login' ? record : undefined;
+      record = undefined;
+      return v;
+    },
+    async end() {
+      counts.end++;
+      const v = record?.idToken;
+      record = undefined;
+      return v;
+    },
+  };
+  const SESSIONS = {
+    idFromName(_id: string) {
+      counts.idFromName++;
+      return _id;
+    },
+    get(_id: string) {
+      counts.get++;
+      return stub;
+    },
+  } as any;
+  const env: any = {
+    SESSIONS,
+    AUTH_ISSUER: `${kernel.url.origin}/auth`,
+    API_RESOURCE: 'https://api.rezics.test',
+    WEBSITE_SCOPES: 'media:read media:complete',
+    WEBSITE_CLIENT_ID: 'rezics-website',
+    WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
+    KERNEL_ORIGIN: kernel.url.origin,
+  };
+  const media = {
+    async get(_key: string) {
+      counts.r2get++;
+      return {
+        body: new ReadableStream({
+          start(c) {
+            c.enqueue(new Uint8Array([1, 2, 3]));
+            c.close();
+          },
+        }),
+        size: 3,
+        httpMetadata: { contentType: 'image/png' },
+      };
+    },
+    async head(_key: string) {
+      counts.r2head++;
+      return { size: 3, httpMetadata: { contentType: 'image/png' } };
+    },
+    async put(_key: string, body: any) {
+      counts.r2put++;
+      if (body instanceof ReadableStream) await new Response(body).arrayBuffer();
+      return {};
+    },
+    async delete() {
+      counts.r2delete++;
+    },
+    async list() {
+      counts.r2list++;
+      return { objects: [] };
+    },
+  };
+  env.MEDIA = media;
+  return { counts, env };
 }
+const snapshot = (c: Counts) => ({
+  D: c.credential + c.signedIn + c.create + c.takeLogin + c.end,
+  K: c.kernel,
+  R: c.r2get + c.r2head + c.r2put + c.r2delete + c.r2list,
+  A: c.auth,
+});
+const expectBinding = (c: Counts, idFromName: number, get: number) => {
+  expect({ idFromName: c.idFromName, get: c.get }).toEqual({ idFromName, get });
+};
 
-for (const size of [1, 8, 64]) {
-  test(`download stays within its bound as s grows (${size})`, async () => {
-    const origin = await site();
-    kernelCalls.length = 0;
-    const response = await fetch(`${origin}/media/${subjectId}/original`, { redirect: 'manual' });
-    expect(response.status).toBe(404);
-    expect(kernelCalls).toEqual([`GET /v1/media/${subjectId}:authorizeDownload?variant=original`]);
-  }, 300_000);
-}
+test('credential resolution stays within its bound as s grows', async () => {
+  for (const s of [1, 8, 64]) {
+    const { counts, env } = harness();
+    const request = new Request('https://site.test/media/id/original', {
+      headers: { cookie: `__Host-rezics_session=${cookieId}` },
+    });
+    await prepareSession(request, env);
+    expect(snapshot(counts)).toEqual({ D: 1, K: 0, R: 0, A: 0 });
+    expectBinding(counts, 1, 1);
+  }
+});
+test('sign-in stays within its bound as s grows', async () => {
+  for (const s of [1, 8, 64]) {
+    authCalls.length = 0;
+    const { counts, env } = harness();
+    env.WEBSITE_CLIENT_ID = `rezics-cost-${s}`;
+    const res = await authRequest(new Request('https://site.test/auth/sign-in'), env);
+    expect(res.status).toBe(302);
+    counts.auth = authCalls.length;
+    expect(snapshot(counts)).toEqual({ D: 1, K: 0, R: 0, A: 1 });
+    expectBinding(counts, 1, 1);
+  }
+});
+test('callback stays within its bound as s grows', async () => {
+  for (const s of [1, 8, 64]) {
+    const { counts, env } = harness({
+      kind: 'login',
+      state: 'expected',
+      nonce: 'nonce',
+      verifier: 'verifier',
+      returnTo: '/',
+      expiresAt: Date.now() + 60_000,
+    });
+    const res = await authRequest(
+      new Request('https://site.test/auth/callback?state=wrong', {
+        headers: { cookie: `__Host-rezics_login=${cookieId}` },
+      }),
+      env,
+    );
+    expect(res.status).toBe(400);
+    expect(snapshot(counts)).toEqual({ D: 1, K: 0, R: 0, A: 0 });
+    expectBinding(counts, 1, 1);
+  }
+});
+test('sign-out stays within its bound as s grows', async () => {
+  for (const s of [1, 8, 64]) {
+    authCalls.length = 0;
+    const { counts, env } = harness();
+    env.WEBSITE_CLIENT_ID = `rezics-signout-${s}`;
+    const res = await authRequest(
+      new Request('https://site.test/auth/sign-out', {
+        method: 'POST',
+        headers: { cookie: `__Host-rezics_session=${cookieId}` },
+      }),
+      env,
+    );
+    expect([302, 303]).toContain(res.status);
+    counts.auth = authCalls.length;
+    expect(snapshot(counts)).toEqual({ D: 1, K: 0, R: 0, A: 1 });
+    expectBinding(counts, 1, 1);
+  }
+});
+test('upload stays within its bound as s grows', async () => {
+  // The request body sizes vary while the reserved-state rejection stays at one kernel request and no R2 calls.
+  for (const s of [1, 8, 64])
+    for (const size of [64 * 1024, 512 * 1024, 4 * 1024 * 1024]) {
+      const { counts, env } = harness();
+      const oldFetch = globalThis.fetch;
+      globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+        counts.kernel++;
+        const url = String(input);
+        if (url.endsWith('/v1/media/id'))
+          return Response.json({
+            media: {
+              id: 'id',
+              state: 'uploaded',
+              byteCount: size,
+              mediaType: 'application/octet-stream',
+              sha256: null,
+              containerId: 'c',
+              uploaderId: 'u',
+              key: 'key',
+              reservationRequestId: 'req',
+            },
+          });
+        return Response.json({ media: { id: 'id', state: 'uploaded' } });
+      };
+      try {
+        const body = new ReadableStream<Uint8Array>({
+          start(c) {
+            for (let n = 0; n < size; n += 65536) c.enqueue(new Uint8Array(Math.min(65536, size - n)));
+            c.close();
+          },
+        });
+        const res = await mediaRequest(
+          new Request('https://site.test/media/id', {
+            method: 'PUT',
+            headers: { 'content-type': 'application/octet-stream', 'content-length': String(size) },
+            body,
+            duplex: 'half',
+          } as RequestInit),
+          env,
+        );
+        expect(res.status).toBe(409);
+        expect(snapshot(counts)).toEqual({ D: 0, K: 1, R: 0, A: 0 });
+      } finally {
+        globalThis.fetch = oldFetch;
+      }
+    }
+});
+test('download stays within its bound as s grows', async () => {
+  for (const s of [1, 8, 64])
+    for (const size of [64 * 1024, 512 * 1024, 4 * 1024 * 1024]) {
+      const { counts, env } = harness();
+      const oldFetch = globalThis.fetch;
+      globalThis.fetch = async () => {
+        counts.kernel++;
+        return Response.json({
+          allowed: true,
+          key: 'key',
+          sha256: 'abc',
+          mediaType: 'image/png',
+          byteCount: size,
+          publicCache: false,
+          cacheControl: 'private, no-store',
+        });
+      };
+      try {
+        const res = await mediaRequest(new Request('https://site.test/media/id/original'), env);
+        expect(res.status).toBe(200);
+        await res.arrayBuffer();
+        expect(snapshot(counts)).toEqual({ D: 0, K: 1, R: 2, A: 0 });
+      } finally {
+        globalThis.fetch = oldFetch;
+      }
+    }
+});
