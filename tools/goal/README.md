@@ -146,9 +146,11 @@ using `worker-result.schema.json`, including any concrete blocker and the approa
 
 The tracked repository gate is `bun tools/goal/scripts/gate.ts`. It runs `bun install --frozen-lockfile` followed by
 `bun run check` from an isolated checkout. Task acceptance commands are saved with the task for promotion. Integration
-rebases onto the integration branch, checks declared paths and fast-forwards that branch; it does not run gates or
-move `main`. Other repositories can override the local `gate` command. Gates and dependency installation never run in
-the main checkout or the worker's checkout.
+rebases onto the integration branch, checks declared paths, formats changes and fast-forwards that branch; it does not
+run task acceptance gates or move `main`. The `integrationChecks` setting runs commands in order after formatting and
+scope validation; by default it installs dependencies and constructs the kernel OpenAPI document. Set it to `[]` to
+disable the check. Other repositories can override the local `gate` command. Gates and dependency installation never run
+in the main checkout or the worker's checkout.
 
 New tasks and retries branch from the integration branch. If it does not exist, the controller creates it from `main`.
 Held tasks become ready when each `after:` dependency is integrated or merged. Integrated tasks remain in flight until

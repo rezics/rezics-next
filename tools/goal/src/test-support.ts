@@ -88,6 +88,7 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:120,cached
   const pool = { ...fixturePool(join(state, 'account')), command };
   writeFileSync(join(state, 'local.json'), JSON.stringify({ version: 1, terminationGraceMs: 1000, pools: [pool] }));
   const settings = loadSettings({ cwd: root, env: {} });
+  settings.integrationChecks = [];
   mkdirSync(settings.stateDirectory, { recursive: true });
   const store = new WorkerStore(openDb(join(settings.stateDirectory, 'goal.sqlite'))), tasks = new WorkerTasks(settings, store);
   const briefFile = join(state, 'source.md'); writeFileSync(briefFile, markdown);

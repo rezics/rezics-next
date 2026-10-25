@@ -3,6 +3,10 @@
   "mainBranch": "main",
   "branchPrefix": "worker/",
   "terminationGraceMs": 1500,
+  "integrationChecks": [
+    ["bun", "install"],
+    ["bun", "run", "--cwd", "services/kernel", "openapi"]
+  ],
   "derivedFiles": [
     {
       "path": "bun.lock",

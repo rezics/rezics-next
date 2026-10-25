@@ -22,6 +22,7 @@ import type { IntegrationRuntime } from './integration-cli.ts';
 import type { ManagerServices, ManagerSpec } from './managers.ts';
 
 export type SettingsOptions = { cwd?: string; env?: NodeJS.ProcessEnv; localFile?: string };
+export type ConfiguredSettings = Settings & { integrationChecks: string[][] };
 export type DerivedFile = { path: string; stage: 'integration' | 'promotion'; command: string[] };
 export function readDerivedFiles(value: unknown = defaults.derivedFiles): DerivedFile[] {
   if (!Array.isArray(value)) throw new Error('derivedFiles must be an array');
@@ -34,6 +35,14 @@ export function readDerivedFiles(value: unknown = defaults.derivedFiles): Derive
     if (!Array.isArray(file.command) || !file.command.length || file.command.some(part => typeof part !== 'string' || !part))
       throw new Error(`derivedFiles[${index}].command must be a command array`);
     return { path, stage: file.stage, command: [...file.command] };
+  });
+}
+export function readIntegrationChecks(value: unknown = defaults.integrationChecks): string[][] {
+  if (!Array.isArray(value)) throw new Error('integrationChecks must be an array');
+  return value.map((command, index) => {
+    if (!Array.isArray(command) || !command.length || command.some(part => typeof part !== 'string' || !part))
+      throw new Error(`integrationChecks[${index}] must be a command array`);
+    return [...command] as string[];
   });
 }
 const packageDerivedFiles = readDerivedFiles();
@@ -62,14 +71,14 @@ export function mainCheckout(cwd = process.cwd()): string {
 }
 
 /** Package defaults < untracked local settings < explicit environment paths. No account fallback is implicit. */
-export function loadSettings(options: SettingsOptions = {}): Settings {
+export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings {
   const env = options.env ?? process.env;
   const cwd = resolve(options.cwd ?? process.cwd());
   const initialMain = resolve(cwd, env.GOAL_MAIN_CHECKOUT || mainCheckout(cwd));
   const localFile = resolve(cwd, options.localFile ?? env.GOAL_LOCAL_CONFIG ?? join(initialMain, '.temp/goal/local.json'));
   const local = existsSync(localFile) ? object(JSON.parse(readFileSync(localFile, 'utf8')), 'local settings') : {};
   keys(local, ['version', 'mainCheckout', 'stateDirectory', 'worktreeRoot', 'mainBranch', 'integrationBranch', 'promotionParallelism', 'branchPrefix',
-    'terminationGraceMs', 'gate', 'formatCommand', 'codex', 'routingFile', 'riskAreasFile', 'integration', 'pools'], 'settings');
+    'terminationGraceMs', 'gate', 'formatCommand', 'integrationChecks', 'codex', 'routingFile', 'riskAreasFile', 'integration', 'pools'], 'settings');
   if (local.version !== undefined && local.version !== 1) throw new Error('unsupported local settings version');
   const main = resolve(dirname(localFile), env.GOAL_MAIN_CHECKOUT ?? String(local.mainCheckout ?? initialMain));
   // Keeping credentials and account policy untracked is checked even for an explicitly selected file.
@@ -86,6 +95,7 @@ export function loadSettings(options: SettingsOptions = {}): Settings {
   const formatCommand = local.formatCommand ?? [resolve(main, 'node_modules/.bin/oxfmt')];
   if (!Array.isArray(formatCommand) || !formatCommand.length || formatCommand.some(item => typeof item !== 'string' || !item))
     throw new Error('formatCommand must be a command array');
+  const integrationChecks = readIntegrationChecks(local.integrationChecks === undefined ? defaults.integrationChecks : local.integrationChecks);
   const codex: Record<string, unknown> = { ...defaults.codex, ...object(local.codex ?? {}, 'codex') };
   keys(codex, Object.keys(defaults.codex), 'codex');
   const compact = { ...defaults.codex.compactTokens, ...object(codex.compactTokens, 'compactTokens') };
@@ -121,7 +131,8 @@ export function loadSettings(options: SettingsOptions = {}): Settings {
     integrationBranch: text(local.integrationBranch ?? 'dev', 'integrationBranch'),
     promotionParallelism: positive(local.promotionParallelism ?? 4, 'promotionParallelism'),
     routingFile: path(local.routingFile, join(import.meta.dir, '../routing.json')),
-    gate: gate as string[], formatCommand: formatCommand as string[], riskAreasFile: path(local.riskAreasFile, join(import.meta.dir, '../risk-areas.json')), pools,
+    gate: gate as string[], formatCommand: formatCommand as string[], integrationChecks,
+    riskAreasFile: path(local.riskAreasFile, join(import.meta.dir, '../risk-areas.json')), pools,
     terminationGraceMs: positive(local.terminationGraceMs ?? defaults.terminationGraceMs, 'terminationGraceMs', true),
     codex: { serviceTier: text(env.GOAL_CODEX_SERVICE_TIER ?? codex.serviceTier, 'serviceTier'),
       compactTokens: { sol: positive(compact.sol, 'compactTokens.sol'), luna: positive(compact.luna, 'compactTokens.luna') },
@@ -189,6 +200,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   train = new MergeTrain({ mainCheckout: settings.mainCheckout, stateDirectory: settings.stateDirectory,
     worktreeRoot: settings.worktreeRoot, mainBranch: settings.mainBranch, integrationBranch: settings.integrationBranch,
     formatCommand: settings.formatCommand,
+    integrationChecks: (settings as Settings & { integrationChecks?: string[][] }).integrationChecks ?? [],
     queue, fence: store, sink: job,
     derivedFiles: options.train?.derivedFiles ?? packageDerivedFiles,
     promote: () => promote({ settings, job, runGate, derivedFiles: options.train?.derivedFiles ?? packageDerivedFiles,

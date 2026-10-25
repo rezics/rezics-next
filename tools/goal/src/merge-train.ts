@@ -9,10 +9,22 @@ import { StaleAttemptError } from './contracts.ts';
 import type { AttemptFence, AttemptRef, GateOutcome, GateOutcomeSink, GateStage } from './contracts.ts';
 import { SqliteLandingQueue, type LandingEntry } from './land.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
-import { changedFiles, diffLineCount, firstFailure, gateRunner, git, nonGeneratedFiles, outsideScope, type GateRunner } from './merge.ts';
+import { changedFiles, diffLineCount, firstFailure, gateRunner, git, nonGeneratedFiles, outsideScope, type GateResult, type GateRunner } from './merge.ts';
 
 export type DerivedFile = { path: string; stage: 'integration' | 'promotion'; command: string[] };
 const defaultDerivedFiles = defaults.derivedFiles as DerivedFile[];
+
+async function runIntegrationChecks(commands: readonly (readonly string[])[], cwd: string, logPath: string): Promise<GateResult> {
+  const execute = gateRunner(180_000);
+  let output = '';
+  for (const command of commands) {
+    appendFileSync(logPath, `$ ${command.join(' ')} (cwd: ${cwd})\n`);
+    const result = await execute(command, cwd, logPath);
+    output += result.output;
+    if (!result.passed) return { ...result, output: result.output };
+  }
+  return { passed: true, output, timedOut: false };
+}
 
 function derivedForPath(path: string, files: readonly DerivedFile[]): DerivedFile[] {
   return files.filter(file => matchesPath(path, [file.path]));
@@ -116,6 +128,7 @@ export function rebaseOnto(cwd: string, base: string, originalBase: string, logP
 export type TrainOptions = {
   mainCheckout: string; stateDirectory: string; worktreeRoot: string;
   formatCommand?: string[];
+  integrationChecks?: string[][];
   queue: SqliteLandingQueue; fence: AttemptFence; sink: GateOutcomeSink;
   derivedFiles?: DerivedFile[];
   runGate?: GateRunner; gateIdentity?: string; mainBranch?: string; integrationBranch?: string;
@@ -289,6 +302,34 @@ export class MergeTrain {
           }
         }
         const candidate = git(trainTree, 'rev-parse', 'HEAD');
+        const integrationChecks = o.integrationChecks ?? [];
+        if (integratesIntoDev && integrationChecks.length) {
+          stage = 'gate';
+          appendFileSync(logPath, `\nIntegration check on ${candidate}, dev ${base}\n`);
+          const checked = await runIntegrationChecks(integrationChecks, trainTree, logPath);
+          o.fence.assertCurrent(request);
+          if (target() !== base) continue;
+          if (!checked.passed) {
+            result.timedOut = checked.timedOut;
+            result.firstFailure = firstFailure(checked.output);
+            const key = `integration-check:${JSON.stringify(integrationChecks)}`;
+            let baseline = o.queue.baseline(base, key);
+            if (!baseline) {
+              git(trainTree, 'reset', '--hard', base);
+              git(trainTree, 'clean', '-fdx');
+              appendFileSync(logPath, `\nIntegration check baseline on dev ${base}\n`);
+              baseline = await runIntegrationChecks(integrationChecks, trainTree, logPath);
+              o.queue.saveBaseline(base, key, baseline);
+            }
+            o.fence.assertCurrent(request);
+            if (target() !== base) continue;
+            if (baseline.passed) {
+              result.stage = stage;
+              return result;
+            }
+            appendFileSync(logPath, 'dev already fails the integration check\n');
+          }
+        }
         if (!integratesIntoDev) {
           stage = 'gate';
           appendFileSync(logPath, `\nGate on ${candidate}, main ${base}\n`);
