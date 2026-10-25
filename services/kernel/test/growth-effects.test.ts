@@ -13,6 +13,7 @@ const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
 const CREATED = 'com.rezics.subject.created.v1';
 let nextPartition = 3584 + Math.floor(Math.random() * 256);
 const freshPartition = () => nextPartition++;
+let growth: GrowthDatabase;
 let releaseBlocked!: () => void;
 let blockedStarted!: () => void;
 const blocked = new Promise<void>((resolve) => (releaseBlocked = resolve));
@@ -33,10 +34,14 @@ const effects = registerEffects([
   },
 ]);
 
-beforeAll(() => launchWork({ databaseUrl }));
+beforeAll(async () => {
+  growth = await openGrowthDatabase(databaseUrl);
+  await launchWork({ databaseUrl, systemDatabasePool: growth.openPool({ max: 4 }) });
+});
 afterAll(async () => {
   releaseBlocked();
   await shutdownWork();
+  await growth.close();
   await pool.end();
   await admin.end();
 });
@@ -95,48 +100,46 @@ test('effects of one partition start in position order', async () => {
 }, 30_000);
 
 test('Effect enqueue stays within its bound as N grows', async () => {
-  const growth = await openGrowthDatabase(databaseUrl);
   const base = freshPartition();
-  try {
-    await checkGrowth(growth, {
-      name: 'Effect enqueue',
-      bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
-      grow: async (db, scale, previous) => {
-        await seedPartitions(db, base + previous, base + scale);
-        for (let i = previous; i < scale; i++) {
-          const item = envelope(base + i, 1n, `growth-${base + i}`);
-          await enqueueAndWait(item);
-        }
-      },
-      // Awaiting the handle keeps DBOS's background polling outside each measured capture.
-      operation: async (_db, _scale, repetition) => {
-        const partition = freshPartition();
-        const item = envelope(partition, BigInt(repetition + 1), `measured-${partition}`);
+  await checkGrowth(growth, {
+    name: 'Effect enqueue',
+    scales: [1, 4, 16],
+    repetitions: 1,
+    warmups: 0,
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    grow: async (db, scale, previous) => {
+      await seedPartitions(db, base + previous, base + scale);
+      for (let i = previous; i < scale; i++) {
+        const item = envelope(base + i, 1n, `growth-${base + i}`);
         await enqueueAndWait(item);
-      },
-    });
-  } finally {
-    await growth.close();
-  }
+      }
+    },
+    // Awaiting the handle keeps DBOS's background polling outside each measured capture.
+    operation: async (_db, _scale, repetition) => {
+      const partition = freshPartition();
+      const item = envelope(partition, BigInt(repetition + 1), `measured-${partition}`);
+      await enqueueAndWait(item);
+    },
+  });
 }, 120_000);
 
 test('Effect persistence stays within its bound as N grows', async () => {
-  const growth = await openGrowthDatabase(databaseUrl);
-  try {
-    await checkGrowth(growth, {
-      name: 'Effect persistence',
-      bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
-      grow: async (db, scale, previous) => {
-        await seedPartitions(db, 5000 + previous, 5000 + scale);
-      },
-      // The enqueue and awaited handle isolate one workflow's persisted execution and completion.
-      operation: async (_db, _scale, repetition) => {
-        const partition = freshPartition();
-        const item = envelope(partition, BigInt(repetition + 1), `persist-${partition}`);
-        await enqueueAndWait(item);
-      },
-    });
-  } finally {
-    await growth.close();
-  }
+  await checkGrowth(growth, {
+    name: 'Effect persistence',
+    scales: [1, 4, 16],
+    repetitions: 1,
+    warmups: 0,
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    grow: async (_db, scale, previous) => {
+      for (let i = previous; i < scale; i++) {
+        await enqueueAndWait(envelope(freshPartition(), BigInt(i + 1), `persist-grow-${i}`));
+      }
+    },
+    // The enqueue and awaited handle isolate one workflow's persisted execution and completion.
+    operation: async (_db, _scale, repetition) => {
+      const partition = freshPartition();
+      const item = envelope(partition, BigInt(repetition + 1), `persist-${partition}`);
+      await enqueueAndWait(item);
+    },
+  });
 }, 120_000);

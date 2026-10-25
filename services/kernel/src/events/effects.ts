@@ -1,6 +1,7 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
-import type { Pool } from 'pg';
-import { startWorker } from '../worker.ts';
+import pg, { type Pool } from 'pg';
+import { composeWork } from '../work/registry.ts';
+import { createWorkClient } from '../work/client.ts';
 import type { Relay } from './relays.ts';
 import { EVENT_TYPES, readBatch, type CloudEvent, type Envelope } from './log.ts';
 
@@ -14,7 +15,7 @@ export type Effect = {
   run(event: CloudEvent): Promise<void>;
 };
 
-type WorkOptions = { databaseUrl: string; executorId?: string };
+type WorkOptions = { databaseUrl: string; executorId?: string; systemDatabasePool?: Pool };
 
 export function effectWorkflowId(envelope: Envelope, eventSeq: number, name: string): string {
   return `fx:${envelope.epoch}:${envelope.partition}:${envelope.position}:${eventSeq}:${name}`;
@@ -47,32 +48,79 @@ export function registerEffects(effects: Effect[]): { enqueue(envelopes: readonl
 
   return {
     async enqueue(envelopes) {
-      const starts: Promise<unknown>[] = [];
+      const partitions = new Map<
+        number,
+        Array<{ envelope: Envelope; eventSeq: number; event: CloudEvent; effect: Effect }>
+      >();
       for (const envelope of envelopes) {
         for (const [eventSeq, event] of envelope.events.entries()) {
           for (const effect of effects) {
             if (effect.types.includes(event.type)) {
-              starts.push(
-                DBOS.startWorkflow(workflow, {
-                  workflowID: effectWorkflowId(envelope, eventSeq, effect.name),
-                  workflowIDReusePolicy: 'return-existing',
-                  queueName: EFFECTS_QUEUE,
-                })(effect.name, event),
-              );
+              const jobs = partitions.get(envelope.partition) ?? [];
+              jobs.push({ envelope, eventSeq, event, effect });
+              partitions.set(envelope.partition, jobs);
             }
           }
         }
       }
-      await Promise.all(starts);
+      await Promise.all(
+        [...partitions.entries()].map(async ([partition, jobs]) => {
+          jobs.sort((left, right) =>
+            left.envelope.position === right.envelope.position
+              ? left.eventSeq - right.eventSeq
+              : left.envelope.position < right.envelope.position
+                ? -1
+                : 1,
+          );
+          for (const { envelope, eventSeq, event, effect } of jobs) {
+            await DBOS.startWorkflow(workflow, {
+              workflowID: effectWorkflowId(envelope, eventSeq, effect.name),
+              workflowIDReusePolicy: 'return-existing',
+              queueName: EFFECTS_QUEUE,
+              enqueueOptions: { queuePartitionKey: String(partition) },
+            })(effect.name, event);
+          }
+        }),
+      );
     },
   };
 }
 
-let worker: Awaited<ReturnType<typeof startWorker>> | undefined;
+let worker: { stop(): Promise<void> } | undefined;
 
 /** Compatibility for effect callers that registered their functions before launch. */
 export async function launchWork(options: WorkOptions): Promise<void> {
-  worker = await startWorker({ ...options, poolSize: 10 }, []);
+  const pool = options.systemDatabasePool ?? new pg.Pool({ connectionString: options.databaseUrl, max: 10 });
+  const client = await createWorkClient(options.databaseUrl, pool);
+  let work: Awaited<ReturnType<typeof composeWork>> | undefined;
+  try {
+    work = await composeWork([], {
+      databaseUrl: options.databaseUrl,
+      ...(options.executorId === undefined ? {} : { executorId: options.executorId }),
+      pool,
+      client,
+    });
+    await client.registerQueue(EFFECTS_QUEUE, { partitionConcurrency: 1, minPollingIntervalMs: 10 });
+    await work.launch();
+    worker = {
+      async stop() {
+        try {
+          await work!.shutdown();
+        } finally {
+          await client.close();
+          if (options.systemDatabasePool === undefined) await pool.end();
+        }
+      },
+    };
+  } catch (error) {
+    try {
+      await work?.shutdown();
+    } finally {
+      await client.close();
+      if (options.systemDatabasePool === undefined) await pool.end();
+    }
+    throw error;
+  }
 }
 
 export async function shutdownWork(): Promise<void> {
