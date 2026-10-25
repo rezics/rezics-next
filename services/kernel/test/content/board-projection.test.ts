@@ -44,9 +44,9 @@ async function source(targetBoard = boardId) {
   const command = await runCommand(db.pool, { partition: partitionOf(sourceRoute) }, async (tx, context) => {
     await tx.query(
       `INSERT INTO content.thread
-       (route, thread_id, author_account_id, board_id, title, visibility, security_revision, recorded_transaction_id)
-       VALUES ($1, $2, $3, $4, 'Private title', 'published', 1, $5)`,
-      [sourceRoute, threadId, authorId, targetBoard, context.transactionId],
+       (route, thread_id, author_account_id, board_id, title, visibility, security_revision, recorded_transaction_id, created_at)
+       VALUES ($1, $2, $3, $4, 'Private title', 'published', 1, $5, $6)`,
+      [sourceRoute, threadId, authorId, targetBoard, context.transactionId, createdAt],
     );
     await tx.query(
       `INSERT INTO content.post
