@@ -59,6 +59,7 @@ import bootstrapOwner from './lifecycle-handle-bootstrap-owner.sql';
 export const REGISTRATION_TTL_MS = 30 * 60 * 1000;
 export const HANDLE_REDIRECT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export const LIFECYCLE_ACTIONS: ActionCatalogue = new Map([
+  ['account:read', { anonymous: false }],
   ['account:update', { anonymous: false }],
   ['account:delete', { anonymous: false, replay: 'self-account-read' }],
   ['organization:membership', { anonymous: false }],
@@ -291,7 +292,7 @@ async function grants(
   transactionId: string,
   actions: string[],
 ) {
-  await grantsInsert.run(tx, {
+  return grantsInsert.run(tx, {
     route: accountRoute(accountId),
     account_id: accountId,
     subject_id: subjectId,
@@ -761,7 +762,28 @@ export function createLifecycleInternals(
             transaction_id: transactionId,
           });
           requireAllowed(affected(changed));
+          await grants(tx, input.accountId, input.accountId, '', transactionId, ['account:read']);
           return { accountId: input.accountId };
+        },
+      );
+    },
+    /** Deployment-only upgrade, one supplied account per batch on its own anchor.
+     * Resume with the same account/key after interruption; receipts retain the
+     * result. Supply only accounts needing the upgrade, never enumerate in a
+     * request path. Existing read history, including expired ranges, is final:
+     * the initializer skips that identity/action rather than widening validity.
+     * This installs no principal grant and never changes authentication state.
+     */
+    async installSelfReadGrant(input: LifecycleCommand) {
+      input = { ...input };
+      const route = accountRoute(input.accountId);
+      return execute(
+        { route, id: input.accountId, kind: 'self-read-installed', key: input.key, input: {} },
+        async (tx, transactionId) => {
+          const account = await locked(tx, input.accountId);
+          requireAllowed(account.kind === 'actor' && account.state === 'active' && !account.fenced);
+          const changed = await grants(tx, input.accountId, input.accountId, '', transactionId, ['account:read']);
+          return { accountId: input.accountId, installed: changed.length };
         },
       );
     },
