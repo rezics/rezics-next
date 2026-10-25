@@ -727,7 +727,7 @@ name their test files. Touches specifies independent growth axes and fixed input
 | Access token issuance           | `/token`: native session/user point reads identify the client, then a shared client barrier, exact coverage/reduction checks, `proof` and client lookup. First-party issuance materializes one consent pair. Signing rechecks the singleton generation and seeks at most three live keys; no archive or token-table scan. No refresh-token issuance/rotation endpoint or plugin; `account.refreshToken` is unused. Grow unrelated S and archived K; fix live session, owner, claims, client/scopes and request count.                                                                                                                                                                                                                                                                                                                                                                          | R=O(1), B=O(L), Q=O(1), including barrier locks and signer refresh. Imported-key/claims work and JWKS slots are bounded; refresh-token rotation Q=0.                                                                                                                                                                  | `Access token issuance stays within its bound as S grows`                                                                                             |
 | Live-proof token                | `internal.accessTokenForProof` accepts this instance's immutable native human proof only inside its live `consumeAuthorization` callback (private O(1) identity/scope check; copies/foreign/stale fail before I/O). Shared native client barrier; one source-session PK read, one current Access human/state/fence/epoch point read, exact client/coverage/reduction/consent chain and materialization, ≤3 signer slots. Same `/token` API claims/ES256/JWKS, no delegation; expiry=min(300s, source lifetime). JWT stays in the trusted adapter call and enters installed Access via ordinary authentication; no HTTP route, DBOS/persisted token or effect grant. Grow unrelated accounts and other owners' native histories at 1x/8x/64x within cap64; fix selected neighborhood and one proof/sign operation.                                                                              | R=N+U*t+M; constant statements/rows, indexed blocks O(log R). No session, verification or key-history scan. Bounded claims/ES256 CPU; no wall-clock growth gate.                                                                                                                                                      | `test/growth-session-proof-capability.test.ts`: "checkGrowth live proof signing uses constant native evidence at 1x/8x/64x; copies reject before I/O" |
 | Scheduled maintenance           | One native Auth DBOS schedule/queue in `auth_dbos`, inside the Auth process/database. Each purpose step invokes one indexed primitive: `session_expiry` admission ≤1000, exact singleton/live-slot signing retention CAS (≤3 live slots, ≤1 retired key), and `verification_expiry_idx` admission ≤2000 candidates/≤1000 deletes. No history-draining loop, archive scan, account enumeration or upgrade backfill. Unfinished steps recover natively; successful checkpoints replay their counts. Grow unrelated rows, expired sessions/verifications and archived signing history independently at 1x/8x/64x; measure one fixed admitted durable tick, including native wake/history overhead.                                                                                                                                                                                                | R=N+U*t+M plus Auth operational rows. Per attempt ≤1000 changes per kind, O(B log R) indexed work and bounded statements/native records; registration is O(1). Total backlog cost follows removed changes across separate attempts.                                                                                   | `auth-schedules.test.ts`, `growth-auth-schedules.test.ts`                                                                                             |
-| Signing keys and JWKS           | Singleton generation + exact current/next/retiring kid seeks; sign/JWKS recheck generation. Imported material is cached at most 30s, refreshing generation changes immediately. At most three native ES256 keys; five-minute access/ID maximum + 300s recent-expired logout hint + 30s verifier cache + 60s clock allowance retain keys for 690s. Auth-only `internal.signing` status/stage/rotate/prune use generation CAS and typed `signing_rotation_pending`; occupied slots throttle rotation. Retiring GC deletes one exact hot key, keeping immutable kid/material in cold archive. Upgrade requires stopped old binaries, renames legacy history without iterating K, and refuses startup for 690s when history exists before exact-key adoption. Grow history and unrelated Auth rows at 1x/8x/64x; measure actual loading/signing/refreshed HTTP JWKS with native JOSE verification. | Hot R=O(1), B=O(log R), Q=O(1), output/JOSE work ≤3 keys; no history iteration. Injection ≤3 exact identity seeks; rotation/GC change O(1) slot/generation rows (GC batch B=1).                                                                                                                                       | `test/growth-signing-retention.test.ts`: "signing loading and refreshed JWKS stay bounded as retired history and unrelated Auth rows grow"            |
+| Signing keys and JWKS           | Singleton generation + exact current/next/retiring kid seeks; sign/JWKS recheck generation. Imported material is cached at most 30s, refreshing generation changes immediately. At most three native ES256 keys; five-minute access/ID maximum + 600s recent-session logout hint + 30s verifier cache + 60s clock allowance retain keys for 990s. Auth-only `internal.signing` status/stage/rotate/prune use generation CAS and typed `signing_rotation_pending`; occupied slots throttle rotation. Retiring GC deletes one exact hot key, keeping immutable kid/material in cold archive. Upgrade requires stopped old binaries, renames legacy history without iterating K, and refuses startup for 690s when history exists before exact-key adoption. Grow history and unrelated Auth rows at 1x/8x/64x; measure actual loading/signing/refreshed HTTP JWKS with native JOSE verification. | Hot R=O(1), B=O(log R), Q=O(1), output/JOSE work ≤3 keys; no history iteration. Injection ≤3 exact identity seeks; rotation/GC change O(1) slot/generation rows (GC batch B=1).                                                                                                                                       | `test/growth-signing-retention.test.ts`: "signing loading and refreshed JWKS stay bounded as retired history and unrelated Auth rows grow"            |
 | Native attempt rate limiter     | Installed Better Auth 1.7.12 production native admission uses PostgreSQL customStorage.consume: one atomic upsert by auth_attempt_counter_pkey per charge, returning at most one row across service instances. Common 1x/8x/64x seed grows same-family unrelated counter keys C, owners/credentials, clients/reductions, unrelated and subject session/recovery history and expired verifications R. Capture entire wrong-password (known/missing email), recovery-start and invalid-proof handlers through two fresh instances, including native cold schema metadata; three Origin rejections, twelve charges, shared 429 budgets, generic denials and unchanged epoch floor. No second limiter or request-time history sweep.                                                                                                                                                               | R=O(1), B=O(log C + log R); Q=42 and 1294 examined rows per twelve-charge cohort, including both replicas' cold catalog SQL. Each native charge: Q=1, ≤1 upsert row, B=O(log C). Empty reduction scans cost zero rows/blocks.                                                                                         | `growth-auth-rate.test.ts` (whole handler + native counter)                                                                                           |
 | Password sign-in                | Email: `user_email_key` SELECT + `account_userId_idx`/`credential_owner_unique` SELECT, at most one owner/credential; ID: one credential-owner seek. Native password verification, shared client barrier and exact coverage/reduction/consent probes precede establishment and `proof`. Session INSERT locks the owner and reads/evicts at most cap=64 oldest stored sessions, including expired rows. Grow unrelated A and S; fix owner, credential, client/scopes and own session neighborhood.                                                                                                                                                                                                                                                                                                                                                                                              | R=O(1+cap), B=O((1+cap)L), Q=O(1), cap=64; password work has fixed input size. Legacy owners must finish bounded upgrade pages before establishment.                                                                                                                                                                  | `Password sign-in stays within its bound as A grows`                                                                                                  |
 | Public-key sign-in              | One `auth_public_key_pkey(account_id,kid)` SELECT, local JOSE verification, one `auth_key_assertion_pkey(account_id,jti)` INSERT + user FK. Establishment reads one owner, checks client coverage/reduction/consent under the shared barrier, INSERTs one session with the cap=64 owner lock/oldest-row eviction, then runs `proof`. Grow A, S, P, J; fix owner/kid, assertion size, client/scopes, own sessions and one fresh JTI per attempt.                                                                                                                                                                                                                                                                                                                                                                                                                                                | R=O(1+cap), B=O((1+cap)L), Q=O(1), cap=64; replay denial uses one key read and one conflicting INSERT. No assertion-history scan.                                                                                                                                                                                     | `Public-key sign-in stays within its bound as J grows`                                                                                                |
@@ -956,6 +956,7 @@ uses native `checkGrowth` at 1/8/64 × 500, grows unrelated owners/clients and t
 selected person's other-client/history rows, and retains full SQL/auto_explain
 provenance in `.temp/current-consent-growth.json`. No planner overrides or
 wall-clock growth gate are used.
+
 ## Website client
 
 The website's backend-for-frontend (BFF) is the confidential, first-party OAuth
@@ -979,9 +980,23 @@ await auth.internal.registerWebsiteClient({
   publicJwks: { keys: [websitePublicJwk] }, // public P-256 ES256 keys only
   redirectUris: ['https://rezics.com/auth/callback'],
   postLogoutRedirectUris: ['https://rezics.com/'],
-  scopes: ['openid', 'offline_access', 'media:create', 'media:read', 'media:complete' /* , … */],
+  scopes: [
+    'openid',
+    'offline_access',
+    ...[...mountedWebsiteActions].filter(([, action]) => !action.anonymous).map(([name]) => name),
+  ],
 });
 ```
+
+`mountedWebsiteActions` is the trusted catalogue of mounted site features supplied
+as `siteActions` when composing Auth. It includes `media:complete` and all mounted
+protected site actions, including `account:read` with its self-revoking replay
+formula and admitted `source_fence:read`, `source_fence:takedown` and
+`media:import_from_url` features. Future mounted entries use this same data path.
+Registration supplies no actor, principal or resource grant; a public-read floor
+requires no scope. Production's configured audience, kernel `AUTH_AUDIENCE` and
+the website's `resource` are exactly `https://api.rezics.com`, without a trailing
+slash. Isolated tests use `https://api.rezics.test`.
 
 - The website generates its private P-256 JWK and keeps it as a Worker secret.
   Deployment passes only `{ keys: [public JWK] }`. Each key needs a unique `kid`,
@@ -1100,8 +1115,11 @@ Through the real website handler, one refresh rotation costs 28 statements and
 the measured family's rotated history, the person's other families and other
 people's families grow (`growth-website-refresh.test.ts`). Code exchange,
 refresh, replay and revocation touch the family and token rows by exact key or
-hash and never scan refresh history. Ending a native session still reads that
-session's own token rows by `sessionId`, bounded by one session's rotations.
+hash and never scan refresh history. Session logout does not enumerate token history: the provider's optional
+front/back-channel notification hooks are omitted because this sole native client
+has no such delivery registered. Native RP logout still deletes the actual session
+and expires its cookie. Access-first deletion raises the floor, and native token
+admission requires the same live session; expired physical rows wait for retention.
 
 `internal.pruneExpiredProtocolState(batch)` removes at most one batch (1 through
 1000, default 1000) of expired access tokens, refresh tokens, refresh families,
@@ -1109,10 +1127,32 @@ client assertions and recent logout evidence per invocation. Removing a family
 never revives a token, because the provider refuses tokens of a missing family.
 Each kind uses its expiry index; one invocation stays constant in rows and
 statements as expired and live history grow (`website-protocol-retention.test.ts`).
-The maintenance tick does not call it yet; its step list is fixed by the
-schedule tests, so the Auth host must schedule it separately.
+Register `websiteMaintenanceModule` from `@rezics/auth/website-maintenance` with
+the existing kernel worker. It registers one durable step and one minute schedule
+on the existing `maintenance` queue, with no backfill and no second SDK launch:
+
+```ts
+import { websiteMaintenanceModule } from '@rezics/auth/website-maintenance';
+
+const work = await composeWork([...KERNEL_WORK_MODULES, websiteMaintenanceModule(auth.internal)], workerOptions);
+await work.launch(); // the existing single kernel worker owns launch/shutdown
+```
+
+The trusted port invokes Auth's primitive in its existing process/pool; it is
+never a public endpoint. Each activation handles one batch per kind and yields
+remaining history to later ticks. Only counts enter DBOS, and failures are
+sanitized. `website-maintenance.test.ts` exercises actual dispatch through kernel
+composition, with an isolated migrated database and real DBOS storage.
 
 `website-client.test.ts` covers discovery, registration, code, PKCE, refresh
 rotation and replay with two people. `website-logout.test.ts` covers revocation
 and RP-initiated logout: refused cross-person, hintless, forged and
 unregistered-redirect requests, then a matching hint that ends the real session.
+
+`website-security.test.ts` additionally exercises hostile registration and
+assertions, independent PKCE and client proof failures, restart-safe JTI replay,
+missing consent and Access outages, concurrent code/refresh reuse, rotation with
+revocation, code redemption with logout, native browser confirmation and expired
+recent-session hints, including `pool.max=1`. RFC 7009 revocation of an API JWT
+uses the same native confidential proof admission, then the existing Access floor;
+the adapter reports success only after that floor commits.
