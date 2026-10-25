@@ -7,6 +7,7 @@ import { classifyTask, readRouting, routeTask } from './routing.ts';
 import { choosePool } from './allowance.ts';
 import { readPool, type PoolReader } from './usage.ts';
 import { launch, workerPrompt, type RunningWorker } from './launch.ts';
+import { rebaseOnto } from './merge-train.ts';
 import { terminateProcessGroup } from './process.ts';
 import { readMeasurement, makeRecord } from './records.ts';
 import type { WorkerStore } from './store.ts';
@@ -17,7 +18,7 @@ export function git(cwd: string, args: string[]): string {
   if (result.status !== 0) throw new Error(`git ${args[0]}: ${result.stderr.trim()}`);
   return result.stdout.trimEnd();
 }
-export type RetryOptions = { brief?: string; profile?: Profile; fixRound?: number; consulted?: boolean; escalation?: string; evidence?: string; consultation?: string; excludePools?: string[] };
+export type RetryOptions = { brief?: string; profile?: Profile; fixRound?: number; consulted?: boolean; escalation?: string; evidence?: string; consultation?: string; excludePools?: string[]; conflictFiles?: string[] };
 export class HeldTaskConflictError extends Error {
   constructor(readonly detail: string) { super(detail); this.name = 'HeldTaskConflictError'; }
 }
@@ -119,7 +120,25 @@ export class WorkerTasks {
           current.brief = reshaped.brief; current.briefPath = briefPath; current.taskClass = nextTaskClass;
         });
       } else task = this.store.task(taskId);
-      try { return await this.launcher(this.store, task, next, pool, workerPrompt(task, options.evidence, options.consultation), this.settings.codex); }
+      try {
+        let prompt: string;
+        if (options.escalation === 'rebase-conflict') {
+          const main = git(this.settings.mainCheckout, ['rev-parse', '--verify', `refs/heads/${this.settings.mainBranch}`]);
+          const tip = git(task.worktree, ['rev-parse', 'HEAD']);
+          const originalBase = git(task.worktree, ['merge-base', tip, main]);
+          const rebaseLog = `${next.logPath}.rebase`;
+          mkdirSync(dirname(rebaseLog), { recursive: true });
+          let files: string[] = [];
+          try { rebaseOnto(task.worktree, main, originalBase, rebaseLog); }
+          catch (error) {
+            files = git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z']).split('\0').filter(Boolean);
+            if (!files.length) throw error;
+          }
+          if (!files.length) files = options.conflictFiles ?? [];
+          prompt = workerPrompt(task, options.evidence, options.consultation, files);
+        } else prompt = workerPrompt(task, options.evidence, options.consultation);
+        return await this.launcher(this.store, task, next, pool, prompt, this.settings.codex);
+      }
       catch (error) {
         const failed = this.store.updateAttempt(next, a => {
           a.state = 'exited'; a.endedAt = new Date().toISOString(); a.result = String(error); a.exitCode = -1; a.failureKind = 'tool'; a.after = this.reader(pool);

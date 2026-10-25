@@ -38,7 +38,7 @@ export function workerEnvironment(pool: Pool, extra: NodeJS.ProcessEnv = {}, par
   const key = pool.cli === 'codex' ? 'CODEX_HOME' : pool.cli === 'grok' ? 'GROK_HOME' : pool.cli === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CURSOR_CONFIG_DIR';
   return { ...env, ...extra, [key]: pool.configDirectory };
 }
-export function workerPrompt(task: Task, evidence?: string, consultation?: string): string {
+export function workerPrompt(task: Task, evidence?: string, consultation?: string, resolutionFiles: readonly string[] = []): string {
   return [
     `Work only in ${task.worktree}, on branch ${task.branch}. Read and follow its AGENTS.md.`,
     'Work until every acceptance condition holds. Do not send progress reports. Commit the completed changes on this branch.',
@@ -49,6 +49,7 @@ export function workerPrompt(task: Task, evidence?: string, consultation?: strin
     'The task contract follows:', task.brief.markdown,
     evidence ? `Continue from this evidence bundle:\n${evidence}` : '',
     consultation ? `Read-only consultation:\n${consultation}` : '',
+    resolutionFiles.length ? `The control plane has already started a rebase onto current main in this worktree. Conflicted files: ${resolutionFiles.join(', ')}. Resolve and stage them, then run \`git rebase --continue\` until the rebase completes. Do not start another rebase.` : '',
   ].filter(Boolean).join('\n\n');
 }
 export type RunningWorker = { child: ChildProcess; exited: Promise<{ code: number | null; signal: NodeJS.Signals | null }>; attempt: Attempt };

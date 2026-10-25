@@ -55,6 +55,8 @@ export type GateOutcome = AttemptRef & {
   logPath: string;
   hostMs: number;
   changedFiles: readonly string[];
+  /** Paths left unresolved by a rebase-stage failure. */
+  conflictedFiles?: readonly string[];
   diffLines: number;
   mergedCommit?: string;
 };

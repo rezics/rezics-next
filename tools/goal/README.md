@@ -153,6 +153,8 @@ classification markers. A specification conflict reaches the manager inbox direc
 allowed pool. Repeating the same first assertion after a fix round triggers one read-only Sol `medium` consultation;
 the original profile receives its answer in a fresh session. Scope growth, stalls, failure after consultation and the
 two-fix-round limit reach the owning manager. An early success claim followed by a failed gate is recorded and continued.
+Rebase-stage conflicts with main receive one same-profile resolution attempt after the control plane starts that rebase in
+the task worktree; a second conflict goes to the manager as a specification conflict.
 
 Each attempt's evidence directory contains `contract.md`, `diff.patch`, `failure.json` and `approaches.json`. Diffs
 include commits, tracked edits and untracked files. Raw session logs stay in the runs directory and never enter the

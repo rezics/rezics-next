@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import defaults from '../defaults.json';
 import { StaleAttemptError } from './contracts.ts';
 import type { AttemptFence, GateOutcome, GateOutcomeSink, GateStage } from './contracts.ts';
@@ -16,7 +16,7 @@ function unmergedFiles(cwd: string): string[] {
   return git(cwd, 'diff', '--name-only', '--diff-filter=U', '-z').split('\0').filter(Boolean);
 }
 
-function rebaseOnto(cwd: string, base: string, originalBase: string, logPath: string): void {
+export function rebaseOnto(cwd: string, base: string, originalBase: string, logPath: string): void {
   try {
     git(cwd, '-c', 'rebase.updateRefs=false', 'rebase', '--onto', base, originalBase);
     return;
@@ -25,10 +25,12 @@ function rebaseOnto(cwd: string, base: string, originalBase: string, logPath: st
     const derivedByPath = new Map(derivedFiles.map(file => [file.path, file]));
     for (;;) {
       const conflicts = unmergedFiles(cwd);
-      if (!conflicts.length || conflicts.some(path => !derivedByPath.has(path))) throw rebaseError;
+      if (!conflicts.length) throw rebaseError;
+      const derivedConflicts = conflicts.filter(path => derivedByPath.has(path));
+      if (!derivedConflicts.length) throw rebaseError;
 
-      for (const path of conflicts) git(cwd, 'checkout', '--ours', '--', path);
-      for (const path of conflicts) {
+      for (const path of derivedConflicts) git(cwd, 'checkout', '--ours', '--', path);
+      for (const path of derivedConflicts) {
         const file = derivedByPath.get(path)!;
         if (!file.command.length) throw new Error(`No regeneration command configured for ${path}`);
         const commandCwd = dirname(join(cwd, file.path));
@@ -37,7 +39,8 @@ function rebaseOnto(cwd: string, base: string, originalBase: string, logPath: st
         appendFileSync(logPath, `$ ${file.command.join(' ')} (cwd: ${commandCwd})\n${output}`);
         if (result.status !== 0) throw new Error(`Failed to regenerate ${path}: ${output || result.error?.message || 'command failed'}`);
       }
-      git(cwd, 'add', '--', ...conflicts);
+      git(cwd, 'add', '--', ...derivedConflicts);
+      if (derivedConflicts.length !== conflicts.length) throw rebaseError;
       try {
         git(cwd, '-c', 'core.editor=true', 'rebase', '--continue');
         return;
@@ -108,7 +111,7 @@ export class MergeTrain {
     const result: GateOutcome = { taskId: request.taskId, attempt: request.attempt, passed: false,
       stage: 'setup', logPath, hostMs: 0, changedFiles: [], diffLines: 0 };
     let stage: GateStage = 'setup';
-    const trainTree = join(o.worktreeRoot, `train-${randomUUID()}`);
+    const trainTree = resolve(o.worktreeRoot, `train-${randomUUID()}`);
     let added = false;
     const runGate = o.runGate ?? gateRunner();
     try {
@@ -127,7 +130,7 @@ export class MergeTrain {
       }
       const tip = git(o.mainCheckout, 'rev-parse', '--verify', `${request.branch}^{commit}`);
       const originalBase = git(o.mainCheckout, 'merge-base', tip, main());
-      mkdirSync(o.worktreeRoot, { recursive: true });
+      mkdirSync(resolve(o.worktreeRoot), { recursive: true });
       git(o.mainCheckout, 'worktree', 'add', '--detach', trainTree, tip);
       added = true;
       for (;;) {
@@ -194,6 +197,7 @@ export class MergeTrain {
       const message = String(error);
       appendFileSync(logPath, `${message}\n`);
       result.stage = stage;
+      if (stage === 'rebase' && added) result.conflictedFiles = unmergedFiles(trainTree);
       result.firstFailure = firstFailure(message);
       return result;
     } finally {

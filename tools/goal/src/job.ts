@@ -12,6 +12,19 @@ import { git, HeldTaskConflictError, type WorkerTasks, type RetryOptions } from 
 import type { ManagerEventKind } from './contracts.ts';
 import type { RunningWorker } from './launch.ts';
 
+function rebaseConflictFiles(outcome: GateOutcome): string[] {
+  const files = new Set(outcome.conflictedFiles ?? []);
+  const details = `${outcome.firstFailure?.assertion ?? ''}\n${outcome.firstFailure?.excerpt ?? ''}`;
+  for (const line of details.split(/\r?\n/)) {
+    const conflict = line.match(/\bCONFLICT \([^)]+\):\s*(?:Merge conflict in\s+)?(.+)$/);
+    if (!conflict) continue;
+    const file = conflict[1]!.replace(/\s+(?:deleted|added|modified) in\b.*$/, '').trim();
+    if (file) files.add(file);
+  }
+  if (!files.size) for (const file of outcome.changedFiles) files.add(file);
+  return [...files];
+}
+
 export class WorkerJob implements GateOutcomeSink {
   private readonly pending = new Set<Promise<void>>();
   constructor(readonly tasks: WorkerTasks, readonly landing: LandingQueue, readonly inbox: ManagerInbox,
@@ -160,6 +173,32 @@ export class WorkerJob implements GateOutcomeSink {
           }
         }
         store.putRecord(record); return;
+      }
+      if (outcome.stage === 'rebase') {
+        store.updateAttempt(outcome, a => {
+          a.failure = outcome.firstFailure ?? null;
+          a.approaches.push({ approach: `Attempt ${a.attempt}: ${a.profile.model}/${a.profile.effort}`,
+            result: outcome.firstFailure ? `${outcome.firstFailure.assertion}: ${outcome.firstFailure.excerpt}` : 'Failed at rebase' });
+        });
+        const evidencePath = evidenceBundle(task, store.attempt(outcome));
+        const files = rebaseConflictFiles(outcome);
+        if (attempt.escalation === 'rebase-conflict') {
+          record.escalation = 'spec-conflict';
+          store.updateAttempt(outcome, a => { a.escalation = 'spec-conflict'; });
+          store.updateTask(outcome, t => { t.state = 'stopped'; });
+          const detail = files.length ? `conflicted files: ${files.join(', ')}` : outcome.firstFailure?.assertion ?? 'conflict with current main';
+          const event = { managerId: task.brief.manager, taskId: task.id, kind: 'spec-conflict' as const,
+            summary: `spec-conflict: repeated rebase conflict; ${detail}`.replace(/[\r\n]+/g, ' '), evidencePath };
+          store.event(outcome, 'manager-event', event); this.inbox.deliver(event);
+        } else {
+          record.escalation = 'rebase-conflict';
+          store.updateAttempt(outcome, a => { a.escalation = 'rebase-conflict'; });
+          const options: RetryOptions = { evidence: evidencePath, escalation: 'rebase-conflict',
+            fixRound: attempt.fixRound, conflictFiles: files };
+          action = async () => { store.assertCurrent(outcome); await this.start(task.id, options); };
+        }
+        store.putRecord(record);
+        return;
       }
       const limits = readRouting(this.tasks.settings.routingFile).classes[task.taskClass as Exclude<typeof task.taskClass, 'mechanical'>];
       const failureClass = classifyFailure(outcome, task, attempt, record, limits, this.hasCommit(outcome));
