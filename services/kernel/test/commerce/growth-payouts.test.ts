@@ -6,9 +6,12 @@ import {
   listPayoutStatements,
   readPayoutStatement,
 } from '../../src/commerce/payouts.ts';
+import { readPartition } from '../../src/partition/partition.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { derivedId, newId, partitionOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { encodeCursor } from '../../src/tokens/cursor.ts';
+import type { KeyRing } from '../../src/tokens/seal.ts';
 import {
   checkGrowth,
   openGrowthDatabase,
@@ -32,6 +35,24 @@ const actor: AccountActor = {
   requestedBy: null,
   authnEpoch: 1,
 };
+const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(7)]]) };
+const anchorTransactionIds = Array.from({ length: 8 }, (_, index) => `txn_growth${String(index + 1).padStart(3, '0')}`);
+let partitionEpoch = 1;
+// Same binding and epoch the payout list seals: operation, account, and statement when paging lines.
+function signedCursor(
+  operation: 'payout_statement.list' | 'payout_statement.lines',
+  after: string,
+  statementId?: string,
+) {
+  return encodeCursor(
+    tokens,
+    {
+      operation,
+      parameters: statementId === undefined ? { accountId: creator } : { accountId: creator, statementId },
+    },
+    { epoch: partitionEpoch, after: [after] },
+  );
+}
 const checkAccess = async (client: {
   query: (query: string, values?: unknown[]) => Promise<{ rowCount: number | null }>;
 }) =>
@@ -50,6 +71,36 @@ let populationNumber = 0;
 let listSeededStatementIds: string[] = [];
 function payoutLinesTag(): string {
   return `pg${anchorStatement.replaceAll('-', '').slice(-8)}`;
+}
+async function releaseSeedBulk(database: GrowthDatabase) {
+  // Recorded transactions reject DELETE. Truncate the previous population and restore the anchor rows.
+  const client = await database.admin.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `CREATE TEMP TABLE keep_statement ON COMMIT DROP AS
+       SELECT * FROM commerce.payout_statement WHERE route = $1 AND statement_id = $2`,
+      [hotRoute, anchorStatement],
+    );
+    await client.query(
+      `CREATE TEMP TABLE keep_grant ON COMMIT DROP AS
+       SELECT * FROM access.resource_grant
+       WHERE route = 0 AND resource_id = $1 AND subject_id = $2 AND action = 'payout_statement:list'`,
+      [GLOBAL_CONTEXT, creator],
+    );
+    await client.query(
+      `TRUNCATE commerce.royalty_line, commerce.order_transaction, commerce.purchase_order, commerce.payout_statement,
+              access.resource_grant, core.outbox, core.receipt, editorial.write_basis`,
+    );
+    await client.query('INSERT INTO commerce.payout_statement SELECT * FROM keep_statement');
+    await client.query('INSERT INTO access.resource_grant SELECT * FROM keep_grant');
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 function population(name: string, includeLines: boolean): Population {
   const populationOffset = populationNumber++ * 32_000;
@@ -130,6 +181,7 @@ function population(name: string, includeLines: boolean): Population {
             buyer_account_id: newId(route),
             offer_id: offerId,
             offer_revision: 1,
+            target_subject_id: offerId,
             creator_account_id: creator,
             title: 'Growth book',
             currency: 'usd',
@@ -181,7 +233,8 @@ function population(name: string, includeLines: boolean): Population {
             transaction_id: transactionId,
             epoch: 1,
             position,
-            actor_account_id: creator,
+            principal_id: creator,
+            principal_kind: 'account',
             client_id: 'growth-payout-seed',
             requested_by: null,
           },
@@ -189,7 +242,8 @@ function population(name: string, includeLines: boolean): Population {
         'core.receipt': [
           {
             partition_no: hotPartition,
-            actor_account_id: creator,
+            principal_id: creator,
+            principal_kind: 'account',
             command_kind: 'growth.payout.seed',
             idempotency_key: `payout-seed-${lineTag}-${ordinal}`,
             request_digest: Buffer.alloc(32, 1),
@@ -261,27 +315,30 @@ beforeAll(async () => {
      ON CONFLICT (partition_no) DO NOTHING`,
     [hotPartition],
   );
-  // This paid order and its fixed eight transactions mirror the commerce write projections read by recordOrder.
+  const partition = await readPartition(database.admin, hotPartition);
+  if (!partition) throw new Error('Growth payout partition was not created');
+  partitionEpoch = partition.epoch;
+  // This paid order and its fixed eight transactions mirror the commerce write projections read by recordTransactions.
   await database.admin.query(
     `INSERT INTO commerce.purchase_order
-      (route,order_id,buyer_account_id,offer_id,offer_revision,creator_account_id,title,currency,
+      (route,order_id,buyer_account_id,offer_id,offer_revision,target_subject_id,creator_account_id,title,currency,
        unit_amount_minor,tax_code,royalty_basis_points,settlement,created_at,updated_at,revision,transaction_id,amount_tax_minor)
-     VALUES ($1,$2,$3,$4,1,$5,'Growth book','usd',1000,'txcd_10302000',9000,'paid',
-       '2025-12-01','2025-12-01',1,$6,0)`,
-    [hotRoute, anchorOrder, newId(hotRoute), anchorOffer, creator, newId(hotRoute)],
+     VALUES ($1,$2,$3,$4,1,$5,$6,'Growth book','usd',1000,'txcd_10302000',9000,'paid',
+       '2025-12-01','2025-12-01',1,$7,0)`,
+    [hotRoute, anchorOrder, newId(hotRoute), anchorOffer, newId(hotRoute), creator, newId(hotRoute)],
   );
   await database.admin.query(
     `INSERT INTO commerce.order_transaction
       (route,order_id,balance_transaction_id,kind,source_id,currency,amount_minor,fee_minor,net_minor,
        fee_details,stripe_created,recorded_at,transaction_id)
-     SELECT $1,$2,'txn_growth' || lpad(n::text,3,'0'),'charge','ch_growth','usd',1000,0,1000,'[]'::jsonb,
-       '2025-12-01','2026-01-01',$3 FROM generate_series(1,8) AS n`,
-    [hotRoute, anchorOrder, newId(hotRoute)],
+     SELECT $1,$2,id,'charge','ch_growth','usd',1000,0,1000,'[]'::jsonb,
+       '2025-12-01','2026-01-01',$3 FROM unnest($4::text[]) AS id`,
+    [hotRoute, anchorOrder, newId(hotRoute), anchorTransactionIds],
   );
   const recorded = await createPayouts({
     pool: database.pool,
     clock: () => new Date('2026-01-20T12:00:00Z'),
-  }).recordOrder(anchorOrder, 'growth-payout-anchor-record');
+  }).recordTransactions(anchorOrder, anchorTransactionIds, 'growth-payout-anchor-record');
   if ('changed' in recorded && !recorded.changed)
     throw new Error(`Production royalty anchor was not recorded: ${JSON.stringify(recorded)}`);
   const statement = await database.admin.query(
@@ -311,13 +368,14 @@ test('Royalty computation and payout record stays within its bound as q grows', 
     'Royalty computation and payout record stays within its bound as q grows',
     true,
     async (_growthDb, _scale, repetition) => {
-      await payouts.recordOrder(anchorOrder, `royalty-growth-${repetition}`);
+      await payouts.recordTransactions(anchorOrder, anchorTransactionIds, `royalty-growth-${repetition}`);
     },
   );
   expect(report.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
 }, 90_000);
 
 test('Statement read and list stays within its bound as d grows', async () => {
+  await releaseSeedBulk(db!);
   const report = await grow(
     db!,
     'Statement read and list stays within its bound as d grows',
@@ -326,26 +384,34 @@ test('Statement read and list stays within its bound as d grows', async () => {
       await readPayoutStatement(growthDb.pool, actor, anchorStatement, checkAccess);
       const cursorIndex = Math.min(listSeededStatementIds.length - 1, scale * ordinalsPerScale * 0.75);
       const after = listSeededStatementIds.slice().sort()[cursorIndex] ?? null;
-      return listPayoutStatements(growthDb.pool, actor, checkAccess, { after, limit: 20 });
+      return listPayoutStatements(growthDb.pool, tokens, actor, checkAccess, {
+        cursor: after === null ? null : signedCursor('payout_statement.list', after),
+        limit: 20,
+      });
     },
   );
   expect(report.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
 }, 90_000);
 
 test('Payout lines page stays within its bound as d grows', async () => {
+  await releaseSeedBulk(db!);
   const report = await grow(
     db!,
     'Payout lines page stays within its bound as d grows',
     true,
     async (growthDb, scale) => {
-      const cursor = `txn_${payoutLinesTag()}${String(Math.floor(scale * ordinalsPerScale * 0.75)).padStart(10, '0')}`;
-      return listPayoutLines(growthDb.pool, actor, anchorStatement, checkAccess, { after: cursor, limit: 20 });
+      const after = `txn_${payoutLinesTag()}${String(Math.floor(scale * ordinalsPerScale * 0.75)).padStart(10, '0')}`;
+      return listPayoutLines(growthDb.pool, tokens, actor, anchorStatement, checkAccess, {
+        cursor: signedCursor('payout_statement.lines', after, anchorStatement),
+        limit: 20,
+      });
     },
   );
   expect(report.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
 }, 90_000);
 
 test('Mark paid stays within its bound as q grows', async () => {
+  await releaseSeedBulk(db!);
   const targetIds: string[] = [];
   const recordPayout = createPayouts({ pool: db!.pool, clock: () => new Date('2026-02-20T12:00:00Z') });
   for (let index = 0; index < 18; index++) {
@@ -355,20 +421,21 @@ test('Mark paid stays within its bound as q grows', async () => {
     const transactionId = newId(hotRoute);
     await db!.admin.query(
       `INSERT INTO commerce.purchase_order
-       (route,order_id,buyer_account_id,offer_id,offer_revision,creator_account_id,title,currency,
+       (route,order_id,buyer_account_id,offer_id,offer_revision,target_subject_id,creator_account_id,title,currency,
         unit_amount_minor,tax_code,royalty_basis_points,settlement,created_at,updated_at,revision,transaction_id,amount_tax_minor)
-       VALUES ($1,$2,$3,$4,1,$5,'Payout target','usd',100,'txcd_10302000',9000,'paid',
-        '2025-12-01','2025-12-01',1,$6,0)`,
-      [hotRoute, targetOrder, newId(hotRoute), targetOffer, creator, transactionId],
+       VALUES ($1,$2,$3,$4,1,$5,$6,'Payout target','usd',100,'txcd_10302000',9000,'paid',
+        '2025-12-01','2025-12-01',1,$7,0)`,
+      [hotRoute, targetOrder, newId(hotRoute), targetOffer, newId(hotRoute), creator, transactionId],
     );
+    const balanceTransactionId = `txn_paid${String(index).padStart(3, '0')}`;
     await db!.admin.query(
       `INSERT INTO commerce.order_transaction
        (route,order_id,balance_transaction_id,kind,source_id,currency,amount_minor,fee_minor,net_minor,
         fee_details,stripe_created,recorded_at,transaction_id)
        VALUES ($1,$2,$3,'charge','ch_paid',$4,100,0,100,'[]'::jsonb,'2025-12-01','2026-01-01',$5)`,
-      [hotRoute, targetOrder, `txn_paid${String(index).padStart(3, '0')}`, targetCurrency, transactionId],
+      [hotRoute, targetOrder, balanceTransactionId, targetCurrency, transactionId],
     );
-    const recorded = await recordPayout.recordOrder(targetOrder, `paid-target-${index}`);
+    const recorded = await recordPayout.recordTransactions(targetOrder, [balanceTransactionId], `paid-target-${index}`);
     if ('changed' in recorded && !recorded.changed) throw new Error(`Failed to prepare paid target ${index}`);
     const targetId = derivedId(creator, `2026-02:${targetCurrency}`, hotRoute);
     const target = await db!.admin.query('SELECT 1 FROM commerce.payout_statement WHERE route=$1 AND statement_id=$2', [
