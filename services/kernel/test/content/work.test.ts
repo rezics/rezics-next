@@ -444,6 +444,8 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
       ).toHaveLength(1);
     } finally {
       await running?.stop();
+      // Keep the persistent schedule through kill/restart; remove only our fixture at final teardown.
+      await client.deleteSchedule(CONTENT_COLLECTION_SCHEDULE);
       await client.close();
       await pool.end();
       store.close();
@@ -475,6 +477,8 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
       expect(store.puts).toEqual([]);
     } finally {
       await running?.stop();
+      // Keep the persistent schedule through kill/restart; remove only our fixture at final teardown.
+      await client.deleteSchedule(CONTENT_COLLECTION_SCHEDULE);
       await client.close();
       await pool.end();
       store.close();
@@ -508,9 +512,15 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
       running = await worker(store, systemUrl.href);
       await result(image);
       store.fail(true);
+      // Durable image work outlives the fixture's ten-second authentication admission.
+      const moderator = await system.auth.issue({
+        accountId: system.actors.moderator.actor.accountId,
+        clientId: system.actors.moderator.actor.clientId,
+        scopes: system.actors.moderator.actor.scopes,
+      });
       const erased = await eraseStandaloneMedia(
         { pool: system.database.pool, access: system.access, routeKey: system.routeKey },
-        system.actors.moderator.actor,
+        moderator.actor,
         { mediaId: fixture.mediaId, reason: 'Remove bytes' },
         { requestId: randomUUID(), idempotencyKey: randomUUID(), deadline: Date.now() + 10_000 },
       );
@@ -545,6 +555,8 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
       ).toBe(true);
     } finally {
       await running?.stop();
+      // Keep the persistent schedule through kill/restart; remove only our fixture at final teardown.
+      await client.deleteSchedule(CONTENT_COLLECTION_SCHEDULE);
       await client.close();
       await system.close();
       store.close();
@@ -608,6 +620,8 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
       });
     } finally {
       await running?.stop();
+      // Keep the persistent schedule through kill/restart; remove only our fixture at final teardown.
+      await client.deleteSchedule(CONTENT_COLLECTION_SCHEDULE);
       await client.close();
       await pool.end();
       store.close();
@@ -820,6 +834,8 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
       });
     } finally {
       await running?.stop();
+      // Keep the persistent schedule through kill/restart; remove only our fixture at final teardown.
+      await client.deleteSchedule(CONTENT_COLLECTION_SCHEDULE);
       await client.close();
       consent.stop(true);
       store.close();
@@ -871,6 +887,8 @@ ON CONFLICT (route,media_id) DO UPDATE SET state='uploaded',actual_byte_count=EX
       ).toEqual({ state: 'rejected', collection_pending: true });
     } finally {
       await running?.stop();
+      // Keep the persistent schedule through kill/restart; remove only our fixture at final teardown.
+      await client.deleteSchedule(CONTENT_COLLECTION_SCHEDULE);
       await client.close();
       await pool.end();
       store.close();
