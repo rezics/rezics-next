@@ -403,7 +403,11 @@ test('Facet counts stays within its bound as N grows', async () => {
         expect(response.status).toBe(200);
         const answer = (await response.json()) as {
           total: { value: number; relation: string };
-          facets: { property: string; values: { value: string; count: number; labels: Record<string, string> }[] }[];
+          facets: {
+            property: string;
+            relation: string;
+            values: { value: string; count: number; labels: Record<string, string> }[];
+          }[];
         };
         expect(answer.total).toEqual({ value: 4, relation: 'exact' });
         expect(answer.facets).toEqual([
