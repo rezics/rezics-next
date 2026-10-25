@@ -72,6 +72,7 @@ export function createKernel(dependencies: KernelDependencies) {
   });
   const media = mediaRoutes(content as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
+    clock,
     routeKey: dependencies.routeKey,
     get access() {
       return resolveAccess({ actions: actionCatalogue(granted) });

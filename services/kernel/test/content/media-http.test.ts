@@ -698,3 +698,159 @@ test('reply media rechecks ancestor revision availability and the independently 
   );
   expect((await download(media.id, 'webp-320', 'owner', conditional)).status).toBe(404);
 });
+
+test('cover download inherits its readable subject and current source fence through bounded point reads', async () => {
+  const { tupleRoute } = await import('../../src/content/imported-contract.ts');
+  const { capture, costOf } = await import('../support/growth.ts');
+  const routeKey = new Uint8Array(32).fill(7);
+  const subject = newId(route);
+  const id = newId(route);
+  const source = 'media-http-catalogue';
+  const externalId = 'cover-record';
+  const home = tupleRoute(routeKey, source, externalId);
+  const provenance = {
+    source,
+    external_id: externalId,
+    record_revision: 'edition-1',
+    digest: hash,
+    converter_revision: 'converter-1',
+    field_group: 'cover',
+    references: [
+      { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.test/cover' } }] },
+    ],
+  };
+  // Setup is outside the capture, including unrelated rows in the same homes.
+  const distractors = Array.from({ length: 2048 }, (_, index) => ({
+    route,
+    id: newId(route),
+    external_id: `unrelated-cover-${index}`,
+    home: tupleRoute(routeKey, source, `unrelated-cover-${index}`),
+  }));
+  await db.admin.query(
+    `INSERT INTO semantic.subject(route,subject_id,type,recorded_transaction_id)
+     SELECT route,id,'schema:Book',id FROM jsonb_to_recordset($1::jsonb) AS x(route integer,id uuid)`,
+    [JSON.stringify([{ route, id: subject }, ...distractors])],
+  );
+  await db.admin.query(
+    `INSERT INTO content.source_fences(route,source,external_id,field_group,taken_down,security_revision)
+     SELECT home,$2,external_id,'cover',false,1
+     FROM jsonb_to_recordset($1::jsonb) AS x(home integer,external_id text)`,
+    [JSON.stringify([{ home, external_id: externalId }, ...distractors]), source],
+  );
+  await db.admin.query(
+    `INSERT INTO content.media(route,media_id,container_id,uploader_id,reservation_request_id,purpose,
+      media_type,byte_count,actual_byte_count,sha256,state,key,claimed_at,transaction_id,source_url,credit,provenance)
+     VALUES ($1,$2::uuid,$3,$4,$2::text,'cover','image/png',256,256,$5,'available',$6,NULL,$4,$7,$8,$9)`,
+    [
+      route,
+      id,
+      subject,
+      owner.accountId,
+      hash,
+      `m/${id}/original`,
+      'https://example.test/cover.png',
+      {
+        rightsHolder: 'Cover Artist',
+        via: { name: 'Example Catalogue', url: 'https://example.test/cover' },
+        license: 'CC0-1.0',
+        obligations: [],
+      },
+      provenance,
+    ],
+  );
+  await db.admin.query(
+    `INSERT INTO content.media_variant(route,media_id,format,width,height,media_type,byte_count,sha256,key,transaction_id)
+     VALUES ($1,$2,'webp',320,200,'image/webp',64,$3,$4,$5)`,
+    [route, id, derivativeHash, `m/${id}/webp-320`, owner.accountId],
+  );
+  for (const table of ['semantic.subject', 'content.source_fences', 'content.media', 'content.media_variant'])
+    await db.admin.query(`ANALYZE ${table}`);
+  const pair = await generateKeyPair('ES256');
+  const publicKey = { ...(await exportJWK(pair.publicKey)), kid: 'cover-http', alg: 'ES256', use: 'sig' };
+  const coverApp = createKernel({
+    pool: db.pool,
+    routeKey,
+    access: (config) =>
+      createAccess({
+        ...config,
+        auth: {
+          issuer,
+          audience: 'https://kernel.test',
+          jwksUrl: `${issuer}/.well-known/jwks.json`,
+          fetch: async () => Response.json({ keys: [publicKey] }),
+        },
+      }),
+  });
+  const token = await new SignJWT({
+    client_id: 'rezics-website',
+    scope: 'media:read subject:read',
+    authn_epoch: 1,
+    auth_time: Math.floor(Date.now() / 1000),
+    amr: ['pwd'],
+  })
+    .setProtectedHeader({ alg: 'ES256', typ: 'at+jwt', kid: 'cover-http' })
+    .setIssuer(issuer)
+    .setAudience('https://kernel.test')
+    .setSubject(owner.accountId)
+    .setIssuedAt()
+    .setExpirationTime('5m')
+    .sign(pair.privateKey);
+  const request = async (variant = 'webp-320', authenticated = false) => {
+    const response = await coverApp.handle(
+      new Request(`http://kernel.test/v1/media/${id}:authorizeDownload?variant=${variant}`, {
+        headers: {
+          'if-none-match': `"${derivativeHash}"`,
+          ...(authenticated ? { authorization: `Bearer ${token}` } : {}),
+        },
+      }),
+    );
+    return { response, status: response.status, body: await response.json() };
+  };
+  const observed = await capture(db, () => request());
+  expect(observed.value.status).toBe(200);
+  expect(observed.value.body).toEqual({
+    allowed: true,
+    key: `m/${id}/webp-320`,
+    sha256: derivativeHash,
+    mediaType: 'image/webp',
+    byteCount: 64,
+    publicCache: false,
+    cacheControl: 'private, no-cache',
+  });
+  expect(observed.value.response.headers.get('cache-control')).toBe('private, no-cache');
+  const cost = costOf(observed.capture);
+  console.log('CoverPointReadCost', JSON.stringify(cost));
+  expect(cost.relations['content.media']?.rows).toBe(3);
+  expect(cost.relations['content.media_variant']?.rows).toBe(3);
+  expect(cost.relations['semantic.subject']?.rows).toBe(3);
+  expect(cost.relations['content.source_fences']?.rows).toBe(2);
+  for (const table of ['content.media', 'content.media_variant', 'semantic.subject', 'content.source_fences'])
+    expect(cost.relations[table]?.sequentialScans).toBe(0);
+  expect(
+    observed.capture.statements.some((statement) => /content.media_reference|semantic.candidate/.test(statement)),
+  ).toBe(false);
+  await db.admin.query(
+    "UPDATE content.source_fences SET taken_down=true,security_revision=2 WHERE route=$1 AND source=$2 AND external_id=$3 AND field_group='cover'",
+    [home, source, externalId],
+  );
+  const fenced = await request();
+  absent(fenced);
+  await db.admin.query(
+    "UPDATE content.source_fences SET taken_down=false,security_revision=3 WHERE route=$1 AND source=$2 AND external_id=$3 AND field_group='cover'",
+    [home, source, externalId],
+  );
+  await db.admin.query('UPDATE content.media SET taken_down=true,security_revision=1 WHERE route=$1 AND media_id=$2', [
+    route,
+    id,
+  ]);
+  const takenDown = await request();
+  absent(takenDown);
+  expect(takenDown.body).toEqual(fenced.body);
+  await db.admin.query(
+    "UPDATE content.media SET taken_down=false,state='rejected',decision='invalid-image',claimed_at=NULL,security_revision=2 WHERE route=$1 AND media_id=$2",
+    [route, id],
+  );
+  const rejected = await request('original', true);
+  absent(rejected);
+  expect(rejected.body).toEqual(fenced.body);
+});

@@ -3,6 +3,7 @@ import { GrantDeniedError } from '../access/grant-commands.ts';
 import { accessCheck, type AccessCheck, type Actor, type AccessClient } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
+import subjectExists from '../semantic/subject-exists.sql';
 import { tupleRoute } from './imported-contract.ts';
 import { readFences } from './source-fences.ts';
 import {
@@ -75,12 +76,15 @@ export async function downloadMedia(
         !['uploaded', 'available'].includes(initial.state)
       )
         return denied;
-    } else if (initial.state !== 'available' || initial.claimed_at === null || initial.variant_key === null)
+    } else if (
+      initial.state !== 'available' ||
+      initial.variant_key === null ||
+      (initial.purpose === 'post-image' && initial.claimed_at === null)
+    )
       return denied;
 
-    // Source-backed covers need their subject's actual disclosure and tuple fence.
-    // The subject reader currently supplies existence only. There is no native
-    // candidate-disclosure port in this checkout; do not manufacture publication.
+    // A cover inherits its declared subject; candidate visibility belongs to the
+    // semantic response. The tuple fence is read at its independent source home.
     if (initial.purpose === 'cover') {
       if (!context.routeKey) return denied;
       const provenance = initial.provenance as {
@@ -102,20 +106,62 @@ export async function downloadMedia(
         external_id: provenance.external_id,
         field_group: 'cover' as const,
       };
-      const fence = await snapshot(home, async (client) => (await readFences(client, [tuple]))[0]);
+      const fenceAtHome = () => snapshot(home, async (client) => (await readFences(client, [tuple]))[0]);
+      const fence = await fenceAtHome();
       if (!fence || fence.takenDown) return denied;
       const resource = { route: r, id: initial.container_id };
-      const subject = await accessCheck(
+      const subjectResource = { ...resource, eligibility: subjectReadEligibility(resource) };
+      const accessContext = { pool: dependencies.pool, deadline: context.deadline };
+      const subject = await accessCheck(dependencies.access, actor, 'subject:read', subjectResource, accessContext);
+      const publicSubject = original
+        ? null
+        : actor.kind === 'anonymous'
+          ? subject
+          : await accessCheck(
+              dependencies.access,
+              { kind: 'anonymous' },
+              'subject:read',
+              subjectResource,
+              accessContext,
+            );
+      let publiclyVisible = false;
+      const mediaResource = { route: r, id: mediaId };
+      const media = await accessCheck(
         dependencies.access,
         actor,
-        'subject:read',
-        { ...resource, eligibility: subjectReadEligibility(resource) },
-        { pool: dependencies.pool, deadline: context.deadline },
+        'media:read',
+        {
+          ...mediaResource,
+          eligibility: createResourcePublicEligibility({
+            resource: mediaResource,
+            action: 'media:read',
+            async prepare() {
+              return initial;
+            },
+            async verify({ client }) {
+              const current = await point(client, mediaId, slot);
+              if (!current || !usable(current) || signature(current) !== signature(initial))
+                throw new GrantDeniedError();
+              // Existence is a hard prerequisite even when an independent grant
+              // could satisfy the subject formula without a public floor.
+              if (!(await subjectExists.run(client, { route: r, subject_id: initial.container_id })))
+                throw new GrantDeniedError();
+              if (!(await subject(client))) throw new GrantDeniedError();
+              publiclyVisible = publicSubject !== null && (await publicSubject(client));
+              return publiclyVisible;
+            },
+          }),
+        },
+        accessContext,
       );
-      if (!(await snapshot(r, (client) => subject(client)))) return denied;
-      // Missing current candidate/field binding is required evidence, even for an
-      // uploader or a subject grant. Until that owning port exists, fail closed.
-      return denied;
+      const currentFence = await fenceAtHome();
+      if (!currentFence || currentFence.takenDown || signature(currentFence) !== signature(fence)) return denied;
+      return snapshot(r, async (client) => {
+        const current = await point(client, mediaId, slot);
+        if (!current || !usable(current) || signature(current) !== signature(initial) || !(await media(client)))
+          return denied;
+        return bytesDecision(current, mediaId, variant, publiclyVisible, context.deadline);
+      });
     }
     if (initial.purpose !== 'post-image') return denied;
     const chain = await snapshot(r, (client) => mediaParentChain(client, initial.container_id));
@@ -212,33 +258,44 @@ export async function downloadMedia(
       if (signature(currentChain) !== signature(chain)) return denied;
       for (const check of checks) if (!(await check(client))) return denied;
       if (!(await mediaCheck(client))) return denied;
-      const key = original ? current.key : current.variant_key;
-      const sha256 = original ? current.sha256 : current.variant_sha256;
-      const mediaType = original ? current.media_type : current.variant_media_type;
-      const byteCount = Number(original ? current.actual_byte_count : current.variant_byte_count);
-      if (
-        !key ||
-        key !== `m/${mediaId}/${variant}` ||
-        !sha256 ||
-        !digest.test(sha256) ||
-        !mediaType ||
-        !Number.isSafeInteger(byteCount) ||
-        byteCount < 1 ||
-        Date.now() >= context.deadline
-      )
-        return denied;
-      return {
-        allowed: true,
-        key,
-        sha256,
-        mediaType,
-        byteCount,
-        publicCache: false,
-        cacheControl: publiclyVisible ? 'private, no-cache' : 'private, no-store',
-      } as const;
+      return bytesDecision(current, mediaId, variant, publiclyVisible, context.deadline);
     });
   } catch (error) {
-    if (error instanceof GrantDeniedError) return denied;
+    if (error instanceof GrantDeniedError || error instanceof RangeError) return denied;
     throw error;
   }
+}
+
+function bytesDecision(
+  row: Row,
+  mediaId: string,
+  variant: DownloadVariant,
+  publiclyVisible: boolean,
+  deadline: number,
+): DownloadDecision {
+  const original = variant === 'original';
+  const key = original ? row.key : row.variant_key;
+  const sha256 = original ? row.sha256 : row.variant_sha256;
+  const mediaType = original ? row.media_type : row.variant_media_type;
+  const byteCount = Number(original ? row.actual_byte_count : row.variant_byte_count);
+  if (
+    !key ||
+    key !== `m/${mediaId}/${variant}` ||
+    !sha256 ||
+    !digest.test(sha256) ||
+    !mediaType ||
+    !Number.isSafeInteger(byteCount) ||
+    byteCount < 1 ||
+    Date.now() >= deadline
+  )
+    return denied;
+  return {
+    allowed: true,
+    key,
+    sha256,
+    mediaType,
+    byteCount,
+    publicCache: false,
+    cacheControl: publiclyVisible && !original ? 'private, no-cache' : 'private, no-store',
+  };
 }
