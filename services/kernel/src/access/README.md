@@ -8,6 +8,19 @@ A grantor needs `access:grant` and never grants an action they do not hold. Gran
 
 `gate:<group>` and `gate:any` are direct actions on the Global Context (route 0, id `00000000-0000-8000-8000-000000000000`). `<group>` matches `^[a-z][a-z_]{0,62}$`. On that resource, holding `gate:any` counts as holding every `gate:<group>`. Granting `gate:any` requires `gate:any`. The grantor check adds at most one extra exact `gate:any` check on the Global Context per granted gate action, `O((1+K) log G)` with `K <= 1000`. Other actions are unchanged. There is no caller-supplied grantor and no wildcard for any other action.
 
+## Accounts
+
+Managing an automated account requires an `account:manage` grant on its operator's account resource.
+A person holds this grant for the automation they operate. When an organization operates automation,
+its owners receive `account:manage` and `access:grant` through the owner-role grants written at organization creation.
+Owners can grant management to other members through the ordinary `/v1/grants` routes; a grantor cannot grant
+actions they do not hold. Operator session and credential capabilities also require current organization membership,
+so a management grant to a non-member is inert. Revocation removes management authority at command time T,
+including when consuming a previously approved opening.
+
+No organization exists in any deployment yet, so these creation defaults need no upgrade path.
+Organization creation writes two additional grant rows; request paths and their costs are unchanged.
+
 ## Operator responsibility pages
 
 `createOperatorCommands` remains an internal privileged application port; it has no public list route.

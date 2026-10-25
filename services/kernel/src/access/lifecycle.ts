@@ -60,7 +60,7 @@ export const LIFECYCLE_ACTIONS: ActionCatalogue = new Map([
   ['organization:membership', { anonymous: false }],
 ]);
 const ACTOR_ACTIONS = ['account:update', 'account:delete'];
-const ORGANIZATION_ACTIONS = [...ACTOR_ACTIONS, 'organization:membership'];
+const ORGANIZATION_ACTIONS = [...ACTOR_ACTIONS, 'organization:membership', 'account:manage', 'access:grant'];
 const ID_NAMESPACE = '9e068400-e1f4-8ba0-925e-098dec304890';
 
 function requireAllowed(value: unknown): asserts value {
