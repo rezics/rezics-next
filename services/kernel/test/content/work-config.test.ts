@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { ConfigError } from '../../src/commerce/config.ts';
 import { readContentWorkConfig } from '../../src/content/work-config.ts';
 
 const env = {
@@ -27,21 +28,136 @@ test('production R2 and exact HTTPS source hosts are explicit and bounded', () =
   );
 });
 
-test('missing and partial content configuration fail closed without leaking values', () => {
-  expect(() => readContentWorkConfig({})).toThrow('CONTENT_R2_ENDPOINT');
-  for (const key of Object.keys(env)) {
-    const partial: Record<string, string | undefined> = { ...env, [key]: undefined };
-    expect(() => readContentWorkConfig(partial)).toThrow(key);
-    partial[key] = '';
-    expect(() => readContentWorkConfig(partial)).toThrow(key);
+const consent = {
+  CONTENT_AUTH_CONSENT_URL: 'https://consent.example.test/internal/v1/consents:read',
+  CF_ACCESS_CLIENT_ID: 'access-client-id',
+  CF_ACCESS_CLIENT_SECRET: 'access-client-secret',
+};
+
+test('each group is all or nothing and a partial group names its first missing variable', () => {
+  const empty = readContentWorkConfig({});
+  expect(empty.storage).toBeNull();
+  expect(empty.sourceHosts).toEqual([]);
+  expect(empty.consent).toBeNull();
+  expect(Object.isFrozen(empty)).toBe(true);
+  expect(Object.isFrozen(empty.sourceHosts)).toBe(true);
+  expect(Object.isFrozen(empty.absentGroups)).toBe(true);
+  expect(empty.absentGroups).toEqual([
+    {
+      name: 'storage',
+      variables: [
+        'CONTENT_R2_ENDPOINT',
+        'CONTENT_R2_BUCKET',
+        'CONTENT_R2_ACCESS_KEY_ID',
+        'CONTENT_R2_SECRET_ACCESS_KEY',
+      ],
+    },
+    { name: 'sources', variables: ['CONTENT_SOURCE_HOSTS'] },
+    {
+      name: 'consent',
+      variables: ['CONTENT_AUTH_CONSENT_URL', 'CF_ACCESS_CLIENT_ID', 'CF_ACCESS_CLIENT_SECRET'],
+    },
+  ]);
+
+  const sourcesOnly = readContentWorkConfig({ CONTENT_SOURCE_HOSTS: 'images.example.org' });
+  expect(sourcesOnly.storage).toBeNull();
+  expect(sourcesOnly.consent).toBeNull();
+  expect(sourcesOnly.sourceHosts).toEqual(['images.example.org']);
+  expect(sourcesOnly.absentGroups.map((group) => group.name)).toEqual(['storage', 'consent']);
+
+  const consentOnly = readContentWorkConfig(consent);
+  expect(consentOnly.storage).toBeNull();
+  expect(consentOnly.sourceHosts).toEqual([]);
+  expect(consentOnly.consent).toEqual({
+    url: consent.CONTENT_AUTH_CONSENT_URL,
+    serviceTokenId: consent.CF_ACCESS_CLIENT_ID,
+    serviceTokenSecret: consent.CF_ACCESS_CLIENT_SECRET,
+  });
+  expect(consentOnly.absentGroups.map((group) => group.name)).toEqual(['storage', 'sources']);
+
+  const storageAndSources = readContentWorkConfig(env);
+  expect(storageAndSources.consent).toBeNull();
+  expect(storageAndSources.absentGroups.map((group) => group.name)).toEqual(['consent']);
+
+  const complete = readContentWorkConfig({ ...env, ...consent });
+  expect(complete.absentGroups).toEqual([]);
+  expect(complete.consent).toEqual(consentOnly.consent);
+
+  expect(() => readContentWorkConfig({ CONTENT_R2_BUCKET: 'content-media' })).toThrow('CONTENT_R2_ENDPOINT');
+  expect(() =>
+    readContentWorkConfig({
+      CONTENT_R2_ENDPOINT: env.CONTENT_R2_ENDPOINT,
+      CONTENT_R2_ACCESS_KEY_ID: env.CONTENT_R2_ACCESS_KEY_ID,
+      CONTENT_R2_SECRET_ACCESS_KEY: env.CONTENT_R2_SECRET_ACCESS_KEY,
+    }),
+  ).toThrow('CONTENT_R2_BUCKET');
+  expect(() =>
+    readContentWorkConfig({
+      CONTENT_R2_ENDPOINT: env.CONTENT_R2_ENDPOINT,
+      CONTENT_R2_BUCKET: env.CONTENT_R2_BUCKET,
+      CONTENT_R2_SECRET_ACCESS_KEY: env.CONTENT_R2_SECRET_ACCESS_KEY,
+    }),
+  ).toThrow('CONTENT_R2_ACCESS_KEY_ID');
+  expect(() =>
+    readContentWorkConfig({
+      CONTENT_R2_ENDPOINT: env.CONTENT_R2_ENDPOINT,
+      CONTENT_R2_BUCKET: env.CONTENT_R2_BUCKET,
+      CONTENT_R2_ACCESS_KEY_ID: env.CONTENT_R2_ACCESS_KEY_ID,
+    }),
+  ).toThrow('CONTENT_R2_SECRET_ACCESS_KEY');
+  expect(() => readContentWorkConfig({ CF_ACCESS_CLIENT_ID: consent.CF_ACCESS_CLIENT_ID })).toThrow(
+    'CONTENT_AUTH_CONSENT_URL',
+  );
+  expect(() =>
+    readContentWorkConfig({
+      CONTENT_AUTH_CONSENT_URL: consent.CONTENT_AUTH_CONSENT_URL,
+      CF_ACCESS_CLIENT_SECRET: consent.CF_ACCESS_CLIENT_SECRET,
+    }),
+  ).toThrow('CF_ACCESS_CLIENT_ID');
+  expect(() =>
+    readContentWorkConfig({
+      CONTENT_AUTH_CONSENT_URL: consent.CONTENT_AUTH_CONSENT_URL,
+      CF_ACCESS_CLIENT_ID: consent.CF_ACCESS_CLIENT_ID,
+    }),
+  ).toThrow('CF_ACCESS_CLIENT_SECRET');
+
+  for (const key of [
+    'CONTENT_R2_ENDPOINT',
+    'CONTENT_R2_BUCKET',
+    'CONTENT_R2_ACCESS_KEY_ID',
+    'CONTENT_R2_SECRET_ACCESS_KEY',
+  ] as const) {
+    expect(() => readContentWorkConfig({ ...env, [key]: '' })).toThrow(key);
   }
+  expect(() => readContentWorkConfig({ ...env, CONTENT_SOURCE_HOSTS: '' })).toThrow('CONTENT_SOURCE_HOSTS');
+  for (const key of Object.keys(consent) as (keyof typeof consent)[]) {
+    expect(() => readContentWorkConfig({ ...env, ...consent, [key]: '' })).toThrow(key);
+  }
+
+  let endpointFailure: unknown;
   try {
     readContentWorkConfig({ ...env, CONTENT_R2_ENDPOINT: 'https://private-access-id:private-secret@example.org' });
   } catch (error) {
-    expect(String(error)).toContain('CONTENT_R2_ENDPOINT');
-    expect(String(error)).not.toContain('private-access-id');
-    expect(String(error)).not.toContain('private-secret');
+    endpointFailure = error;
   }
+  expect(endpointFailure).toBeInstanceOf(ConfigError);
+  expect(String(endpointFailure)).toContain('CONTENT_R2_ENDPOINT');
+  expect(String(endpointFailure)).not.toContain('private-access-id');
+  expect(String(endpointFailure)).not.toContain('private-secret');
+
+  let consentFailure: unknown;
+  try {
+    readContentWorkConfig({
+      ...consent,
+      CONTENT_AUTH_CONSENT_URL: 'https://consent-user-secret:hidden@consent.example.test/internal/v1/consents:read',
+    });
+  } catch (error) {
+    consentFailure = error;
+  }
+  expect(consentFailure).toBeInstanceOf(ConfigError);
+  expect(String(consentFailure)).toContain('CONTENT_AUTH_CONSENT_URL');
+  expect(String(consentFailure)).not.toContain('consent-user-secret');
+  expect(String(consentFailure)).not.toContain('hidden');
 });
 
 test('R2 rejects non-R2 origins, plaintext, paths and URL credentials', () => {
