@@ -1,4 +1,13 @@
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, relative, resolve, sep } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
@@ -39,27 +48,34 @@ function declarationPath(sourcePath: string, specifier: string): string {
   return `${path}.d.ts`;
 }
 
-export function clientDeclarations(): Map<string, string> {
+export function clientDeclarations(kernelDirectory = KERNEL): Map<string, string> {
   const temporaryRoot = resolve(ROOT, '.temp');
   mkdirSync(temporaryRoot, { recursive: true });
   const temporaryDirectory = mkdtempSync(resolve(temporaryRoot, 'kernel-client-'));
   try {
     const compiler = resolve(ROOT, 'node_modules/.bin/tsc');
-    const result = spawnSync(
-      compiler,
-      [
-        '-p',
-        'tsconfig.json',
-        '--runExternalCode',
-        '--noEmit',
-        'false',
-        '--declaration',
-        '--emitDeclarationOnly',
-        '--outDir',
-        temporaryDirectory,
-      ],
-      { cwd: KERNEL, env: process.env, encoding: 'utf8' },
+    const compilerConfig = resolve(temporaryDirectory, 'tsconfig.json');
+    const modules = resolve(kernelDirectory, 'node_modules');
+    if (existsSync(modules)) symlinkSync(modules, resolve(temporaryDirectory, 'node_modules'), 'dir');
+    writeFileSync(
+      compilerConfig,
+      JSON.stringify({
+        extends: resolve(kernelDirectory, 'tsconfig.json'),
+        compilerOptions: {
+          rootDir: kernelDirectory,
+          outDir: temporaryDirectory,
+          noEmit: false,
+          declaration: true,
+          emitDeclarationOnly: true,
+        },
+        include: [resolve(kernelDirectory, 'src')],
+      }),
     );
+    const result = spawnSync(compiler, ['-p', compilerConfig, '--runExternalCode'], {
+      cwd: kernelDirectory,
+      env: process.env,
+      encoding: 'utf8',
+    });
     if (result.error) throw result.error;
     if (result.status !== 0) throw new Error(`${result.stdout}${result.stderr}`);
 
