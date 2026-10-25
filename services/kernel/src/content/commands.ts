@@ -366,12 +366,18 @@ async function appendRevision(
     at: authoritativeTimeValue(time),
   });
 }
-function result(value: ContentCommandValue, actor: Actor, noun: 'thread' | 'post' | 'revision') {
+const CREATED_EVENT = {
+  thread: 'com.rezics.content.thread.created.v1',
+  post: 'com.rezics.content.post.created.v1',
+  revision: 'com.rezics.content.revision.created.v1',
+} as const;
+
+function result<Noun extends keyof typeof CREATED_EVENT>(value: ContentCommandValue, actor: Actor, noun: Noun) {
   return {
     value,
     events: [
       {
-        type: `com.rezics.content.${noun}.created.v1`,
+        type: CREATED_EVENT[noun],
         subject: value.itemId,
         data: { ...value, actorId: account(actor).accountId },
       },

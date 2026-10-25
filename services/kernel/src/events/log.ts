@@ -2,6 +2,7 @@ import type { Pool } from 'pg';
 import { Type } from 'typebox';
 import { ACCESS_EVENTS } from '../access/events.ts';
 import { COMMERCE_EVENTS } from '../commerce/events.ts';
+import { COMMUNITY_EVENTS } from '../community/events.ts';
 import { CONTENT_EVENTS } from '../content/events.ts';
 import { LIBRARY_EVENTS } from '../library/events.ts';
 import { SEMANTIC_EVENTS } from '../semantic/events.ts';
@@ -20,6 +21,7 @@ const digest = Type.String({ pattern: '^sha256:[0-9a-f]{64}$' });
 export const EVENT_TYPES = {
   ...ACCESS_EVENTS,
   ...COMMERCE_EVENTS,
+  ...COMMUNITY_EVENTS,
   ...CONTENT_EVENTS,
   ...LIBRARY_EVENTS,
   ...SEMANTIC_EVENTS,

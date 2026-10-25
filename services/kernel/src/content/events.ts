@@ -27,6 +27,10 @@ export const CONTENT_EVENTS = {
     { threadId: UUID, itemId: UUID, revisionId: UUID, actorId: UUID },
     { additionalProperties: false },
   ),
+  'com.rezics.content.board.created.v1': Type.Object(
+    { boardId: UUID, realmId: UUID, conceptId: UUID, actorId: UUID },
+    { additionalProperties: false },
+  ),
   ...MEDIA_EVENTS,
   ...MEDIA_IMPORT_EVENTS,
   ...MEDIA_MODERATION_EVENTS,
