@@ -14,10 +14,7 @@ export function csrfHeaders(): HeadersInit {
 
 export function draftFetch(body: DocumentSnapshot): typeof fetch {
   return Object.assign(
-    (
-      input: Parameters<typeof fetch>[0],
-      init?: Parameters<typeof fetch>[1],
-    ) => {
+    (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
       if (typeof init?.body !== 'string') return globalThis.fetch(input, init);
       try {
         const payload = JSON.parse(init.body);
