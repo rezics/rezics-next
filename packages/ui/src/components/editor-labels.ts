@@ -1,4 +1,4 @@
-/** English defaults for the editor's selection and link controls. */
+/** English defaults for the editor's controls and upload announcements. */
 export const richTextEditorLabels = {
   formatting: 'Format text',
   turnInto: 'Turn into',
@@ -24,6 +24,17 @@ export const richTextEditorLabels = {
   editLink: 'Edit link',
   openLink: 'Open link',
   invalidUrl: 'Enter an http:, https: or mailto: address.',
+  image: 'Image',
+  uploadFile: 'Choose image file',
+  imageAlt: 'Alt text',
+  editImageAlt: 'Edit alt text',
+  insertImage: 'Insert image',
+  uploading: 'Uploading image',
+  uploadFailed: 'Image upload failed',
+  retryUpload: 'Retry upload',
+  dismissUpload: 'Dismiss upload',
+  unsupportedImage: 'Choose a PNG, JPEG, WebP, GIF or AVIF image.',
+  imageLimit: 'A post can contain up to 32 media files.',
   documentError: 'This document could not be saved.',
 };
 

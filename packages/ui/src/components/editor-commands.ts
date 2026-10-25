@@ -9,7 +9,7 @@ export interface EditorCommand {
   node?: string;
   mark?: string;
   active?: (editor: Editor) => boolean;
-  run: (editor: Editor, openLink: () => void) => void;
+  run: (editor: Editor, openLink: () => void, openImage?: () => void) => void;
 }
 
 /** Block identities survive a change of text block type. */
@@ -56,6 +56,13 @@ const mark = (id: string, label: keyof RichTextEditorLabels): EditorCommand => (
     editor.chain().focus().toggleMark(id).run();
   },
 });
+
+export const imageCommand: EditorCommand = {
+  id: 'image',
+  label: 'image',
+  node: 'image',
+  run: (_editor, _openLink, openImage) => openImage?.(),
+};
 
 export const markCommands: readonly EditorCommand[] = [
   mark('bold', 'bold'),
