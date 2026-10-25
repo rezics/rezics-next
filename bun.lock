@@ -120,6 +120,7 @@
     "services/auth": {
       "name": "@rezics/auth",
       "dependencies": {
+        "@dbos-inc/dbos-sdk": "5.4.6-preview",
         "better-auth": "1.7.12",
         "jose": "6.2.13",
         "pg": "8.23.1",

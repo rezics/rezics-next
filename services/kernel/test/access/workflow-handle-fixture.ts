@@ -1,0 +1,265 @@
+import { DBOS } from '@dbos-inc/dbos-sdk';
+import { createHash } from 'node:crypto';
+import { Pool } from 'pg';
+import type { JWK } from 'jose';
+import { createAuthService, createAccountWorkflows } from '../../../auth/src/index.ts';
+import type { AccountWorkflowPorts, AccountOperation } from '../../../auth/src/workflows.ts';
+import { createPool, withConnection } from '../../src/database/pool.ts';
+import { readAccount } from '../../src/access/account-data.ts';
+import { createAuthenticator } from '../../src/access/authenticate.ts';
+import { createAccess } from '../../src/access/permission.ts';
+import {
+  createLifecycleCommands,
+  createLifecycleInternals,
+  LIFECYCLE_ACTIONS,
+  type LifecycleRequest,
+} from '../../src/access/lifecycle.ts';
+import { routeOf, partitionOf } from '../../src/route/route.ts';
+import { accessCheck } from '../../src/request/access.ts';
+
+export type FixtureConfiguration = {
+  kernelUrl: string;
+  authUrl: string;
+  systemUrl: string;
+  stagingKey: string;
+  secret: string;
+  signing: JWK;
+};
+export async function handleFixture(
+  config: FixtureConfiguration,
+  clock = () => new Date(),
+  afterCredential?: (accountId: string, registrationId: string) => Promise<void>,
+) {
+  // A single resource connection also detects accidental simultaneous anchor checkout.
+  const kernel = createPool(config.kernelUrl);
+  kernel.options.max = 1;
+  const database = new Pool({ connectionString: config.authUrl });
+  const read = (id: string) => withConnection(kernel, (client) => readAccount(client, routeOf(id)!, id));
+  async function pendingProof(reference: string) {
+    const row = (
+      await database.query<{ account_id: string; reservation_id: string; request_key: string }>(
+        'SELECT account_id,reservation_id,request_key FROM auth_registration_stage WHERE registration_id=$1',
+        [reference],
+      )
+    ).rows[0];
+    if (!row?.reservation_id) throw new Error('No durable pending registration');
+    const route = routeOf(row.account_id)!;
+    const workflow = `accounts:${createHash('sha256')
+      .update(JSON.stringify(`registration:${row.request_key}`))
+      .digest('hex')}`;
+    const receipt = await kernel.query<{ response: { accountId: string; registrationId: string } }>(
+      "SELECT response FROM core.receipt WHERE partition_no=$1 AND actor_account_id=$2 AND command_kind='access.actor-pending' AND idempotency_key=$3",
+      [partitionOf(route), '00000000-0000-8000-8000-000000000001', `${route}:wf:${workflow}:pending-account`],
+    );
+    if (
+      receipt.rows[0]?.response.accountId !== row.account_id ||
+      receipt.rows[0]?.response.registrationId !== row.reservation_id
+    )
+      throw new Error('Pending receipt mismatch');
+    return row;
+  }
+  const internal = createLifecycleInternals({
+    pool: kernel,
+    clock,
+    routeKey: createHash('sha256').update('durable-handle-fixture-route').digest(),
+    async provisioningEvidence(proof) {
+      if (typeof proof !== 'string') return null;
+      const row = await pendingProof(proof);
+      const owner = await database.query('SELECT account_id FROM auth_provisioning_receipt WHERE account_id=$1', [
+        row.account_id,
+      ]);
+      if (!owner.rowCount) return null;
+      return {
+        accountId: row.account_id,
+        registrationId: row.reservation_id,
+        authIdentityId: row.account_id,
+        authnEpoch: 1,
+      };
+    },
+    recoveryEvidence: async () => null,
+  });
+  const auth = await createAuthService({
+    database,
+    issuer: 'https://durable-handles.auth.test',
+    audience: 'https://durable-handles.api.test',
+    secret: config.secret,
+    signing: { activeKid: config.signing.kid!, privateKeys: [config.signing] },
+    trustedAccess: {
+      async readAccount(id) {
+        const account = await read(id);
+        return account
+          ? {
+              accountId: id,
+              kind: account.kind as 'actor' | 'organization',
+              state: account.state as 'pending' | 'active' | 'suspended' | 'deleted',
+              authnEpoch: Number(account.minimumAuthnEpoch),
+              automated: account.operatorAccountId !== null,
+              fenced: account.fenced,
+            }
+          : null;
+      },
+      authorizeProvisioning: async (reference) => ({ accountId: (await pendingProof(reference)).account_id }),
+    },
+  });
+  await auth.internal.registerClient({ clientId: 'durable-web', firstParty: true, scopes: ['account:update'] });
+  const verifier = createAuthenticator({
+    ...auth.verifier,
+    fetch: async () => auth.handler(new Request(auth.verifier.jwksUrl)),
+  });
+  const access = createAccess({
+    actions: LIFECYCLE_ACTIONS,
+    accountEvidence: (actor) => verifier.identity(actor)?.account,
+  });
+  const commands = createLifecycleCommands({ pool: kernel, access });
+  const approvals = new Map<string, { token: string; operation?: AccountOperation }>();
+  let fault: string | undefined;
+  let beforeRevoke: ((accountId: string) => Promise<void>) | undefined;
+  const effects: { phase: string; transactionId: string; replayed: boolean }[] = [];
+  function intercept<T extends (...args: never[]) => Promise<{ transactionId: string; replayed: boolean }>>(
+    phase: string,
+    fn: T,
+  ): T {
+    return (async (...args: Parameters<T>) => {
+      const result = await fn(...args);
+      effects.push({ phase, transactionId: result.transactionId, replayed: result.replayed });
+      if (fault === phase) {
+        fault = undefined;
+        throw new Error('Lost command acknowledgement');
+      }
+      return result;
+    }) as T;
+  }
+  const ports: AccountWorkflowPorts<LifecycleRequest> = {
+    ...internal,
+    transitionAccountHandle: commands.transitionAccountHandle,
+    async provisioningReference({ accountId, reservationId }) {
+      const row = (
+        await database.query<{ registration_id: string }>(
+          'SELECT registration_id FROM auth_registration_stage WHERE account_id=$1 AND reservation_id=$2',
+          [accountId, reservationId],
+        )
+      ).rows[0];
+      if (!row) throw new Error('Missing provisioning reference');
+      return row.registration_id;
+    },
+    async provisioningEvidence(input) {
+      return ports.provisioningReference(input);
+    },
+    async authorizeOperation(reference, operation) {
+      const approval = approvals.get(reference);
+      if (!approval || (approval.operation && JSON.stringify(approval.operation) !== JSON.stringify(operation)))
+        throw new Error('Approval mismatch');
+      const context = { pool: kernel, deadline: Date.now() + 5000 };
+      const actor = await verifier.authenticate(approval.token, context);
+      if (actor.kind !== 'account') throw new Error('No authenticated actor');
+      if (operation.kind === 'rename') {
+        const check = await accessCheck(
+          access,
+          actor,
+          'account:update',
+          { route: routeOf(operation.accountId)!, id: operation.accountId },
+          context,
+        );
+        if (!(await withConnection(kernel, (client) => check(client))))
+          throw new Error('Current rename authorization denied');
+      }
+      return { ...context, actor };
+    },
+    actorAccountId: (context) => context.actor.accountId,
+  };
+  const native = {
+    reserveHandle: internal.reserveHandle,
+    holdHandle: internal.holdHandle,
+    transitionAccountHandle: commands.transitionAccountHandle,
+    finalizeHandleTransition: internal.finalizeHandleTransition,
+    redirectTransitionHandle: internal.redirectTransitionHandle,
+    completeHandleTransition: internal.completeHandleTransition,
+  };
+  for (const phase of Object.keys(native) as (keyof typeof native)[]) {
+    Object.assign(ports, { [phase]: intercept(phase, native[phase]) });
+  }
+  const options = {
+    database,
+    systemDatabaseUrl: config.systemUrl,
+    stagingKey: Buffer.from(config.stagingKey, 'hex'),
+    auth: {
+      ...auth,
+      internal: {
+        ...auth.internal,
+        async revokeSessions(accountId: string) {
+          await beforeRevoke?.(accountId);
+          await auth.internal.revokeSessions(accountId);
+        },
+        async provisionPassword(input: Parameters<typeof auth.internal.provisionPassword>[0]) {
+          const result = await auth.internal.provisionPassword(input);
+          await afterCredential?.(result.accountId, input.authorization);
+          return result;
+        },
+      },
+    },
+    access: ports,
+    clock,
+  };
+  let workflows = createAccountWorkflows(options);
+  return {
+    database,
+    kernel,
+    internal,
+    commands,
+    auth,
+    read,
+    effects,
+    beforeRevocation(callback?: (accountId: string) => Promise<void>) {
+      beforeRevoke = callback;
+    },
+    authenticate(token: string) {
+      return verifier.authenticate(token, { pool: kernel, deadline: Date.now() + 5000 });
+    },
+    get workflows() {
+      return workflows;
+    },
+    failAfter(phase: string) {
+      fault = phase;
+    },
+    async restart() {
+      await workflows.close();
+      workflows = createAccountWorkflows(options);
+      await workflows.start();
+    },
+    approve(reference: string, token: string, operation?: AccountOperation) {
+      approvals.set(reference, { token, ...(operation ? { operation } : {}) });
+    },
+    async close() {
+      await workflows.close();
+      await database.end();
+      await kernel.end();
+    },
+  };
+}
+
+// This process deliberately has no in-memory retry/controller. A parent test
+// kills it while the official DBOS workflow is durably waiting for activation.
+if (import.meta.main) {
+  const fixture = await handleFixture(
+    JSON.parse(process.env.HANDLE_WORKFLOW_FIXTURE!),
+    undefined,
+    process.env.HANDLE_WORKFLOW_COMMIT_LOSS
+      ? async (accountId, registrationId) => {
+          process.stdout.write(JSON.stringify({ accountId, registrationId, workflowId: DBOS.workflowID }) + '\n');
+          await new Promise(() => {});
+        }
+      : undefined,
+  );
+  await fixture.workflows.start();
+  const ref = await fixture.workflows.beginRegistration({
+    key: process.env.HANDLE_WORKFLOW_KEY ?? 'process-loss',
+    handle: process.env.HANDLE_WORKFLOW_KEY ?? 'process_loss',
+  });
+  await fixture.workflows.installRegistrationCredential({
+    registrationId: ref.registrationId,
+    email: process.env.HANDLE_WORKFLOW_EMAIL!,
+    password: process.env.HANDLE_WORKFLOW_PASSWORD!,
+  });
+  process.stdout.write(JSON.stringify(ref) + '\n');
+  await new Promise(() => {});
+}

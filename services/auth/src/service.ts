@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, createHmac, randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { betterAuth } from 'better-auth';
 import { APIError, createAuthEndpoint } from 'better-auth/api';
@@ -432,6 +432,53 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         )
           throw new Denied(400);
         const hash = await context.password.hash(input.password);
+        if (input.idempotencyKey !== undefined) {
+          text(input.idempotencyKey);
+          const digest = createHmac('sha256', options.secret)
+            .update(
+              JSON.stringify(['auth-provisioning-v1', account.accountId, input.email.toLowerCase(), input.password]),
+            )
+            .digest();
+          const connection = await database.connect();
+          try {
+            await connection.query('BEGIN');
+            await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
+              `auth-provision:${input.idempotencyKey}`,
+            ]);
+            const previous = (
+              await connection.query<{ account_id: string; digest: Buffer }>(
+                'SELECT account_id, digest FROM auth_provisioning_receipt WHERE idempotency_key=$1',
+                [input.idempotencyKey],
+              )
+            ).rows[0];
+            if (previous) {
+              if (previous.account_id !== account.accountId || !previous.digest.equals(digest)) throw new Denied();
+            } else {
+              // Same Better Auth owner model and official password hash. These
+              // writes and their retry receipt commit in one Auth transaction.
+              await connection.query(
+                'INSERT INTO "user" (id,name,email,"emailVerified",image) VALUES ($1,\'\',$2,false,NULL)',
+                [account.accountId, input.email.toLowerCase()],
+              );
+              await connection.query(
+                'INSERT INTO account (id,"accountId","providerId","userId",password,"updatedAt") VALUES ($1,$2,\'credential\',$2,$3,CURRENT_TIMESTAMP)',
+                [randomUUID(), account.accountId, hash],
+              );
+              await connection.query('INSERT INTO auth_provisioning_receipt VALUES ($1,$2,$3)', [
+                input.idempotencyKey,
+                account.accountId,
+                digest,
+              ]);
+            }
+            await connection.query('COMMIT');
+          } catch (error) {
+            await connection.query('ROLLBACK');
+            throw error;
+          } finally {
+            connection.release();
+          }
+          return { accountId: account.accountId };
+        }
         // Use the official PostgreSQL adapter and its explicit external-ID facility.
         await context.adapter.transaction(async (transaction) => {
           const now = new Date();
@@ -477,6 +524,19 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           authTime: human.auth_time,
         };
         return establish(selected, input.headers);
+      },
+      async provisionCredentialless(input) {
+        const approval = await trustedAccess.authorizeProvisioning(input.authorization);
+        const account = await trustedAccess.readAccount(approval.accountId);
+        if (!account || account.kind !== 'actor' || account.state !== 'pending' || !account.automated || account.fenced)
+          throw new Denied();
+        await owner(account.accountId);
+        return { accountId: account.accountId };
+      },
+      async eraseAccount(accountId) {
+        const account = await trustedAccess.readAccount(accountId);
+        if (!account || account.state !== 'deleted' || !account.fenced) throw new Denied();
+        await database.query('DELETE FROM "user" WHERE id=$1', [accountId]);
       },
       async setCredential(input) {
         const value = input.credential;

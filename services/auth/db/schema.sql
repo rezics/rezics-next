@@ -89,6 +89,17 @@ CREATE TABLE public.auth_key_assertion (
 
 
 --
+-- Name: auth_provisioning_receipt; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_provisioning_receipt (
+    idempotency_key text NOT NULL,
+    account_id text NOT NULL,
+    digest bytea NOT NULL
+);
+
+
+--
 -- Name: auth_public_key; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -110,6 +121,25 @@ CREATE TABLE public.auth_recovery (
     authn_epoch integer NOT NULL,
     expires_at timestamp with time zone NOT NULL,
     CONSTRAINT auth_recovery_authn_epoch_check CHECK ((authn_epoch >= 0))
+);
+
+
+--
+-- Name: auth_registration_stage; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_registration_stage (
+    registration_id text NOT NULL,
+    request_key text NOT NULL,
+    handle text NOT NULL,
+    account_id text NOT NULL,
+    reservation_id text,
+    request_digest bytea NOT NULL,
+    ciphertext bytea,
+    credential_digest bytea,
+    expires_at timestamp with time zone,
+    completed_at timestamp with time zone,
+    expired_at timestamp with time zone
 );
 
 
@@ -136,6 +166,17 @@ CREATE TABLE public.auth_signing_key (
     private_jwk jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     CONSTRAINT auth_signing_key_private_jwk_check CHECK (((private_jwk ->> 'd'::text) IS NOT NULL))
+);
+
+
+--
+-- Name: auth_workflow_request; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_workflow_request (
+    workflow_id text NOT NULL,
+    digest bytea NOT NULL,
+    request jsonb NOT NULL
 );
 
 
@@ -241,6 +282,22 @@ ALTER TABLE ONLY public.auth_key_assertion
 
 
 --
+-- Name: auth_provisioning_receipt auth_provisioning_receipt_account_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_provisioning_receipt
+    ADD CONSTRAINT auth_provisioning_receipt_account_id_key UNIQUE (account_id);
+
+
+--
+-- Name: auth_provisioning_receipt auth_provisioning_receipt_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_provisioning_receipt
+    ADD CONSTRAINT auth_provisioning_receipt_pkey PRIMARY KEY (idempotency_key);
+
+
+--
 -- Name: auth_public_key auth_public_key_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -254,6 +311,30 @@ ALTER TABLE ONLY public.auth_public_key
 
 ALTER TABLE ONLY public.auth_recovery
     ADD CONSTRAINT auth_recovery_pkey PRIMARY KEY (proof_hash);
+
+
+--
+-- Name: auth_registration_stage auth_registration_stage_account_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_registration_stage
+    ADD CONSTRAINT auth_registration_stage_account_id_key UNIQUE (account_id);
+
+
+--
+-- Name: auth_registration_stage auth_registration_stage_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_registration_stage
+    ADD CONSTRAINT auth_registration_stage_pkey PRIMARY KEY (registration_id);
+
+
+--
+-- Name: auth_registration_stage auth_registration_stage_request_key_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_registration_stage
+    ADD CONSTRAINT auth_registration_stage_request_key_key UNIQUE (request_key);
 
 
 --
@@ -278,6 +359,14 @@ ALTER TABLE ONLY public.auth_session_opening
 
 ALTER TABLE ONLY public.auth_signing_key
     ADD CONSTRAINT auth_signing_key_pkey PRIMARY KEY (kid);
+
+
+--
+-- Name: auth_workflow_request auth_workflow_request_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_workflow_request
+    ADD CONSTRAINT auth_workflow_request_pkey PRIMARY KEY (workflow_id);
 
 
 --
@@ -341,6 +430,13 @@ ALTER TABLE ONLY public.verification
 --
 
 CREATE INDEX "account_userId_idx" ON public.account USING btree ("userId");
+
+
+--
+-- Name: auth_registration_stage_due; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_registration_stage_due ON public.auth_registration_stage USING btree (expires_at, registration_id) WHERE ((completed_at IS NULL) AND (expired_at IS NULL));
 
 
 --

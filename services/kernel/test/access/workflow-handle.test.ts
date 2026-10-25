@@ -36,7 +36,9 @@ const internal = createLifecycleInternals({
   recoveryEvidence: async () => null,
 });
 const access = createAccess({ actions: LIFECYCLE_ACTIONS, accountEvidence: (_actor, context) => context.account });
-const commands = createLifecycleCommands({ pool, clock, access });
+// Authorization uses the real database clock; the injected coordinator clock
+// advances lifecycle deadlines without changing the request evidence budget.
+const commands = createLifecycleCommands({ pool, access });
 const row = (id: string) => withConnection(reader, (client) => readAccount(client, routeOf(id)!, id));
 async function context(id: string, scopes = ['account:update']) {
   return {

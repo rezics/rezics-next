@@ -9,8 +9,10 @@ organization authority or grants.
 
 Auth supplies guarded account effects through Better Auth, including operator
 session opening, actor-owned password and public-key credentials, human recovery
-and Access-first consent reduction. It does not implement DBOS registration,
-OIDC authorization, token exchange, CIBA or device authorization. Unverified
+and Access-first consent reduction. The explicit account workflow host adds DBOS
+registration, organization handle bootstrap, authorized rename and revocation.
+OIDC authorization, token exchange, CIBA and device authorization remain outside
+this service. Unverified
 `requested_by` and all caller-supplied `act` values are rejected.
 
 ## Database and checks
@@ -308,3 +310,93 @@ public JWKS and the subsequent single current actor state/epoch-floor read.
 Auth implements no kernel request hook. The JOSE tests verify with public JWKS
 alone and reject forged, unknown-key, wrong-issuer, wrong-audience and expired
 tokens; they also distinguish person and automated actor subjects.
+
+## Durable account workflow host
+
+`createAccountWorkflows(options)` is exported from `src/index.ts` with
+`AccountWorkflowOptions`, `AccountWorkflowPorts`, `AccountOperation`,
+`RegistrationReference`, `WorkflowHandleTransition` and `WorkflowFence`.
+The returned host exports:
+
+- `start()` and `close()` for the official pinned DBOS SDK executor;
+- `beginRegistration`, `installRegistrationCredential`, `activateRegistration`
+  and `register` for staged human registration;
+- `expireDueRegistrations` for bounded expiry work using the authoritative clock;
+- `renameHandle`, `createOrganization`, `revokeSessions` and `resumeOperation`;
+- `handler(Request): Promise<Response>`, which adds strict `POST /signup` with
+  `{ key, handle, email, password }` and delegates other routes to the guarded Auth handler.
+
+The host requires a migrated Auth pool, a separate DBOS system database URL,
+a persistent Auth-only 32-byte `stagingKey`, the existing Auth service and trusted
+Access ports. The application explicitly starts one host and closes it before its
+Auth pool. SIGINT/SIGTERM shut DBOS down. Ordinary `createAuthService` consumers
+never start DBOS. The SDK owns its system schema, independently of Auth migrations.
+The application calls `expireDueRegistrations` when advancing its authoritative
+clock; this method sends durable expiry messages to the existing workflows.
+
+Registration arguments contain only an opaque stage reference. AES-256-GCM
+staging binds encrypted credential input to that reference, account and normalized
+handle. Purpose-separated HKDF keys protect encryption and credential binding.
+Only the credential step decrypts; DBOS receives a nonsecret owner reference.
+Auth credential installation and its idempotency receipt share one Auth transaction.
+Pending accounts cannot establish sessions. A provisioned handle barrier precedes
+activation; expiry terminalizes/fences the pending Access account before releasing
+its exact claim and erasing its Auth owner. Terminal/completed stages clear ciphertext.
+
+`AccountWorkflowPorts` consumes structural shapes of real Access command results.
+Commands return native receipts; the coordinator journals their nonsecret values
+and stable keys. `authorizeOperation` must resolve a durable approval to a currently
+authenticated kernel context and check current authorization with the installed
+Access formula before returning, including on workflow replay/resume. Approval
+references are opaque, nonsecret references, never cookies or bearer tokens. All
+workflow methods are trusted application APIs; public JSON cannot select account
+identity, kind, epoch, operator or an authorization context. Only `/signup` is a
+new public endpoint. A workflow failure remains durable. `resumeOperation` uses
+the SDK's rewind API from the failed step, retaining successful Access barriers.
+
+Handle publication uses the actual lifecycle exports `holdHandle`,
+`transitionAccountHandle`, `bootstrapOrganizationHandle`,
+`finalizeHandleTransition`, `redirectTransitionHandle` and
+`completeHandleTransition`. A purpose/account/reservation/operation-bound hold
+never expires merely because DBOS pauses. The account-anchor command checks
+`account:update` through `accessCommandAuthorization` before receipt lookup,
+conditionally changes the expected current handle and serializes outstanding
+operations. Final claim, old redirect and completion are separate partition
+commands. Old redirects retain the original 30-day interval. Trusted cancellation
+uses `cancelHandleTransition` followed by `releaseHandleTransition`; its permanent
+account-local terminal slot prevents delayed publication and stale releases.
+`expireRegistration` and `releaseExpiredRegistrationHandle` provide separate
+account-terminal and exact-reservation cleanup commands. Generic account patches
+continue to reject handle changes.
+
+## Evidence and remaining integration
+
+`test/workflows.test.ts` is boundary evidence: deterministic Access receipts are
+journaled fixtures, with real isolated Auth, Better Auth, JOSE and DBOS storage.
+It does not implement Access policy. Every issuer deployment owns its migrated
+fixture; the workflow tests never reuse the foundation deployment's global keys
+or clients through `AUTH_TEST_DATABASE_URL`.
+
+Kernel's `test/access/workflow-handle.test.ts` exercises real PostgreSQL lifecycle
+commands. `workflow-handle-durable.test.ts` composes the workflow host with those
+actual commands, real Auth credentials, JWT authentication and the merged Access
+formula. It kills an executor process after credential/handle barriers, recovers
+persisted DBOS history and loses command acknowledgements at every handle phase.
+It checks native receipt replay, indefinite held reservations beyond the pending
+TTL, organization owner grants, exact expired-registration cleanup and serialized
+credential confidentiality. The original lifecycle and Auth outcome assertions
+remain unchanged. Final application transport bindings and the original complete
+lifecycle conformance driver remain an integration seam.
+
+The broader operator/member/client workflows are unfinished. In particular,
+Access exports `reserveCoordination` and `setMembership`, but no command releases
+a membership coordination reservation after the organization-local terminal slot.
+`operator.releaseResponsibility` accepts only `purpose = 'operator'`. Leaving the
+member hold prevents subsequent deletion forever; deleting it from Auth would
+bypass the Access command boundary. Adding that non-handle lifecycle command is
+outside the narrowly authorized handle implementation extension. The current
+host therefore does not expose membership removal, automated-account creation,
+operator session/transfer/deletion coordination, suspension fanout or client-scope
+reduction workflows. Their existing individual Auth/Access effects remain available
+to a later authorized integration. No Auth-only client-row update is treated as a
+completed authority reduction.

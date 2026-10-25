@@ -143,6 +143,7 @@ CREATE TABLE access.account (
     fence_receipt_id uuid,
     operator_relation_version bigint DEFAULT 0 NOT NULL,
     operator_reservation_id uuid,
+    handle_operation_id text,
     CONSTRAINT account_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT account_check1 CHECK (((operator_account_id IS NULL) OR ((kind = 'actor'::text) AND (operator_account_id <> account_id)))),
     CONSTRAINT account_content_preferences_check CHECK ((jsonb_typeof(content_preferences) = 'object'::text)),
@@ -168,6 +169,8 @@ CREATE TABLE access.handle_claim (
     reserved_until timestamp with time zone,
     transaction_id uuid NOT NULL,
     reservation_id uuid,
+    hold_operation_id text,
+    hold_expected_handle text,
     CONSTRAINT handle_claim_check CHECK ((route = ((get_byte(sha256(convert_to(normalized_handle, 'UTF8'::name)), 0) * 256) + get_byte(sha256(convert_to(normalized_handle, 'UTF8'::name)), 1)))),
     CONSTRAINT handle_claim_check1 CHECK ((((state = 'pending'::text) AND (expires_at IS NOT NULL) AND (reserved_until IS NULL)) OR ((state = 'active'::text) AND (expires_at IS NULL) AND (reserved_until IS NULL)) OR ((state = 'reserved'::text) AND (expires_at IS NULL) AND (reserved_until IS NOT NULL)))),
     CONSTRAINT handle_claim_normalized_handle_check CHECK ((normalized_handle ~ '^[a-z0-9][a-z0-9_-]{0,63}$'::text)),
@@ -211,6 +214,41 @@ CREATE TABLE access.lifecycle_fence_receipt (
 
 
 --
+-- Name: lifecycle_handle_effect; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.lifecycle_handle_effect (
+    route integer NOT NULL,
+    normalized_handle text NOT NULL,
+    account_id uuid NOT NULL,
+    reservation_id uuid NOT NULL,
+    operation_id text NOT NULL,
+    effect text NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT lifecycle_handle_effect_effect_check CHECK ((effect = ANY (ARRAY['active'::text, 'reserved'::text])))
+);
+
+
+--
+-- Name: lifecycle_handle_operation; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.lifecycle_handle_operation (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    operation_id text NOT NULL,
+    handle text NOT NULL,
+    reservation_id uuid NOT NULL,
+    expected_handle text,
+    old_reservation_id uuid,
+    state text NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT lifecycle_handle_operation_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT lifecycle_handle_operation_state_check CHECK ((state = ANY (ARRAY['published'::text, 'completed'::text, 'cancelled'::text])))
+);
+
+
+--
 -- Name: lifecycle_membership_slot; Type: TABLE; Schema: access; Owner: -
 --
 
@@ -222,6 +260,20 @@ CREATE TABLE access.lifecycle_membership_slot (
     terminal boolean DEFAULT false NOT NULL,
     transaction_id uuid NOT NULL,
     CONSTRAINT lifecycle_membership_slot_check CHECK ((route = ((get_byte(uuid_send(organization_id), 10) * 256) + get_byte(uuid_send(organization_id), 11))))
+);
+
+
+--
+-- Name: lifecycle_registration_expiry; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.lifecycle_registration_expiry (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    reservation_id uuid NOT NULL,
+    handle text NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT lifecycle_registration_expiry_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11))))
 );
 
 
@@ -443,11 +495,35 @@ ALTER TABLE ONLY access.lifecycle_fence_receipt
 
 
 --
+-- Name: lifecycle_handle_effect lifecycle_handle_effect_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.lifecycle_handle_effect
+    ADD CONSTRAINT lifecycle_handle_effect_pkey PRIMARY KEY (route, normalized_handle, account_id, reservation_id, operation_id, effect);
+
+
+--
+-- Name: lifecycle_handle_operation lifecycle_handle_operation_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.lifecycle_handle_operation
+    ADD CONSTRAINT lifecycle_handle_operation_pkey PRIMARY KEY (route, account_id, operation_id);
+
+
+--
 -- Name: lifecycle_membership_slot lifecycle_membership_slot_pkey; Type: CONSTRAINT; Schema: access; Owner: -
 --
 
 ALTER TABLE ONLY access.lifecycle_membership_slot
     ADD CONSTRAINT lifecycle_membership_slot_pkey PRIMARY KEY (route, organization_id, member_account_id, reservation_id);
+
+
+--
+-- Name: lifecycle_registration_expiry lifecycle_registration_expiry_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.lifecycle_registration_expiry
+    ADD CONSTRAINT lifecycle_registration_expiry_pkey PRIMARY KEY (route, account_id, reservation_id);
 
 
 --

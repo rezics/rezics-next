@@ -37,6 +37,18 @@ import ownersRead from './lifecycle-owners.sql';
 import fenceStatement from './lifecycle-fence.sql';
 import fenceRead from './lifecycle-fence-read.sql';
 import fenceClear from './lifecycle-fence-clear.sql';
+import handleHold from './lifecycle-handle-hold.sql';
+import handlePublish from './lifecycle-handle-publish.sql';
+import operationRead from './lifecycle-handle-operation-read.sql';
+import operationCancel from './lifecycle-handle-cancel.sql';
+import operationComplete from './lifecycle-handle-complete.sql';
+import transitionChange from './lifecycle-handle-transition-change.sql';
+import transitionRelease from './lifecycle-handle-transition-release.sql';
+import expiryInsert from './lifecycle-registration-expiry.sql';
+import expiryRead from './lifecycle-registration-expiry-read.sql';
+import registrationRelease from './lifecycle-registration-release.sql';
+import effectRead from './lifecycle-handle-effect-read.sql';
+import bootstrapOwner from './lifecycle-handle-bootstrap-owner.sql';
 
 /** Authoritative application-clock policy: registration lasts 30 minutes and an
  * old handle redirects for 30 days. Neither clock nor timestamps come from JSON.
@@ -89,6 +101,94 @@ function epoch(value: number): boolean {
 type Boundary = { pool: Pool; clock?: () => Date };
 export type LifecycleRequest = Omit<PermissionContext, 'pool'> & { actor: AccountActor };
 export type LifecycleCommand = { accountId: string; key: string };
+export type HandleTransition = LifecycleCommand & {
+  handle: string;
+  reservationId: string;
+  operationId: string;
+  expectedHandle: string | null;
+};
+
+function transitionInput(input: HandleTransition): HandleTransition {
+  accountRoute(input.accountId);
+  requireAllowed(
+    typeof input.operationId === 'string' && input.operationId.length > 0 && input.operationId.length <= 256,
+  );
+  requireAllowed(typeof input.reservationId === 'string');
+  const handle = normalized(input.handle);
+  const expectedHandle = input.expectedHandle === null ? null : normalized(input.expectedHandle);
+  requireAllowed(handle !== expectedHandle);
+  return {
+    accountId: input.accountId,
+    key: input.key,
+    handle,
+    expectedHandle,
+    operationId: input.operationId,
+    reservationId: input.reservationId,
+  };
+}
+const transitionParameters = (input: HandleTransition) => ({
+  route: accountRoute(input.accountId),
+  account_id: input.accountId,
+  handle: input.handle,
+  reservation_id: input.reservationId,
+  operation_id: input.operationId,
+  expected_handle: input.expectedHandle ?? '',
+});
+async function readClaim(pool: Pool, handle: string) {
+  return withConnection(pool, (client) => handleRead.run(client, { route: handleRoute(handle), handle }));
+}
+async function readOperation(pool: Pool, input: HandleTransition) {
+  return withConnection(pool, (client) =>
+    operationRead.run(client, {
+      route: accountRoute(input.accountId),
+      account_id: input.accountId,
+      operation_id: input.operationId,
+    }),
+  );
+}
+function matchesOperation(operation: Awaited<ReturnType<typeof readOperation>>, input: HandleTransition) {
+  return (
+    operation &&
+    operation.handle === input.handle &&
+    operation.reservationId === input.reservationId &&
+    operation.expectedHandle === input.expectedHandle
+  );
+}
+async function publicationEvidence(pool: Pool, input: HandleTransition) {
+  // Every separately anchored read ends before checkout of the account anchor.
+  const claim = await readClaim(pool, input.handle);
+  const old = input.expectedHandle === null ? null : await readClaim(pool, input.expectedHandle);
+  return { claim, old };
+}
+async function publishHandle(
+  tx: CommandTransaction,
+  input: HandleTransition,
+  evidence: Awaited<ReturnType<typeof publicationEvidence>>,
+  transactionId: string,
+) {
+  const { claim, old } = evidence;
+  requireAllowed(
+    claim?.state === 'pending' &&
+      claim.accountId === input.accountId &&
+      claim.reservationId === input.reservationId &&
+      claim.operationId === input.operationId &&
+      claim.expectedHandle === input.expectedHandle,
+  );
+  requireAllowed(
+    input.expectedHandle === null ||
+      (old?.state === 'active' && old.accountId === input.accountId && old.reservationId),
+  );
+  requireAllowed(
+    affected(
+      await handlePublish.run(tx, {
+        ...transitionParameters(input),
+        old_reservation_id: old?.reservationId ?? '',
+        transaction_id: transactionId,
+      }),
+    ),
+  );
+  return { accountId: input.accountId, handle: input.handle, operationId: input.operationId };
+}
 /** Exact resulting floor is a decimal string, preserving PostgreSQL bigint.
  * receiptId, accountId and this floor identify the Auth invalidation barrier.
  * kind and priorOperatorAccountId are deliberately retained nonsecret facts.
@@ -312,6 +412,260 @@ export function createLifecycleInternals(
       requireAllowed(typeof key === 'string' && key.length > 0 && key.length <= 256);
       const route = anchorRoute(routeKey, `access.registration:${key}`);
       return derivedId(ID_NAMESPACE, `registration:${key}`, route);
+    },
+    /** Indefinite purpose/account/reservation/operation-bound publication hold.
+     * Only the trusted coordinator owns this capability. Cancellation first
+     * commits a permanent account-local terminal slot before releasing it. */
+    async holdHandle(value: HandleTransition) {
+      const input = transitionInput(value);
+      const route = handleRoute(input.handle);
+      return execute(
+        { route, id: input.handle, kind: 'handle-held', key: input.key, input },
+        async (tx, transactionId) => {
+          requireAllowed(
+            affected(
+              await handleHold.run(tx, {
+                ...transitionParameters(input),
+                route,
+                at: authoritativeTimeValue(currentCommand(tx).time),
+                transaction_id: transactionId,
+              }),
+            ),
+          );
+          return {
+            accountId: input.accountId,
+            handle: input.handle,
+            reservationId: input.reservationId,
+            operationId: input.operationId,
+          };
+        },
+      );
+    },
+    /** Narrow bootstrap capability: the durable initial owner's existing
+     * reservation is required, and only the first organization handle is set. */
+    async bootstrapOrganizationHandle(
+      value: HandleTransition & { ownerAccountId: string; ownerReservationId: string },
+    ) {
+      const input = transitionInput(value);
+      requireAllowed(input.expectedHandle === null);
+      const ownerAccountId = value.ownerAccountId;
+      const ownerReservationId = value.ownerReservationId;
+      const owner = await memberReservation(pool, ownerAccountId, input.accountId, ownerReservationId);
+      const evidence = await publicationEvidence(pool, input);
+      return execute(
+        {
+          route: accountRoute(input.accountId),
+          id: input.accountId,
+          kind: 'organization-handle-published',
+          key: input.key,
+          input: { ...input, ownerAccountId, ownerReservationId },
+        },
+        async (tx, transactionId) => {
+          const account = await locked(tx, input.accountId);
+          requireAllowed(owner && account.kind === 'organization');
+          requireAllowed(
+            await bootstrapOwner.run(tx, {
+              route: accountRoute(input.accountId),
+              organization_id: input.accountId,
+              owner_id: ownerAccountId,
+              reservation_id: ownerReservationId,
+              at: authoritativeTimeValue(currentCommand(tx).time),
+            }),
+          );
+          return publishHandle(tx, input, evidence, transactionId);
+        },
+      );
+    },
+    async finalizeHandleTransition(value: HandleTransition) {
+      const input = transitionInput(value);
+      const operation = await readOperation(pool, input);
+      const route = handleRoute(input.handle);
+      return execute(
+        { route, id: input.handle, kind: 'transition-handle-claimed', key: input.key, input },
+        async (tx, transactionId) => {
+          requireAllowed(matchesOperation(operation, input) && operation!.state !== 'cancelled');
+          requireAllowed(
+            affected(
+              await transitionChange.run(tx, {
+                route,
+                handle: input.handle,
+                account_id: input.accountId,
+                reservation_id: input.reservationId,
+                operation_id: input.operationId,
+                state: 'active',
+                reserved_until: '',
+                transaction_id: transactionId,
+              }),
+            ),
+          );
+          return { accountId: input.accountId, handle: input.handle };
+        },
+      );
+    },
+    async redirectTransitionHandle(value: HandleTransition) {
+      const input = transitionInput(value);
+      requireAllowed(input.expectedHandle !== null);
+      const operation = await readOperation(pool, input);
+      const route = handleRoute(input.expectedHandle);
+      return execute(
+        { route, id: input.expectedHandle, kind: 'transition-handle-redirected', key: input.key, input },
+        async (tx, transactionId) => {
+          requireAllowed(
+            matchesOperation(operation, input) && operation!.state !== 'cancelled' && operation!.oldReservationId,
+          );
+          const reservedUntil = new Date(
+            Date.parse(authoritativeTimeValue(currentCommand(tx).time)) + HANDLE_REDIRECT_TTL_MS,
+          ).toISOString();
+          requireAllowed(
+            affected(
+              await transitionChange.run(tx, {
+                route,
+                handle: input.expectedHandle!,
+                account_id: input.accountId,
+                reservation_id: operation!.oldReservationId!,
+                operation_id: input.operationId,
+                state: 'reserved',
+                reserved_until: reservedUntil,
+                transaction_id: transactionId,
+              }),
+            ),
+          );
+          return { accountId: input.accountId, handle: input.expectedHandle, reservedUntil };
+        },
+      );
+    },
+    async completeHandleTransition(value: HandleTransition) {
+      const input = transitionInput(value);
+      const operation = await readOperation(pool, input);
+      const claimed = await withConnection(pool, (client) =>
+        effectRead.run(client, {
+          route: handleRoute(input.handle),
+          handle: input.handle,
+          account_id: input.accountId,
+          reservation_id: input.reservationId,
+          operation_id: input.operationId,
+          effect: 'active',
+        }),
+      );
+      const redirected =
+        input.expectedHandle === null || !operation?.oldReservationId
+          ? null
+          : await withConnection(pool, (client) =>
+              effectRead.run(client, {
+                route: handleRoute(input.expectedHandle!),
+                handle: input.expectedHandle!,
+                account_id: input.accountId,
+                reservation_id: operation.oldReservationId!,
+                operation_id: input.operationId,
+                effect: 'reserved',
+              }),
+            );
+      return execute(
+        {
+          route: accountRoute(input.accountId),
+          id: input.accountId,
+          kind: 'handle-transition-completed',
+          key: input.key,
+          input,
+        },
+        async (tx, transactionId) => {
+          await locked(tx, input.accountId);
+          requireAllowed(matchesOperation(operation, input));
+          requireAllowed(claimed && (input.expectedHandle === null || redirected));
+          requireAllowed(
+            affected(
+              await operationComplete.run(tx, { ...transitionParameters(input), transaction_id: transactionId }),
+            ),
+          );
+          return { accountId: input.accountId, handle: input.handle };
+        },
+      );
+    },
+    async cancelHandleTransition(value: HandleTransition) {
+      const input = transitionInput(value);
+      return execute(
+        {
+          route: accountRoute(input.accountId),
+          id: input.accountId,
+          kind: 'handle-transition-cancelled',
+          key: input.key,
+          input,
+        },
+        async (tx, transactionId) => {
+          await locked(tx, input.accountId);
+          requireAllowed(
+            affected(await operationCancel.run(tx, { ...transitionParameters(input), transaction_id: transactionId })),
+          );
+          return { accountId: input.accountId, operationId: input.operationId };
+        },
+      );
+    },
+    async releaseHandleTransition(value: HandleTransition) {
+      const input = transitionInput(value);
+      const operation = await readOperation(pool, input);
+      const route = handleRoute(input.handle);
+      return execute(
+        { route, id: input.handle, kind: 'handle-transition-released', key: input.key, input },
+        async (tx) => {
+          requireAllowed(matchesOperation(operation, input) && operation!.state === 'cancelled');
+          requireAllowed(affected(await transitionRelease.run(tx, { ...transitionParameters(input), route })));
+          return { accountId: input.accountId, handle: input.handle };
+        },
+      );
+    },
+    async expireRegistration(input: LifecycleCommand & { handle: string; reservationId: string }) {
+      input = { ...input, handle: normalized(input.handle) };
+      const route = accountRoute(input.accountId);
+      return execute(
+        { route, id: input.accountId, kind: 'registration-expired', key: input.key, input },
+        async (tx, transactionId) => {
+          const account = await locked(tx, input.accountId);
+          requireAllowed(
+            account.state === 'pending' &&
+              account.registrationId === input.reservationId &&
+              account.handle === input.handle &&
+              account.expiresAt &&
+              Date.parse(account.expiresAt) <= Date.parse(authoritativeTimeValue(currentCommand(tx).time)),
+          );
+          const receipt = await fence(tx, account, true, transactionId);
+          await expiryInsert.run(tx, {
+            route,
+            account_id: input.accountId,
+            reservation_id: input.reservationId,
+            handle: input.handle,
+            transaction_id: transactionId,
+          });
+          return receipt;
+        },
+      );
+    },
+    async releaseExpiredRegistrationHandle(input: LifecycleCommand & { handle: string; reservationId: string }) {
+      input = { ...input, handle: normalized(input.handle) };
+      const proof = await withConnection(pool, (client) =>
+        expiryRead.run(client, {
+          route: accountRoute(input.accountId),
+          account_id: input.accountId,
+          reservation_id: input.reservationId,
+        }),
+      );
+      const route = handleRoute(input.handle);
+      return execute(
+        { route, id: input.handle, kind: 'registration-handle-released', key: input.key, input },
+        async (tx) => {
+          requireAllowed(proof?.handle === input.handle);
+          requireAllowed(
+            affected(
+              await registrationRelease.run(tx, {
+                route,
+                handle: input.handle,
+                account_id: input.accountId,
+                reservation_id: input.reservationId,
+              }),
+            ),
+          );
+          return { accountId: input.accountId, handle: input.handle };
+        },
+      );
     },
     async reserveHandle(input: { handle: string; accountId: string; key: string }) {
       input = { ...input };
@@ -676,6 +1030,31 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
     );
   }
   return {
+    async transitionAccountHandle(context: LifecycleRequest, value: HandleTransition) {
+      const input = transitionInput(value);
+      context = snapshotRequest(context);
+      const evidence = await publicationEvidence(pool, input);
+      const authorization = await authorize(context, 'account:update', input.accountId);
+      return execute(
+        {
+          route: accountRoute(input.accountId),
+          id: input.accountId,
+          kind: 'account-handle-published',
+          key: input.key,
+          input,
+          actor: context.actor,
+          deadline: context.deadline,
+          authorization,
+        },
+        async (tx, transactionId) => {
+          await locked(tx, input.accountId);
+          requireAllowed(await authorization.check(tx));
+          const result = await publishHandle(tx, input, evidence, transactionId);
+          requireAllowed(await authorization.check(tx));
+          return result;
+        },
+      );
+    },
     async updateAccount(context: LifecycleRequest, input: LifecycleCommand & { patch: unknown }) {
       input = { ...input };
       context = snapshotRequest(context);

@@ -286,3 +286,42 @@ test('strict signup endpoint composes Auth while rejecting public account author
   const raw = await request('/api/auth/sign-up/email', { name: 'raw', email, password });
   expect(raw.status).toBe(404);
 }, 30000);
+
+test('public signup binds credentials atomically and cannot take over a trusted staged request', async () => {
+  const ref = await workflows.beginRegistration({ key: 'private-stage', handle: 'private-stage' });
+  const takeover = await request('/signup', {
+    key: 'private-stage',
+    handle: 'private-stage',
+    email: 'takeover@example.test',
+    password,
+  });
+  expect(takeover.status).toBeGreaterThanOrEqual(400);
+  await workflows.installRegistrationCredential({
+    registrationId: ref.registrationId,
+    email: 'private-stage@example.test',
+    password,
+  });
+  expect(await workflows.activateRegistration(ref.registrationId)).toEqual({ accountId: ref.accountId });
+
+  const payload = { key: 'bound-signup', handle: 'bound-signup', email: 'bound-signup@example.test', password };
+  const competing = { ...payload, password: `${password}-changed` };
+  const responses = await Promise.all([request('/signup', payload), request('/signup', competing)]);
+  expect(responses.filter((response) => response.status === 201)).toHaveLength(1);
+  expect(responses.filter((response) => response.status >= 400)).toHaveLength(1);
+  const accepted = responses[0]!.status === 201 ? payload : competing;
+  instant += 1800001;
+  expect((await request('/signup', accepted)).status).toBe(201);
+  expect((await pool.query('SELECT id FROM "user" WHERE id=$1', ['workflow-account-bound-signup'])).rows).toHaveLength(
+    1,
+  );
+  let serialized = '';
+  for (const { tablename } of (
+    await system.query<{ tablename: string }>("SELECT tablename FROM pg_tables WHERE schemaname='dbos'")
+  ).rows)
+    serialized += JSON.stringify(
+      (await system.query(`SELECT row_to_json(t) FROM dbos."${tablename.replaceAll('"', '""')}" t`)).rows,
+    );
+  expect(serialized).not.toContain(password);
+  expect(serialized).not.toContain(competing.password);
+  expect(serialized).not.toContain(payload.email);
+}, 30000);

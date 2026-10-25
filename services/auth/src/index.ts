@@ -1,6 +1,15 @@
 import type { Pool } from 'pg';
 import { buildAuthService } from './service.ts';
 import type { JWK } from 'jose';
+export { createAccountWorkflows } from './workflows.ts';
+export type {
+  AccountWorkflowOptions,
+  AccountWorkflowPorts,
+  AccountOperation,
+  RegistrationReference,
+  WorkflowHandleTransition,
+  WorkflowFence,
+} from './workflows.ts';
 
 export interface AccessAccount {
   accountId: string;
@@ -128,7 +137,11 @@ export interface AuthService {
       authorization: string;
       email: string;
       password: string;
+      idempotencyKey?: string;
     }): Promise<{ accountId: string }>;
+    provisionCredentialless(input: { authorization: string }): Promise<{ accountId: string }>;
+    /** The coordinator must commit Access tombstone/fence before erasure. */
+    eraseAccount(accountId: string): Promise<void>;
     openAutomatedSession(input: {
       authorization: string;
       subjectAccountId: string;
