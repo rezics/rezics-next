@@ -16,8 +16,8 @@ export type SearchRequest = {
   text?: string;
   filter?: unknown;
   sort?: SearchPlan['sort'];
-  page_size?: number;
-  page_token?: string;
+  limit?: number;
+  cursor?: string;
 };
 
 type Result = { id: string; type: string; labels: Record<string, string> };
@@ -86,20 +86,20 @@ function validate(request: SearchRequest) {
   const sort = request.sort === undefined ? (text ? 'relevance' : 'name') : request.sort;
   if (sort !== 'relevance' && sort !== 'name' && sort !== 'id') invalid('/sort', 'invalid_format');
   if (sort === 'relevance' && !text) unsupported('/sort');
-  const pageSize = request.page_size === undefined ? 20 : request.page_size;
-  if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 50) invalid('/page_size', 'out_of_range');
+  const limit = request.limit === undefined ? 20 : request.limit;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) invalid('/limit', 'out_of_range');
 
   return {
     text,
     filter,
     sort,
-    pageSize,
+    limit,
     // Keep the validated JSON, rather than the compiler's internal representation, in the binding.
     bindingRequest: {
       ...(text ? { text: request.text } : {}),
       ...(filter ? { filter } : {}),
       sort,
-      page_size: pageSize,
+      limit,
     },
   };
 }
@@ -180,13 +180,13 @@ export function createSearchService({
 
   return {
     async search(principal: 'anonymous' | `account:${string}`, request: SearchRequest, now = Date.now()) {
-      const { text, filter, sort, pageSize, bindingRequest } = validate(request);
+      const { text, filter, sort, limit, bindingRequest } = validate(request);
       const binding = { operation: 'subjects.search', request: bindingRequest, principal };
       const cursor =
-        request.page_token === undefined ? undefined : decodeSearchCursor(cursors, binding, request.page_token, now);
+        request.cursor === undefined ? undefined : decodeSearchCursor(cursors, binding, request.cursor, now);
       if (cursor && !cursor.ok) {
         if (cursor.reason === 'expired') throw new ProblemError('search_restart_required');
-        invalid('/page_token', 'invalid_format');
+        invalid('/cursor', 'invalid_format');
       }
 
       const compiledText = text ? compileText(text, { field: 'search_text', prefix: 't' }) : undefined;
@@ -213,7 +213,7 @@ export function createSearchService({
       let exhausted = false;
       const results: Result[] = [];
       for (let round = 0; round < 3; round++) {
-        const size = Math.min(200, 2 * (pageSize - results.length) + 1);
+        const size = Math.min(200, 2 * (limit - results.length) + 1);
         const page = await indexRequest(() =>
           searchSubjects(client, prefix, { ...plan, size, ...(after === undefined ? {} : { after }) }),
         );
@@ -230,17 +230,15 @@ export function createSearchService({
           consumed++;
           const subject = subjects.get(hit);
           if (subject) results.push(project(subject));
-          if (results.length === pageSize) break;
+          if (results.length === limit) break;
         }
         exhausted = page.hits.length < size && consumed === page.hits.length;
-        if (exhausted || results.length === pageSize) break;
+        if (exhausted || results.length === limit) break;
       }
       return {
-        results,
+        subjects: results,
         total: total!,
-        next_page_token: exhausted
-          ? null
-          : encodeSearchCursor(cursors, binding, { generation: generation!, after: after! }, now),
+        next: exhausted ? null : encodeSearchCursor(cursors, binding, { generation: generation!, after: after! }, now),
         as_of: await asOf(generation!),
       };
     },
@@ -256,7 +254,7 @@ export function createSearchService({
         hits.map((hit) => ({ ...hit, matched: [] })),
         new Map(),
       );
-      return { results: passed.slice(0, limit).map(({ subject }) => project(subject)), as_of: await asOf(generation) };
+      return { subjects: passed.slice(0, limit).map(({ subject }) => project(subject)), as_of: await asOf(generation) };
     },
   };
 }

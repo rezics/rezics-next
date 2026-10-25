@@ -10524,14 +10524,14 @@
               "schema": {
                 "additionalProperties": false,
                 "properties": {
+                  "cursor": {
+                    "type": "string"
+                  },
                   "filter": {},
-                  "page_size": {
-                    "maximum": 50,
+                  "limit": {
+                    "maximum": 100,
                     "minimum": 1,
                     "type": "integer"
-                  },
-                  "page_token": {
-                    "type": "string"
                   },
                   "sort": {
                     "enum": [
@@ -10563,13 +10563,13 @@
                       "format": "date-time",
                       "type": "string"
                     },
-                    "next_page_token": {
+                    "next": {
                       "type": [
                         "string",
                         "null"
                       ]
                     },
-                    "results": {
+                    "subjects": {
                       "items": {
                         "additionalProperties": false,
                         "properties": {
@@ -10620,9 +10620,9 @@
                     }
                   },
                   "required": [
-                    "results",
+                    "subjects",
                     "total",
-                    "next_page_token",
+                    "next",
                     "as_of"
                   ],
                   "type": "object"
@@ -11219,7 +11219,7 @@
                       "format": "date-time",
                       "type": "string"
                     },
-                    "results": {
+                    "subjects": {
                       "items": {
                         "additionalProperties": false,
                         "properties": {
@@ -11250,7 +11250,7 @@
                     }
                   },
                   "required": [
-                    "results",
+                    "subjects",
                     "as_of"
                   ],
                   "type": "object"

@@ -7,8 +7,8 @@ export type SearchRequest = {
     text?: string;
     filter?: unknown;
     sort?: SearchPlan['sort'];
-    page_size?: number;
-    page_token?: string;
+    limit?: number;
+    cursor?: string;
 };
 type Result = {
     id: string;
@@ -23,16 +23,16 @@ export declare function createSearchService({ pool, client, prefix, source, curs
     cursors: KeyRing;
 }): {
     search(principal: 'anonymous' | `account:${string}`, request: SearchRequest, now?: number): Promise<{
-        results: Result[];
+        subjects: Result[];
         total: {
             value: number;
             relation: 'exact' | 'lower_bound';
         };
-        next_page_token: string | null;
+        next: string | null;
         as_of: string;
     }>;
     suggest(q: string, limit?: number): Promise<{
-        results: Result[];
+        subjects: Result[];
         as_of: string;
     }>;
 };

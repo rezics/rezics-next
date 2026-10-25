@@ -47,15 +47,15 @@ export declare function createKernel(dependencies: KernelDependencies): (import(
                         text?: string;
                         filter?: any;
                         sort?: "id" | "name" | "relevance";
-                        page_size?: number;
-                        page_token?: string;
+                        limit?: number;
+                        cursor?: string;
                     };
                     params: {};
                     query: unknown;
                     headers: unknown;
                     response: {
                         200: {
-                            results: {
+                            subjects: {
                                 id: string;
                                 type: string;
                                 labels: Record<string, string>;
@@ -64,7 +64,7 @@ export declare function createKernel(dependencies: KernelDependencies): (import(
                                 value: number;
                                 relation: "exact" | "lower_bound";
                             };
-                            next_page_token: string | null;
+                            next: string | null;
                             as_of: string;
                         };
                         400: {
@@ -183,7 +183,7 @@ export declare function createKernel(dependencies: KernelDependencies): (import(
     }>;
     response: {
         200: import("typebox").TObject<{
-            results: import("typebox").TArray<import("typebox").TObject<{
+            subjects: import("typebox").TArray<import("typebox").TObject<{
                 id: import("typebox").TString;
                 type: import("typebox").TString;
                 labels: import("typebox").TRecord<"^.*$", import("typebox").TString>;
@@ -267,7 +267,7 @@ export declare function createKernel(dependencies: KernelDependencies): (import(
     };
     status: import("elysia").SelectiveStatus<{
         200: {
-            results: {
+            subjects: {
                 id: string;
                 type: string;
                 labels: Record<string, string>;
@@ -333,7 +333,7 @@ export declare function createKernel(dependencies: KernelDependencies): (import(
     }>;
     problem: import("elysia").SelectiveProblem<{
         200: {
-            results: {
+            subjects: {
                 id: string;
                 type: string;
                 labels: Record<string, string>;
@@ -404,7 +404,7 @@ export declare function createKernel(dependencies: KernelDependencies): (import(
         }>;
         response: {
             200: import("typebox").TObject<{
-                results: import("typebox").TArray<import("typebox").TObject<{
+                subjects: import("typebox").TArray<import("typebox").TObject<{
                     id: import("typebox").TString;
                     type: import("typebox").TString;
                     labels: import("typebox").TRecord<"^.*$", import("typebox").TString>;
@@ -519,7 +519,7 @@ export declare function createKernel(dependencies: KernelDependencies): (import(
     readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
     readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
-    results: {
+    subjects: {
         id: string;
         type: string;
         labels: Record<string, string>;
@@ -532,7 +532,7 @@ export declare function createKernel(dependencies: KernelDependencies): (import(
     }>;
     response: {
         200: import("typebox").TObject<{
-            results: import("typebox").TArray<import("typebox").TObject<{
+            subjects: import("typebox").TArray<import("typebox").TObject<{
                 id: import("typebox").TString;
                 type: import("typebox").TString;
                 labels: import("typebox").TRecord<"^.*$", import("typebox").TString>;

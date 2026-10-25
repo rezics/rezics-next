@@ -16,14 +16,14 @@ const result = t.Object(
 );
 const searchResponse = t.Object(
   {
-    results: t.Array(result),
+    subjects: t.Array(result),
     total: t.Object({ value: t.Integer(), relation: t.Union([t.Literal('exact'), t.Literal('lower_bound')]) }, object),
-    next_page_token: t.Union([t.String(), t.Null()]),
+    next: t.Union([t.String(), t.Null()]),
     as_of: t.String({ format: 'date-time' }),
   },
   object,
 );
-const suggestResponse = t.Object({ results: t.Array(result), as_of: t.String({ format: 'date-time' }) }, object);
+const suggestResponse = t.Object({ subjects: t.Array(result), as_of: t.String({ format: 'date-time' }) }, object);
 const unauthorized = problemSchema('authentication_required', 'invalid_credentials');
 const unavailable = problemSchema('index_not_ready', 'overloaded', 'deadline_exceeded');
 const resource = { route: 0, id: GLOBAL_CONTEXT };
@@ -38,8 +38,8 @@ export function searchRoutes<App>(app: App, { pool, search }: { pool: Pool; sear
             text: t.Optional(t.String()),
             filter: t.Optional(t.Any()),
             sort: t.Optional(t.Union([t.Literal('relevance'), t.Literal('name'), t.Literal('id')])),
-            page_size: t.Optional(t.Integer({ minimum: 1, maximum: 50 })),
-            page_token: t.Optional(t.String()),
+            limit: t.Optional(t.Integer({ minimum: 1, maximum: 100 })),
+            cursor: t.Optional(t.String()),
           },
           object,
         ),
