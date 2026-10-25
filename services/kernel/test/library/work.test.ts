@@ -6,6 +6,7 @@ import { createAccess } from '../../src/access/index.ts';
 import type { CloudEvent } from '../../src/events/log.ts';
 import { createCollectionCommands } from '../../src/library/collections.ts';
 import type { Collection, CollectionVisibility } from '../../src/library/collection-model.ts';
+import { syncSubjectListing } from '../../src/library/listing.ts';
 import { libraryWorkModule } from '../../src/library/work-module.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
@@ -34,6 +35,7 @@ const access = createAccess({
 });
 const commands = createCollectionCommands({ pool: db.pool, access });
 let actor: AccountActor;
+let token: string;
 let worker: Awaited<ReturnType<typeof composeWork>>;
 
 beforeAll(async () => {
@@ -44,7 +46,7 @@ beforeAll(async () => {
      VALUES ($1, $2, 'actor', 'active', $2, false, 1, true)`,
     [routeOf(accountId), accountId],
   );
-  const token = await new SignJWT({
+  token = await new SignJWT({
     client_id: 'web',
     scope: scopes.join(' '),
     authn_epoch: 1,
@@ -56,7 +58,7 @@ beforeAll(async () => {
     .setAudience('https://api.rezics.test')
     .setSubject(accountId)
     .setIssuedAt()
-    .setExpirationTime('1h')
+    .setExpirationTime('5m')
     .sign(signing.privateKey);
   actor = await access.authenticate(token, { pool: db.pool, deadline: Date.now() + 5000 });
   await bootstrapRelease(db.pool, bundledRelease);
@@ -71,6 +73,7 @@ afterAll(async () => {
 });
 
 async function subject() {
+  actor = await owner();
   const key = randomUUID();
   return (
     await createSubject(db.pool, {
@@ -86,19 +89,27 @@ async function subject() {
 }
 
 async function collection(visibility: CollectionVisibility = 'public') {
-  return (await commands.createCollection(actor, { title: 'Listing Collection', visibility }, randomUUID())).value;
+  return (await commands.createCollection(await owner(), { title: 'Listing Collection', visibility }, randomUUID()))
+    .value;
 }
 
 async function add(collectionId: string, subjectId: string) {
-  return (await commands.addMember(actor, collectionId, { subjectId }, randomUUID())).value;
+  return (await commands.addMember(await owner(), collectionId, { subjectId }, randomUUID())).value;
 }
 
 async function flip(row: Collection, visibility: CollectionVisibility) {
-  return (await commands.updateCollection(actor, row.id, { revision: row.revision, visibility }, randomUUID())).value;
+  return (await commands.updateCollection(await owner(), row.id, { revision: row.revision, visibility }, randomUUID()))
+    .value;
+}
+
+async function owner() {
+  return access.authenticate(token, { pool: db.pool, deadline: Date.now() + 5000 });
 }
 
 async function event(collectionId: string, memberId?: string): Promise<CloudEvent> {
-  const type = `com.rezics.library.collection.${memberId ? 'member' : 'listing'}.changed.v1`;
+  const type: CloudEvent['type'] = memberId
+    ? 'com.rezics.library.collection.member.changed.v1'
+    : 'com.rezics.library.collection.listing.changed.v1';
   const row = (
     await db.admin.query(
       `SELECT * FROM core.outbox WHERE subject=$1 AND type=$2
@@ -131,11 +142,11 @@ async function run(notification: CloudEvent) {
     name,
     notification,
   );
-  await handle.getResult();
+  await handle.getResult({ pollingIntervalMs: 10 });
   if (name === 'library_collection_listing') {
     const workflow = await client.getWorkflow(notification.id);
     expect(workflow).toMatchObject({ workflowName: 'library.collectionListing', queueName: 'workflows' });
-    await client.retrieveWorkflow(notification.id).getResult();
+    await client.retrieveWorkflow(notification.id).getResult({ pollingIntervalMs: 10 });
   }
 }
 
@@ -178,10 +189,10 @@ test('member effects project duplicate membership once and remove each member fr
   const original = await listed(s, c.id, 2);
   await run(old);
   expect(await state(s)).toEqual(original);
-  await commands.removeMember(actor, c.id, first.id, randomUUID());
+  await commands.removeMember(await owner(), c.id, first.id, randomUUID());
   await run(await event(c.id, first.id));
   await listed(s, c.id, 1);
-  await commands.removeMember(actor, c.id, second.id, randomUUID());
+  await commands.removeMember(await owner(), c.id, second.id, randomUUID());
   await run(await event(c.id, second.id));
   const final = await listed(s, c.id, 0);
   await run(old);
@@ -206,7 +217,7 @@ test('listing workflows hide and restore every distinct subject, and deleted mem
   c = await flip(c, 'public');
   await run(await event(c.id));
   for (const s of subjects) await listed(s, c.id, s === subjects[0] ? 2 : 1);
-  await commands.deleteCollection(actor, c.id, c.revision, randomUUID());
+  await commands.deleteCollection(await owner(), c.id, c.revision, randomUUID());
   const deleted = await event(c.id);
   await run(deleted);
   for (const s of subjects) await listed(s, c.id, 0);
@@ -258,8 +269,8 @@ test('member and listing statement costs depend only on this Collection at three
     for (let i = previous; i < scale; i++) {
       const c = await collection();
       const s = await subject();
-      const m = await add(c.id, s);
-      await run(await event(c.id, m.id));
+      await add(c.id, s);
+      await syncSubjectListing({ pool: db.pool }, { subjectId: s, collectionId: c.id });
     }
     previous = scale;
     const c = await collection();

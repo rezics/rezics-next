@@ -16,6 +16,11 @@ test('the library module runs once after commerce in the single configured kerne
   );
   const env = {
     DATABASE_URL: databaseUrl,
+    KERNEL_ROUTE_KEY: Buffer.alloc(32, 106).toString('base64url'),
+    KERNEL_SESSION_KEYS: `0:${Buffer.alloc(32, 107).toString('base64url')}`,
+    AUTH_ISSUER: 'https://auth.example.test',
+    AUTH_AUDIENCE: 'https://api.rezics.test',
+    AUTH_JWKS_URL: 'https://auth.example.test/jwks',
     STRIPE_SECRET_KEY: 'sk_test_library_worker',
     STRIPE_MANAGED_PAYMENTS: 'false',
     CHECKOUT_SUCCESS_URL: 'https://web.example.test/success',

@@ -1,0 +1,62 @@
+import { DBOS } from '@dbos-inc/dbos-sdk';
+import { withConnection } from '../database/pool.ts';
+import type { WorkContext } from '../work/registry.ts';
+import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
+import { requireRoute } from './command-support.ts';
+import { syncSubjectListing } from './listing.ts';
+import memberSubjects from './work-member-subjects.sql';
+
+const COLLECTION_LISTING_WORKFLOW = 'library.collectionListing';
+const PAGE_SIZE = 100;
+
+export function registerLibraryWork({ pool, client, addEffects }: WorkContext): void {
+  const syncPage = DBOS.registerStep(
+    async (collectionId: string, after: string): Promise<string | null> => {
+      // The route/Collection/subject index bounds this seek, including tombstoned Collections.
+      const subjects = await withConnection(pool, (connection) =>
+        memberSubjects.run(
+          { query: connection.query.bind(connection) },
+          { route: requireRoute(collectionId), collection_id: collectionId, after, limit: PAGE_SIZE },
+        ),
+      );
+      // Release the Collection connection before entering any subject partition command.
+      // A retry repeats the whole page against current source truth; completed syncs are no-ops.
+      for (const { subjectId } of subjects) await syncSubjectListing({ pool }, { subjectId, collectionId });
+      return subjects.length === PAGE_SIZE ? subjects[PAGE_SIZE - 1]!.subjectId : null;
+    },
+    { name: 'library.syncCollectionPage', ...COMMAND_STEP_RETRIES },
+  );
+  DBOS.registerWorkflow(
+    async (collectionId: string) => {
+      let after: string | null = '00000000-0000-0000-0000-000000000000';
+      while (after !== null) after = await syncPage(collectionId, after);
+    },
+    { name: COLLECTION_LISTING_WORKFLOW },
+  );
+  addEffects([
+    {
+      name: 'library_member_listing',
+      types: ['com.rezics.library.collection.member.changed.v1'],
+      async run(event) {
+        const { subjectId, collectionId } = event.data as { subjectId: string; collectionId: string };
+        await syncSubjectListing({ pool }, { subjectId, collectionId });
+      },
+    },
+    {
+      name: 'library_collection_listing',
+      types: ['com.rezics.library.collection.listing.changed.v1'],
+      async run(event) {
+        const { collectionId } = event.data as { collectionId: string };
+        await client.enqueue(
+          {
+            workflowName: COLLECTION_LISTING_WORKFLOW,
+            workflowID: event.id,
+            workflowIDReusePolicy: 'return-existing',
+            queueName: 'workflows',
+          },
+          collectionId,
+        );
+      },
+    },
+  ]);
+}
