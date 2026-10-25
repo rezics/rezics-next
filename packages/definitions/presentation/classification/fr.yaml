@@ -1,0 +1,9 @@
+types:
+  skos:Concept: 'Concept'
+  skos:ConceptScheme: 'Schéma de concepts'
+properties:
+  skos:inScheme: 'dans le schéma'
+  skos:broader: 'a pour concept générique'
+  foaf:focus: 'sujet représenté'
+  schema:keywords: 'mots-clés'
+  schema:genre: 'genre'

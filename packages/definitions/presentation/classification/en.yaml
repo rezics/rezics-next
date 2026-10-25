@@ -1,0 +1,9 @@
+types:
+  skos:Concept: 'Concept'
+  skos:ConceptScheme: 'Concept Scheme'
+properties:
+  skos:inScheme: 'is in scheme'
+  skos:broader: 'has broader'
+  foaf:focus: 'focus'
+  schema:keywords: 'keywords'
+  schema:genre: 'genre'

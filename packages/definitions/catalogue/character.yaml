@@ -10,3 +10,8 @@ default_range: string
 imports:
   - linkml:types
   - core
+classes:
+  FictionalCharacter:
+    is_a: Character
+    class_uri: wd:Q95074
+    description: A fictional character.

@@ -13,7 +13,7 @@ imports:
 classes:
   LaunchWork:
     abstract: true
-    is_a: Thing
+    is_a: CreativeWork
     slots:
       - datePublished
       - inLanguage

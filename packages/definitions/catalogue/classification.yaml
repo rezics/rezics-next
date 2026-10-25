@@ -6,7 +6,61 @@ prefixes:
   linkml: https://w3id.org/linkml/
   schema: http://schema.org/
   wd: http://www.wikidata.org/entity/
+  skos: http://www.w3.org/2004/02/skos/core#
+  foaf: http://xmlns.com/foaf/0.1/
 default_range: string
 imports:
   - linkml:types
   - core
+classes:
+  Concept:
+    is_a: Thing
+    class_uri: skos:Concept
+    description: A classification concept, optionally standing for a subject through its focus.
+    slots:
+      - inScheme
+      - broader
+      - focus
+  ConceptScheme:
+    is_a: Thing
+    class_uri: skos:ConceptScheme
+    description: A scheme of concepts, created and adopted like any other subject.
+slots:
+  inScheme:
+    slot_uri: skos:inScheme
+    description: A concept scheme to which the concept belongs.
+    range: ConceptScheme
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+  broader:
+    slot_uri: skos:broader
+    description: A broader concept in the classification hierarchy.
+    range: Concept
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+  focus:
+    slot_uri: foaf:focus
+    description: The subject that this concept stands for.
+    range: Thing
+    annotations:
+      datatype: wikibase-item
+  genre:
+    slot_uri: schema:genre
+    description: A genre concept classifying the creative work.
+    range: Concept
+    multivalued: true
+    exact_mappings:
+      - wd:P136
+    annotations:
+      datatype: wikibase-item
+      qualifiers: spoilerLevel
+  keywords:
+    slot_uri: schema:keywords
+    description: A tag concept classifying the creative work.
+    range: Concept
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      qualifiers: spoilerLevel

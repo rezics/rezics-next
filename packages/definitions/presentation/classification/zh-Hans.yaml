@@ -1,0 +1,9 @@
+types:
+  skos:Concept: '概念'
+  skos:ConceptScheme: '概念体系'
+properties:
+  skos:inScheme: '所属概念体系'
+  skos:broader: '上位概念'
+  foaf:focus: '代表的主体'
+  schema:keywords: '标签'
+  schema:genre: '类型'

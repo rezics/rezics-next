@@ -8,6 +8,7 @@ prefixes:
   wd: http://www.wikidata.org/entity/
   bf: http://id.loc.gov/ontologies/bibframe/
   wdt: http://www.wikidata.org/prop/direct/
+  rezics: https://rezics.com/vocab/
 default_range: string
 imports:
   - linkml:types
@@ -20,6 +21,25 @@ classes:
       - image
       - name
       - sameAs
+  CreativeWork:
+    abstract: true
+    is_a: Thing
+    class_uri: schema:CreativeWork
+    description: A creative work, including a published realization of a work.
+    slots:
+      - contributor
+      - genre
+      - keywords
+      - partOfSeries
+  Character:
+    abstract: true
+    is_a: Thing
+    description: A character represented in a creative work.
+  CreativeWorkSeries:
+    abstract: true
+    is_a: CreativeWork
+    class_uri: schema:CreativeWorkSeries
+    description: A series of creative works.
   Person:
     is_a: Thing
     class_uri: schema:Person
@@ -94,10 +114,10 @@ slots:
       - wd:P50
     annotations:
       datatype: wikibase-item
-      qualifiers: position openLibraryId bangumiPersonId vndbId sameAs
+      qualifiers: creditedAs position detailedRole openLibraryId bangumiPersonId vndbId sameAs
   position:
     slot_uri: schema:position
-    description: The one-based position of an attributed person or organization.
+    description: The one-based order of a credit or the ordinal of a member in a series.
     pattern: '^[1-9][0-9]{0,3}$'
     exact_mappings:
       - wd:P1545
@@ -174,3 +194,155 @@ slots:
       - wd:P3180
     annotations:
       datatype: external-id
+  illustrator:
+    slot_uri: schema:illustrator
+    description: A person or organization credited with illustration.
+    any_of:
+      - range: Person
+      - range: Organization
+    multivalued: true
+    exact_mappings:
+      - wd:P110
+    annotations:
+      datatype: wikibase-item
+      qualifiers: creditedAs position detailedRole
+  director:
+    slot_uri: schema:director
+    description: A person or organization credited with direction.
+    any_of:
+      - range: Person
+      - range: Organization
+    multivalued: true
+    exact_mappings:
+      - wd:P57
+    annotations:
+      datatype: wikibase-item
+      qualifiers: creditedAs position detailedRole
+  musicBy:
+    slot_uri: schema:musicBy
+    description: A person or organization credited with composing the music.
+    any_of:
+      - range: Person
+      - range: Organization
+    multivalued: true
+    exact_mappings:
+      - wd:P86
+    annotations:
+      datatype: wikibase-item
+      qualifiers: creditedAs position detailedRole
+  producer:
+    slot_uri: schema:producer
+    description: A person or organization credited with production.
+    any_of:
+      - range: Person
+      - range: Organization
+    multivalued: true
+    exact_mappings:
+      - wd:P162
+    annotations:
+      datatype: wikibase-item
+      qualifiers: creditedAs position detailedRole
+  productionCompany:
+    slot_uri: schema:productionCompany
+    description: A person or organization credited as a production company.
+    any_of:
+      - range: Person
+      - range: Organization
+    multivalued: true
+    exact_mappings:
+      - wd:P272
+    annotations:
+      datatype: wikibase-item
+      qualifiers: creditedAs position detailedRole
+  screenwriter:
+    slot_uri: wdt:P58
+    description: A person or organization credited with writing the screenplay.
+    any_of:
+      - range: Person
+      - range: Organization
+    multivalued: true
+    exact_mappings:
+      - wd:P58
+    annotations:
+      datatype: wikibase-item
+      qualifiers: creditedAs position detailedRole
+  developer:
+    slot_uri: wdt:P178
+    description: A person or organization credited with development.
+    any_of:
+      - range: Person
+      - range: Organization
+    multivalued: true
+    exact_mappings:
+      - wd:P178
+    annotations:
+      datatype: wikibase-item
+      qualifiers: creditedAs position detailedRole
+  voiceActor:
+    slot_uri: wdt:P725
+    description: A person or organization credited with a voice performance.
+    any_of:
+      - range: Person
+      - range: Organization
+    multivalued: true
+    exact_mappings:
+      - wd:P725
+    annotations:
+      datatype: wikibase-item
+      qualifiers: creditedAs position detailedRole characterRole
+  contributor:
+    slot_uri: schema:contributor
+    description: A person or organization credited in any other job, specified by its detailed role.
+    any_of:
+      - range: Person
+      - range: Organization
+    multivalued: true
+    exact_mappings:
+      - wd:P767
+    annotations:
+      datatype: wikibase-item
+      qualifiers: creditedAs position detailedRole
+  creditedAs:
+    slot_uri: wdt:P1932
+    description: The name as it appears in the credit.
+    annotations:
+      datatype: string
+  detailedRole:
+    slot_uri: wdt:P3831
+    description: A concept specifying the detailed staff position or appearance role.
+    range: Concept
+    annotations:
+      datatype: wikibase-item
+  characterRole:
+    slot_uri: wdt:P453
+    description: The character portrayed in a voice performance.
+    range: Character
+    annotations:
+      datatype: wikibase-item
+  character:
+    slot_uri: schema:character
+    description: A character appearing in a creative work.
+    range: Character
+    multivalued: true
+    exact_mappings:
+      - wd:P674
+    annotations:
+      datatype: wikibase-item
+      qualifiers: detailedRole creditedAs spoilerLevel
+  spoilerLevel:
+    slot_uri: rezics:spoilerLevel
+    description: Disclosure level from 0 (no spoiler) through 2 (major spoiler).
+    range: integer
+    minimum_value: 0
+    maximum_value: 2
+    annotations:
+      datatype: quantity
+      units: '1'
+  partOfSeries:
+    slot_uri: wdt:P179
+    description: The series to which this member belongs, with its ordinal as a position qualifier.
+    range: CreativeWorkSeries
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      qualifiers: position

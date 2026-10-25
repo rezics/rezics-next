@@ -19,3 +19,18 @@ properties:
   wdt:P5732: Bangumi subject ID
   wdt:P6298: bgm.tv person ID
   wdt:P3180: Visual Novel Database ID
+  schema:illustrator: 'illustrator'
+  schema:director: 'director'
+  schema:musicBy: 'composer'
+  schema:producer: 'producer'
+  schema:productionCompany: 'production company'
+  wdt:P58: 'screenwriter'
+  wdt:P178: 'developer'
+  wdt:P725: 'voice actor'
+  schema:contributor: 'contributor to the creative work or subject'
+  wdt:P1932: 'object of statement named as'
+  wdt:P3831: 'object of statement has role'
+  wdt:P453: 'character role'
+  schema:character: 'characters'
+  wdt:P179: 'part of the series'
+  rezics:spoilerLevel: 'spoiler level'

@@ -1,0 +1,9 @@
+types:
+  skos:Concept: 'Begriff'
+  skos:ConceptScheme: 'Begriffssystem'
+properties:
+  skos:inScheme: 'im Begriffssystem'
+  skos:broader: 'hat Oberbegriff'
+  foaf:focus: 'Bezugssubjekt'
+  schema:keywords: 'Schlagwörter'
+  schema:genre: 'Genre'

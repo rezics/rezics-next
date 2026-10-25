@@ -19,3 +19,18 @@ properties:
   wdt:P5732: Bangumi主題識別碼
   wdt:P6298: Bangumi人物識別碼
   wdt:P3180: 視覺小說數據庫識別碼
+  schema:illustrator: '插畫家'
+  schema:director: '導演'
+  schema:musicBy: '作曲者'
+  schema:producer: '製作人'
+  schema:productionCompany: '製作商'
+  wdt:P58: '編劇'
+  wdt:P178: '開發者'
+  wdt:P725: '配音員'
+  schema:contributor: '創作作品或主題貢獻者'
+  wdt:P1932: '客體表述為'
+  wdt:P3831: '客體角色'
+  wdt:P453: '人物角色'
+  schema:character: '登場角色'
+  wdt:P179: '所屬系列'
+  rezics:spoilerLevel: '劇透程度'

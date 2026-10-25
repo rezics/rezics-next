@@ -13,7 +13,7 @@ imports:
   - core
 classes:
   Work:
-    is_a: Thing
+    is_a: CreativeWork
     class_uri: schema:Book
     description: A creative work that is a book, independent of its editions.
     exact_mappings:
@@ -26,7 +26,7 @@ classes:
       - datePublished
       - inLanguage
   Edition:
-    is_a: Thing
+    is_a: CreativeWork
     class_uri: bf:Instance
     description: A published edition of a book work.
     exact_mappings:
@@ -44,8 +44,8 @@ classes:
 slots:
   exampleOfWork:
     slot_uri: schema:exampleOfWork
-    description: The book work represented by this edition.
-    range: Work
+    description: The creative work represented by this edition.
+    range: CreativeWork
     exact_mappings:
       - wd:P629
     annotations:
@@ -61,14 +61,16 @@ slots:
       datatype: external-id
   publisher:
     slot_uri: schema:publisher
-    description: An organization that published the edition.
-    range: Organization
+    description: A person or organization credited with publishing the edition.
+    any_of:
+      - range: Person
+      - range: Organization
     multivalued: true
     exact_mappings:
       - wd:P123
     annotations:
       datatype: wikibase-item
-      qualifiers: vndbId sameAs
+      qualifiers: creditedAs position detailedRole vndbId sameAs
   numberOfPages:
     slot_uri: schema:numberOfPages
     description: The number of pages in the edition.
@@ -81,11 +83,13 @@ slots:
       units: '1'
   translator:
     slot_uri: schema:translator
-    description: A person credited with translating the edition.
-    range: Person
+    description: A person or organization credited with translating the edition.
+    any_of:
+      - range: Person
+      - range: Organization
     multivalued: true
     exact_mappings:
       - wd:P655
     annotations:
       datatype: wikibase-item
-      qualifiers: position openLibraryId sameAs
+      qualifiers: creditedAs position detailedRole openLibraryId sameAs

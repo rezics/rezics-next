@@ -41,6 +41,77 @@ changes, add a new term instead of editing the existing one.
 
 Run `bun run --cwd packages/definitions check` from the repository root.
 
+### Shared terms
+
+`CreativeWork`, `Character` and `CreativeWorkSeries` are abstract anchors. Book
+works, editions and launch works extend `CreativeWork`; `FictionalCharacter` and
+`Series` extend the other two anchors. A range on an anchor reaches every concrete
+subclass a vertical adds. The two concrete profiles add no slots of their own here.
+`schema:exampleOfWork` ranges over all creative works, including editions.
+
+A credit is a statement whose property names the job and whose value is a person
+or organization. Its qualifiers record the name as credited, credit order and a
+detailed role concept, such as a Bangumi staff position. Existing identifier
+qualifiers remain available. A voice credit can also name the character portrayed.
+Only `schema:contributor` is inherited from `CreativeWork`; profiles attach other
+credit properties and character appearances to the types that use them.
+
+An appearance is a `schema:character` statement, qualified by an appearance role
+concept (main, supporting, and so on), its credited name and spoiler level. The
+custom `rezics:spoilerLevel` quantity uses unit `1`, from 0 (no spoiler) through
+2 (major spoiler). This disclosure mechanism has no standard vocabulary term.
+
+Genres, tags and detailed roles are SKOS concepts. A concept and its scheme are
+subjects, created and adopted like any other subject; a Realm's board scheme is
+one example. When a classification value stands for another subject, the concept
+names that subject with `foaf:focus`, whose range is `Thing`.
+
+Series membership is an adopted `wdt:P179` statement on the member creative work,
+with its ordinal in `schema:position`. It is never a list membership. The shared
+catalogue adds a fixed set of terms; releases remain cached by digest, with no
+runtime path changes.
+
+The following list cites the vocabulary terms and Wikidata mappings used here.
+SKOS and FOAF terms cite their publishing vocabularies. New terms have labels in
+`en`, `zh-Hant`, `zh-Hans`, `ja`, `ko`, `de`, `fr` and `es`, in their respective
+presentation groups. Labels use Wikidata's language-specific labels where available
+or the vocabulary's English label; missing labels are authored locally without a
+translation service. Existing terms retain their current labels.
+
+| Term                        | Source and meaning                                                                                                                                         |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schema:CreativeWork`       | [CreativeWork](https://schema.org/CreativeWork), the shared work anchor                                                                                    |
+| `schema:CreativeWorkSeries` | [CreativeWorkSeries](https://schema.org/CreativeWorkSeries), the shared series anchor                                                                      |
+| `wd:Q95074`                 | [character](https://www.wikidata.org/wiki/Q95074), the concrete fictional character profile                                                                |
+| `wd:Q7725310`               | [series of creative works](https://www.wikidata.org/wiki/Q7725310), the concrete series profile                                                            |
+| `schema:exampleOfWork`      | [exampleOfWork](https://schema.org/exampleOfWork), mapped to [edition or translation of (P629)](https://www.wikidata.org/wiki/Property:P629)               |
+| `schema:author`             | [author](https://schema.org/author), mapped to [author (P50)](https://www.wikidata.org/wiki/Property:P50)                                                  |
+| `schema:translator`         | [translator](https://schema.org/translator), mapped to [translator (P655)](https://www.wikidata.org/wiki/Property:P655)                                    |
+| `schema:publisher`          | [publisher](https://schema.org/publisher), mapped to [publisher (P123)](https://www.wikidata.org/wiki/Property:P123)                                       |
+| `schema:illustrator`        | [illustrator](https://schema.org/illustrator), mapped to [illustrator (P110)](https://www.wikidata.org/wiki/Property:P110)                                 |
+| `schema:director`           | [director](https://schema.org/director), mapped to [director (P57)](https://www.wikidata.org/wiki/Property:P57)                                            |
+| `schema:musicBy`            | [musicBy](https://schema.org/musicBy), mapped to [composer (P86)](https://www.wikidata.org/wiki/Property:P86)                                              |
+| `schema:producer`           | [producer](https://schema.org/producer), mapped to [producer (P162)](https://www.wikidata.org/wiki/Property:P162)                                          |
+| `schema:productionCompany`  | [productionCompany](https://schema.org/productionCompany), mapped to [production company (P272)](https://www.wikidata.org/wiki/Property:P272)              |
+| `wdt:P58`                   | [screenwriter](https://www.wikidata.org/wiki/Property:P58)                                                                                                 |
+| `wdt:P178`                  | [developer](https://www.wikidata.org/wiki/Property:P178)                                                                                                   |
+| `wdt:P725`                  | [voice actor](https://www.wikidata.org/wiki/Property:P725)                                                                                                 |
+| `schema:contributor`        | [contributor](https://schema.org/contributor), mapped to [contributor to the creative work or subject (P767)](https://www.wikidata.org/wiki/Property:P767) |
+| `wdt:P1932`                 | [object of statement named as](https://www.wikidata.org/wiki/Property:P1932), the name as credited                                                         |
+| `schema:position`           | [position](https://schema.org/position), mapped to [series ordinal (P1545)](https://www.wikidata.org/wiki/Property:P1545)                                  |
+| `wdt:P3831`                 | [object of statement has role](https://www.wikidata.org/wiki/Property:P3831), a detailed role concept                                                      |
+| `wdt:P453`                  | [character role](https://www.wikidata.org/wiki/Property:P453), the character portrayed                                                                     |
+| `schema:character`          | [character](https://schema.org/character), mapped to [characters (P674)](https://www.wikidata.org/wiki/Property:P674)                                      |
+| `rezics:spoilerLevel`       | `https://rezics.com/vocab/spoilerLevel`, the custom disclosure quantity described above                                                                    |
+| `skos:Concept`              | [Concept](https://www.w3.org/2009/08/skos-reference/skos.html#Concept), a classification concept                                                           |
+| `skos:ConceptScheme`        | [ConceptScheme](https://www.w3.org/2009/08/skos-reference/skos.html#ConceptScheme), a concept scheme                                                       |
+| `skos:inScheme`             | [inScheme](https://www.w3.org/2009/08/skos-reference/skos.html#inScheme), scheme membership                                                                |
+| `skos:broader`              | [broader](https://www.w3.org/2009/08/skos-reference/skos.html#broader), a broader concept                                                                  |
+| `foaf:focus`                | [focus](http://xmlns.com/foaf/spec/#term_focus), the subject a concept stands for                                                                          |
+| `schema:genre`              | [genre](https://schema.org/genre), mapped to [genre (P136)](https://www.wikidata.org/wiki/Property:P136)                                                   |
+| `schema:keywords`           | [keywords](https://schema.org/keywords), tag concepts                                                                                                      |
+| `wdt:P179`                  | [part of the series](https://www.wikidata.org/wiki/Property:P179), membership on the member                                                                |
+
 Release tooling imports `compileCatalogue` and `CatalogueError` from
 `@rezics/definitions/compile`. This separate entry point loads
 `@neverblink/linkml` 0.17.1; the default entry point never imports the compiler or

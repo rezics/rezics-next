@@ -1,0 +1,16 @@
+properties:
+  schema:illustrator: 'illustrateur ou illustratrice'
+  schema:director: 'réalisé(e) ou mis(e) en scène par'
+  schema:musicBy: 'compositeur ou compositrice'
+  schema:producer: 'producteur ou productrice'
+  schema:productionCompany: 'société de production'
+  wdt:P58: 'scénariste'
+  wdt:P178: 'développé par'
+  wdt:P725: 'comédien ou comédienne de doublage'
+  schema:contributor: 'collaborateur ou collaboratrice au travail de création'
+  wdt:P1932: 'indiqué comme'
+  wdt:P3831: "rôle de l'objet de la déclaration"
+  wdt:P453: 'rôle'
+  schema:character: 'personnages'
+  wdt:P179: 'série'
+  rezics:spoilerLevel: 'niveau de divulgation'

@@ -1,0 +1,9 @@
+types:
+  skos:Concept: '개념'
+  skos:ConceptScheme: '개념 체계'
+properties:
+  skos:inScheme: '소속 개념 체계'
+  skos:broader: '상위 개념'
+  foaf:focus: '가리키는 대상'
+  schema:keywords: '태그'
+  schema:genre: '장르'

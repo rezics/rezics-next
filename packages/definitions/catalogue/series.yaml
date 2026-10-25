@@ -10,3 +10,8 @@ default_range: string
 imports:
   - linkml:types
   - core
+classes:
+  Series:
+    is_a: CreativeWorkSeries
+    class_uri: wd:Q7725310
+    description: A series of creative works.

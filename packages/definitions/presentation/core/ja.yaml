@@ -19,3 +19,18 @@ properties:
   wdt:P5732: 番組計画主題識別子
   wdt:P6298: 番組計画人物識別子
   wdt:P3180: ビジュアルノベル・データベース識別子
+  schema:illustrator: '挿絵画家'
+  schema:director: '監督'
+  schema:musicBy: '作曲者'
+  schema:producer: 'プロデューサー'
+  schema:productionCompany: '制作会社'
+  wdt:P58: '脚本'
+  wdt:P178: '開発元'
+  wdt:P725: '声優'
+  schema:contributor: '作品あるいは主題の貢献者'
+  wdt:P1932: '原文表記'
+  wdt:P3831: '当てはまる役割'
+  wdt:P453: '配役'
+  schema:character: '登場キャラクター'
+  wdt:P179: 'シリーズ'
+  rezics:spoilerLevel: 'ネタバレ度'

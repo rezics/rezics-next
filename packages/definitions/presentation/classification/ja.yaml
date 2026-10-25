@@ -1,0 +1,9 @@
+types:
+  skos:Concept: '概念'
+  skos:ConceptScheme: '概念体系'
+properties:
+  skos:inScheme: '所属する概念体系'
+  skos:broader: '上位概念'
+  foaf:focus: '指し示す対象'
+  schema:keywords: 'タグ'
+  schema:genre: 'ジャンル'
