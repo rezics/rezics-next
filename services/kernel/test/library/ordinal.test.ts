@@ -74,7 +74,8 @@ test('respacing yields short evenly spaced sorted unique keys', () => {
     for (const key of keys) {
       expect(key.length).toBeLessThanOrEqual(MAX_ORDINAL_KEY_LENGTH);
       expect(isOrdinalKey(key)).toBe(true);
-      expect(key).toBe(keyBetween(previous, null));
+      const spaced = keyBetween(previous, null);
+      expect(spaced).toBe(key);
       previous = key;
     }
     expect(new Set(keys).size).toBe(count);
