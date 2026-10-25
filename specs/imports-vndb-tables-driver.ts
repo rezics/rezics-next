@@ -18,7 +18,10 @@
  * entry_meta's exported column is id, although the generator selects itemid.
  *
  * Grouped payload follows the independently frozen imports-vndb-driver.ts suite:
- * vn object, vn_titles array, entry_meta object with numeric per-entry revision.
+ * vn {id}, vn_titles array, entry_meta object with numeric per-entry revision.
+ * Validate all known input columns, then retain only the converter's needed
+ * columns. Descriptions, image IDs and unused VN columns are discarded, never
+ * reconstructed by this adapter. Preserve native entry_meta dates and counters.
  * entry_meta also contains other entry types: skip those, not orphan v IDs.
  * No auxiliary table is needed for the current metadata-only converter. Use the
  * actual VNDB @rezics/conversion module and its converter_revision by reference.
@@ -62,7 +65,7 @@ export interface Entry {
   linkTarget?: string;
 }
 export interface GroupedRecord {
-  vn: Record<string, unknown> & { id: string };
+  vn: { id: string };
   vn_titles: Array<{ id: string; lang: string; official: boolean; title: string; latin: string | null }>;
   entry_meta: { id: string; created: string; lastmod: string; revision: number; num_edits: number; num_users: number };
 }
@@ -107,7 +110,8 @@ export interface VndbTablesDriver {
     externalRequests: string[];
     executedDumpStatements: number;
   }>;
-  /** Search actual durable staging/spools/logs for these bytes, outside measurement. */
+  /** Search actual current SQLite logical rows and durable spools/logs for these
+   * bytes, outside measurement; do not search deleted SQLite page remnants. */
   retainedMarkers(markers: string[]): Promise<string[]>;
   measure<T>(operation: () => Promise<T>): Promise<{ value: T; cost: Cost }>;
   /**

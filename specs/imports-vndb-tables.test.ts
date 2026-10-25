@@ -67,6 +67,7 @@ function at(root: unknown, path: Path): unknown {
 }
 function converted(d: VndbTablesDriver, row: Awaited<ReturnType<VndbTablesDriver['page']>>['records'][number]) {
   expect(row.key).toBe(row.record.vn.id);
+  expect(row.record.vn).toEqual({ id: row.key });
   expect(row.revision).toBe(row.record.entry_meta.revision);
   expect(row.output).toEqual(d.converter.convert(row.record));
   const located = d.converter.locate(row.output);
@@ -183,21 +184,8 @@ test('the actual VNDB table-file format is grouped into complete source records 
     expect(first.next).toBe('v123');
     const row = first.records[0]!;
     expect(Object.keys(row.record).sort()).toEqual(['entry_meta', 'vn', 'vn_titles']);
-    expect(row.record.vn).toEqual({
-      id: 'v123',
-      image: 'cv123',
-      c_image: 'cv123',
-      olang: 'en',
-      c_votecount: 2,
-      c_rating: 700,
-      c_average: 700,
-      c_length: null,
-      c_lengthnum: 0,
-      length: 2,
-      devstatus: 0,
-      alias: 'Harbor Sentinel',
-      description: 'UNLICENSED_DESCRIPTION_SENTINEL',
-    });
+    expect(row.record.vn).toEqual({ id: 'v123' });
+    expect(await d.retainedMarkers(['UNLICENSED_DESCRIPTION_SENTINEL', 'cv123', 'Harbor Sentinel'])).toEqual([]);
     expect(row.record.vn_titles).toEqual(
       expect.arrayContaining([
         { id: 'v123', lang: 'en', official: true, title: 'Sentinel Harbor', latin: null },
@@ -275,7 +263,7 @@ test('COPY escapes nulls booleans numeric cells and split UTF8 decode before con
       latin: '\\N',
     });
     expect(row.record.entry_meta.revision).toBe(7);
-    expect(row.record.vn.c_length).toBeNull();
+    expect(row.record.vn).not.toHaveProperty('c_length');
     expect((await d.page(run, 'v123', 1)).records[0]!.record.vn_titles[0]!.latin).toBe('');
   } finally {
     await d.close();
@@ -298,6 +286,48 @@ test('changed raw title and entry revision reach the real converter and committe
     await d.commit(changed);
     expect((await d.baseline('v123'))!.revision).toBe(8);
     expect((await d.baseline('v123'))!.digest).not.toBe(before!.digest);
+  } finally {
+    await d.close();
+  }
+});
+
+test('normalization ignores unsupported public descriptions and images while titles and revisions affect conversion', async () => {
+  const d = await loadVndbTablesDriver();
+  try {
+    const original = await stage(d);
+    const before = (await d.page(original, null, 1)).records[0]!;
+    converted(d, before);
+    await d.commit(original);
+    const baseline = await d.baseline('v123');
+    const ignored = replace(
+      fixture(),
+      'db/vn',
+      text('vn').replaceAll('UNLICENSED_DESCRIPTION_SENTINEL', 'OTHER_UNLICENSED_PROSE').replaceAll('cv123', 'cv456'),
+    );
+    const normalized = await stage(d, ignored);
+    await d.reopen();
+    const unchanged = (await d.page(normalized, null, 1)).records[0]!;
+    expect(unchanged.record).toEqual(before.record);
+    expect(unchanged.output).toEqual(before.output);
+    converted(d, unchanged);
+    expect(
+      await d.retainedMarkers(['UNLICENSED_DESCRIPTION_SENTINEL', 'OTHER_UNLICENSED_PROSE', 'cv123', 'cv456']),
+    ).toEqual([]);
+    await d.commit(normalized);
+    expect((await d.baseline('v123'))!.digest).toBe(baseline!.digest);
+    for (const [table, from, to] of [
+      ['vn_titles', 'Sentinel Harbor', 'Changed Harbor'],
+      ['entry_meta', '\t7\t6\t3', '\t8\t6\t3'],
+    ] as const) {
+      const run = await stage(d, replace(fixture(), `db/${table}`, text(table).replace(from, to)));
+      const row = (await d.page(run, null, 1)).records[0]!;
+      converted(d, row);
+      expect(at(row.output, ['digest'])).not.toBe(at(before.output, ['digest']));
+      const proposals = (output: unknown) => d.converter.locate(output).proposals.map((path) => at(output, path));
+      expect(proposals(row.output)).not.toEqual(proposals(before.output));
+      await d.commit(run);
+      expect((await d.baseline('v123'))!.digest).not.toBe(baseline!.digest);
+    }
   } finally {
     await d.close();
   }
@@ -408,6 +438,11 @@ test('malformed COPY cells headers truncation and invalid UTF8 abort atomically'
       await rejected(d, replace(fixture(), 'db/entry_meta', text('entry_meta').replace('\t7\t', `\t${revision}\t`)));
     }
     await rejected(d, replace(fixture(), 'db/vn_titles.header', 'id\tlang\tofficial\tfictional_title\tlatin\n'));
+    // Discarding known columns does not exempt their headers or values from validation.
+    await rejected(d, replace(fixture(), 'db/vn.header', text('vn.header').replace('description', 'unknown_prose')));
+    for (const value of ['bad', '\\N']) {
+      await rejected(d, replace(fixture(), 'db/vn', text('vn').replace('\t2\t700\t', `\t${value}\t700\t`)));
+    }
     const [prefix, suffix] = text('vn_titles').split('Sentinel Harbor');
     await rejected(
       d,
@@ -475,7 +510,7 @@ test('unrelated user post review list tables and shipped SQL are never staged de
     expect(state.sourceRecords).toBe(2);
     expect(state.executedDumpStatements).toBe(0);
     expect(state.externalRequests).toEqual([]);
-    expect(await d.retainedMarkers([...markers, 'PRIVATE_SENTINEL'])).toEqual([]);
+    expect(await d.retainedMarkers([...markers, 'PRIVATE_SENTINEL', 'UNLICENSED_DESCRIPTION_SENTINEL'])).toEqual([]);
     for (const row of (await d.page(run, null, 2)).records) converted(d, row);
   } finally {
     await d.close();
