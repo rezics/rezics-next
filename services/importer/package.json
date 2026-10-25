@@ -7,7 +7,10 @@
     "check": "tsc --noEmit -p tsconfig.json && bun test"
   },
   "dependencies": {
-    "@rezics/conversion": "workspace:*"
+    "@rezics/conversion": "workspace:*",
+    "@rezics/client": "workspace:*",
+    "@rezics/definitions": "workspace:*",
+    "typebox": "1.4.3"
   },
   "devDependencies": {
     "@types/bun": "1.4.4"

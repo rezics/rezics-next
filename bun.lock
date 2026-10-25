@@ -219,7 +219,10 @@
       "name": "@rezics/importer",
       "version": "0.1.0",
       "dependencies": {
+        "@rezics/client": "workspace:*",
         "@rezics/conversion": "workspace:*",
+        "@rezics/definitions": "workspace:*",
+        "typebox": "1.4.3",
       },
       "devDependencies": {
         "@types/bun": "1.4.4",
