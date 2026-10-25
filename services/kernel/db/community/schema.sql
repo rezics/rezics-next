@@ -142,6 +142,64 @@ END;
 $$;
 
 
+--
+-- Name: inherit_realm_votes(); Type: FUNCTION; Schema: community; Owner: -
+--
+
+CREATE FUNCTION community.inherit_realm_votes() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  SELECT votes INTO NEW.votes
+  FROM community.realm_revision
+  WHERE route = NEW.route AND realm_id = NEW.realm_id AND revision_id = NEW.predecessor;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: realm_revision_votes(integer, uuid, uuid); Type: FUNCTION; Schema: community; Owner: -
+--
+
+CREATE FUNCTION community.realm_revision_votes(route integer, realm_id uuid, revision_id uuid) RETURNS jsonb
+    LANGUAGE plpgsql STABLE
+    AS $$
+DECLARE
+  found jsonb;
+BEGIN
+  SELECT revision.votes INTO found
+  FROM community.realm_revision AS revision
+  WHERE revision.route = realm_revision_votes.route
+    AND revision.realm_id = realm_revision_votes.realm_id
+    AND revision.revision_id = realm_revision_votes.revision_id;
+  RETURN found;
+END;
+$$;
+
+
+--
+-- Name: realm_votes_allowed(jsonb); Type: FUNCTION; Schema: community; Owner: -
+--
+
+CREATE FUNCTION community.realm_votes_allowed(votes jsonb) RETURNS boolean
+    LANGUAGE sql IMMUTABLE
+    AS $$
+  SELECT CASE
+    WHEN votes IS NULL OR jsonb_typeof(votes) <> 'object' THEN false
+    WHEN (SELECT count(*) FROM jsonb_object_keys(votes)) > 7 THEN false
+    WHEN EXISTS (
+      SELECT 1
+      FROM jsonb_each(votes) AS entry(key, value)
+      WHERE entry.key <> ALL (ARRAY['upvote', 'downvote', 'like', 'love', 'laugh', 'insightful', 'sad'])
+         OR jsonb_typeof(entry.value) <> 'number'
+         OR (entry.value <> '1'::jsonb AND entry.value <> '-1'::jsonb)
+    ) THEN false
+    ELSE true
+  END;
+$$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -202,6 +260,7 @@ CREATE TABLE community.realm (
     created_at timestamp with time zone NOT NULL,
     creator uuid NOT NULL,
     board_scheme_id uuid,
+    votes jsonb DEFAULT '{"upvote": 1, "downvote": -1}'::jsonb NOT NULL,
     CONSTRAINT realm_board_scheme_id_check CHECK (((board_scheme_id)::text ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text)),
     CONSTRAINT realm_check CHECK ((realm_id <> space_id)),
     CONSTRAINT realm_check1 CHECK ((route = ((get_byte(uuid_send(space_id), 10) * 256) + get_byte(uuid_send(space_id), 11)))),
@@ -209,7 +268,8 @@ CREATE TABLE community.realm (
     CONSTRAINT realm_check3 CHECK ((route = ((get_byte(uuid_send(head_revision_id), 10) * 256) + get_byte(uuid_send(head_revision_id), 11)))),
     CONSTRAINT realm_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT realm_state_check CHECK ((state = 'active'::text)),
-    CONSTRAINT realm_visibility_check CHECK ((visibility = ANY (ARRAY['public'::text, 'protected'::text])))
+    CONSTRAINT realm_visibility_check CHECK ((visibility = ANY (ARRAY['public'::text, 'protected'::text]))),
+    CONSTRAINT realm_votes_check CHECK (community.realm_votes_allowed(votes))
 );
 
 
@@ -265,6 +325,7 @@ CREATE TABLE community.realm_revision (
     created_at timestamp with time zone NOT NULL,
     author uuid NOT NULL,
     board_scheme_id uuid,
+    votes jsonb DEFAULT '{"upvote": 1, "downvote": -1}'::jsonb NOT NULL,
     CONSTRAINT realm_revision_board_scheme_id_check CHECK (((board_scheme_id)::text ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text)),
     CONSTRAINT realm_revision_check CHECK ((predecessor <> revision_id)),
     CONSTRAINT realm_revision_check1 CHECK ((route = ((get_byte(uuid_send(realm_id), 10) * 256) + get_byte(uuid_send(realm_id), 11)))),
@@ -273,7 +334,8 @@ CREATE TABLE community.realm_revision (
     CONSTRAINT realm_revision_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT realm_revision_summary_check CHECK ((char_length(summary) <= 4096)),
     CONSTRAINT realm_revision_title_check CHECK (((char_length(title) >= 1) AND (char_length(title) <= 1024))),
-    CONSTRAINT realm_revision_visibility_check CHECK ((visibility = ANY (ARRAY['public'::text, 'protected'::text])))
+    CONSTRAINT realm_revision_visibility_check CHECK ((visibility = ANY (ARRAY['public'::text, 'protected'::text]))),
+    CONSTRAINT realm_revision_votes_check CHECK (community.realm_votes_allowed(votes))
 );
 
 
@@ -520,6 +582,13 @@ CREATE TRIGGER realm_revision_board_scheme BEFORE INSERT ON community.realm_revi
 --
 
 CREATE TRIGGER realm_revision_immutable BEFORE DELETE OR UPDATE ON community.realm_revision FOR EACH ROW EXECUTE FUNCTION community.guard_realm_revision();
+
+
+--
+-- Name: realm_revision realm_revision_votes; Type: TRIGGER; Schema: community; Owner: -
+--
+
+CREATE TRIGGER realm_revision_votes BEFORE INSERT ON community.realm_revision FOR EACH ROW WHEN (((new.predecessor IS NOT NULL) AND (new.votes = '{"upvote": 1, "downvote": -1}'::jsonb))) EXECUTE FUNCTION community.inherit_realm_votes();
 
 
 --

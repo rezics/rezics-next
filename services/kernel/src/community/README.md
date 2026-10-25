@@ -201,3 +201,9 @@ A missing Realm, or one that is not yet active at T, has no proof.
 - Touches: One point read of the member's current interval after the Realm read check.
 - Bound: O(1) rows and statements; O(log R) blocks.
 - Growth check: `join.test.ts` reads one interval. No scan of members.
+
+### Read Realm votes
+
+- Touches: one primary-key read of community.realm per given Realm, one statement per partition.
+- Bound: O(n log R) for n Realms.
+- Growth check: a fixed set of Realms read with constant rows and statements at 2048, 8192 and 32768 Realms.
