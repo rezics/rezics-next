@@ -21,6 +21,7 @@ import assignmentRead from './permission-assignment.sql';
 import membershipRead from './permission-membership.sql';
 import timeRead from './permission-time.sql';
 import permissionRead from './permission-check.sql';
+import { prepareAnonymousEligibility } from './eligibility.ts';
 
 /** Kernel-owned request evidence, populated by the one authoritative actor point read.
  * Identity and this record must come from verified Auth/Access, never request JSON.
@@ -65,6 +66,10 @@ type Prepared = {
   roles: RoleEvidence[];
   anonymous: boolean;
   grantRoles: readonly string[];
+  scope: boolean;
+  admitsAnonymous: boolean;
+  capability: Resource['eligibility'];
+  verifyFloor: ((client: AccessClient, at: string) => Promise<boolean>) | undefined;
 };
 
 // Object identity is the trust boundary: serialized, spread, and caller-created
@@ -117,7 +122,20 @@ export async function checkPermission(
 ): Promise<boolean> {
   try {
     const facts = typeof evidence === 'object' && evidence !== null ? prepared.get(evidence) : undefined;
-    if (!facts || facts.binding !== bind(actor, action, resource) || Date.now() >= facts.deadline) return false;
+    if (
+      !facts ||
+      facts.binding !== bind(actor, action, resource) ||
+      facts.capability !== (resource.eligibility ?? resource.anonymousEligibility) ||
+      Date.now() >= facts.deadline
+    )
+      return false;
+    // Obtain one authoritative T on this attempt's own resource client. Domain
+    // verification and the permission formula must evaluate exactly this instant.
+    const at = time ? authoritativeTimeValue(time) : (await timeRead.run(client))?.at;
+    if (!at) return false;
+    const domainEligible = facts.verifyFloor ? await facts.verifyFloor(client, at) : false;
+    const floor = facts.admitsAnonymous && domainEligible;
+    if (facts.binding !== bind(actor, action, resource) || Date.now() >= facts.deadline) return false;
     const row = await permissionRead.run(client, {
       route: resource.route,
       resource_id: resource.id,
@@ -125,11 +143,13 @@ export async function checkPermission(
       actor_id: actor.kind === 'account' ? actor.accountId : '',
       principal_id: facts.principalId ?? '',
       anonymous: facts.anonymous,
+      floor,
+      scope: facts.scope,
+      at,
       roles: facts.roles,
       grant_roles: [...facts.grantRoles],
       evidence_valid: facts.valid,
       deadline: facts.databaseDeadline,
-      at: time ? authoritativeTimeValue(time) : '',
     });
     // A query taking longer than its evidence budget cannot produce usable authority.
     return row?.allowed === true && Date.now() < facts.deadline;
@@ -171,10 +191,19 @@ export function createAccess(config: PermissionConfig): Access {
         if (actor.kind === 'anonymous') {
           if (!metadata.anonymous) return evidence;
         } else {
-          if (!uuidPattern.test(actor.accountId) || !actor.clientId || !actor.scopes.includes(action)) return evidence;
+          if (
+            !uuidPattern.test(actor.accountId) ||
+            !actor.clientId ||
+            actor.scopes.some((scope) => !/^[\x21\x23-\x5b\x5d-\x7e]{1,128}$/.test(scope))
+          )
+            return evidence;
           account = config.accountEvidence(actor, context);
           if (!account || !eligible(account, actor)) return evidence;
         }
+        const verifyFloor = await prepareAnonymousEligibility(
+          { actor, action, resource: Object.freeze({ ...resource }), deadline },
+          context,
+        );
         // Every query uses the pool independently before resource checkout. None
         // of these reads holds a connection while another partition is consulted.
         const time = await timeRead.run(context.pool);
@@ -329,6 +358,10 @@ export function createAccess(config: PermissionConfig): Access {
           roles,
           anonymous: actor.kind === 'anonymous',
           grantRoles,
+          scope: actor.kind === 'account' && actor.scopes.includes(action),
+          admitsAnonymous: metadata.anonymous,
+          capability: resource.eligibility ?? resource.anonymousEligibility,
+          verifyFloor,
         });
       } catch {
         // Missing tables, unresolved accounts and failed separately anchored reads deny.

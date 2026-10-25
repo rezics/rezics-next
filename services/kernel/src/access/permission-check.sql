@@ -3,7 +3,7 @@
 -- an alternative hashed EXISTS subplan that enumerates the resource ACL.
 WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route, :resource_id::uuid AS resource_id, :action::text AS action,
-         NULLIF(:actor_id::text, '')::uuid AS actor_id, NULLIF(:principal_id::text, '')::uuid AS principal_id, :anonymous::boolean AS anonymous, :deadline::timestamptz AS deadline
+         NULLIF(:actor_id::text, '')::uuid AS actor_id, NULLIF(:principal_id::text, '')::uuid AS principal_id, :anonymous::boolean AS anonymous, :floor::boolean AS floor, :scope::boolean AS scope, :deadline::timestamptz AS deadline
 ), keys AS MATERIALIZED (
   SELECT r.account_id, r.organization_id AS subject_id, 'identity'::text AS subject_kind,
          r.role AS subject_role, r.member, r.valid
@@ -40,23 +40,17 @@ WITH input AS NOT MATERIALIZED (
 SELECT (
   t.at < i.deadline AND t.observed_at < i.deadline
   AND :evidence_valid::tstzrange @> t.at
-  AND (i.anonymous OR (
+  AND (i.floor OR (NOT i.anonymous AND i.scope AND (
     EXISTS (SELECT 1 FROM probes p WHERE p.account_id = i.actor_id AND p.granted AND p.member AND p.valid @> t.at)
     AND (i.principal_id IS NULL OR EXISTS (
       SELECT 1 FROM probes p WHERE p.account_id = i.principal_id AND p.granted AND p.member AND p.valid @> t.at
     ))
-  ))
+  )))
   AND NOT EXISTS (
     -- All current group hits require authoritative role/absence evidence.
     -- A new matching denial or grant cannot reuse an unprepared group key.
     SELECT 1 FROM probes p
     WHERE (p.denied AND p.member) OR (p.subject_role <> '' AND (p.granted OR p.denied) AND NOT (p.valid @> t.at))
   )
-  -- Preserve the existing anonymous outcome until the public eligibility floor
-  -- replaces it. Authenticated checks never enumerate this resource's ACL.
-  AND (NOT i.anonymous OR NOT EXISTS (
-    SELECT 1 FROM access.resource_denial d WHERE d.route = i.route AND d.resource_id = i.resource_id
-      AND d.action = i.action AND d.valid @> t.at
-  ))
 ) AS allowed
 FROM input i CROSS JOIN authority t;

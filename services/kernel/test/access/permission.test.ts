@@ -2,6 +2,7 @@ import { afterAll, beforeEach, expect, test } from 'bun:test';
 import pg from 'pg';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createAccess, checkPermission, checkDelegationBounds } from '../../src/access/permission.ts';
+import { createResourcePublicEligibility } from '../../src/access/index.ts';
 import { accessCheck, type AccountActor, type Actor, type Resource } from '../../src/request/access.ts';
 
 const url = process.env.DATABASE_URL;
@@ -110,6 +111,11 @@ async function unavailable(table: string, body: () => Promise<void>) {
 
 beforeEach(async () => {
   await pool.query('TRUNCATE access.membership_inverse');
+  await pool.query(`CREATE TABLE IF NOT EXISTS permission_public_fixture
+    (route integer, id uuid, published boolean, valid tstzrange)`);
+  await pool.query('DELETE FROM permission_public_fixture');
+  for (const target of [resource, { ...resource, id: id('6789', '10') }])
+    await pool.query("INSERT INTO permission_public_fixture VALUES ($1,$2,true,'(,)')", [target.route, target.id]);
   for (const table of ['resource_grant', 'resource_denial', 'principal_assignment', 'organization_member', 'account']) {
     await pool.query(`DELETE FROM access.${table}`);
   }
@@ -234,6 +240,9 @@ test('grant ranges use exact inclusive start and exclusive end at the final data
       actor_id: actorId,
       principal_id: principalId,
       anonymous: false,
+      floor: false,
+      scope: true,
+      at: null,
       roles: '[]',
       evidence_valid: '(,)',
       deadline: 'infinity',
@@ -386,14 +395,39 @@ test('membership and assignment expiry cannot be bypassed by prepared evidence o
   expect(await assignment(pool)).toBe(false);
 });
 
-test('known anonymous metadata admits only explicit routes and still applies final denials', async () => {
+test('known anonymous metadata needs current publication and retains targeted final denials', async () => {
   const anonymous: Actor = { kind: 'anonymous' };
-  expect(await run(anonymous, 'subject:public')).toBe(true);
+  const published: Resource = {
+    ...resource,
+    anonymousEligibility: createResourcePublicEligibility({
+      resource,
+      action: 'subject:public',
+      async prepare({ pool: source }) {
+        const { rows } = await source.query('SELECT id FROM permission_public_fixture WHERE route=$1', [
+          resource.route,
+        ]);
+        return rows.length === 2 ? rows.map((row) => row.id) : null;
+      },
+      async verify({ client, at, evidence }) {
+        const { rows } = await client.query(
+          `SELECT id, published AND valid @> $2::timestamptz AS current
+          FROM permission_public_fixture WHERE route=$1`,
+          [resource.route, at],
+        );
+        return rows.length === 2 && rows.every((row) => evidence.includes(row.id) && row.current === true);
+      },
+    }),
+  };
+  expect(await run(anonymous, 'subject:public', published)).toBe(true);
+  expect(await run(anonymous, 'subject:public')).toBe(false);
   expect(await run(anonymous, action)).toBe(false);
   expect(await run(anonymous, 'arbitrary:read')).toBe(false);
-  expect(await run(identity({ scopes: [] }), 'subject:public')).toBe(false);
+  expect(await run(identity({ scopes: [] }), 'subject:public', published)).toBe(true);
   await deny(actorId, '(,)', 'resource', 'subject:public');
-  expect(await run(anonymous, 'subject:public')).toBe(false);
+  expect(await run(identity({ scopes: [] }), 'subject:public', published)).toBe(false);
+  expect(await run(anonymous, 'subject:public', published)).toBe(true);
+  await pool.query('UPDATE permission_public_fixture SET published=false WHERE id=$1', [resource.id]);
+  expect(await run(anonymous, 'subject:public', published)).toBe(false);
 });
 
 test('delegation bounds check every proposed action against the grantor effective permissions', async () => {

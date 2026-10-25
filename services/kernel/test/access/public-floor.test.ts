@@ -170,7 +170,8 @@ beforeAll(async () => {
         );
       },
       async authorizeProvisioning(reference) {
-        return typeof reference === 'string' && [person, robot].includes(reference) ? { accountId: reference } : null;
+        if (![person, robot].includes(reference)) throw new Error('Unknown provisioning reference');
+        return { accountId: reference };
       },
     },
   });
@@ -202,7 +203,7 @@ beforeAll(async () => {
       fetch: (url, init) => service.handler(new Request(url, init)),
     },
   });
-  await pool.query(`CREATE TEMP TABLE public_floor_fixture
+  await pool.query(`CREATE TABLE public_floor_fixture
     (route integer, id uuid, revision integer, published boolean, disclose boolean, captcha boolean,
     valid tstzrange, PRIMARY KEY(route,id))`);
 }, 30000);
@@ -249,14 +250,15 @@ test('unknown actions, invalid bearer and inactive or fenced accounts cannot acq
     actorOf(access, new Request(audience, { headers: { authorization: 'Bearer invalid' } }), context()),
   ).rejects.toBeInstanceOf(AuthenticationError);
   for (const update of ["state='suspended'", 'authn_fenced=true', 'minimum_authn_epoch=2']) {
-    await pool.query(`UPDATE access.account SET ${update} WHERE route=$1 AND account_id=$2`, [routeOf(person), person]);
+    await pool.query('BEGIN');
     try {
+      await pool.query(`UPDATE access.account SET ${update} WHERE route=$1 AND account_id=$2`, [
+        routeOf(person),
+        person,
+      ]);
       await expect(access.authenticate(personToken, context())).rejects.toBeInstanceOf(AuthenticationError);
     } finally {
-      await pool.query(
-        "UPDATE access.account SET state='active',authn_fenced=false,minimum_authn_epoch=1 WHERE route=$1 AND account_id=$2",
-        [routeOf(person), person],
-      );
+      await pool.query('ROLLBACK');
     }
   }
 });
@@ -306,12 +308,13 @@ test('publication callbacks and the one SQL formula use exactly the same authori
   const client = await pool.connect();
   const checkedTimes: unknown[] = [];
   const traced = {
-    query: async (query: { text: string; values: unknown[] }) => {
-      if (query.text.includes('AS allowed')) {
+    query: async (query: string | { text: string; values: unknown[] }, values?: unknown[]) => {
+      const statementInput = typeof query === 'string' ? { text: query, values: values ?? [] } : query;
+      if (statementInput.text.includes('AS allowed')) {
         const statement = (await import('../../src/access/permission-check.sql')).default;
-        checkedTimes.push(query.values[statement.params.indexOf('at')]);
+        checkedTimes.push(statementInput.values[statement.params.indexOf('at')]);
       }
-      return client.query(query);
+      return client.query(statementInput);
     },
   } as AccessClient;
   try {
@@ -335,7 +338,7 @@ test('named actor and principal bans override their floor without banning an unr
     [routeOf(principal), principal, requestId, person],
   );
   const delegated = await new SignJWT({
-    ...decodeJwt(personToken),
+    ...decodeJwt<Record<string, unknown>>(personToken),
     requested_by: `urn:rezics:request:${principal}:${requestId}`,
   })
     .setProtectedHeader({ alg: 'ES256', kid: signingKey.kid!, typ: 'at+jwt' })
@@ -364,7 +367,7 @@ test('real mixed protocol and other-product scopes do not poison a known grant b
     [routeOf(principal), principal, requestId, person],
   );
   const delegated = await new SignJWT({
-    ...decodeJwt(mixedToken),
+    ...decodeJwt<Record<string, unknown>>(mixedToken),
     requested_by: `urn:rezics:request:${principal}:${requestId}`,
   })
     .setProtectedHeader({ alg: 'ES256', kid: signingKey.kid!, typ: 'at+jwt' })

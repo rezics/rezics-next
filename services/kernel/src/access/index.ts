@@ -2,7 +2,6 @@ import type { Access, AccessConfig as KernelAccessConfig, Actor, Resource } from
 import { installResourceRoleCatalogue, resourceRoleCatalogue } from './resource-roles.ts';
 import { createAccess as permissionAccess } from './permission.ts';
 import { createAuthenticator, deadlineClient, within, type AuthenticationConfig } from './authenticate.ts';
-import { evaluateResourceEligibility } from './eligibility.ts';
 
 export {
   createResourcePublicEligibility,
@@ -68,9 +67,6 @@ export function createAccess(config: AccessConfig): Access {
       )
         return false;
       try {
-        // Temporary fail-closed seam until the full floor evaluator binds the attempt.
-        if (actor.kind === 'anonymous' && resource.eligibility !== undefined)
-          return await evaluateResourceEligibility(resource.eligibility);
         return await within(facts.deadline, () =>
           permissions.authorize(deadlineClient(client, facts.deadline), actor, action, resource, evidence, time),
         );

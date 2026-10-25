@@ -13,6 +13,11 @@ export type AccountActor = {
 export type Actor = AccountActor | {
     kind: 'anonymous';
 };
+declare const anonymousEligibility: unique symbol;
+/** Server-created capability. Serialization or copying cannot preserve its authority. */
+export type ResourceAnonymousEligibility = {
+    readonly [anonymousEligibility]: true;
+};
 export type Resource = {
     route: number;
     id: string;
@@ -58,3 +63,4 @@ export declare class AuthenticationError extends Error {
 }
 export declare function actorOf(access: Access, request: Request, context: AccessContext): Promise<Actor>;
 export declare const anonymousAccess: Access;
+export {};

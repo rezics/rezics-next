@@ -14,7 +14,14 @@ export type AccountActor = {
 
 export type Actor = AccountActor | { kind: 'anonymous' };
 
-export type Resource = { route: number; id: string; eligibility?: ResourceEligibility };
+/** Server-only eligibility cannot be recovered from request JSON. */
+export type Resource = {
+  route: number;
+  id: string;
+  eligibility?: ResourceEligibility;
+  /** Compatibility spelling; uses the same opaque capability and evaluator. */
+  anonymousEligibility?: ResourceEligibility;
+};
 
 export type ActionCatalogue = ReadonlyMap<string, { anonymous: boolean; replay?: 'self-account-read' }>;
 
