@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { Type, type TSchema } from 'typebox';
 import { Value } from 'typebox/value';
 import { CONTENT_EVENTS } from '../../src/content/events.ts';
 
@@ -13,7 +14,7 @@ const ids = {
   threadId: '88888888-8888-4888-8888-888888888888',
 };
 
-const valid: Record<keyof typeof CONTENT_EVENTS, unknown> = {
+const valid = {
   'com.rezics.content.thread.created.v1': {
     threadId: ids.threadId,
     itemId: ids.itemId,
@@ -58,18 +59,24 @@ const valid: Record<keyof typeof CONTENT_EVENTS, unknown> = {
     targetId: ids.postId,
     revisionId: ids.revisionId,
   },
-};
+} satisfies Partial<Record<keyof typeof CONTENT_EVENTS, unknown>>;
 
-test('content event contracts are closed typed ID-only schemas and reject unknown fields or authored body copies', () => {
-  expect(Object.keys(CONTENT_EVENTS)).toEqual(Object.keys(valid));
-
-  for (const [type, schema] of Object.entries(CONTENT_EVENTS)) {
-    const data = valid[type as keyof typeof CONTENT_EVENTS];
+function assertOriginalContracts(catalogue: Record<string, TSchema>): void {
+  for (const [type, data] of Object.entries(valid)) {
+    expect(Object.hasOwn(catalogue, type)).toBe(true);
+    const schema = catalogue[type]!;
     expect(Value.Check(schema, data)).toBe(true);
-    expect(Value.Check(schema, { ...(data as object), unexpected: true })).toBe(false);
+    expect(Value.Check(schema, { ...data, unexpected: true })).toBe(false);
     expect(Value.Check(schema, { body: 'authored body' })).toBe(false);
+    for (const field of ['body', 'title', 'snippet']) {
+      expect(Value.Check(schema, { ...data, [field]: 'authored bytes' })).toBe(false);
+    }
     expect(Value.Check(schema, null)).toBe(false);
   }
+}
+
+test('content event contracts are closed typed ID-only schemas and reject unknown fields or authored body copies', () => {
+  assertOriginalContracts(CONTENT_EVENTS);
 
   expect(
     Value.Check(CONTENT_EVENTS['com.rezics.content.thread.created.v1'], {
@@ -110,5 +117,35 @@ test('content event contracts are closed typed ID-only schemas and reject unknow
   }
   for (const targetKind of ['revision', 'media', 'account']) {
     expect(Value.Check(report, { reportId: ids.reportId, targetKind, targetId: ids.itemId })).toBe(false);
+  }
+});
+
+test('a synthetic closed additive event coexists with every required original contract', () => {
+  const type = 'com.rezics.content.media.collection-pending.v1';
+  const schema = Type.Object(
+    { mediaId: Type.Literal(ids.mediaId), containerId: Type.Literal(ids.containerId) },
+    { additionalProperties: false },
+  );
+  const extended = { ...CONTENT_EVENTS, [type]: schema };
+  assertOriginalContracts(extended);
+
+  const data = { mediaId: ids.mediaId, containerId: ids.containerId };
+  expect(Value.Check(extended[type], data)).toBe(true);
+  expect(Value.Check(schema, { ...data, unexpected: true })).toBe(false);
+  for (const field of ['body', 'title', 'snippet']) {
+    expect(Value.Check(schema, { ...data, [field]: 'authored bytes' })).toBe(false);
+  }
+  expect(Value.Check(schema, { body: 'authored body' })).toBe(false);
+  expect(Value.Check(schema, null)).toBe(false);
+  expect(Value.Check(schema, { mediaId: ids.mediaId })).toBe(false);
+  expect(Value.Check(schema, { ...data, mediaId: 'not-an-id' })).toBe(false);
+
+  for (const requiredType of Object.keys(valid)) {
+    const missing: Record<string, TSchema> = { ...extended };
+    delete missing[requiredType];
+    expect(() => assertOriginalContracts(missing)).toThrow();
+  }
+  for (const unknownType of ['com.rezics.content.unknown.v1', 'content.thread.created.v1', 'toString']) {
+    expect(Object.hasOwn(extended, unknownType)).toBe(false);
   }
 });
