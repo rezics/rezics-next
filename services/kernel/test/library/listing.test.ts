@@ -166,22 +166,22 @@ test('visibility cycles, duplicate removal, deletion, redelivery and reversed de
 
   await remove(source.id, source.members[0]!);
   await sync(subjectId, source.id);
-  expect((await assertCount(subjectId, 1, 1)).pairs[0]?.multiplicity).toBe(1);
+  expect((await assertCount(subjectId, 1, 2)).pairs[0]?.multiplicity).toBe(1);
   await visibility(source.id, 'private');
   await sync(subjectId, source.id);
-  expect((await assertCount(subjectId, 0, 2)).pairs).toEqual([]);
+  expect((await assertCount(subjectId, 0, 3)).pairs).toEqual([]);
   await visibility(source.id, 'public');
   await sync(subjectId, source.id);
-  await assertCount(subjectId, 1, 3);
+  await assertCount(subjectId, 1, 4);
 
   const other = await collection(pool, subjectId, 'public');
   await sync(subjectId, other.id);
-  await assertCount(subjectId, 2, 4);
+  await assertCount(subjectId, 2, 5);
   await remove(source.id);
   await remove(other.id, other.members[0]!);
   // Deliver the newest work before older notifications: every invocation rereads current truth.
   for (const id of [other.id, source.id]) await sync(subjectId, id);
-  const final = await assertCount(subjectId, 0, 6);
+  const final = await assertCount(subjectId, 0, 7);
   expect(final.pairs).toEqual([]);
   for (const id of [source.id, other.id, other.id, source.id]) await sync(subjectId, id);
   expect(await state(subjectId)).toEqual(final);
