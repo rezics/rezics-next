@@ -13,6 +13,7 @@ import { REACTION_KINDS } from './events.ts';
 import type { BoardView } from './model.ts';
 import type { ItemView, ThreadView } from './reads.ts';
 import type { ReportView } from './reports.ts';
+import type { Operation } from './operation-contract.ts';
 
 type ViewerReactionKind = (typeof REACTION_KINDS)[number];
 type ViewerReactionSlot = { readonly viewerReaction?: ViewerReactionKind | null };
@@ -320,4 +321,45 @@ export const ReportPageResponseSchema = t.Object(
     next: t.Union([t.String(), t.Null()]),
   },
   closed,
+);
+
+export const ModerationReasonSchema = t.Object({ reason: t.String({ minLength: 1, maxLength: 1024 }) }, closed);
+export const ModerationResponseSchema = t.Object({ securityRevision: t.String({ pattern: '^[1-9][0-9]*$' }) }, closed);
+export const AuthorErasureInputSchema = t.Object({ authorId: ContentIdSchema }, closed);
+const operationCount = t.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER });
+const operationCounts = { processedPosts: operationCount, erasedRevisions: operationCount };
+const operationBase = {
+  name: t.String({ pattern: '^operations/[0-9a-f-]{36}$' }),
+  metadata: t.Object(
+    {
+      type: t.Literal('content.author_erasure'),
+      threadId: ContentIdSchema,
+      authorId: ContentIdSchema,
+      ...operationCounts,
+      steps: operationCount,
+    },
+    closed,
+  ),
+};
+/** Pending has no result; a completed AIP-151 operation has exactly one arm. */
+export const OperationSchema = t.Unsafe<Operation>(
+  t.Union([
+    t.Object({ ...operationBase, done: t.Literal(false) }, closed),
+    t.Object({ ...operationBase, done: t.Literal(true), response: t.Object(operationCounts, closed) }, closed),
+    t.Object(
+      {
+        ...operationBase,
+        done: t.Literal(true),
+        error: t.Object(
+          {
+            code: t.Integer({ minimum: 1, maximum: 16 }),
+            message: t.String(),
+            details: t.Optional(t.Array(t.Unknown())),
+          },
+          closed,
+        ),
+      },
+      closed,
+    ),
+  ]),
 );
