@@ -25,6 +25,32 @@ const searchResponse = t.Object(
   },
   object,
 );
+const facetResponse = t.Object(
+  {
+    facets: t.Array(
+      t.Object(
+        {
+          property: t.String(),
+          relation: t.Union([t.Literal('exact'), t.Literal('lower_bound')]),
+          values: t.Array(
+            t.Object(
+              {
+                value: t.String({ format: 'uuid' }),
+                count: t.Integer(),
+                labels: t.Record(t.String(), t.String()),
+              },
+              object,
+            ),
+          ),
+        },
+        object,
+      ),
+    ),
+    total: t.Object({ value: t.Integer(), relation: t.Union([t.Literal('exact'), t.Literal('lower_bound')]) }, object),
+    as_of: t.String({ format: 'date-time' }),
+  },
+  object,
+);
 const suggestResponse = t.Object({ subjects: t.Array(result), as_of: t.String({ format: 'date-time' }) }, object);
 const unauthorized = problemSchema('authentication_required', 'invalid_credentials');
 const unavailable = problemSchema('index_not_ready', 'overloaded', 'deadline_exceeded');
@@ -70,6 +96,48 @@ export function searchRoutes<App>(
           if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
           if (!search) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
           return search.search(actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous', body);
+        });
+      },
+    )
+    .post(
+      customMethod('/v1/subjects', 'facets'),
+      {
+        body: t.Object(
+          {
+            text: t.Optional(t.String()),
+            filter: t.Optional(t.Any()),
+            facets: t.Array(
+              t.Object(
+                {
+                  property: t.String(),
+                  size: t.Optional(t.Integer({ minimum: 1, maximum: 20 })),
+                },
+                object,
+              ),
+              { minItems: 1, maxItems: 8 },
+            ),
+          },
+          object,
+        ),
+        response: {
+          200: facetResponse,
+          400: problemSchema('invalid_request'),
+          401: unauthorized,
+          403: problemSchema('forbidden'),
+          422: problemSchema('unsupported_query'),
+          503: problemSchema('semantic_not_ready', 'index_not_ready', 'overloaded', 'deadline_exceeded'),
+        },
+        detail: { operationId: 'subject.facets', 'x-action': 'subject:read', security: [{ bearerAuth: [] }, {}] },
+      },
+      async ({ body, authorize, admission, job, actor }) => {
+        const check = await authorize({
+          ...resource,
+          ...(includeEligibility ? { eligibility: globalReadEligibility('subject:read') } : {}),
+        });
+        return admission.run('normal', job, async () => {
+          if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
+          if (!search) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
+          return search.facets(actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous', body);
         });
       },
     )

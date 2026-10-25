@@ -1,16 +1,34 @@
 import { readFileSync } from 'node:fs';
+import type { Facet } from './facets.ts';
 import { subjectAlias } from './indices.ts';
 import type { OpenSearch } from './opensearch.ts';
 
 // Released templates keep their source and id; changes require a new version of both.
 export const SEARCH_TEMPLATE = 'subjects-search-v1';
 export const SUGGEST_TEMPLATE = 'subjects-suggest-v1';
+export const FACET_TEMPLATE = 'subjects-facets-v1';
 export const TOTAL_LIMIT = 10_000;
 
 const templates = [SEARCH_TEMPLATE, SUGGEST_TEMPLATE].map((name) => ({
   name,
   body: JSON.parse(readFileSync(new URL(`../../db/search/templates/${name}.json`, import.meta.url), 'utf8')) as unknown,
 }));
+
+// Kept here with its versioned id; all untrusted input is serialized through toJson.
+templates.push({
+  name: FACET_TEMPLATE,
+  body: {
+    script: {
+      lang: 'mustache',
+      source: `{
+        "size": 0,
+        "track_total_hits": 10000,
+        "query": {{#toJson}}query{{/toJson}},
+        "aggs": {{#toJson}}aggregations{{/toJson}}
+      }`,
+    },
+  },
+});
 
 type SortValue = string | number | null;
 
@@ -128,4 +146,71 @@ export function suggestSubjects(
       params: { text: JSON.stringify(plan.text), size: plan.size },
     })
     .then(({ body }) => body.hits.hits.map(subjectHit));
+}
+
+type FacetResponse = {
+  hits: { total: { value: number; relation: 'eq' | 'gte' } };
+  aggregations: Record<
+    string,
+    { facts: { property: { values: { buckets: { key: string; subjects: { doc_count: number } }[] } } } }
+  >;
+};
+
+export async function countFacets(
+  search: OpenSearch,
+  prefix: string,
+  plan: { query?: Record<string, unknown>; filter?: Record<string, unknown>; facets: readonly Facet[]; sample: number },
+) {
+  const aggregations = Object.fromEntries(
+    plan.facets.map(({ property, size }, index) => [
+      `facet_${index}`,
+      {
+        sampler: { shard_size: plan.sample },
+        aggs: {
+          facts: {
+            nested: { path: 'facts' },
+            aggs: {
+              property: {
+                filter: { term: { 'facts.property': property } },
+                aggs: {
+                  values: {
+                    terms: {
+                      field: 'facts.value',
+                      size: 2 * size,
+                      order: [{ subjects: 'desc' }, { _key: 'asc' }],
+                    },
+                    aggs: { subjects: { reverse_nested: {} } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    ]),
+  );
+  const { body } = await search.request<FacetResponse>('POST', `/${subjectAlias(prefix)}/_search/template`, {
+    id: `${prefix}${FACET_TEMPLATE}`,
+    params: {
+      query: { bool: { must: plan.query ?? { match_all: {} }, ...(plan.filter ? { filter: plan.filter } : {}) } },
+      aggregations,
+    },
+  });
+  const total: SearchResult['total'] = {
+    value: body.hits.total.value,
+    relation: body.hits.total.relation === 'eq' ? 'exact' : 'lower_bound',
+  };
+  const relation: SearchResult['total']['relation'] =
+    total.relation === 'exact' && total.value <= plan.sample ? 'exact' : 'lower_bound';
+  return {
+    total,
+    facets: plan.facets.map(({ property }, index) => ({
+      property,
+      relation: relation as SearchResult['total']['relation'],
+      values: body.aggregations[`facet_${index}`]!.facts.property.values.buckets.map(({ key, subjects }) => ({
+        value: key,
+        count: subjects.doc_count,
+      })).sort((a, b) => b.count - a.count || (a.value < b.value ? -1 : a.value > b.value ? 1 : 0)),
+    })),
+  };
 }

@@ -48,6 +48,21 @@ const service: SearchService = {
     if (failure) throw failure;
     return { subjects: [result], total: { value: 1, relation: 'exact' }, next: null, as_of: asOf };
   },
+  async facets(principal, request) {
+    calls.push(['facets', principal, request]);
+    if (failure) throw failure;
+    return {
+      facets: [
+        {
+          property: 'schema:author',
+          relation: 'exact',
+          values: [{ value: result.id, count: 1, labels: result.labels }],
+        },
+      ],
+      total: { value: 1, relation: 'exact' },
+      as_of: asOf,
+    };
+  },
   async suggest(q, limit) {
     calls.push(['suggest', q, limit]);
     if (failure) throw failure;
@@ -221,4 +236,39 @@ test('both routes are public custom methods of subject:read in the contract', ()
   const read = { 'x-action': 'subject:read', security: [{ bearerAuth: [] }, {}] };
   expect(paths['/v1/subjects:search']?.post).toMatchObject({ operationId: 'subject.search', ...read });
   expect(paths['/v1/subjects:suggest']?.get).toMatchObject({ operationId: 'subject.suggest', ...read });
+});
+
+test('facets forward principals and reject denied credentials and unknown fields before the service', async () => {
+  calls.length = 0;
+  checks.length = 0;
+  const body = { facets: [{ property: 'schema:author', size: 1 }] };
+  for (const token of [undefined, 'reader']) {
+    const result = await call(kernel, 'POST', '/v1/subjects:facets', { ...(token ? { token } : {}), body });
+    expect(result.response.status).toBe(200);
+    expect(result.body.facets[0].values[0].count).toBe(1);
+  }
+  expect(calls).toEqual([
+    ['facets', 'anonymous', body],
+    ['facets', `account:${reader.accountId}`, body],
+  ]);
+  expect(checks).toEqual([
+    ['anonymous', 'subject:read', { route: 0, id: GLOBAL_CONTEXT }],
+    ['reader', 'subject:read', { route: 0, id: GLOBAL_CONTEXT }],
+  ]);
+  calls.length = 0;
+  expect((await call(kernel, 'POST', '/v1/subjects:facets', { token: 'denied', body })).response.status).toBe(403);
+  expect((await call(kernel, 'POST', '/v1/subjects:facets', { token: 'stolen', body })).response.status).toBe(401);
+  for (const [invalid, pointer, code] of [
+    [{ ...body, extra: true }, '/extra', 'unknown_field'],
+    [{ facets: [{ property: 'schema:author', extra: true }] }, '/facets/0/extra', 'unknown_field'],
+    [{}, '/facets', 'required'],
+    [{ facets: [] }, '/facets', 'out_of_range'],
+    [{ facets: [{ property: 'schema:author', size: 21 }] }, '/facets/0/size', 'out_of_range'],
+  ] as const) {
+    const result = await call(kernel, 'POST', '/v1/subjects:facets', { body: invalid });
+    expect(result.response.status).toBe(400);
+    expect(result.body.errors).toEqual([{ pointer, code }]);
+  }
+  expect(calls).toEqual([]);
+  expect((await call(offline, 'POST', '/v1/subjects:facets', { body })).response.status).toBe(503);
 });

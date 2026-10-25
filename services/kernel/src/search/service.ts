@@ -5,11 +5,19 @@ import { activeRelease } from '../semantic/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { decodeSearchCursor, encodeSearchCursor } from './cursor.ts';
 import { checkHits, type FactClause } from './disclosure/check.ts';
+import { admitFacets, discloseFacetValues, validateFacets, type FacetRequest, type FacetValue } from './facets.ts';
 import { compileFilter } from './filter.ts';
 import { createFreshness } from './freshness.ts';
 import { subjectGenerations, subjectIndexName } from './indices.ts';
 import { OpenSearchError, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
-import { installTemplates, searchSubjects, suggestSubjects, type SearchPlan, type SubjectHit } from './query.ts';
+import {
+  countFacets,
+  installTemplates,
+  searchSubjects,
+  suggestSubjects,
+  type SearchPlan,
+  type SubjectHit,
+} from './query.ts';
 import { subjectConsumer } from './runner.ts';
 import type { IndexedSubject, SubjectSource } from './source.ts';
 import { compileText, parseText, positiveText, TextSyntaxError } from './text.ts';
@@ -110,6 +118,7 @@ export function createSearchService({
   prefix,
   source,
   cursors,
+  facetSample = 10_000,
   release = async () => (await activeRelease(pool))?.release ?? null,
 }: {
   pool: Pool;
@@ -118,7 +127,10 @@ export function createSearchService({
   source: SubjectSource;
   cursors: KeyRing;
   release?: () => Promise<FilterRelease | null>;
+  facetSample?: number;
 }) {
+  if (!Number.isSafeInteger(facetSample) || facetSample < 1)
+    throw new RangeError('facetSample must be a positive safe integer');
   let templates: Promise<void> | undefined;
   let alias: { generation: number; expiresAt: number } | undefined;
   let aliasRead: Promise<number> | undefined;
@@ -180,25 +192,34 @@ export function createSearchService({
     return (await reader.current()).asOf.toISOString();
   }
 
+  async function admitQuery(
+    text: ReturnType<typeof parseText> | undefined,
+    filter: ReturnType<typeof parseFilter> | undefined,
+    current?: FilterRelease,
+  ) {
+    let admitted;
+    if (filter) {
+      const active = current ?? (await release());
+      if (!active) throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
+      try {
+        admitted = admitFilter(filter, active);
+      } catch (error) {
+        if (error instanceof FilterError)
+          throw new ProblemError(error.problem, {
+            errors: error.errors.map(({ pointer, code }) => ({ pointer: `/filter${pointer}`, code })),
+          });
+        throw error;
+      }
+    }
+    if ((text || admitted) && !(text && positiveText(text)) && !(admitted && positiveFilter(admitted)))
+      unsupported(text ? '/text' : '/filter');
+    return admitted;
+  }
+
   return {
     async search(principal: 'anonymous' | `account:${string}`, request: SearchRequest, now = Date.now()) {
       const { text, filter, sort, limit, bindingRequest } = validate(request);
-      let admitted;
-      if (filter) {
-        const current = await release();
-        if (!current) throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
-        try {
-          admitted = admitFilter(filter, current);
-        } catch (error) {
-          if (error instanceof FilterError)
-            throw new ProblemError(error.problem, {
-              errors: error.errors.map(({ pointer, code }) => ({ pointer: `/filter${pointer}`, code })),
-            });
-          throw error;
-        }
-      }
-      if ((text || admitted) && !(text && positiveText(text)) && !(admitted && positiveFilter(admitted)))
-        unsupported(text ? '/text' : '/filter');
+      const admitted = await admitQuery(text, filter);
       const binding = { operation: 'subjects.search', request: bindingRequest, principal };
       const cursor =
         request.cursor === undefined ? undefined : decodeSearchCursor(cursors, binding, request.cursor, now);
@@ -258,6 +279,44 @@ export function createSearchService({
         total: total!,
         next: exhausted ? null : encodeSearchCursor(cursors, binding, { generation: generation!, after: after! }, now),
         as_of: await asOf(generation!),
+      };
+    },
+
+    async facets(principal: 'anonymous' | `account:${string}`, request: FacetRequest, now = Date.now()) {
+      const facets = validateFacets(request);
+      const { text, filter } = validate({
+        ...(request.text === undefined ? {} : { text: request.text }),
+        filter: request.filter,
+      });
+      const current = await release();
+      if (!current) throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
+      const admitted = await admitQuery(text, filter, current);
+      admitFacets(facets, filter, current);
+      const counted = await indexRequest(() =>
+        countFacets(client, prefix, {
+          ...(text ? { query: compileText(text, { field: 'search_text', prefix: 't' }).query } : {}),
+          ...(admitted ? { filter: compileFilter(admitted, { prefix: 'f' }).query } : {}),
+          facets,
+          sample: facetSample,
+        }),
+      );
+      const subjects = await discloseFacetValues(
+        source,
+        counted.facets.flatMap((facet) => facet.values.map(({ value }) => value)),
+      );
+      return {
+        facets: counted.facets.map((facet, index) => ({
+          property: facet.property,
+          relation: facet.relation,
+          values: facet.values
+            .flatMap(({ value, count }): FacetValue[] => {
+              const subject = subjects.get(value);
+              return subject ? [{ value, count, labels: project(subject).labels }] : [];
+            })
+            .slice(0, facets[index]!.size),
+        })),
+        total: counted.total,
+        as_of: await asOf(await indexRequest(aliasGeneration)),
       };
     },
 
