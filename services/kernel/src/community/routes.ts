@@ -372,6 +372,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         },
         detail: {
           operationId: 'space_address.change',
+          'x-exposure': 'public',
           'x-action': 'space:manage',
           'x-rate-limit': writeRate,
           security: writeSecurity,
@@ -411,6 +412,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         },
         detail: {
           operationId: 'space_address.resolve',
+          'x-exposure': 'public',
           'x-action': 'space:read',
           security: readSecurity,
         },

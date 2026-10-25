@@ -51162,7 +51162,8 @@
           },
           {}
         ],
-        "x-action": "space:read"
+        "x-action": "space:read",
+        "x-exposure": "public"
       }
     },
     "/v1/spaces": {
@@ -54496,6 +54497,7 @@
           }
         ],
         "x-action": "space:manage",
+        "x-exposure": "public",
         "x-rate-limit": {
           "family": "write",
           "units": 1
