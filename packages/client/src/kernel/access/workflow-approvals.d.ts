@@ -1,11 +1,13 @@
-import type { CredentialEffectBinding } from '@rezics/auth';
-import type { AccountOperation } from '@rezics/auth';
+import type { CredentialEffectBinding } from '@rezics/auth-contract';
+import type { AccountOperation } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 import type { Access, AccessContext, AccountActor, ActionCatalogue } from '../request/access.ts';
 import { type KeyRing } from '../tokens/seal.ts';
 import type { LifecycleRequest } from './lifecycle.ts';
 import credentialRead from './auth-credential-capability-workflow-read.sql';
 export declare const MAX_WORKFLOW_APPROVAL_LIFETIME_MS = 300000;
+/** Host composition registers these workflow actions without a kernel HTTP route. */
+export declare const WORKFLOW_APPROVAL_ACTIONS: ActionCatalogue;
 /** Nonsecret integrity-bound locator only; no actor, credentials or authority. */
 export type WorkflowApproval = {
     reference: string;
@@ -36,6 +38,11 @@ export type WorkflowApprovalBinding = Readonly<{
 /** Return only durable binding metadata; never serialize the resolved context. */
 export declare function workflowApprovalBinding(request: LifecycleRequest): WorkflowApprovalBinding | undefined;
 export declare class WorkflowApprovalUnavailableError extends Error {
+    readonly status = 503;
+    constructor();
+}
+export declare class WorkflowApprovalDeniedError extends Error {
+    readonly status = 403;
     constructor();
 }
 type CredentialWorkflowPorts = {

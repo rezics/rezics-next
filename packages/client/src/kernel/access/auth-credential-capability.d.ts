@@ -1,5 +1,5 @@
 import { type Account } from './account-data.ts';
-import type { AuthService, CredentialAuthorizationInput, CredentialEffectAuthorization, CredentialEffectBinding, CredentialEffectVerifier, CredentialFloorPort, TrustedAccessPorts } from '@rezics/auth';
+import type { AuthSessionPort, CredentialAuthorizationInput, CredentialEffectAuthorization, CredentialEffectBinding, CredentialEffectVerifier, CredentialFloorPort, TrustedAccessPorts } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 import type { Access, AccessContext, AccountActor, Resource } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -32,10 +32,15 @@ export type CredentialCapabilityConfig = {
     operators: ReturnType<typeof createOperatorCommands>;
     workflowApprovals: ReturnType<typeof createWorkflowApprovals>;
     referenceKeys: KeyRing;
-    accessTokenForProof: AuthService['internal']['accessTokenForProof'];
+    accessTokenForProof: AuthSessionPort['internal']['accessTokenForProof'];
     verifyCredentialEffect: CredentialEffectVerifier;
 };
-export type CredentialCapability = Required<Pick<TrustedAccessPorts, 'approveCredentialEffect' | 'revalidateCredentialEffect'>> & {
+type CredentialRevalidationInput = Parameters<NonNullable<TrustedAccessPorts['revalidateCredentialEffect']>>[0] & {
+    /** Auth's saved committing opening identity; required for result disclosure. */
+    committedOpeningReceiptId?: string;
+};
+export type CredentialCapability = Required<Pick<TrustedAccessPorts, 'approveCredentialEffect'>> & {
+    revalidateCredentialEffect(input: CredentialRevalidationInput): Promise<void>;
     /** Seal only a verified native exact opening locator; no caller approval minting.
      */
     createOpeningReference(opening: CredentialOpeningLocator): string;
@@ -68,10 +73,11 @@ export type CredentialCapability = Required<Pick<TrustedAccessPorts, 'approveCre
  * credential binding columns; a broad opening alone fails. Four separate purposes
  * never substitute for each other, sessions or devices in either direction.
  *
- * Expiry is min(native created T + 60s, source proof/session lifetime, evidence
- * lifetime), checked against command T AND database time. Retention never renews
- * rows. Every consume/retry re-runs the SAME formula, current state, fences, floors
- * and operator checks, including before disclosure of an exact saved Auth result.
+ * Operator opening expiry is min(native created T + 60s, verified bearer expiry),
+ * checked against command T AND database time. The evidence read window bounds
+ * creation reads, not the opening lifetime. Retention never renews rows. Every
+ * consume/retry re-runs the SAME formula, current state, fences, floors and operator
+ * checks, including before disclosure of an exact saved Auth result.
  * Revalidate at the Auth commit boundary: revocation after consumption spends the
  * opening without mutation. An opening without exact committed Auth success fails
  * closed; NEW authenticated approval may resume only the same immutable operation.

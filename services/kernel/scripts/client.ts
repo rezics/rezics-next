@@ -34,11 +34,46 @@ function declarationFiles(directory: string, prefix = ''): Map<string, string> {
   return sorted(result);
 }
 
-function specifierTargets(content: string): string[] {
+/** Tokenize declaration imports without treating comments or string literal types as code. */
+function declarationSpecifiers(content: string): string[] {
+  const tokens = [
+    ...content.matchAll(/\/\*[\s\S]*?\*\/|\/\/[^\n]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[A-Za-z_$][\w$]*|[^\s]/g),
+  ]
+    .map((match) => match[0])
+    .filter((token) => !token.startsWith('//') && !token.startsWith('/*'));
   const specifiers: string[] = [];
-  const pattern = /\bfrom\s*(['"])(\.{1,2}\/[^'"]+)\1|\bimport\s*\(\s*(['"])(\.{1,2}\/[^'"]+)\3\s*\)/g;
-  for (const match of content.matchAll(pattern)) specifiers.push((match[2] ?? match[4])!);
+  const literal = (token: string | undefined) => token?.startsWith("'") || token?.startsWith('"');
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index];
+    let target: string | undefined;
+    if (token === 'from' || token === 'import') {
+      if (literal(tokens[index + 1])) target = tokens[index + 1];
+    }
+    if ((token === 'import' || token === 'require') && tokens[index + 1] === '(' && literal(tokens[index + 2]))
+      target = tokens[index + 2];
+    if (target) specifiers.push(target.slice(1, -1));
+  }
   return specifiers;
+}
+
+/** Service source must never become a client's transitive compiler input. */
+export function assertNoServiceImports(declarations: Map<string, string>, root = ROOT): void {
+  const services = new Set<string>();
+  for (const entry of readdirSync(resolve(root, 'services'), { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const manifest = resolve(root, 'services', entry.name, 'package.json');
+    if (!existsSync(manifest)) continue;
+    const { name } = JSON.parse(readFileSync(manifest, 'utf8')) as { name?: string };
+    if (name) services.add(name);
+  }
+  for (const [file, content] of declarations) {
+    for (const specifier of declarationSpecifiers(content)) {
+      const bare = specifier.split(/[?#]/)[0]!;
+      const packageName = bare.startsWith('@') ? bare.split('/').slice(0, 2).join('/') : bare.split('/')[0]!;
+      if (services.has(packageName))
+        throw new Error(`Client declaration ${file} imports service package ${packageName}`);
+    }
+  }
 }
 
 /** TypeScript 7 writes a content-mapped `.sql` module as `name.d.sql.ts`. Resolution also accepts `name.sql.d.ts`, which is the name this closure walks. */
@@ -104,12 +139,13 @@ export function clientDeclarations(kernelDirectory = KERNEL): Map<string, string
       const sourcePath = resolve(sourceRoot, key);
       const content = readFileSync(sourcePath, 'utf8');
       declarations.set(key, content);
-      for (const specifier of specifierTargets(content)) {
+      for (const specifier of declarationSpecifiers(content).filter((value) => /^\.{1,2}\//.test(value))) {
         const target = declarationPath(sourcePath, specifier);
         const targetKey = relative(sourceRoot, target).split(sep).join('/');
         if (!targetKey.startsWith('../') && !declarations.has(targetKey)) pending.push(targetKey);
       }
     }
+    assertNoServiceImports(declarations, resolve(kernelDirectory, '../..'));
     return sorted(declarations);
   } finally {
     rmSync(temporaryDirectory, { recursive: true, force: true });

@@ -1,16 +1,6 @@
+import type { RecoveryEstablishmentEvidence } from '@rezics/auth-contract';
+export type { RecoveryEstablishmentEvidence } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
-
-/** Committed successful native Auth recovery, bound to the exact Access barrier
- * and a new credential establishment. Structurally matches Access evidence. */
-export type RecoveryEstablishmentEvidence = Readonly<{
-  accountId: string;
-  receiptId: string;
-  minimumAuthnEpoch: string;
-  authnEpoch: number;
-  establishmentId: string;
-  /** Original source-proof expiry; resolving a witness never renews it. */
-  expiresAt: string;
-}>;
 
 const hash = async (value: unknown) =>
   Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(value)))).toString('hex');

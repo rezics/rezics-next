@@ -1,12 +1,14 @@
 import type {
   AccountWorkflowPorts,
   AccountOperation,
-  AuthService,
+  AuthSessionPort,
+  AuthCredentialPort,
+  AuthRecoveryPort,
   NativeWorkflowProofPorts as AuthWorkflowProofPorts,
   TrustedAccessPorts,
-  createBarrierProofVerifier,
-  createProvisioningEvidenceVerifier,
-} from '@rezics/auth';
+  BarrierProofPort,
+  ProvisioningEvidencePort,
+} from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 import type { Access, ActionCatalogue } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -48,8 +50,8 @@ export type NativeWorkflowProofPorts = {
  * evidence must fail closed; it cannot be replaced by a synthetic receipt.
  */
 export type NativeAccountBindingProofs = {
-  provisioning: ReturnType<typeof createProvisioningEvidenceVerifier>;
-  barriers: ReturnType<typeof createBarrierProofVerifier>;
+  provisioning: ProvisioningEvidencePort;
+  barriers: BarrierProofPort;
   workflow: NativeWorkflowProofPorts;
   recoveryEvidence?: (reference: unknown) => Promise<RecoveryEvidence | null>;
 };
@@ -64,7 +66,7 @@ export type NativeAccountBindingsConfig = {
   clock?: () => Date;
   referenceKeys: KeyRing;
   /** Deferred access permits Auth to consume trustedAccess during construction. */
-  auth: () => AuthService;
+  auth: () => AuthSessionPort & AuthCredentialPort & AuthRecoveryPort;
   proofs: NativeAccountBindingProofs;
 };
 

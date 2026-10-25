@@ -1,10 +1,8 @@
+import type { MembershipWorkInput, MembershipWorkResult, MembershipWorkflowPorts } from '@rezics/auth-contract';
 import {
   MEMBERSHIP_WORKFLOW_NAME,
   isMembershipAuthorizationReference,
   registerMembershipWorkflows,
-  type MembershipWorkInput,
-  type MembershipWorkResult,
-  type MembershipWorkflowPorts,
 } from '@rezics/auth/membership-workflows';
 import canonicalize from 'canonicalize';
 import { routeOf } from '../route/route.ts';

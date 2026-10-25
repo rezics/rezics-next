@@ -1,6 +1,14 @@
 import type { Access, AccessContext, AccountActor } from '../request/access.ts';
 import { type KeyRing } from '../tokens/seal.ts';
 import approvalRead from './workflow-approvals-read.sql';
+export declare class ApprovalIdentityDeniedError extends Error {
+    readonly status = 403;
+    constructor();
+}
+export declare class ApprovalIdentityUnavailableError extends Error {
+    readonly status = 503;
+    constructor();
+}
 export declare const APPROVAL_REFERENCE_PURPOSE = "access.workflow-approval.v1";
 export type ApprovalRow = NonNullable<Awaited<ReturnType<typeof approvalRead.run>>>;
 declare const approvedIdentity: unique symbol;

@@ -4,7 +4,7 @@ import type {
   EffectAuthorization,
   InvalidationReceipt,
   TrustedAccessPorts,
-} from '@rezics/auth';
+} from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 import { routeOf } from '../route/route.ts';
 import { readAccount, type Account } from './account-data.ts';

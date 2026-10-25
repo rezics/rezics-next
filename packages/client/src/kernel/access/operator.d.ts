@@ -1,4 +1,4 @@
-import type { CredentialEffectBinding } from '@rezics/auth';
+import type { CredentialEffectBinding } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 import { type CommandOutcome } from '../command/command.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -6,6 +6,7 @@ import { type Access, type ActionCatalogue } from '../request/access.ts';
 import type { LifecycleRequest } from './lifecycle.ts';
 export declare const OPERATOR_RECEIPT_TTL_MS = 60000;
 export declare class OperatorDeniedError extends Error {
+    readonly status = 403;
     constructor();
 }
 export type OperatorPurpose = 'session' | 'credential-management';

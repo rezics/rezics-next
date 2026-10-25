@@ -1,8 +1,8 @@
-import type { CredentialEffectBinding } from '@rezics/auth';
+import type { CredentialEffectBinding } from '@rezics/auth-contract';
 import credentialConsume from './workflow-approvals-credential-consume.sql';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
-import type { AccountOperation, NativeWorkflowProofPorts } from '@rezics/auth';
+import type { AccountOperation, NativeWorkflowProofPorts } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 import type { Access, AccessContext, AccountActor, ActionCatalogue } from '../request/access.ts';
 import { seal, unseal, type KeyRing } from '../tokens/seal.ts';

@@ -1,38 +1,19 @@
+import type {
+  ProvisioningReceiptMetadata,
+  ProvisioningEvidenceLocator,
+  ProvisioningEvidenceReference,
+  ProvisioningEvidence,
+} from '@rezics/auth-contract';
+export type {
+  ProvisioningReceiptMetadata,
+  ProvisioningAuthorization,
+  ProvisioningEvidenceLocator,
+  ProvisioningEvidenceReference,
+  ProvisioningEvidence,
+  ProvisioningResult,
+} from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 
-/** Extra trusted Access result. All facts describe the original pending command,
- * not HTTP fields, Auth staging, or a later account authentication floor. */
-export interface ProvisioningReceiptMetadata {
-  registrationId: string;
-  reservationId: string;
-  authnEpoch: number;
-  expiresAt: string;
-}
-export interface ProvisioningAuthorization {
-  accountId: string;
-  receipt?: ProvisioningReceiptMetadata;
-}
-export interface ProvisioningEvidenceLocator extends ProvisioningReceiptMetadata {
-  receiptKey: string;
-  accountId: string;
-}
-/** Nonsecret exact locator. Possession authorizes neither provisioning nor activation. */
-export interface ProvisioningEvidenceReference extends ProvisioningEvidenceLocator {
-  version: 1;
-  credentialId: string;
-}
-/** Structurally matches Access without importing the kernel at runtime. */
-export interface ProvisioningEvidence {
-  accountId: string;
-  registrationId: string;
-  authIdentityId: string;
-  authnEpoch: number;
-}
-export interface ProvisioningResult {
-  accountId: string;
-  /** Absent for legacy trust fixtures without exact pending receipt metadata. */
-  provisioningEvidence?: ProvisioningEvidenceReference;
-}
 const bounded = (value: unknown): value is string =>
   typeof value === 'string' && value.length > 0 && value.length <= 1024 && !value.includes('\0');
 export function validProvisioningReceipt(value: ProvisioningReceiptMetadata): boolean {

@@ -1,4 +1,4 @@
-import type { CredentialEffectBinding } from '@rezics/auth';
+import type { CredentialEffectBinding } from '@rezics/auth-contract';
 import { verifiedBearerExpiry } from './approved-identity.ts';
 import credentialBind from './operator-opening-credential-bind.sql';
 import credentialConsume from './operator-opening-credential-consume.sql';

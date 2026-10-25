@@ -1,28 +1,13 @@
+import type { NativeWorkflowPair, AutomatedCreationBinding, NativeWorkflowProofPorts } from '@rezics/auth-contract';
+export type { NativeWorkflowPair, AutomatedCreationBinding, NativeWorkflowProofPorts } from '@rezics/auth-contract';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { createProvisioningEvidenceVerifier } from './provisioning-evidence.ts';
-import type { AccountOperation } from './workflows.ts';
 
-type Pair = { accountId: string; reservationId: string };
-export type AutomatedCreationBinding = Omit<Extract<AccountOperation, { kind: 'automated' }>, 'authorization'>;
-export type NativeWorkflowProofPorts = {
-  recordPending(input: Pair & { reference: string }): Promise<void>;
-  pendingReference(input: Pair): Promise<string | null>;
-  provisioningEvidence(input: Pair): Promise<unknown>;
-  /** Optional capabilities fail closed for automated creation when absent. */
-  recordAutomatedPending?(input: Pair & { reference: string }): Promise<void>;
-  automatedReference?(input: Pair): Promise<string | null>;
-  creationBinding?(input: {
-    registrationId: string;
-    operationKey: string;
-    accountId?: string;
-    reservationId?: string;
-  }): Promise<AutomatedCreationBinding | null>;
-};
 function bounded(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= 4096 && !value.includes('\0');
 }
-function pair(input: Pair) {
+function pair(input: NativeWorkflowPair) {
   if (!bounded(input.accountId) || !bounded(input.reservationId)) throw new Error('Native workflow proof denied');
 }
 
@@ -32,7 +17,7 @@ function pair(input: Pair) {
 export function createNativeWorkflowProofPorts({ database }: { database: Pool }) {
   const verifier = createProvisioningEvidenceVerifier({ database });
   return {
-    async recordPending(input: Pair & { reference: string }): Promise<void> {
+    async recordPending(input: NativeWorkflowPair & { reference: string }): Promise<void> {
       const { accountId, reservationId, reference } = input;
       pair(input);
       if (!bounded(reference)) throw new Error('Native workflow proof denied');
@@ -44,7 +29,7 @@ export function createNativeWorkflowProofPorts({ database }: { database: Pool })
       );
       if (result.rowCount !== 1) throw new Error('Native pending binding conflict');
     },
-    async pendingReference(input: Pair): Promise<string | null> {
+    async pendingReference(input: NativeWorkflowPair): Promise<string | null> {
       const { accountId, reservationId } = input;
       pair(input);
       return (
@@ -56,7 +41,7 @@ export function createNativeWorkflowProofPorts({ database }: { database: Pool })
         ).rows[0]?.pending_reference ?? null
       );
     },
-    async recordAutomatedPending(input: Pair & { reference: string }): Promise<void> {
+    async recordAutomatedPending(input: NativeWorkflowPair & { reference: string }): Promise<void> {
       const { accountId, reservationId, reference } = input;
       pair(input);
       if (!bounded(reference)) throw new Error('Native workflow proof denied');
@@ -68,7 +53,7 @@ export function createNativeWorkflowProofPorts({ database }: { database: Pool })
       );
       if (result.rowCount !== 1) throw new Error('Native automated binding conflict');
     },
-    async automatedReference(input: Pair): Promise<string | null> {
+    async automatedReference(input: NativeWorkflowPair): Promise<string | null> {
       const { accountId, reservationId } = input;
       pair(input);
       return (
@@ -80,7 +65,7 @@ export function createNativeWorkflowProofPorts({ database }: { database: Pool })
         ).rows[0]?.automated_reference ?? null
       );
     },
-    async provisioningEvidence(input: Pair): Promise<unknown> {
+    async provisioningEvidence(input: NativeWorkflowPair): Promise<unknown> {
       const { accountId, reservationId } = input;
       pair(input);
       const row = (

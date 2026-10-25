@@ -1,4 +1,4 @@
-import type { AccessAccount, ProvisioningReceiptMetadata, EffectAuthorization, TrustedAccessPorts } from '@rezics/auth';
+import type { AccessAccount, ProvisioningReceiptMetadata, EffectAuthorization, TrustedAccessPorts } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 import type { createLifecycleInternals, LifecycleFenceReceipt } from './lifecycle.ts';
 import type { OperatorOpening } from './operator.ts';
@@ -34,6 +34,7 @@ export declare class AuthBindingUnavailableError extends Error {
     constructor(capability: keyof AuthBindingCapabilities);
 }
 export declare class AuthBindingDeniedError extends Error {
+    readonly status = 403;
     constructor();
 }
 /** Production Auth/Access seam. Reads use Access's existing account anchor; no local

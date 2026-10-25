@@ -12,7 +12,7 @@ import reservationRead from './operator-reservation.sql';
 import memberRead from './operator-member.sql';
 import { createCredentialFloorHook } from './auth-barriers.ts';
 import type {
-  AuthService,
+  AuthSessionPort,
   CredentialAuthorizationInput,
   CredentialEffectAuthorization,
   CredentialEffectBinding,
@@ -20,7 +20,7 @@ import type {
   CredentialFloorPort,
   CredentialFloorReceipt,
   TrustedAccessPorts,
-} from '@rezics/auth';
+} from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 import type { Access, AccessContext, AccountActor, Resource } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -55,7 +55,7 @@ export type CredentialCapabilityConfig = {
   operators: ReturnType<typeof createOperatorCommands>;
   workflowApprovals: ReturnType<typeof createWorkflowApprovals>;
   referenceKeys: KeyRing;
-  accessTokenForProof: AuthService['internal']['accessTokenForProof'];
+  accessTokenForProof: AuthSessionPort['internal']['accessTokenForProof'];
   verifyCredentialEffect: CredentialEffectVerifier;
 };
 

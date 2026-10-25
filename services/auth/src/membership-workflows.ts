@@ -1,34 +1,17 @@
+import type {
+  MembershipWorkInput,
+  MembershipWorkReservation,
+  MembershipWorkResult,
+  MembershipWorkflowPorts,
+} from '@rezics/auth-contract';
+export type {
+  MembershipPrincipal,
+  MembershipWorkInput,
+  MembershipWorkReservation,
+  MembershipWorkResult,
+  MembershipWorkflowPorts,
+} from '@rezics/auth-contract';
 import { DBOS } from '@dbos-inc/dbos-sdk';
-
-export type MembershipPrincipal = { kind: 'organization' | 'realm'; id: string };
-export type MembershipWorkInput =
-  | {
-      kind: 'membership';
-      principal: MembershipPrincipal;
-      memberAccountId: string;
-      role: 'owner' | 'member' | null;
-      reservationId?: string;
-      authorization: string;
-    }
-  | { kind: 'organization'; organizationId: string; authorization: string };
-export type MembershipWorkReservation = { accountId: string; principal: MembershipPrincipal; reservationId: string };
-export type MembershipWorkResult =
-  | { status: 'completed'; accountId: string; reservationId: string }
-  | { status: 'membership_limit'; code: 'membership_limit' };
-type Result<T> = Promise<{ value: T }>;
-export interface MembershipWorkflowPorts<Context> {
-  authorize(reference: string, input: MembershipWorkInput): Promise<Context>;
-  actorAccountId(context: Context): string;
-  reserve(input: { accountId: string; principal: MembershipPrincipal; key: string }): Result<MembershipWorkReservation>;
-  publish(
-    context: Context,
-    input: MembershipWorkInput,
-    reservation: MembershipWorkReservation,
-    key: string,
-  ): Promise<unknown>;
-  terminalize(reservation: MembershipWorkReservation, key: string): Promise<unknown>;
-  release(input: MembershipWorkReservation & { key: string }): Promise<unknown>;
-}
 
 /** Shared ordering for the Auth host and the kernel registrar. Every callback
  * is a registered durable step; this function performs no external I/O. */

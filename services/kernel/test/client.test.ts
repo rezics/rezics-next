@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve, sep } from 'node:path';
-import { clientDeclarations, committedDeclarations } from '../scripts/client.ts';
+import { assertNoServiceImports, clientDeclarations, committedDeclarations } from '../scripts/client.ts';
 
 // Each declaration emit runs the TypeScript compiler; under a loaded host it exceeds Bun's 5 s default.
 const timeout = 60_000;
@@ -85,9 +85,69 @@ test(
       const changed = clientDeclarations(kernel);
       expect(changed.get('http/request.d.ts')).not.toBe(first.get('http/request.d.ts'));
       expect(changed.get('http/request.d.ts')).toContain('version: number');
+
+      mkdirSync(resolve(workspace, 'services/example'), { recursive: true });
+      writeFileSync(resolve(workspace, 'services/example/package.json'), JSON.stringify({ name: '@fixture/service' }));
+      writeFileSync(resolve(source, 'service.d.ts'), 'export interface Port { id: string }\n');
+      const config = JSON.parse(readFileSync(resolve(kernel, 'tsconfig.json'), 'utf8'));
+      config.compilerOptions.paths = { '@fixture/service': ['./src/http/service.d.ts'] };
+      writeFileSync(resolve(kernel, 'tsconfig.json'), JSON.stringify(config));
+      writeFileSync(
+        resolve(source, 'kernel.ts'),
+        "import type { Port } from '@fixture/service';\nexport interface Kernel { port: Port }\n",
+      );
+      expect(() => clientDeclarations(kernel)).toThrow(
+        'Client declaration http/kernel.d.ts imports service package @fixture/service',
+      );
     } finally {
       rmSync(fixtureRoot, { recursive: true, force: true });
     }
   },
   timeout,
 );
+
+test('client generation refuses declarations importing a service workspace and names both', () => {
+  const temporaryRoot = resolve(PROJECT_ROOT, '.temp');
+  mkdirSync(temporaryRoot, { recursive: true });
+  const root = mkdtempSync(resolve(temporaryRoot, 'client-service-import-'));
+  try {
+    mkdirSync(resolve(root, 'services/example'), { recursive: true });
+    writeFileSync(resolve(root, 'services/example/package.json'), JSON.stringify({ name: '@fixture/service' }));
+    for (const content of [
+      "import type { Port } from '@fixture/service';",
+      "export type { Port } from '@fixture/service/ports';",
+      "export type Port = import('@fixture/service').Port;",
+      "import '@fixture/service';",
+      "import Port = require('@fixture/service/ports');",
+    ]) {
+      expect(() => assertNoServiceImports(new Map([['access/fixture.d.ts', content]]), root)).toThrow(
+        'Client declaration access/fixture.d.ts imports service package @fixture/service',
+      );
+    }
+    expect(() =>
+      assertNoServiceImports(
+        new Map([
+          [
+            'access/allowed.d.ts',
+            "import type { Port } from '@rezics/auth-contract';\nexport type Pool = import('pg').Pool;",
+          ],
+          [
+            'access/literals.d.ts',
+            `// import '@fixture/service';\n/* export * from '@fixture/service'; */\nexport type Example = "from '@fixture/service'";`,
+          ],
+        ]),
+        root,
+      ),
+    ).not.toThrow();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('generated client declarations import no Auth service and declare all package dependencies', async () => {
+  for (const [file, content] of committedDeclarations()) {
+    expect(content, file).not.toMatch(/['"]@rezics\/auth(?:\/[^'"]*)?['"]/);
+  }
+  const { checkWorkspaceImports } = await import('../../../scripts/workspace-imports.ts');
+  expect(checkWorkspaceImports(PROJECT_ROOT).filter((line) => line.startsWith('error: @rezics/client '))).toEqual([]);
+});

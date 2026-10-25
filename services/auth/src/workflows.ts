@@ -1,3 +1,23 @@
+import type {
+  AccountWorkflowPorts,
+  AccountOperation,
+  WorkflowMembership,
+  WorkflowResponsibility,
+  WorkflowAccount,
+  WorkflowHandleTransition,
+  WorkflowContext,
+  WorkflowFence,
+} from '@rezics/auth-contract';
+export type {
+  AccountWorkflowPorts,
+  AccountOperation,
+  WorkflowMembership,
+  WorkflowResponsibility,
+  WorkflowAccount,
+  WorkflowHandleTransition,
+  WorkflowContext,
+  WorkflowFence,
+} from '@rezics/auth-contract';
 import { createCipheriv, createDecipheriv, createHash, createHmac, hkdfSync, randomBytes } from 'node:crypto';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { coordinateMembership } from './membership-workflows.ts';
@@ -5,146 +25,9 @@ import { sanitizedClientIp, verifyTurnstile, type TurnstileConfiguration } from 
 import type { Pool } from 'pg';
 import type { AuthService } from './index.ts';
 
-/** Transport-neutral shapes of the existing Access command inputs/results.
- * Production ports return the complete native CommandOutcome, including receipt
- * position/transactionId. The coordinator consumes only its nonsecret value. */
-type Result<T> = Promise<{ value: T }>;
 type Command = { accountId: string; key: string };
-export type WorkflowMembership = { organizationId: string; memberAccountId: string; reservationId: string };
-export type WorkflowResponsibility = { operatorAccountId: string; subjectAccountId: string; reservationId: string };
-export type WorkflowAccount = {
-  accountId: string;
-  handle: string | null;
-  operatorAccountId: string | null;
-  state: string;
-  fenced: boolean;
-};
-
-export type WorkflowHandleTransition = Command & {
-  handle: string;
-  expectedHandle: string | null;
-  reservationId: string;
-  operationId: string;
-};
-export type WorkflowContext = { actor: { accountId: string } };
 type Reservation = { handle: string; accountId: string; reservationId: string; expiresAt: string };
-export type WorkflowFence = {
-  accountId: string;
-  receiptId: string;
-  minimumAuthnEpoch: string;
-  kind: string;
-  priorOperatorAccountId: string | null;
-};
-export type AccountOperation =
-  | { kind: 'rename'; accountId: string; handle: string; expectedHandle: string | null; authorization: string }
-  | { kind: 'organization'; handle: string; authorization: string }
-  | { kind: 'revoke'; accountId: string }
-  | {
-      kind: 'membership';
-      organizationId: string;
-      memberAccountId: string;
-      role: 'owner' | 'member' | null;
-      reservationId?: string;
-      authorization: string;
-    }
-  | {
-      kind: 'automated';
-      registrationId: string;
-      operatorAccountId: string;
-      authorization: string;
-      handle?: string;
-      operationKey?: string;
-    }
-  | {
-      kind: 'transfer';
-      previous: WorkflowResponsibility;
-      expectedVersion: string;
-      operatorAccountId: string;
-      authorization: string;
-    }
-  | { kind: 'delete'; accountId: string; responsibility?: WorkflowResponsibility; authorization: string }
-  | { kind: 'fence-operator'; accountId: string; authorization: string }
-  | { kind: 'consent'; accountId: string; clientId: string; scopes: string[]; authorization: string }
-  | { kind: 'client-reduction'; clientId: string; scopes: string[]; firstParty: boolean; authorization: string }
-  | { kind: 'opening'; operatorAccountId: string; subjectAccountId: string; authorization: string };
 
-export interface AccountWorkflowPorts<Context = WorkflowContext> {
-  registrationTarget(key: string): string;
-  reserveHandle(input: { handle: string; accountId: string; key: string }): Result<Reservation>;
-  createPending(
-    input: Command & { handle: string; reservationId: string },
-  ): Result<{ accountId: string; registrationId: string; expiresAt: string }>;
-  claimHandle(
-    input: Command & { handle: string; reservationId: string; evidence?: unknown },
-  ): Result<{ accountId: string; handle: string }>;
-  activate(input: Command & { evidence: unknown }): Result<{ accountId: string }>;
-  expireRegistration(input: Command & { handle: string; reservationId: string }): Result<unknown>;
-  releaseExpiredRegistrationHandle(input: Command & { handle: string; reservationId: string }): Result<unknown>;
-  provisioningReference(input: {
-    accountId: string;
-    reservationId: string;
-    operation?: AccountOperation;
-  }): Promise<string>;
-  provisioningEvidence(input: { accountId: string; reservationId: string }): Promise<unknown>;
-  raiseFence(input: Command): Result<WorkflowFence>;
-  /** Resolve a durable approval to an authenticated kernel context. Recheck
-   * current authorization; never synthesize a context from public JSON. Called
-   * inside each protected step, so context/private facts never enter DBOS. */
-  authorizeOperation?(reference: string, operation: AccountOperation): Promise<Context>;
-  /** Native hosts deny legacy operations with no durable authorization field.
-   * Callback-only historical hosts may omit this adapter. */
-  authorizeUnprotectedOperation?(operation: AccountOperation): Promise<void>;
-  actorAccountId?(context: Context): string;
-  stableCommandKey?(context: Context, phase: string): string;
-  holdHandle?(input: WorkflowHandleTransition): Result<unknown>;
-  transitionAccountHandle?(context: Context, input: WorkflowHandleTransition): Result<unknown>;
-  finalizeHandleTransition?(input: WorkflowHandleTransition): Result<unknown>;
-  redirectTransitionHandle?(input: WorkflowHandleTransition): Result<unknown>;
-  completeHandleTransition?(input: WorkflowHandleTransition): Result<unknown>;
-  cancelHandleTransition?(input: WorkflowHandleTransition): Result<unknown>;
-  releaseHandleTransition?(input: WorkflowHandleTransition): Result<unknown>;
-  provisionManagementDefaults?(input: { operatorAccountId: string; key: string }): Result<unknown>;
-  readAccount?(accountId: string): Promise<WorkflowAccount | null>;
-  setMembership?(
-    context: Context,
-    input: WorkflowMembership & { role: 'owner' | 'member' | null; key: string },
-  ): Result<unknown>;
-  releaseMembershipCoordination?(input: WorkflowMembership & { key: string }): Result<unknown>;
-  reserveResponsibility?(input: {
-    operatorAccountId: string;
-    subjectAccountId: string;
-    key: string;
-  }): Result<WorkflowResponsibility>;
-  recordOperatorRelation?(
-    input: WorkflowResponsibility & { expectedOperatorAccountId: string | null; expectedVersion: string; key: string },
-    pending?: { reservationId: string; operation: AccountOperation },
-  ): Result<WorkflowResponsibility & { version: string }>;
-  retireResponsibility?(input: WorkflowResponsibility & { key: string }): Result<unknown>;
-  releaseResponsibility?(input: WorkflowResponsibility & { key: string }): Result<unknown>;
-  responsibilityPage?(input: {
-    operatorAccountId: string;
-    limit?: number;
-    cursor?: string;
-  }): Promise<{ operators: { reservationId: string; subjectAccountId: string }[]; next: string | null }>;
-  tombstone?(context: Context, input: Command): Result<WorkflowFence>;
-  redirectHandle?(input: Command & { handle: string }): Result<unknown>;
-  authorizeOpening?(
-    context: Context,
-    input: { operatorAccountId: string; subjectAccountId: string; purpose: 'session'; key: string },
-  ): Result<{ receiptId: string }>;
-  reserveCoordination?(
-    input: Command & { relatedAccountId: string; purpose: 'membership' | 'operator' },
-  ): Result<{ accountId: string; relatedAccountId: string; purpose: string; reservationId: string }>;
-  createOrganization?(input: {
-    organizationId: string;
-    ownerAccountId: string;
-    ownerReservationId: string;
-    key: string;
-  }): Result<{ accountId: string; ownerAccountId: string }>;
-  bootstrapOrganizationHandle?(
-    input: WorkflowHandleTransition & { ownerAccountId: string; ownerReservationId: string },
-  ): Result<unknown>;
-}
 export interface AccountWorkflowOptions<Context = WorkflowContext> {
   database: Pool;
   systemDatabaseUrl: string;

@@ -1,4 +1,4 @@
-import type { AuthService } from '@rezics/auth';
+import type { AuthRecoveryPort } from '@rezics/auth-contract';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { createLifecycleInternals, LifecycleDeniedError } from './lifecycle.ts';
@@ -13,7 +13,7 @@ import { createLifecycleInternals, LifecycleDeniedError } from './lifecycle.ts';
 export function createRecoveryCompletion(config: {
   pool: Pool;
   routeKey: Uint8Array;
-  auth: () => AuthService;
+  auth: () => AuthRecoveryPort;
   clock?: () => Date;
 }) {
   const resolve = (reference: unknown) => config.auth().internal.resolveRecoveryEstablishment(reference);

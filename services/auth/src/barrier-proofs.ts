@@ -1,17 +1,8 @@
+import type { BarrierProof, BarrierProofExpectation } from '@rezics/auth-contract';
+export type { BarrierProof, BarrierProofExpectation } from '@rezics/auth-contract';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 
-/** Nonsecret reference resolution; this receipt confers no authority by itself. */
-export type BarrierProof = Readonly<{
-  accountId: string;
-  purpose: 'consent-reduction' | 'recovery';
-  previousEpoch: number;
-  operationKey: string;
-  digest: string;
-  expiresAt: string;
-}>;
-
-type Expected = Pick<BarrierProof, 'accountId' | 'purpose' | 'previousEpoch' | 'operationKey'>;
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 const bounded = (value: unknown, size: number): value is string =>
@@ -23,7 +14,7 @@ const bounded = (value: unknown, size: number): value is string =>
  */
 export function createBarrierProofVerifier({ database }: { database: Pool }) {
   return {
-    async verify(reference: string, expected: Expected): Promise<BarrierProof | null> {
+    async verify(reference: string, expected: BarrierProofExpectation): Promise<BarrierProof | null> {
       if (
         typeof reference !== 'string' ||
         !/^[0-9a-f]{64}$/.test(reference) ||

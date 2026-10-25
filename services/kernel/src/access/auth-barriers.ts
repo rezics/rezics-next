@@ -1,4 +1,4 @@
-import type { CredentialFloorPort, CredentialFloorReceipt } from '@rezics/auth';
+import type { CredentialFloorPort, CredentialFloorReceipt } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
@@ -7,7 +7,7 @@ import { partitionOf, routeOf, newId } from '../route/route.ts';
 import { readAccount } from './account-data.ts';
 import credentialRead from './auth-barriers-credential-read.sql';
 import credentialAdvance from './auth-barriers-credential-advance.sql';
-import type { createBarrierProofVerifier, TrustedAccessPorts } from '@rezics/auth';
+import type { BarrierProofPort, TrustedAccessPorts } from '@rezics/auth-contract';
 import type { AuthBindingCapabilities } from './auth-bindings.ts';
 import { AuthBindingDeniedError } from './auth-bindings.ts';
 import type { createLifecycleInternals, LifecycleFenceReceipt } from './lifecycle.ts';
@@ -16,7 +16,7 @@ type Lifecycle = Pick<
   ReturnType<typeof createLifecycleInternals>,
   'advanceAuthenticationFloor' | 'readFenceReceipt' | 'readFenceState'
 >;
-type Proofs = Pick<ReturnType<typeof createBarrierProofVerifier>, 'verify'>;
+type Proofs = Pick<BarrierProofPort, 'verify'>;
 type Capabilities = Required<Pick<AuthBindingCapabilities, 'invalidateAccount' | 'authorizeRecovery'>>;
 type Ports = Required<Pick<TrustedAccessPorts, 'invalidateAccount' | 'authorizeRecovery'>>;
 function allowed(value: unknown): asserts value {

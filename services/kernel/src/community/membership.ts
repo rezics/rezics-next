@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
-import type { MembershipWorkInput } from '@rezics/auth/membership-workflows';
+import type { MembershipWorkInput } from '@rezics/auth-contract';
 import { readAccount } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import type { LifecycleRequest } from '../access/lifecycle.ts';

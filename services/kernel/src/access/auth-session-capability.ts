@@ -1,4 +1,4 @@
-import type { AuthService } from '@rezics/auth';
+import type { AuthSessionPort } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 import type { Access } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
@@ -43,7 +43,7 @@ export function createOperatorSessionCapability(config: {
   access: Access;
   operators: ReturnType<typeof createOperatorCommands>;
   referenceKeys: KeyRing;
-  accessTokenForProof: AuthService['internal']['accessTokenForProof'];
+  accessTokenForProof: AuthSessionPort['internal']['accessTokenForProof'];
 }): OperatorSessionCapability {
   const { pool, access, operators, accessTokenForProof } = config;
   // Keep a bounded private snapshot, as with the native cursor key ring.
