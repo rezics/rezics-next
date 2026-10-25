@@ -43,7 +43,7 @@ const thread = newId(route);
 const secondThread = newId(route);
 const accounts = new Map<string, Account>();
 const access = createAccess({
-  actions: new Map(author.scopes.map((action) => [action, { anonymous: false }])),
+  actions: new Map([...author.scopes, 'media:read', 'media:erase'].map((action) => [action, { anonymous: false }])),
   accountEvidence: (actor) => accounts.get(actor.accountId),
 });
 const dependencies = () => ({ pool: db.pool, access });

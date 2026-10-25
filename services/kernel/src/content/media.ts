@@ -1,5 +1,23 @@
 import type { Pool } from 'pg';
-import type { CommandOutcome, CommandTransaction } from '../command/command.ts';
+import { createHash } from 'node:crypto';
+import canonicalize from 'canonicalize';
+import {
+  authoritativeTimeValue,
+  currentCommand,
+  principalCommandIdentity,
+  runCommand,
+  type CommandAuthorization,
+  type CommandOutcome,
+  type CommandTransaction,
+} from '../command/command.ts';
+import { initializeResourceGrants, parentCreationAuthorization } from '../access/index.ts';
+import { GrantDeniedError } from '../access/grant-commands.ts';
+import { accessCheck, accessCommandAuthorization, type AccessCheck } from '../request/access.ts';
+import { newId, partitionOf, routeOf } from '../route/route.ts';
+import reserveStatement from './reserve-media.sql';
+import completeStatement from './complete-media.sql';
+import readStatement from './read-media.sql';
+import claimStatement from './claim-media.sql';
 import type { Access, Actor } from '../request/access.ts';
 import type { ImportedSource, Rights } from './imported-contract.ts';
 import type { MediaId, PostId, ReadContext, RequestContext, RevisionId, ThreadId } from './model.ts';
@@ -92,32 +110,357 @@ export type ClaimMediaInput = ClaimMediaBase &
         revisionId?: never;
       }>
   );
-export function reserveMedia(
-  _dependencies: MediaDependencies,
-  _actor: Actor,
-  _input: MediaReservationInput,
-  _context: RequestContext,
+const imageTypes = new Set(['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp']);
+const digestPattern = /^[0-9a-f]{64}$/;
+function account(actor: Actor) {
+  if (actor.kind !== 'account') throw new GrantDeniedError();
+  return actor;
+}
+function route(id: string): number {
+  const result = routeOf(id);
+  if (result === null) throw new GrantDeniedError();
+  return result;
+}
+function length(value: number): void {
+  if (!Number.isSafeInteger(value) || value < 1 || value > 20 * 1024 * 1024)
+    throw new TypeError('Invalid media byte count');
+}
+function digest(value: string): void {
+  if (typeof value !== 'string' || !digestPattern.test(value)) throw new TypeError('Invalid media SHA256');
+}
+function requestKey(value: string): void {
+  if (typeof value !== 'string' || value.length < 1 || value.length > 255)
+    throw new TypeError('Invalid media request identifier');
+}
+function options(actor: Actor, r: number, kind: string, input: unknown, context: RequestContext) {
+  requestKey(context.idempotencyKey);
+  const identity = principalCommandIdentity(account(actor));
+  return {
+    ...identity,
+    partition: partitionOf(r),
+    deadline: context.deadline,
+    receipt: {
+      kind,
+      key: context.idempotencyKey,
+      digest: createHash('sha256')
+        .update(canonicalize([identity, kind, input])!)
+        .digest(),
+    },
+  };
+}
+type Row = Awaited<ReturnType<typeof readStatement.run>>[number];
+async function read(client: CommandTransaction, id: string, kind = 'media'): Promise<Row | null> {
+  const rows = await readStatement.run(client, { route: route(id), id, kind });
+  if (rows.length > 1) throw new GrantDeniedError();
+  return rows[0] ?? null;
+}
+type Container = Row & { kind: 'post' | 'thread' | 'board'; id: string; visibility: string; security_revision: string };
+async function chain(client: CommandTransaction, containerId: string): Promise<Container[]> {
+  const result: Container[] = [];
+  const seen = new Set<string>();
+  let id = containerId;
+  let kind = 'container';
+  let threadId: string | null = null;
+  let posts = 0;
+  while (result.length < 36) {
+    if (seen.has(id)) throw new GrantDeniedError();
+    seen.add(id);
+    const row = await read(client, id, kind);
+    if (
+      !row ||
+      (row.kind !== 'post' && row.kind !== 'thread' && row.kind !== 'board') ||
+      row.id !== id ||
+      !row.visibility ||
+      !row.security_revision ||
+      row.visibility === 'taken_down' ||
+      row.availability !== 'available'
+    )
+      throw new GrantDeniedError();
+    result.push(row as Container);
+    if (row.kind === 'board') return result;
+    if (row.kind === 'thread') {
+      if (threadId !== null && threadId !== row.id) throw new GrantDeniedError();
+      if (!row.board_id) throw new GrantDeniedError();
+      id = row.board_id;
+      kind = 'board';
+    } else {
+      if (++posts > 33 || !row.thread_id || (threadId !== null && threadId !== row.thread_id))
+        throw new GrantDeniedError();
+      threadId = row.thread_id;
+      id = row.parent_id ?? row.thread_id;
+      if (route(id) !== route(containerId)) throw new GrantDeniedError();
+      kind = row.parent_id ? 'post' : 'thread';
+    }
+  }
+  throw new GrantDeniedError();
+}
+
+export async function reserveMedia(
+  dependencies: MediaDependencies,
+  actor: Actor,
+  input: MediaReservationInput,
+  context: RequestContext,
 ): Promise<CommandOutcome<Readonly<{ mediaId: MediaId }>>> {
-  throw unfinishedPort('reserveMedia');
+  const owner = account(actor);
+  const r = route(input.containerId);
+  if (input.purpose !== 'post-image' || !imageTypes.has(input.mediaType))
+    throw new TypeError('Invalid media purpose or type');
+  length(input.byteCount);
+  if (input.sha256 !== undefined) digest(input.sha256);
+  const body = {
+    containerId: input.containerId,
+    purpose: input.purpose,
+    mediaType: input.mediaType,
+    byteCount: input.byteCount,
+    ...(input.sha256 === undefined ? {} : { sha256: input.sha256 }),
+  };
+  const mediaId = newId(r);
+  const resource = { route: r, id: mediaId };
+  let insertedTransaction: string | undefined;
+  let preparedChain: Container[] = [];
+  let disclosure: (AccessCheck | null)[] = [];
+  const base = parentCreationAuthorization({
+    access: dependencies.access,
+    actor,
+    action: 'media:create',
+    parent: {
+      resource: { route: r, id: body.containerId },
+      async validate(client, time) {
+        const current = await chain(client, body.containerId);
+        if (current.length !== preparedChain.length) return false;
+        for (let i = 0; i < current.length; i++) {
+          const row = current[i]!;
+          const before = preparedChain[i]!;
+          if (
+            row.id !== before.id ||
+            row.kind !== before.kind ||
+            row.security_revision !== before.security_revision ||
+            row.thread_id !== before.thread_id ||
+            row.parent_id !== before.parent_id ||
+            row.board_id !== before.board_id
+          )
+            return false;
+          const check = disclosure[i];
+          if (check && !(await check(client, time))) return false;
+        }
+        return true;
+      },
+    },
+    context: {
+      pool: dependencies.pool,
+      deadline: context.deadline,
+      resource,
+      creation: {
+        async validate(tx, target, time) {
+          const row = await read(tx, target.id);
+          return (
+            row !== null &&
+            row.inserted_here === true &&
+            row.transaction_id === insertedTransaction &&
+            row.uploader_id === owner.accountId &&
+            row.container_id === body.containerId &&
+            row.reservation_request_id === context.idempotencyKey &&
+            Date.parse(row.created_at!) === Date.parse(authoritativeTimeValue(time))
+          );
+        },
+      },
+    },
+  });
+  const authorization: CommandAuthorization = {
+    ...base,
+    async prepare(attempt) {
+      // Prepare private-ancestor formula evidence before the parent checkout.
+      // Every retry resolves the bounded chain again; no resource connection is retained.
+      preparedChain = await chain(dependencies.pool, body.containerId);
+      disclosure = [];
+      for (const row of preparedChain) {
+        disclosure.push(
+          row.visibility === 'public'
+            ? null
+            : await accessCheck(
+                dependencies.access,
+                actor,
+                `${row.kind}:read`,
+                { route: route(row.id), id: row.id },
+                { pool: dependencies.pool, deadline: context.deadline },
+              ),
+        );
+      }
+      return base.prepare!(attempt);
+    },
+  };
+  return runCommand(
+    dependencies.pool,
+    { ...options(actor, r, 'content.media.reserve', body, context), authorization },
+    async (tx, command) => {
+      await reserveStatement.run(tx, {
+        route: r,
+        media_id: mediaId,
+        container_id: body.containerId,
+        uploader_id: owner.accountId,
+        reservation_request_id: context.idempotencyKey,
+        purpose: body.purpose,
+        media_type: body.mediaType,
+        byte_count: body.byteCount,
+        declared_sha256: body.sha256 ?? null,
+        key: `m/${mediaId}/original`,
+        at: authoritativeTimeValue(command.time),
+        transaction_id: command.transactionId,
+      });
+      insertedTransaction = command.transactionId;
+      await initializeResourceGrants(tx, { resource, type: 'content.media', creator: owner.accountId });
+      return {
+        value: { mediaId },
+        events: [
+          {
+            type: 'com.rezics.content.media.reserved.v1',
+            subject: mediaId,
+            data: { mediaId, containerId: body.containerId, actorId: owner.accountId },
+          },
+        ],
+      };
+    },
+  );
 }
-export function completeMedia(
-  _dependencies: MediaDependencies,
-  _actor: Actor,
-  _mediaId: MediaId,
-  _input: MediaCompletionInput,
-  _context: RequestContext,
+export async function completeMedia(
+  dependencies: MediaDependencies,
+  actor: Actor,
+  mediaId: MediaId,
+  input: MediaCompletionInput,
+  context: RequestContext,
 ): Promise<CommandOutcome<Readonly<{ mediaId: MediaId; state: 'uploaded' }>>> {
-  throw unfinishedPort('completeMedia');
+  const owner = account(actor);
+  const r = route(mediaId);
+  if (owner.clientId !== 'rezics-website' || route(input.containerId) !== r) throw new GrantDeniedError();
+  length(input.byteCount);
+  digest(input.sha256);
+  requestKey(input.reservationRequestId);
+  const body = {
+    containerId: input.containerId,
+    reservationRequestId: input.reservationRequestId,
+    byteCount: input.byteCount,
+    sha256: input.sha256,
+  };
+  // Scope and current owner-role/grant authority are evaluated by the ONE Access formula.
+  const base = await accessCommandAuthorization(
+    dependencies.access,
+    actor,
+    'media:complete',
+    { route: r, id: mediaId },
+    { pool: dependencies.pool, deadline: context.deadline },
+    () => new GrantDeniedError(),
+  );
+  const authorization: CommandAuthorization = {
+    ...base,
+    async authorize(tx, attempt, evidence) {
+      const mode = await base.authorize(tx, attempt, evidence);
+      const row = await read(tx, mediaId);
+      if (
+        !row ||
+        row.uploader_id !== owner.accountId ||
+        row.container_id !== body.containerId ||
+        row.reservation_request_id !== body.reservationRequestId ||
+        Number(row.byte_count) !== body.byteCount ||
+        (row.declared_sha256 !== null && row.declared_sha256 !== body.sha256) ||
+        row.erased ||
+        row.collection_pending
+      )
+        throw new GrantDeniedError();
+      return mode;
+    },
+  };
+  return runCommand(
+    dependencies.pool,
+    { ...options(actor, r, 'content.media.complete', [mediaId, body], context), authorization },
+    async (tx, command) => {
+      const rows = await completeStatement.run(tx, {
+        route: r,
+        media_id: mediaId,
+        uploader_id: owner.accountId,
+        container_id: body.containerId,
+        reservation_request_id: body.reservationRequestId,
+        byte_count: body.byteCount,
+        sha256: body.sha256,
+        transaction_id: command.transactionId,
+      });
+      if (rows.length !== 1) throw new GrantDeniedError();
+      return {
+        value: { mediaId, state: 'uploaded' as const },
+        events: [
+          {
+            type: 'com.rezics.content.media.uploaded.v1',
+            subject: mediaId,
+            data: { mediaId, containerId: body.containerId, actorId: owner.accountId },
+          },
+        ],
+      };
+    },
+  );
 }
-export function readReservation(
-  _dependencies: MediaDependencies,
-  _mediaId: MediaId,
-  _context: ReadContext,
+export async function readReservation(
+  dependencies: MediaDependencies,
+  mediaId: MediaId,
+  context: ReadContext,
 ): Promise<MediaMetadata | null> {
-  throw unfinishedPort('readReservation');
+  if (context.actor.kind !== 'account' || routeOf(mediaId) === null || Date.now() >= context.deadline) return null;
+  const check = await accessCheck(
+    dependencies.access,
+    context.actor,
+    'media:read_reservation',
+    { route: route(mediaId), id: mediaId },
+    { pool: dependencies.pool, deadline: context.deadline },
+  );
+  if (!(await check(dependencies.pool))) return null;
+  const row = await read(dependencies.pool, mediaId);
+  if (!row || row.uploader_id !== context.actor.accountId || Date.now() >= context.deadline) return null;
+  return {
+    id: mediaId,
+    route: route(mediaId),
+    containerId: row.container_id!,
+    uploaderId: row.uploader_id,
+    key: row.key!,
+    purpose: row.purpose as MediaPurpose,
+    mediaType: row.media_type!,
+    byteCount: Number(row.byte_count),
+    reservationRequestId: row.reservation_request_id!,
+    ...(row.declared_sha256 === null ? {} : { declaredSha256: row.declared_sha256 }),
+    sha256: row.sha256,
+    state: row.state as MediaState,
+    claimedAt: row.claimed_at,
+    erased: row.erased!,
+    collectionPending: row.collection_pending!,
+    createdAt: row.created_at!,
+    decision: row.decision,
+    variants: JSON.parse(row.variants_json) as MediaVariant[],
+  };
 }
-export function claimMedia(_transaction: CommandTransaction, _input: ClaimMediaInput): Promise<void> {
-  throw unfinishedPort('claimMedia');
+export async function claimMedia(transaction: CommandTransaction, input: ClaimMediaInput): Promise<void> {
+  const command = currentCommand(transaction);
+  const owner = account(input.author);
+  const r = route(input.containerId);
+  if (
+    command.partition !== partitionOf(r) ||
+    command.basis?.actorAccountId !== owner.accountId ||
+    command.basis.clientId !== owner.clientId ||
+    command.basis.requestedBy !== owner.requestedBy ||
+    command.authorization?.mode !== 'execute' ||
+    (command.authorization.action !== 'post:create' && command.authorization.action !== 'post:revise') ||
+    route(input.itemId) !== r ||
+    route(input.revisionId) !== r ||
+    input.mediaIds.length > 32
+  )
+    throw new GrantDeniedError();
+  const ids = [...new Set(input.mediaIds)];
+  if (ids.some((id) => routeOf(id) !== r)) throw new GrantDeniedError();
+  if (ids.length === 0) return;
+  const rows = await claimStatement.run(transaction, {
+    route: r,
+    media_ids: ids,
+    container_id: input.containerId,
+    uploader_id: owner.accountId,
+    at: authoritativeTimeValue(command.time),
+  });
+  if (rows.length !== ids.length) throw new GrantDeniedError();
 }
 export function decideDownload(
   _dependencies: MediaDependencies,
@@ -127,10 +470,12 @@ export function decideDownload(
 ): Promise<DownloadDecision> {
   throw unfinishedPort('decideDownload');
 }
-export function readMediaState(_pool: Pool, _mediaId: MediaId): Promise<MediaState | null> {
-  throw unfinishedPort('readMediaState');
+export async function readMediaState(pool: Pool, mediaId: MediaId): Promise<MediaState | null> {
+  if (routeOf(mediaId) === null) return null;
+  return ((await read(pool, mediaId))?.state as MediaState | null) ?? null;
 }
-export function readCollectionFence(_pool: Pool, _mediaId: MediaId): Promise<boolean | null> {
-  throw unfinishedPort('readCollectionFence');
+export async function readCollectionFence(pool: Pool, mediaId: MediaId): Promise<boolean | null> {
+  if (routeOf(mediaId) === null) return null;
+  return (await read(pool, mediaId))?.collection_pending ?? null;
 }
 export type { MediaStorage } from './media-storage.ts';
