@@ -845,12 +845,17 @@ test('cover download inherits its readable subject and current source fence thro
   ]);
   const takenDown = await request();
   absent(takenDown);
-  expect(takenDown.body).toEqual(fenced.body);
+  const withoutRequestId = (body: typeof fenced.body) => {
+    expect(body.request_id).toBeString();
+    const { request_id: _requestId, ...problem } = body;
+    return problem;
+  };
+  expect(withoutRequestId(takenDown.body)).toEqual(withoutRequestId(fenced.body));
   await db.admin.query(
     "UPDATE content.media SET taken_down=false,state='rejected',decision='invalid-image',claimed_at=NULL,security_revision=2 WHERE route=$1 AND media_id=$2",
     [route, id],
   );
   const rejected = await request('original', true);
   absent(rejected);
-  expect(rejected.body).toEqual(fenced.body);
+  expect(withoutRequestId(rejected.body)).toEqual(withoutRequestId(fenced.body));
 });
