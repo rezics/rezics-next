@@ -234,6 +234,24 @@ $$;
 
 
 --
+-- Name: guard_reaction_total(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.guard_reaction_total() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF ROW(NEW.route, NEW.target_id, NEW.kind)
+       IS DISTINCT FROM ROW(OLD.route, OLD.target_id, OLD.kind)
+     OR ROW(NEW.source_epoch, NEW.source_position) < ROW(OLD.source_epoch, OLD.source_position) THEN
+    RAISE EXCEPTION 'Reaction total identity and source watermark cannot regress' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: guard_report(); Type: FUNCTION; Schema: content; Owner: -
 --
 
@@ -684,6 +702,26 @@ CREATE TABLE content.reaction_count (
 
 
 --
+-- Name: reaction_total; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.reaction_total (
+    route integer NOT NULL,
+    target_id uuid NOT NULL,
+    kind text NOT NULL,
+    count integer NOT NULL,
+    source_epoch integer NOT NULL,
+    source_position bigint NOT NULL,
+    CONSTRAINT reaction_total_check CHECK ((route = ((get_byte(uuid_send(target_id), 10) * 256) + get_byte(uuid_send(target_id), 11)))),
+    CONSTRAINT reaction_total_count_check CHECK ((count >= 0)),
+    CONSTRAINT reaction_total_kind_check CHECK ((kind = ANY (ARRAY['upvote'::text, 'downvote'::text, 'like'::text, 'love'::text, 'laugh'::text, 'insightful'::text, 'sad'::text]))),
+    CONSTRAINT reaction_total_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT reaction_total_source_epoch_check CHECK ((source_epoch > 0)),
+    CONSTRAINT reaction_total_source_position_check CHECK ((source_position > 0))
+);
+
+
+--
 -- Name: report; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -923,6 +961,14 @@ ALTER TABLE ONLY content.reaction
 
 
 --
+-- Name: reaction_total reaction_total_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.reaction_total
+    ADD CONSTRAINT reaction_total_pkey PRIMARY KEY (route, target_id, kind);
+
+
+--
 -- Name: report report_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -1123,6 +1169,13 @@ CREATE TRIGGER post_identity BEFORE UPDATE ON content.post FOR EACH ROW EXECUTE 
 --
 
 CREATE TRIGGER reaction_count_identity BEFORE UPDATE ON content.reaction_count FOR EACH ROW EXECUTE FUNCTION content.guard_reaction_count();
+
+
+--
+-- Name: reaction_total reaction_total_identity; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER reaction_total_identity BEFORE UPDATE ON content.reaction_total FOR EACH ROW EXECUTE FUNCTION content.guard_reaction_total();
 
 
 --

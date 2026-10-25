@@ -79,9 +79,8 @@ The `insert-thread.sql`, `insert-post.sql` and `insert-revision.sql` storage hel
 
 ### Reaction count
 
-- **Touches:** One `core.partition` primary-key read in the target partition, then one point update of `content.reaction_count` per changed kind: `-1` on the previous kind and `+1` on the new kind, inserting that contribution when the row is absent. A kind-to-kind change touches two kinds. No read or scan of `content.reaction`. `readReactionCounts` reads that target's primary-key prefix and returns the summed counts with the newest source watermark.
-- **Bound:** Per event, rows O(1), blocks O(log R), statements O(1). A batch of n events is O(n). A watermark that is not newer changes zero rows.
-- **Growth check:** `test/content/reaction-projection.test.ts`: `aggregation cost is O(changes) as reactions and targets grow`. At 2048, 8192 and 32768 prior reactions with a fixed batch: constant rows and statements per event, zero sequential scans.
+- **Reaction count change:** Touches one contribution upsert and at most two `content.reaction_total` upserts (`-1` on the previous kind and `+1` on the new kind), in the target partition and one transaction. The source watermark changes only when its contribution row changes. Bound: O(log R) per event; concurrent changes to one target serialize on its total rows, which is acceptable for this asynchronous projection. Growth check: per-event rows and statements stay constant with 2048, 8192 and 32768 prior contributions on the target.
+- **Reaction counts read:** `readReactionCounts` touches one index range of at most seven total rows per target. A page reads at most L x 7 total rows per partition with one statement per partition. Bound: O(L x 7) rows, independent of contributors. Growth check: one target's read and a fixed page's read stay constant as contributors on the target grow to 2048, 8192 and 32768 across source partitions.
 
 ### Author erasure
 

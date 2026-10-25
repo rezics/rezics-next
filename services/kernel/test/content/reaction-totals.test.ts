@@ -3,6 +3,7 @@ import pg from 'pg';
 import { randomUUID } from 'node:crypto';
 import { runCommand } from '../../src/command/command.ts';
 import {
+  applyReactionCountEnvelopes,
   createReactionCountEffect,
   readReactionCounts,
   type ReactionCounts,
@@ -158,8 +159,9 @@ test('single-target and page reads stay within seven rows as 2048, 8192 and 3276
   await append(anchorActor, targetId, null, null);
 
   async function apply(items: readonly Envelope[]): Promise<void> {
-    const effect = createReactionCountEffect(db.pool);
-    for (const item of items) await effect.run(item.events[0]!);
+    for (let offset = 0; offset < items.length; offset += 256) {
+      await applyReactionCountEnvelopes(db.pool, items.slice(offset, offset + 256));
+    }
   }
 
   function next(partition: number, itemTarget: string): Envelope {
@@ -179,7 +181,7 @@ test('single-target and page reads stay within seven rows as 2048, 8192 and 3276
       for (let partition = 2048; partition < 4096; partition++) events.push(next(partition, targetId));
     } else if (scale === 8192) {
       for (let partition = 2048; partition < 4096; partition++) {
-        events.push(next(partition, targetId), next(partition, targetId));
+        events.push(next(partition, targetId), next(partition, targetId), next(partition, targetId));
       }
     } else {
       for (let partition = 0; partition < 2048; partition++) {

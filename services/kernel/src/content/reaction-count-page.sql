@@ -10,7 +10,7 @@ SELECT requested.target_id AS "targetId",
 FROM unnest(:target_ids::uuid[], :routes::integer[]) AS requested(target_id, route)
 JOIN LATERAL (
   SELECT count_row.kind, count_row.count, count_row.source_epoch, count_row.source_position
-  FROM content.reaction_count AS count_row
+  FROM content.reaction_total AS count_row
   CROSS JOIN input
   WHERE count_row.route = requested.route
     AND count_row.target_id = requested.target_id

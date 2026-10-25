@@ -6,9 +6,9 @@ import { projectBatch, type BatchResult, type CloudEvent, type Envelope } from '
 import partitionRead from '../partition/read.sql';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { CONTENT_EVENTS, REACTION_KINDS, type ContentEventData } from './events.ts';
-import insertSql from './reaction-count-insert.sql';
 import readSql from './reaction-count-read.sql';
-import upsert from './reaction-count-upsert.sql';
+import countUpsert from './reaction-count-upsert.sql';
+import totalUpsert from './reaction-total-upsert.sql';
 
 const changed = 'com.rezics.content.reaction.changed.v1';
 const maxPosition = 9223372036854775807n;
@@ -73,21 +73,27 @@ async function applyChange(client: PoolClient, change: Change): Promise<void> {
       source_partition: change.sourcePartition,
       kind: step.kind,
       delta: step.delta,
+      update_delta: step.delta,
       source_epoch: change.epoch,
       source_position: change.position.toString(),
     };
-    // A point update reads the contribution. Insert only when that row is absent;
-    // a stale watermark updates nothing and must not replace the stored count.
-    const updated = await client.query(
-      upsert.sql,
-      upsert.params.map((name) => parameters[name as keyof typeof parameters]),
+    // The upsert returns no row for a replay or stale watermark. OLD and NEW
+    // counts provide the actual contribution delta after the zero floor.
+    const updated = await client.query<{ previous_count: number; current_count: number }>(
+      countUpsert.sql,
+      countUpsert.params.map((name) => parameters[name as keyof typeof parameters]),
     );
-    if ((updated.rowCount ?? 0) === 0) {
-      await client.query(
-        insertSql.sql,
-        insertSql.params.map((name) => parameters[name as keyof typeof parameters]),
-      );
-    }
+    const contribution = updated.rows[0];
+    if (!contribution) continue;
+    const totalParameters = {
+      ...parameters,
+      delta: contribution.current_count - contribution.previous_count,
+      update_delta: contribution.current_count - contribution.previous_count,
+    };
+    await client.query(
+      totalUpsert.sql,
+      totalUpsert.params.map((name) => totalParameters[name as keyof typeof totalParameters]),
+    );
   }
 }
 
@@ -113,12 +119,17 @@ async function applyEnvelopes(pool: Pool, envelopes: readonly Envelope[]): Promi
   }
 }
 
+/** Applies decoded source envelopes through the same path used by the reaction relay. */
+export function applyReactionCountEnvelopes(pool: Pool, envelopes: readonly Envelope[]): Promise<void> {
+  return applyEnvelopes(pool, envelopes);
+}
+
 /** Consumes one actor partition through projectBatch and folds each change into the target partition. */
 export function projectReactionCounts(pool: Pool, partition: number): Promise<BatchResult> {
   return projectBatch(pool, {
     consumer: REACTION_COUNT_CONSUMER,
     partition,
-    apply: (envelopes) => applyEnvelopes(pool, envelopes),
+    apply: (envelopes) => applyReactionCountEnvelopes(pool, envelopes),
   });
 }
 
