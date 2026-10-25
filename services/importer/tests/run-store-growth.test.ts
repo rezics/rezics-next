@@ -169,19 +169,56 @@ function seedRunStore(store: RunStore, count: number, status: 'staging' | 'ready
       put(
         `INSERT INTO run_generations(source,id,seq,lease,status,threshold,prior,supplied,survivors,classified,resolved,expected,changed,prepared,cursor)
          VALUES(?,?,?,?,?,0.5,?,?,?,?,?,?,?,?,?)`,
-        FIXTURE_SOURCE, id, i + 1, i === 0 ? FIXTURE_RUN.lease : 'old-lease', i === 0 ? status : 'complete',
-        count, count, count, status === 'ready' && i === 0 ? count : 0, status === 'ready' && i === 0 ? count : 0,
-        count, count, count, '',
+        FIXTURE_SOURCE,
+        id,
+        i + 1,
+        i === 0 ? FIXTURE_RUN.lease : 'old-lease',
+        i === 0 ? status : 'complete',
+        count,
+        count,
+        count,
+        status === 'ready' && i === 0 ? count : 0,
+        status === 'ready' && i === 0 ? count : 0,
+        count,
+        count,
+        count,
+        '',
       );
       put(
         `INSERT INTO run_entries(source,run_id,record_key,row_json,projection_json,kind,resolved,bytes,keys_json,omissions_json,pending,remaining)
-         VALUES(?,?,?,?,?,'unchanged',1,'{}','[]','[]',0,0)`,
-        FIXTURE_SOURCE, FIXTURE_RUN.id, key, fixtureRowJson(key), '[]',
+         VALUES(?,?,?,?,?,'changed',1,'{}',?,'[]',0,0)`,
+        FIXTURE_SOURCE,
+        FIXTURE_RUN.id,
+        key,
+        fixtureRowJson(key),
+        '[]',
+        JSON.stringify([`C${i}`]),
       );
       put('INSERT INTO run_members VALUES(?,?,?,?,?)', FIXTURE_SOURCE, key, 1, i + 1, fixtureRowJson(key));
       put('INSERT INTO run_acknowledged VALUES(?,?,?,?)', FIXTURE_SOURCE, key, fixtureRowJson(key), '[]');
-      put('INSERT INTO run_commands VALUES(?,?,?,?,?,1)', FIXTURE_SOURCE, id, `C${i}`, key, 'facts');
+      put(
+        'INSERT INTO run_commands VALUES(?,?,?,?,?,?,?,1)',
+        FIXTURE_SOURCE,
+        FIXTURE_RUN.id,
+        `C${i}`,
+        key,
+        'facts',
+        'propose',
+        0,
+      );
       put('INSERT INTO run_payloads VALUES(?,?,?)', FIXTURE_SOURCE, `C${i}`, '{}');
+      put(
+        'INSERT INTO run_envelopes VALUES(?,?,?,?,?,?,?,?,?)',
+        FIXTURE_SOURCE,
+        FIXTURE_RUN.id,
+        key,
+        0,
+        0,
+        '{}',
+        JSON.stringify([`C${i}`]),
+        0,
+        0,
+      );
     }
     for (const statement of statements.values()) statement.finalize();
     db.exec('COMMIT');
@@ -191,7 +228,9 @@ function seedRunStore(store: RunStore, count: number, status: 'staging' | 'ready
     throw error;
   }
   db.exec('ANALYZE');
-  const first = db.prepare('SELECT record_key FROM run_entries WHERE source=? AND run_id=? ORDER BY record_key LIMIT 1');
+  const first = db.prepare(
+    'SELECT record_key FROM run_entries WHERE source=? AND run_id=? ORDER BY record_key LIMIT 1',
+  );
   try {
     return (first.get(FIXTURE_SOURCE, FIXTURE_RUN.id) as { record_key: string }).record_key;
   } finally {
@@ -212,7 +251,16 @@ async function measureRunGrowth(
     const directory = await mkdtemp('.temp/run-store-growth-followup-');
     const store = new RunStore(`${directory}/runs.sqlite`);
     const probe = createSqliteProbe(store.database, {
-      growingTables: ['run_sources', 'run_generations', 'run_entries', 'run_members', 'run_acknowledged', 'run_commands', 'run_payloads'],
+      growingTables: [
+        'run_sources',
+        'run_generations',
+        'run_entries',
+        'run_members',
+        'run_acknowledged',
+        'run_commands',
+        'run_payloads',
+        'run_envelopes',
+      ],
     });
     try {
       const key = seedRunStore(store, 500 * scale, status);
@@ -224,18 +272,24 @@ async function measureRunGrowth(
         throw new Error(`${name}: ${String(error)}\n${statements}`);
       }
       samples.push({ scale, cost: measured.cost });
-      plans.push(`scale ${scale}:\n${measured.statements.map((event) => `${event.sql}\n${JSON.stringify(event.plan)}`).join('\n')}`);
+      plans.push(
+        `scale ${scale}:\n${measured.statements.map((event) => `${event.sql}\n${JSON.stringify(event.plan)}`).join('\n')}`,
+      );
     } finally {
       store.close();
       await rm(directory, { recursive: true, force: true });
     }
   }
   try {
-    assertGrowth(samples, {
-      rows: page ? 'linear' : 'constant',
-      blocks: 'constant',
-      statements: page ? 'linear' : 'constant',
-    }, { blocks: { absolute: 0, relative: 0 } });
+    assertGrowth(
+      samples,
+      {
+        rows: page ? 'linear' : 'constant',
+        blocks: 'constant',
+        statements: page ? 'linear' : 'constant',
+      },
+      { blocks: { absolute: 0, relative: 0 } },
+    );
   } catch (error) {
     throw new Error(`${name}: ${String(error)}\n${plans.join('\n')}`);
   }
@@ -246,10 +300,15 @@ test('Run control stays within its bound as R grows', async () => {
 }, 120_000);
 
 test('Run staging stays within its bound as R grows', async () => {
-  await measureRunGrowth('Run staging', (store, scale) => {
-    const key = `fresh-${scale}-${crypto.randomUUID()}`;
-    store.stage(FIXTURE_RUN, { row: fixtureRow(key), projection: [] });
-  }, false, 'staging');
+  await measureRunGrowth(
+    'Run staging',
+    (store, scale) => {
+      const key = `fresh-${scale}-${crypto.randomUUID()}`;
+      store.stage(FIXTURE_RUN, { row: fixtureRow(key), projection: [] });
+    },
+    false,
+    'staging',
+  );
 }, 120_000);
 
 test('Run projection page stays within its bound as R grows', async () => {
