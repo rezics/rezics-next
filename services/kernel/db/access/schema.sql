@@ -658,18 +658,18 @@ ALTER TABLE ONLY access.standing_parent_installation
 
 
 --
--- Name: organization_member_owner_probe; Type: INDEX; Schema: access; Owner: -
---
-
-CREATE INDEX organization_member_owner_probe ON access.organization_member USING gist (route, organization_id, valid) WHERE (role = 'owner'::text);
-
-
---
 -- Name: write_rate_counter write_rate_counter_pkey; Type: CONSTRAINT; Schema: access; Owner: -
 --
 
 ALTER TABLE ONLY access.write_rate_counter
     ADD CONSTRAINT write_rate_counter_pkey PRIMARY KEY (identity_digest, family);
+
+
+--
+-- Name: organization_member_owner_probe; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX organization_member_owner_probe ON access.organization_member USING gist (route, organization_id, valid) WHERE (role = 'owner'::text);
 
 
 --
