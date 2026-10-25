@@ -508,7 +508,25 @@ test('Cursors and seal stays within its bound as N grows', async () => {
     },
   };
   await seed({ pool: db.pool, admin: db.admin }, pagePopulation, { from: 0, to: 2 });
-  const population = requestPopulation(state, `request-cursor-${randomUUID()}`, (partition + 1) % 4096);
+  const population: Population = {
+    name: `request-cursor-growth-${randomUUID()}`,
+    hotPartition: (partition + 1) % 4096,
+    hotShare: 1,
+    rows: ({ ordinal, route }) => {
+      const id = newId(route);
+      const transaction = newId(route);
+      state.subjectIds.add(id);
+      return {
+        'semantic.subject': [{ route, subject_id: id, type: 'schema:Book', recorded_transaction_id: transaction }],
+        'semantic.fact': itemFacts(id, { labels: { en: `Cursor growth subject ${ordinal}` } }).map((fact) => ({
+          route,
+          subject_id: id,
+          ...fact,
+          recorded_transaction_id: transaction,
+        })),
+      };
+    },
+  };
   const report = await checkGrowth(db, {
     name: 'Cursors and seal stays within its bound as N grows',
     bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
