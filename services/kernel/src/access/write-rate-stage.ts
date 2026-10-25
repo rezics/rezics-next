@@ -3,8 +3,8 @@ import type { WriteRateContext, WriteRateLimiter } from './write-rate.ts';
 import { bindAnonymousRateIdentity } from './write-rate-identity.ts';
 import { rateLimitUnits, type RateLimitDeclaration } from '../http/rate-limit.ts';
 import { ProblemError } from '../http/problem.ts';
+import { actionLabelOfMountedRoute, mountedRouteCatalogue, type MountedRoute } from '../http/request.ts';
 
-type MountedRoute = { method: string; path: string; hooks?: { detail?: unknown } };
 export type WriteRateStageOptions = {
   trustedProxyPeers?: readonly string[];
   clientIpHeader?: string;
@@ -24,7 +24,9 @@ export function createWriteRateStage(limiter: WriteRateLimiter, options: WriteRa
   return async (input: {
     request: Request;
     route?: string | undefined;
-    routes: readonly MountedRoute[];
+    routes?: readonly MountedRoute[];
+    /** Already resolved by the shared native request stage. */
+    mounted?: MountedRoute | undefined;
     body: unknown;
     context: WriteRateContext;
     peer?: string | undefined;
@@ -32,18 +34,23 @@ export function createWriteRateStage(limiter: WriteRateLimiter, options: WriteRa
     const { request, context } = input;
     const unavailable = () =>
       new ProblemError('rate_limit_unavailable', { headers: { 'retry-after': '1', 'cache-control': 'no-store' } });
-    const mounted = input.routes.find(
-      (entry) =>
-        (entry.method === request.method || entry.method === 'ALL' || entry.method === '*') &&
-        entry.path === (input.route ?? new URL(request.url).pathname),
-    );
+    const mounted =
+      'mounted' in input
+        ? input.mounted
+        : input.routes && mountedRouteCatalogue(input.routes).find(request, input.route);
     const detail = mounted?.hooks?.detail as Record<string, unknown> | undefined;
     const declaration = detail?.['x-rate-limit'] as RateLimitDeclaration | undefined;
     if (declaration === undefined) {
       const action = detail?.['x-action'];
       // Explicit semantic read actions cover read-only POSTs. Method alone never exempts a POST.
-      if (typeof action === 'string' && /:(read|list)$/.test(action)) return;
-      if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return;
+      if (typeof action === 'string') {
+        try {
+          if (/:(read|list)$/.test(actionLabelOfMountedRoute(mounted))) return;
+        } catch {
+          throw unavailable();
+        }
+      }
+      if (action === undefined && ['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return;
       throw unavailable();
     }
     let units: number;
@@ -52,7 +59,7 @@ export function createWriteRateStage(limiter: WriteRateLimiter, options: WriteRa
     } catch {
       throw unavailable();
     }
-    const key = `${declaration.family}:${units}`;
+    const key = `${mounted?.method} ${mounted?.path} ${declaration.family}:${units}`;
     const previous = charged.get(request);
     if (previous) {
       if (

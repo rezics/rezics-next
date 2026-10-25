@@ -1,5 +1,9 @@
 import { afterAll, beforeEach, expect, test } from 'bun:test';
 import { t } from 'elysia';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { createAccess } from '../../src/access/index.ts';
+import { newId } from '../../src/route/route.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { Pool } from 'pg';
 import { createApp } from '../../src/http/app.ts';
 import { defineRateLimit } from '../../src/http/rate-limit.ts';
@@ -200,4 +204,133 @@ test('expired native windows reset atomically for the next full batch', async ()
   expect(row.count).toBe(100);
   expect(row.expires_at.getTime()).toBeGreaterThanOrEqual(original.getTime());
   expect(effects).toBe(200);
+});
+
+test('createKernel payout markPaid and offer delist spend once before effect with a native account counter', async () => {
+  const route = 0x2200;
+  const account = newId(route),
+    statement = newId(route),
+    offer = newId(route);
+  await pool.query(
+    "INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES ($1,$2,'actor','active',$2)",
+    [route, account],
+  );
+  await pool.query(
+    "INSERT INTO commerce.payout_statement(route,statement_id,creator_account_id,period,currency) VALUES ($1,$2,$3,'1900-01','usd')",
+    [route, statement, account],
+  );
+  await pool.query(
+    `INSERT INTO commerce.offer(route,offer_id,creator_account_id,target_subject_id,title,currency,unit_amount_minor,tax_code,royalty_basis_points,state,revision,created_at,updated_at,transaction_id)
+    VALUES ($1,$2,$3,$4,'Book','usd',1000,'txcd_10302000',9000,'active',1,now(),now(),$2)`,
+    [route, offer, account, newId(0x5500)],
+  );
+  for (const [anchor, resource, action] of [
+    [0, GLOBAL_CONTEXT, 'payout_statement:mark_paid'],
+    [route, offer, 'offer:manage'],
+  ] as const)
+    await pool.query(
+      "INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id) VALUES ($1,$2,$3,$4,'(,)',$3)",
+      [anchor, resource, account, action],
+    );
+  const pair = await generateKeyPair('ES256');
+  const jwk = { ...(await exportJWK(pair.publicKey)), kid: 'mounted-rate', alg: 'ES256' };
+  const token = await new SignJWT({
+    client_id: 'web',
+    scope: 'payout_statement:mark_paid offer:manage',
+    authn_epoch: 1,
+    auth_time: Math.floor(Date.now() / 1000),
+    amr: ['pwd'],
+  })
+    .setProtectedHeader({ alg: 'ES256', kid: 'mounted-rate', typ: 'at+jwt' })
+    .setIssuer('https://auth.test')
+    .setAudience('https://kernel.test')
+    .setSubject(account)
+    .setIssuedAt()
+    .setExpirationTime('5m')
+    .sign(pair.privateKey);
+  const real = createWriteRateLimiter({
+    secret,
+    overrides: JSON.stringify({ 'new-account': { write: { maximum: 2, seconds: 60 } } }),
+  });
+  const spends: unknown[] = [];
+  const states = async () => [
+    (
+      await pool.query('SELECT state,revision FROM commerce.payout_statement WHERE route=$1 AND statement_id=$2', [
+        route,
+        statement,
+      ])
+    ).rows[0],
+    (await pool.query('SELECT state,revision FROM commerce.offer WHERE route=$1 AND offer_id=$2', [route, offer]))
+      .rows[0],
+  ];
+  const app = createKernel({
+    pool,
+    routeKey: new Uint8Array(32),
+    access: (config) =>
+      createAccess({
+        ...config,
+        auth: {
+          issuer: 'https://auth.test',
+          audience: 'https://kernel.test',
+          jwksUrl: 'https://auth.test/jwks',
+          fetch: async () => Response.json({ keys: [jwk] }),
+        },
+      }),
+    writeRate: {
+      async spend(context, family, units) {
+        spends.push([family, units, await states()]);
+        return real.spend(context, family, units);
+      },
+    },
+  });
+  const send = (path: string, body: unknown) =>
+    app.handle(
+      new Request(`https://kernel.test${path}`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+          'idempotency-key': JSON.stringify(Bun.randomUUIDv7()),
+        },
+        body: JSON.stringify(body),
+      }),
+    );
+  expect((await send(`/v1/payoutStatements/${statement}:markPaid`, {})).status).toBe(400);
+  expect(spends).toEqual([]);
+  expect((await pool.query('SELECT count FROM access.write_rate_counter')).rows).toEqual([]);
+  const paid = await send(`/v1/payoutStatements/${statement}:markPaid`, { paidReference: 'wire' });
+  expect(paid.status).toBe(200);
+  expect(await paid.json()).toMatchObject({
+    statement: { id: statement, state: 'paid', paidReference: 'wire', revision: 2 },
+  });
+  const delisted = await send(`/v1/offers/${offer}:delist`, {});
+  expect(delisted.status).toBe(200);
+  expect(await delisted.json()).toMatchObject({ offer: { id: offer, state: 'delisted' } });
+  const before = await states();
+  const rejected = await send(`/v1/payoutStatements/${statement}:markPaid`, { paidReference: 'another-wire' });
+  expect(rejected.status).toBe(429);
+  expect(rejected.headers.get('retry-after')).toMatch(/^[1-9][0-9]*$/);
+  expect(await states()).toEqual(before);
+  expect(spends).toEqual([
+    [
+      'write',
+      1,
+      [
+        { state: 'open', revision: 1 },
+        { state: 'active', revision: 1 },
+      ],
+    ],
+    [
+      'write',
+      1,
+      [
+        { state: 'paid', revision: 2 },
+        { state: 'active', revision: 1 },
+      ],
+    ],
+    ['write', 1, before],
+  ]);
+  expect((await pool.query('SELECT route,family,count FROM access.write_rate_counter')).rows).toEqual([
+    { route, family: 'write', count: 2 },
+  ]);
 });

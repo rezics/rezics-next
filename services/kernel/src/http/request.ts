@@ -5,6 +5,7 @@ import { ProblemError } from './problem.ts';
 import { ANONYMOUS_PRINCIPAL_ID, normalizeCommandKey, type CommandPrincipal } from '../command/command.ts';
 import type { ActionCatalogue, Actor } from '../request/access.ts';
 import { anchorRoute, derivedId } from '../route/route.ts';
+import { kernelWriteRateFor } from './write-rate-routes.ts';
 
 export const SESSION_HEADER = 'rezics-session-token';
 export const IDEMPOTENCY_HEADER = 'idempotency-key';
@@ -65,13 +66,17 @@ export function anonymousRequestDigest(operation: string, input: { semantic: unk
 const ACTION_PATTERN = /^[a-z][a-z_]*:[a-z][a-z_]*$/;
 const OPERATION_PATTERN = /^[a-z][a-z_]*\.[a-z][a-z_]*$/;
 
-type Route = {
+export type MountedRoute = {
   method: string;
   path: string;
   hooks?: { detail?: unknown };
 };
 
-type RouteApp = { routes: readonly Route[] };
+type RouteApp = {
+  routes: readonly MountedRoute[];
+  '~map'?: { [method: string]: Record<string, unknown> | undefined };
+  '~config'?: { strictPath?: boolean };
+};
 
 type RouteDeclaration = { action: string; anonymous: boolean; replay?: 'self-account-read' };
 
@@ -79,12 +84,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function declaration(route: Route): RouteDeclaration {
+function declaration(route: MountedRoute): RouteDeclaration {
   const label = `${route.method.toUpperCase()} ${route.path}`;
   const detail = isRecord(route.hooks?.detail) ? route.hooks.detail : {};
-  const action = detail['x-action'];
-  if (typeof action !== 'string' || !ACTION_PATTERN.test(action))
-    throw new Error(`${label}: routes declare x-action as <resource>:<verb>`);
+  const action = actionLabelOfMountedRoute(route);
 
   const operationId = detail.operationId;
   if (typeof operationId !== 'string' || !OPERATION_PATTERN.test(operationId))
@@ -103,8 +106,14 @@ function declaration(route: Route): RouteDeclaration {
   };
 }
 
+const actionCatalogues = new WeakMap<object, ActionCatalogue>();
+
 /** Derives the configured action set from the routes mounted on an application. */
 export function actionCatalogue(app: RouteApp): ActionCatalogue {
+  const mounted = mountedCatalogues.get(app);
+  if (mounted) return actionCatalogue(mounted);
+  const cached = actionCatalogues.get(app);
+  if (cached) return cached;
   const catalogue = new Map<string, { anonymous: boolean; replay?: 'self-account-read' }>();
   for (const route of app.routes) {
     const detail = isRecord(route.hooks?.detail) ? route.hooks.detail : {};
@@ -120,17 +129,99 @@ export function actionCatalogue(app: RouteApp): ActionCatalogue {
       );
     catalogue.set(action, { anonymous, ...(replay === undefined ? {} : { replay }) });
   }
+  // Unsealed applications may still mount routes. Cache only the final snapshot.
+  if (app instanceof MountedRouteCatalogue) actionCatalogues.set(app, catalogue);
   return catalogue;
 }
 
-/** Finds and validates the mounted route that is handling this request. */
-export function actionForRequest(app: RouteApp, request: Request, routePath?: string): string {
-  const method = request.method.toUpperCase();
-  const path = routePath ?? new URL(request.url).pathname;
-  const route = app.routes.find(
-    (entry) =>
-      (entry.method.toUpperCase() === method || entry.method === 'ALL' || entry.method === '*') && entry.path === path,
-  );
-  if (!route) throw new Error(`${method} ${path}: no matching route declaration`);
+/** A snapshot of server declarations, indexed by native method and matched template.
+ * Construct only after composition; Elysia's routes getter composes hook views.
+ * Request paths are never matched here: Elysia has already selected the route.
+ */
+export class MountedRouteCatalogue {
+  readonly routes: readonly MountedRoute[];
+  readonly #index = new Map<string, MountedRoute>();
+
+  constructor(routes: readonly MountedRoute[], app?: RouteApp) {
+    this.routes = routes.map((route) => {
+      const detail = isRecord(route.hooks?.detail) ? { ...route.hooks.detail } : {};
+      const composedRate = app && kernelWriteRateFor(app, route);
+      if (detail['x-rate-limit'] === undefined && composedRate) detail['x-rate-limit'] = composedRate;
+      const rate = detail['x-rate-limit'];
+      if (isRecord(rate)) detail['x-rate-limit'] = Object.freeze({ ...rate });
+      const mounted = Object.freeze({
+        method: route.method.toUpperCase(),
+        path: route.path,
+        hooks: Object.freeze({ detail: Object.freeze(detail) }),
+      });
+      this.#index.set(`${mounted.method} ${mounted.path}`, mounted);
+      return mounted;
+    });
+    Object.freeze(this.routes);
+    // Native static handlers omit context.route. Index their actual router identities,
+    // including encoded aliases and Elysia's non-strict trailing-slash aliases, once.
+    const native = app?.['~map'];
+    if (native) {
+      const identities = new Map<unknown, MountedRoute>();
+      for (const route of this.routes) {
+        const method = route.method === 'ALL' ? '*' : route.method;
+        const identity = native[method]?.[route.path];
+        if (identity !== undefined) identities.set(identity, route);
+      }
+      for (const [method, paths] of Object.entries(native)) {
+        for (const [path, identity] of Object.entries(paths ?? {})) {
+          const route = identities.get(identity);
+          if (!route) continue;
+          this.#index.set(`${method} ${path}`, route);
+          const loose = `${path}/`;
+          if (!app?.['~config']?.strictPath && !native[method]?.[loose]) this.#index.set(`${method} ${loose}`, route);
+        }
+      }
+    }
+  }
+
+  find(request: Request, matchedTemplate?: string): MountedRoute | undefined {
+    // Static native handlers may omit route; their pathname is already the literal template.
+    const path = matchedTemplate ?? new URL(request.url).pathname;
+    return (
+      this.#index.get(`${request.method.toUpperCase()} ${path}`) ??
+      this.#index.get(`ALL ${path}`) ??
+      this.#index.get(`* ${path}`)
+    );
+  }
+}
+
+const mountedCatalogues = new WeakMap<object, MountedRouteCatalogue>();
+
+/** App instances and standalone stage route arrays have independent catalogue lifetimes. */
+export function mountedRouteCatalogue(app: RouteApp | readonly MountedRoute[]): MountedRouteCatalogue {
+  let catalogue = mountedCatalogues.get(app);
+  if (!catalogue) {
+    catalogue = new MountedRouteCatalogue(
+      Array.isArray(app) ? app : (app as RouteApp).routes,
+      Array.isArray(app) ? undefined : (app as RouteApp),
+    );
+    mountedCatalogues.set(app, catalogue);
+  }
+  return catalogue;
+}
+
+/** The action label is also available for errors before authorization is initialized. */
+export function actionLabelOfMountedRoute(route: MountedRoute | undefined): string {
+  if (!route) throw new Error('No matching mounted route declaration');
+  const detail = isRecord(route.hooks?.detail) ? route.hooks.detail : {};
+  const action = detail['x-action'];
+  if (typeof action !== 'string' || !ACTION_PATTERN.test(action))
+    throw new Error(`${route.method.toUpperCase()} ${route.path}: routes declare x-action as <resource>:<verb>`);
+  return action;
+}
+
+export function actionOfMountedRoute(route: MountedRoute | undefined): string {
+  if (!route) throw new Error('No matching mounted route declaration');
   return declaration(route).action;
+}
+
+/** Finds and validates Elysia's mounted route, never routing a parameterized URL again. */
+export function actionForRequest(app: RouteApp, request: Request, routePath?: string): string {
+  return actionOfMountedRoute(mountedRouteCatalogue(app).find(request, routePath));
 }

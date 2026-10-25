@@ -17,7 +17,15 @@ import type { KeyRing } from '../tokens/seal.ts';
 import { Admission } from './admission.ts';
 import { customMethodVerb } from './custom-method.ts';
 import { ProblemError, problemResponse } from './problem.ts';
-import { actionCatalogue, actionForRequest, SESSION_HEADER } from './request.ts';
+import {
+  actionCatalogue,
+  actionLabelOfMountedRoute,
+  actionOfMountedRoute,
+  mountedRouteCatalogue,
+  type MountedRoute,
+  type MountedRouteCatalogue,
+  SESSION_HEADER,
+} from './request.ts';
 import healthCheck from './health.sql';
 import { createWriteRateLimiter, type WriteRateLimiter } from '../access/write-rate.ts';
 import { createWriteRateStage, type WriteRateStageOptions } from '../access/write-rate-stage.ts';
@@ -49,12 +57,18 @@ export function createApp({
   const requestIds = new WeakMap<Request, string>();
   const arrivals = new WeakMap<Request, number>();
   let mountedApp: { routes: readonly { method: string; path: string; hooks?: { detail?: unknown } }[] };
+  let catalogue: MountedRouteCatalogue;
+  const matchedRoutes = new WeakMap<Request, MountedRoute | undefined>();
+  const mountedFor = (request: Request, route?: string): MountedRoute | undefined => {
+    if (!matchedRoutes.has(request)) matchedRoutes.set(request, catalogue.find(request, route));
+    return matchedRoutes.get(request);
+  };
   let resolvedAccess: Access | undefined;
   const accessForApp = (): Access => {
     if (typeof access !== 'function') return access;
     if (!resolvedAccess) {
       // Routes are mounted after createApp returns, so build access on its first use.
-      resolvedAccess = access({ actions: actionCatalogue(mountedApp) });
+      resolvedAccess = access({ actions: actionCatalogue(catalogue) });
     }
     return resolvedAccess;
   };
@@ -75,7 +89,7 @@ export function createApp({
     .onError('global', ({ error, request, route }) => {
       let action: string | undefined;
       try {
-        action = actionForRequest(mountedApp, request, typeof route === 'string' ? route : undefined);
+        action = actionLabelOfMountedRoute(mountedFor(request, typeof route === 'string' ? route : undefined));
       } catch {
         action = undefined;
       }
@@ -110,7 +124,7 @@ export function createApp({
 
       const permission = () => {
         const currentAccess = accessForApp();
-        const action = actionForRequest(mountedApp, request, route);
+        const action = actionOfMountedRoute(mountedFor(request, route));
         const context = { pool, deadline: job.deadline };
         const prepare = currentAccess.prepare;
         const checkedAccess: Access = {
@@ -146,18 +160,20 @@ export function createApp({
     })
     .onBeforeHandle('global', async ({ request, route, body, actor, job, server }) => {
       const original = originalRequests.get(request) ?? request;
-      const declaration = mountedApp.routes.find(
-        (entry) =>
-          (entry.method === request.method || entry.method === 'ALL' || entry.method === '*') &&
-          entry.path === (route ?? new URL(request.url).pathname),
-      )?.hooks?.detail as Record<string, unknown> | undefined;
-      if (declaration?.['x-action'] === undefined) return;
+      const mounted = mountedFor(request, route);
+      const detail = mounted?.hooks?.detail as Record<string, unknown> | undefined;
+      if (
+        ['GET', 'HEAD', 'OPTIONS'].includes(request.method) &&
+        detail?.['x-action'] === undefined &&
+        detail?.['x-rate-limit'] === undefined
+      )
+        return;
       await admission.run('normal', job, () =>
         rateStage({
           request,
           route,
           body,
-          routes: mountedApp.routes,
+          mounted,
           context: { pool, actor, deadline: job.deadline },
           peer: ratePeer ? ratePeer(original) : (server?.requestIP(original)?.address ?? socketPeer(original)),
         }),
@@ -178,7 +194,10 @@ export function createApp({
   mountedApp = app;
   socketPeer = (request) => app.server?.requestIP(request)?.address;
   app.wrap((handle) => {
-    const verbs = new Set(app.routes.map((route) => customMethodVerb(route.path)).filter((verb) => verb !== undefined));
+    catalogue = mountedRouteCatalogue(mountedApp);
+    const verbs = new Set(
+      catalogue.routes.map((route) => customMethodVerb(route.path)).filter((verb) => verb !== undefined),
+    );
     return (request) => {
       const url = new URL(request.url);
       const path = url.pathname;
