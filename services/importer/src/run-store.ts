@@ -129,7 +129,12 @@ function sourceId(value: unknown): asserts value is string {
   identifier(value, 64, /^[a-z][a-z0-9_-]*$/u);
 }
 function keyId(value: unknown): asserts value is string {
-  identifier(value, 512, /^[\p{L}\p{N}][\p{L}\p{N}._:/@+\-]*$/u);
+  // Native Open Library keys are opaque SQL identifiers; retain their leading slash.
+  identifier(
+    value,
+    512,
+    /^(?:[\p{L}\p{N}][\p{L}\p{N}._:/@+\-]*|\/(?:works\/OL[1-9][0-9]*W|books\/OL[1-9][0-9]*M|authors\/OL[1-9][0-9]*A))$/u,
+  );
 }
 function validateRun(run: Run) {
   exact(run, ['source', 'id', 'lease']);
