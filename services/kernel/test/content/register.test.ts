@@ -83,19 +83,15 @@ async function composeRegistration(mode: 'empty' | 'full'): Promise<Registration
         {
           name: registerContent.name,
           async register(context) {
-            const proxy = new Proxy(context, {
-              get(target, property, receiver) {
-                if (property === 'addEffects') {
-                  return (items: Effect[]) => {
-                    for (const effect of items) effects.push({ name: effect.name, types: [...effect.types] });
-                    return target.addEffects(items);
-                  };
-                }
-                const value: unknown = Reflect.get(target, property, receiver);
-                return typeof value === 'function' ? value.bind(target) : value;
+            // The composed context is frozen. A Proxy cannot replace addEffects without breaking
+            // the invariant for its non-writable property, so record on a plain wrapper instead.
+            await registerContent.register({
+              ...context,
+              addEffects(items: Effect[]) {
+                for (const effect of items) effects.push({ name: effect.name, types: [...effect.types] });
+                context.addEffects(items);
               },
             });
-            await registerContent.register(proxy);
           },
         },
       ],
