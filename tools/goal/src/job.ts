@@ -1,7 +1,7 @@
 import { watch, type FSWatcher } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import type { GateOutcome, GateOutcomeSink, LandingQueue, ManagerInbox, AttemptRef } from './contracts.ts';
-import { groupMembers, sameProcess, terminateProcessGroup, waitForProcess, waitForProcessGroup } from './process.ts';
+import { liveGroups, sameProcess, terminateProcessGroup, waitForProcess, waitForProcessGroup } from './process.ts';
 import { StaleAttemptError } from './contracts.ts';
 import { acquireDirectoryLease, acquireDirectoryLeaseWaiting, LeaseHeldError, type DirectoryLease } from './lease.ts';
 import { classifyFailure } from './failures.ts';
@@ -169,9 +169,11 @@ export class WorkerJob implements GateOutcomeSink {
     };
     const candidates = store.attempts().filter(attempt => ['running', 'exited'].includes(attempt.state)
       && (!attempt.driver || !sameProcess(attempt.driver)) && ownsRunLog(attempt.logPath));
+    // One /proc scan for all candidates: a scan per candidate made every command cost attempts × processes.
+    const live = adoptRunning || !candidates.length ? null : liveGroups();
     for (const candidate of candidates) {
       const ref = { taskId: candidate.taskId, attempt: candidate.attempt };
-      if (!adoptRunning && candidate.process && groupMembers(candidate.process.group).length) continue;
+      if (live && candidate.process && live.has(candidate.process.group)) continue;
       let lease: DirectoryLease;
       try { lease = acquireDirectoryLease(join(this.tasks.settings.stateDirectory, 'leases', ref.taskId)); }
       catch (error) { if (error instanceof LeaseHeldError) continue; throw error; }

@@ -2,13 +2,20 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 export type ProcessIdentity = { pid: number; start: string; boot: string; group: number };
 
+// The boot id cannot change while this process runs; reading it for every /proc entry dominated each scan.
+const bootIds = new Map<string, string>();
+function bootId(procRoot: string): string {
+  let id = bootIds.get(procRoot);
+  if (id === undefined) { id = readFileSync(`${procRoot}/sys/kernel/random/boot_id`, 'utf8').trim(); bootIds.set(procRoot, id); }
+  return id;
+}
 export function processIdentity(pid = process.pid, procRoot = '/proc'): ProcessIdentity | null {
   if (!Number.isSafeInteger(pid) || pid < 1) return null;
   try {
     const stat = readFileSync(`${procRoot}/${pid}/stat`, 'utf8');
     const fields = stat.slice(stat.lastIndexOf(')') + 2).trim().split(/\s+/);
     if (fields[0] === 'Z' || fields[0] === 'X' || !fields[19]) return null;
-    return { pid, start: fields[19], boot: readFileSync(`${procRoot}/sys/kernel/random/boot_id`, 'utf8').trim(), group: Number(fields[2]) };
+    return { pid, start: fields[19], boot: bootId(procRoot), group: Number(fields[2]) };
   } catch { return null; }
 }
 export function sameProcess(identity: ProcessIdentity, procRoot = '/proc'): boolean {
@@ -18,6 +25,16 @@ export function sameProcess(identity: ProcessIdentity, procRoot = '/proc'): bool
 export function groupMembers(group: number): ProcessIdentity[] {
   return readdirSync('/proc').filter(name => /^\d+$/.test(name)).map(name => processIdentity(Number(name)))
     .filter((p): p is ProcessIdentity => p !== null && p.group === group);
+}
+/** Process groups with a live member, from one scan of /proc. */
+export function liveGroups(): Set<number> {
+  const groups = new Set<number>();
+  for (const name of readdirSync('/proc')) {
+    if (!/^\d+$/.test(name)) continue;
+    const identity = processIdentity(Number(name));
+    if (identity) groups.add(identity.group);
+  }
+  return groups;
 }
 /** Wait until every process in an identified detached group has exited. */
 export async function waitForProcessGroup(identity: ProcessIdentity): Promise<void> {
