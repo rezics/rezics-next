@@ -38,7 +38,24 @@ function record(source: Exclude<Source, 'vndb'>, title = 'CLI public title', key
         id: `Q${key}`,
         lastrevid: 7,
         labels: { en: { language: 'en', value: title } },
-        claims: {},
+        claims: {
+          P31: [
+            {
+              id: `Q${key}$00000000-0000-4000-8000-000000000001`,
+              type: 'statement',
+              rank: 'normal',
+              mainsnak: {
+                snaktype: 'value',
+                property: 'P31',
+                datatype: 'wikibase-item',
+                datavalue: {
+                  type: 'wikibase-entityid',
+                  value: { 'entity-type': 'item', 'numeric-id': 47461344, id: 'Q47461344' },
+                },
+              },
+            },
+          ],
+        },
         ...privateFields,
       }) + '\n'
     );
@@ -78,7 +95,7 @@ class Remote {
     const override = await this.before(request);
     if (override) return override;
     const path = new URL(request.url).pathname;
-    if (path === '/v1/sourceFences:check') return Response.json({ fenced: false, securityRevision: 1 });
+    if (path === '/v1/sourceFences:check') return Response.json({ fenced: false, securityRevision: null });
     expect(path).toBe('/v1/subjects:batchWrite');
     const body: BatchWriteRequest = await request.json();
     expect(checkBatchWrite(body)).toEqual([]);
