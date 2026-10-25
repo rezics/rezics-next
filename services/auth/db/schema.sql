@@ -490,10 +490,24 @@ CREATE INDEX auth_attempt_counter_retention ON public.auth_attempt_counter USING
 
 
 --
+-- Name: auth_recovery_account_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_recovery_account_id_idx ON public.auth_recovery USING btree (account_id);
+
+
+--
 -- Name: auth_registration_stage_due; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX auth_registration_stage_due ON public.auth_registration_stage USING btree (expires_at, registration_id) WHERE ((completed_at IS NULL) AND (expired_at IS NULL));
+
+
+--
+-- Name: auth_session_opening_subject_account_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_session_opening_subject_account_id_idx ON public.auth_session_opening USING btree (subject_account_id);
 
 
 --
