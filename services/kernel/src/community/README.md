@@ -79,14 +79,14 @@ transaction. Access grant initialization uses fixed role templates and point ins
 rows in the relevant partition. See [Access Cost](../access/README.md#cost) for its account and
 grant lookup bounds.
 
-| Operation               | Touches                                                                                                                                                                                       | Bound                                                      | Growth check                                                                       |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Create Space            | One admission read and Global parent check (A); two inserts, a same-transaction creation proof and native grant initialization (C), in the Space partition                                    | O(1) rows and statements; O(log R) blocks                  | `growth-space.test.ts`: create at 256, 2048 and 16384 other Spaces and revisions   |
-| Update Space            | A on the Space with one point read joining its head; one revision insert and one head compare-and-set (C)                                                                                     | O(1) rows and statements; O(log R) blocks                  | `growth-space.test.ts`: update a fixed probe at the same scales                    |
-| Read Space              | One routed point read joining the exact head revision                                                                                                                                         | O(1) rows and statements; O(log R) blocks                  | `growth-space.test.ts`: read a fixed probe at the same scales                      |
-| Public eligibility      | One prepared point read and one current point verification through Access                                                                                                                     | O(1) rows and statements; O(log R) blocks                  | Uses the same point-read shape                                                     |
-| Claim or change address | One handle point read; one address-partition pending write; one Space head read, revision insert and head compare-and-set; one address activation and, for changes, one old-claim reservation | O(1) rows and statements; O(log A + S + H) blocks per step | `growth-space-address.test.ts`: 2048, 8192 and 32768 addresses, Spaces and handles |
-| Resolve address         | One active address point read and the Space's normal read authorization and exact-head read                                                                                                   | O(1) rows and statements; O(log A + S) blocks              | `growth-space-address.test.ts`: same population sizes                              |
+| Operation               | Touches                                                                                                                                                                                       | Bound                                                      | Growth check                                                                                                                        |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Create Space            | One admission read and Global parent check (A); two inserts, a same-transaction creation proof and native grant initialization (C), in the Space partition                                    | O(1) rows and statements; O(log R) blocks                  | `growth-space.test.ts`: create at 256, 2048 and 16384 other Spaces and revisions                                                    |
+| Update Space            | A on the Space with one point read joining its head; one revision insert and one head compare-and-set (C)                                                                                     | O(1) rows and statements; O(log R) blocks                  | `growth-space.test.ts`: update a fixed probe at the same scales                                                                     |
+| Read Space              | One routed point read joining the exact head revision                                                                                                                                         | O(1) rows and statements; O(log R) blocks                  | `growth-space.test.ts`: read a fixed probe at the same scales                                                                       |
+| Public eligibility      | One prepared point read and one current point verification through Access                                                                                                                     | O(1) rows and statements; O(log R) blocks                  | test/community/growth-space-address.test.ts, "address claim, change and resolve stay bounded as addresses, Spaces and handles grow" |
+| Claim or change address | One handle point read; one address-partition pending write; one Space head read, revision insert and head compare-and-set; one address activation and, for changes, one old-claim reservation | O(1) rows and statements; O(log A + S + H) blocks per step | `growth-space-address.test.ts`: 2048, 8192 and 32768 addresses, Spaces and handles                                                  |
+| Resolve address         | One active address point read and the Space's normal read authorization and exact-head read                                                                                                   | O(1) rows and statements; O(log A + S) blocks              | `growth-space-address.test.ts`: same population sizes                                                                               |
 
 The growth checks use `checkGrowth` with other identities and their revisions growing around a
 fixed probe, and require zero sequential scans on community relations and the handle-claim table.
@@ -163,8 +163,8 @@ A missing Realm, or one that is not yet active at T, has no proof.
 | Operation               | Touches                                                                                                               | Bound                              | Growth check                                                                                                                                                 |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Publish membership      | One Realm point read at T, one interval open or close, and at most one terminal insert in the Realm partition, plus A | O(1) rows, O(log R) blocks, plus A | `growth-membership.test.ts`: a fixed probe at 2048, 8192 and 32768 members of other Realms and accounts; constant rows and statements, zero sequential scans |
-| Read terminal or change | One point read, on the terminal primary key or `realm_member_change`                                                  | O(1) rows, O(log R) blocks         | The same fixed probe and scales                                                                                                                              |
-| Role proof              | Two membership index seeks (the temporal primary key and `realm_member_next`) plus the Realm existence point          | O(1) rows, O(log R) blocks         | The same fixed probe and scales                                                                                                                              |
+| Read terminal or change | One point read, on the terminal primary key or `realm_member_change`                                                  | O(1) rows, O(log R) blocks         | test/community/growth-membership.test.ts, "publish, terminal reads and role proofs stay within their bound as Realms and members grow"                       |
+| Role proof              | Two membership index seeks (the temporal primary key and `realm_member_next`) plus the Realm existence point          | O(1) rows, O(log R) blocks         | test/community/growth-membership.test.ts, "publish, terminal reads and role proofs stay within their bound as Realms and members grow"                       |
 
 ### Check Realm participation
 
@@ -177,3 +177,27 @@ A missing Realm, or one that is not yet active at T, has no proof.
 - Touches: One exact Realm head read and one idempotent `resource_role_grant` insert in the Realm command transaction.
 - Bound: O(1) rows and statements; O(log R) blocks.
 - Growth check: `participation.test.ts` asserts one group grant after protection and uses the same bounded 2048, 8192 and 32768 population checks.
+
+### Join a Realm
+
+- Touches: The membership workflow's own bounded reserve and publish steps, then one follow point upsert on the member's account partition.
+- Bound: O(1) rows and statements per step, plus Access; O(log R) blocks. No scan of members.
+- Growth check: `join.test.ts` is a fixed probe of one public join. It does not populate 2048, 8192 or 32768 members.
+
+### Leave a Realm
+
+- Touches: The membership workflow's own bounded reserve, publish and release steps. Leave writes no follow and never unfollows.
+- Bound: O(1) rows and statements per step, plus Access; O(log R) blocks. No scan of members.
+- Growth check: `join.test.ts` is a fixed probe of one leave. It does not populate 2048, 8192 or 32768 members.
+
+### Add a Realm member
+
+- Touches: The same membership workflow as join, one idempotent member-group grant when the Realm is protected, and one follow point upsert.
+- Bound: O(1) rows and statements per step, plus Access; O(log R) blocks. No scan of members.
+- Growth check: `join.test.ts` is a fixed probe of one added member. It does not populate 2048, 8192 or 32768 members.
+
+### Read own Realm membership
+
+- Touches: One point read of the member's current interval after the Realm read check.
+- Bound: O(1) rows and statements; O(log R) blocks.
+- Growth check: `join.test.ts` reads one interval. No scan of members.

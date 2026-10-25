@@ -17,19 +17,36 @@ import {
 import { withConnection } from '../database/pool.ts';
 import { accessCheck, accessCommandAuthorization, type Access, type AccessClient } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
+import { unseal, type KeyRing } from '../tokens/seal.ts';
+import { ensureRealmMemberGrant } from './participation.ts';
 import realmActive from './membership-realm.sql';
 import openMembership from './membership-open.sql';
 import closeMembership from './membership-close.sql';
 import writeTerminal from './membership-terminal.sql';
 import readTerminalRow from './membership-read-terminal.sql';
 import readChangeRow from './membership-read-change.sql';
+import readCurrent from './membership-current.sql';
 import readRoles from './membership-role.sql';
+import readRealmHead from './realm-read.sql';
 
 type MembershipInput = Extract<MembershipWorkInput, { kind: 'membership' }>;
 type Row = Record<string, unknown>;
 const MEMBERSHIP_KIND = 'community.realm.membership';
 const TERMINAL_KIND = 'community.realm.membership.terminal';
 const CLIENT_ID = 'realm-membership';
+/** Shared by the HTTP issuer and the workflow authorizer. */
+export const REALM_MEMBERSHIP_SEAL_SCOPE = 'community.realm.membership';
+const AUTHORIZE_DEADLINE_MS = 30_000;
+
+/** Least privilege for the sealed workflow actor. Join and leave carry realm:join; adding another account carries realm:manage. */
+export function realmMembershipActorScopes(input: {
+  actorAccountId: string;
+  memberAccountId: string;
+  role: MembershipInput['role'];
+}): readonly ['realm:join'] | readonly ['realm:manage'] {
+  if (input.role !== null && input.actorAccountId !== input.memberAccountId) return ['realm:manage'];
+  return ['realm:join'];
+}
 
 /** Realm owners are identity grants, not membership rows. */
 export class RealmMembershipRoleError extends Error {
@@ -44,6 +61,8 @@ export type RealmMembershipDependencies = {
   pool: Pool;
   access: Access;
   clock?: () => Date;
+  /** Session key ring shared with HTTP. Authorize denies when it is absent. */
+  referenceKeys?: KeyRing;
 };
 
 export type RealmMembership = RealmMembershipCommands & { roleReader: RealmRoleReader };
@@ -114,6 +133,9 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
     const route = realmRoute(input.principal.id);
     denyUnless(routeOf(input.memberAccountId) !== null);
     denyUnless(input.reservationId === undefined || routeOf(input.reservationId) === routeOf(input.memberAccountId));
+    const keys = config.referenceKeys;
+    const payload = keys ? unseal(keys, REALM_MEMBERSHIP_SEAL_SCOPE, reference) : undefined;
+    if (payload !== undefined) return authorizeSealed(payload, input);
     const context = { pool, deadline: Date.now() + 30_000 };
     const actor = await access.authenticate(reference, context);
     const accountRoute = routeOf(actor.accountId);
@@ -206,6 +228,62 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
     return proofs;
   };
 
+  async function authorizeSealed(payload: unknown, input: MembershipWorkInput): Promise<LifecycleRequest> {
+    const seal = membershipSeal(payload);
+    if (!seal || input.kind !== 'membership' || input.principal.kind !== 'realm') throw new GrantDeniedError();
+    const scopes = realmMembershipActorScopes({
+      actorAccountId: seal.accountId,
+      memberAccountId: input.memberAccountId,
+      role: input.role,
+    });
+    if (
+      seal.realmId !== input.principal.id ||
+      seal.memberAccountId !== input.memberAccountId ||
+      seal.role !== input.role ||
+      seal.reservationId !== input.reservationId ||
+      seal.scopes.length !== scopes.length ||
+      seal.scopes.some((scope, index) => scope !== scopes[index]) ||
+      seal.expiresAt <= Date.now()
+    )
+      throw new GrantDeniedError();
+    const actorRoute = routeOf(seal.accountId);
+    const realmRouteId = routeOf(seal.realmId);
+    if (actorRoute === null || realmRouteId === null || routeOf(seal.spaceId) === null) throw new GrantDeniedError();
+    const at = (config.clock ?? (() => new Date()))().toISOString();
+    const account = await withConnection(pool, (client) => readAccount(client, actorRoute, seal.accountId));
+    if (
+      !account ||
+      account.kind !== 'actor' ||
+      account.state !== 'active' ||
+      account.fenced ||
+      !Number.isSafeInteger(seal.authnEpoch) ||
+      seal.authnEpoch <= 0 ||
+      BigInt(seal.authnEpoch) < account.minimumAuthnEpoch
+    )
+      throw new GrantDeniedError();
+    const realm = await withConnection(pool, (client) =>
+      readOne(readRealmHead.run(client, { route: realmRouteId, id: seal.realmId, at })),
+    );
+    const visibility = text(realm, 'visibility');
+    if (text(realm, 'space_id') !== seal.spaceId || (visibility !== 'public' && visibility !== 'protected'))
+      throw new GrantDeniedError();
+    if (input.role === 'member' && seal.accountId === input.memberAccountId && visibility !== 'public')
+      throw new GrantDeniedError();
+    if (input.role === null && seal.accountId !== input.memberAccountId) throw new GrantDeniedError();
+    return {
+      actor: {
+        kind: 'account',
+        accountId: seal.accountId,
+        clientId: seal.clientId,
+        scopes: [...seal.scopes],
+        requestedBy: seal.requestedBy,
+        authnEpoch: seal.authnEpoch,
+      },
+      account,
+      deadline: Math.min(seal.expiresAt, Date.now() + AUTHORIZE_DEADLINE_MS),
+    };
+  }
+
   async function publish(
     request: LifecycleRequest,
     input: MembershipInput,
@@ -274,6 +352,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
           transactionId: command.transactionId,
         });
         denyUnless(written);
+        if (role === 'member') await ensureRealmMemberGrant(tx, { realmId });
         denyUnless(await authorization.check(tx));
         const value = {
           realmId,
@@ -351,6 +430,103 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
     terminalize,
     roleReader,
   } satisfies RealmMembership;
+}
+
+type MembershipSeal = {
+  accountId: string;
+  clientId: string;
+  requestedBy: string | null;
+  authnEpoch: number;
+  scopes: readonly string[];
+  realmId: string;
+  spaceId: string;
+  memberAccountId: string;
+  role: 'member' | null;
+  reservationId: string | undefined;
+  expiresAt: number;
+};
+
+function membershipSeal(value: unknown): MembershipSeal | null {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  const allowed = new Set([
+    'accountId',
+    'clientId',
+    'requestedBy',
+    'authnEpoch',
+    'scopes',
+    'realmId',
+    'spaceId',
+    'memberAccountId',
+    'role',
+    'reservationId',
+    'expiresAt',
+  ]);
+  if (Object.keys(row).some((key) => !allowed.has(key))) return null;
+  const accountId = row.accountId;
+  const clientId = row.clientId;
+  const realmId = row.realmId;
+  const spaceId = row.spaceId;
+  const memberAccountId = row.memberAccountId;
+  const scopes = row.scopes;
+  if (
+    typeof accountId !== 'string' ||
+    routeOf(accountId) === null ||
+    typeof clientId !== 'string' ||
+    clientId.length < 1 ||
+    clientId.length > 128 ||
+    typeof realmId !== 'string' ||
+    routeOf(realmId) === null ||
+    typeof spaceId !== 'string' ||
+    routeOf(spaceId) === null ||
+    typeof memberAccountId !== 'string' ||
+    routeOf(memberAccountId) === null ||
+    (row.role !== 'member' && row.role !== null) ||
+    (row.requestedBy !== null && typeof row.requestedBy !== 'string') ||
+    typeof row.authnEpoch !== 'number' ||
+    !Number.isSafeInteger(row.authnEpoch) ||
+    typeof row.expiresAt !== 'number' ||
+    !Number.isSafeInteger(row.expiresAt) ||
+    !Array.isArray(scopes) ||
+    scopes.some((scope) => typeof scope !== 'string')
+  )
+    return null;
+  const reservationId = row.reservationId;
+  if (reservationId !== undefined && (typeof reservationId !== 'string' || routeOf(reservationId) === null))
+    return null;
+  return {
+    accountId,
+    clientId,
+    requestedBy: row.requestedBy as string | null,
+    authnEpoch: row.authnEpoch,
+    scopes: scopes as string[],
+    realmId,
+    spaceId,
+    memberAccountId,
+    role: row.role,
+    reservationId,
+    expiresAt: row.expiresAt,
+  };
+}
+
+/** One point read of the account's open Realm interval. No member scan. */
+export async function readRealmMembershipInterval(
+  pool: Pool,
+  realmId: string,
+  accountId: string,
+  at: string,
+): Promise<{ since: string; reservationId: string } | null> {
+  const route = routeOf(realmId);
+  if (route === null || routeOf(accountId) === null || !Number.isFinite(Date.parse(at))) return null;
+  const row = await withConnection(pool, (client) =>
+    readOne(readCurrent.run(client, { route, realm_id: realmId, account_id: accountId, at })),
+  );
+  const reservationId = text(row, 'reservationId');
+  const since = row?.since;
+  if (!reservationId || (typeof since !== 'string' && !(since instanceof Date))) return null;
+  const parsed = since instanceof Date ? since : new Date(since);
+  if (!Number.isFinite(parsed.getTime())) return null;
+  return { since: parsed.toISOString(), reservationId };
 }
 
 async function writeMembership(

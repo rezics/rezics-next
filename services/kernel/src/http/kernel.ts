@@ -3,6 +3,7 @@ import { parseExposure } from '../access/gates/declaration.ts';
 import { createAccess } from '../access/index.ts';
 import { accessRoutes } from '../access/routes.ts';
 import { exposureRoutes } from '../access/gates/routes.ts';
+import { createRealmMembership } from '../community/membership.ts';
 import { communityRoutes } from '../community/routes.ts';
 import { systemClock } from '../clock.ts';
 import { payoutRoutes } from '../commerce/payout-routes.ts';
@@ -16,7 +17,8 @@ import type { TurnstileVerifier } from '../content/turnstile.ts';
 import type { ContentRuntime } from '../content/runtime.ts';
 import { personalLibraryRoutes } from '../library/personal-routes.ts';
 import { profileRoutes } from '../presentation/http/profiles.ts';
-import type { Access, AccessConfig } from '../request/access.ts';
+import type { Access, AccessConfig, AccessRealmRoleReader } from '../request/access.ts';
+import { createWorkClient, type WorkClient } from '../work/client.ts';
 import { searchRoutes, type SearchService } from '../search/http/routes.ts';
 import { definitionRoutes } from '../semantic/http/definitions.ts';
 import { contextRoutes } from '../semantic/http/contexts.ts';
@@ -35,6 +37,8 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
   search?: SearchService;
   /** Trusted verifier binding; runtime secret/env composition belongs to the service. */
   reports?: { anonymousVerifier?: TurnstileVerifier };
+  /** Enqueue-only client. Tests close the instance they pass. */
+  workClient?: WorkClient;
 };
 
 /** The route key must stay the same across restarts, or retries lose their receipts. */
@@ -46,10 +50,26 @@ export function createKernel(dependencies: KernelDependencies) {
     return instant;
   };
   const factory = dependencies.access ?? createAccess;
-  let access: Access | undefined;
-  const resolveAccess = (config: AccessConfig) =>
-    (access ??= typeof factory === 'function' ? factory(config) : factory);
   const tokens = dependencies.tokens ?? { current: 1, keys: new Map([[1, new Uint8Array(randomBytes(32))]]) };
+  let access: Access | undefined;
+  let realmMembership: ReturnType<typeof createRealmMembership> | undefined;
+  const realmRoleReader: AccessRealmRoleReader = (client, input) => {
+    if (!realmMembership) {
+      if (!access) throw new Error('Realm membership role reader is not installed');
+      realmMembership = createRealmMembership({ pool: dependencies.pool, access, referenceKeys: tokens, clock });
+    }
+    return realmMembership.roleReader(client, input);
+  };
+  const resolveAccess = (config: AccessConfig) =>
+    (access ??= typeof factory === 'function' ? factory({ ...config, realmRoleReader }) : factory);
+  let opened: Promise<WorkClient> | undefined;
+  const workClient = (): Promise<WorkClient> => {
+    if (dependencies.workClient) return Promise.resolve(dependencies.workClient);
+    const url = dependencies.pool.options.connectionString;
+    if (!url) return Promise.reject(new Error('Work client requires the pool connection string'));
+    opened ??= createWorkClient(url);
+    return opened;
+  };
   const subjects = subjectRoutes(createApp({ ...dependencies, access: resolveAccess, tokens, clock }), {
     ...dependencies,
     tokens,
@@ -57,18 +77,18 @@ export function createKernel(dependencies: KernelDependencies) {
   const batched = bulkRoutes(subjects, {
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
-    access: () => resolveAccess({ actions: actionCatalogue(batched) }),
+    access: () => resolveAccess({ actions: actionCatalogue(batched), realmRoleReader }),
   });
   const app = definitionRoutes(batched as unknown as ReturnType<typeof subjectRoutes>, dependencies);
   const presentation = profileRoutes(app, { ...dependencies, tokens });
   const payouts = payoutRoutes(app, {
     ...dependencies,
-    access: () => resolveAccess({ actions: actionCatalogue(app) }),
+    access: () => resolveAccess({ actions: actionCatalogue(app), realmRoleReader }),
   });
   const commercial = commerceRoutes(app, {
     pool: dependencies.pool,
     tokens,
-    access: () => resolveAccess({ actions: actionCatalogue(app) }),
+    access: () => resolveAccess({ actions: actionCatalogue(app), realmRoleReader }),
     ...(dependencies.commerce === undefined ? {} : { commerce: dependencies.commerce }),
   });
   let progress: ReturnType<typeof progressRoutes>;
@@ -76,12 +96,12 @@ export function createKernel(dependencies: KernelDependencies) {
     pool: dependencies.pool,
     tokens,
     clock,
-    access: () => resolveAccess({ actions: actionCatalogue(progress) }),
+    access: () => resolveAccess({ actions: actionCatalogue(progress), realmRoleReader }),
   });
   const contextual = contextRoutes(progress as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
-    access: () => resolveAccess({ actions: actionCatalogue(contextual) }),
+    access: () => resolveAccess({ actions: actionCatalogue(contextual), realmRoleReader }),
   });
   const searched = searchRoutes(contextual, dependencies);
   const anonymousVerifier = dependencies.reports?.anonymousVerifier ?? dependencies.content?.anonymousVerifier;
@@ -95,7 +115,7 @@ export function createKernel(dependencies: KernelDependencies) {
     ...(dependencies.content?.workflows === undefined ? {} : { workflows: dependencies.content.workflows }),
     ...(anonymousVerifier === undefined ? {} : { anonymousVerifier }),
     get access() {
-      return resolveAccess({ actions: actionCatalogue(content) });
+      return resolveAccess({ actions: actionCatalogue(content), realmRoleReader });
     },
   });
   const media = mediaRoutes(content as unknown as ReturnType<typeof definitionRoutes>, {
@@ -103,13 +123,13 @@ export function createKernel(dependencies: KernelDependencies) {
     clock,
     routeKey: dependencies.routeKey,
     get access() {
-      return resolveAccess({ actions: actionCatalogue(granted) });
+      return resolveAccess({ actions: actionCatalogue(granted), realmRoleReader });
     },
   });
   const granted = accessRoutes(media as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
     clock,
-    access: () => resolveAccess({ actions: actionCatalogue(granted) }),
+    access: () => resolveAccess({ actions: actionCatalogue(granted), realmRoleReader }),
   });
   const exposed = exposureRoutes(granted as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
@@ -119,19 +139,21 @@ export function createKernel(dependencies: KernelDependencies) {
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
     clock,
-    access: () => resolveAccess({ actions: actionCatalogue(community) }),
+    access: () => resolveAccess({ actions: actionCatalogue(community), realmRoleReader }),
+    tokens,
+    workClient,
   });
   const personal = personalLibraryRoutes(community as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
     tokens,
     clock,
-    access: () => resolveAccess({ actions: actionCatalogue(personal) }),
+    access: () => resolveAccess({ actions: actionCatalogue(personal), realmRoleReader }),
   });
   const collections = collectionRoutes(personal as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
     tokens,
     clock,
-    access: () => resolveAccess({ actions: actionCatalogue(collections) }),
+    access: () => resolveAccess({ actions: actionCatalogue(collections), realmRoleReader }),
   });
   declareKernelWriteRates(collections);
   const parameterNames = new Map<string, { name: string; method: string; path: string }>();

@@ -13,6 +13,8 @@ import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
 import { AuthenticationError, type Access, type AccessClient } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
+import type { KeyRing } from '../tokens/seal.ts';
+import type { WorkClient } from '../work/client.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import {
   createSpace,
@@ -28,6 +30,8 @@ import { claimSpaceAddress, readSpaceAddress, SpaceAddressConflictError } from '
 import { createRealm, RealmConflictError, RealmInputError, updateRealm, type RealmDependencies } from './realm.ts';
 import { readRealm, setBoardScheme, type Realm } from './board-scheme.ts';
 import { createRealmParticipationCheck } from './participation.ts';
+import { enqueueRealmJoin, enqueueRealmLeave, readOwnRealmMembership, RealmMembershipConflictError } from './join.ts';
+import { readRealmMembershipInterval } from './membership.ts';
 import {
   listPublications,
   publish,
@@ -106,6 +110,15 @@ const decisionResponse = t.Object(
   closed,
 );
 const publicationPage = t.Object({ items: t.Array(publication), next: t.Union([t.String(), t.Null()]) }, closed);
+const accepted = t.Object({ workflowId: t.String({ minLength: 1, maxLength: 200 }) }, closed);
+const membershipState = t.Object(
+  {
+    state: t.Union([t.Literal('none'), t.Literal('pending'), t.Literal('member')]),
+    since: t.Union([instant, t.Null()]),
+  },
+  closed,
+);
+const addMemberInput = t.Object({ accountId: id }, closed);
 const publicationParams = t.Object({ realmId: t.String(), subjectId: t.String() }, closed);
 
 const createInput = t.Object({ title, summary: t.Optional(summary) }, closed);
@@ -195,6 +208,8 @@ export type CommunityRouteDependencies = {
   routeKey: Uint8Array;
   clock?: () => Date;
   access: () => Access;
+  tokens: KeyRing;
+  workClient: () => Promise<WorkClient>;
 };
 
 function communityProblem(error: unknown): never {
@@ -208,6 +223,7 @@ function communityProblem(error: unknown): never {
   // A changed head is the same closed not_found as content post edit's failed compare-and-set.
   if (error instanceof SpaceConflictError || error instanceof RealmConflictError) throw new ProblemError('not_found');
   if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
+  if (error instanceof RealmMembershipConflictError) throw new ProblemError('idempotency_conflict');
   throw error;
 }
 
@@ -901,6 +917,160 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         } catch (error) {
           communityProblem(error);
         }
+      },
+    )
+    .post(
+      '/v1/realms/:realmId/membership',
+      {
+        params: realmParams,
+        headers: commandHeaders,
+        response: { 202: strict(accepted), ...writeFailures },
+        detail: {
+          operationId: 'realm.join',
+          'x-exposure': 'public',
+          'x-action': 'realm:join',
+          'x-rate-limit': writeRate,
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { realmId }, headers, actor, admission, job, authorize, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const route = routeOf(realmId);
+        if (route === null) throw new ProblemError('not_found');
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        try {
+          return await admission.run('normal', job, async () => {
+            const current = await readRealm(realmDependencies(), actor, realmId, { deadline: job.deadline });
+            if (!current) throw new ProblemError('not_found');
+            if (current.visibility !== 'public') throw new ProblemError('forbidden');
+            const allowed = await authorize({ route, id: realmId });
+            if (!(await withConnection(dependencies.pool, (client) => allowed(client))))
+              throw new ProblemError('forbidden');
+            const result = await enqueueRealmJoin(await dependencies.workClient(), {
+              tokens: dependencies.tokens,
+              actor,
+              realmId,
+              spaceId: current.spaceId,
+              memberAccountId: actor.accountId,
+              idempotencyKey: key,
+            });
+            set.status = 202;
+            return result;
+          });
+        } catch (error) {
+          communityProblem(error);
+        }
+      },
+    )
+    .delete(
+      '/v1/realms/:realmId/membership',
+      {
+        params: realmParams,
+        response: { 202: strict(accepted), ...writeFailures },
+        detail: {
+          operationId: 'realm.leave',
+          'x-exposure': 'public',
+          'x-action': 'realm:join',
+          'x-rate-limit': writeRate,
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { realmId }, actor, admission, job, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        if (routeOf(realmId) === null) throw new ProblemError('not_found');
+        try {
+          return await admission.run('normal', job, async () => {
+            const interval = await readRealmMembershipInterval(
+              dependencies.pool,
+              realmId,
+              actor.accountId,
+              observedAt(),
+            );
+            if (!interval) throw new ProblemError('not_found');
+            const current = await readRealm(realmDependencies(), actor, realmId, { deadline: job.deadline });
+            if (!current) throw new ProblemError('not_found');
+            const result = await enqueueRealmLeave(await dependencies.workClient(), {
+              tokens: dependencies.tokens,
+              actor,
+              realmId,
+              spaceId: current.spaceId,
+              reservationId: interval.reservationId,
+            });
+            set.status = 202;
+            return result;
+          });
+        } catch (error) {
+          communityProblem(error);
+        }
+      },
+    )
+    .post(
+      '/v1/realms/:realmId/members',
+      {
+        params: realmParams,
+        headers: commandHeaders,
+        body: strict(addMemberInput),
+        response: { 202: strict(accepted), ...writeFailures },
+        detail: {
+          operationId: 'realm.add_member',
+          'x-exposure': 'public',
+          'x-action': 'realm:manage',
+          'x-rate-limit': writeRate,
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { realmId }, body, headers, actor, admission, job, authorize, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        if (routeOf(body.accountId) === null) throw new ProblemError('invalid_request');
+        const route = routeOf(realmId);
+        if (route === null) throw new ProblemError('not_found');
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        try {
+          return await admission.run('normal', job, async () => {
+            const allowed = await authorize({ route, id: realmId });
+            const granted = await withConnection(dependencies.pool, (client) => allowed(client));
+            const current = await readRealm(realmDependencies(), actor, realmId, { deadline: job.deadline });
+            if (!granted) {
+              if (!current) throw new ProblemError('not_found');
+              throw new ProblemError('forbidden');
+            }
+            if (!current) throw new ProblemError('not_found');
+            const result = await enqueueRealmJoin(await dependencies.workClient(), {
+              tokens: dependencies.tokens,
+              actor,
+              realmId,
+              spaceId: current.spaceId,
+              memberAccountId: body.accountId,
+              idempotencyKey: key,
+            });
+            set.status = 202;
+            return result;
+          });
+        } catch (error) {
+          communityProblem(error);
+        }
+      },
+    )
+    .get(
+      '/v1/realms/:realmId/members/me',
+      {
+        params: realmParams,
+        response: { 200: strict(membershipState), ...readFailures, 403: problemSchema('forbidden') },
+        detail: {
+          operationId: 'realm.membership',
+          'x-exposure': 'public',
+          'x-action': 'realm:read',
+          security: readSecurity,
+        },
+      },
+      async ({ params: { realmId }, actor, admission, job }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        if (routeOf(realmId) === null) throw new ProblemError('not_found');
+        const current = await admission.run('normal', job, () =>
+          readRealm(realmDependencies(), actor, realmId, { deadline: job.deadline }),
+        );
+        if (!current) throw new ProblemError('not_found');
+        return readOwnRealmMembership(dependencies.pool, realmId, actor.accountId, observedAt());
       },
     );
 }

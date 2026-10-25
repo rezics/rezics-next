@@ -2,6 +2,7 @@ import { type CommerceDependencies } from '../commerce/routes.ts';
 import type { ContentBoardDependencies } from '../content/boards.ts';
 import type { TurnstileVerifier } from '../content/turnstile.ts';
 import type { ContentRuntime } from '../content/runtime.ts';
+import { type WorkClient } from '../work/client.ts';
 import { type SearchService } from '../search/http/routes.ts';
 import { createApp } from './app.ts';
 export type KernelDependencies = Parameters<typeof createApp>[0] & {
@@ -15,6 +16,8 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
     reports?: {
         anonymousVerifier?: TurnstileVerifier;
     };
+    /** Enqueue-only client. Tests close the instance they pass. */
+    workClient?: WorkClient;
 };
 /** The route key must stay the same across restarts, or retries lose their receipts. */
 export declare function createKernel(dependencies: KernelDependencies): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
@@ -13915,6 +13918,577 @@ export declare function createKernel(dependencies: KernelDependencies): import("
             };
         };
     };
+} & {
+    v1: {
+        realms: {
+            ":realmId": {
+                publications: {
+                    ":subjectId": {
+                        $reject: {
+                            post: {
+                                body: unknown;
+                                params: {
+                                    realmId: string;
+                                    subjectId: string;
+                                };
+                                query: unknown;
+                                headers: {
+                                    "idempotency-key": string;
+                                    'if-match': string;
+                                };
+                                response: {
+                                    200: {
+                                        publication: {
+                                            realmId: string;
+                                            subjectId: string;
+                                            publicationId: string;
+                                            subjectRevisionId: null;
+                                            publishedAt: string;
+                                            verdict: "reject" | "withdraw";
+                                            predecessor: string | null;
+                                        };
+                                    };
+                                    400: {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail?: string;
+                                        errors?: {
+                                            pointer: string;
+                                            code: never;
+                                        }[];
+                                    };
+                                    401: {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail?: string;
+                                        errors?: {
+                                            pointer: string;
+                                            code: never;
+                                        }[];
+                                    };
+                                    403: {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail?: string;
+                                        errors?: {
+                                            pointer: string;
+                                            code: never;
+                                        }[];
+                                    };
+                                    404: {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail?: string;
+                                        errors?: {
+                                            pointer: string;
+                                            code: never;
+                                        }[];
+                                    };
+                                    422: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail?: string;
+                                        errors?: {
+                                            pointer: string;
+                                            code: never;
+                                        }[];
+                                    };
+                                    429: {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail?: string;
+                                        errors?: {
+                                            pointer: string;
+                                            code: never;
+                                        }[];
+                                    };
+                                    500: {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail?: string;
+                                        errors?: {
+                                            pointer: string;
+                                            code: never;
+                                        }[];
+                                    };
+                                    503: {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail?: string;
+                                        errors?: {
+                                            pointer: string;
+                                            code: never;
+                                        }[];
+                                    };
+                                };
+                                error: never;
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        realms: {
+            ":realmId": {
+                membership: {
+                    post: {
+                        body: unknown;
+                        params: {
+                            realmId: string;
+                        };
+                        query: unknown;
+                        headers: {
+                            "idempotency-key": string;
+                        };
+                        response: {
+                            200: {
+                                workflowId: string;
+                            };
+                            202: {
+                                workflowId: string;
+                            };
+                            400: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            401: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            403: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            429: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            500: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            503: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        realms: {
+            ":realmId": {
+                membership: {
+                    delete: {
+                        body: unknown;
+                        params: {
+                            realmId: string;
+                        };
+                        query: unknown;
+                        headers: unknown;
+                        response: {
+                            200: {
+                                workflowId: string;
+                            };
+                            202: {
+                                workflowId: string;
+                            };
+                            400: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            401: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            403: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            422: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            429: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            500: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            503: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        realms: {
+            ":realmId": {
+                members: {
+                    post: {
+                        body: {
+                            accountId: string;
+                        };
+                        params: {
+                            realmId: string;
+                        };
+                        query: unknown;
+                        headers: {
+                            "idempotency-key": string;
+                        };
+                        response: {
+                            200: {
+                                workflowId: string;
+                            };
+                            202: {
+                                workflowId: string;
+                            };
+                            400: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            401: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            403: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            429: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            500: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            503: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
 }, import("elysia").DefaultEphemeral, {
     derive: {
         readonly admission: import("./admission.ts").Admission;
@@ -13934,14 +14508,9 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     schemas: {};
     response: {};
     error: [];
-}, "post", "/v1/realms/:realmId/publications/:subjectId/$reject", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
+}, "get", "/v1/realms/:realmId/members/me", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
     params: import("typebox").TObject<{
         realmId: import("typebox").TString;
-        subjectId: import("typebox").TString;
-    }>;
-    headers: import("typebox").TObject<{
-        "idempotency-key": import("typebox").TString;
-        'if-match': import("typebox").TString;
     }>;
     response: {
         400: import("typebox").TObject<{
@@ -13972,34 +14541,6 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
-        500: import("typebox").TObject<{
-            type: import("typebox").TSchema;
-            title: import("typebox").TSchema;
-            status: import("typebox").TLiteral<number>;
-            code: import("typebox").TSchema;
-            retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-            request_id: import("typebox").TString;
-            detail: import("typebox").TOptional<import("typebox").TString>;
-            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-            }>>>;
-        }>;
-        403: import("typebox").TObject<{
-            type: import("typebox").TSchema;
-            title: import("typebox").TSchema;
-            status: import("typebox").TLiteral<number>;
-            code: import("typebox").TSchema;
-            retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-            request_id: import("typebox").TString;
-            detail: import("typebox").TOptional<import("typebox").TString>;
-            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-            }>>>;
-        }>;
         404: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
@@ -14014,21 +14555,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
-        422: import("typebox").TObject<{
-            type: import("typebox").TSchema;
-            title: import("typebox").TSchema;
-            status: import("typebox").TLiteral<number>;
-            code: import("typebox").TSchema;
-            retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-            request_id: import("typebox").TString;
-            detail: import("typebox").TOptional<import("typebox").TString>;
-            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-            }>>>;
-        }>;
-        429: import("typebox").TObject<{
+        500: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
@@ -14062,39 +14589,18 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 vendor: string;
                 types: {
                     input: {
-                        publication: {
-                            realmId: string;
-                            subjectId: string;
-                            publicationId: string;
-                            subjectRevisionId: null;
-                            publishedAt: string;
-                            verdict: "reject" | "withdraw";
-                            predecessor: string | null;
-                        };
+                        state: "member" | "none" | "pending";
+                        since: string | null;
                     };
                     output: {
-                        publication: {
-                            realmId: string;
-                            subjectId: string;
-                            publicationId: string;
-                            subjectRevisionId: null;
-                            publishedAt: string;
-                            verdict: "reject" | "withdraw";
-                            predecessor: string | null;
-                        };
+                        state: "member" | "none" | "pending";
+                        since: string | null;
                     };
                 } | undefined;
                 validate(value: unknown): {
                     value: {
-                        publication: {
-                            realmId: string;
-                            subjectId: string;
-                            publicationId: string;
-                            subjectRevisionId: null;
-                            publishedAt: string;
-                            verdict: "reject" | "withdraw";
-                            predecessor: string | null;
-                        };
+                        state: "member" | "none" | "pending";
+                        since: string | null;
                     };
                     issues?: never;
                 } | {
@@ -14105,46 +14611,42 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 };
                 jsonSchema: {
                     input: () => import("typebox").TObject<{
-                        publication: import("typebox").TObject<{
-                            realmId: import("typebox").TString;
-                            subjectId: import("typebox").TString;
-                            publicationId: import("typebox").TString;
-                            subjectRevisionId: import("typebox").TNull;
-                            publishedAt: import("typebox").TString;
-                            verdict: import("typebox").TUnion<[import("typebox").TLiteral<"withdraw">, import("typebox").TLiteral<"reject">]>;
-                            predecessor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        }>;
+                        state: import("typebox").TUnion<[import("typebox").TLiteral<"none">, import("typebox").TLiteral<"pending">, import("typebox").TLiteral<"member">]>;
+                        since: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                     }>;
                     output: () => import("typebox").TObject<{
-                        publication: import("typebox").TObject<{
-                            realmId: import("typebox").TString;
-                            subjectId: import("typebox").TString;
-                            publicationId: import("typebox").TString;
-                            subjectRevisionId: import("typebox").TNull;
-                            publishedAt: import("typebox").TString;
-                            verdict: import("typebox").TUnion<[import("typebox").TLiteral<"withdraw">, import("typebox").TLiteral<"reject">]>;
-                            predecessor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        }>;
+                        state: import("typebox").TUnion<[import("typebox").TLiteral<"none">, import("typebox").TLiteral<"pending">, import("typebox").TLiteral<"member">]>;
+                        since: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                     }>;
                 };
             };
-        } & {
-            headers: {
-                readonly "rezics-session-token": import("typebox").TString;
-                readonly etag: import("typebox").TString;
-            };
         };
+        403: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail: import("typebox").TOptional<import("typebox").TString>;
+            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
     };
     detail: {
         operationId: string;
         'x-exposure': string;
         'x-action': string;
-        'x-rate-limit': Readonly<import("./rate-limit.ts").RateLimitDeclaration>;
-        security: {
+        security: ({
             bearerAuth: never[];
-        }[];
+        } | {
+            bearerAuth?: never;
+        })[];
     };
-}, {}, "/v1/realms/:realmId/publications/:subjectId/$reject">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params: { realmId, subjectId }, headers, actor, admission, job, session, set }: {
+}, {}, "/v1/realms/:realmId/members/me">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params: { realmId }, actor, admission, job }: {
     server: import("elysia").Server | null;
     redirect: import("elysia").redirect;
     set: {
@@ -14182,34 +14684,6 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 code: never;
             }[];
         };
-        500: {
-            type: unknown;
-            title: unknown;
-            status: number;
-            code: unknown;
-            retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
-            request_id: string;
-            detail?: string;
-            errors?: {
-                pointer: string;
-                code: never;
-            }[];
-        };
-        403: {
-            type: unknown;
-            title: unknown;
-            status: number;
-            code: unknown;
-            retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
-            request_id: string;
-            detail?: string;
-            errors?: {
-                pointer: string;
-                code: never;
-            }[];
-        };
         404: {
             type: unknown;
             title: unknown;
@@ -14224,21 +14698,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 code: never;
             }[];
         };
-        422: {
-            type: unknown;
-            title: unknown;
-            status: number;
-            code: unknown;
-            retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
-            request_id: string;
-            detail?: string;
-            errors?: {
-                pointer: string;
-                code: never;
-            }[];
-        };
-        429: {
+        500: {
             type: unknown;
             title: unknown;
             status: number;
@@ -14267,15 +14727,22 @@ export declare function createKernel(dependencies: KernelDependencies): import("
             }[];
         };
         200: {
-            publication: {
-                realmId: string;
-                subjectId: string;
-                publicationId: string;
-                subjectRevisionId: null;
-                publishedAt: string;
-                verdict: "reject" | "withdraw";
-                predecessor: string | null;
-            };
+            state: "member" | "none" | "pending";
+            since: string | null;
+        };
+        403: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail?: string;
+            errors?: {
+                pointer: string;
+                code: never;
+            }[];
         };
     }>;
     problem: import("elysia").SelectiveProblem<{
@@ -14307,34 +14774,6 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 code: never;
             }[];
         };
-        500: {
-            type: unknown;
-            title: unknown;
-            status: number;
-            code: unknown;
-            retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
-            request_id: string;
-            detail?: string;
-            errors?: {
-                pointer: string;
-                code: never;
-            }[];
-        };
-        403: {
-            type: unknown;
-            title: unknown;
-            status: number;
-            code: unknown;
-            retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
-            request_id: string;
-            detail?: string;
-            errors?: {
-                pointer: string;
-                code: never;
-            }[];
-        };
         404: {
             type: unknown;
             title: unknown;
@@ -14349,21 +14788,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 code: never;
             }[];
         };
-        422: {
-            type: unknown;
-            title: unknown;
-            status: number;
-            code: unknown;
-            retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
-            request_id: string;
-            detail?: string;
-            errors?: {
-                pointer: string;
-                code: never;
-            }[];
-        };
-        429: {
+        500: {
             type: unknown;
             title: unknown;
             status: number;
@@ -14392,25 +14817,27 @@ export declare function createKernel(dependencies: KernelDependencies): import("
             }[];
         };
         200: {
-            publication: {
-                realmId: string;
-                subjectId: string;
-                publicationId: string;
-                subjectRevisionId: null;
-                publishedAt: string;
-                verdict: "reject" | "withdraw";
-                predecessor: string | null;
-            };
+            state: "member" | "none" | "pending";
+            since: string | null;
+        };
+        403: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail?: string;
+            errors?: {
+                pointer: string;
+                code: never;
+            }[];
         };
     }>;
     defer: (fn: import("elysia/types").AfterResponseHandler<NoInfer<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
         params: import("typebox").TObject<{
             realmId: import("typebox").TString;
-            subjectId: import("typebox").TString;
-        }>;
-        headers: import("typebox").TObject<{
-            "idempotency-key": import("typebox").TString;
-            'if-match': import("typebox").TString;
         }>;
         response: {
             400: import("typebox").TObject<{
@@ -14441,34 +14868,6 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                     code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
                 }>>>;
             }>;
-            500: import("typebox").TObject<{
-                type: import("typebox").TSchema;
-                title: import("typebox").TSchema;
-                status: import("typebox").TLiteral<number>;
-                code: import("typebox").TSchema;
-                retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                request_id: import("typebox").TString;
-                detail: import("typebox").TOptional<import("typebox").TString>;
-                errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                    pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                }>>>;
-            }>;
-            403: import("typebox").TObject<{
-                type: import("typebox").TSchema;
-                title: import("typebox").TSchema;
-                status: import("typebox").TLiteral<number>;
-                code: import("typebox").TSchema;
-                retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                request_id: import("typebox").TString;
-                detail: import("typebox").TOptional<import("typebox").TString>;
-                errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                    pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                }>>>;
-            }>;
             404: import("typebox").TObject<{
                 type: import("typebox").TSchema;
                 title: import("typebox").TSchema;
@@ -14483,21 +14882,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                     code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
                 }>>>;
             }>;
-            422: import("typebox").TObject<{
-                type: import("typebox").TSchema;
-                title: import("typebox").TSchema;
-                status: import("typebox").TLiteral<number>;
-                code: import("typebox").TSchema;
-                retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                request_id: import("typebox").TString;
-                detail: import("typebox").TOptional<import("typebox").TString>;
-                errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                    pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                }>>>;
-            }>;
-            429: import("typebox").TObject<{
+            500: import("typebox").TObject<{
                 type: import("typebox").TSchema;
                 title: import("typebox").TSchema;
                 status: import("typebox").TLiteral<number>;
@@ -14531,39 +14916,18 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                     vendor: string;
                     types: {
                         input: {
-                            publication: {
-                                realmId: string;
-                                subjectId: string;
-                                publicationId: string;
-                                subjectRevisionId: null;
-                                publishedAt: string;
-                                verdict: "reject" | "withdraw";
-                                predecessor: string | null;
-                            };
+                            state: "member" | "none" | "pending";
+                            since: string | null;
                         };
                         output: {
-                            publication: {
-                                realmId: string;
-                                subjectId: string;
-                                publicationId: string;
-                                subjectRevisionId: null;
-                                publishedAt: string;
-                                verdict: "reject" | "withdraw";
-                                predecessor: string | null;
-                            };
+                            state: "member" | "none" | "pending";
+                            since: string | null;
                         };
                     } | undefined;
                     validate(value: unknown): {
                         value: {
-                            publication: {
-                                realmId: string;
-                                subjectId: string;
-                                publicationId: string;
-                                subjectRevisionId: null;
-                                publishedAt: string;
-                                verdict: "reject" | "withdraw";
-                                predecessor: string | null;
-                            };
+                            state: "member" | "none" | "pending";
+                            since: string | null;
                         };
                         issues?: never;
                     } | {
@@ -14574,46 +14938,42 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                     };
                     jsonSchema: {
                         input: () => import("typebox").TObject<{
-                            publication: import("typebox").TObject<{
-                                realmId: import("typebox").TString;
-                                subjectId: import("typebox").TString;
-                                publicationId: import("typebox").TString;
-                                subjectRevisionId: import("typebox").TNull;
-                                publishedAt: import("typebox").TString;
-                                verdict: import("typebox").TUnion<[import("typebox").TLiteral<"withdraw">, import("typebox").TLiteral<"reject">]>;
-                                predecessor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            }>;
+                            state: import("typebox").TUnion<[import("typebox").TLiteral<"none">, import("typebox").TLiteral<"pending">, import("typebox").TLiteral<"member">]>;
+                            since: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                         }>;
                         output: () => import("typebox").TObject<{
-                            publication: import("typebox").TObject<{
-                                realmId: import("typebox").TString;
-                                subjectId: import("typebox").TString;
-                                publicationId: import("typebox").TString;
-                                subjectRevisionId: import("typebox").TNull;
-                                publishedAt: import("typebox").TString;
-                                verdict: import("typebox").TUnion<[import("typebox").TLiteral<"withdraw">, import("typebox").TLiteral<"reject">]>;
-                                predecessor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            }>;
+                            state: import("typebox").TUnion<[import("typebox").TLiteral<"none">, import("typebox").TLiteral<"pending">, import("typebox").TLiteral<"member">]>;
+                            since: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                         }>;
                     };
                 };
-            } & {
-                headers: {
-                    readonly "rezics-session-token": import("typebox").TString;
-                    readonly etag: import("typebox").TString;
-                };
             };
+            403: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail: import("typebox").TOptional<import("typebox").TString>;
+                errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                }>>>;
+            }>;
         };
         detail: {
             operationId: string;
             'x-exposure': string;
             'x-action': string;
-            'x-rate-limit': Readonly<import("./rate-limit.ts").RateLimitDeclaration>;
-            security: {
+            security: ({
                 bearerAuth: never[];
-            }[];
+            } | {
+                bearerAuth?: never;
+            })[];
         };
-    }, {}, "/v1/realms/:realmId/publications/:subjectId/$reject">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
+    }, {}, "/v1/realms/:realmId/members/me">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
         derive: {
             readonly admission: import("./admission.ts").Admission;
             readonly job: {
@@ -14638,12 +14998,8 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     query: Record<string, string | undefined>;
     params: {
         realmId: string;
-        subjectId: string;
     };
-    headers: {
-        "idempotency-key": string;
-        'if-match': string;
-    };
+    headers: Record<string, string | undefined>;
     cookie: Record<string, import("elysia").Cookie<unknown>>;
     readonly admission: import("./admission.ts").Admission;
     readonly job: {
@@ -14658,23 +15014,14 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
     readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
-    publication: {
-        publicationId: string;
-        realmId: string;
-        subjectId: string;
-        predecessor: string | null;
-        subjectRevisionId: null;
-        verdict: 'reject';
-        publishedAt: string;
-    };
+    state: 'member';
+    since: string;
+} | {
+    state: 'none';
+    since: null;
 }>, {
     params: import("typebox").TObject<{
         realmId: import("typebox").TString;
-        subjectId: import("typebox").TString;
-    }>;
-    headers: import("typebox").TObject<{
-        "idempotency-key": import("typebox").TString;
-        'if-match': import("typebox").TString;
     }>;
     response: {
         400: import("typebox").TObject<{
@@ -14705,34 +15052,6 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
-        500: import("typebox").TObject<{
-            type: import("typebox").TSchema;
-            title: import("typebox").TSchema;
-            status: import("typebox").TLiteral<number>;
-            code: import("typebox").TSchema;
-            retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-            request_id: import("typebox").TString;
-            detail: import("typebox").TOptional<import("typebox").TString>;
-            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-            }>>>;
-        }>;
-        403: import("typebox").TObject<{
-            type: import("typebox").TSchema;
-            title: import("typebox").TSchema;
-            status: import("typebox").TLiteral<number>;
-            code: import("typebox").TSchema;
-            retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-            request_id: import("typebox").TString;
-            detail: import("typebox").TOptional<import("typebox").TString>;
-            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-            }>>>;
-        }>;
         404: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
@@ -14747,21 +15066,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
-        422: import("typebox").TObject<{
-            type: import("typebox").TSchema;
-            title: import("typebox").TSchema;
-            status: import("typebox").TLiteral<number>;
-            code: import("typebox").TSchema;
-            retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-            request_id: import("typebox").TString;
-            detail: import("typebox").TOptional<import("typebox").TString>;
-            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-            }>>>;
-        }>;
-        429: import("typebox").TObject<{
+        500: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
             status: import("typebox").TLiteral<number>;
@@ -14795,39 +15100,18 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 vendor: string;
                 types: {
                     input: {
-                        publication: {
-                            realmId: string;
-                            subjectId: string;
-                            publicationId: string;
-                            subjectRevisionId: null;
-                            publishedAt: string;
-                            verdict: "reject" | "withdraw";
-                            predecessor: string | null;
-                        };
+                        state: "member" | "none" | "pending";
+                        since: string | null;
                     };
                     output: {
-                        publication: {
-                            realmId: string;
-                            subjectId: string;
-                            publicationId: string;
-                            subjectRevisionId: null;
-                            publishedAt: string;
-                            verdict: "reject" | "withdraw";
-                            predecessor: string | null;
-                        };
+                        state: "member" | "none" | "pending";
+                        since: string | null;
                     };
                 } | undefined;
                 validate(value: unknown): {
                     value: {
-                        publication: {
-                            realmId: string;
-                            subjectId: string;
-                            publicationId: string;
-                            subjectRevisionId: null;
-                            publishedAt: string;
-                            verdict: "reject" | "withdraw";
-                            predecessor: string | null;
-                        };
+                        state: "member" | "none" | "pending";
+                        since: string | null;
                     };
                     issues?: never;
                 } | {
@@ -14838,44 +15122,40 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 };
                 jsonSchema: {
                     input: () => import("typebox").TObject<{
-                        publication: import("typebox").TObject<{
-                            realmId: import("typebox").TString;
-                            subjectId: import("typebox").TString;
-                            publicationId: import("typebox").TString;
-                            subjectRevisionId: import("typebox").TNull;
-                            publishedAt: import("typebox").TString;
-                            verdict: import("typebox").TUnion<[import("typebox").TLiteral<"withdraw">, import("typebox").TLiteral<"reject">]>;
-                            predecessor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        }>;
+                        state: import("typebox").TUnion<[import("typebox").TLiteral<"none">, import("typebox").TLiteral<"pending">, import("typebox").TLiteral<"member">]>;
+                        since: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                     }>;
                     output: () => import("typebox").TObject<{
-                        publication: import("typebox").TObject<{
-                            realmId: import("typebox").TString;
-                            subjectId: import("typebox").TString;
-                            publicationId: import("typebox").TString;
-                            subjectRevisionId: import("typebox").TNull;
-                            publishedAt: import("typebox").TString;
-                            verdict: import("typebox").TUnion<[import("typebox").TLiteral<"withdraw">, import("typebox").TLiteral<"reject">]>;
-                            predecessor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        }>;
+                        state: import("typebox").TUnion<[import("typebox").TLiteral<"none">, import("typebox").TLiteral<"pending">, import("typebox").TLiteral<"member">]>;
+                        since: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                     }>;
                 };
             };
-        } & {
-            headers: {
-                readonly "rezics-session-token": import("typebox").TString;
-                readonly etag: import("typebox").TString;
-            };
         };
+        403: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail: import("typebox").TOptional<import("typebox").TString>;
+            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
     };
     detail: {
         operationId: string;
         'x-exposure': string;
         'x-action': string;
-        'x-rate-limit': Readonly<import("./rate-limit.ts").RateLimitDeclaration>;
-        security: {
+        security: ({
             bearerAuth: never[];
-        }[];
+        } | {
+            bearerAuth?: never;
+        })[];
     };
 }> & import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
     typebox: {};
