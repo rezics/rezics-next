@@ -14,17 +14,16 @@ export function run(program: string, args: string[], env: NodeJS.ProcessEnv = pr
   return result.stdout.trim();
 }
 
-export function migrate(url: string): void {
+export function migrate(url: string, migrationsDirectory = 'db/migrations'): void {
   run(resolve(directory, 'node_modules/.bin/dbmate'), [
     '--url',
     url,
     '--migrations-dir',
-    'db/migrations',
+    migrationsDirectory,
     '--no-dump-schema',
     '--migration-lock',
     '--wait',
     'up',
-    '--strict',
   ]);
 }
 
