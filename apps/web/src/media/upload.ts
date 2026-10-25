@@ -1,5 +1,5 @@
 import type { DigestStream } from '@cloudflare/workers-types';
-import { viewerCredential } from './auth.ts';
+import { viewerCredential } from '../session/request.ts';
 import { completeReservation, dependencyUnavailable, problem, readReservation } from './kernel.ts';
 import type { MediaEnv } from './index.ts';
 

@@ -7,10 +7,28 @@ Locale selection uses URL, `rezics_locale` cookie, `Accept-Language`, then Engli
 
 Media bytes use the `MEDIA` R2 binding for the `rezics-media` bucket. Development simulates this bucket locally.
 `PUT /media/<id>` transports a reserved upload; `GET` and `HEAD /media/<id>/<variant>` ask content for permission on every request.
-Viewer credentials currently come from `Authorization`, forwarded unchanged for reservation reads, completion and
-download decisions. This is a development stand-in for the website's server-side session. The browser will hold only a
-session cookie; access and refresh tokens will stay in the Worker. No cookie is read yet, and introducing the session
-must add cross-site request protection for these routes.
+Viewer credentials come from an explicit `Authorization` header, forwarded unchanged, or from the person's server-side
+session. Access and refresh tokens stay in the Worker; the browser holds an opaque `__Host-rezics_session` cookie.
+Unsafe requests carrying that cookie require an `Origin` equal to the site's own origin.
+
+Sign-in uses `GET /auth/sign-in?return_to=/ja`, followed by `GET /auth/callback`. Sign-out uses `POST /auth/sign-out`.
+Login transactions expire after 10 minutes; sessions expire 30 days after sign-in. The `SESSIONS` Durable Object binding
+stores both in SQLite, with one instance per login transaction or session. Development simulates the objects locally.
+
+Configure these variables in the environment of `bun run dev`:
+
+- `AUTH_ISSUER`: Auth's exact OpenID issuer identifier. HTTPS is required except for loopback development issuers
+  (`127.0.0.1`, `localhost`, or `[::1]`).
+- `WEBSITE_CLIENT_ID`: the confidential website client id, `rezics-website`.
+- `WEBSITE_CLIENT_KEY`: a private P-256 JWK with a `kid`, used for ES256 client assertions. In production this is a
+  Worker secret; supply it through Cloudflare's secret management, never through a config file or build output.
+  `AUTH_ISSUER` and `WEBSITE_CLIENT_ID` are production Worker text variables.
+
+Auth must register the website client's redirect URI `<site origin>/auth/callback`, its post-logout redirect URI
+`<site origin>/`, the `private_key_jwt` authentication method with the corresponding public key and `kid`, and the
+scopes `openid offline_access media:complete`. Discovery supplies all Auth endpoints, so connecting the Worker to
+Auth later requires configuration only. If any auth variable is missing, `/auth/` routes return 503
+`dependency_unavailable`, session cookies confer no credential, and the rest of the site keeps working.
 
 Set `KERNEL_ORIGIN`, the content API's origin, in the environment of `bun run dev`, for example
 `KERNEL_ORIGIN=http://127.0.0.1:3000 bun run dev`. Production supplies it as a Worker variable.

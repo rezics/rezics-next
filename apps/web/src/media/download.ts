@@ -1,4 +1,4 @@
-import { viewerCredential } from './auth.ts';
+import { viewerCredential } from '../session/request.ts';
 import { authorizeDownload, notFound, problem, problemResponse } from './kernel.ts';
 import type { MediaEnv } from './index.ts';
 
