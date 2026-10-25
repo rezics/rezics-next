@@ -144,7 +144,15 @@ test('operator rights never automatically grant agent rights', async () => {
   expect(await product().execute(direct, operation)).toBe('denied');
 });
 test('unknown actions fail closed', async () => {
-  expect(await product().execute(session, { ...operation, action: 'unknown:action' })).toBe('denied');
+  // Supply all three operands so a missing allow cannot mask an open action registry.
+  await replace(f => {
+    for (const g of f.grants) g.actions.push('unknown:action');
+    f.consents[0]!.scopes.push('unknown:action');
+  });
+  expect(await product().execute(session, operation)).toBe('permitted');
+  // Auth may reject the unregistered scope, or execution must reject the action.
+  expect(await attempt({ ...login, scopes: ['read', 'unknown:action'] },
+    { ...operation, action: 'unknown:action' })).toBe('denied');
 });
 test('missing authoritative evidence fails closed', async () => {
   await evidenceDenies('missing');
@@ -154,7 +162,7 @@ test('unresolved authoritative evidence fails closed', async () => {
 });
 async function evidenceDenies(failure: 'missing' | 'unavailable') {
   // Each source gets a fresh positive control, without relying on earlier failures.
-  for (const source of ['accounts', 'grants', 'consents', 'delegatedRequests', 'memberships'] as const) {
+  for (const source of ['accounts', 'resources', 'clients', 'grants', 'consents', 'delegatedRequests', 'memberships'] as const) {
     if (source !== 'accounts') {
       await product().close();
       driver = undefined;
@@ -259,14 +267,18 @@ test('each grant starts inclusively and expires at the exact authoritative end',
   }
 });
 test('future and expired denies do not block but an active deny does', async () => {
-  await replace(f => {
-    for (const g of f.grants) g.valid = { start: '2029-01-01T00:00:00.000Z', end: '2031-01-01T00:00:00.000Z' };
-    f.grants.push({ ...grant('temporary-deny', 'agent'), effect: 'deny' });
-  });
-  for (const [instant, expected] of [['2029-12-31T23:59:59.999Z', 'permitted'],
-    [start, 'denied'], [now, 'denied'], [end, 'permitted']] as const) {
-    await product().setAuthoritativeTime(instant);
-    expect(await product().execute(session, operation)).toBe(expected);
+  for (const account of ['agent', 'principal']) {
+    facts = fixture();
+    await replace(f => {
+      for (const g of f.grants) g.valid = { start: '2029-01-01T00:00:00.000Z', end: '2031-01-01T00:00:00.000Z' };
+      f.grants.push({ ...grant('temporary-deny', account), effect: 'deny' });
+    });
+    for (const [instant, expected] of [['2029-12-31T23:59:59.999Z', 'permitted'],
+      [start, 'denied'], [now, 'denied'], [end, 'permitted'],
+      ['2030-01-01T00:00:02.001Z', 'permitted']] as const) {
+      await product().setAuthoritativeTime(instant);
+      expect(await product().execute(session, operation)).toBe(expected);
+    }
   }
 });
 

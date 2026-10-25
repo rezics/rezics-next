@@ -54,7 +54,7 @@ export type Outcome = 'permitted' | 'denied';
 export type Operation =
   | { kind: 'resource'; resourceId: string; action: string }
   | { kind: 'grant'; grant: Grant };
-export type Evidence = 'accounts' | 'grants' | 'consents' | 'delegatedRequests' | 'memberships';
+export type Evidence = 'accounts' | 'resources' | 'clients' | 'grants' | 'consents' | 'delegatedRequests' | 'memberships';
 
 export interface PermissionDriver {
   /**
