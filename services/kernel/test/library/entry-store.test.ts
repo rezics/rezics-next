@@ -7,7 +7,6 @@ import {
   measure,
   openGrowthDatabase,
   seed,
-  type GrowthDatabase,
   type GrowthSample,
   type Population,
 } from '../support/growth.ts';

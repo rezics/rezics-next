@@ -96,6 +96,57 @@ CREATE TABLE library.collection_member (
 
 
 --
+-- Name: copy; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.copy (
+    route integer NOT NULL,
+    copy_id uuid NOT NULL,
+    account_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    status text NOT NULL,
+    location text,
+    source text,
+    acquired_on date,
+    disposed_on date,
+    note text,
+    revision integer NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT copy_check CHECK ((route = ((get_byte(uuid_send(copy_id), 10) * 256) + get_byte(uuid_send(copy_id), 11)))),
+    CONSTRAINT copy_check1 CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT copy_location_check CHECK (((location IS NULL) OR (char_length(location) <= 200))),
+    CONSTRAINT copy_note_check CHECK (((note IS NULL) OR (char_length(note) <= 1000))),
+    CONSTRAINT copy_revision_check CHECK ((revision >= 1)),
+    CONSTRAINT copy_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT copy_source_check CHECK (((source IS NULL) OR (char_length(source) <= 200))),
+    CONSTRAINT copy_status_check CHECK ((status = ANY (ARRAY['ordered'::text, 'owned'::text, 'lent'::text, 'disposed'::text])))
+);
+
+
+--
+-- Name: entry; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.entry (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    requested_subject_id uuid,
+    state text NOT NULL,
+    revision integer NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT entry_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT entry_revision_check CHECK ((revision >= 1)),
+    CONSTRAINT entry_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT entry_state_check CHECK ((state = ANY (ARRAY['planned'::text, 'in_progress'::text, 'completed'::text, 'paused'::text, 'dropped'::text])))
+);
+
+
+--
 -- Name: follow; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -181,6 +232,22 @@ ALTER TABLE ONLY library.collection
 
 
 --
+-- Name: copy copy_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.copy
+    ADD CONSTRAINT copy_pkey PRIMARY KEY (route, copy_id);
+
+
+--
+-- Name: entry entry_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.entry
+    ADD CONSTRAINT entry_pkey PRIMARY KEY (route, account_id, subject_id);
+
+
+--
 -- Name: follow follow_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -216,6 +283,27 @@ CREATE INDEX collection_curator_listing ON library.collection USING btree (route
 --
 
 CREATE INDEX collection_member_subject ON library.collection_member USING btree (route, collection_id, subject_id);
+
+
+--
+-- Name: copy_account_created; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX copy_account_created ON library.copy USING btree (route, account_id, created_at, copy_id);
+
+
+--
+-- Name: entry_account_state; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_account_state ON library.entry USING btree (route, account_id, state, updated_at DESC, subject_id);
+
+
+--
+-- Name: entry_account_updated; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_account_updated ON library.entry USING btree (route, account_id, updated_at DESC, subject_id);
 
 
 --
