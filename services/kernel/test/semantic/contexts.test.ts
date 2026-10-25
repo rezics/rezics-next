@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import pg from 'pg';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { createAccess, type AccessConfig } from '../../src/access/index.ts';
 import { resourceRoleCatalogue } from '../../src/access/resource-roles.ts';
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
@@ -10,7 +11,7 @@ import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -50,6 +51,7 @@ const kernel = createKernel({
 });
 
 beforeAll(async () => {
+  await bootstrapRelease(pool, bundledRelease);
   const signing = await generateKeyPair('ES256', { extractable: true });
   jwk = { ...(await exportJWK(signing.publicKey)), kid: 'contexts', alg: 'ES256' };
   access = createAccess({
