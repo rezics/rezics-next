@@ -90,6 +90,9 @@
     },
     "packages/auth-contract": {
       "name": "@rezics/auth-contract",
+      "devDependencies": {
+        "@types/bun": "1.4.4",
+      },
     },
     "packages/client": {
       "name": "@rezics/client",
