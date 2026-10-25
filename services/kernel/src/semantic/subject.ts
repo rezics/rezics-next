@@ -19,13 +19,18 @@ import { linkChanges } from './link-changes.ts';
 import { slotView } from './slots.ts';
 import { matchesTarget } from './targets.ts';
 import createRevision from './create-revision.sql';
-import insertFacts from './insert-facts.sql';
 import insertSubject from './create-subject.sql';
 import changePartitionSubjectCount from './change-partition-subject-count.sql';
 import readLabelsStatement from './read-labels.sql';
+import readRelatedStatement from './read-related.sql';
 import readSubjectStatement from './read-subject.sql';
 import readTypesStatement from './read-item-types.sql';
 import { readRelease as getRelease } from './definitions.ts';
+import { writeFacts } from './write-facts.ts';
+
+export { writeFacts } from './write-facts.ts';
+
+const BATCH_LIMIT = 256;
 
 export const CREATE_SUBJECT = 'subject.create';
 const CONTEXT = GLOBAL_CONTEXT;
@@ -114,23 +119,10 @@ export async function writeSubject(
   if (checked.violations.length) throw new SubjectInputError(checked.violations);
   const facts = itemFacts(subjectId, options.item, typeof input?.type === 'string' ? input.type : undefined);
   const dataTypes = factDataTypes(options.release.release, facts);
-  const grouped = new Map<number, Set<string>>();
-  for (const item of checked.targets) {
-    const itemRoute = routeOf(item.id);
-    if (itemRoute === null) continue;
-    const itemPartition = partitionOf(itemRoute);
-    const ids = grouped.get(itemPartition) ?? new Set<string>();
-    ids.add(item.id);
-    grouped.set(itemPartition, ids);
-  }
-  const itemTypes = new Map<string, string>();
-  for (const [partition_no, ids] of grouped) {
-    const rows = (await readTypesStatement.run(tx, { partition_no, subject_ids: [...ids] })) as {
-      id: string;
-      type: string;
-    }[];
-    for (const row of rows) itemTypes.set(row.id, row.type);
-  }
+  const itemTypes = await readItemTypes(
+    tx,
+    checked.targets.map((item) => item.id),
+  );
   const targetErrors = checked.targets.flatMap((item) => {
     const targetType = itemTypes.get(item.id);
     return targetType && matchesTarget(options.release.release, targetType, item.targets)
@@ -153,7 +145,7 @@ export async function writeSubject(
     transaction_id: transactionId,
     source: options.source ?? null,
   });
-  await insertFacts.run(tx, {
+  await writeFacts(tx, {
     route,
     subject_id: subjectId,
     transaction_id: transactionId,
@@ -239,12 +231,19 @@ async function withoutFencedFacts(
   const revisions = [
     ...new Set(facts.flatMap((fact) => (fact.statement_id && fact.fact_revision ? [fact.fact_revision] : []))),
   ];
-  if (!revisions.length) return facts;
+  // Always probe, including an empty list, so hiding the last shown statement does not drop a statement.
   const result = await client.query<{ revision: number; source: Source | null }>(
-    `SELECT revision, source FROM semantic.revision
-     WHERE route = $1 AND subject_id = $2 AND revision = ANY($3::int[])`,
+    `SELECT probed.revision, probed.source
+     FROM unnest($3::int[]) AS wanted(revision)
+     JOIN LATERAL (
+       SELECT revision, source FROM semantic.revision
+       WHERE route = $1 AND subject_id = $2 AND revision = wanted.revision
+       OFFSET 0
+       LIMIT 1
+     ) probed ON true`,
     [route, subjectId, revisions],
   );
+  if (!revisions.length) return facts;
   const sources = new Map(result.rows.map((row) => [row.revision, row.source]));
   const gone = await fencedIds(
     client,
@@ -325,34 +324,18 @@ export async function readSubject(
   };
 }
 
-export async function readLabels(pool: Pool, ids: readonly string[]): Promise<Map<string, Item['labels']>> {
-  const groups = new Map<number, Set<string>>();
-  for (const id of ids) {
-    const route = routeOf(id);
-    if (route === null) continue;
-    const partition = partitionOf(route);
-    const subjectIds = groups.get(partition) ?? new Set<string>();
-    subjectIds.add(id);
-    groups.set(partition, subjectIds);
-  }
+type Queryable = Pick<PoolClient, 'query'>;
 
-  const labels = new Map<string, Item['labels']>();
-  await Promise.all(
-    [...groups].map(async ([partition_no, subjectIds]) => {
-      const rows = (await readLabelsStatement.run(pool, {
-        partition_no,
-        subject_ids: [...subjectIds],
-      })) as { id: string; labels: Record<string, string> }[];
-      for (const row of rows) labels.set(row.id, row.labels);
-    }),
-  );
-  return labels;
+function assertBatch(ids: readonly string[], message: string): void {
+  if (ids.length > BATCH_LIMIT) throw new TypeError(message);
 }
 
-/** Resolve reference anchors with one redirect batch and one label batch per partition. */
-export async function readRelated(pool: Pool, ids: readonly string[]) {
+function groupsOf(ids: readonly string[]): Map<number, string[]> {
   const groups = new Map<number, string[]>();
+  const seen = new Set<string>();
   for (const id of ids) {
+    if (seen.has(id)) continue;
+    seen.add(id);
     const route = routeOf(id);
     if (route === null) continue;
     const partition = partitionOf(route);
@@ -360,26 +343,109 @@ export async function readRelated(pool: Pool, ids: readonly string[]) {
     group.push(id);
     groups.set(partition, group);
   }
-  const redirects = new Map<string, string>();
+  return groups;
+}
+
+/** Item targets of one write, one primary-key probe per id and one statement per partition. */
+export async function readItemTypes(client: Queryable, ids: readonly string[]): Promise<Map<string, string>> {
+  assertBatch(ids, 'An item type check accepts at most 256 ids');
+  const types = new Map<string, string>();
+  for (const subjectIds of groupsOf(ids).values()) {
+    const rows = (await readTypesStatement.run(client, {
+      routes: subjectIds.map((id) => routeOf(id)!),
+      subject_ids: subjectIds,
+    })) as { id: string; type: string }[];
+    for (const row of rows) types.set(row.id, row.type);
+  }
+  return types;
+}
+
+export async function readLabels(pool: Pool, ids: readonly string[]): Promise<Map<string, Item['labels']>> {
+  assertBatch(ids, 'A label fill accepts at most 256 ids');
+  const labels = new Map<string, Item['labels']>();
   await Promise.all(
-    [...groups.values()].map(async (group) => {
-      const { rows } = await pool.query<{ id: string; target: string | null }>(
-        `SELECT input.id::text, r.target::text FROM unnest($1::integer[], $2::uuid[]) input(route, id)
-       JOIN LATERAL (SELECT subject_id FROM semantic.subject WHERE route = input.route AND subject_id = input.id
-         AND visibility = 'visible' LIMIT 1) s ON true
-       LEFT JOIN LATERAL (SELECT target FROM semantic.redirect WHERE route = input.route AND subject_id = input.id
-         ORDER BY sequence DESC LIMIT 1) r ON true`,
-        [group.map((id) => routeOf(id)), group],
-      );
-      for (const row of rows) if (row.target) redirects.set(row.id, row.target);
+    [...groupsOf(ids).values()].map(async (subjectIds) => {
+      const rows = (await readLabelsStatement.run(pool, {
+        routes: subjectIds.map((id) => routeOf(id)!),
+        subject_ids: subjectIds,
+      })) as { id: string; labels: Record<string, string> }[];
+      for (const row of rows) labels.set(row.id, row.labels ?? {});
     }),
   );
-  const labels = await readLabels(pool, [...new Set(ids.map((id) => redirects.get(id) ?? id))]);
-  const related: Record<string, { labels: Item['labels']; redirect?: string }> = {};
-  for (const id of ids) {
-    const target = redirects.get(id);
-    const value = labels.get(target ?? id);
-    if (value) related[id] = { ...(target ? { redirect: target } : {}), labels: value };
+  return labels;
+}
+
+export type RelatedState = {
+  id: string;
+  visibility: string;
+  security_revision: string;
+  redirect: string | null;
+  labels: Item['labels'];
+};
+
+type RelatedCache = { ids: string[]; pending: Promise<Map<string, RelatedState>> };
+const relatedLoads = new WeakMap<object, RelatedCache>();
+
+async function queryRelated(client: Queryable, ids: readonly string[]): Promise<Map<string, RelatedState>> {
+  const states = new Map<string, RelatedState>();
+  for (const subjectIds of groupsOf(ids).values()) {
+    const rows = (await readRelatedStatement.run(client, {
+      routes: subjectIds.map((id) => routeOf(id)!),
+      subject_ids: subjectIds,
+    })) as RelatedState[];
+    for (const row of rows) states.set(row.id, { ...row, labels: row.labels ?? {} });
   }
-  return related;
+  return states;
+}
+
+/** One statement per partition for visibility, eligibility, labels and redirects. Repeated calls on the same client reuse a superset. */
+export function loadRelated(client: object, ids: readonly string[]): Promise<Map<string, RelatedState>> {
+  assertBatch(ids, 'A related read accepts at most 256 ids');
+  const known = relatedLoads.get(client);
+  if (known && ids.every((id) => known.ids.includes(id))) return known.pending;
+  const pending = queryRelated(client as Queryable, ids).then(async (fetched) => {
+    const prior = known ? await known.pending : new Map<string, RelatedState>();
+    const merged = new Map(prior);
+    for (const [id, state] of fetched) merged.set(id, state);
+    return merged;
+  });
+  relatedLoads.set(client, { ids: [...new Set([...(known?.ids ?? []), ...ids])], pending });
+  return pending;
+}
+
+function isPool(value: Pool | PoolClient): value is Pool {
+  return typeof (value as Pool).connect === 'function' && typeof (value as PoolClient).release !== 'function';
+}
+
+/** Labels of the requested ids, following one redirect, from the shared related read. */
+export async function readRelated(db: Pool | PoolClient, ids: readonly string[]) {
+  assertBatch(ids, 'A related read accepts at most 256 ids');
+  const assemble = async (client: PoolClient) => {
+    const states = await loadRelated(client, ids);
+    const targets = [
+      ...new Set(
+        ids.flatMap((id) => {
+          const state = states.get(id);
+          return state?.visibility === 'visible' && state.redirect ? [state.redirect] : [];
+        }),
+      ),
+    ];
+    const targetStates = targets.length > 0 ? await loadRelated(client, targets) : states;
+    const related: Record<string, { labels: Item['labels']; redirect?: string }> = {};
+    for (const id of ids) {
+      const state = states.get(id);
+      if (!state || state.visibility !== 'visible') continue;
+      const target = state.redirect;
+      if (target) {
+        const redirected = targetStates.get(target);
+        if (!redirected || redirected.visibility !== 'visible') continue;
+        related[id] = { redirect: target, labels: redirected.labels };
+        continue;
+      }
+      related[id] = { labels: state.labels };
+    }
+    return related;
+  };
+  if (isPool(db)) return withConnection(db, assemble);
+  return assemble(db);
 }

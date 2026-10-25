@@ -4,7 +4,7 @@ import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import type { FactRow, Item } from './item.ts';
+import type { Item } from './item.ts';
 import pageSubjectsStatement from './page-subjects.sql';
 
 export const LIST_SUBJECTS = 'subject.list';
@@ -30,14 +30,7 @@ export type SubjectPage = {
 type PageRow = {
   route: number;
   id: string;
-  slot_id: string | null;
-  log_seq: number | null;
-  operation: FactRow['operation'] | null;
-  kind: FactRow['kind'] | null;
-  language: string | null;
-  property: string | null;
-  statement_id: string | null;
-  body: unknown;
+  body: Record<string, string> | null;
 };
 
 type Queryable = Pool | PoolClient;
@@ -53,25 +46,6 @@ async function rollback(client: PoolClient, error: unknown): Promise<never> {
 
 function isCanonicalSubjectId(id: unknown): id is string {
   return typeof id === 'string' && routeOf(id) !== null;
-}
-
-function facts(rows: readonly PageRow[]): FactRow[] {
-  return rows.flatMap((row) =>
-    row.slot_id === null || row.log_seq === null || row.operation === null || row.kind === null
-      ? []
-      : [
-          {
-            slot_id: row.slot_id,
-            log_seq: row.log_seq,
-            operation: row.operation,
-            kind: row.kind,
-            language: row.language,
-            property: row.property,
-            statement_id: row.statement_id,
-            body: row.body,
-          },
-        ],
-  );
 }
 
 function readRows(
@@ -141,24 +115,10 @@ export async function pageSubjects(
       });
       await client.query('COMMIT');
 
-      const subjectRows = new Map<string, PageRow[]>();
-      for (const row of rows) {
-        const grouped = subjectRows.get(row.id) ?? [];
-        grouped.push(row);
-        subjectRows.set(row.id, grouped);
-      }
-      const groups = [...subjectRows.values()];
-      const hasMore = groups.length > size;
-      const shown = groups.slice(0, size);
-      const subjects = shown.map((group) => ({
-        id: group[0]!.id,
-        labels: Object.fromEntries(
-          facts(group)
-            .filter((fact) => fact.kind === 'label' && fact.operation === 'assert')
-            .map((fact) => [fact.language!, fact.body as string]),
-        ),
-      }));
-      const last = shown.at(-1)?.[0];
+      const hasMore = rows.length > size;
+      const shown = rows.slice(0, size);
+      const subjects = shown.map((row) => ({ id: row.id, labels: row.body ?? {} }));
+      const last = shown.at(-1);
       const next =
         hasMore && last
           ? encodeCursor(ring, binding, { epoch: partitionState.epoch, after: [last.route, last.id] })

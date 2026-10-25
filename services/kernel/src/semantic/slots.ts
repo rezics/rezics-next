@@ -1,5 +1,6 @@
 import type { CommandTransaction } from '../command/command.ts';
 import { derivedId, routeOf } from '../route/route.ts';
+import { writeFacts } from './write-facts.ts';
 import { GLOBAL_CONTEXT, StaleEditorialHeadError } from './definitions.ts';
 import { SLOT_NS, type FactRow, type Statement } from './item.ts';
 
@@ -140,13 +141,17 @@ async function globalSlotView(tx: CommandTransaction, subject: string, property:
     `SELECT * FROM (
        SELECT c.*, a.revision AS decision_revision
        FROM semantic.acceptance_current a
-       JOIN semantic.candidate c
-         ON c.route = a.route AND c.subject_id = a.subject_id AND c.candidate_id = a.candidate_id
+       JOIN LATERAL (
+         SELECT * FROM semantic.candidate
+         WHERE route = a.route AND subject_id = a.subject_id AND candidate_id = a.candidate_id
+         LIMIT 1
+       ) c ON true
        WHERE a.route = $1 AND a.subject_id = $2 AND a.context_id = $3 AND a.slot_id = $4
-         AND a.verdict = 'reject' AND NOT (a.candidate_id = ANY($5::uuid[]))
+         AND a.verdict = 'reject'
        ORDER BY a.revision DESC, a.candidate_id
        LIMIT $6
      ) recent
+     WHERE NOT (candidate_id = ANY($5::uuid[]))
      ORDER BY revision, view_order, candidate_id`,
     [
       routeOf(subject),
@@ -166,8 +171,14 @@ async function omitHidden(tx: CommandTransaction, subject: string, facts: FactRo
   );
   if (ids.length === 0) return facts;
   const hidden = await tx.query<{ candidate_id: string }>(
-    `SELECT candidate_id::text FROM semantic.hidden_candidate
-     WHERE route = $1 AND subject_id = $2 AND candidate_id = ANY($3::uuid[])`,
+    `SELECT probed.candidate_id::text AS candidate_id
+     FROM unnest($3::uuid[]) AS wanted(candidate_id)
+     JOIN LATERAL (
+       SELECT candidate_id FROM semantic.hidden_candidate
+       WHERE route = $1 AND subject_id = $2 AND candidate_id = wanted.candidate_id
+       OFFSET 0
+       LIMIT 1
+     ) probed ON true`,
     [routeOf(subject), subject, ids],
   );
   if (hidden.rows.length === 0) return facts;
@@ -328,10 +339,24 @@ export async function expandSlot(
       ],
     );
   }
-  await tx.query(
-    `INSERT INTO semantic.fact
-     (route, subject_id, slot_id, log_seq, operation, kind, property, body, recorded_transaction_id)
-     VALUES ($1, $2, $3, 33, 'expand', 'statement', $4, '{}', $5)`,
-    [routeOf(subject), subject, slotId(subject, property), property, transactionId],
-  );
+  const route = routeOf(subject);
+  if (route === null) throw new RangeError('Subject id must be a canonical routed id');
+  await writeFacts(tx, {
+    route,
+    subject_id: subject,
+    transaction_id: transactionId,
+    facts: [
+      {
+        slot_id: slotId(subject, property),
+        log_seq: 33,
+        operation: 'expand',
+        kind: 'statement',
+        language: null,
+        property,
+        statement_id: null,
+        body: {},
+        release: null,
+      },
+    ],
+  });
 }

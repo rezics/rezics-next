@@ -411,7 +411,7 @@ CREATE TABLE semantic.subject (
     visibility text DEFAULT 'visible'::text NOT NULL,
     security_revision bigint DEFAULT 0 NOT NULL,
     current_facts integer DEFAULT 0 NOT NULL,
-    current_release text NOT NULL,
+    current_release text DEFAULT 'sha256:0000000000000000000000000000000000000000000000000000000000000000'::text NOT NULL,
     CONSTRAINT subject_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
     CONSTRAINT subject_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT subject_security_revision_check CHECK ((security_revision >= 0)),
@@ -594,6 +594,13 @@ CREATE INDEX fact_compact_candidate ON semantic.fact USING btree (route, subject
 
 
 --
+-- Name: fact_label; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX fact_label ON semantic.fact USING btree (route, subject_id, language) WHERE ((kind = 'label'::text) AND (operation = 'assert'::text));
+
+
+--
 -- Name: fact_terms; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -618,7 +625,7 @@ CREATE INDEX merge_member_pending ON semantic.merge_member USING btree (route, s
 -- Name: revision_transaction; Type: INDEX; Schema: semantic; Owner: -
 --
 
-CREATE INDEX revision_transaction ON semantic.revision USING btree (route, subject_id, recorded_transaction_id);
+CREATE INDEX revision_transaction ON semantic.revision USING btree (recorded_transaction_id, route, subject_id);
 
 
 --

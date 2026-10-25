@@ -28,7 +28,7 @@ import { createApp } from '../../http/app.ts';
 import { defineRateLimit } from '../../http/rate-limit.ts';
 import { ProblemError, problemSchema } from '../../http/problem.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, requestDigest, SESSION_HEADER } from '../../http/request.ts';
-import { subjectReadEligibility } from '../eligibility.ts';
+import { relatedReadEligibility, subjectReadEligibility } from '../eligibility.ts';
 import { listSubjectLinks } from '../links.ts';
 import { customMethod } from '../../http/custom-method.ts';
 import {
@@ -501,26 +501,30 @@ function subjectRoutes(
           const definition = release.properties[property];
           if (definition) related[property] = { labels: definition.labels };
         }
-        const readableIds = await Promise.all(
-          [...subjectIds].map(async (id) => {
+        const relatedList = [...subjectIds];
+        if (relatedList.length > 256) throw new TypeError('A related read accepts at most 256 ids');
+        const checks = await Promise.all(
+          relatedList.map(async (id) => {
             const relatedRoute = routeOf(id);
             if (relatedRoute === null) return null;
             const relatedResource = { route: relatedRoute, id };
-            const relatedCheck = await authorize({
+            return authorize({
               ...relatedResource,
-              eligibility: subjectReadEligibility(relatedResource),
-            });
-            return admission.run('normal', job, async () => {
-              const allowed = await withConnection(pool, (client) => relatedCheck(client));
-              return allowed ? id : null;
+              eligibility: relatedReadEligibility(relatedResource, relatedList),
             });
           }),
         );
         const references = await admission.run('normal', job, () =>
-          readRelated(
-            pool,
-            readableIds.filter((id): id is string => id !== null),
-          ),
+          withConnection(pool, async (client) => {
+            const allowed: string[] = [];
+            for (let index = 0; index < relatedList.length; index++) {
+              const check = checks[index];
+              const id = relatedList[index];
+              if (!check || id === undefined || !(await check(client))) continue;
+              allowed.push(id);
+            }
+            return readRelated(client, allowed);
+          }),
         );
         Object.assign(related, references);
 

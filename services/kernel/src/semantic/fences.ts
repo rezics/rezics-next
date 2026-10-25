@@ -221,6 +221,7 @@ export async function candidateSources(
   entries: readonly ProvenanceRow[],
 ): Promise<Map<string, Source | null>> {
   const sources = new Map<string, Source | null>();
+  if (entries.length > 256) throw new TypeError('A source fence read accepts at most 256 ids');
   if (entries.length === 0) return sources;
   const result = await client.query<{ subject_id: string; id: string; source: Source | null }>(
     `SELECT e.subject_id::text AS subject_id, e.candidate_id::text AS id,

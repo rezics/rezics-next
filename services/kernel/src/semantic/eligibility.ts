@@ -2,6 +2,7 @@ import { createResourcePublicEligibility, type ResourceEligibility } from '../ac
 import contextPublicExists from './context-public-exists.sql';
 import contextPublicEvidence from './context-public-evidence.sql';
 import { GLOBAL_CONTEXT } from './definitions.ts';
+import { loadRelated } from './subject.ts';
 import subjectPublicEvidence from './subject-public-evidence.sql';
 
 export type GlobalReadAction = 'subject:read' | 'definitions:read' | 'presentation:read';
@@ -21,6 +22,25 @@ export function globalReadEligibility(action: GlobalReadAction): ResourceEligibi
     },
     async verify({ client, resource: identity }) {
       return (await contextPublicExists.run(client, { route: identity.route, context_id: identity.id })) !== null;
+    },
+  });
+}
+
+/** Related ids share one read. Prepare stores the batch; verify loads it once per client. */
+export function relatedReadEligibility(
+  resource: { route: number; id: string },
+  ids: readonly string[],
+): ResourceEligibility {
+  const batch = [...ids];
+  return createResourcePublicEligibility({
+    resource,
+    action: 'subject:read',
+    async prepare() {
+      return { ids: batch };
+    },
+    async verify({ client, resource: identity }) {
+      const states = await loadRelated(client, batch);
+      return states.get(identity.id)?.visibility === 'visible';
     },
   });
 }

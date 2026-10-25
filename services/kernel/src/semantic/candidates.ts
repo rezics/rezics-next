@@ -31,7 +31,7 @@ import {
   type Adoption,
   type Candidate,
 } from './slots.ts';
-import readTypes from './read-item-types.sql';
+import { readItemTypes } from './subject.ts';
 import { contextSnapshot } from './context.ts';
 import { matchesTarget } from './targets.ts';
 import changeCurrentFacts from './change-current-facts.sql';
@@ -142,20 +142,10 @@ export async function writeProposal(
     options.statement,
     options.allowContent === true,
   );
-  const grouped = new Map<number, Set<string>>();
-  for (const item of input.items) {
-    const itemRoute = routeOf(item.id);
-    if (itemRoute === null) continue;
-    const partition = partitionOf(itemRoute);
-    const ids = grouped.get(partition) ?? new Set<string>();
-    ids.add(item.id);
-    grouped.set(partition, ids);
-  }
-  const types = new Map<string, string>();
-  for (const [partition_no, ids] of grouped) {
-    const rows = await readTypes.run(tx, { partition_no, subject_ids: [...ids] });
-    for (const row of rows) types.set(row.id, row.type);
-  }
+  const types = await readItemTypes(
+    tx,
+    input.items.map((item) => item.id),
+  );
   const errors = input.items.flatMap((item) =>
     matchesTarget(options.release.release, types.get(item.id) ?? '', item.targets)
       ? []
