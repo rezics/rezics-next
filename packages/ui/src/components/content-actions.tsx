@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ReactNode, Ref } from 'react';
 import { useState } from 'react';
 import { EllipsisIcon, FlagIcon, LinkIcon, PencilIcon, Trash2Icon } from 'lucide-react';
 import { Button } from './button.tsx';
@@ -31,12 +31,13 @@ export type ContentActionsLabels = { readonly [K in keyof typeof contentActionsL
 interface ContentActionsCommonProps {
   onCopyLink: () => void | Promise<void>;
   labels?: Partial<ContentActionsLabels>;
+  triggerRef?: Ref<HTMLButtonElement>;
 }
 
 export interface OwnerContentActionsProps extends ContentActionsCommonProps {
   ownsContent: true;
   onEdit: () => void;
-  onDelete: () => void | Promise<void>;
+  onDelete?: () => void | Promise<void>;
   onReport?: never;
 }
 
@@ -62,7 +63,7 @@ export function ContentActions(props: ContentActionsProps) {
   const labels = { ...contentActionsLabels, ...props.labels };
 
   const confirmDelete = async () => {
-    if (props.ownsContent !== true || deletePending) return;
+    if (props.ownsContent !== true || !props.onDelete || deletePending) return;
 
     setDeletePending(true);
     setDeleteFailure('');
@@ -81,7 +82,7 @@ export function ContentActions(props: ContentActionsProps) {
     <>
       <Menu>
         <MenuTrigger asChild>
-          <Button aria-label={labels.moreActions} size="icon-sm" variant="ghost">
+          <Button aria-label={labels.moreActions} ref={props.triggerRef} size="icon-sm" variant="ghost">
             <EllipsisIcon aria-hidden="true" />
           </Button>
         </MenuTrigger>
@@ -96,11 +97,15 @@ export function ContentActions(props: ContentActionsProps) {
                 <PencilIcon aria-hidden="true" />
                 {labels.edit}
               </MenuItem>
-              <MenuSeparator />
-              <MenuItem onClick={() => setDeleteOpen(true)} value="delete">
-                <Trash2Icon aria-hidden="true" />
-                {labels.delete}
-              </MenuItem>
+              {props.onDelete ? (
+                <>
+                  <MenuSeparator />
+                  <MenuItem onClick={() => setDeleteOpen(true)} value="delete">
+                    <Trash2Icon aria-hidden="true" />
+                    {labels.delete}
+                  </MenuItem>
+                </>
+              ) : null}
             </>
           ) : (
             <MenuItem onClick={() => setReportOpen(true)} value="report">
@@ -112,34 +117,36 @@ export function ContentActions(props: ContentActionsProps) {
       </Menu>
 
       {props.ownsContent ? (
-        <AlertDialog
-          onOpenChange={({ open }) => {
-            setDeleteOpen(open);
-            if (!open) setDeleteFailure('');
-          }}
-          open={deleteOpen}
-          pending={deletePending}
-        >
-          <AlertDialogContent size="sm">
-            <AlertDialogHeader description={labels.deleteDescription} title={labels.deleteTitle} />
-            {deleteFailure ? (
-              <p className="px-6 text-sm" role="alert">
-                {deleteFailure}
-              </p>
-            ) : null}
-            <AlertDialogFooter>
-              <AlertDialogCancel disabled={deletePending}>{labels.cancel}</AlertDialogCancel>
-              <AlertDialogAction
-                disabled={deletePending}
-                isLoading={deletePending}
-                onClick={confirmDelete}
-                variant="destructive"
-              >
-                {labels.confirmDelete}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        props.onDelete ? (
+          <AlertDialog
+            onOpenChange={({ open }) => {
+              setDeleteOpen(open);
+              if (!open) setDeleteFailure('');
+            }}
+            open={deleteOpen}
+            pending={deletePending}
+          >
+            <AlertDialogContent size="sm">
+              <AlertDialogHeader description={labels.deleteDescription} title={labels.deleteTitle} />
+              {deleteFailure ? (
+                <p className="px-6 text-sm" role="alert">
+                  {deleteFailure}
+                </p>
+              ) : null}
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={deletePending}>{labels.cancel}</AlertDialogCancel>
+                <AlertDialogAction
+                  disabled={deletePending}
+                  isLoading={deletePending}
+                  onClick={confirmDelete}
+                  variant="destructive"
+                >
+                  {labels.confirmDelete}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        ) : null
       ) : (
         <ReportDialog
           {...(props.maxDetails === undefined ? {} : { maxDetails: props.maxDetails })}

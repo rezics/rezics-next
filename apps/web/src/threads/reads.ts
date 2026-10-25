@@ -14,6 +14,7 @@ type Board = NonNullable<Awaited<ReturnType<BoardResource['get']>>['data']>;
 type Thread = NonNullable<Awaited<ReturnType<ThreadResource['get']>>['data']>;
 type ThreadPage = NonNullable<Awaited<ReturnType<BoardResource['threads']['get']>>['data']>;
 type PostPage = NonNullable<Awaited<ReturnType<ThreadResource['posts']['get']>>['data']>;
+export type ThreadPost = PostPage['posts'][number];
 
 type PageInput = { id: string; cursor?: string };
 

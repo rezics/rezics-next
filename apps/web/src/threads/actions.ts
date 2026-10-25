@@ -7,16 +7,21 @@ import { kernelClient } from '../kernel/client';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed.ts';
 import type { SessionEnv } from '../session/client.ts';
 import { prepareSession, viewerCredential } from '../session/request.ts';
+import { erasePostRequest, revisePostRequest } from './post-writes';
 
 const licence = 'LicenseRef-rezics-terms';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-type FailureReason = 'closed' | 'forbidden' | 'invalid' | 'rate-limited' | 'unavailable';
+type FailureReason = 'closed' | 'forbidden' | 'not-found' | 'conflict' | 'invalid' | 'rate-limited' | 'unavailable';
 export type WriteFailure = { ok: false; reason: FailureReason; retryAfter?: number };
 export type ThreadResource = ReturnType<KernelClient['threads']>;
+export type PostResource = ReturnType<KernelClient['posts']>;
 export type ThreadCreated = NonNullable<Awaited<ReturnType<KernelClient['threads']['post']>>['data']>;
 export type PostCreated = NonNullable<Awaited<ReturnType<ThreadResource['posts']['post']>>['data']>;
 export type CreatedPost = PostCreated['post'];
+export type CurrentPost = NonNullable<Awaited<ReturnType<PostResource['get']>>['data']>['post'];
+export type RevisedPost = NonNullable<Awaited<ReturnType<PostResource['revisions']['post']>>['data']>['post'];
+export type EditFailure = WriteFailure | { ok: false; reason: 'stale'; currentPost?: CurrentPost };
 
 function validateMediaIds(input: object): string[] | undefined {
   if (!('mediaIds' in input) || input.mediaIds === undefined) return undefined;
@@ -86,6 +91,8 @@ function parseRetryAfter(value: unknown): number | undefined {
 function refusal(status: number, headers: HeadersInit | undefined, body?: unknown): WriteFailure {
   if (isPlatformClosedProblem(status, body)) return { ok: false, reason: 'closed' };
   if (status === 403 || status === 401) return { ok: false, reason: 'forbidden' };
+  if (status === 404) return { ok: false, reason: 'not-found' };
+  if (status === 409) return { ok: false, reason: 'conflict' };
   if (status === 400 || status === 413 || status === 422) return { ok: false, reason: 'invalid' };
   if (status === 429) {
     const retryAfter = parseRetryAfter(new Headers(headers).get('retry-after'));
@@ -165,4 +172,63 @@ export const replyToThread = createServerFn({ method: 'POST' })
       if (isPlatformClosedError(error)) return { ok: false, reason: 'closed' };
       return { ok: false, reason: 'unavailable' };
     }
+  });
+
+function validatePostId(input: unknown): { postId: string } {
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    !('postId' in input) ||
+    typeof input.postId !== 'string' ||
+    !input.postId ||
+    input.postId.length > 128
+  )
+    throw new Error('Invalid post id');
+  return { postId: input.postId };
+}
+
+function validateEdit(input: unknown): {
+  postId: string;
+  revisionId: string;
+  body: DocumentSnapshot;
+  idempotencyKey: string;
+  mediaIds?: string[];
+} {
+  const draft = validateDraft(input);
+  const postId = validatePostId(input).postId;
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    !('revisionId' in input) ||
+    typeof input.revisionId !== 'string' ||
+    !input.revisionId ||
+    input.revisionId.length > 128
+  )
+    throw new Error('Invalid post revision');
+  return { ...draft, postId, revisionId: input.revisionId };
+}
+
+export const revisePost = createServerFn({ method: 'POST' })
+  .validator(validateEdit)
+  .handler(async ({ data }): Promise<{ ok: true; post: RevisedPost } | EditFailure> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    return revisePostRequest(data, getRequest(), env as Partial<SessionEnv>, kernelClient(), refusal);
+  });
+
+export const erasePost = createServerFn({ method: 'POST' })
+  .validator((input: unknown) => {
+    const { postId } = validatePostId(input);
+    if (
+      !input ||
+      typeof input !== 'object' ||
+      !('idempotencyKey' in input) ||
+      typeof input.idempotencyKey !== 'string' ||
+      !uuid.test(input.idempotencyKey)
+    )
+      throw new Error('Invalid post deletion');
+    return { postId, idempotencyKey: input.idempotencyKey };
+  })
+  .handler(async ({ data }): Promise<{ ok: true } | WriteFailure> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    return erasePostRequest(data, getRequest(), env as Partial<SessionEnv>, kernelClient(), refusal);
   });

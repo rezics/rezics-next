@@ -4,7 +4,7 @@ import { Button } from '@rezics/ui/button';
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import type { WriteFailure } from './actions';
+import type { CurrentPost, EditFailure, RevisedPost, WriteFailure } from './actions';
 import { imageSources, replyImageLimit, uploadReplyImage, UploadRefusal } from './upload';
 
 type WriteResult<T> = { ok: true; value: T } | WriteFailure;
@@ -304,6 +304,188 @@ export function PostComposer<T>({
       <Button className="mt-5" type="submit" form={formId} disabled={!ready || submitting || pendingUploads > 0}>
         {m.thread_write_send()}
       </Button>
+    </div>
+  );
+}
+
+export function postEditFailureText(failure: EditFailure): string {
+  switch (failure.reason) {
+    case 'closed':
+      return m.thread_write_closed();
+    case 'forbidden':
+      return m.thread_edit_forbidden();
+    case 'not-found':
+      return m.thread_edit_not_found();
+    case 'conflict':
+      return m.thread_edit_conflict();
+    case 'invalid':
+      return m.thread_edit_invalid();
+    case 'rate-limited':
+      return m.thread_edit_rate_limited({ seconds: failure.retryAfter ?? 1 });
+    case 'stale':
+      return m.thread_edit_stale();
+    default:
+      return m.thread_edit_unavailable();
+  }
+}
+
+export function InlinePostEditor({
+  initialBody,
+  revisionId: initialRevisionId,
+  idempotencyKey,
+  containerId,
+  onSubmit,
+  onCancel,
+  onSuccess,
+}: {
+  initialBody: DocumentSnapshot;
+  revisionId: string;
+  idempotencyKey: string;
+  containerId: string;
+  onSubmit: (input: {
+    body: DocumentSnapshot;
+    revisionId: string;
+    idempotencyKey: string;
+    mediaIds: string[];
+  }) => Promise<{ ok: true; post: RevisedPost } | EditFailure>;
+  onCancel: () => void;
+  onSuccess: (post: RevisedPost) => void;
+}) {
+  const locale = getLocale();
+  const labels = useMemo(() => editorLabels(), [locale]);
+  const [body, setBody] = useState(initialBody);
+  const bodyRef = useRef(body);
+  const [revisionId, setRevisionId] = useState(initialRevisionId);
+  const [failure, setFailure] = useState<EditFailure | null>(null);
+  const [uploadNotice, setUploadNotice] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [pendingUploads, setPendingUploads] = useState(0);
+  const pendingRef = useRef(0);
+  const refusalRef = useRef<UploadRefusal | null>(null);
+  const ready = hasDocumentContent(body);
+
+  function updateBody(next: DocumentSnapshot) {
+    bodyRef.current = next;
+    setBody(next);
+  }
+
+  function captureEditorInput(event: FormEvent<HTMLDivElement>) {
+    const target = event.target;
+    if (!(target instanceof HTMLElement) || target.getAttribute('contenteditable') !== 'true') return;
+    const next = fromPlainText(target.innerText, 'blocks');
+    bodyRef.current = next;
+    setBody(next);
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (pendingRef.current > 0 || !hasDocumentContent(bodyRef.current) || submitting) return;
+    const mediaIds = imageSources(bodyRef.current);
+    if (mediaIds.length > replyImageLimit) {
+      setUploadNotice(m.editor_image_limit());
+      return;
+    }
+    setSubmitting(true);
+    setFailure(null);
+    try {
+      const result = await onSubmit({ body: bodyRef.current, revisionId, idempotencyKey, mediaIds });
+      if (!result.ok) {
+        setFailure(result);
+        return;
+      }
+      onSuccess(result.post);
+    } catch {
+      setFailure({ ok: false, reason: 'unavailable' });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function loadCurrentVersion() {
+    if (!failure || failure.reason !== 'stale' || !failure.currentPost) return;
+    const current = failure.currentPost as CurrentPost;
+    if (current.body === null) {
+      setFailure({ ok: false, reason: 'not-found' });
+      return;
+    }
+    bodyRef.current = current.body;
+    setBody(current.body);
+    setRevisionId(current.revisionId);
+    setFailure(null);
+  }
+
+  const upload = async (file: File, signal: AbortSignal) => {
+    refusalRef.current = null;
+    try {
+      return await uploadReplyImage(containerId, file, signal);
+    } catch (error) {
+      if (error instanceof UploadRefusal) refusalRef.current = error;
+      throw error;
+    }
+  };
+
+  function handleUploadState(state: UploadState, count: number) {
+    pendingRef.current = count;
+    setPendingUploads(count);
+    if (state === 'pending') setUploadNotice(null);
+    if (state === 'failed') setUploadNotice(uploadRefusalText(refusalRef.current ?? new UploadRefusal('unavailable')));
+  }
+
+  return (
+    <div
+      className="space-y-4 rounded-xl border border-border/70 bg-card p-5"
+      onInputCapture={captureEditorInput}
+      onKeyDownCapture={(event) => {
+        if (event.key === 'Escape' && !submitting) {
+          event.preventDefault();
+          onCancel();
+        }
+      }}
+    >
+      <form className="space-y-4" onSubmit={submit}>
+        <p className="text-sm font-medium">{m.thread_reply_body_label()}</p>
+        {submitting ? (
+          <p
+            className="min-h-32 rounded-xl border border-border/60 bg-background px-4 py-3 text-sm text-muted-foreground"
+            role="status"
+          >
+            {m.thread_edit_saving()}
+          </p>
+        ) : (
+          <RichTextEditor
+            value={body}
+            onChange={updateBody}
+            label={m.thread_reply_body_label()}
+            labels={labels}
+            className="thread-post-editor"
+            upload={upload}
+            onUploadState={handleUploadState}
+          />
+        )}
+        {failure ? (
+          <div className="space-y-3" role="alert">
+            <p>{postEditFailureText(failure)}</p>
+            {failure.reason === 'stale' && failure.currentPost ? (
+              <Button type="button" variant="outline" onClick={() => void loadCurrentVersion()}>
+                {m.thread_edit_load_current()}
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+        {uploadNotice ? (
+          <p className="text-sm" role="alert">
+            {uploadNotice}
+          </p>
+        ) : null}
+        <div className="flex flex-wrap gap-2">
+          <Button type="submit" disabled={!ready || submitting || pendingUploads > 0} isLoading={submitting}>
+            {m.thread_edit_save()}
+          </Button>
+          <Button type="button" variant="outline" disabled={submitting} onClick={onCancel}>
+            {m.thread_edit_cancel()}
+          </Button>
+        </div>
+      </form>
     </div>
   );
 }

@@ -387,6 +387,20 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
   script once per page and only after opening a dialog
 - **Growth check:** `tests/report-cost.test.ts`: `report submission keeps K/D/R/A fixed as stored reports and sessions grow`
 
+### Post edit
+
+- **Touches:** One `POST /v1/posts/<id>/revisions`/K after the session read; send the current revision in `If-Match`
+  and render the returned post. A stale head gets one `GET /v1/posts/<id>`/K so the author can choose to load it.
+- **Bound:** Exactly 1 K for a successful edit and at most 1 additional K after a 412; ≤1 D; 0 R/A; constant as
+  the thread's post count grows
+- **Growth check:** `tests/post-editing-cost.test.ts`: `post edits keep K/D/R/A fixed as post data grows`
+
+### Post delete
+
+- **Touches:** One `DELETE /v1/posts/<id>`/K after the session read; preserve the erased post's thread slot.
+- **Bound:** Exactly 1 K and ≤1 D; 0 R/A; constant as the thread's post count grows
+- **Growth check:** `tests/post-editing-cost.test.ts`: `post deletions keep K/D/R/A fixed as post data grows`
+
 ### Reply image
 
 - **Touches:** Per image, one site `POST /media`, one `PUT /media/<id>` and at most 32 `GET /media/<id>` state reads
