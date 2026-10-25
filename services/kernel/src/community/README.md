@@ -73,3 +73,28 @@ position counter.
 | Create Realm | One admission observation shared by Global parent, Space and Context checks; one host point read and unique slot probe, prepared Context evidence and one Context verification at T; two inserts, a creation proof and grant initialization in the Space partition (C) | O(1) rows and statements; O(log R) blocks, plus A                            | `growth-realm.test.ts`: create at 256, 2048 and 16384 other Realms           |
 | Update Realm | A on the Realm and one exact head read; a supplied Context adds its prepared evidence and point verification at T; one revision insert and head compare-and-set (C)                                                                                                    | O(1) rows and statements; O(log R) blocks, plus A                            | `growth-realm.test.ts`: update a fixed probe at the same scales              |
 | Read Realm   | One exact head read during public eligibility verification; protected reads require A's grant branch                                                                                                                                                                   | O(1) domain rows and statements; O(log R) blocks, plus A for protected reads | `growth-realm.test.ts`: public and protected fixed probes at the same scales |
+
+A Realm publishes subjects into one slot per subject. The record history is append-only and the head
+names the current record. `publish`, `withdraw` and `reject` require `realm:publish` on that Realm.
+The action is not mounted on the Realm role template; the caller grants it to a moderator. Publishing
+confers no ownership and writes no access grant, resource initialization or semantic row on the subject
+or the Global Context.
+
+The anchor admits the actor once, then at T reads the active Realm and requires the subject to exist
+and pass `subjectReadEligibility`. An empty slot takes no `expectedHead`. An occupied slot moves only
+from that head. Withdraw and reject append a record and move the same head, so the slot leaves the
+adopted keyset in the transaction that writes it.
+
+`subject_revision_id` is null. The subject point reads at T (`subject-public-evidence.sql` and
+`subject-exists.sql`) expose no revision. `readSubject` exposes a monotonic integer `revision`, not a
+revision id.
+
+`listPublications` seeks the Realm's adopted heads. Every returned item passes final disclosure:
+`realm:read` for the Realm, including the public floor or a grant when the Realm is protected, and
+`subjectReadEligibility` for the subject at one snapshot T. `readPublication` returns one adopted head
+under those same checks. A protected Realm that the actor cannot read is indistinguishable from absence.
+
+| Operation                   | Touches                                                                                                                                            | Bound                                          | Growth check                                                                                                 |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Publish, withdraw or reject | One admission observation, one Realm point read and one subject point read at T, then one record insert and one head upsert in the Realm partition | O(1) rows, O(log R) blocks, plus A             | `growth-publication.test.ts`: a fixed probe at 256, 2048 and 16384 publications on other Realms and subjects |
+| List or read publications   | One keyset seek of L adopted heads plus final disclosure of the Realm and each subject; no count or offset                                         | O(L * (conditions + chain)); O(1) for one head | `growth-publication.test.ts`: the probe Realm and page stay fixed at the same scales                         |

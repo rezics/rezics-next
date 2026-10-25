@@ -24,6 +24,36 @@ CREATE SCHEMA community;
 
 
 --
+-- Name: guard_publication(); Type: FUNCTION; Schema: community; Owner: -
+--
+
+CREATE FUNCTION community.guard_publication() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RAISE EXCEPTION 'Publication records are append-only' USING ERRCODE = '23514';
+END;
+$$;
+
+
+--
+-- Name: guard_publication_head(); Type: FUNCTION; Schema: community; Owner: -
+--
+
+CREATE FUNCTION community.guard_publication_head() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF ROW(NEW.route, NEW.realm_id, NEW.subject_id)
+     IS DISTINCT FROM ROW(OLD.route, OLD.realm_id, OLD.subject_id) THEN
+    RAISE EXCEPTION 'Publication slot identity is immutable' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: guard_realm(); Type: FUNCTION; Schema: community; Owner: -
 --
 
@@ -86,6 +116,47 @@ $$;
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
+
+--
+-- Name: publication; Type: TABLE; Schema: community; Owner: -
+--
+
+CREATE TABLE community.publication (
+    route integer NOT NULL,
+    publication_id uuid NOT NULL,
+    realm_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    verdict text NOT NULL,
+    predecessor uuid,
+    subject_revision_id uuid,
+    actor uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT publication_check CHECK ((predecessor <> publication_id)),
+    CONSTRAINT publication_check1 CHECK ((route = ((get_byte(uuid_send(realm_id), 10) * 256) + get_byte(uuid_send(realm_id), 11)))),
+    CONSTRAINT publication_check2 CHECK ((route = ((get_byte(uuid_send(publication_id), 10) * 256) + get_byte(uuid_send(publication_id), 11)))),
+    CONSTRAINT publication_check3 CHECK ((route = ((get_byte(uuid_send(predecessor), 10) * 256) + get_byte(uuid_send(predecessor), 11)))),
+    CONSTRAINT publication_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT publication_verdict_check CHECK ((verdict = ANY (ARRAY['adopt'::text, 'reject'::text, 'withdraw'::text])))
+);
+
+
+--
+-- Name: publication_head; Type: TABLE; Schema: community; Owner: -
+--
+
+CREATE TABLE community.publication_head (
+    route integer NOT NULL,
+    realm_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    publication_id uuid NOT NULL,
+    verdict text NOT NULL,
+    published_at timestamp with time zone NOT NULL,
+    CONSTRAINT publication_head_check CHECK ((route = ((get_byte(uuid_send(realm_id), 10) * 256) + get_byte(uuid_send(realm_id), 11)))),
+    CONSTRAINT publication_head_check1 CHECK ((route = ((get_byte(uuid_send(publication_id), 10) * 256) + get_byte(uuid_send(publication_id), 11)))),
+    CONSTRAINT publication_head_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT publication_head_verdict_check CHECK ((verdict = ANY (ARRAY['adopt'::text, 'reject'::text, 'withdraw'::text])))
+);
+
 
 --
 -- Name: realm; Type: TABLE; Schema: community; Owner: -
@@ -179,6 +250,30 @@ CREATE TABLE community.space_revision (
 
 
 --
+-- Name: publication_head publication_head_pkey; Type: CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.publication_head
+    ADD CONSTRAINT publication_head_pkey PRIMARY KEY (route, realm_id, subject_id);
+
+
+--
+-- Name: publication publication_pkey; Type: CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.publication
+    ADD CONSTRAINT publication_pkey PRIMARY KEY (route, publication_id);
+
+
+--
+-- Name: publication publication_route_realm_id_publication_id_key; Type: CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.publication
+    ADD CONSTRAINT publication_route_realm_id_publication_id_key UNIQUE (route, realm_id, publication_id);
+
+
+--
 -- Name: realm realm_pkey; Type: CONSTRAINT; Schema: community; Owner: -
 --
 
@@ -243,6 +338,27 @@ ALTER TABLE ONLY community.space_revision
 
 
 --
+-- Name: publication_head_adopted_page; Type: INDEX; Schema: community; Owner: -
+--
+
+CREATE INDEX publication_head_adopted_page ON community.publication_head USING btree (route, realm_id, published_at DESC, subject_id DESC) WHERE (verdict = 'adopt'::text);
+
+
+--
+-- Name: publication_head publication_head_identity; Type: TRIGGER; Schema: community; Owner: -
+--
+
+CREATE TRIGGER publication_head_identity BEFORE UPDATE ON community.publication_head FOR EACH ROW EXECUTE FUNCTION community.guard_publication_head();
+
+
+--
+-- Name: publication publication_immutable; Type: TRIGGER; Schema: community; Owner: -
+--
+
+CREATE TRIGGER publication_immutable BEFORE DELETE OR UPDATE ON community.publication FOR EACH ROW EXECUTE FUNCTION community.guard_publication();
+
+
+--
 -- Name: realm realm_identity; Type: TRIGGER; Schema: community; Owner: -
 --
 
@@ -268,6 +384,38 @@ CREATE TRIGGER space_identity BEFORE UPDATE ON community.space FOR EACH ROW EXEC
 --
 
 CREATE TRIGGER space_revision_immutable BEFORE DELETE OR UPDATE ON community.space_revision FOR EACH ROW EXECUTE FUNCTION community.guard_space_revision();
+
+
+--
+-- Name: publication_head publication_head_route_publication_id_fkey; Type: FK CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.publication_head
+    ADD CONSTRAINT publication_head_route_publication_id_fkey FOREIGN KEY (route, publication_id) REFERENCES community.publication(route, publication_id);
+
+
+--
+-- Name: publication_head publication_head_route_realm_id_fkey; Type: FK CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.publication_head
+    ADD CONSTRAINT publication_head_route_realm_id_fkey FOREIGN KEY (route, realm_id) REFERENCES community.realm(route, realm_id);
+
+
+--
+-- Name: publication publication_route_realm_id_fkey; Type: FK CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.publication
+    ADD CONSTRAINT publication_route_realm_id_fkey FOREIGN KEY (route, realm_id) REFERENCES community.realm(route, realm_id);
+
+
+--
+-- Name: publication publication_route_realm_id_predecessor_fkey; Type: FK CONSTRAINT; Schema: community; Owner: -
+--
+
+ALTER TABLE ONLY community.publication
+    ADD CONSTRAINT publication_route_realm_id_predecessor_fkey FOREIGN KEY (route, realm_id, predecessor) REFERENCES community.publication(route, realm_id, publication_id);
 
 
 --
