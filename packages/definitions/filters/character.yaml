@@ -1,0 +1,33 @@
+all:
+  labels:
+    en: All characters
+    zh-Hant: 全部角色
+    zh-Hans: 所有角色
+    ja: すべてのキャラクター
+    ko: 모든 캐릭터
+    de: Alle Charaktere
+    fr: Tous les personnages
+    es: Todos los personajes
+  filter:
+    type:
+      in:
+        - wd:Q95074
+before-2000:
+  labels:
+    en: Characters born before 2000
+    zh-Hant: 2000 年前出生的角色
+    zh-Hans: 2000年以前出生的角色
+    ja: 2000年より前に生まれたキャラクター
+    ko: 2000년 이전에 태어난 캐릭터
+    de: Vor 2000 geborene Charaktere
+    fr: Personnages nés avant 2000
+    es: Personajes nacidos antes de 2000
+  filter:
+    and:
+      - type:
+          in:
+            - wd:Q95074
+      - statement:
+          property: schema:birthDate
+          range:
+            lte: 1999

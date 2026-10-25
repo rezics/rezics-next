@@ -39,6 +39,25 @@
                   }
                 },
                 {
+                  "type": "TypeList",
+                  "props": {
+                    "id": "works",
+                    "title": {
+                      "en": "All recipes",
+                      "zh-Hant": "全部食譜",
+                      "zh-Hans": "所有食谱",
+                      "ja": "すべてのレシピ",
+                      "ko": "모든 레시피",
+                      "de": "Alle Rezepte",
+                      "fr": "Toutes les recettes",
+                      "es": "Todas las recetas"
+                    },
+                    "types": ["schema:Recipe"],
+                    "sort": "name",
+                    "limit": 24
+                  }
+                },
+                {
                   "type": "Slot",
                   "props": {
                     "id": "hero",

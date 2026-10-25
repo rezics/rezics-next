@@ -39,6 +39,25 @@
                   }
                 },
                 {
+                  "type": "TypeList",
+                  "props": {
+                    "id": "works",
+                    "title": {
+                      "en": "All anime",
+                      "zh-Hant": "全部動畫",
+                      "zh-Hans": "所有动画",
+                      "ja": "すべてのアニメ",
+                      "ko": "모든 애니메이션",
+                      "de": "Alle Anime",
+                      "fr": "Tous les anime",
+                      "es": "Todos los anime"
+                    },
+                    "types": ["schema:Movie", "schema:TVSeries"],
+                    "sort": "name",
+                    "limit": 24
+                  }
+                },
+                {
                   "type": "Slot",
                   "props": {
                     "id": "hero",

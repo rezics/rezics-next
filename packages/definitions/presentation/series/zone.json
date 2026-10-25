@@ -1,0 +1,232 @@
+{
+  "labels": {
+    "en": "Series",
+    "zh-Hant": "系列",
+    "zh-Hans": "系列",
+    "ja": "シリーズ",
+    "ko": "시리즈",
+    "de": "Serien",
+    "fr": "Séries",
+    "es": "Series"
+  },
+  "pages": [
+    {
+      "route": "",
+      "document": {
+        "root": {
+          "props": {}
+        },
+        "content": [
+          {
+            "type": "Stack",
+            "props": {
+              "id": "page",
+              "gap": "md",
+              "children": [
+                {
+                  "type": "Heading",
+                  "props": {
+                    "id": "title",
+                    "text": "Series",
+                    "level": 2
+                  }
+                },
+                {
+                  "type": "Text",
+                  "props": {
+                    "id": "intro",
+                    "text": "A starting page for series of creative works and book series."
+                  }
+                },
+                {
+                  "type": "TypeList",
+                  "props": {
+                    "id": "works",
+                    "title": {
+                      "en": "All series",
+                      "zh-Hant": "全部系列",
+                      "zh-Hans": "所有系列",
+                      "ja": "すべてのシリーズ",
+                      "ko": "모든 시리즈",
+                      "de": "Alle Serien",
+                      "fr": "Toutes les séries",
+                      "es": "Todas las series"
+                    },
+                    "types": ["wd:Q7725310", "schema:BookSeries"],
+                    "sort": "name",
+                    "limit": 24
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "hero",
+                    "name": "hero",
+                    "children": []
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "entity",
+                    "name": "entity",
+                    "children": []
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "aside",
+                    "name": "aside",
+                    "children": []
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "footer",
+                    "name": "footer",
+                    "children": []
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "route": "book-series",
+      "document": {
+        "root": {
+          "props": {}
+        },
+        "content": [
+          {
+            "type": "Stack",
+            "props": {
+              "id": "page",
+              "gap": "md",
+              "children": [
+                {
+                  "type": "Heading",
+                  "props": {
+                    "id": "title",
+                    "text": "Book series",
+                    "level": 2
+                  }
+                },
+                {
+                  "type": "Text",
+                  "props": {
+                    "id": "intro",
+                    "text": "Series of books, with membership recorded on each member work."
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "hero",
+                    "name": "hero",
+                    "children": []
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "entity",
+                    "name": "entity",
+                    "children": []
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "aside",
+                    "name": "aside",
+                    "children": []
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "footer",
+                    "name": "footer",
+                    "children": []
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "route": "creative-works",
+      "document": {
+        "root": {
+          "props": {}
+        },
+        "content": [
+          {
+            "type": "Stack",
+            "props": {
+              "id": "page",
+              "gap": "md",
+              "children": [
+                {
+                  "type": "Heading",
+                  "props": {
+                    "id": "title",
+                    "text": "Creative works",
+                    "level": 2
+                  }
+                },
+                {
+                  "type": "Text",
+                  "props": {
+                    "id": "intro",
+                    "text": "Series of creative works."
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "hero",
+                    "name": "hero",
+                    "children": []
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "entity",
+                    "name": "entity",
+                    "children": []
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "aside",
+                    "name": "aside",
+                    "children": []
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "footer",
+                    "name": "footer",
+                    "children": []
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "scope": ["series/all", "series/creative-works", "series/book-series", "series/before-2000"]
+}

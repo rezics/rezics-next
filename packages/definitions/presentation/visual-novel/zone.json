@@ -39,6 +39,25 @@
                   }
                 },
                 {
+                  "type": "TypeList",
+                  "props": {
+                    "id": "works",
+                    "title": {
+                      "en": "All visual novels",
+                      "zh-Hant": "全部視覺小說",
+                      "zh-Hans": "所有视觉小说",
+                      "ja": "すべてのビジュアルノベル",
+                      "ko": "모든 비주얼 노벨",
+                      "de": "Alle Visual Novels",
+                      "fr": "Tous les visual novels",
+                      "es": "Todas las novelas visuales"
+                    },
+                    "types": ["wd:Q689445"],
+                    "sort": "name",
+                    "limit": 24
+                  }
+                },
+                {
                   "type": "Slot",
                   "props": {
                     "id": "hero",

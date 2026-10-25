@@ -1,0 +1,166 @@
+{
+  "labels": {
+    "en": "Manga",
+    "zh-Hant": "漫畫",
+    "zh-Hans": "漫画",
+    "ja": "漫画",
+    "ko": "만화",
+    "de": "Manga",
+    "fr": "Manga",
+    "es": "Manga"
+  },
+  "pages": [
+    {
+      "route": "",
+      "document": {
+        "root": {
+          "props": {}
+        },
+        "content": [
+          {
+            "type": "Stack",
+            "props": {
+              "id": "page",
+              "gap": "md",
+              "children": [
+                {
+                  "type": "Heading",
+                  "props": {
+                    "id": "title",
+                    "text": "Manga",
+                    "level": 2
+                  }
+                },
+                {
+                  "type": "Text",
+                  "props": {
+                    "id": "intro",
+                    "text": "A starting page for manga works. Volumes have their own page."
+                  }
+                },
+                {
+                  "type": "TypeList",
+                  "props": {
+                    "id": "works",
+                    "title": {
+                      "en": "All manga",
+                      "zh-Hant": "全部漫畫",
+                      "zh-Hans": "所有漫画",
+                      "ja": "すべての漫画",
+                      "ko": "모든 만화",
+                      "de": "Alle Manga",
+                      "fr": "Tous les mangas",
+                      "es": "Todos los mangas"
+                    },
+                    "types": ["schema:ComicSeries"],
+                    "sort": "name",
+                    "limit": 24
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "hero",
+                    "name": "hero",
+                    "children": []
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "entity",
+                    "name": "entity",
+                    "children": []
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "aside",
+                    "name": "aside",
+                    "children": []
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "footer",
+                    "name": "footer",
+                    "children": []
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "route": "volumes",
+      "document": {
+        "root": {
+          "props": {}
+        },
+        "content": [
+          {
+            "type": "Stack",
+            "props": {
+              "id": "page",
+              "gap": "md",
+              "children": [
+                {
+                  "type": "Heading",
+                  "props": {
+                    "id": "title",
+                    "text": "Volumes",
+                    "level": 2
+                  }
+                },
+                {
+                  "type": "Text",
+                  "props": {
+                    "id": "intro",
+                    "text": "Published volumes of manga works."
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "hero",
+                    "name": "hero",
+                    "children": []
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "entity",
+                    "name": "entity",
+                    "children": []
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "aside",
+                    "name": "aside",
+                    "children": []
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "footer",
+                    "name": "footer",
+                    "children": []
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "scope": ["manga/all", "manga/volumes", "manga/before-2000"]
+}

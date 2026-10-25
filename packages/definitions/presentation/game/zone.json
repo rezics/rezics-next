@@ -1,0 +1,232 @@
+{
+  "labels": {
+    "en": "Video games",
+    "zh-Hant": "電子遊戲",
+    "zh-Hans": "电子游戏",
+    "ja": "コンピュータゲーム",
+    "ko": "비디오 게임",
+    "de": "Computerspiele",
+    "fr": "Jeux vidéo",
+    "es": "Videojuegos"
+  },
+  "pages": [
+    {
+      "route": "",
+      "document": {
+        "root": {
+          "props": {}
+        },
+        "content": [
+          {
+            "type": "Stack",
+            "props": {
+              "id": "page",
+              "gap": "md",
+              "children": [
+                {
+                  "type": "Heading",
+                  "props": {
+                    "id": "title",
+                    "text": "Video games",
+                    "level": 2
+                  }
+                },
+                {
+                  "type": "Text",
+                  "props": {
+                    "id": "intro",
+                    "text": "A starting page for video games. Releases and add-ons have their own pages."
+                  }
+                },
+                {
+                  "type": "TypeList",
+                  "props": {
+                    "id": "works",
+                    "title": {
+                      "en": "All video games",
+                      "zh-Hant": "全部電子遊戲",
+                      "zh-Hans": "所有电子游戏",
+                      "ja": "すべてのコンピュータゲーム",
+                      "ko": "모든 비디오 게임",
+                      "de": "Alle Computerspiele",
+                      "fr": "Tous les jeux vidéo",
+                      "es": "Todos los videojuegos"
+                    },
+                    "types": ["schema:VideoGame"],
+                    "sort": "name",
+                    "limit": 24
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "hero",
+                    "name": "hero",
+                    "children": []
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "entity",
+                    "name": "entity",
+                    "children": []
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "aside",
+                    "name": "aside",
+                    "children": []
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "footer",
+                    "name": "footer",
+                    "children": []
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "route": "add-ons",
+      "document": {
+        "root": {
+          "props": {}
+        },
+        "content": [
+          {
+            "type": "Stack",
+            "props": {
+              "id": "page",
+              "gap": "md",
+              "children": [
+                {
+                  "type": "Heading",
+                  "props": {
+                    "id": "title",
+                    "text": "Add-ons",
+                    "level": 2
+                  }
+                },
+                {
+                  "type": "Text",
+                  "props": {
+                    "id": "intro",
+                    "text": "Independently referable expansions and add-ons."
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "hero",
+                    "name": "hero",
+                    "children": []
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "entity",
+                    "name": "entity",
+                    "children": []
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "aside",
+                    "name": "aside",
+                    "children": []
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "footer",
+                    "name": "footer",
+                    "children": []
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "route": "releases",
+      "document": {
+        "root": {
+          "props": {}
+        },
+        "content": [
+          {
+            "type": "Stack",
+            "props": {
+              "id": "page",
+              "gap": "md",
+              "children": [
+                {
+                  "type": "Heading",
+                  "props": {
+                    "id": "title",
+                    "text": "Releases",
+                    "level": 2
+                  }
+                },
+                {
+                  "type": "Text",
+                  "props": {
+                    "id": "intro",
+                    "text": "Releases of video games by platform, language and publication date."
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "hero",
+                    "name": "hero",
+                    "children": []
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "entity",
+                    "name": "entity",
+                    "children": []
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "aside",
+                    "name": "aside",
+                    "children": []
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "footer",
+                    "name": "footer",
+                    "children": []
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "scope": ["game/all", "game/releases", "game/add-ons", "game/before-2000"]
+}

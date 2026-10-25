@@ -1,0 +1,61 @@
+all:
+  labels:
+    en: All video games
+    zh-Hant: 全部電子遊戲
+    zh-Hans: 所有电子游戏
+    ja: すべてのコンピュータゲーム
+    ko: 모든 비디오 게임
+    de: Alle Computerspiele
+    fr: Tous les jeux vidéo
+    es: Todos los videojuegos
+  filter:
+    type:
+      in:
+        - schema:VideoGame
+releases:
+  labels:
+    en: All game releases
+    zh-Hant: 全部遊戲發行
+    zh-Hans: 所有游戏发行版
+    ja: すべてのゲームのリリース
+    ko: 모든 게임 출시 버전
+    de: Alle Computerspiel-Veröffentlichungen
+    fr: Toutes les parutions de jeux vidéo
+    es: Todas las publicaciones de videojuegos
+  filter:
+    type:
+      in:
+        - wd:Q20631656
+add-ons:
+  labels:
+    en: All add-ons
+    zh-Hant: 全部資料片
+    zh-Hans: 所有资料片
+    ja: すべての拡張パック
+    ko: 모든 확장팩
+    de: Alle Computerspiel-Erweiterungen
+    fr: Toutes les extensions de jeux vidéo
+    es: Todas las expansiones de videojuegos
+  filter:
+    type:
+      in:
+        - wd:Q209163
+before-2000:
+  labels:
+    en: Games released before 2000
+    zh-Hant: 2000 年前推出的遊戲
+    zh-Hans: 2000年以前推出的游戏
+    ja: 2000年より前に公開されたゲーム
+    ko: 2000년 이전에 공개된 게임
+    de: Vor 2000 erschienene Computerspiele
+    fr: Jeux vidéo sortis avant 2000
+    es: Videojuegos lanzados antes de 2000
+  filter:
+    and:
+      - type:
+          in:
+            - schema:VideoGame
+      - statement:
+          property: schema:datePublished
+          range:
+            lte: 1999

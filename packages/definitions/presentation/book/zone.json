@@ -39,6 +39,25 @@
                   }
                 },
                 {
+                  "type": "TypeList",
+                  "props": {
+                    "id": "works",
+                    "title": {
+                      "en": "All books",
+                      "zh-Hant": "全部書籍",
+                      "zh-Hans": "全部图书",
+                      "ja": "すべての書籍",
+                      "ko": "모든 도서",
+                      "de": "Alle Bücher",
+                      "fr": "Tous les livres",
+                      "es": "Todos los libros"
+                    },
+                    "types": ["schema:Book"],
+                    "sort": "name",
+                    "limit": 24
+                  }
+                },
+                {
                   "type": "Slot",
                   "props": {
                     "id": "hero",

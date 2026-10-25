@@ -1,0 +1,47 @@
+all:
+  labels:
+    en: All manga
+    zh-Hant: 全部漫畫
+    zh-Hans: 所有漫画
+    ja: すべての漫画
+    ko: 모든 만화
+    de: Alle Manga
+    fr: Tous les mangas
+    es: Todos los mangas
+  filter:
+    type:
+      in:
+        - schema:ComicSeries
+volumes:
+  labels:
+    en: All manga volumes
+    zh-Hant: 全部漫畫單行本
+    zh-Hans: 所有漫画单行本
+    ja: すべての漫画の単行本
+    ko: 모든 만화 단행본
+    de: Alle Mangabände
+    fr: Tous les volumes de manga
+    es: Todos los volúmenes de manga
+  filter:
+    type:
+      in:
+        - schema:PublicationVolume
+before-2000:
+  labels:
+    en: Manga published before 2000
+    zh-Hant: 2000 年前出版的漫畫
+    zh-Hans: 2000年以前出版的漫画
+    ja: 2000年より前に出版された漫画
+    ko: 2000년 이전에 출판된 만화
+    de: Vor 2000 erschienene Manga
+    fr: Mangas parus avant 2000
+    es: Mangas publicados antes de 2000
+  filter:
+    and:
+      - type:
+          in:
+            - schema:ComicSeries
+      - statement:
+          property: schema:datePublished
+          range:
+            lte: 1999

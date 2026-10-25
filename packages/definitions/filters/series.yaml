@@ -1,0 +1,62 @@
+all:
+  labels:
+    en: All series
+    zh-Hant: 全部系列
+    zh-Hans: 所有系列
+    ja: すべてのシリーズ
+    ko: 모든 시리즈
+    de: Alle Serien
+    fr: Toutes les séries
+    es: Todas las series
+  filter:
+    type:
+      in:
+        - wd:Q7725310
+        - schema:BookSeries
+creative-works:
+  labels:
+    en: All series of creative works
+    zh-Hant: 全部系列創意作品
+    zh-Hans: 所有系列创意作品
+    ja: すべての作品シリーズ
+    ko: 모든 창작 시리즈
+    de: Alle Serien von Werken
+    fr: Toutes les séries d'œuvres
+    es: Todas las series de obras creativas
+  filter:
+    type:
+      in:
+        - wd:Q7725310
+book-series:
+  labels:
+    en: All book series
+    zh-Hant: 全部叢書
+    zh-Hans: 所有丛书
+    ja: すべての叢書
+    ko: 모든 총서
+    de: Alle Buchreihen
+    fr: Toutes les séries de livres
+    es: Todas las series de libros
+  filter:
+    type:
+      in:
+        - schema:BookSeries
+before-2000:
+  labels:
+    en: Book series started before 2000
+    zh-Hant: 2000 年前開始的叢書
+    zh-Hans: 2000年以前开始的丛书
+    ja: 2000年より前に始まった叢書
+    ko: 2000년 이전에 시작된 총서
+    de: Vor 2000 begonnene Buchreihen
+    fr: Séries de livres commencées avant 2000
+    es: Series de libros iniciadas antes de 2000
+  filter:
+    and:
+      - type:
+          in:
+            - schema:BookSeries
+      - statement:
+          property: schema:startDate
+          range:
+            lte: 1999
