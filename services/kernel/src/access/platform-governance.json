@@ -11,6 +11,7 @@
     "definitions:activate",
     "context:create",
     "offer:create",
-    "payout_statement:mark_paid"
+    "payout_statement:mark_paid",
+    "space:create"
   ]
 }
