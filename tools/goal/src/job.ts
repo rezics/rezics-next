@@ -226,12 +226,15 @@ export class WorkerJob implements GateOutcomeSink {
       && (!attempt.driver || !sameProcess(attempt.driver)) && ownsRunLog(attempt.logPath));
     // One /proc scan for all candidates: a scan per candidate made every command cost attempts × processes.
     const live = adoptRunning || !candidates.length ? null : liveGroups();
+    // Adopted attempts are followed at once: followed in turn, one long-running worker held back every later settle.
+    const follows: Promise<void>[] = [];
     for (const candidate of candidates) {
       const ref = { taskId: candidate.taskId, attempt: candidate.attempt };
       if (live && candidate.process && live.has(candidate.process.group)) continue;
       let lease: DirectoryLease;
       try { lease = acquireDirectoryLease(join(this.tasks.settings.stateDirectory, 'leases', ref.taskId)); }
       catch (error) { if (error instanceof LeaseHeldError) continue; throw error; }
+      let followed = false;
       try {
         if (store.task(ref.taskId).currentAttempt !== ref.attempt) continue;
         const attempt = store.attempt(ref);
@@ -244,12 +247,17 @@ export class WorkerJob implements GateOutcomeSink {
           this.onAttemptExit(ref);
           continue;
         }
-        try {
-          if (attempt.process) await waitForProcessGroup(attempt.process);
-          await this.followAttempt({ attempt, exited: Promise.resolve({ code: null, signal: null }) });
-        } catch (error) { await this.endAsEnvironment(ref, error, true); }
-      } finally { lease.release(); }
+        followed = true;
+        follows.push((async () => {
+          try {
+            if (attempt.process) await waitForProcessGroup(attempt.process);
+            await this.followAttempt({ attempt, exited: Promise.resolve({ code: null, signal: null }) });
+          } catch (error) { await this.endAsEnvironment(ref, error, true); }
+          finally { lease.release(); }
+        })());
+      } finally { if (!followed) lease.release(); }
     }
+    await Promise.all(follows);
     await this.resumeRetryIntents();
   }
   reportPromotionEnvironment(taskId: string, failure: NonNullable<GateOutcome['firstFailure']>): void {

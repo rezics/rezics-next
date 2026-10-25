@@ -104,6 +104,40 @@ test('an attempt whose driver died while the worker runs is adopted and settled 
   }
 });
 
+test('a finished orphan settles while an adopted orphan before it is still running', async () => {
+  const h = harness(waitingWorker);
+  const releases: string[] = [];
+  const workers: Awaited<ReturnType<typeof h.tasks.retry>>[] = [];
+  try {
+    // Recovery visits attempts in task id order; the running one comes first, so following in turn would block.
+    const tasks = [h.tasks.dispatch(h.briefFile), h.tasks.dispatch(h.briefFile)].toSorted((a, b) => a.id.localeCompare(b.id));
+    const running = tasks[0]!, finished = tasks[1]!;
+    for (const task of [running, finished]) {
+      workers.push(await h.tasks.retry(task.id));
+      releases.push(join(task.worktree, '.worker-release'));
+      await waitForFile(join(task.worktree, '.worker-started'));
+    }
+    writeFileSync(releases[1]!, 'release'); await workers[1]!.exited;
+    for (const worker of workers) h.store.updateAttempt(worker.attempt, attempt => {
+      (attempt as typeof attempt & { driver?: ProcessIdentity }).driver = deadIdentity();
+    });
+    const landed: string[] = [];
+    const job = new WorkerJob(h.tasks, { enqueue: request => landed.push(request.taskId) }, { deliver() {} });
+    const adoption = job.recoverOrphans();
+    for (let wait = 0; wait < 100 && !landed.length; wait++) await Bun.sleep(50);
+
+    expect(landed).toEqual([finished.id]);
+    expect(h.store.task(running.id).state).toBe('running');
+    writeFileSync(releases[0]!, 'release');
+    await adoption;
+    expect(landed.toSorted()).toEqual([running.id, finished.id].toSorted());
+  } finally {
+    for (const release of releases) writeFileSync(release, 'release');
+    for (const worker of workers) await worker.exited;
+    h.dispose();
+  }
+});
+
 test('an exception in the driver ends the attempt as an environment failure delivered to the manager', async () => {
   const h = harness(), inbox: { kind: string; summary: string }[] = [];
   try {
