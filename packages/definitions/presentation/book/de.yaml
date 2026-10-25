@@ -1,0 +1,9 @@
+types:
+  schema:Book: Schrifttum
+  bf:Instance: Ausgabe oder Version
+properties:
+  schema:exampleOfWork: Ausgabe oder Übersetzung von
+  schema:isbn: ISBN-13
+  schema:publisher: Verlag
+  schema:numberOfPages: Anzahl der Seiten
+  schema:translator: Übersetzer

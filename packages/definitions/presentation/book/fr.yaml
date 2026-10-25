@@ -1,0 +1,9 @@
+types:
+  schema:Book: œuvre écrite
+  bf:Instance: version, édition ou traduction
+properties:
+  schema:exampleOfWork: édition ou traduction de
+  schema:isbn: ISBN-13
+  schema:publisher: publié par
+  schema:numberOfPages: nombre de pages
+  schema:translator: traducteur ou traductrice

@@ -4,14 +4,14 @@ types:
 properties:
   schema:url: URL
   schema:name: name
-  schema:sameAs: sameAs
+  schema:sameAs: exact match
   schema:birthDate: date of birth
   schema:deathDate: date of death
   schema:author: author
   schema:position: position
   schema:datePublished: publication date
   schema:version: version
-  schema:dateModified: dateModified
+  schema:dateModified: last update
   schema:inLanguage: language
   schema:abstract: abstract
   schema:image: image

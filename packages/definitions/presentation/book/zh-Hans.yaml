@@ -1,0 +1,9 @@
+types:
+  schema:Book: 书面作品
+  bf:Instance: 作品版本或翻译
+properties:
+  schema:exampleOfWork: 版本或翻译原作
+  schema:isbn: ISBN-13
+  schema:publisher: 出版者
+  schema:numberOfPages: 总页数
+  schema:translator: 译者

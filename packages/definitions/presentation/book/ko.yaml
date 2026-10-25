@@ -1,0 +1,9 @@
+types:
+  schema:Book: 저작물
+  bf:Instance: 판
+properties:
+  schema:exampleOfWork: 다음의 판 또는 번역본
+  schema:isbn: ISBN-13
+  schema:publisher: 발행 주체
+  schema:numberOfPages: 전체 쪽수
+  schema:translator: 번역가

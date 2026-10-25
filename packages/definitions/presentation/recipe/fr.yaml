@@ -1,0 +1,6 @@
+types:
+  schema:Recipe: recette de cuisine
+properties:
+  schema:recipeIngredient: ingrédient
+  schema:cookTime: temps de cuisson
+  schema:recipeYield: portions
