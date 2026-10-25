@@ -1,21 +1,16 @@
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import {
-  createAuthHost,
-  createNativeWorkflowProofPorts,
-  createProvisioningEvidenceVerifier,
-  type AuthService,
-} from '@rezics/auth';
+import { createAuthService, type AuthService } from '@rezics/auth';
+import type { MembershipWorkInput } from '@rezics/auth/membership-workflows';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
 import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
 import { readAccount } from '../../src/access/account-data.ts';
-import { createAuthBindings } from '../../src/access/auth-bindings.ts';
 import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { createAccess } from '../../src/access/index.ts';
-import { createLifecycleInternals, type LifecycleRequest } from '../../src/access/lifecycle.ts';
+import { createAccess as createPermissionAccess } from '../../src/access/permission.ts';
+import type { LifecycleRequest } from '../../src/access/lifecycle.ts';
 import { createAccountsWorkModule, enqueueMembership } from '../../src/access/membership-work.ts';
-import { createRegistrationProofBindings } from '../../src/access/registration-proof.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { recordResourceDenial } from '../../src/access/resource-denials.ts';
 import { createRealmMembership } from '../../src/community/membership.ts';
@@ -26,6 +21,7 @@ import { composeWork } from '../../src/work/registry.ts';
 import { runCommand, principalCommandIdentity } from '../../src/command/command.ts';
 import { accessCommandAuthorization } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 
 const issuer = 'https://realm-participation.auth.test';
@@ -41,21 +37,18 @@ let admin: Pool;
 let pool: Pool;
 let authPool: Pool;
 let authDatabaseName = '';
-let host: Awaited<ReturnType<typeof createAuthHost>>;
 let service: AuthService;
 let kernel: ReturnType<typeof createKernel>;
 let workClient: Awaited<ReturnType<typeof createWorkClient>>;
 let workRuntime: Awaited<ReturnType<typeof composeWork>>;
 let access: ReturnType<typeof createAccess>;
+let membershipAccess: ReturnType<typeof createPermissionAccess>;
 let membership: ReturnType<typeof createRealmMembership>;
+let roleReader: ReturnType<typeof createRealmMembership>['roleReader'] | undefined;
+let scopes: string[];
 let governance: Person;
-let owner: Person;
-let member: Person;
-let unrelated: Person;
-let contextAuthor: Person;
-let classificationContext: { id: string; kind: string; labels: Record<string, string> };
-let protectedRealm: Realm;
-let publicRealm: Realm;
+const peopleById = new Map<string, Person>();
+const provisioningApprovals = new Set<string>();
 
 type Person = { accountId: string; bearer: string };
 type Realm = {
@@ -101,14 +94,21 @@ async function issue(email: string, scope: string[]) {
 }
 
 async function personWithToken(name: string, scope: string[]): Promise<Person> {
+  const accountId = newId(0x3180);
   const email = `${name}-${crypto.randomUUID()}@realm.test`;
-  const result = await host.workflows.register({
-    key: `${name}-${crypto.randomUUID()}`,
-    handle: `${name}_${crypto.randomUUID().slice(0, 8)}`,
-    email,
-    password,
-  });
-  return { accountId: result.accountId, bearer: await issue(email, scope) };
+  await admin.query(
+    "INSERT INTO access.account (route, account_id, kind, state, transaction_id) VALUES ($1,$2,'actor','pending',$2)",
+    [routeOf(accountId), accountId],
+  );
+  provisioningApprovals.add(accountId);
+  await service.internal.provisionPassword({ authorization: accountId, email, password });
+  await admin.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
+    routeOf(accountId),
+    accountId,
+  ]);
+  const person = { accountId, bearer: await issue(email, scope) };
+  peopleById.set(accountId, person);
+  return person;
 }
 
 async function call(method: string, path: string, options: Call = {}) {
@@ -149,9 +149,9 @@ async function grant(accountId: string, actions: string[]) {
   expect(result.value).toEqual({ grant: body });
 }
 
-async function createSpace(title: string) {
+async function createSpace(actor: Person, title: string) {
   const result = await call('POST', '/v1/spaces', {
-    bearer: owner.bearer,
+    bearer: actor.bearer,
     key: crypto.randomUUID(),
     body: { title, summary: `${title} summary` },
   });
@@ -159,11 +159,11 @@ async function createSpace(title: string) {
   return result.value.space as { spaceId: string; headRevisionId: string };
 }
 
-async function createRealm(spaceId: string, visibility: 'public' | 'protected', title: string) {
+async function createRealm(actor: Person, spaceId: string, visibility: 'public' | 'protected', title: string) {
   const result = await call('POST', '/v1/realms', {
-    bearer: owner.bearer,
+    bearer: actor.bearer,
     key: crypto.randomUUID(),
-    body: { spaceId, title, summary: `${title} summary`, visibility, contextId: classificationContext.id },
+    body: { spaceId, title, summary: `${title} summary`, visibility, contextId: GLOBAL_CONTEXT },
   });
   expect(result.response.status).toBe(201);
   return (result.value as { realm: Realm }).realm;
@@ -181,19 +181,27 @@ async function lifecycleRequest(person: Person): Promise<LifecycleRequest> {
   return { actor, account, deadline: Date.now() + 30_000 };
 }
 
-async function joinMember(realmId: string) {
+async function authorizeMembership(reference: string, input: MembershipWorkInput) {
+  const accountId = /^authenticated-fixture\.(.+)$/.exec(reference)?.[1];
+  const person = accountId ? peopleById.get(accountId) : undefined;
+  if (!person || input.kind !== 'membership' || input.principal.kind !== 'realm')
+    throw new Error('No membership approval for this actor');
+  return lifecycleRequest(person);
+}
+
+async function joinMember(realmId: string, member: Person, authorizer: Person) {
   const handle = await enqueueMembership(workClient, `participation:${crypto.randomUUID()}`, {
     kind: 'membership',
     principal: { kind: 'realm', id: realmId },
     memberAccountId: member.accountId,
     role: 'member',
-    authorization: `authenticated-fixture.${owner.accountId}`,
+    authorization: `authenticated-fixture.${authorizer.accountId}`,
   });
   return handle.getResult();
 }
 
-async function writeRealmBan(resourceId: string, target: Person) {
-  const actor = await access.authenticate(owner.bearer, { pool, deadline: Date.now() + 30_000 });
+async function writeRealmBan(resourceId: string, target: Person, authorizer: Person) {
+  const actor = await access.authenticate(authorizer.bearer, { pool, deadline: Date.now() + 30_000 });
   const resource = { route: routeOf(resourceId)!, id: resourceId };
   const deadline = Date.now() + 30_000;
   const identity = principalCommandIdentity(actor);
@@ -238,7 +246,7 @@ beforeAll(async () => {
   db = await openGrowthDatabase(url);
   pool = db.pool;
   admin = db.admin;
-  pool.options.max = 1;
+  pool.options.max = 10;
   authDatabaseName = `realm_participation_auth_${process.pid}`;
   await admin.query(`CREATE DATABASE ${authDatabaseName}`);
   const authUrl = new URL(url);
@@ -256,7 +264,6 @@ beforeAll(async () => {
       'new-account': { write: { maximum: 100000, seconds: 86400 } },
     }),
   });
-  let roleReader: ReturnType<typeof createRealmMembership>['roleReader'] | undefined;
   kernel = createKernel({
     pool,
     routeKey,
@@ -275,118 +282,97 @@ beforeAll(async () => {
           return roleReader(client, input);
         },
       });
-      membership = createRealmMembership({ pool, access });
-      roleReader = membership.roleReader;
       return access;
     },
     writeRate: limiter,
   });
-  const scopes = [...actionCatalogue(kernel).keys()].filter((scope) => scope !== 'media:complete');
-  const proofs = createNativeWorkflowProofPorts({ database: authPool });
-  const registration = createRegistrationProofBindings({ pool, referenceKeys: tokens });
-  const provisioning = createProvisioningEvidenceVerifier({ database: authPool });
-  const internal = createLifecycleInternals({
-    pool,
-    routeKey,
-    provisioningEvidence: (evidence) => provisioning.resolve(evidence),
-    recoveryEvidence: async () => null,
+  scopes = [...actionCatalogue(kernel).keys()].filter((scope) => scope !== 'media:complete');
+  membershipAccess = createPermissionAccess({
+    actions: new Map(scopes.map((action) => [action, { anonymous: false }])),
+    accountEvidence: (_actor, context) => context.account,
+    realmRoleReader: (client, input) => {
+      if (!roleReader) return Promise.resolve(null);
+      return roleReader(client, input);
+    },
   });
-  const registrationPorts = {
-    ...internal,
-    async createPending(input: Parameters<typeof internal.createPending>[0]) {
-      const outcome = await internal.createPending(input);
-      const pair = { accountId: input.accountId, reservationId: input.reservationId };
-      if (!(await proofs.pendingReference(pair))) {
-        const reference = await registration.createProvisioningReference({ input, outcome });
-        if (!reference) throw new Error('Missing native registration reference');
-        await proofs.recordPending({ ...pair, reference });
-      }
-      return outcome;
-    },
-    async provisioningReference(input: { accountId: string; reservationId: string }) {
-      const reference = await proofs.pendingReference(input);
-      if (!reference) throw new Error('Missing persisted registration reference');
-      return reference;
-    },
-    provisioningEvidence: (input: { accountId: string; reservationId: string }) => proofs.provisioningEvidence(input),
-  };
-  host = await createAuthHost({
+  membership = createRealmMembership({ pool, access: membershipAccess });
+  roleReader = membership.roleReader;
+  service = await createAuthService({
     database: authPool,
-    systemDatabasePool: authPool,
     issuer,
     audience,
     secret: 'realm-participation-auth-persistent-secret-32bytes',
     signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
-    trustedAccess: createAuthBindings({
-      pool,
-      ...registration,
-      verifyPendingIdentity: registration.verifyNativePendingIdentity,
-    }),
-    access: registrationPorts,
-    stagingKey: new Uint8Array(32).fill(99),
-    maintenanceSchedule: '0 0 1 1 *',
-    executorId: 'realm-participation-executor',
-  });
-  service = host.service;
-  await service.internal.registerClient({ clientId: 'realm-participation-client', firstParty: true, scopes });
-  await host.start();
-  governance = await personWithToken('participation_governance', scopes);
-  owner = await personWithToken('participation_owner', scopes);
-  member = await personWithToken('participation_member', scopes);
-  unrelated = await personWithToken('participation_unrelated', scopes);
-  contextAuthor = await personWithToken('participation_context_author', scopes);
-  await bootstrapGovernance(pool, governance.accountId);
-  await grant(owner.accountId, ['realm:create', 'space:create']);
-  await grant(contextAuthor.accountId, ['context:create']);
-  const contextResult = await call('POST', '/v1/contexts', {
-    bearer: contextAuthor.bearer,
-    key: crypto.randomUUID(),
-    body: { labels: { en: 'Participation classification' } },
-  });
-  expect(contextResult.response.status).toBe(201);
-  classificationContext = (contextResult.value as { context: typeof classificationContext }).context;
-
-  const protectedSpace = await createSpace(`Protected participation host ${crypto.randomUUID()}`);
-  protectedRealm = await createRealm(
-    protectedSpace.spaceId,
-    'protected',
-    `Protected participation Realm ${crypto.randomUUID()}`,
-  );
-  const publicSpace = await createSpace(`Public participation host ${crypto.randomUUID()}`);
-  publicRealm = await createRealm(publicSpace.spaceId, 'public', `Public participation Realm ${crypto.randomUUID()}`);
-
-  const accountAccess = access;
-  if (!accountAccess) throw new Error('Kernel did not install production Access');
-  const realmPort = {
-    ...membership,
-    async authorize(reference: string) {
-      const accountId = /^authenticated-fixture\.(.+)$/.exec(reference)?.[1];
-      if (accountId !== owner.accountId) throw new Error('No membership approval for this actor');
-      return lifecycleRequest(owner);
+    trustedAccess: {
+      async readAccount(accountId) {
+        const account = await readAccount(admin, routeOf(accountId)!, accountId);
+        return (
+          account && {
+            accountId: account.accountId,
+            kind: account.kind,
+            state: account.state,
+            authnEpoch: Number(account.minimumAuthnEpoch),
+            automated: false,
+          }
+        );
+      },
+      async authorizeProvisioning(reference) {
+        if (!provisioningApprovals.delete(reference)) throw new Error('Unknown fixture provisioning reference');
+        return { accountId: reference };
+      },
     },
-  };
-  workClient = await createWorkClient(url);
-  workRuntime = await composeWork([createAccountsWorkModule({ realm: realmPort, access: accountAccess })], {
-    databaseUrl: url,
-    pool,
-    client: workClient,
-    env: { KERNEL_ROUTE_KEY: Buffer.from(routeKey).toString('base64url') },
   });
+  await service.internal.registerClient({ clientId: 'realm-participation-client', firstParty: true, scopes });
+  governance = await personWithToken('participation_governance', scopes);
+  await bootstrapGovernance(pool, governance.accountId);
+  workClient = await createWorkClient(url);
+  workRuntime = await composeWork(
+    [
+      createAccountsWorkModule({
+        realm: { ...membership, authorize: authorizeMembership },
+        access: membershipAccess,
+        authorize: authorizeMembership,
+      }),
+    ],
+    {
+      databaseUrl: url,
+      pool,
+      client: workClient,
+      env: { KERNEL_ROUTE_KEY: Buffer.from(routeKey).toString('base64url') },
+    },
+  );
   await workRuntime.launch();
 }, 120_000);
 
 afterAll(async () => {
   await workRuntime?.shutdown();
   await workClient?.close();
-  await host?.stop();
-  if (authDatabaseName) await admin?.query(`DROP DATABASE IF EXISTS ${authDatabaseName} WITH (FORCE)`);
   await authPool?.end();
+  if (authDatabaseName) await admin?.query(`DROP DATABASE IF EXISTS ${authDatabaseName} WITH (FORCE)`);
   await db?.close();
 });
 
 test.serial(
   'an active account may participate in a public Realm, and in a protected Realm only while it is a member',
   async () => {
+    const owner = await personWithToken(`participation_owner_${crypto.randomUUID()}`, scopes);
+    const member = await personWithToken(`participation_member_${crypto.randomUUID()}`, scopes);
+    const unrelated = await personWithToken(`participation_unrelated_${crypto.randomUUID()}`, scopes);
+    await grant(owner.accountId, ['realm:create', 'space:create']);
+    const protectedSpace = await createSpace(owner, `Protected participation host ${crypto.randomUUID()}`);
+    const protectedRealm = await createRealm(
+      owner,
+      protectedSpace.spaceId,
+      'protected',
+      `Protected participation Realm ${crypto.randomUUID()}`,
+    );
+    const publicSpace = await createSpace(owner, `Public participation host ${crypto.randomUUID()}`);
+    const publicRealm = await createRealm(
+      owner,
+      publicSpace.spaceId,
+      'public',
+      `Public participation Realm ${crypto.randomUUID()}`,
+    );
     const missing = await call('GET', `/v1/realms/${newId(29)}/participation`);
     const anonymous = await call('GET', `/v1/realms/${protectedRealm.realmId}/participation`);
     const nonMember = await call('GET', `/v1/realms/${protectedRealm.realmId}/participation`, {
@@ -399,7 +385,7 @@ test.serial(
     expect(withoutRequest(anonymous.value)).toEqual(withoutRequest(missing.value));
     expect(withoutRequest(nonMember.value)).toEqual(withoutRequest(missing.value));
 
-    const joined = await joinMember(protectedRealm.realmId);
+    const joined = await joinMember(protectedRealm.realmId, member, owner);
     expect(joined).toMatchObject({ status: 'completed', accountId: member.accountId });
     const memberCheck = await call('GET', `/v1/realms/${protectedRealm.realmId}/participation`, {
       bearer: member.bearer,
@@ -422,15 +408,41 @@ test.serial(
 );
 
 test.serial('a Realm ban denial overrides public participation', async () => {
-  await writeRealmBan(publicRealm.realmId, unrelated);
+  const owner = await personWithToken(`participation_ban_owner_${crypto.randomUUID()}`, scopes);
+  const participant = await personWithToken(`participation_ban_account_${crypto.randomUUID()}`, scopes);
+  await grant(owner.accountId, ['realm:create', 'space:create']);
+  const space = await createSpace(owner, `Public ban participation host ${crypto.randomUUID()}`);
+  const publicRealm = await createRealm(
+    owner,
+    space.spaceId,
+    'public',
+    `Public ban participation Realm ${crypto.randomUUID()}`,
+  );
+  const allowed = await call('GET', `/v1/realms/${publicRealm.realmId}/participation`, {
+    bearer: participant.bearer,
+  });
+  expect(allowed.response.status).toBe(204);
+  await writeRealmBan(publicRealm.realmId, participant, owner);
   const denied = await call('GET', `/v1/realms/${publicRealm.realmId}/participation`, {
-    bearer: unrelated.bearer,
+    bearer: participant.bearer,
   });
   expect(denied.response.status).toBe(403);
   expect(denied.value).toMatchObject({ code: 'forbidden', effect_status: 'not_applicable' });
 });
 
 test.serial('Realm participation stays bounded as Realms, members and grants grow', async () => {
+  const owner = await personWithToken(`participation_growth_owner_${crypto.randomUUID()}`, scopes);
+  const member = await personWithToken(`participation_growth_member_${crypto.randomUUID()}`, scopes);
+  await grant(owner.accountId, ['realm:create', 'space:create']);
+  const space = await createSpace(owner, `Growth participation host ${crypto.randomUUID()}`);
+  const protectedRealm = await createRealm(
+    owner,
+    space.spaceId,
+    'protected',
+    `Growth participation Realm ${crypto.randomUUID()}`,
+  );
+  const joined = await joinMember(protectedRealm.realmId, member, owner);
+  expect(joined).toMatchObject({ status: 'completed', accountId: member.accountId });
   const route = routeOf(protectedRealm.realmId)!;
   const memberActor = await access.authenticate(member.bearer, { pool, deadline: Date.now() + 30_000 });
   expect(memberActor.kind).toBe('account');
@@ -477,7 +489,7 @@ test.serial('Realm participation stays bounded as Realms, members and grants gro
             space_id: spaceId,
             state: 'active',
             visibility: 'protected',
-            context_id: classificationContext.id,
+            context_id: GLOBAL_CONTEXT,
             head_revision_id: realmRevisionId,
             created_at: at,
             creator: owner.accountId,
@@ -492,7 +504,7 @@ test.serial('Realm participation stays bounded as Realms, members and grants gro
             title: `Growth Realm ${ordinal}`,
             summary: '',
             visibility: 'protected',
-            context_id: classificationContext.id,
+            context_id: GLOBAL_CONTEXT,
             created_at: at,
             author: owner.accountId,
           },
