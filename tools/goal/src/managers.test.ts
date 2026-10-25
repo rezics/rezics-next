@@ -59,7 +59,7 @@ test('the Codex viewer resumes the thread on the remote endpoint without permiss
     const manager = await s.managers.start(s.spec);
     const argv = s.windows[0]?.argv ?? [];
     expect(argv).toContain('resume');
-    expect(argv).toContain(manager.threadId);
+    expect(argv).toContain(manager.threadId!);
     expect(argv).toContain('--remote');
     expect(argv).toContain('ws://127.0.0.1:10001');
     expect(argv).not.toContain('--dangerously-bypass-approvals-and-sandbox');
