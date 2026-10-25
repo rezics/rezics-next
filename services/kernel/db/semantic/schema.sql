@@ -206,6 +206,20 @@ CREATE TABLE semantic.definition_release (
 
 
 --
+-- Name: external_claim; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.external_claim (
+    route integer NOT NULL,
+    source text NOT NULL,
+    external_id text NOT NULL,
+    subject_id uuid NOT NULL,
+    recorded_transaction_id uuid NOT NULL,
+    CONSTRAINT external_claim_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
 -- Name: fact; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -301,6 +315,20 @@ CREATE TABLE semantic.redirect (
 
 
 --
+-- Name: retraction; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.retraction (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    candidate_id uuid NOT NULL,
+    revision integer NOT NULL,
+    "references" jsonb NOT NULL,
+    CONSTRAINT retraction_references_check CHECK ((jsonb_typeof("references") = 'array'::text))
+);
+
+
+--
 -- Name: revision; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -311,11 +339,28 @@ CREATE TABLE semantic.revision (
     kind text NOT NULL,
     release text NOT NULL,
     recorded_transaction_id uuid NOT NULL,
-    CONSTRAINT revision_kind_check CHECK ((kind = ANY (ARRAY['create'::text, 'propose'::text, 'accept'::text, 'reject'::text, 'adopt'::text, 'merge'::text]))),
+    source jsonb,
+    CONSTRAINT revision_kind_check CHECK ((kind = ANY (ARRAY['create'::text, 'propose'::text, 'accept'::text, 'reject'::text, 'adopt'::text, 'merge'::text, 'retract'::text]))),
     CONSTRAINT revision_release_check CHECK ((release ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT revision_revision_check CHECK ((revision >= 1)),
     CONSTRAINT revision_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT revision_subject_route_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11))))
+);
+
+
+--
+-- Name: source_candidate; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.source_candidate (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    source text NOT NULL,
+    external_id text NOT NULL,
+    field_group text NOT NULL,
+    statement_digest text NOT NULL,
+    candidate_id uuid NOT NULL,
+    CONSTRAINT source_candidate_statement_digest_check CHECK ((statement_digest ~ '^[0-9a-f]{64}$'::text))
 );
 
 
@@ -395,6 +440,14 @@ ALTER TABLE ONLY semantic.definition_release
 
 
 --
+-- Name: external_claim external_claim_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.external_claim
+    ADD CONSTRAINT external_claim_pkey PRIMARY KEY (route, source, external_id);
+
+
+--
 -- Name: fact fact_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -435,11 +488,27 @@ ALTER TABLE ONLY semantic.redirect
 
 
 --
+-- Name: retraction retraction_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.retraction
+    ADD CONSTRAINT retraction_pkey PRIMARY KEY (route, subject_id, candidate_id, revision);
+
+
+--
 -- Name: revision revision_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
 ALTER TABLE ONLY semantic.revision
     ADD CONSTRAINT revision_pkey PRIMARY KEY (route, subject_id, revision);
+
+
+--
+-- Name: source_candidate source_candidate_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.source_candidate
+    ADD CONSTRAINT source_candidate_pkey PRIMARY KEY (route, subject_id, source, external_id, field_group, statement_digest);
 
 
 --
@@ -500,6 +569,13 @@ CREATE INDEX revision_transaction ON semantic.revision USING btree (route, subje
 
 
 --
+-- Name: source_candidate_retract; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX source_candidate_retract ON semantic.source_candidate USING btree (route, subject_id, candidate_id, source, external_id, field_group);
+
+
+--
 -- Name: acceptance acceptance_immutable; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -542,6 +618,20 @@ CREATE TRIGGER candidate_immutable_truncate BEFORE TRUNCATE ON semantic.candidat
 
 
 --
+-- Name: external_claim external_claim_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER external_claim_immutable BEFORE DELETE OR UPDATE ON semantic.external_claim FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: external_claim external_claim_immutable_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER external_claim_immutable_truncate BEFORE TRUNCATE ON semantic.external_claim FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
 -- Name: fact fact_immutable; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -574,6 +664,20 @@ CREATE TRIGGER moderation_immutable_truncate BEFORE TRUNCATE ON semantic.moderat
 --
 
 CREATE TRIGGER redirect_immutable BEFORE DELETE OR UPDATE ON semantic.redirect FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: retraction retraction_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER retraction_immutable BEFORE DELETE OR UPDATE ON semantic.retraction FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: retraction retraction_immutable_truncate; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER retraction_immutable_truncate BEFORE TRUNCATE ON semantic.retraction FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
 
 
 --
@@ -686,6 +790,14 @@ ALTER TABLE ONLY semantic.definition_activation
 
 
 --
+-- Name: external_claim external_claim_route_subject_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.external_claim
+    ADD CONSTRAINT external_claim_route_subject_id_fkey FOREIGN KEY (route, subject_id) REFERENCES semantic.subject(route, subject_id);
+
+
+--
 -- Name: fact fact_route_subject_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -718,11 +830,35 @@ ALTER TABLE ONLY semantic.redirect
 
 
 --
+-- Name: retraction retraction_route_subject_id_candidate_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.retraction
+    ADD CONSTRAINT retraction_route_subject_id_candidate_id_fkey FOREIGN KEY (route, subject_id, candidate_id) REFERENCES semantic.candidate(route, subject_id, candidate_id);
+
+
+--
+-- Name: retraction retraction_route_subject_id_revision_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.retraction
+    ADD CONSTRAINT retraction_route_subject_id_revision_fkey FOREIGN KEY (route, subject_id, revision) REFERENCES semantic.revision(route, subject_id, revision);
+
+
+--
 -- Name: revision revision_route_subject_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
 --
 
 ALTER TABLE ONLY semantic.revision
     ADD CONSTRAINT revision_route_subject_id_fkey FOREIGN KEY (route, subject_id) REFERENCES semantic.subject(route, subject_id);
+
+
+--
+-- Name: source_candidate source_candidate_route_subject_id_candidate_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.source_candidate
+    ADD CONSTRAINT source_candidate_route_subject_id_candidate_id_fkey FOREIGN KEY (route, subject_id, candidate_id) REFERENCES semantic.candidate(route, subject_id, candidate_id);
 
 
 --

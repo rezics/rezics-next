@@ -1,8 +1,9 @@
+import type { Source } from '@rezics/definitions/bulk';
 import { SubjectRedirectError } from './merges.ts';
 import { checkSubjectInput } from '@rezics/definitions/validate';
 import type { Release } from '@rezics/definitions';
 import type { Pool, PoolClient } from 'pg';
-import { runCommand, type CommandAuthorization } from '../command/command.ts';
+import { runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
 import { withConnection, discardConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccessCheck, AccountActor, Resource } from '../request/access.ts';
@@ -57,13 +58,10 @@ export async function createSubject(
     deadline?: number;
   },
 ): Promise<CreateSubjectResult> {
-  const { route, id: subjectId } = options.target;
-  if (routeOf(subjectId) !== route) throw new RangeError('Subject target id must carry its route');
-  const input = options.item as Record<string, unknown>;
   const checked = checkSubjectInput(options.item, options.release.release, rejectContent);
   if (checked.violations.length) throw new SubjectInputError(checked.violations);
-  const facts = itemFacts(subjectId, options.item, typeof input?.type === 'string' ? input.type : undefined);
-  const dataTypes = factDataTypes(options.release.release, facts);
+  const { route, id: subjectId } = options.target;
+  if (routeOf(subjectId) !== route) throw new RangeError('Subject target id must carry its route');
   const partition = partitionOf(route);
   const command = await runCommand(
     pool,
@@ -92,73 +90,89 @@ export async function createSubject(
       },
     },
     async (tx, { transactionId }) => {
-      const grouped = new Map<number, Set<string>>();
-      for (const item of checked.targets) {
-        const itemRoute = routeOf(item.id);
-        if (itemRoute === null) continue;
-        const itemPartition = partitionOf(itemRoute);
-        const ids = grouped.get(itemPartition) ?? new Set<string>();
-        ids.add(item.id);
-        grouped.set(itemPartition, ids);
-      }
-      const itemTypes = new Map<string, string>();
-      for (const [partition_no, ids] of grouped) {
-        const rows = (await readTypesStatement.run(tx, { partition_no, subject_ids: [...ids] })) as {
-          id: string;
-          type: string;
-        }[];
-        for (const row of rows) itemTypes.set(row.id, row.type);
-      }
-      const targetErrors = checked.targets.flatMap((item) => {
-        const targetType = itemTypes.get(item.id);
-        return targetType && matchesTarget(options.release.release, targetType, item.targets)
-          ? []
-          : [{ pointer: item.pointer, code: 'out_of_range' as const }];
-      });
-      if (targetErrors.length) throw new SubjectInputError(targetErrors);
-      await insertSubject.run(tx, {
-        route,
-        subject_id: subjectId,
-        type: String(input.type),
-        transaction_id: transactionId,
-      });
-      await createRevision.run(tx, {
-        route,
-        subject_id: subjectId,
-        release: options.release.digest,
-        transaction_id: transactionId,
-      });
-      await insertFacts.run(tx, {
-        route,
-        subject_id: subjectId,
-        transaction_id: transactionId,
-        facts,
-      });
-      const events: { type: string; subject: string; data: unknown }[] = [
-        { type: 'com.rezics.subject.created.v1', subject: subjectId, data: { id: subjectId } },
-      ];
-      const changes = linkChanges([], facts, dataTypes);
-      if (changes.length > 0) {
-        events.push({
-          type: LINKS_CHANGED,
-          subject: subjectId,
-          data: { subject: subjectId, revision: 1, changes },
-        });
-      }
-      return {
-        value: resolveItem(subjectId, facts, String(input.type), dataTypes, {
-          revision: 1,
-          release: options.release.digest,
-          context: CONTEXT,
-        }),
-        events,
-      };
+      return writeSubject(tx, transactionId, options);
     },
   );
   return {
     subject: command.value,
     component: { partition: command.partition, epoch: command.epoch, position: command.position },
     replayed: command.replayed,
+  };
+}
+
+/** The same creation work for individual writes and imported records. */
+export async function writeSubject(
+  tx: CommandTransaction,
+  transactionId: string,
+  options: Pick<Parameters<typeof createSubject>[1], 'target' | 'item' | 'release'> & { source?: Source },
+) {
+  const { route, id: subjectId } = options.target;
+  const input = options.item as Record<string, unknown>;
+  const checked = checkSubjectInput(options.item, options.release.release, rejectContent);
+  if (checked.violations.length) throw new SubjectInputError(checked.violations);
+  const facts = itemFacts(subjectId, options.item, typeof input?.type === 'string' ? input.type : undefined);
+  const dataTypes = factDataTypes(options.release.release, facts);
+  const grouped = new Map<number, Set<string>>();
+  for (const item of checked.targets) {
+    const itemRoute = routeOf(item.id);
+    if (itemRoute === null) continue;
+    const itemPartition = partitionOf(itemRoute);
+    const ids = grouped.get(itemPartition) ?? new Set<string>();
+    ids.add(item.id);
+    grouped.set(itemPartition, ids);
+  }
+  const itemTypes = new Map<string, string>();
+  for (const [partition_no, ids] of grouped) {
+    const rows = (await readTypesStatement.run(tx, { partition_no, subject_ids: [...ids] })) as {
+      id: string;
+      type: string;
+    }[];
+    for (const row of rows) itemTypes.set(row.id, row.type);
+  }
+  const targetErrors = checked.targets.flatMap((item) => {
+    const targetType = itemTypes.get(item.id);
+    return targetType && matchesTarget(options.release.release, targetType, item.targets)
+      ? []
+      : [{ pointer: item.pointer, code: 'out_of_range' as const }];
+  });
+  if (targetErrors.length) throw new SubjectInputError(targetErrors);
+  await insertSubject.run(tx, {
+    route,
+    subject_id: subjectId,
+    type: String(input.type),
+    transaction_id: transactionId,
+  });
+  await createRevision.run(tx, {
+    route,
+    subject_id: subjectId,
+    release: options.release.digest,
+    transaction_id: transactionId,
+    source: options.source ?? null,
+  });
+  await insertFacts.run(tx, {
+    route,
+    subject_id: subjectId,
+    transaction_id: transactionId,
+    facts,
+  });
+  const events: { type: string; subject: string; data: unknown }[] = [
+    { type: 'com.rezics.subject.created.v1', subject: subjectId, data: { id: subjectId } },
+  ];
+  const changes = linkChanges([], facts, dataTypes);
+  if (changes.length > 0) {
+    events.push({
+      type: LINKS_CHANGED,
+      subject: subjectId,
+      data: { subject: subjectId, revision: 1, changes },
+    });
+  }
+  return {
+    value: resolveItem(subjectId, facts, String(input.type), dataTypes, {
+      revision: 1,
+      release: options.release.digest,
+      context: CONTEXT,
+    }),
+    events,
   };
 }
 

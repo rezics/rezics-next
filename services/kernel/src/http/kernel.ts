@@ -15,6 +15,7 @@ import type { Access, AccessConfig } from '../request/access.ts';
 import { searchRoutes, type SearchService } from '../search/http/routes.ts';
 import { definitionRoutes } from '../semantic/http/definitions.ts';
 import { contextRoutes } from '../semantic/http/contexts.ts';
+import { bulkRoutes } from '../semantic/http/bulk.ts';
 import { subjectRoutes } from '../semantic/http/subjects.ts';
 import { createApp } from './app.ts';
 import { actionCatalogue } from './request.ts';
@@ -42,10 +43,16 @@ export function createKernel(dependencies: KernelDependencies) {
   const resolveAccess = (config: AccessConfig) =>
     (access ??= typeof factory === 'function' ? factory(config) : factory);
   const tokens = dependencies.tokens ?? { current: 1, keys: new Map([[1, new Uint8Array(randomBytes(32))]]) };
-  const app = definitionRoutes(
-    subjectRoutes(createApp({ ...dependencies, access: resolveAccess, tokens }), { ...dependencies, tokens }),
-    dependencies,
-  );
+  const subjects = subjectRoutes(createApp({ ...dependencies, access: resolveAccess, tokens }), {
+    ...dependencies,
+    tokens,
+  });
+  const batched = bulkRoutes(subjects, {
+    pool: dependencies.pool,
+    routeKey: dependencies.routeKey,
+    access: () => resolveAccess({ actions: actionCatalogue(batched) }),
+  });
+  const app = definitionRoutes(batched as unknown as ReturnType<typeof subjectRoutes>, dependencies);
   const presentation = profileRoutes(app, dependencies);
   const payouts = payoutRoutes(app, {
     ...dependencies,
@@ -107,6 +114,7 @@ export function createKernel(dependencies: KernelDependencies) {
     }
   }
   return community as typeof community &
+    typeof batched &
     typeof presentation &
     typeof granted &
     typeof media &

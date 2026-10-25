@@ -1,14 +1,15 @@
 import { checkStatementInput } from '@rezics/definitions/validate';
+import type { Source, BatchReference } from '@rezics/definitions/bulk';
 import type { Release } from '@rezics/definitions';
 import type { Pool, PoolClient } from 'pg';
-import { runCommand, type CommandAuthorization } from '../command/command.ts';
+import { runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccountActor } from '../request/access.ts';
 import { derivedId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding, type CursorKey } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { redirectOf } from './merges.ts';
+import { redirectOf, SubjectRedirectError } from './merges.ts';
 import { GLOBAL_CONTEXT, readRelease } from './definitions.ts';
 import { LINKS_CHANGED } from './events.ts';
 import { factDataTypes, itemFacts, resolveItem, SubjectInputError, type Violation } from './item.ts';
@@ -93,81 +94,92 @@ export async function proposeStatement(
       authorization: options.authorization,
     },
     async (tx, { transactionId }) => {
-      const subject = await tx.query<{ type: string; revision: number }>(
-        `SELECT s.type, latest.revision FROM semantic.subject s
-       JOIN LATERAL (SELECT revision FROM semantic.revision WHERE route = s.route AND subject_id = s.subject_id
-         ORDER BY revision DESC LIMIT 1) latest ON true
-       WHERE s.route = $1 AND s.subject_id = $2 AND s.visibility = 'visible'`,
-        [route, options.subject],
-      );
-      if (!subject.rows[0]) throw new SubjectNotFoundError();
-      if (await redirectOf(tx, options.subject)) throw new EditorialConflictError();
-      const input = validatedStatement(options.subject, subject.rows[0].type, options.release, options.statement);
-      const grouped = new Map<number, Set<string>>();
-      for (const item of input.items) {
-        const itemRoute = routeOf(item.id);
-        if (itemRoute === null) continue;
-        const partition = partitionOf(itemRoute);
-        const ids = grouped.get(partition) ?? new Set<string>();
-        ids.add(item.id);
-        grouped.set(partition, ids);
-      }
-      const types = new Map<string, string>();
-      for (const [partition_no, ids] of grouped) {
-        const rows = await readTypes.run(tx, { partition_no, subject_ids: [...ids] });
-        for (const row of rows) types.set(row.id, row.type);
-      }
-      const errors = input.items.flatMap((item) =>
-        matchesTarget(options.release.release, types.get(item.id) ?? '', item.targets)
-          ? []
-          : [{ pointer: item.pointer, code: 'out_of_range' as const }],
-      );
-      if (errors.length) throw new SubjectInputError(errors);
-      const revision = subject.rows[0].revision + 1;
-      const candidate = derivedId(CANDIDATE_NS, `${options.subject}\n${revision}`, route);
-      try {
-        await expandSlot(tx, options.subject, input.property, transactionId);
-        await tx.query(
-          `INSERT INTO semantic.revision (route, subject_id, revision, kind, release, recorded_transaction_id)
-         VALUES ($1, $2, $3, 'propose', $4, $5)`,
-          [route, options.subject, revision, options.release.digest, transactionId],
-        );
-        await tx.query(
-          `INSERT INTO semantic.candidate
-         (route, subject_id, candidate_id, slot_id, property, rank, statement, release, revision, origin)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'proposal')`,
-          [
-            route,
-            options.subject,
-            candidate,
-            slotId(options.subject, input.property),
-            input.property,
-            (input.fact.body as { rank: string }).rank,
-            JSON.stringify(input.fact.body),
-            options.release.digest,
-            revision,
-          ],
-        );
-      } catch (error) {
-        // PostgreSQL can report a concurrent insert as a uniqueness failure before SSI detects the race.
-        if (
-          record(error) &&
-          error.code === '23505' &&
-          ['revision_pkey', 'candidate_pkey', 'fact_pkey'].includes(String(error.constraint))
-        ) {
-          error.code = '40001';
-        }
-        throw error;
-      }
-      return {
-        value: { candidate, revision },
-        events: [{ type: 'com.rezics.statement.proposed.v1', subject: options.subject, data: { candidate, revision } }],
-      };
+      return writeProposal(tx, transactionId, options);
     },
   );
   return {
     ...command.value,
     component: { partition: command.partition, epoch: command.epoch, position: command.position },
+  };
+}
+
+/** Allocate and validate a proposal inside its subject's command transaction. */
+export async function writeProposal(
+  tx: CommandTransaction,
+  transactionId: string,
+  options: Pick<Parameters<typeof proposeStatement>[1], 'subject' | 'statement' | 'release'> & { source?: Source },
+) {
+  const route = routeOf(options.subject)!;
+  const subject = await tx.query<{ type: string; revision: number }>(
+    `SELECT s.type, latest.revision FROM semantic.subject s
+       JOIN LATERAL (SELECT revision FROM semantic.revision WHERE route = s.route AND subject_id = s.subject_id
+         ORDER BY revision DESC LIMIT 1) latest ON true
+       WHERE s.route = $1 AND s.subject_id = $2 AND s.visibility = 'visible'`,
+    [route, options.subject],
+  );
+  if (!subject.rows[0]) throw new SubjectNotFoundError();
+  const redirect = await redirectOf(tx, options.subject);
+  if (redirect) throw new SubjectRedirectError(options.subject, redirect);
+  const input = validatedStatement(options.subject, subject.rows[0].type, options.release, options.statement);
+  const grouped = new Map<number, Set<string>>();
+  for (const item of input.items) {
+    const itemRoute = routeOf(item.id);
+    if (itemRoute === null) continue;
+    const partition = partitionOf(itemRoute);
+    const ids = grouped.get(partition) ?? new Set<string>();
+    ids.add(item.id);
+    grouped.set(partition, ids);
+  }
+  const types = new Map<string, string>();
+  for (const [partition_no, ids] of grouped) {
+    const rows = await readTypes.run(tx, { partition_no, subject_ids: [...ids] });
+    for (const row of rows) types.set(row.id, row.type);
+  }
+  const errors = input.items.flatMap((item) =>
+    matchesTarget(options.release.release, types.get(item.id) ?? '', item.targets)
+      ? []
+      : [{ pointer: item.pointer, code: 'out_of_range' as const }],
+  );
+  if (errors.length) throw new SubjectInputError(errors);
+  const revision = subject.rows[0].revision + 1;
+  const candidate = derivedId(CANDIDATE_NS, `${options.subject}\n${revision}`, route);
+  try {
+    await expandSlot(tx, options.subject, input.property, transactionId);
+    await tx.query(
+      `INSERT INTO semantic.revision (route, subject_id, revision, kind, release, recorded_transaction_id, source)
+         VALUES ($1, $2, $3, 'propose', $4, $5, $6)`,
+      [route, options.subject, revision, options.release.digest, transactionId, options.source ?? null],
+    );
+    await tx.query(
+      `INSERT INTO semantic.candidate
+         (route, subject_id, candidate_id, slot_id, property, rank, statement, release, revision, origin)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'proposal')`,
+      [
+        route,
+        options.subject,
+        candidate,
+        slotId(options.subject, input.property),
+        input.property,
+        (input.fact.body as { rank: string }).rank,
+        JSON.stringify(input.fact.body),
+        options.release.digest,
+        revision,
+      ],
+    );
+  } catch (error) {
+    // PostgreSQL can report a concurrent insert as a uniqueness failure before SSI detects the race.
+    if (
+      record(error) &&
+      error.code === '23505' &&
+      ['revision_pkey', 'candidate_pkey', 'fact_pkey'].includes(String(error.constraint))
+    ) {
+      error.code = '40001';
+    }
+    throw error;
+  }
+  return {
+    value: { candidate, revision },
+    events: [{ type: 'com.rezics.statement.proposed.v1', subject: options.subject, data: { candidate, revision } }],
   };
 }
 
@@ -565,8 +577,8 @@ export function listRevisions(pool: Pool, ring: KeyRing, options: PageOptions) {
     { operation: 'subject.list_revisions', parameters: { subject: options.subject } },
     (after) => after.length === 1 && Number.isSafeInteger(after[0]) && Number(after[0]) >= 1,
     async (client, after) => {
-      const result = await client.query<{ revision: number; kind: string; release: string }>(
-        `SELECT revision, kind, release FROM semantic.revision WHERE route = $1 AND subject_id = $2
+      const result = await client.query<{ revision: number; kind: string; release: string; source: Source | null }>(
+        `SELECT revision, kind, release, source FROM semantic.revision WHERE route = $1 AND subject_id = $2
          AND revision < $3 ORDER BY revision DESC LIMIT $4`,
         [routeOf(options.subject), options.subject, after?.[0] ?? 2147483647, options.limit + 1],
       );
@@ -662,7 +674,25 @@ export async function listCandidates(
           (fact.body as { rank?: 'normal' | 'preferred' | 'deprecated' }).rank ?? null,
         ]),
       );
-      const candidates = shown.map((row) => {
+      const candidates = [];
+      for (const row of shown) {
+        const provenance = await client.query<{
+          source: Source | null;
+          retracted: number | null;
+          retraction: { source: Source; references: BatchReference[] } | null;
+        }>(
+          `SELECT p.source, latest.revision AS retracted,
+             CASE WHEN latest.revision IS NULL THEN NULL ELSE
+               jsonb_build_object('source', latest.source, 'references', latest."references") END AS retraction
+           FROM semantic.revision p LEFT JOIN LATERAL (
+             SELECT t.revision, r.source, t."references" FROM semantic.retraction t JOIN semantic.revision r
+               ON r.route = t.route AND r.subject_id = t.subject_id AND r.revision = t.revision
+             WHERE t.route = p.route AND t.subject_id = p.subject_id AND t.candidate_id = $4
+             ORDER BY t.revision DESC LIMIT 1
+           ) latest ON true
+           WHERE p.route = $1 AND p.subject_id = $2 AND p.revision = $3`,
+          [routeOf(options.subject), options.subject, row.revision, row.candidate_id],
+        );
         const fact = candidateFact(options.property, row);
         const dataTypes = factDataTypes(releases.get(row.release)!, [fact]);
         const statement = resolveItem(options.subject, [fact], '', dataTypes, {
@@ -670,7 +700,8 @@ export async function listCandidates(
           release: row.release,
           context: options.context,
         }).statements[options.property]![0]!;
-        return {
+        candidates.push({
+          ...provenance.rows[0]!,
           id: row.candidate_id,
           statement,
           release: row.release,
@@ -679,8 +710,8 @@ export async function listCandidates(
             row.verdict === 'accept' ? ('accepted' as const) : row.verdict === 'reject' ? ('rejected' as const) : null,
           head: row.head,
           rank: ranks.get(row.candidate_id) ?? null,
-        };
-      });
+        });
+      }
       const last = shown.at(-1);
       return {
         value: {

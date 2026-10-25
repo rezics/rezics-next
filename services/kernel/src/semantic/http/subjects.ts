@@ -1,3 +1,4 @@
+import { SourceSchema, BatchReferenceSchema } from '@rezics/definitions/bulk';
 import { mergeSubjects, SubjectRedirectError } from '../merges.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
@@ -96,6 +97,7 @@ const pageQuery = {
 };
 function candidateError(error: unknown): never {
   if (error instanceof SubjectInputError) throw invalidSubjectInput(error);
+  if (error instanceof SubjectRedirectError) throw new ProblemError('conflict');
   if (error instanceof SubjectNotFoundError) throw new ProblemError('not_found');
   if (error instanceof EditorialConflictError) throw new ProblemError('conflict');
   if (error instanceof StaleEditorialHeadError) throw new ProblemError('stale_editorial_head');
@@ -914,6 +916,12 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
             candidates: t.Array(
               t.Object({
                 id: t.String({ format: 'uuid' }),
+                source: t.Union([SourceSchema, t.Null()]),
+                retracted: t.Union([t.Integer(), t.Null()]),
+                retraction: t.Union([
+                  t.Object({ source: SourceSchema, references: t.Array(BatchReferenceSchema) }),
+                  t.Null(),
+                ]),
                 statement: StatementSchema,
                 release: t.String(),
                 revision: t.Integer(),
@@ -970,7 +978,14 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
         query: t.Object(pageQuery),
         response: {
           200: t.Object({
-            revisions: t.Array(t.Object({ revision: t.Integer(), kind: t.String(), release: t.String() })),
+            revisions: t.Array(
+              t.Object({
+                revision: t.Integer(),
+                kind: t.String(),
+                release: t.String(),
+                source: t.Union([SourceSchema, t.Null()]),
+              }),
+            ),
             next: t.Union([t.String(), t.Null()]),
           }),
           ...listingErrors,

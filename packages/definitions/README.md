@@ -339,20 +339,48 @@ command is authorized as its single-command equivalent: create uses `subject:cre
 through parent authorization on the Global Context; propose and retract use
 `statement:propose`. This authorization also runs on every replay.
 
-Each command runs alone in its subject's partition and uses its own receipt, keyed by
-principal and command key, exactly as the corresponding single endpoint does. A batch is
-not atomic: commands may run concurrently, and results retain request order. Before any
-command runs, the request spends one unit per command from the caller's import rate
-budget. If the budget is exceeded, the endpoint returns 429 with `Retry-After` and runs
-nothing.
+The kernel currently serves `facts`. Any other field group receives a command-local
+400 with only `/commands/<i>/source/field_group` `unsupported`. Without an active
+release the request receives 503 `semantic_not_ready`. Request-level shape errors
+receive 400 and nothing runs; command-level errors retain their original pointers
+and do not prevent valid peers from running.
 
-A command failure is returned as its result: 400 `invalid_request` with errors pointing
-into the request, 403, 404 `not_found`, 409 `conflict` (with `redirect: { from, to }`
-for a redirected subject), 409 `fenced` when that source `(source, external_id,
-field_group)` is fenced on the subject, or 503 as for a single request. Fencing is
-checked inside the command. Retry a lost response or 5xx result with the same key: the
-receipt replays the first outcome, so a command is never lost or applied twice. A
-proposal or retraction never changes what a Context adopted; editors decide it.
+Each command runs alone in one partition and uses a receipt keyed by caller, command
+key and `subject.batch_<op>`, with a digest covering the whole command. Commands on
+the same partition run in request order; at most eight partitions run concurrently.
+A batch is not atomic. The 200 response contains `{ results }` in request order,
+one `{ key, status, value }` or `{ key, status, problem }` per command. Problems carry
+the single-request body without `instance`. The session header merges command
+positions in request order, keeping the latest 32 partitions. The shared write-rate
+stage charges the request once, using its command count.
+
+A create claims `(source, external_id)` permanently on the route shared with content's
+source fences, without a field group in that identity. A new claim creates one subject,
+adopts its labels, descriptions and aliases in Global, and returns 201 `{ id, revision: 1 }`.
+A resolving create ignores the supplied subject body and returns 200 `{ id, revision }`
+with the existing subject's latest revision. A different type conflicts, an invisible
+subject is not found, and a redirected subject conflicts with `redirect: { from, to }`;
+a claim is never re-created or reassigned. Creates cannot carry statements: importers
+propose each fact to the returned id.
+
+Propose returns 201 `{ candidate, revision }`. A source's refresh with the same
+`(source, external_id, field_group)` and canonical property, value and qualifiers
+returns 200 with its existing candidate and the latest subject revision. References
+and rank do not change that identity. Refreshes cannot restore moderated content.
+Retract requires a candidate proposed by the same source tuple; another source's
+candidate conflicts and an unknown candidate is not found. It appends a cited
+retraction revision, removes the source-candidate identity, and returns 200 `{ revision }`.
+A later proposal may then create a new candidate. Proposals and retractions leave
+Context adoptions unchanged.
+
+Revision listings include the source envelope or null for individual writes.
+Candidate listings expose the proposing `source`, latest `retracted` revision and
+`retraction: { source, references }`, each null when absent. Provenance follows the
+listing's usual visibility rules. Command failures include 400 `invalid_request`,
+403 `forbidden`, 404 `not_found`, 409 `conflict`, 422 `idempotency_conflict`, and
+503 as for an individual write. Retry a lost response with the same command key to
+replay its receipt. Content source fencing and the summary and cover write groups
+are subsequent integrations.
 
 The contract has no runtime path. `checkBatchWrite` is linear in request size, bounded by
 `BATCH_LIMIT` and the statement limits. Proposals require nonempty `references`;

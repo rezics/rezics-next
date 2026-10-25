@@ -25,6 +25,7 @@ export const SEMANTIC_EVENTS = {
     { id: UUID, survivor: UUID, cursor: Type.Array(Type.Union([Type.String(), Type.Integer()])) },
     { additionalProperties: false },
   ),
+  'com.rezics.statement.retracted.v1': Type.Object({ candidate: UUID, revision }, { additionalProperties: false }),
   'com.rezics.statement.proposed.v1': Type.Object({ candidate: UUID, revision }, { additionalProperties: false }),
   'com.rezics.statement.accepted.v1': Type.Object(
     { candidate: UUID, context: UUID, revision, head: revision },
