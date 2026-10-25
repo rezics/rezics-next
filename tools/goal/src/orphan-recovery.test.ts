@@ -1,0 +1,125 @@
+import { expect, test } from 'bun:test';
+import { existsSync, mkdirSync, watch, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import type { ProcessIdentity } from './process.ts';
+import { WorkerJob } from './job.ts';
+import { acquireDirectoryLease } from './lease.ts';
+import { harness, temporaryDirectory } from './test-support.ts';
+
+function deadIdentity(): ProcessIdentity {
+  return { pid: 2_147_483_647, start: 'dead-incarnation', boot: 'dead-boot', group: 2_147_483_647 };
+}
+
+function waitForFile(path: string): Promise<void> {
+  if (existsSync(path)) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const watcher = watch(dirname(path), () => {
+      if (!existsSync(path)) return;
+      clearTimeout(timer); watcher.close(); resolve();
+    });
+    const timer = setTimeout(() => { watcher.close(); reject(new Error(`missing fixture signal: ${path}`)); }, 10000);
+    if (existsSync(path)) { clearTimeout(timer); watcher.close(); resolve(); }
+  });
+}
+
+const waitingWorker = `#!/usr/bin/env bun
+import { existsSync, watch, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+writeFileSync('.worker-started', 'ready');
+if (!existsSync('.worker-release')) await new Promise<void>(resolve => {
+  const watcher = watch('.', () => {
+    if (existsSync('.worker-release')) { watcher.close(); resolve(); }
+  });
+  if (existsSync('.worker-release')) { watcher.close(); resolve(); }
+});
+writeFileSync('result.txt', 'accepted');
+spawnSync('git', ['add', 'result.txt']);
+spawnSync('git', ['commit', '-m', 'Complete fixture']);
+console.log(JSON.stringify({type:'thread.started',thread_id:'fixture-session'}));
+console.log(JSON.stringify({type:'item.completed',item:{id:'message',type:'agent_message',text:'RESULT: success'}}));
+console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:120,cached_input_tokens:80,output_tokens:20}}));
+`;
+
+test('a lease released between a failed publish and the owner read is acquired instead of reported unrecognised', () => {
+  const temporary = temporaryDirectory();
+  const path = join(temporary.path, 'dispatch.lease');
+  try {
+    // A released lease leaves no owner file during this observable race window.
+    mkdirSync(path);
+    const acquired = acquireDirectoryLease(path);
+    acquired.release();
+  } finally { temporary.close(); }
+});
+
+test('an attempt whose driver died after the worker finished is settled and lands', async () => {
+  const h = harness(), landings: { attempt: number }[] = [];
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const worker = await h.tasks.retry(task.id);
+    await worker.exited;
+    h.store.updateAttempt(worker.attempt, attempt => {
+      (attempt as typeof attempt & { driver?: ProcessIdentity }).driver = deadIdentity();
+    });
+
+    const job = new WorkerJob(h.tasks, { enqueue: request => landings.push(request) }, { deliver() {} });
+    await job.recoverOrphans();
+
+    expect(h.store.task(task.id).state).toBe('landing');
+    expect(h.store.attempt(worker.attempt).state).toBe('exited');
+    expect(h.store.record(worker.attempt)?.tokens).toEqual({ input: 120, cached: 80, output: 20 });
+    expect(landings.map(request => request.attempt)).toEqual([1]);
+  } finally { h.dispose(); }
+});
+
+test('an attempt whose driver died while the worker runs is adopted and settled when the worker exits', async () => {
+  const h = harness(waitingWorker);
+  let release = '';
+  let worker: Awaited<ReturnType<typeof h.tasks.retry>> | undefined;
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    worker = await h.tasks.retry(task.id);
+    const started = join(task.worktree, '.worker-started');
+    release = join(task.worktree, '.worker-release');
+    await waitForFile(started);
+    h.store.updateAttempt(worker.attempt, attempt => {
+      (attempt as typeof attempt & { driver?: ProcessIdentity }).driver = deadIdentity();
+    });
+    const landings: { attempt: number }[] = [];
+    const job = new WorkerJob(h.tasks, { enqueue: request => landings.push(request) }, { deliver() {} });
+    let recovered = false;
+    const adoption = job.recoverOrphans().then(() => { recovered = true; });
+
+    expect(recovered).toBe(false);
+    expect(h.store.task(task.id).state).toBe('running');
+    writeFileSync(release, 'release');
+    await adoption;
+
+    expect(h.store.task(task.id).state).toBe('landing');
+    expect(h.store.record(worker.attempt)?.tokens.input).toBe(120);
+    expect(landings.map(request => request.attempt)).toEqual([1]);
+  } finally {
+    if (release) writeFileSync(release, 'release');
+    if (worker) await worker.exited;
+    h.dispose();
+  }
+});
+
+test('an exception in the driver ends the attempt as an environment failure delivered to the manager', async () => {
+  const h = harness(), inbox: { kind: string; summary: string }[] = [];
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const job = new WorkerJob(h.tasks, {
+      enqueue() { throw new Error('driver landing adapter failed'); },
+    }, { deliver: event => inbox.push(event) });
+
+    await expect(job.start(task.id)).resolves.toBeUndefined();
+
+    const attempt = h.store.attempt({ taskId: task.id, attempt: 1 });
+    expect(attempt.state).toBe('exited');
+    expect(attempt.escalation).toBe('environment');
+    expect(h.store.record({ taskId: task.id, attempt: 1 })?.escalation).toBe('environment');
+    expect(h.store.task(task.id).state).toBe('stopped');
+    expect(inbox).toHaveLength(1);
+    expect(inbox[0]?.summary).toContain('driver landing adapter failed');
+  } finally { h.dispose(); }
+});
