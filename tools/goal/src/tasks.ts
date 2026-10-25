@@ -213,7 +213,7 @@ export class WorkerTasks {
         task = this.store.updateTask(next, current => { current.base = integration; });
         if (!files.length && (changedBase || options.escalation === 'rebase-conflict')) installWorktreeDependencies(task.worktree);
         if (!files.length && options.escalation === 'rebase-conflict') files = options.conflictFiles ?? [];
-        const prompt = workerPrompt(task, options.evidence, options.consultation, files);
+        const prompt = workerPrompt(task, options.evidence, options.consultation, files, this.settings.mainCheckout);
         return await this.launcher(this.store, task, next, pool, prompt, this.settings.codex);
       }
       catch (error) {

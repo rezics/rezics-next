@@ -39,9 +39,10 @@ export function workerEnvironment(pool: Pool, extra: NodeJS.ProcessEnv = {}, par
   const key = pool.cli === 'codex' ? 'CODEX_HOME' : pool.cli === 'grok' ? 'GROK_HOME' : pool.cli === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CURSOR_CONFIG_DIR';
   return { ...env, ...extra, [key]: pool.configDirectory };
 }
-export function workerPrompt(task: Task, evidence?: string, consultation?: string, resolutionFiles: readonly string[] = []): string {
+export function workerPrompt(task: Task, evidence: string | undefined, consultation: string | undefined, resolutionFiles: readonly string[], mainCheckout: string): string {
   return [
     `Work only in ${task.worktree}, on branch ${task.branch}. Read and follow its AGENTS.md.`,
+    `The main checkout ${mainCheckout} is read-only: never write there. Write files only by paths inside ${task.worktree}.`,
     'Work until every acceptance condition holds. Do not send progress reports. Commit the completed changes on this branch.',
     'Do not rebase, merge, change acceptance tests, or expand the declared scope.',
     'Finish with one JSON object matching this exit schema. A blocker is a fact about your attempt; explain the concrete conflict or tool failure in its detail.',
