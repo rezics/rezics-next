@@ -7,6 +7,7 @@ import { publicCredential, verifyKeyAssertion } from './key-credentials.ts';
 import { betterAuthOptions, credentialOwnerSchema } from './better-auth.ts';
 import { createSigner } from './signing.ts';
 import { issuerOrigin } from './issuer.ts';
+import { nativeAttemptRequest } from './rate-limit.ts';
 import type {
   AccessAccount,
   AuthService,
@@ -101,6 +102,9 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
   const signer = await createSigner(database, options.signing);
   const binding = new AsyncLocalStorage<Binding>();
   const recoveryBinding = new AsyncLocalStorage<{ accountId: string; epoch: number }>();
+  // Native router admission runs before this private alias dispatch hook. A
+  // request cannot install it through a header, body or native endpoint name.
+  const attemptDispatch = new AsyncLocalStorage<() => Promise<Response>>();
   const proofHash = (token: string) => createHash('sha256').update(token).digest('hex');
 
   async function activeActor(accountId: string): Promise<AccessAccount> {
@@ -165,6 +169,10 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       credentialOwnerSchema,
       {
         id: 'trusted-establishment',
+        async onRequest() {
+          const dispatch = attemptDispatch.getStore();
+          if (dispatch) return { response: await dispatch() };
+        },
         endpoints: {
           establish: createAuthEndpoint('/trusted-establishment', { method: 'POST' }, async (ctx) => {
             const selected = binding.getStore();
@@ -371,17 +379,14 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
   async function establish(selected: Binding, headers: Headers): Promise<Response> {
     return established(
       await binding.run(selected, () =>
-        auth.handler(
-          new Request(`${options.issuer}/api/auth/trusted-establishment`, {
-            method: 'POST',
-            headers: {
-              origin: options.issuer,
-              'content-type': 'application/json',
-              'user-agent': headers.get('user-agent') ?? '',
-            },
-            body: '{}',
+        auth.api.establish({
+          headers: new Headers({
+            origin: options.issuer,
+            'content-type': 'application/json',
+            'user-agent': headers.get('user-agent') ?? '',
           }),
-        ),
+          asResponse: true,
+        }),
       ),
     );
   }
@@ -402,7 +407,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     return account;
   }
 
-  return {
+  const service: AuthService = {
     verifier: {
       issuer: options.issuer,
       audience: options.audience,
@@ -821,6 +826,27 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         // All mutations require the configured origin, including first-login CSRF protection.
         if (request.headers.get('origin') !== options.issuer || request.headers.get('sec-fetch-site') === 'cross-site')
           throw new Denied(403);
+        const attemptPath = {
+          '/signin': '/sign-in/email',
+          '/signin/key': '/sign-in/email',
+          '/recovery/start': '/request-password-reset',
+          '/recovery/complete': '/reset-password',
+        }[url.pathname];
+        if (attemptPath && !attemptDispatch.getStore()) {
+          const response = await attemptDispatch.run(
+            () => service.handler(request),
+            () => auth.handler(nativeAttemptRequest(request, options.issuer, attemptPath)),
+          );
+          if (response.status === 429) {
+            const denied = json({ error: 'authentication_denied' }, 429);
+            // The pinned router emits X-Retry-After; expose the standard header
+            // without forwarding endpoint bodies or releasing session cookies.
+            denied.headers.set('retry-after', response.headers.get('x-retry-after') ?? '1');
+            return denied;
+          }
+          if (response.status >= 500) return json({ error: 'authentication_denied' }, 503);
+          return response;
+        }
         const body = await bodyOf(request);
         if (url.pathname === '/recovery/start') {
           fields(body, ['account_id']);
@@ -904,13 +930,11 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           const selected = { clientId: text(body.client_id), scopes: scopes(body.scope) };
           await clientFor(selected.clientId);
           const response = await binding.run(selected, () =>
-            auth.handler(
-              new Request(`${options.issuer}/api/auth/sign-in/email`, {
-                method: 'POST',
-                headers: request.headers,
-                body: JSON.stringify({ email: text(body.email), password: text(body.password) }),
-              }),
-            ),
+            auth.api.signInEmail({
+              headers: request.headers,
+              body: { email: text(body.email), password: text(body.password) },
+              asResponse: true,
+            }),
           );
           if (!response.ok)
             return json({ error: 'authentication_denied' }, response.status >= 400 ? response.status : 401);
@@ -1005,4 +1029,5 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       }
     },
   };
+  return service;
 }

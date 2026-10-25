@@ -43,6 +43,20 @@ CREATE TABLE public.account (
 
 
 --
+-- Name: auth_attempt_counter; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE UNLOGGED TABLE public.auth_attempt_counter (
+    key text NOT NULL,
+    count integer NOT NULL,
+    last_request timestamp with time zone NOT NULL,
+    accepted boolean NOT NULL,
+    CONSTRAINT auth_attempt_counter_count_check CHECK ((count > 0)),
+    CONSTRAINT auth_attempt_counter_key_check CHECK ((key ~ '^[0-9a-f]{64}$'::text))
+);
+
+
+--
 -- Name: auth_client; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -262,6 +276,14 @@ ALTER TABLE ONLY public.account
 
 
 --
+-- Name: auth_attempt_counter auth_attempt_counter_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_attempt_counter
+    ADD CONSTRAINT auth_attempt_counter_pkey PRIMARY KEY (key);
+
+
+--
 -- Name: auth_client auth_client_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -458,6 +480,13 @@ ALTER TABLE ONLY public.verification
 --
 
 CREATE INDEX "account_userId_idx" ON public.account USING btree ("userId");
+
+
+--
+-- Name: auth_attempt_counter_retention; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_attempt_counter_retention ON public.auth_attempt_counter USING btree (last_request, key);
 
 
 --

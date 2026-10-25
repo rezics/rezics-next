@@ -1,5 +1,6 @@
 import type { BetterAuthOptions, BetterAuthPlugin } from 'better-auth';
 import type { Pool } from 'pg';
+import { nativeAttemptOptions } from './rate-limit.ts';
 
 export const credentialOwnerSchema = {
   id: 'credential-owner-schema',
@@ -15,6 +16,7 @@ export const credentialOwnerSchema = {
 /** Shared with the official Better Auth migration generator. */
 export function betterAuthOptions(database: Pool, issuer: string, secret: string) {
   return {
+    ...nativeAttemptOptions(database, issuer, secret),
     database,
     baseURL: issuer,
     basePath: '/api/auth',
