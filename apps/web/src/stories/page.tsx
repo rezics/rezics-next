@@ -11,7 +11,7 @@ import {
 } from '@tanstack/react-router';
 import { createKernelClient } from '@rezics/client';
 import { DocumentBody } from '@rezics/ui/document-body';
-import { AppShell, HomePage, NotFoundPage } from '../shell/shell';
+import { AppShell, HomePage } from '../shell/shell';
 import { createRecordedKernelFetch } from '../kernel/fake';
 import { SearchPage } from '../search/search';
 import subjectRecording from '../kernel/recorded/subject.json';
@@ -25,8 +25,6 @@ import searchEmptyRecording from '../kernel/recorded/search-empty.json';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 
-const id = subjectRecording.subject.id;
-const missingId = '00000000-0000-4000-8000-000000000000';
 const boardId = boardRecording.board.id;
 const threadId = threadRecording.thread.id;
 const client = createKernelClient('http://kernel.local', {
@@ -64,28 +62,6 @@ function searchResult(recording: typeof searchRecording | typeof searchEmptyReco
   return body as SearchView;
 }
 
-function SubjectPage() {
-  const [label, setLabel] = React.useState(
-    () => subjectRecording.subject.labels[getLocale()] ?? subjectRecording.subject.labels.en ?? '',
-  );
-  React.useEffect(() => {
-    void client
-      .subjects({ id })
-      .get()
-      .then(({ data }) => setLabel(data?.subject.labels[getLocale()] ?? data?.subject.labels.en ?? ''));
-  }, []);
-  return (
-    <article>
-      <h1 className="font-serif text-4xl font-semibold">{label}</h1>
-    </article>
-  );
-}
-function MissingPage() {
-  React.useEffect(() => {
-    void client.subjects({ id: missingId }).get();
-  }, []);
-  return <NotFoundPage />;
-}
 function BoardPage() {
   const [board, setBoard] = React.useState<{ title: string | null }>(boardRecording.board);
   const [threads, setThreads] = React.useState<{ threads: { id: string; title: string | null }[] }>(
@@ -233,8 +209,6 @@ export function PageStory({ visitor, children }: { visitor: 'Signed In' | 'Signe
 
 export const pages = {
   home: <HomePage />,
-  subject: <SubjectPage />,
-  'missing-subject': <MissingPage />,
   shell: <HomePage />,
   board: <BoardPage />,
   thread: <ThreadPage />,

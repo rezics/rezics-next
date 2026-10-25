@@ -229,10 +229,15 @@ test(
       'type ThreadResponse = ThreadNode extends { get: { response: { 200: infer Body } } } ? Body : never;',
       'type PostsResponse = ThreadNode extends { posts: { get: { response: { 200: infer Body } } } } ? Body : never;',
       "type SearchResponse = NonNullable<Awaited<ReturnType<KernelClient['subjects']['$search']['post']>>['data']>;",
+      "type PageReadResult = Awaited<ReturnType<KernelClient['pages']['$read']['post']>>;",
+      "type PageResponse = NonNullable<PageReadResult['data']>;",
+      "type PageMissingResponse = Extract<NonNullable<PageReadResult['error']>, { status: 404 | '404' }>['value'];",
     ];
     const responseType: Record<string, string> = {
       'missing-subject.json': 'MissingResponse',
+      'missing-subject-page.json': 'PageMissingResponse',
       'subject.json': 'SubjectResponse',
+      'subject-page.json': 'PageResponse',
       'board.json': 'BoardResponse',
       'board-threads.json': 'BoardThreadsResponse',
       'thread.json': 'ThreadResponse',

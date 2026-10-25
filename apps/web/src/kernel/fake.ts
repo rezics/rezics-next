@@ -31,6 +31,30 @@ function resourceId(recording: KernelRecording | undefined, key: string): string
   return typeof id === 'string' ? id : undefined;
 }
 
+function knownSubjectId(recordings: Record<string, KernelRecording>): string | undefined {
+  const subject = recordings['subject-page']?.subject;
+  return typeof subject === 'string' ? subject : resourceId(recordings.subject, 'subject');
+}
+
+/** `POST /v1/pages:read` for the recorded subject, or the fixed missing id. */
+async function pageRecording(
+  request: Request,
+  recordings: Record<string, KernelRecording>,
+): Promise<KernelRecording | undefined> {
+  let subject: unknown;
+  try {
+    const body = (await request.json()) as { target?: unknown };
+    const target = body.target;
+    if (!target || typeof target !== 'object' || Array.isArray(target)) return undefined;
+    subject = (target as { subject?: unknown }).subject;
+  } catch {
+    return undefined;
+  }
+  if (typeof subject !== 'string') return undefined;
+  if (subject === missingSubjectId) return recordings['missing-subject-page'];
+  return subject === knownSubjectId(recordings) ? recordings['subject-page'] : undefined;
+}
+
 function recordedResponse(recording: KernelRecording): Response {
   const body: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(recording)) {
@@ -67,6 +91,7 @@ async function selectRecording(
       return recordings.thread;
     return undefined;
   }
+  if (request.method === 'POST' && pathname === '/v1/pages:read') return pageRecording(request, recordings);
   if (request.method !== 'POST' || pathname !== '/v1/subjects:search') return undefined;
   let text: unknown;
   try {

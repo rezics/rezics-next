@@ -8,6 +8,8 @@ export default defineConfig({
     alias: {
       'cloudflare:workers': fileURLToPath(new URL('./.storybook/cloudflare-workers.ts', import.meta.url)),
       '@tanstack/react-start': fileURLToPath(new URL('./.storybook/react-start.ts', import.meta.url)),
+      // The subject page imports composition, whose profile digest uses node:crypto.
+      'node:crypto': fileURLToPath(new URL('./src/stories/node-crypto.ts', import.meta.url)),
     },
   },
   test: {
