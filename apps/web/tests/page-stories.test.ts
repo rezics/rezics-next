@@ -1,0 +1,251 @@
+import { afterAll, expect, test } from 'bun:test';
+import AxeBuilder from '@axe-core/playwright';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:net';
+import { basename, dirname, join, resolve } from 'node:path';
+import { chromium, type Browser } from 'playwright';
+
+const app = join(import.meta.dir, '..');
+const root = resolve(app, '../..');
+const ui = join(root, 'packages/ui');
+const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'];
+const pages = ['home', 'subject', 'missing-subject', 'shell'];
+const visitors = ['Signed In', 'Signed Out'];
+const recorded = join(app, 'src/kernel/recorded');
+mkdirSync(join(root, '.temp'), { recursive: true });
+const temporary = mkdtempSync(join(root, '.temp/page-stories-'));
+const timeout = 900_000;
+const executable = (name: string) =>
+  [app, ui].map((directory) => join(directory, 'node_modules/.bin', name)).find(existsSync)!;
+let child: ChildProcess | undefined;
+let browser: Browser | undefined;
+
+function recordings() {
+  return existsSync(recorded) ? [...new Bun.Glob('**/*.json').scanSync({ cwd: recorded })].sort() : [];
+}
+
+async function command(args: string[], cwd = app) {
+  const run = Bun.spawn(args, { cwd, stdout: 'pipe', stderr: 'pipe', env: { ...process.env, CI: '1' } });
+  const [stdout, stderr, code] = await Promise.all([
+    new Response(run.stdout).text(),
+    new Response(run.stderr).text(),
+    run.exited,
+  ]);
+  return { code, output: `${stdout}\n${stderr}` };
+}
+
+// Copied from session.test.ts: reserve a port and keep the server in its own process group.
+function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const probe = createServer();
+    probe.once('error', reject);
+    probe.listen(0, '127.0.0.1', () => {
+      const { port } = probe.address() as { port: number };
+      probe.close(() => resolve(port));
+    });
+  });
+}
+
+async function storybook() {
+  const port = await freePort();
+  let output = '';
+  const keep = (chunk: Buffer) => {
+    output = (output + chunk.toString()).slice(-8000);
+  };
+  child = spawn(executable('storybook'), ['dev', '--ci', '--host', '127.0.0.1', '--port', String(port)], {
+    cwd: app,
+    detached: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...process.env, CI: '1', STORYBOOK_DISABLE_TELEMETRY: '1' },
+  });
+  child.stdout!.on('data', keep);
+  child.stderr!.on('data', keep);
+  const origin = `http://127.0.0.1:${port}`;
+  const deadline = Date.now() + 150_000;
+  for (;;) {
+    if (child.exitCode !== null) throw new Error(`Storybook exited with ${child.exitCode}:\n${output}`);
+    try {
+      if ((await fetch(`${origin}/index.json`, { signal: AbortSignal.timeout(10_000) })).ok) return origin;
+    } catch {}
+    if (Date.now() > deadline) throw new Error(`Storybook did not serve its index in time:\n${output}`);
+    await Bun.sleep(500);
+  }
+}
+
+// Follow local imports, so shared replay helpers may own the recordings instead of each story importing JSON directly.
+function dependencies(file: string, seen = new Set<string>()): Set<string> {
+  if (seen.has(file)) return seen;
+  seen.add(file);
+  if (file.endsWith('.json')) return seen;
+  const source = readFileSync(file, 'utf8');
+  for (const match of source.matchAll(/(?:from\s*|import\s*\(?\s*)['"](\.[^'"]+)['"]/g)) {
+    const path = resolve(dirname(file), match[1]!);
+    const target = [path, `${path}.ts`, `${path}.tsx`, join(path, 'index.ts'), join(path, 'index.tsx')].find(
+      (candidate) => existsSync(candidate) && /\.(?:tsx?|json)$/.test(candidate),
+    );
+    if (target) dependencies(target, seen);
+  }
+  return seen;
+}
+
+afterAll(async () => {
+  await browser?.close();
+  if (child?.pid)
+    try {
+      process.kill(-child.pid, 'SIGTERM');
+    } catch {}
+  rmSync(temporary, { recursive: true, force: true });
+});
+
+// Change to test(...) when web has recorded page and shell stories running through the Storybook vitest addon.
+test.failing(
+  'every page story renders from recorded kernel responses and passes as an accessible browser test',
+  async () => {
+    const report = join(temporary, 'stories.json');
+    // An absent Storybook is an empty story suite, not a missing-config or missing-command failure.
+    const fallback = join(temporary, 'empty.config.ts');
+    writeFileSync(fallback, `export default { test: { include: ['src/**/*.stories.tsx'], passWithNoTests: true } };\n`);
+    const config = existsSync(join(app, 'vitest.config.ts')) ? join(app, 'vitest.config.ts') : fallback;
+    const run = await command([
+      executable('vitest'),
+      'run',
+      '--config',
+      config,
+      '--reporter=json',
+      `--outputFile=${report}`,
+    ]);
+    if (!existsSync(report)) throw new Error(`vitest did not write a JSON report:\n${run.output}`);
+    const result = JSON.parse(readFileSync(report, 'utf8')) as {
+      testResults: { name: string; assertionResults: { title: string; status: string }[] }[];
+    };
+    for (const page of pages)
+      for (const visitor of visitors) {
+        const passed = result.testResults
+          .filter((file) => basename(file.name) === `${page}.stories.tsx`)
+          .flatMap((file) => file.assertionResults)
+          .filter((assertion) => assertion.title === visitor && assertion.status === 'passed');
+        expect(passed.length, `${page}: ${visitor} must pass in the browser`).toBeGreaterThan(0);
+      }
+    expect(run.code, run.output).toBe(0);
+    const main = readFileSync(join(app, '.storybook/main.ts'), 'utf8');
+    for (const feature of ['@storybook/react-vite', '@storybook/addon-vitest', '@storybook/addon-a11y'])
+      expect(main).toContain(feature);
+    expect(readFileSync(config, 'utf8')).toContain('storybookTest');
+    expect(readFileSync(config, 'utf8')).toContain('browser');
+    const preview = ['preview.ts', 'preview.tsx'].map((name) => join(app, '.storybook', name)).find(existsSync);
+    expect(preview, 'the preview exposes the locale toolbar to every story').toBeDefined();
+    const previewSource = readFileSync(preview!, 'utf8');
+    for (const feature of ['globalTypes', 'locale', 'toolbar', ...locales]) expect(previewSource).toContain(feature);
+
+    const origin = await storybook();
+    const index = (await (await fetch(`${origin}/index.json`)).json()) as {
+      entries: Record<string, { id: string; importPath: string; name: string; type: string }>;
+    };
+    browser = await chromium.launch();
+    const entries = Object.values(index.entries).filter((entry) => entry.type === 'story');
+    for (const name of pages)
+      for (const visitor of visitors)
+        expect(
+          entries.some((entry) => basename(entry.importPath) === `${name}.stories.tsx` && entry.name === visitor),
+        ).toBe(true);
+    for (const entry of entries) {
+      const name = basename(entry.importPath, '.stories.tsx');
+      const imports = dependencies(resolve(app, entry.importPath));
+      expect([...imports].some((file) => file.startsWith(`${recorded}/`) && file.endsWith('.json'))).toBe(true);
+      for (const locale of locales) {
+        const context = await browser.newContext({ viewport: { width: 1280, height: 860 }, reducedMotion: 'reduce' });
+        const page = await context.newPage();
+        const external: string[] = [];
+        await page.route('**/*', async (route) => {
+          const url = new URL(route.request().url());
+          if (url.origin === origin || !['http:', 'https:'].includes(url.protocol)) return route.continue();
+          external.push(url.href);
+          await route.abort();
+        });
+        await page.goto(`${origin}/iframe.html?id=${entry.id}&viewMode=story&globals=locale:${locale}`, {
+          waitUntil: 'networkidle',
+        });
+        // Browser steps copied from shell.test.ts; every page includes the real shell landmarks.
+        await page.getByRole('main').waitFor();
+        expect(await page.getByRole('main').count()).toBe(1);
+        expect(await page.getByRole('navigation').count()).toBe(1);
+        expect(await page.evaluate(() => document.documentElement.lang)).toBe(locale);
+        const own = await Bun.file(join(app, 'messages', `${locale}.json`)).json();
+        expect(await page.getByRole('navigation', { name: own.shell_navigation, exact: true }).count()).toBe(1);
+        if (entry.name === 'Signed Out')
+          expect(await page.getByRole('link', { name: own.account_sign_in, exact: true }).count()).toBe(1);
+        if (entry.name === 'Signed In') {
+          expect(await page.getByRole('link', { name: own.account_sign_in, exact: true }).count()).toBe(0);
+          expect(await page.getByRole('button', { name: own.account_sign_out, exact: true }).count()).toBe(1);
+        }
+        if (name === 'home' || name === 'missing-subject')
+          expect((await page.getByRole('heading', { level: 1 }).textContent())?.trim()).toBe(
+            name === 'home' ? own.home_heading : own.not_found_heading,
+          );
+        if (name === 'subject') {
+          const recording = await Bun.file(join(recorded, 'subject.json')).json();
+          expect((await page.getByRole('heading', { level: 1 }).textContent())?.trim()).toBe(
+            recording.subject.labels[locale] ?? recording.subject.labels.en,
+          );
+        }
+        const a11y = await new AxeBuilder({ page })
+          .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'])
+          .analyze();
+        expect(
+          a11y.violations.map((violation) => violation.id),
+          `${entry.id} ${locale}`,
+        ).toEqual([]);
+        expect(external, 'stories replay recordings without contacting Auth or a live kernel').toEqual([]);
+        await context.close();
+      }
+    }
+  },
+  timeout,
+);
+
+// Change to test(...) when every recorded JSON response satisfies its kernel client response contract.
+test.failing(
+  'each recorded response type-checks against the kernel client',
+  async () => {
+    const files = recordings();
+    const module = join(temporary, 'recordings.ts');
+    const source = [
+      "import type { KernelClient } from '@rezics/client';",
+      'type Mutable<T> = { -readonly [K in keyof T]: Mutable<T[K]> };',
+      "type Read = Awaited<ReturnType<ReturnType<KernelClient['subjects']>['get']>>;",
+      "type SubjectResponse = NonNullable<Read['data']>;",
+      "type MissingResponse = Extract<NonNullable<Read['error']>, { status: 404 | '404' }>['value'];",
+    ];
+    files.forEach((file, index) => {
+      const path = join(recorded, file);
+      const json = readFileSync(path, 'utf8');
+      source.push(`import recording${index} from ${JSON.stringify(path)};`);
+      // JSON imports widen discriminants to string. Restore only the exact literal shape read from that same file.
+      source.push(`const literal${index} = ${json} as const;`);
+      source.push(
+        `(recording${index} as Mutable<typeof literal${index}>) satisfies ${basename(file) === 'missing-subject.json' ? 'MissingResponse' : 'SubjectResponse'};`,
+      );
+    });
+    writeFileSync(module, `${source.join('\n')}\n`);
+    const config = join(temporary, 'tsconfig.json');
+    writeFileSync(
+      config,
+      JSON.stringify({
+        extends: join(root, 'tsconfig.base.json'),
+        compilerOptions: {
+          resolveJsonModule: true,
+          types: ['bun'],
+          paths: { '@rezics/client': [join(root, 'packages/client/src/index.ts')] },
+        },
+        files: [module],
+      }),
+    );
+    const run = await command([join(root, 'node_modules/.bin/tsc'), '--noEmit', '-p', config]);
+    expect(run.code, run.output).toBe(0);
+    expect(files, 'a successful empty compilation does not cover the subject and missing-subject responses').toEqual(
+      expect.arrayContaining(['subject.json', 'missing-subject.json']),
+    );
+  },
+  timeout,
+);
