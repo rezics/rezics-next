@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import type { ResourceRoleCatalogue } from '../access/resource-roles.ts';
 import { type AuthoritativeTime, type CommandAuthorization } from '../command/command.ts';
+import type { ResourceEligibility } from '../access/eligibility.ts';
 export type AccountActor = {
     kind: 'account';
     accountId: string;
@@ -15,6 +16,7 @@ export type Actor = AccountActor | {
 export type Resource = {
     route: number;
     id: string;
+    eligibility?: ResourceEligibility;
 };
 export type ActionCatalogue = ReadonlyMap<string, {
     anonymous: boolean;
