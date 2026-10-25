@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { realpathSync, statSync } from 'node:fs';
 import { dirname, extname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { migrate, moduleExtensionFiles, POSTGRES_IMAGE, schemaDumps } from './database.ts';
+import { migrate, moduleExtensionFiles, POSTGRES_IMAGE, schemaDumps, validateMigrationVersions } from './database.ts';
 import { buildSearchImage, waitForSearch } from './search.ts';
 
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -184,6 +184,9 @@ function fail(message: string): never {
 }
 
 async function main(): Promise<void> {
+  const migrationFiles = Array.from(new Bun.Glob('db/**/migrations/*.sql').scanSync({ cwd: directory }));
+  validateMigrationVersions(migrationFiles, new Date());
+
   const plan = checkPlan(process.argv.slice(2), directory);
   const extensionFiles = moduleExtensionFiles();
   if (extensionFiles.length) fail(`Module migrations must not create extensions:\n${extensionFiles.join('\n')}`);
