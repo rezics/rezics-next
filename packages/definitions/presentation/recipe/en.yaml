@@ -1,0 +1,6 @@
+types:
+  schema:Recipe: recipe
+properties:
+  schema:recipeIngredient: ingredient
+  schema:cookTime: cooking time
+  schema:recipeYield: servings

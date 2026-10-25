@@ -309,6 +309,24 @@ export async function compileCatalogue(input: {
   const slots = terms('slots', globals);
   const classKeysByName = new Map(classes.map((term) => [term.name, term.key]));
   const slotKeysByName = new Map(slots.map((term) => [term.name, term.key]));
+  const parents = new Map<string, string>();
+  for (const source of Object.values(parsed))
+    for (const [name, definition] of Object.entries(object(source.classes))) {
+      if (typeof object(definition).is_a === 'string') parents.set(name, object(definition).is_a as string);
+    }
+  const descendants = (range: string): string[] =>
+    classes
+      .filter((term) => {
+        let current: string | undefined = term.name;
+        const seen = new Set<string>();
+        while (current && !seen.has(current)) {
+          if (current === range) return true;
+          seen.add(current);
+          current = parents.get(current);
+        }
+        return false;
+      })
+      .map((term) => term.name);
   const mappings = (term: Term) => {
     const result = unique(names(term.value.exact_mappings));
     for (const mapping of result)
@@ -335,11 +353,14 @@ export async function compileCatalogue(input: {
     const datatype = annotations.datatype as DataType;
     const range = slot.range ?? parsed[location.file]?.default_range ?? 'string';
     const ranges = Array.isArray(slot.any_of) ? slot.any_of.map((entry) => object(entry).range) : [range];
+    const expandedTargets = unique(
+      ranges.flatMap((candidate) => (typeof candidate === 'string' ? descendants(candidate) : [])),
+    );
     const agrees =
       DATA_TYPES.includes(datatype) &&
       ranges.length > 0 &&
       ranges.every((range) => {
-        if (datatype === 'wikibase-item') return typeof range === 'string' && classKeysByName.has(range);
+        if (datatype === 'wikibase-item') return typeof range === 'string' && descendants(range).length > 0;
         const expected =
           datatype === 'quantity'
             ? ['integer', 'decimal']
@@ -377,7 +398,7 @@ export async function compileCatalogue(input: {
     }
     property.qualifiers = unique(property.qualifiers);
     if (datatype === 'wikibase-item')
-      property.targets = unique(ranges.map((range) => classKeysByName.get(range as string)!));
+      property.targets = unique(expandedTargets.map((name) => classKeysByName.get(name)!));
     if (datatype === 'quantity') {
       const units = words(annotations.units);
       if (!units.length || units.length > 16)
@@ -416,11 +437,19 @@ export async function compileCatalogue(input: {
     add({ file: input.root, pointer: '/version' }, 'invalid', 'Catalogue version is required');
   stop();
 
-  for (const tag of Object.keys(input.presentation).sort(compare)) {
-    const file = `presentation/${tag}`;
-    const labels = parse(input.presentation[tag]!, file);
+  const seenLabels = new Set<string>();
+  for (const key of Object.keys(input.presentation).sort(compare)) {
+    const parts = key.split('/');
+    const tag = parts.length === 1 ? parts[0]! : parts.length === 2 ? parts[1]! : '';
+    const file = `presentation/${key}`;
+    const labels = parse(input.presentation[key]!, file);
     // Use the release schema's complete BCP 47 grammar, including grandfathered tags.
-    if (!languagePattern.test(tag)) add({ file, pointer: '' }, 'invalid', 'Expected a BCP 47 language tag');
+    if (
+      !languagePattern.test(tag) ||
+      (parts.length === 2 && !/^[a-z][a-z0-9-]{0,63}$(?![\s\S])/u.test(parts[0]!)) ||
+      parts.length > 2
+    )
+      add({ file, pointer: '' }, 'invalid', 'Expected a BCP 47 language tag or <group>/<tag>');
     allowed(labels, 'types properties', { file, pointer: '' });
     for (const collection of ['types', 'properties'] as const) {
       if (labels[collection] !== undefined && !record(labels[collection]))
@@ -430,7 +459,14 @@ export async function compileCatalogue(input: {
         if (!Object.hasOwn(release[collection], key)) add(location, 'invalid', 'Unknown term');
         else if (typeof label !== 'string' || !label.length || [...label].length > 256)
           add(location, 'invalid', 'Label must contain between one and 256 characters');
-        else release[collection][key]!.labels[tag] = label;
+        else {
+          const identity = `${tag}\0${collection}\0${key}`;
+          if (seenLabels.has(identity)) add(location, 'duplicate', 'Term already has a label in this language');
+          else {
+            seenLabels.add(identity);
+            release[collection][key]!.labels[tag] = label;
+          }
+        }
       }
     }
   }

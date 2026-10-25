@@ -1,13 +1,6 @@
 types:
   schema:Person: 人物
   schema:Organization: 組織
-  schema:Book: 書籍
-  bf:Instance: 版本
-  schema:Recipe: 食譜
-  schema:TVSeries: 電視系列節目
-  schema:MusicAlbum: 音樂專輯
-  schema:VideoGame: 電子遊戲
-  wd:Q689445: 視覺小說
 properties:
   schema:url: URL
   schema:name: 名稱
@@ -20,14 +13,6 @@ properties:
   schema:version: 版本
   schema:dateModified: 最後更新
   schema:inLanguage: 語言
-  schema:exampleOfWork: 原作品
-  schema:isbn: ISBN-13
-  schema:publisher: 出版者
-  schema:numberOfPages: 頁數
-  schema:translator: 譯者
-  schema:recipeIngredient: 食材
-  schema:cookTime: 烹調時間
-  schema:recipeYield: 份量
   schema:abstract: 摘要
   schema:image: 圖像
   wdt:P648: 開放圖書館識別碼

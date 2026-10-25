@@ -1,0 +1,12 @@
+id: https://rezics.com/catalogue/classification
+name: classification
+version: 1.0.0
+description: Classification profile terms.
+prefixes:
+  linkml: https://w3id.org/linkml/
+  schema: http://schema.org/
+  wd: http://www.wikidata.org/entity/
+default_range: string
+imports:
+  - linkml:types
+  - core

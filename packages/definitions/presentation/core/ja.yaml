@@ -1,13 +1,6 @@
 types:
   schema:Person: 人物
   schema:Organization: 組織
-  schema:Book: 書籍
-  bf:Instance: 版
-  schema:Recipe: レシピ
-  schema:TVSeries: テレビ番組シリーズ
-  schema:MusicAlbum: アルバム
-  schema:VideoGame: コンピュータゲーム
-  wd:Q689445: ビジュアルノベル
 properties:
   schema:url: URL
   schema:name: 名前
@@ -20,14 +13,6 @@ properties:
   schema:version: バージョン
   schema:dateModified: 最終更新日
   schema:inLanguage: 言語
-  schema:exampleOfWork: 原作品
-  schema:isbn: ISBN-13
-  schema:publisher: 出版社
-  schema:numberOfPages: ページ数
-  schema:translator: 翻訳者
-  schema:recipeIngredient: 材料
-  schema:cookTime: 調理時間
-  schema:recipeYield: 人数
   schema:abstract: アブストラクト
   schema:image: 画像
   wdt:P648: Open Library識別子

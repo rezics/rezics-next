@@ -1,0 +1,25 @@
+id: https://rezics.com/catalogue/game
+name: game
+version: 1.0.0
+description: Video game profile terms.
+prefixes:
+  linkml: https://w3id.org/linkml/
+  schema: http://schema.org/
+  wd: http://www.wikidata.org/entity/
+default_range: string
+imports:
+  - linkml:types
+  - core
+classes:
+  VideoGame:
+    abstract: true
+    is_a: LaunchWork
+    class_uri: schema:VideoGame
+    description: Shared video game fields; source identifiers are declared on concrete profiles.
+  BangumiVideoGame:
+    is_a: VideoGame
+    class_uri: schema:VideoGame
+    exact_mappings:
+      - wd:Q7889
+    slots:
+      - bangumiSubjectId

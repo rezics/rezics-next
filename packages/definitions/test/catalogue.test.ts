@@ -7,13 +7,24 @@ test('the committed bundled release is the compilation of the bundled catalogue'
   const sources = bundledSources();
   expect(sources.root).toBe('rezics.yaml');
   expect(Object.keys(sources.schemas).sort()).toEqual([
+    'anime.yaml',
     'book.yaml',
+    'character.yaml',
+    'classification.yaml',
     'core.yaml',
+    'game.yaml',
+    'manga.yaml',
     'recipe.yaml',
     'rezics.yaml',
+    'series.yaml',
+    'visual-novel.yaml',
     'works.yaml',
   ]);
-  expect(Object.keys(sources.presentation).sort()).toEqual(['en', 'ja', 'zh-Hant']);
+  expect(Object.keys(sources.presentation).sort()).toEqual(
+    ['anime', 'book', 'core', 'game', 'recipe', 'visual-novel', 'works'].flatMap((group) =>
+      ['en', 'ja', 'zh-Hant'].map((tag) => `${group}/${tag}`),
+    ),
+  );
   expect(await compileCatalogue(sources)).toEqual(bundledRelease);
   expect(validateRelease(bundledRelease)).toEqual([]);
   expect(bundledDigest).toBe(releaseDigest(bundledRelease));
@@ -147,13 +158,11 @@ ${prefixes}imports:
   - rezics
   - music
 `;
-  const labels = Bun.YAML.parse(sources.presentation.en!) as Record<string, Record<string, string>>;
-  labels.types!['schema:MusicComposition'] = 'musical composition';
-  labels.properties!['schema:composer'] = 'composer';
+  const labels = 'types:\n  schema:MusicComposition: musical composition\nproperties:\n  schema:composer: composer\n';
   const release = await compileCatalogue({
     root: 'fixture.yaml',
     schemas: { ...sources.schemas, 'fixture.yaml': root, 'music.yaml': music },
-    presentation: { ...sources.presentation, en: JSON.stringify(labels) },
+    presentation: { ...sources.presentation, 'music/en': labels },
   });
   expect(release.catalogue).toEqual({ id: 'https://rezics.com/catalogue/fixture', version: '1.0.0' });
   expect(Object.keys(release.types).sort()).toEqual(

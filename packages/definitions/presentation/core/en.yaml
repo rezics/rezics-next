@@ -1,13 +1,6 @@
 types:
   schema:Person: person
   schema:Organization: organization
-  schema:Book: book
-  bf:Instance: edition
-  schema:Recipe: recipe
-  schema:TVSeries: television series
-  schema:MusicAlbum: album
-  schema:VideoGame: video game
-  wd:Q689445: visual novel
 properties:
   schema:url: URL
   schema:name: name
@@ -20,14 +13,6 @@ properties:
   schema:version: version
   schema:dateModified: dateModified
   schema:inLanguage: language
-  schema:exampleOfWork: edition of
-  schema:isbn: ISBN-13
-  schema:publisher: publisher
-  schema:numberOfPages: number of pages
-  schema:translator: translator
-  schema:recipeIngredient: ingredient
-  schema:cookTime: cooking time
-  schema:recipeYield: servings
   schema:abstract: abstract
   schema:image: image
   wdt:P648: Open Library ID

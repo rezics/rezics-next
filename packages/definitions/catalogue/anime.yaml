@@ -1,0 +1,20 @@
+id: https://rezics.com/catalogue/anime
+name: anime
+version: 1.0.0
+description: Television series profile terms.
+prefixes:
+  linkml: https://w3id.org/linkml/
+  schema: http://schema.org/
+  wd: http://www.wikidata.org/entity/
+default_range: string
+imports:
+  - linkml:types
+  - core
+classes:
+  TVSeries:
+    is_a: LaunchWork
+    class_uri: schema:TVSeries
+    exact_mappings:
+      - wd:Q5398426
+    slots:
+      - bangumiSubjectId

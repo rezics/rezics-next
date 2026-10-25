@@ -1,0 +1,12 @@
+id: https://rezics.com/catalogue/character
+name: character
+version: 1.0.0
+description: Character profile terms.
+prefixes:
+  linkml: https://w3id.org/linkml/
+  schema: http://schema.org/
+  wd: http://www.wikidata.org/entity/
+default_range: string
+imports:
+  - linkml:types
+  - core

@@ -23,10 +23,16 @@ RFC 8785 canonical JSON. Validate first: the digest function does not validate.
 ## Bundled catalogue
 
 The LinkML sources in `catalogue/` define the bundled terms. `rezics.yaml` imports
-the shared `core` terms and the `book`, `recipe` and `works` profiles. These profiles add
-types and properties through catalogue data; they do not need package code. The
-compiled release is checked in at `release/rezics.json`, and `src/bundled.ts`
-exposes both the source files and that release.
+the shared `core` terms and each profile schema. These profiles add types and
+properties through catalogue data; they do not need package code. The compiled
+release is checked in at `release/rezics.json`, and `src/bundled.ts` discovers all
+catalogue and presentation YAML files for compilation.
+
+To add a vertical, add its schema as `catalogue/<vertical>.yaml`, add that schema
+to the imports in `catalogue/rezics.yaml`, and add one label file per locale at
+`presentation/<vertical>/<tag>.yaml` for each locale the vertical supports. Keep
+each term's labels in the group named for the schema file that defines that term.
+Profiles with no current terms can contain only metadata and an import of `core`.
 
 To change the catalogue, edit its LinkML source or the language files in
 `presentation/`, then run `bun run --cwd packages/definitions release` and review
@@ -83,14 +89,19 @@ Source conventions:
 - Patterns are allowed only on `string`, `external-id`, and `monolingualtext`.
   Every source pattern must compile with JavaScript's `u` flag, contain at most
   256 characters, and receive `safe` from recheck's synchronous checker.
-- Each presentation entry uses a BCP 47 language tag and contains a YAML object
-  with optional `types` and `properties` maps, keyed by release CURIE. Labels
-  must be nonempty strings of at most 256 characters. Unknown terms and other
-  keys are refused. Every emitted type and property requires an `en` label;
-  other locales may be partial.
+- Each presentation entry uses a BCP 47 language tag or `<group>/<tag>`, where
+  group matches `^[a-z][a-z0-9-]{0,63}$`, and contains a YAML object with optional
+  `types` and `properties` maps, keyed by release CURIE. Files with the same tag
+  merge; a term can be labelled only once per tag. Labels must be nonempty strings
+  of at most 256 characters. Unknown terms and other keys are refused. Every
+  emitted type and property requires an `en` label; other locales may be partial.
 
 Limits and profile checks precede LinkML loading and linting, then mapping, then
-labels. Compilation stops at the first stage with violations. LinkML warnings
+labels. A `wikibase-item` range includes its concrete class and every concrete
+descendant reachable through `is_a`, including when the range or an intermediate
+class is abstract. Descendants are resolved across all supplied schemas; an
+abstract range with no concrete descendants is invalid. Emitted targets are
+sorted and unique. Compilation stops at the first stage with violations. LinkML warnings
 are permitted; errors are refused. Derived JSON with derivation enabled supplies
 classes and induced attributes. An auxiliary abstract class induces all global
 slots through LinkML, preserving unused qualifier properties without resolving
