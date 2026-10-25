@@ -26,7 +26,12 @@ export function validResource(resource: Resource): boolean {
   return resource && routeOf(resource.id) !== null && routeOf(resource.id) === resource.route;
 }
 export function validActions(actions: readonly string[]): boolean {
-  return Array.isArray(actions) && actions.length > 0 && actions.every((action) => typeof action === 'string');
+  return (
+    Array.isArray(actions) &&
+    actions.length > 0 &&
+    actions.length <= 1000 &&
+    actions.every((action) => typeof action === 'string' && /^[a-z][a-z_]*:[a-z][a-z_]*$/.test(action))
+  );
 }
 
 /** Prepare separate anchors before resource checkout, then reuse the original
@@ -37,7 +42,7 @@ export function validActions(actions: readonly string[]): boolean {
  * grantor rights.
  */
 export async function grantCommand<T>(
-  config: { pool: Pool; access: Access },
+  config: { pool: Pool; access: Access; clock?: (() => Date) | undefined },
   context: GrantCommandContext,
   options: {
     resource: Resource;
@@ -105,6 +110,7 @@ export async function grantCommand<T>(
         deadline: context.deadline,
         basis,
         authorization,
+        clock: config.clock,
         receipt: {
           actorAccountId: actor.accountId,
           kind: options.kind,

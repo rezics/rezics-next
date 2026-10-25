@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { createAccess } from '../access/index.ts';
+import { accessRoutes } from '../access/routes.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { payoutRoutes } from '../commerce/payout-routes.ts';
 import { commerceRoutes, type CommerceDependencies } from '../commerce/routes.ts';
@@ -68,8 +69,18 @@ export function createKernel(dependencies: KernelDependencies) {
       return resolveAccess({ actions: actionCatalogue(content) });
     },
   });
-  declareKernelWriteRates(content);
-  return content as typeof content & typeof searched & typeof payouts & typeof commercial & typeof contextual;
+  const granted = accessRoutes(content as unknown as ReturnType<typeof definitionRoutes>, {
+    pool: dependencies.pool,
+    clock,
+    access: () => resolveAccess({ actions: actionCatalogue(granted) }),
+  });
+  declareKernelWriteRates(granted);
+  return granted as typeof granted &
+    typeof content &
+    typeof searched &
+    typeof payouts &
+    typeof commercial &
+    typeof contextual;
 }
 
 /** The app's type is the Eden contract. */

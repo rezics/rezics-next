@@ -49,7 +49,12 @@ function recipient(input: GrantRecipient) {
 /** The composition root supplies the mounted catalogue's colon-form management
  * action. There is no privileged management or caller-supplied grantor path.
  */
-export function createGrantCommands(config: { pool: Pool; access: Access; managementAction: string }) {
+export function createGrantCommands(config: {
+  pool: Pool;
+  access: Access;
+  managementAction: string;
+  clock?: (() => Date) | undefined;
+}) {
   async function execute(
     context: GrantCommandContext,
     operation: 'create' | 'change' | 'revoke',
@@ -68,6 +73,7 @@ export function createGrantCommands(config: { pool: Pool; access: Access; manage
       throw new GrantDeniedError();
     const actions = [...new Set(input.actions)].sort();
     const oldActions = previous ? [...new Set(previous.actions)].sort() : [];
+    if (new Set([...actions, ...oldActions]).size > 1000) throw new GrantDeniedError();
     return grantCommand(
       config,
       context,
@@ -135,8 +141,11 @@ export function createGrantCommands(config: { pool: Pool; access: Access; manage
       !subject ||
       !validResource(input.resource) ||
       !actions ||
+      !validActions(actions) ||
       typeof input.valid !== 'string' ||
-      (operation === 'change' && (!previous || !oldActions || typeof previous.valid !== 'string'))
+      (operation === 'change' && (!previous || !oldActions || typeof previous.valid !== 'string')) ||
+      (oldActions !== undefined && !validActions(oldActions)) ||
+      new Set([...actions, ...(oldActions ?? [])]).size > 1000
     )
       throw new GrantDeniedError();
     return grantCommand(
