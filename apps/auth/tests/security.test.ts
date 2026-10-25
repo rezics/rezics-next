@@ -58,8 +58,7 @@ const fake = Bun.serve({
     const headers = new Headers({ 'cache-control': 'no-store' });
 
     if (url.pathname === '/session' && request.method === 'GET') {
-      if (signedOut)
-        return Response.json({ error: 'authentication_required' }, { status: 401, headers });
+      if (signedOut) return Response.json({ error: 'authentication_required' }, { status: 401, headers });
       return Response.json({ account_id: accountId }, { headers });
     }
 
@@ -69,15 +68,23 @@ const fake = Bun.serve({
     }
 
     if (url.pathname.startsWith('/credential-effects/') && request.method === 'POST') {
-      if (stepUpRequired)
-        return Response.json({ error: 'step_up_required' }, { status: 401, headers });
+      if (stepUpRequired) return Response.json({ error: 'step_up_required' }, { status: 401, headers });
       if (url.pathname === '/credential-effects/stage')
         return Response.json(
-          { effectRef: 'effect-ref', key: JSON.parse(call.body).key, subjectId: accountId, purpose: 'password', digest: 'digest' },
+          {
+            effectRef: 'effect-ref',
+            key: JSON.parse(call.body).key,
+            subjectId: accountId,
+            purpose: 'password',
+            digest: 'digest',
+          },
           { headers },
         );
       if (url.pathname === '/credential-effects/approve')
-        return Response.json({ reference: 'approval-reference', expiresAt: new Date(now + 60_000).toISOString() }, { headers });
+        return Response.json(
+          { reference: 'approval-reference', expiresAt: new Date(now + 60_000).toISOString() },
+          { headers },
+        );
       if (url.pathname === '/credential-effects/apply')
         return Response.json({ receiptId: 'receipt-id', replayed: true }, { headers });
     }
@@ -218,6 +225,7 @@ afterAll(async () => {
 
 async function passwordForm(page: Page) {
   const input = page.getByLabel('New password', { exact: true });
+  await input.waitFor({ state: 'visible' });
   expect(await input.count(), 'security settings has one labelled new password field').toBe(1);
   return { input, submit: page.getByRole('button', { name: 'Update password', exact: true }) };
 }
@@ -234,8 +242,8 @@ function postBody(path: string, index = -1) {
   return JSON.parse(call!.body) as Record<string, unknown>;
 }
 
-test.failing(
-  "a signed-in person changes their password through the staged credential effect",
+test(
+  'a signed-in person changes their password through the staged credential effect',
   async () => {
     signedOut = false;
     stepUpRequired = false;
@@ -251,7 +259,7 @@ test.failing(
         page.waitForResponse((response) => new URL(response.url()).pathname === '/credential-effects/apply'),
         form.submit.click(),
       ]);
-      await expect(page.getByRole('status')).toContainText('Password changed');
+      expect(await page.getByRole('status').innerText()).toContain('Password changed');
 
       const stage = postBody('/credential-effects/stage');
       const approve = postBody('/credential-effects/approve');
@@ -276,12 +284,12 @@ test.failing(
         expect(url).not.toContain(password);
         expect(decodeURIComponent(url.replace(/\+/g, ' '))).not.toContain(password);
       }
-      expect(calls.filter((call) => call.method === 'GET').map((call) => new URL(call.url, fake.url).pathname)).toContain(
-        '/session',
-      );
-      expect(calls.filter((call) => call.method === 'GET').map((call) => new URL(call.url, fake.url).pathname)).toContain(
-        '/sessions',
-      );
+      expect(
+        calls.filter((call) => call.method === 'GET').map((call) => new URL(call.url, fake.url).pathname),
+      ).toContain('/session');
+      expect(
+        calls.filter((call) => call.method === 'GET').map((call) => new URL(call.url, fake.url).pathname),
+      ).toContain('/sessions');
     } finally {
       await page.context().close();
     }
@@ -289,7 +297,7 @@ test.failing(
   timeout,
 );
 
-test.failing(
+test(
   'a stale session is sent to step-up and comes back to security settings',
   async () => {
     signedOut = false;
@@ -299,10 +307,7 @@ test.failing(
     try {
       const form = await passwordForm(page);
       await form.input.fill(password);
-      await Promise.all([
-        page.waitForURL((url) => url.pathname === '/step-up'),
-        form.submit.click(),
-      ]);
+      await Promise.all([page.waitForURL((url) => url.pathname === '/step-up'), form.submit.click()]);
       const stepUpUrl = new URL(page.url());
       expect(stepUpUrl.searchParams.get('return_to')).toBe('/security');
       expect(page.url()).not.toContain(password);
@@ -310,8 +315,8 @@ test.failing(
 
       stepUpRequired = false;
       await page.goto(`${origin}/security`, { waitUntil: 'networkidle' });
-      await expect(page.getByRole('heading', { name: 'Account security' })).toBeVisible();
-      await expect(page.getByLabel('New password', { exact: true })).toHaveValue('');
+      expect(await page.getByRole('heading', { name: 'Account security' }).count()).toBe(1);
+      expect(await page.getByLabel('New password', { exact: true }).inputValue()).toBe('');
     } finally {
       await page.context().close();
     }
@@ -319,7 +324,7 @@ test.failing(
   timeout,
 );
 
-test.failing(
+test(
   'a person sees their sessions, the current one marked, and revokes another',
   async () => {
     signedOut = false;
@@ -328,19 +333,20 @@ test.failing(
     const { page } = await open('/security', { locale: 'en', timezoneId: 'America/Los_Angeles' });
     try {
       const list = page.getByRole('list', { name: 'Your sessions' });
-      await expect(list).toBeVisible();
+      await list.waitFor({ state: 'visible' });
+      expect(await list.count()).toBe(1);
       const rows = list.getByRole('listitem');
-      await expect(rows).toHaveCount(2);
-      await expect(rows.first()).toContainText('Unknown device');
-      await expect(rows.first()).toContainText('login');
-      await expect(rows.first()).toContainText('Current session');
-      await expect(rows.nth(1)).toContainText('Firefox on Linux');
-      await expect(rows.nth(1)).toContainText('website');
+      expect(await rows.count()).toBe(2);
+      expect(await rows.first().innerText()).toContain('Unknown device');
+      expect(await rows.first().innerText()).toContain('login');
+      expect(await rows.first().innerText()).toContain('Current session');
+      expect(await rows.nth(1).innerText()).toContain('Firefox on Linux');
+      expect(await rows.nth(1).innerText()).toContain('website');
       const formattedDate = new Intl.DateTimeFormat('en', {
         dateStyle: 'medium',
         timeZone: 'America/Los_Angeles',
       }).format(new Date(sessions[0]!.created_at));
-      await expect(rows.nth(1)).toContainText(formattedDate);
+      expect(await rows.nth(1).innerText()).toContain(formattedDate);
 
       let confirmations = 0;
       page.on('dialog', async (dialog) => {
@@ -348,10 +354,14 @@ test.failing(
         expect(dialog.type()).toBe('confirm');
         await dialog.accept();
       });
-      await rows.nth(1).getByRole('button', { name: 'Revoke', exact: true }).click();
+      await Promise.all([
+        page.waitForResponse((response) => new URL(response.url()).pathname === '/sessions/revoke'),
+        rows.nth(1).getByRole('button', { name: 'Revoke', exact: true }).click(),
+      ]);
       expect(confirmations).toBe(1);
       expect(postBody('/sessions/revoke')).toEqual({ session_id: 'older-session' });
-      await expect(rows).toHaveCount(1);
+      await rows.nth(1).waitFor({ state: 'detached' });
+      expect(await rows.count()).toBe(1);
       expect(authCalls('/sessions/revoke')).toHaveLength(1);
     } finally {
       await page.context().close();
@@ -360,7 +370,7 @@ test.failing(
   timeout,
 );
 
-test.failing(
+test(
   'revoking the current session signs the person out',
   async () => {
     signedOut = false;
@@ -369,7 +379,8 @@ test.failing(
     const { page, origin } = await open();
     try {
       const current = page.getByRole('listitem').filter({ hasText: 'Current session' });
-      await expect(current).toBeVisible();
+      await current.waitFor({ state: 'visible' });
+      expect(await current.count()).toBe(1);
       page.once('dialog', (dialog) => dialog.accept());
       await Promise.all([
         page.waitForURL(`${origin}/login`),
@@ -387,7 +398,7 @@ test.failing(
   timeout,
 );
 
-test.failing(
+test(
   'signed out, the page offers sign-in',
   async () => {
     signedOut = true;
@@ -395,7 +406,9 @@ test.failing(
     calls.length = 0;
     const { page } = await open('/security', {}, false);
     try {
-      await expect(page.getByRole('link', { name: 'Sign in', exact: true })).toHaveAttribute('href', '/login');
+      const signIn = page.getByRole('link', { name: 'Sign in', exact: true });
+      await signIn.waitFor({ state: 'visible' });
+      expect(await signIn.getAttribute('href')).toBe('/login');
       expect(authCalls('/session')).toHaveLength(1);
       expect(authCalls('/sessions')).toHaveLength(0);
     } finally {

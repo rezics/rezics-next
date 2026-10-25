@@ -42,7 +42,19 @@ Not built yet.
 
 ## Security
 
-Not built yet.
+The security page reads the signed-in account from `GET /session` and its sessions from `GET /sessions`, with at most
+64 session rows. The view makes no kernel reads. A password change uses three Auth calls and a revoke uses one. A
+signed-out response offers a link to `/login`.
+
+Password changes accept 8 to 128 characters and use one random key for the staged credential effect: stage, approve,
+then apply. A failed network request retries only its step with the same key, and a replayed apply receipt counts as
+success. A `step_up_required` response sends the person to `/step-up` with `/security` as the return target and clears
+the password field; no password is put in the URL.
+
+Sessions show a readable device when the browser and system are recognized, the client id, and created and expiry
+dates formatted for the page locale and time zone. The current session appears first. Revocation asks for confirmation;
+revoking another session removes it from the list, while revoking the current session sends the person to `/login`.
+Passkeys are not shown until that feature is available.
 
 ## Step-up
 
