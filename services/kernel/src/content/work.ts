@@ -6,7 +6,6 @@ import type { Access } from '../request/access.ts';
 import type { KernelClock } from '../clock.ts';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
-import type { WorkClient } from '../work/client.ts';
 import { runAuthorErasure, type NativeDurableStep } from './erasure-workflow.ts';
 import { processImportedMedia } from './media-import-job.ts';
 import type { MediaImportFetchConfig } from './media-import.ts';
@@ -17,8 +16,12 @@ import type {
   OperationResponse,
 } from './operation-contract.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
+import { Value } from 'typebox/value';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
+import { WORK_APPLICATION, type WorkClient } from '../work/client.ts';
 import type { WorkContext, WorkModule } from '../work/registry.ts';
+import { clearErasedPostRevisions } from './erased-post-cleanup.ts';
+import { CONTENT_EVENTS } from './events.ts';
 import { createImageJob } from './image-job.ts';
 import { createCollectionJob } from './collection-job.ts';
 import { refreshBoardRankBatch } from './board-rank.ts';
@@ -253,6 +256,35 @@ async function registerWork(
       queueName: CONTENT_QUEUES.collect,
       cronTimezone: 'UTC',
       automaticBackfill: false,
+    },
+  ]);
+
+  // The erased-post event carries only identity. The committed tombstone is the
+  // authority, so a retry or a new event id reads it again and leaves erased rows unchanged.
+  const erasedPostEvent = 'com.rezics.content.post.erased.v1' as const;
+  const clearErasedPost = DBOS.registerStep(
+    async (postId: string) => clearErasedPostRevisions(context.pool, { postId }, Date.now() + 120_000),
+    { name: 'content.erasePostRevisions.step', ...RETRY },
+  );
+  DBOS.registerWorkflow(async (postId: string) => clearErasedPost(postId), { name: 'content.erasePostRevisions' });
+  context.addEffects([
+    {
+      name: 'content_post_erased',
+      types: [erasedPostEvent],
+      async run(event) {
+        if (event.type !== erasedPostEvent || !Value.Check(CONTENT_EVENTS[erasedPostEvent], event.data))
+          throw new TypeError('Invalid erased post event');
+        await context.client.enqueue(
+          {
+            applicationName: WORK_APPLICATION,
+            workflowName: 'content.erasePostRevisions',
+            queueName: 'governance',
+            workflowID: `content.erasePost:${event.id}`,
+            workflowIDReusePolicy: 'return-existing',
+          },
+          (event.data as { postId: string }).postId,
+        );
+      },
     },
   ]);
 }

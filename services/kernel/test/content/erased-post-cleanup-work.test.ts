@@ -445,14 +445,14 @@ if (process.argv.includes('--erased-post-worker')) {
         const epoch = advanced.rows[0]!.epoch;
         await client.query(
           `INSERT INTO core.outbox (partition_no, position, event_seq, event_count, epoch, id, type, subject, data)
-           SELECT partition_no, $2, 0, 1, $3, $4, type, subject, data
+           SELECT partition_no, $2::bigint, 0, 1, $3::integer, $4::uuid, type, subject, data
            FROM core.outbox WHERE partition_no=$1 AND id=$5`,
           [partitionOf(contentRoute), position, epoch, duplicateId, original.id],
         );
         const rewind = BigInt(original.position) - 1n;
         await client.query(
           `UPDATE core.consumer_checkpoint
-           SET position=$3, epoch=CASE WHEN $3 = 0 THEN NULL ELSE epoch END
+           SET position=$3::bigint, epoch=CASE WHEN $3::bigint = 0 THEN NULL ELSE epoch END
            WHERE partition_no=$1 AND consumer=$2`,
           [partitionOf(contentRoute), EFFECTS_CONSUMER, rewind.toString()],
         );
