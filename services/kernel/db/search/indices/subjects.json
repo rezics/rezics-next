@@ -91,6 +91,29 @@
       },
       "statements": {
         "type": "keyword"
+      },
+      "facts": {
+        "type": "nested",
+        "properties": {
+          "property": {
+            "type": "keyword"
+          },
+          "value": {
+            "type": "keyword"
+          },
+          "unit": {
+            "type": "keyword"
+          },
+          "qualifiers": {
+            "type": "keyword"
+          },
+          "year": {
+            "type": "integer"
+          },
+          "amount": {
+            "type": "double"
+          }
+        }
       }
     }
   }

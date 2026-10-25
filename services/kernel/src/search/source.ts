@@ -1,6 +1,28 @@
 import { partitionOf, routeOf } from '../route/route.ts';
 
 export type LanguageValue = { language: string; value: string };
+
+/**
+ * Filterable form of a statement value.
+ * `year` is the astronomical year of a time value.
+ * `amount` is the decimal amount of a quantity.
+ */
+export type FacetValue =
+  | { kind: 'item' }
+  | { kind: 'time'; year: number }
+  | { kind: 'quantity'; amount: number; unit: string };
+
+/** One adopted statement value. The semantic source fills `facet` and `qualifiers`. */
+export type IndexedStatement = {
+  property: string;
+  /** Stored statement value. An item value is the target subject id. */
+  value: string;
+  /** Present when the value's datatype can be a facet. */
+  facet?: FacetValue;
+  /** Adopted qualifiers whose values are items (target subject ids). */
+  qualifiers?: { property: string; value: string }[];
+};
+
 export type IndexedSubject = {
   id: string;
   type: string;
@@ -14,7 +36,7 @@ export type IndexedSubject = {
   aliases: LanguageValue[];
   descriptions: LanguageValue[];
   /** Adopted Global statement values; an item value is the target subject id. */
-  statements: { property: string; value: string }[];
+  statements: IndexedStatement[];
 };
 
 /** The partition's `core.partition.position` and the listed subjects' state, read in one snapshot. */

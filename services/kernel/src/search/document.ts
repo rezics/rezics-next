@@ -1,6 +1,12 @@
-import { subjectPartition, type IndexedSubject, type SubjectSnapshot } from './source.ts';
+import { subjectPartition, type IndexedStatement, type IndexedSubject, type SubjectSnapshot } from './source.ts';
 
 export const MISSING_NAME = '\u{10FFFF}';
+
+/** One nested fact. Qualifiers are `property=value` strings, unique and in source order. */
+export type SubjectFact =
+  | { property: string; value: string; qualifiers: string[] }
+  | { property: string; year: number; qualifiers: string[] }
+  | { property: string; amount: number; unit: string; qualifiers: string[] };
 
 export type SubjectDocument = {
   id: string;
@@ -11,6 +17,8 @@ export type SubjectDocument = {
   descriptions: string[];
   name_sort: string;
   statements: string[];
+  /** One entry per facet-capable statement, in source order, with exact duplicates removed. */
+  facts: SubjectFact[];
 };
 
 export type IndexAction =
@@ -19,6 +27,36 @@ export type IndexAction =
 
 function uniqueValues(values: readonly string[]): string[] {
   return [...new Set(values)];
+}
+
+function statementFact(statement: IndexedStatement): SubjectFact | undefined {
+  const facet = statement.facet;
+  if (facet === undefined) return undefined;
+  const qualifiers = uniqueValues((statement.qualifiers ?? []).map((item) => `${item.property}=${item.value}`));
+  const property = statement.property;
+  switch (facet.kind) {
+    case 'item':
+      return { property, value: statement.value, qualifiers };
+    case 'time':
+      return { property, year: facet.year, qualifiers };
+    case 'quantity':
+      return { property, amount: facet.amount, unit: facet.unit, qualifiers };
+  }
+}
+
+/** Facet-capable statements only, in source order. An exact duplicate fact is dropped. */
+function subjectFacts(statements: readonly IndexedStatement[]): SubjectFact[] {
+  const facts: SubjectFact[] = [];
+  const seen = new Set<string>();
+  for (const statement of statements) {
+    const fact = statementFact(statement);
+    if (fact === undefined) continue;
+    const identity = JSON.stringify(fact);
+    if (seen.has(identity)) continue;
+    seen.add(identity);
+    facts.push(fact);
+  }
+  return facts;
 }
 
 function subjectDocument(partition: number, subject: IndexedSubject): SubjectDocument {
@@ -36,6 +74,7 @@ function subjectDocument(partition: number, subject: IndexedSubject): SubjectDoc
     descriptions: uniqueValues(subject.descriptions.map((item) => item.value)),
     name_sort: labels[0]?.value ?? MISSING_NAME,
     statements: uniqueValues(subject.statements.map((item) => `${item.property}=${item.value}`)),
+    facts: subjectFacts(subject.statements),
   };
 }
 
