@@ -84,7 +84,8 @@ test('zero, one and many owner outcomes distinguish owners from current and expi
   await f.change(f.member, null);
   await f.change(f.owners[1]!, 'owner');
   await f.change(f.actor, null);
-  expect(await f.read(f.owners[1]!)).toEqual({ owners: 1, target: 1 });
+  const observation = await f.reader.query<{ at: string }>('SELECT clock_timestamp()::text AS at');
+  expect(await f.read(f.owners[1]!, observation.rows[0]!.at)).toEqual({ owners: 1, target: 1 });
   await expect(f.change(f.owners[1]!, null)).rejects.toBeInstanceOf(LifecycleDeniedError);
   await f.seed(64, 0);
   await expect(f.change(f.member, 'owner')).rejects.toBeInstanceOf(LifecycleDeniedError);

@@ -58,18 +58,14 @@ DECLARE
     WHERE m.route = p_route AND m.organization_id = p_organization_id
       AND m.member_account_id = p_member_id
       AND m.valid && tstzrange(p_at, NULL, '[)')
-    -- Native GiST traversal under LIMIT avoids a history scan even when a
-    -- member's expired intervals dominate the planner's cardinality estimate.
+    -- Retain the native GiST traversal; all matching routes have distance zero.
     ORDER BY m.route <-> p_route
-    LIMIT 1 FOR UPDATE;
+    FOR UPDATE;
 BEGIN
+  OPEN overlapping;
   LOOP
-    OPEN overlapping;
     FETCH overlapping INTO target;
-    IF NOT FOUND THEN
-      CLOSE overlapping;
-      EXIT;
-    END IF;
+    EXIT WHEN NOT FOUND;
 
     IF lower_inf(target.valid) OR lower(target.valid) < p_at THEN
       UPDATE access.organization_member
@@ -78,12 +74,12 @@ BEGIN
           transaction_id = p_transaction_id
       WHERE CURRENT OF overlapping;
     ELSE
-      -- Including lower = T: no empty range is constructed or stored.
+      -- Including lower = T: delete rather than construct an empty range.
       DELETE FROM access.organization_member WHERE CURRENT OF overlapping;
     END IF;
-    CLOSE overlapping;
     changed := changed + 1;
   END LOOP;
+  CLOSE overlapping;
   RETURN changed;
 END;
 $$;
