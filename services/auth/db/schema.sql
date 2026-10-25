@@ -310,7 +310,8 @@ CREATE TABLE public.auth_client (
     "requirePKCE" boolean,
     "dpopBoundAccessTokens" boolean DEFAULT false,
     "referenceId" text,
-    metadata jsonb
+    metadata jsonb,
+    display_name text
 );
 
 

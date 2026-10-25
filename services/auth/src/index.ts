@@ -502,7 +502,12 @@ export interface AuthService {
      * native rows cannot pass sessionProof and expire when presented. */
     revokeSessions(accountId: string, options?: { boundedCleanup: true; barrier: InvalidationReceipt }): Promise<void>;
     registerWebsiteClient(input: WebsiteClientRegistration): Promise<void>;
-    registerClient(input: { clientId: string; firstParty: boolean; scopes: string[] }): Promise<void>;
+    registerClient(input: {
+      clientId: string;
+      firstParty: boolean;
+      scopes: string[];
+      displayName?: string;
+    }): Promise<void>;
   };
 }
 

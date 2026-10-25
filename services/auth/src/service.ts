@@ -7,6 +7,7 @@ import { WEBSITE_CLIENT_ID, websiteRoutes } from './website.ts';
 import { pruneExpiredProtocolState } from './protocol-maintenance.ts';
 import { APIError, createAuthEndpoint } from 'better-auth/api';
 import { setSessionCookie } from 'better-auth/cookies';
+import { serializeCookie } from 'better-call';
 import { publicCredential, verifyKeyAssertion } from './key-credentials.ts';
 import { credentialEffects } from './credential-effects.ts';
 import { betterAuthOptions, credentialOwnerSchema } from './better-auth.ts';
@@ -60,6 +61,7 @@ interface Binding {
 }
 interface Client {
   client_id: string;
+  display_name: string | null;
   first_party: boolean;
   scopes: string[];
 }
@@ -247,15 +249,15 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       throw new Denied();
     return account;
   }
-  async function clientFor(clientId: string): Promise<Client> {
+  async function clientFor(clientId: string, status = 401): Promise<Client> {
     // Cookie, actor-key and operator issuance cannot authenticate the website's
     // confidential OAuth client. Its registry identity is reserved for bootstrap.
-    if (clientId === WEBSITE_CLIENT_ID) throw new Denied();
+    if (clientId === WEBSITE_CLIENT_ID) throw new Denied(status);
     const result = await database.query<Client>(
-      'SELECT client_id, first_party, scopes FROM auth_client WHERE client_id=$1 AND EXISTS (SELECT 1 FROM auth_client_coverage v WHERE v.client_id=auth_client.client_id AND v.ready) AND NOT EXISTS (SELECT 1 FROM auth_client_reduction r WHERE r.client_id=auth_client.client_id)',
+      'SELECT client_id, display_name, first_party, scopes FROM auth_client WHERE client_id=$1 AND EXISTS (SELECT 1 FROM auth_client_coverage v WHERE v.client_id=auth_client.client_id AND v.ready) AND NOT EXISTS (SELECT 1 FROM auth_client_reduction r WHERE r.client_id=auth_client.client_id)',
       [clientId],
     );
-    if (!result.rows[0]) throw new Denied();
+    if (!result.rows[0]) throw new Denied(status);
     return result.rows[0];
   }
   async function allowed(accountId: string, selected: Binding): Promise<Client> {
@@ -1243,6 +1245,12 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       registerWebsiteClient: website.register,
       async registerClient(input) {
         const id = text(input.clientId);
+        let displayName: string | null = null;
+        if (input.displayName !== undefined) {
+          if (typeof input.displayName !== 'string') throw new Denied(400);
+          displayName = input.displayName.trim();
+          if (!displayName || displayName.length > 100) throw new Denied(400);
+        }
         if (typeof input.firstParty !== 'boolean') throw new Denied(400);
         const granted = scopes(input.scopes);
         if (id === WEBSITE_CLIENT_ID || granted.includes('media:complete')) throw new Denied(400);
@@ -1262,8 +1270,8 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           )
             throw new Denied();
           await connection.query(
-            'INSERT INTO auth_client (client_id, first_party, scopes) VALUES ($1,$2,$3) ON CONFLICT (client_id) DO UPDATE SET first_party=EXCLUDED.first_party, scopes=EXCLUDED.scopes',
-            [id, input.firstParty, granted],
+            'INSERT INTO auth_client (client_id, first_party, scopes, display_name) VALUES ($1,$2,$3,$4) ON CONFLICT (client_id) DO UPDATE SET first_party=EXCLUDED.first_party, scopes=EXCLUDED.scopes, display_name=EXCLUDED.display_name',
+            [id, input.firstParty, granted, displayName],
           );
           if (!previous)
             await connection.query(
@@ -1287,6 +1295,46 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         if (url.origin !== options.issuer || url.search) throw new Denied(400);
         if (url.pathname === '/.well-known/jwks.json' && request.method === 'GET') return json(await signer.getJwks());
         if (url.pathname === '/session' && request.method === 'GET') return json(await sessionProof(request.headers));
+        if (request.method === 'GET' && /^\/consent\/[^/]+$/.test(url.pathname)) {
+          const human = await humanProof(request.headers);
+          let clientId: string;
+          try {
+            clientId = decodeURIComponent(url.pathname.slice('/consent/'.length));
+          } catch {
+            throw new Denied(400);
+          }
+          const client = await clientFor(clientId, 404);
+          if (client.first_party) throw new Denied(404);
+          const consent = (
+            await database.query<{ scopes: string[]; pending_scopes: string[] | null }>(
+              'SELECT scopes,pending_scopes FROM auth_consent WHERE account_id=$1 AND client_id=$2',
+              [human.account_id, client.client_id],
+            )
+          ).rows[0];
+          return json({
+            client_id: client.client_id,
+            display_name: client.display_name,
+            scopes: client.scopes,
+            granted:
+              consent?.scopes.filter(
+                (scope) =>
+                  client.scopes.includes(scope) &&
+                  (consent.pending_scopes === null || consent.pending_scopes.includes(scope)),
+              ) ?? [],
+          });
+        }
+        if (url.pathname === '/sessions' && request.method === 'GET') {
+          const human = await humanProof(request.headers);
+          const currentId = proofSources.get(human)!.id;
+          const sessions = await database.query(
+            `SELECT id,"clientId" AS client_id,"createdAt" AS created_at,"expiresAt" AS expires_at,
+                    "userAgent" AS user_agent,id=$2 AS current
+             FROM session WHERE "userId"=$1 AND "expiresAt">CURRENT_TIMESTAMP
+             ORDER BY "createdAt" DESC,id DESC LIMIT 64`,
+            [human.account_id, currentId],
+          );
+          return json({ sessions: sessions.rows });
+        }
         if (
           ![
             '/signin',
@@ -1296,6 +1344,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             '/token',
             '/consent',
             '/signout',
+            '/sessions/revoke',
           ].includes(url.pathname) ||
           request.method !== 'POST'
         )
@@ -1325,6 +1374,25 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           return response;
         }
         const body = await bodyOf(request);
+        if (url.pathname === '/sessions/revoke') {
+          fields(body, ['session_id']);
+          const sessionId = text(body.session_id);
+          const human = await humanProof(request.headers);
+          // The native session identity is immutable. Include its owner in the
+          // delete too, so a foreign or unknown id cannot mutate any session.
+          const target = (
+            await database.query<{ userId: string }>('SELECT "userId" FROM session WHERE id=$1', [sessionId])
+          ).rows[0];
+          if (target?.userId !== human.account_id) throw new Denied(404);
+          const cookies: string[] = [];
+          if (sessionId === proofSources.get(human)!.id) {
+            const { authCookies } = await getContext();
+            for (const cookie of [authCookies.sessionToken, authCookies.sessionData, authCookies.dontRememberToken])
+              cookies.push(serializeCookie(cookie.name, '', { ...cookie.attributes, maxAge: 0 }));
+          }
+          await database.query('DELETE FROM session WHERE id=$1 AND "userId"=$2', [sessionId, human.account_id]);
+          return json({}, 200, cookies);
+        }
         if (url.pathname === '/recovery/start') {
           fields(body, ['account_id']);
           const account = await recoveryAccount(text(body.account_id));
