@@ -17,5 +17,7 @@ test('the client sends custom methods to their AIP-136 paths', async () => {
     'POST http://kernel.test/v1/subjects:merge',
     'GET http://kernel.test/v1/subjects/019a1b2c-3d4e-7f00-8a00-000000000002',
   ]);
-  expect(sent[3]).toMatch(new RegExp(`^POST http://kernel\\.test/v1/definitions/releases/sha256(:|%3A)${'0'.repeat(64)}:activate$`));
+  expect(sent[3]).toMatch(
+    new RegExp(`^POST http://kernel\\.test/v1/definitions/releases/sha256(:|%3A)${'0'.repeat(64)}:activate$`),
+  );
 });
