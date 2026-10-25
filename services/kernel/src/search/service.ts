@@ -5,7 +5,14 @@ import { activeRelease } from '../semantic/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { decodeSearchCursor, encodeSearchCursor } from './cursor.ts';
 import { checkHits, type FactClause } from './disclosure/check.ts';
-import { admitFacets, discloseFacetValues, validateFacets, type FacetRequest, type FacetValue } from './facets.ts';
+import {
+  admitFacets,
+  codeFacet,
+  discloseFacetValues,
+  validateFacets,
+  type FacetRequest,
+  type FacetValue,
+} from './facets.ts';
 import { compileFilter } from './filter.ts';
 import { createFreshness } from './freshness.ts';
 import { subjectGenerations, subjectIndexName } from './indices.ts';
@@ -119,7 +126,8 @@ export function createSearchService({
   source,
   cursors,
   facetSample = 10_000,
-  release = async () => (await activeRelease(pool))?.release ?? null,
+  // Definition releases store value.pattern on the property schema. Keep that object so pattern compilation stays cached.
+  release = async () => ((await activeRelease(pool))?.release as FilterRelease | undefined) ?? null,
 }: {
   pool: Pool;
   client: OpenSearch;
@@ -300,9 +308,12 @@ export function createSearchService({
           sample: facetSample,
         }),
       );
+      const coded = new Set(
+        facets.filter((facet) => codeFacet(current, facet.property)).map((facet) => facet.property),
+      );
       const subjects = await discloseFacetValues(
         source,
-        counted.facets.flatMap((facet) => facet.values.map(({ value }) => value)),
+        counted.facets.flatMap((facet) => (coded.has(facet.property) ? [] : facet.values.map(({ value }) => value))),
       );
       return {
         facets: counted.facets.map((facet, index) => ({
@@ -310,6 +321,7 @@ export function createSearchService({
           relation: facet.relation,
           values: facet.values
             .flatMap(({ value, count }): FacetValue[] => {
+              if (coded.has(facet.property)) return [{ value, count, labels: {} }];
               const subject = subjects.get(value);
               return subject ? [{ value, count, labels: project(subject).labels }] : [];
             })

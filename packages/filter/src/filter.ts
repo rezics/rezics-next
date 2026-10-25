@@ -24,7 +24,15 @@ export type FilterDocument =
 
 export type FilterRelease = {
   types: Record<string, { bases?: readonly string[]; facets?: readonly string[] }>;
-  properties: Record<string, { datatype: string; qualifiers?: readonly string[]; units?: readonly string[] }>;
+  properties: Record<
+    string,
+    {
+      datatype: string;
+      qualifiers?: readonly string[];
+      units?: readonly string[];
+      value?: { pattern?: string };
+    }
+  >;
   filters?: Record<string, { filter: unknown }>;
 };
 
@@ -326,6 +334,25 @@ function typeFacets(types: unknown, type: string): Set<string> {
 
 const allFacetsByRelease = new WeakMap<object, ReadonlySet<string>>();
 
+// One compiled pattern per property definition. A missing or unusable pattern is cached as null.
+const codePatterns = new WeakMap<object, RegExp | null>();
+
+function codePattern(definition: object): RegExp | null {
+  if (codePatterns.has(definition)) return codePatterns.get(definition) ?? null;
+  const value = dataField(definition, 'value');
+  const source = isRecord(value) ? dataField(value, 'pattern') : undefined;
+  let compiled: RegExp | null = null;
+  if (typeof source === 'string' && source.length > 0) {
+    try {
+      compiled = new RegExp(source, 'u');
+    } catch {
+      compiled = null;
+    }
+  }
+  codePatterns.set(definition, compiled);
+  return compiled;
+}
+
 function allReleaseFacets(release: FilterRelease): ReadonlySet<string> {
   const known = allFacetsByRelease.get(release);
   if (known) return known;
@@ -476,8 +503,17 @@ export function admitFilter(
 
     if ('in' in statement) {
       const inPointer = appendPointer(appendPointer(pointer, 'statement'), 'in');
-      if (datatype !== 'wikibase-item') reject(inPointer, source, 'unsupported', 'unsupported_query');
-      validateUuidValues(statement.in, inPointer, source);
+      if (datatype === 'wikibase-item') validateUuidValues(statement.in, inPointer, source);
+      else if (datatype === 'string') {
+        const pattern = codePattern(definition);
+        if (!pattern) reject(inPointer, source, 'unsupported', 'unsupported_query');
+        for (let index = 0; index < statement.in.length; index++) {
+          const value = statement.in[index]!;
+          // Full match: a code is the pattern's identifier, at most 128 UTF-16 code units.
+          if (value.length < 1 || value.length > 128 || pattern.exec(value)?.[0] !== value)
+            reject(appendPointer(inPointer, index), source, 'invalid_format', 'invalid_request');
+        }
+      } else reject(inPointer, source, 'unsupported', 'unsupported_query');
     } else {
       const rangePointer = appendPointer(appendPointer(pointer, 'statement'), 'range');
       if (datatype !== 'time' && datatype !== 'quantity')

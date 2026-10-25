@@ -36,6 +36,7 @@ function statementFact(statement: IndexedStatement): SubjectFact | undefined {
   const property = statement.property;
   switch (facet.kind) {
     case 'item':
+    case 'code':
       return { property, value: statement.value, qualifiers };
     case 'time':
       return { property, year: facet.year, qualifiers };

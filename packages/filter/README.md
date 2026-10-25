@@ -51,7 +51,9 @@ admission expands it and checks the expanded document against the same limits. A
 types, statement facets, property datatypes, values, ranges, units and qualifiers against a structural `FilterRelease`.
 Facets are admitted from the types a query can return: a top-level type leaf selects its values, a top-level `and`
 intersects its direct type children, and other forms may return every release type. A type contributes its own facets
-and the facets of its bases. Lookups use own properties only.
+and the facets of its bases. Lookups use own properties only. A registered string facet admits `in` only when its
+definition declares `value.pattern`: each value must be 1 to 128 code units and match that pattern, compiled with the
+`u` flag once per property definition; without a pattern the condition stays unsupported, and qualifiers stay item-only.
 
 Saved definitions come from the release's `filters` map and are parsed with the same grammar. Expansion is one level:
 a missing definition, malformed stored filter, or stored filter containing another saved leaf is an unsupported query.
@@ -65,5 +67,6 @@ Parsing is linear in the input and bounded by the limits: at most 32 leaves, eac
 qualifiers of 64 values; at most 16 alternatives per `or`; depth 4. Admission walks the expanded document once; a
 saved filter expands at most once per leaf and never recursively, so the expanded document obeys the same limits. The
 admitted facets come from at most 64 returnable types with their bases, or from the union over all types, computed once
-per release object and cached, so a request never iterates the release's types. No I/O. The growth check is the limit
+per release object and cached, so a request never iterates the release's types. A code pattern is compiled once per
+property definition, and each value check is linear in at most 128 code units across at most 64 values. No I/O. The growth check is the limit
 tests above: the same refusals at the same pointers whatever the release size.

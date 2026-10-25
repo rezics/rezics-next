@@ -11,6 +11,29 @@ export type FacetRequest = {
 export type Facet = { property: string; size: number };
 export type FacetValue = { value: string; count: number; labels: Record<string, string> };
 
+function ownField(input: object, key: string): unknown {
+  const descriptor = Object.getOwnPropertyDescriptor(input, key);
+  if (!descriptor || !Object.hasOwn(descriptor, 'value')) return undefined;
+  return descriptor.value;
+}
+
+function isRecord(value: unknown): value is object {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+/** A string facet whose definition declares `value.pattern`. Its values are codes, not subjects. */
+export function codeFacet(release: FilterRelease, property: string): boolean {
+  if (!isRecord(release)) return false;
+  const properties = ownField(release, 'properties');
+  if (!isRecord(properties)) return false;
+  const definition = ownField(properties, property);
+  if (!isRecord(definition) || ownField(definition, 'datatype') !== 'string') return false;
+  const value = ownField(definition, 'value');
+  if (!isRecord(value)) return false;
+  const pattern = ownField(value, 'pattern');
+  return typeof pattern === 'string' && pattern.length > 0;
+}
+
 function invalid(pointer: string, code: FieldErrorCode): never {
   throw new ProblemError('invalid_request', { errors: [{ pointer, code }] });
 }
@@ -67,11 +90,17 @@ export function admitFacets(facets: readonly Facet[], filter: FilterDocument | u
         release,
       );
     } catch (error) {
-      if (error instanceof FilterError)
-        throw new ProblemError('unsupported_query', {
-          errors: [{ pointer: `/facets/${index}/property`, code: 'unsupported' }],
-        });
-      throw error;
+      if (!(error instanceof FilterError)) throw error;
+      // The item probe is not a code. A registered code facet rejects that probe as invalid_format.
+      const codeProbe =
+        codeFacet(release, facet.property) &&
+        error.problem === 'invalid_request' &&
+        error.errors.length > 0 &&
+        error.errors.every((item) => item.code === 'invalid_format');
+      if (codeProbe) continue;
+      throw new ProblemError('unsupported_query', {
+        errors: [{ pointer: `/facets/${index}/property`, code: 'unsupported' }],
+      });
     }
   }
 }

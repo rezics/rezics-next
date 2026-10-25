@@ -116,6 +116,17 @@ test('facts answer qualifier conditions bound to one statement', async () => {
   ]);
 });
 
+test('facts.value keeps a code of 128 code units', async () => {
+  const code = 'a'.repeat(128);
+  const entry = subject(3, [{ property: 'schema:inLanguage', value: code, facet: { kind: 'code' } }]);
+  const built = documentActions({ partition: 7, position: 6n, subjects: [entry] }, [entry.id]);
+  const document = (built[0] as Extract<(typeof built)[number], { op: 'index' }>).document;
+  expect(document.facts).toEqual([{ property: 'schema:inLanguage', value: code, qualifiers: [] }]);
+  expect(document.statements).toContain(`schema:inLanguage=${code}`);
+  await search.bulk(bulkLines(index, built), { query: { refresh: 'wait_for' } });
+  expect(await matching(term('property', 'schema:inLanguage'), term('value', code))).toEqual([entry.id]);
+});
+
 test('facts answer year and quantity ranges', async () => {
   const published = term('property', 'schema:datePublished');
   expect(await matching(published, range('year', { gte: 1990, lte: 1999 }))).toEqual([first.id]);

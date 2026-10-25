@@ -290,3 +290,86 @@ test('validateFilter reports the first violation without throwing', () => {
   for (const input of [null, [], 'x', 1, { and: 'x' }, { statement: null }])
     expect(validateFilter(input, release)).toHaveLength(1);
 });
+
+test('a string facet with a value pattern admits codes and refuses other strings', () => {
+  const language = '^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$';
+  const coded: FilterRelease = {
+    types: {
+      'schema:Book': { facets: ['schema:inLanguage', 'schema:name', 'schema:identifier'] },
+    },
+    properties: {
+      'schema:inLanguage': { datatype: 'string', qualifiers: ['rezics:role'], value: { pattern: language } },
+      'schema:name': { datatype: 'string' },
+      'schema:identifier': { datatype: 'string', value: { pattern: '^[a-z]+$' } },
+      'rezics:role': { datatype: 'wikibase-item' },
+    },
+  };
+  const admitCoded = (input: unknown) => admitFilter(parseFilter(input), coded);
+  const refusesCoded = (input: unknown, problem: 'invalid_request' | 'unsupported_query', errors: object[]) =>
+    refuses(() => admitCoded(input), problem, errors);
+  const languages = { statement: { property: 'schema:inLanguage', in: ['ja', 'zh-Hant'] } };
+  expect(admitCoded(languages)).toEqual(languages);
+  const exact = ['en', ...Array.from({ length: 14 }, () => 'abcdefgh')].join('-');
+  expect(exact.length).toBe(128);
+  expect(admitCoded({ statement: { property: 'schema:inLanguage', in: [exact] } })).toEqual({
+    statement: { property: 'schema:inLanguage', in: [exact] },
+  });
+  expect(admitCoded({ statement: { property: 'schema:identifier', in: ['a'.repeat(128)] } })).toEqual({
+    statement: { property: 'schema:identifier', in: ['a'.repeat(128)] },
+  });
+  refusesCoded({ statement: { property: 'schema:inLanguage', in: ['ja', 'JA'] } }, 'invalid_request', [
+    { pointer: '/statement/in/1', code: 'invalid_format' },
+  ]);
+  const long = ['ab', ...Array.from({ length: 15 }, () => 'abcdefgh')].join('-');
+  expect(long.length).toBeGreaterThan(128);
+  refusesCoded({ statement: { property: 'schema:inLanguage', in: [long] } }, 'invalid_request', [
+    { pointer: '/statement/in/0', code: 'invalid_format' },
+  ]);
+  refusesCoded({ statement: { property: 'schema:identifier', in: ['a'.repeat(129)] } }, 'invalid_request', [
+    { pointer: '/statement/in/0', code: 'invalid_format' },
+  ]);
+  refusesCoded({ statement: { property: 'schema:name', in: ['ja'] } }, 'unsupported_query', [
+    { pointer: '/statement/in', code: 'unsupported' },
+  ]);
+  refusesCoded({ statement: { property: 'schema:inLanguage', range: { gte: 1 } } }, 'unsupported_query', [
+    { pointer: '/statement/range', code: 'unsupported' },
+  ]);
+  const qualified = {
+    statement: {
+      property: 'schema:inLanguage',
+      in: ['ja'],
+      qualifiers: [{ property: 'rezics:role', in: [lead] }],
+    },
+  };
+  expect(admitCoded(qualified)).toEqual(qualified);
+  refusesCoded(
+    {
+      statement: {
+        property: 'schema:inLanguage',
+        in: ['ja'],
+        qualifiers: [{ property: 'schema:inLanguage', in: ['en'] }],
+      },
+    },
+    'unsupported_query',
+    [{ pointer: '/statement/qualifiers/0/property', code: 'unsupported' }],
+  );
+  const inherited = Object.create({ pattern: '.*' }) as { pattern?: string };
+  refuses(
+    () =>
+      admitFilter(parseFilter({ statement: { property: 'schema:name', in: ['ja'] } }), {
+        types: coded.types,
+        properties: { 'schema:name': { datatype: 'string', value: inherited } },
+      }),
+    'unsupported_query',
+    [{ pointer: '/statement/in', code: 'unsupported' }],
+  );
+  refuses(
+    () =>
+      admitFilter(parseFilter({ statement: { property: 'schema:inLanguage', in: ['ja'] } }), {
+        types: { 'schema:Book': { facets: [] } },
+        properties: coded.properties,
+      }),
+    'unsupported_query',
+    [{ pointer: '/statement/property', code: 'unsupported' }],
+  );
+});
