@@ -184,13 +184,44 @@ CREATE TABLE public.auth_session_opening (
 
 
 --
+-- Name: auth_signing_generation; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_signing_generation (
+    singleton boolean DEFAULT true NOT NULL,
+    generation integer DEFAULT 0 NOT NULL,
+    current_kid text,
+    next_kid text,
+    retiring_kid text,
+    upgrade_after timestamp with time zone NOT NULL,
+    CONSTRAINT auth_signing_generation_generation_check CHECK ((generation >= 0)),
+    CONSTRAINT auth_signing_generation_singleton_check CHECK (singleton)
+);
+
+
+--
 -- Name: auth_signing_key; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.auth_signing_key (
-    kid text NOT NULL,
-    private_jwk jsonb NOT NULL,
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    kid text CONSTRAINT auth_signing_key_kid_not_null1 NOT NULL,
+    slot text NOT NULL,
+    private_jwk jsonb CONSTRAINT auth_signing_key_private_jwk_not_null1 NOT NULL,
+    retain_until timestamp with time zone,
+    CONSTRAINT auth_signing_key_check CHECK (((slot = 'retiring'::text) = (retain_until IS NOT NULL))),
+    CONSTRAINT auth_signing_key_private_jwk_check1 CHECK (((private_jwk ->> 'd'::text) IS NOT NULL)),
+    CONSTRAINT auth_signing_key_slot_check CHECK ((slot = ANY (ARRAY['current'::text, 'next'::text, 'retiring'::text])))
+);
+
+
+--
+-- Name: auth_signing_key_archive; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_signing_key_archive (
+    kid text CONSTRAINT auth_signing_key_kid_not_null NOT NULL,
+    private_jwk jsonb CONSTRAINT auth_signing_key_private_jwk_not_null NOT NULL,
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP CONSTRAINT auth_signing_key_created_at_not_null NOT NULL,
     CONSTRAINT auth_signing_key_private_jwk_check CHECK (((private_jwk ->> 'd'::text) IS NOT NULL))
 );
 
@@ -404,11 +435,35 @@ ALTER TABLE ONLY public.auth_session_opening
 
 
 --
+-- Name: auth_signing_generation auth_signing_generation_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_signing_generation
+    ADD CONSTRAINT auth_signing_generation_pkey PRIMARY KEY (singleton);
+
+
+--
+-- Name: auth_signing_key_archive auth_signing_key_archive_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_signing_key_archive
+    ADD CONSTRAINT auth_signing_key_archive_pkey PRIMARY KEY (kid);
+
+
+--
 -- Name: auth_signing_key auth_signing_key_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.auth_signing_key
     ADD CONSTRAINT auth_signing_key_pkey PRIMARY KEY (kid);
+
+
+--
+-- Name: auth_signing_key auth_signing_key_slot_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_signing_key
+    ADD CONSTRAINT auth_signing_key_slot_key UNIQUE (slot);
 
 
 --

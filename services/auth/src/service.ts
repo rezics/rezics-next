@@ -142,112 +142,125 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       if (!consent || selected.scopes.some((scope) => !consent.scopes.includes(scope))) throw new Denied();
     }
   }
-  const auth = betterAuth({
-    ...betterAuthOptions(database, options.issuer, options.secret),
-    emailAndPassword: {
-      enabled: true,
-      disableSignUp: true,
-      resetPasswordTokenExpiresIn: 300,
-      revokeSessionsOnPasswordReset: true,
-      async sendResetPassword({ user, token }) {
-        const selected = recoveryBinding.getStore();
-        if (!selected || selected.accountId !== user.id || !options.recoveryDelivery) throw new Denied();
-        const expiresAt = new Date(Date.now() + 300000);
-        try {
-          await database.query(
-            'INSERT INTO auth_recovery (proof_hash, account_id, authn_epoch, expires_at) VALUES ($1,$2,$3,$4)',
-            [proofHash(token), user.id, selected.epoch, expiresAt],
-          );
-          await options.recoveryDelivery.deliver({ accountId: user.id, email: user.email, token, expiresAt });
-        } catch (error) {
-          await context.internalAdapter.deleteVerificationByIdentifier(`reset-password:${token}`);
-          await database.query('DELETE FROM auth_recovery WHERE proof_hash=$1', [proofHash(token)]);
-          throw error;
-        }
-      },
-    },
-    plugins: [
-      credentialOwnerSchema,
-      nativeVerificationPlugin,
-      {
-        id: 'trusted-establishment',
-        async onRequest() {
-          const dispatch = attemptDispatch.getStore();
-          if (dispatch) return { response: await dispatch() };
-        },
-        endpoints: {
-          establish: createAuthEndpoint('/trusted-establishment', { method: 'POST' }, async (ctx) => {
-            const selected = binding.getStore();
-            if (!selected?.subjectId) throw new APIError('UNAUTHORIZED');
-            const user = await ctx.context.internalAdapter.findUserById(selected.subjectId);
-            if (!user) throw new APIError('UNAUTHORIZED');
-            const session = await ctx.context.internalAdapter.createSession(user.id);
-            if (!session) throw new APIError('UNAUTHORIZED');
-            try {
-              if (selected.opening)
-                await database.query(
-                  'INSERT INTO auth_session_opening (session_id, subject_account_id, acting_human_id, operator_account_id, receipt_id) VALUES ($1,$2,$3,$4,$5)',
-                  [
-                    session.id,
-                    user.id,
-                    selected.opening.actingHumanId,
-                    selected.opening.operatorAccountId,
-                    selected.opening.receiptId,
-                  ],
-                );
-              await setSessionCookie(ctx, { session, user });
-              return ctx.json({ success: true });
-            } catch (error) {
-              await ctx.context.internalAdapter.deleteSession(session.token);
-              throw error;
-            }
-          }),
+  function nativeAuth() {
+    return betterAuth({
+      ...betterAuthOptions(database, options.issuer, options.secret),
+      emailAndPassword: {
+        enabled: true,
+        disableSignUp: true,
+        resetPasswordTokenExpiresIn: 300,
+        revokeSessionsOnPasswordReset: true,
+        async sendResetPassword({ user, token }) {
+          const selected = recoveryBinding.getStore();
+          if (!selected || selected.accountId !== user.id || !options.recoveryDelivery) throw new Denied();
+          const expiresAt = new Date(Date.now() + 300000);
+          try {
+            await database.query(
+              'INSERT INTO auth_recovery (proof_hash, account_id, authn_epoch, expires_at) VALUES ($1,$2,$3,$4)',
+              [proofHash(token), user.id, selected.epoch, expiresAt],
+            );
+            await options.recoveryDelivery.deliver({ accountId: user.id, email: user.email, token, expiresAt });
+          } catch (error) {
+            await (await getContext()).internalAdapter.deleteVerificationByIdentifier(`reset-password:${token}`);
+            await database.query('DELETE FROM auth_recovery WHERE proof_hash=$1', [proofHash(token)]);
+            throw error;
+          }
         },
       },
-    ],
-    databaseHooks: {
-      session: {
-        create: {
-          before: async (session) => {
-            // Only a verified password, own-key assertion or consumed Access opening
-            // can install this private context. Public request fields cannot install it.
-            const selected = binding.getStore();
-            if (!selected) throw new APIError('UNAUTHORIZED', { message: 'Trusted session establishment required' });
-            try {
-              const account = await activeActor(session.userId);
-              await allowed(account.accountId, selected);
-              if (
-                (selected.subjectId && selected.subjectId !== session.userId) ||
-                (selected.epoch !== undefined && selected.epoch !== account.authnEpoch)
-              )
-                throw new Denied();
-              if (selected.opening) {
-                if (!account.automated || Date.parse(selected.opening.expiresAt) <= Date.now()) throw new Denied();
-                const human = await activeActor(selected.opening.actingHumanId);
-                if (human.automated || human.authnEpoch > selected.opening.humanEpoch) throw new Denied();
+      plugins: [
+        credentialOwnerSchema,
+        nativeVerificationPlugin,
+        {
+          id: 'trusted-establishment',
+          async onRequest() {
+            const dispatch = attemptDispatch.getStore();
+            if (dispatch) return { response: await dispatch() };
+          },
+          endpoints: {
+            establish: createAuthEndpoint('/trusted-establishment', { method: 'POST' }, async (ctx) => {
+              const selected = binding.getStore();
+              if (!selected?.subjectId) throw new APIError('UNAUTHORIZED');
+              const user = await ctx.context.internalAdapter.findUserById(selected.subjectId);
+              if (!user) throw new APIError('UNAUTHORIZED');
+              const session = await ctx.context.internalAdapter.createSession(user.id);
+              if (!session) throw new APIError('UNAUTHORIZED');
+              try {
+                if (selected.opening)
+                  await database.query(
+                    'INSERT INTO auth_session_opening (session_id, subject_account_id, acting_human_id, operator_account_id, receipt_id) VALUES ($1,$2,$3,$4,$5)',
+                    [
+                      session.id,
+                      user.id,
+                      selected.opening.actingHumanId,
+                      selected.opening.operatorAccountId,
+                      selected.opening.receiptId,
+                    ],
+                  );
+                await setSessionCookie(ctx, { session, user });
+                return ctx.json({ success: true });
+              } catch (error) {
+                await ctx.context.internalAdapter.deleteSession(session.token);
+                throw error;
               }
-              return {
-                data: {
-                  ...session,
-                  clientId: selected.clientId,
-                  grantedScope: selected.scopes.join(' '),
-                  authnEpoch: account.authnEpoch,
-                  authTime: selected.authTime ?? Math.floor(Date.now() / 1000),
-                  authMethods: selected.method ?? 'pwd',
-                },
-              };
-            } catch {
-              throw new APIError('UNAUTHORIZED', { message: 'Authentication denied' });
-            }
+            }),
+          },
+        },
+      ],
+      databaseHooks: {
+        session: {
+          create: {
+            before: async (session) => {
+              // Only a verified password, own-key assertion or consumed Access opening
+              // can install this private context. Public request fields cannot install it.
+              const selected = binding.getStore();
+              if (!selected) throw new APIError('UNAUTHORIZED', { message: 'Trusted session establishment required' });
+              try {
+                const account = await activeActor(session.userId);
+                await allowed(account.accountId, selected);
+                if (
+                  (selected.subjectId && selected.subjectId !== session.userId) ||
+                  (selected.epoch !== undefined && selected.epoch !== account.authnEpoch)
+                )
+                  throw new Denied();
+                if (selected.opening) {
+                  if (!account.automated || Date.parse(selected.opening.expiresAt) <= Date.now()) throw new Denied();
+                  const human = await activeActor(selected.opening.actingHumanId);
+                  if (human.automated || human.authnEpoch > selected.opening.humanEpoch) throw new Denied();
+                }
+                return {
+                  data: {
+                    ...session,
+                    clientId: selected.clientId,
+                    grantedScope: selected.scopes.join(' '),
+                    authnEpoch: account.authnEpoch,
+                    authTime: selected.authTime ?? Math.floor(Date.now() / 1000),
+                    authMethods: selected.method ?? 'pwd',
+                  },
+                };
+              } catch {
+                throw new APIError('UNAUTHORIZED', { message: 'Authentication denied' });
+              }
+            },
           },
         },
       },
-    },
-  });
-  const context = await auth.$context;
+    });
+  }
+  // Public JWKS needs only the signer. Defer the provider's background schema
+  // introspection until a native credential/session operation actually needs it.
+  let native: ReturnType<typeof nativeAuth> | undefined;
+  function getAuth() {
+    return (native ??= nativeAuth());
+  }
+  async function getContext() {
+    return getAuth().$context;
+  }
 
   async function sessionProof(headers: Headers): Promise<SessionProof> {
-    const result = await auth.api.getSession({ headers, query: { disableCookieCache: true, disableRefresh: true } });
+    const result = await getAuth().api.getSession({
+      headers,
+      query: { disableCookieCache: true, disableRefresh: true },
+    });
     if (!result) throw new Denied();
     const session = result.session;
     const account = await activeActor(session.userId);
@@ -277,8 +290,10 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     const connection = await database.connect();
     try {
       await connection.query('SELECT pg_advisory_lock(hashtextextended($1, 0))', [`auth-owner:${accountId}`]);
-      if (await context.internalAdapter.findUserById(accountId)) return;
-      await context.adapter.transaction(async (transaction) => {
+      if (await (await getContext()).internalAdapter.findUserById(accountId)) return;
+      await (
+        await getContext()
+      ).adapter.transaction(async (transaction) => {
         const now = new Date();
         await transaction.create({
           model: 'user',
@@ -373,15 +388,15 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     try {
       return json(await sessionProof(headers), 200, setCookies);
     } catch (error) {
-      const created = await auth.api.getSession({ headers });
-      if (created) await context.internalAdapter.deleteSession(created.session.token);
+      const created = await getAuth().api.getSession({ headers });
+      if (created) await (await getContext()).internalAdapter.deleteSession(created.session.token);
       throw error;
     }
   }
   async function establish(selected: Binding, headers: Headers): Promise<Response> {
     return established(
       await binding.run(selected, () =>
-        auth.api.establish({
+        getAuth().api.establish({
           headers: new Headers({
             origin: options.issuer,
             'content-type': 'application/json',
@@ -419,6 +434,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     },
     internal: {
       pruneExpiredVerifications: () => pruneExpiredVerifications(database),
+      signing: signer.control,
       async provisionPassword(input) {
         // Authorization resolves an approved Access command; HTTP cannot supply this result.
         const approval = await trustedAccess.authorizeProvisioning(input.authorization);
@@ -435,11 +451,11 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email) ||
           input.email.length > 254 ||
           typeof input.password !== 'string' ||
-          input.password.length < context.password.config.minPasswordLength ||
-          input.password.length > context.password.config.maxPasswordLength
+          input.password.length < (await getContext()).password.config.minPasswordLength ||
+          input.password.length > (await getContext()).password.config.maxPasswordLength
         )
           throw new Denied(400);
-        const hash = await context.password.hash(input.password);
+        const hash = await (await getContext()).password.hash(input.password);
         if (input.idempotencyKey !== undefined) {
           text(input.idempotencyKey);
           const digest = createHmac('sha256', options.secret)
@@ -488,7 +504,9 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           return { accountId: account.accountId };
         }
         // Use the official PostgreSQL adapter and its explicit external-ID facility.
-        await context.adapter.transaction(async (transaction) => {
+        await (
+          await getContext()
+        ).adapter.transaction(async (transaction) => {
           const now = new Date();
           await transaction.create({
             model: 'user',
@@ -561,17 +579,17 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         let publicJwk;
         if (value.kind === 'password' && value.password !== null) {
           if (
-            value.password.length < context.password.config.minPasswordLength ||
-            value.password.length > context.password.config.maxPasswordLength
+            value.password.length < (await getContext()).password.config.minPasswordLength ||
+            value.password.length > (await getContext()).password.config.maxPasswordLength
           )
             throw new Denied(400);
-          hash = await context.password.hash(value.password);
+          hash = await (await getContext()).password.hash(value.password);
         } else if (value.kind === 'key') {
           text(value.kid);
           if (!value.remove) publicJwk = await publicCredential(value.publicJwk, value.kid);
         }
         const { receipt, subject, previousEpoch } = await consume(input, purpose);
-        const oldPassword = await context.internalAdapter.findCredentialAccount(subject.accountId);
+        const oldPassword = await (await getContext()).internalAdapter.findCredentialAccount(subject.accountId);
         const destructive =
           purpose === 'remove-password' ||
           purpose === 'remove-key' ||
@@ -582,9 +600,11 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         }
         await owner(subject.accountId);
         if (value.kind === 'password') {
-          if (hash !== null) await context.internalAdapter.updatePassword(subject.accountId, hash);
+          if (hash !== null) await (await getContext()).internalAdapter.updatePassword(subject.accountId, hash);
           else
-            await context.adapter.update({
+            await (
+              await getContext()
+            ).adapter.update({
               model: 'account',
               where: [
                 { field: 'userId', value: subject.accountId },
@@ -603,7 +623,8 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             value.kid,
             publicJwk,
           ]);
-        if (destructive || receipt.invalidation) await context.internalAdapter.deleteUserSessions(subject.accountId);
+        if (destructive || receipt.invalidation)
+          await (await getContext()).internalAdapter.deleteUserSessions(subject.accountId);
       },
       async reduceConsent(input) {
         const granted = scopes(input.scopes);
@@ -660,7 +681,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         } finally {
           connection.release();
         }
-        await context.internalAdapter.deleteUserSessions(input.accountId);
+        await (await getContext()).internalAdapter.deleteUserSessions(input.accountId);
       },
       async beginClientReduction(input) {
         const granted = scopes(input.scopes);
@@ -773,7 +794,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         }
       },
       async revokeSessions(accountId) {
-        await context.internalAdapter.deleteUserSessions(accountId);
+        await (await getContext()).internalAdapter.deleteUserSessions(accountId);
       },
       async registerClient(input) {
         const id = text(input.clientId);
@@ -811,7 +832,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       try {
         const url = new URL(request.url);
         if (url.origin !== options.issuer || url.search) throw new Denied(400);
-        if (url.pathname === '/.well-known/jwks.json' && request.method === 'GET') return json(signer.jwks);
+        if (url.pathname === '/.well-known/jwks.json' && request.method === 'GET') return json(await signer.getJwks());
         if (url.pathname === '/session' && request.method === 'GET') return json(await sessionProof(request.headers));
         if (
           ![
@@ -838,7 +859,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         if (attemptPath && !attemptDispatch.getStore()) {
           const response = await attemptDispatch.run(
             () => service.handler(request),
-            () => auth.handler(nativeAttemptRequest(request, options.issuer, attemptPath)),
+            () => getAuth().handler(nativeAttemptRequest(request, options.issuer, attemptPath)),
           );
           if (response.status === 429) {
             const denied = json({ error: 'authentication_denied' }, 429);
@@ -854,10 +875,10 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         if (url.pathname === '/recovery/start') {
           fields(body, ['account_id']);
           const account = await recoveryAccount(text(body.account_id));
-          const user = await context.internalAdapter.findUserById(account.accountId);
+          const user = await (await getContext()).internalAdapter.findUserById(account.accountId);
           if (!user?.email) throw new Denied();
           await recoveryBinding.run({ accountId: account.accountId, epoch: account.authnEpoch }, () =>
-            auth.api.requestPasswordReset({ body: { email: user.email } }),
+            getAuth().api.requestPasswordReset({ body: { email: user.email } }),
           );
           return json({ success: true });
         }
@@ -867,8 +888,8 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           const token = text(body.token);
           const newPassword = text(body.new_password);
           if (
-            newPassword.length < context.password.config.minPasswordLength ||
-            newPassword.length > context.password.config.maxPasswordLength
+            newPassword.length < (await getContext()).password.config.minPasswordLength ||
+            newPassword.length > (await getContext()).password.config.maxPasswordLength
           )
             throw new Denied(400);
           const account = await recoveryAccount(accountId);
@@ -885,7 +906,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             'INSERT INTO auth_effect_receipt (receipt_id, account_id, purpose, minimum_authn_epoch) VALUES ($1,$2,$3,$4)',
             [receipt.receiptId, accountId, 'recovery', receipt.minimumAuthnEpoch],
           );
-          await auth.api.resetPassword({ body: { token, newPassword } });
+          await getAuth().api.resetPassword({ body: { token, newPassword } });
           return json({ success: true });
         }
         if (url.pathname === '/signin/key') {
@@ -915,9 +936,12 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             if (body.email !== undefined) throw new Denied(400);
             const account = await activeActor(text(body.account_id));
             const password = text(body.password);
-            if (password.length > context.password.config.maxPasswordLength) throw new Denied(400);
-            const credential = await context.internalAdapter.findCredentialAccount(account.accountId);
-            if (!credential?.password || !(await context.password.verify({ hash: credential.password, password })))
+            if (password.length > (await getContext()).password.config.maxPasswordLength) throw new Denied(400);
+            const credential = await (await getContext()).internalAdapter.findCredentialAccount(account.accountId);
+            if (
+              !credential?.password ||
+              !(await (await getContext()).password.verify({ hash: credential.password, password }))
+            )
               throw new Denied();
             return await establish(
               {
@@ -933,7 +957,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           const selected = { clientId: text(body.client_id), scopes: scopes(body.scope) };
           await clientFor(selected.clientId);
           const response = await binding.run(selected, () =>
-            auth.api.signInEmail({
+            getAuth().api.signInEmail({
               headers: request.headers,
               body: { email: text(body.email), password: text(body.password) },
               asResponse: true,
@@ -948,8 +972,8 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             return json(proof, 200, setCookies);
           } catch (error) {
             // A state/consent change during establishment must not release its cookie.
-            const created = await auth.api.getSession({ headers });
-            if (created) await context.internalAdapter.deleteSession(created.session.token);
+            const created = await getAuth().api.getSession({ headers });
+            if (created) await (await getContext()).internalAdapter.deleteSession(created.session.token);
             throw error;
           }
         }
@@ -1018,12 +1042,12 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           } finally {
             connection.release();
           }
-          if (reducing) await context.internalAdapter.deleteUserSessions(proof.account_id);
+          if (reducing) await (await getContext()).internalAdapter.deleteUserSessions(proof.account_id);
           return json({ client_id: client.client_id, scope: granted });
         }
         fields(body, []);
         // Better Auth owns cookie clearing and deletion of its own persistent session.
-        const response = await auth.handler(
+        const response = await getAuth().handler(
           new Request(`${options.issuer}/api/auth/sign-out`, { method: 'POST', headers: request.headers, body: '{}' }),
         );
         return json({ success: response.ok }, response.status, response.headers.getSetCookie());

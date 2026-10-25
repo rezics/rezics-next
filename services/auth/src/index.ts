@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import { buildAuthService } from './service.ts';
 import type { JWK } from 'jose';
+export { SigningRotationPending } from './signing.ts';
 export { createAccountWorkflows } from './workflows.ts';
 export type {
   AccountWorkflowOptions,
@@ -88,6 +89,21 @@ export interface AuthServiceOptions {
   };
 }
 
+export interface SigningState {
+  generation: number;
+  current: string | null;
+  next: string | null;
+  retiring: string | null;
+}
+
+/** Auth-only operational controls. Generation is a durable compare-and-swap token. */
+export interface SigningControl {
+  status(): Promise<SigningState>;
+  stage(input: { expectedGeneration: number; key: JWK }): Promise<SigningState>;
+  rotate(input: { expectedGeneration: number; kid: string }): Promise<SigningState>;
+  prune(input: { expectedGeneration: number }): Promise<SigningState>;
+}
+
 export interface SessionProof {
   account_id: string;
   client_id: string;
@@ -138,6 +154,7 @@ export interface AuthService {
   internal: {
     /** One native expiry batch, at most 1000 rows; schedule through the shared worker. */
     pruneExpiredVerifications(): Promise<number>;
+    signing: SigningControl;
     provisionPassword(input: {
       authorization: string;
       email: string;
