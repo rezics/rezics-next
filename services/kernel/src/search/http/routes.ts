@@ -70,7 +70,9 @@ export function searchRoutes<App>(
           {
             text: t.Optional(t.String()),
             filter: t.Optional(t.Any()),
-            sort: t.Optional(t.Union([t.Literal('relevance'), t.Literal('name'), t.Literal('id')])),
+            sort: t.Optional(
+              t.Union([t.Literal('relevance'), t.Literal('name'), t.Literal('id'), t.Literal('collections')]),
+            ),
             limit: t.Optional(t.Integer({ minimum: 1, maximum: 100 })),
             cursor: t.Optional(t.String()),
           },

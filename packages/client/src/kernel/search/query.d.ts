@@ -9,7 +9,7 @@ export type SearchPlan = {
     query?: Record<string, unknown>;
     filter?: Record<string, unknown>;
     boost?: string;
-    sort: 'relevance' | 'name' | 'id';
+    sort: 'relevance' | 'name' | 'id' | 'collections';
     size: number;
     after?: readonly SortValue[];
 };

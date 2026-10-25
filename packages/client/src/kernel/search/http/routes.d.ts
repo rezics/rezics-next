@@ -45,7 +45,7 @@ export declare function searchRoutes<App>(app: App, { pool, search, access }: {
                     body: {
                         text?: string;
                         filter?: any;
-                        sort?: "id" | "name" | "relevance";
+                        sort?: "collections" | "id" | "name" | "relevance";
                         limit?: number;
                         cursor?: string;
                     };

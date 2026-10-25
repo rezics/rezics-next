@@ -36,7 +36,7 @@ export type SearchPlan = {
   query?: Record<string, unknown>;
   filter?: Record<string, unknown>;
   boost?: string;
-  sort: 'relevance' | 'name' | 'id';
+  sort: 'relevance' | 'name' | 'id' | 'collections';
   size: number;
   after?: readonly SortValue[];
 };
@@ -100,7 +100,9 @@ export function searchSubjects(search: OpenSearch, prefix: string, plan: SearchP
       ? [{ _score: 'desc' }, { id: 'asc' }]
       : plan.sort === 'name'
         ? [{ name_sort: 'asc' }, { id: 'asc' }]
-        : [{ id: 'asc' }];
+        : plan.sort === 'collections'
+          ? [{ public_collection_count: { order: 'desc', missing: 0 } }, { name_sort: 'asc' }, { id: 'asc' }]
+          : [{ id: 'asc' }];
 
   return search
     .request<SearchResponse>('POST', `/${alias}/_search/template`, {

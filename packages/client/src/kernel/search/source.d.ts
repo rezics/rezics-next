@@ -63,5 +63,13 @@ export interface SubjectSource {
         count: number;
     }>;
 }
+/** Active public Collection counts for subjects in one partition. Only the count is read. */
+export interface SubjectListingSource {
+    /**
+     * Counts by subject id. An id without a row is absent (count 0).
+     * An id that routes to another partition throws `RangeError`.
+     */
+    read(partition: number, ids: readonly string[]): Promise<Map<string, number>>;
+}
 /** Returns the partition selected by the route in UUID bytes 10–11. */
 export declare function subjectPartition(id: string): number;

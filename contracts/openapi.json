@@ -46604,7 +46604,8 @@
                     "enum": [
                       "relevance",
                       "name",
-                      "id"
+                      "id",
+                      "collections"
                     ],
                     "type": "string"
                   },

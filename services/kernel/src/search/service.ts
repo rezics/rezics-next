@@ -99,7 +99,8 @@ function validate(request: SearchRequest) {
   }
 
   const sort = request.sort === undefined ? (text ? 'relevance' : 'name') : request.sort;
-  if (sort !== 'relevance' && sort !== 'name' && sort !== 'id') invalid('/sort', 'invalid_format');
+  if (sort !== 'relevance' && sort !== 'name' && sort !== 'id' && sort !== 'collections')
+    invalid('/sort', 'invalid_format');
   if (sort === 'relevance' && !text) unsupported('/sort');
   const limit = request.limit === undefined ? 20 : request.limit;
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) invalid('/limit', 'out_of_range');
