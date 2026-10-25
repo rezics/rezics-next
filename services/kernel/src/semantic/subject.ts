@@ -1,6 +1,6 @@
 import type { Release } from '@rezics/definitions';
 import type { Pool, PoolClient } from 'pg';
-import { runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
+import { runCommand, type CommandAuthorization } from '../command/command.ts';
 import { withConnection, discardConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccessCheck, AccountActor, Resource } from '../request/access.ts';
@@ -19,28 +19,6 @@ import { readRelease as getRelease } from './definitions.ts';
 
 export const CREATE_SUBJECT = 'subject.create';
 const CONTEXT = GLOBAL_CONTEXT;
-export const subjectParent = {
-  resource: { route: 0, id: GLOBAL_CONTEXT },
-  async validate(client: Pick<PoolClient, 'query'>) {
-    const result = await client.query(
-      "SELECT 1 FROM semantic.context WHERE route = 0 AND context_id = $1::uuid AND kind = 'global'",
-      [GLOBAL_CONTEXT],
-    );
-    return result.rowCount === 1;
-  },
-};
-export const subjectCreation = {
-  async validate(tx: CommandTransaction, resource: Resource) {
-    const result = await tx.query(
-      `SELECT 1 FROM semantic.subject s
-       JOIN semantic.revision r ON r.route = s.route AND r.subject_id = s.subject_id AND r.revision = 1
-       WHERE s.route = $1 AND s.subject_id = $2::uuid
-         AND s.recorded_transaction_id = r.recorded_transaction_id AND r.kind = 'create'`,
-      [resource.route, resource.id],
-    );
-    return result.rowCount === 1;
-  },
-};
 
 /** Retries reach the partition holding their receipt while each attempt gets a new subject id. */
 export function subjectTarget(routeKey: Uint8Array, accountId: string, idempotencyKey: string): Resource {

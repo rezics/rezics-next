@@ -2,7 +2,6 @@ import { Elysia } from 'elysia';
 import { randomBytes } from 'node:crypto';
 import type { Pool } from 'pg';
 import { createAccess } from '../access/index.ts';
-import { parentCreationAuthorization } from '../access/parent-creation.ts';
 import { withConnection } from '../database/pool.ts';
 import {
   accessCheck,
@@ -116,29 +115,6 @@ export function createApp({
         authorizeCommand: (resource: Resource, denied: () => Error) => {
           const { checkedAccess, action, context } = permission();
           return accessCommandAuthorization(checkedAccess, actor, action, resource, context, denied);
-        },
-        parentAuthorization: (
-          action: string,
-          parent: unknown,
-          resource: Resource,
-          creation: unknown,
-          denied: () => Error,
-        ) => {
-          const { checkedAccess, context } = permission();
-          const parentAnchor = parent as Parameters<typeof parentCreationAuthorization>[0]['parent'];
-          if (!checkedAccess.prepare)
-            return accessCommandAuthorization(checkedAccess, actor, action, parentAnchor.resource, context, denied);
-          return parentCreationAuthorization({
-            access: checkedAccess,
-            actor,
-            action,
-            parent: parentAnchor,
-            context: {
-              ...context,
-              resource,
-              creation: creation as Parameters<typeof parentCreationAuthorization>[0]['context']['creation'],
-            },
-          });
         },
       };
     })

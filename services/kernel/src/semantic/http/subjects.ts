@@ -8,13 +8,11 @@ import {
   readLabels,
   readSubject,
   SubjectAccessDeniedError,
-  subjectCreation,
-  subjectParent,
   subjectTarget,
 } from '../subject.ts';
 import { DATA_TYPES, type DataType } from '@rezics/definitions';
 import { GrantDeniedError } from '../../access/grant-commands.ts';
-import { activeRelease, readRelease } from '../definitions.ts';
+import { activeRelease, GLOBAL_CONTEXT, readRelease } from '../definitions.ts';
 import { routeOf } from '../../route/route.ts';
 import type { AccountActor } from '../../request/access.ts';
 import { AuthenticationError } from '../../request/access.ts';
@@ -156,18 +154,15 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey }: Su
           security: [{ bearerAuth: [] }],
         },
       },
-      async ({ body, headers, actor, parentAuthorization, admission, job, session, set }) => {
+      async ({ body, headers, actor, authorizeCommand, admission, job, session, set }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         const account: AccountActor = actor;
         const active = await activeRelease(pool);
         if (!active) throw new ProblemError('semantic_not_ready');
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const target = subjectTarget(routeKey, account.accountId, key);
-        const authorization = await parentAuthorization(
-          'subject:create',
-          subjectParent,
-          target,
-          subjectCreation,
+        const authorization = await authorizeCommand(
+          { route: 0, id: GLOBAL_CONTEXT },
           () => new SubjectAccessDeniedError(),
         );
         try {
@@ -179,7 +174,7 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey }: Su
               digest: requestDigest('subject.create', account, body),
               item: body,
               release: { digest: active.digest, release: active.release },
-              authorize: async () => true,
+              authorize: authorization.check,
               authorization,
               deadline: job.deadline,
             }),
