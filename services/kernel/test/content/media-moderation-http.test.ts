@@ -28,7 +28,7 @@ const transactionId = newId(route);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(8)]]) };
 const issuer = 'https://auth.example.test';
 const password = 'correct horse battery staple';
-const scopes = [action, 'media:complete'];
+const scopes = [action, 'media:read'];
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
 let auth: Awaited<ReturnType<typeof createAuthService>>;
 let authPool: Pool;
@@ -136,7 +136,7 @@ beforeAll(async () => {
   uploaderId = await human('media_uploader');
   bearer = await issue(moderatorId, [action]);
   uploaderBearer = await issue(uploaderId, scopes);
-  noScopeBearer = await issue(moderatorId, ['media:complete']);
+  noScopeBearer = await issue(moderatorId, ['media:read']);
   const access = createAccess({
     actions: actionCatalogue(createKernel({ pool: db.pool, routeKey })),
     auth: {

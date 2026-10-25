@@ -53,7 +53,8 @@ const context = () => ({
   deadline: Date.now() + 10000,
 });
 const hash = 'a'.repeat(64);
-const input = (patch: Partial<MediaReservationInput> = {}): MediaReservationInput => ({
+type ExistingThreadReservationInput = Extract<MediaReservationInput, { containerId: string }>;
+const input = (patch: Partial<ExistingThreadReservationInput> = {}): MediaReservationInput => ({
   containerId: thread,
   purpose: 'post-image',
   mediaType: 'image/png',
@@ -105,12 +106,12 @@ beforeAll(async () => {
 });
 afterAll(() => db?.close());
 
-async function reserved(patch: Partial<MediaReservationInput> = {}) {
+async function reserved(patch: Partial<ExistingThreadReservationInput> = {}) {
   const request = context();
   const result = await reserveMedia(dependencies(), author, input(patch), request);
   return { id: result.value.mediaId, request, result };
 }
-async function uploaded(patch: Partial<MediaReservationInput> = {}) {
+async function uploaded(patch: Partial<ExistingThreadReservationInput> = {}) {
   const media = await reserved(patch);
   await completeMedia(
     dependencies(),
@@ -121,7 +122,7 @@ async function uploaded(patch: Partial<MediaReservationInput> = {}) {
   );
   return media;
 }
-async function available(patch: Partial<MediaReservationInput> = {}) {
+async function available(patch: Partial<ExistingThreadReservationInput> = {}) {
   const media = await uploaded(patch);
   // Processing belongs to the following job task. This fixture models its committed state, never a client option.
   await db.admin.query("UPDATE content.media SET state='available' WHERE route=$1 AND media_id=$2", [
@@ -239,7 +240,7 @@ test('invalid metadata, missing or concealed containers and new-ID grants cannot
     { sha256: hash.toUpperCase() },
   ])
     await unchanged(() =>
-      reserveMedia(dependencies(), author, input(patch as Partial<MediaReservationInput>), context()),
+      reserveMedia(dependencies(), author, input(patch as Partial<ExistingThreadReservationInput>), context()),
     );
   for (const actor of [other, { kind: 'anonymous' } as const])
     await unchanged(() => reserveMedia(dependencies(), actor, input(), context()));
@@ -429,9 +430,14 @@ test('claims roll back with referencing command, including mixed lists and colle
   expect(await row(good.id)).toEqual(original);
   expect((await db.admin.query('SELECT count(*) FROM content.post WHERE route=$1', [route])).rows).toEqual(beforePosts);
   for (const flag of ['erased', 'collection_pending']) {
-    await db.admin.query(`UPDATE content.media SET ${flag}=true WHERE route=$1 AND media_id=$2`, [route, good.id]);
-    await unchanged(() => reference([good.id]));
-    await db.admin.query(`UPDATE content.media SET ${flag}=false WHERE route=$1 AND media_id=$2`, [route, good.id]);
+    // Erasure is irreversible, so each fence gets its own media identity.
+    const fenced = await available();
+    await db.admin.query(
+      `UPDATE content.media SET ${flag}=true, security_revision=security_revision+1 WHERE route=$1 AND media_id=$2`,
+      [route, fenced.id],
+    );
+    await unchanged(() => reference([fenced.id]));
+    expect((await row(fenced.id)).claimed_at).toBeNull();
   }
   expect((await row(good.id)).claimed_at).toBeNull();
 });

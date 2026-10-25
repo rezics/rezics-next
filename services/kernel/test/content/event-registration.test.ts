@@ -1,4 +1,4 @@
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, expect, expectTypeOf, test } from 'bun:test';
 import pg from 'pg';
 import { runCommand, type CommandEvent } from '../../src/command/command.ts';
 import { CONTENT_EVENTS, type ContentEventData, type ContentEventType } from '../../src/content/events.ts';
@@ -32,14 +32,39 @@ const fixtures = {
   'com.rezics.content.media.available.v1': media,
   'com.rezics.content.media.rejected.v1': { ...media, decisionId: revisionId },
   'com.rezics.content.media.erased.v1': media,
+  'com.rezics.content.media.collection-pending.v1': media,
   'com.rezics.content.media.collected.v1': media,
+  'com.rezics.content.media.import-requested.v1': { mediaId },
+  'com.rezics.content.media.taken-down.v1': { mediaId, securityRevision: '9223372036854775807' },
   'com.rezics.content.moderation.takedown.v1': {
     targetKind: 'post',
     targetId: itemId,
     securityRevision: '9223372036854775807',
   },
+  'com.rezics.content.post.erased.v1': { postId: itemId, securityRevision: '9223372036854775807' },
   'com.rezics.content.moderation.erasure.v1': { threadId, postIds: [itemId], mediaIds: [mediaId] },
   'com.rezics.content.report.created.v1': { reportId, targetKind: 'post', targetId: itemId, revisionId },
+  'com.rezics.content.reaction.changed.v1': {
+    actorId,
+    targetKind: 'post',
+    targetId: itemId,
+    previousKind: 'upvote',
+    kind: 'like',
+  },
+  'com.rezics.content.author-erasure.requested.v1': { operationId: revisionId, threadId, authorId: actorId },
+  'com.rezics.content.board-thread.projected.v1': {
+    boardId: containerId,
+    threadId,
+    sourceEpoch: 1,
+    sourcePosition: '9223372036854775807',
+  },
+  'com.rezics.content.source_fence.taken_down.v1': {
+    route: 1234,
+    source: 'catalog',
+    external_id: 'external-subject',
+    field_group: 'cover',
+    securityRevision: '9223372036854775807',
+  },
 } satisfies { [T in ContentEventType]: ContentEventData<T> };
 const entries = Object.entries(fixtures);
 let nextPartition = 1400;
@@ -87,6 +112,17 @@ test.each(entries)('native command log/readBatch accepts %s', async (type, data)
     },
   ]);
   expect(await checkpoint(partition)).toBe(written.position);
+});
+
+test('reaction event types retain the closed kinds and nullable transitions', () => {
+  type ReactionKind = 'upvote' | 'downvote' | 'like' | 'love' | 'laugh' | 'insightful' | 'sad';
+  expectTypeOf<ContentEventData<'com.rezics.content.reaction.changed.v1'>>().toEqualTypeOf<{
+    actorId: string;
+    targetKind: 'thread' | 'post';
+    targetId: string;
+    previousKind: ReactionKind | null;
+    kind: ReactionKind | null;
+  }>();
 });
 
 test('native registerEffects accepts every closed content event', () => {

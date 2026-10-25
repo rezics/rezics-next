@@ -27,6 +27,7 @@ import * as imageJob from '../../src/content/image-job.ts';
 import * as collectionJob from '../../src/content/collection-job.ts';
 import * as erasureJob from '../../src/content/erasure-job.ts';
 import type { MediaStorage } from '../../src/content/media-storage.ts';
+import type { DownloadContext } from '../../src/content/media-download.ts';
 import type { TurnstileVerifier } from '../../src/content/turnstile.ts';
 import type * as model from '../../src/content/model.ts';
 import type { ImportedSource, Rights } from '../../src/content/imported-contract.ts';
@@ -41,12 +42,14 @@ type Command<I, V, D = commands.ContentCommandDependencies, C = model.RequestCon
   context: C,
 ) => Promise<CommandOutcome<V>>;
 type Ids = Readonly<{ threadId: string; itemId: string; revisionId: string }>;
-type TargetId = Readonly<{ targetId: string }>;
+type ModerationValue = Readonly<{ targetId: string; securityRevision: string }>;
 
 // These consumers are intentionally uncalled: type checking must never execute a port.
 function publishedSignatures(): void {
   same<Equal<typeof commands.threadTarget, (key: Uint8Array, accountId: string, idempotencyKey: string) => Resource>>();
-  same<Equal<typeof commands.createThread, Command<model.ThreadInput, Ids>>>();
+  same<
+    Equal<typeof commands.createThread, Command<model.ThreadInput & Readonly<{ mediaIds?: readonly string[] }>, Ids>>
+  >();
   same<Equal<typeof commands.createPost, Command<model.PostInput, Ids>>>();
   same<Equal<typeof commands.revisePost, Command<model.RevisionInput, Ids>>>();
   same<
@@ -66,7 +69,7 @@ function publishedSignatures(): void {
         deps: reads.ContentReadDependencies,
         id: string,
         context: model.ReadContext,
-      ) => Promise<model.Anchored<model.ThreadView | null>>
+      ) => Promise<model.Anchored<reads.ThreadView | null>>
     >
   >();
   same<
@@ -78,7 +81,7 @@ function publishedSignatures(): void {
         postId: string,
         context: model.ReadContext,
         revisionId?: string,
-      ) => Promise<model.Anchored<model.ItemView | null>>
+      ) => Promise<model.Anchored<reads.ItemView | null>>
     >
   >();
   same<
@@ -90,7 +93,7 @@ function publishedSignatures(): void {
         context: model.ReadContext,
         cursor?: string,
         limit?: number,
-      ) => Promise<model.Page<model.ItemView>>
+      ) => Promise<model.Page<reads.ItemView>>
     >
   >();
   same<
@@ -113,7 +116,7 @@ function publishedSignatures(): void {
         deps: reads.ContentReadDependencies,
         ids: readonly string[],
         context: model.ReadContext,
-      ) => Promise<readonly model.Anchored<model.ThreadView | null>[]>
+      ) => Promise<readonly model.Anchored<reads.ThreadView | null>[]>
     >
   >();
   same<Equal<typeof board.createBoardEffect, (pool: Pool) => Effect>>();
@@ -132,7 +135,13 @@ function publishedSignatures(): void {
   same<
     Equal<
       typeof media.reserveMedia,
-      Command<media.MediaReservationInput, Readonly<{ mediaId: string }>, media.MediaDependencies>
+      (
+        deps: media.MediaDependencies,
+        actor: Actor,
+        input: media.MediaReservationInput,
+        context: model.RequestContext,
+        newThreadTarget?: media.NewThreadMediaTarget,
+      ) => Promise<CommandOutcome<Readonly<{ mediaId: string }>>>
     >
   >();
   same<
@@ -174,7 +183,10 @@ function publishedSignatures(): void {
   same<Equal<typeof media.readMediaState, (pool: Pool, mediaId: string) => Promise<media.MediaState | null>>>();
   same<Equal<typeof media.readCollectionFence, (pool: Pool, mediaId: string) => Promise<boolean | null>>>();
   same<
-    Equal<typeof moderation.takedown, Command<moderation.TakedownInput, TargetId, moderation.ModerationDependencies>>
+    Equal<
+      typeof moderation.takedown,
+      Command<moderation.TakedownInput, ModerationValue, moderation.ModerationDependencies>
+    >
   >();
   // Initiation must retain receipt/request metadata, even before native work is wired.
   same<Equal<typeof operations.beginAuthorErasure, BeginAuthorErasure>>();
@@ -188,7 +200,7 @@ function publishedSignatures(): void {
   same<
     Equal<
       typeof moderation.eraseStandaloneMedia,
-      Command<moderation.EraseStandaloneMediaInput, TargetId, moderation.ModerationDependencies>
+      Command<moderation.EraseStandaloneMediaInput, ModerationValue, moderation.ModerationDependencies>
     >
   >();
   same<
@@ -235,7 +247,14 @@ function publishedSignatures(): void {
   >();
   same<Equal<imageJob.ImageJob, Readonly<{ process(mediaId: string): Promise<imageJob.ImageJobOutcome> }>>>();
   same<
-    Equal<typeof collectionJob.createCollectionJob, (pool: Pool, storage: MediaStorage) => collectionJob.CollectionJob>
+    Equal<
+      typeof collectionJob.createCollectionJob,
+      (
+        pool: Pool,
+        storage: MediaStorage,
+        configuration?: Readonly<{ clock?: () => Date }>,
+      ) => collectionJob.CollectionJob
+    >
   >();
   same<
     Equal<
@@ -286,8 +305,15 @@ function publishedModels(): void {
       Readonly<{ pool: Pool; access: Access; routeKey: Uint8Array; clock?: () => Date }>
     >
   >();
-  same<Equal<reads.ContentReadDependencies, Readonly<{ pool: Pool; access: Access; tokens: KeyRing }>>>();
-  same<Equal<media.MediaDependencies, Readonly<{ pool: Pool; access: Access }>>>();
+  same<
+    Equal<reads.ContentReadDependencies, Readonly<{ pool: Pool; access: Access; tokens: KeyRing; clock?: () => Date }>>
+  >();
+  same<
+    Equal<
+      media.MediaDependencies,
+      Readonly<{ pool: Pool; access: Access; clock?: () => Date; downloadContext?: DownloadContext }>
+    >
+  >();
   same<Equal<model.ContentCommandValue, Ids>>();
   same<Equal<model.RequestContext, Readonly<{ idempotencyKey: string; deadline: number; requestId: string }>>>();
   same<Equal<model.ReadContext, Readonly<{ actor: Actor; deadline: number }>>>();
@@ -428,6 +454,15 @@ function publishedModels(): void {
       }>
     >
   >();
+  same<
+    Equal<
+      reads.ItemView,
+      model.ItemView & (Readonly<{ availability: 'available' }> | Readonly<{ availability: 'erased'; removed: true }>)
+    >
+  >();
+  same<Equal<reads.ThreadView, Omit<model.ThreadView, 'firstPost'> & Readonly<{ firstPost: reads.ItemView }>>>();
+  same<Equal<media.NewThreadMediaTarget, Readonly<{ thread: Resource; boardId: string }>>>();
+  same<Equal<moderation.ModerationValue, ModerationValue>>();
   same<Equal<keyof model.ItemView, keyof model.ItemMetadata | 'revisionId' | 'body'>>();
   same<Equal<keyof model.RevisionView, keyof model.RevisionMetadata | 'availability' | 'body'>>();
   same<Equal<board.BoardCandidateKey, Readonly<{ createdAt: string; id: string }>>>();
@@ -485,7 +520,11 @@ function publishedModels(): void {
   same<
     Equal<
       media.MediaReservationInput,
-      Readonly<{ containerId: string; purpose: 'post-image'; mediaType: string; byteCount: number; sha256?: string }>
+      Readonly<{ purpose: 'post-image'; mediaType: string; byteCount: number; sha256?: string }> &
+        (
+          | Readonly<{ containerId: string; newThread?: never }>
+          | Readonly<{ newThread: Readonly<{ boardId: string; idempotencyKey: string }>; containerId?: never }>
+        )
     >
   >();
   same<
@@ -497,7 +536,7 @@ function publishedModels(): void {
   same<
     Equal<
       media.ClaimMediaInput,
-      Readonly<{ mediaIds: readonly string[]; containerId: string; author: Actor }> &
+      Readonly<{ mediaIds: readonly string[]; containerId: string; author: Actor; boardId?: string }> &
         (
           | Readonly<{ itemId: string; revisionId: string; reference?: never }>
           | Readonly<{

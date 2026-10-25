@@ -9,7 +9,7 @@ import { REPORT_EVENTS } from './report-events.ts';
 import { SOURCE_FENCE_EVENTS } from './source-fence-events.ts';
 
 export const REACTION_KINDS = ['upvote', 'downvote', 'like', 'love', 'laugh', 'insightful', 'sad'] as const;
-const reactionKind = Type.Union(REACTION_KINDS.map((kind) => Type.Literal(kind)));
+const reactionKind = Type.Enum(REACTION_KINDS);
 
 const UUID = Type.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
 

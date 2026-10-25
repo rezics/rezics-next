@@ -3,7 +3,11 @@
   "private": true,
   "license": "AGPL-3.0-only",
   "type": "module",
-  "workspaces": ["apps/*", "services/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "services/*",
+    "packages/*"
+  ],
   "scripts": {
     "check": "bun scripts/gate.ts"
   },
@@ -11,6 +15,7 @@
     "@better-auth/oauth-provider@1.8.0-beta.2": "patches/@better-auth%2Foauth-provider@1.8.0-beta.2.patch"
   },
   "devDependencies": {
+    "@rezics/document": "workspace:*",
     "@types/bun": "1.4.4",
     "oxfmt": "0.74.0",
     "oxlint": "1.89.0",

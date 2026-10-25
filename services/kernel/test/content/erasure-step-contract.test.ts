@@ -1,4 +1,6 @@
 import { expect, expectTypeOf, test } from 'bun:test';
+import type { CurrentConsentReader } from '../../src/access/auth-consent.ts';
+import type { ErasureJob } from '../../src/content/erasure-job.ts';
 import type { CommandOutcome } from '../../src/command/command.ts';
 import { erasePostLogical } from '../../src/content/erase-post.ts';
 import {
@@ -21,6 +23,8 @@ test('uncalled erasure entry points retain exact native kernel signatures', () =
     deps: Readonly<{
       pool: Pool;
       access: Access;
+      readConsent: CurrentConsentReader;
+      erasureJob?: ErasureJob;
       currentTime: () => Date;
       durableStep: NativeDurableStep;
       checkpoint: ErasureCheckpointAdapter;
