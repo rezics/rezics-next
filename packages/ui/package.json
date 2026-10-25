@@ -10,7 +10,7 @@
   },
   "scripts": {
     "storybook": "storybook dev -p 6006",
-    "check": "tsc --noEmit -p tsconfig.json && bun run test #bun test",
+    "check": "oxfmt --check . && tsc --noEmit -p tsconfig.json && bun run test #bun test",
     "test": "bun scripts/isolated.ts bun test"
   },
   "dependencies": {
