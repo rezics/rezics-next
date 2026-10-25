@@ -108,7 +108,7 @@ async function problem(
 }
 
 const tamper = (token: string) => `${token.slice(0, 10)}${token[10] === 'A' ? 'B' : 'A'}${token.slice(11)}`;
-const ids = (page: { results: { id: string }[] }) => page.results.map((result) => result.id);
+const ids = (page: { subjects: { id: string }[] }) => page.subjects.map((result) => result.id);
 
 test('results come from the current subject state with total and as_of', async () => {
   const { fake, service } = await deployment([kokoro, kanata, connect, miso]);
@@ -121,19 +121,19 @@ test('results come from the current subject state with total and as_of', async (
   });
   const before = Date.now();
   const response = await service.search('anonymous', { text: 'kokoro' });
-  expect(response.results[0]!.id).toBe(kokoro.id);
+  expect(response.subjects[0]!.id).toBe(kokoro.id);
   expect(ids(response).sort()).toEqual([kokoro.id, kanata.id, connect.id].sort());
-  expect(response.results.find((result) => result.id === kanata.id)).toEqual({
+  expect(response.subjects.find((result) => result.id === kanata.id)).toEqual({
     id: kanata.id,
     type: 'schema:Book',
     labels: { en: 'Kokoro no Kanata', ja: 'ココロのカナタ' },
   });
   expect(response.total).toEqual({ value: 3, relation: 'exact' });
-  expect(response.next_page_token).toBeNull();
+  expect(response.next).toBeNull();
   expect(response.as_of).toMatch(RFC3339);
   expect(Date.parse(response.as_of)).toBeGreaterThan(before - 60_000);
   expect(Date.parse(response.as_of)).toBeLessThanOrEqual(Date.now() + 1000);
-  expect((await service.search(account, { text: 'kokoro' })).results).toEqual(response.results);
+  expect((await service.search(account, { text: 'kokoro' })).subjects).toEqual(response.subjects);
 });
 
 test('hits the final check refuses are dropped and the page fills from the next candidates', async () => {
@@ -142,57 +142,51 @@ test('hits the final check refuses are dropped and the page fills from the next 
   fake.put({ ...books[0]!, visibility: 'taken_down', securityRevision: 2 });
   fake.put({ ...books[1]!, visibility: 'hidden', securityRevision: 2 });
   fake.put({ ...books[2]!, securityRevision: 2 });
-  const request = { text: 'natsume', sort: 'name' as const, page_size: 2 };
+  const request = { text: 'natsume', sort: 'name' as const, limit: 2 };
   const page = await service.search('anonymous', request);
   expect(ids(page)).toEqual([books[3]!.id, books[4]!.id]);
-  expect(page.next_page_token).not.toBeNull();
-  const next = await service.search('anonymous', { ...request, page_token: page.next_page_token! });
+  expect(page.next).not.toBeNull();
+  const next = await service.search('anonymous', { ...request, cursor: page.next! });
   expect(ids(next)).toEqual([books[5]!.id]);
-  expect(next.next_page_token).toBeNull();
+  expect(next.next).toBeNull();
 });
 
 test('pages continue through signed tokens bound to the request and the principal', async () => {
   const books = [1, 2, 3, 4, 5].map((n) => subject(n, `Soseki ${n}`));
   const { service } = await deployment(books);
-  const request = { text: 'soseki', sort: 'name' as const, page_size: 2 };
+  const request = { text: 'soseki', sort: 'name' as const, limit: 2 };
   const first = await service.search('anonymous', request);
-  const second = await service.search('anonymous', { ...request, page_token: first.next_page_token! });
-  const third = await service.search('anonymous', { ...request, page_token: second.next_page_token! });
+  const second = await service.search('anonymous', { ...request, cursor: first.next! });
+  const third = await service.search('anonymous', { ...request, cursor: second.next! });
   expect([first, second, third].flatMap(ids)).toEqual(books.map((book) => book.id));
-  expect(third.next_page_token).toBeNull();
+  expect(third.next).toBeNull();
   expect(first.total).toEqual({ value: 5, relation: 'exact' });
-  const token = first.next_page_token!;
-  const invalid = [{ pointer: '/page_token', code: 'invalid_format' }];
+  const token = first.next!;
+  const invalid = [{ pointer: '/cursor', code: 'invalid_format' }];
   await problem(
-    service.search('anonymous', { ...request, text: 'natsume', page_token: token }),
+    service.search('anonymous', { ...request, text: 'natsume', cursor: token }),
     'invalid_request',
     invalid,
   );
-  await problem(
-    service.search('anonymous', { ...request, page_size: 3, page_token: token }),
-    'invalid_request',
-    invalid,
-  );
-  await problem(service.search(account, { ...request, page_token: token }), 'invalid_request', invalid);
-  await problem(service.search('anonymous', { ...request, page_token: tamper(token) }), 'invalid_request', invalid);
+  await problem(service.search('anonymous', { ...request, limit: 3, cursor: token }), 'invalid_request', invalid);
+  await problem(service.search(account, { ...request, cursor: token }), 'invalid_request', invalid);
+  await problem(service.search('anonymous', { ...request, cursor: tamper(token) }), 'invalid_request', invalid);
 });
 
 test('an expired token or one from another generation needs a restart', async () => {
   const books = [1, 2, 3].map((n) => subject(n, `Ogai ${n}`));
   const { prefix, fake, service } = await deployment(books);
-  const request = { text: 'ogai', sort: 'name' as const, page_size: 1 };
+  const request = { text: 'ogai', sort: 'name' as const, limit: 1 };
   const issued = Date.now();
   const first = await service.search('anonymous', request, issued);
-  const token = first.next_page_token!;
+  const token = first.next!;
   await problem(
-    service.search('anonymous', { ...request, page_token: token }, issued + 15 * 60_000 + 1),
+    service.search('anonymous', { ...request, cursor: token }, issued + 15 * 60_000 + 1),
     'search_restart_required',
   );
-  expect(ids(await service.search('anonymous', { ...request, page_token: token }, issued + 1000))).toEqual([
-    books[1]!.id,
-  ]);
+  expect(ids(await service.search('anonymous', { ...request, cursor: token }, issued + 1000))).toEqual([books[1]!.id]);
   await publish(prefix, fake, books, 2);
-  await problem(service.search('anonymous', { ...request, page_token: token }), 'search_restart_required');
+  await problem(service.search('anonymous', { ...request, cursor: token }), 'search_restart_required');
   expect(ids(await service.search('anonymous', request))).toEqual([books[0]!.id]);
 });
 
@@ -215,12 +209,12 @@ test('text, filter, sort and paging errors are typed problems with pointers', as
       [{ pointer: '/filter/or', code: 'out_of_range' }],
     ],
     [{ sort: 'relevance' }, 'unsupported_query', [{ pointer: '/sort', code: 'unsupported' }]],
-    [{ page_size: 51 }, 'invalid_request', [{ pointer: '/page_size', code: 'out_of_range' }]],
-    [{ page_size: 0 }, 'invalid_request', [{ pointer: '/page_size', code: 'out_of_range' }]],
-    [{ page_token: 'not-a-token' }, 'invalid_request', [{ pointer: '/page_token', code: 'invalid_format' }]],
+    [{ limit: 101 }, 'invalid_request', [{ pointer: '/limit', code: 'out_of_range' }]],
+    [{ limit: 0 }, 'invalid_request', [{ pointer: '/limit', code: 'out_of_range' }]],
+    [{ cursor: 'not-a-token' }, 'invalid_request', [{ pointer: '/cursor', code: 'invalid_format' }]],
   ];
   for (const [request, code, errors] of cases) await problem(service.search('anonymous', request), code, errors);
-  expect((await service.search('anonymous', { text: '-kokoro', filter: book })).results).toEqual([]);
+  expect((await service.search('anonymous', { text: '-kokoro', filter: book })).subjects).toEqual([]);
   expect(ids(await service.search('anonymous', { text: 'kokoro -connect', filter: book }))).toEqual([kokoro.id]);
   expect(ids(await service.search('anonymous', {}))).toEqual([kokoro.id]);
 });
@@ -231,8 +225,8 @@ test('typeahead suggests only subjects that pass the final check', async () => {
   const response = await service.suggest('Koko');
   expect(ids(response).sort()).toEqual([kokoro.id, connect.id].sort());
   expect(response.as_of).toMatch(RFC3339);
-  expect((await service.suggest('Koko', 1)).results).toHaveLength(1);
-  expect((await service.suggest('miso')).results).toEqual([
+  expect((await service.suggest('Koko', 1)).subjects).toHaveLength(1);
+  expect((await service.suggest('miso')).subjects).toEqual([
     { id: miso.id, type: 'schema:Recipe', labels: { en: 'Miso soup' } },
   ]);
   const range = (pointer: string) => [{ pointer, code: 'out_of_range' }];
@@ -263,7 +257,7 @@ test('an unreachable node, a missing alias or a missing template is index_not_re
 });
 
 test('each request makes at most three index requests and reads only the partitions of examined hits', async () => {
-  const subjects = Array.from({ length: 120 }, (_, index) =>
+  const subjects = Array.from({ length: 240 }, (_, index) =>
     subject(index + 1, `Growth ${index + 1}`, 1 + (index % 4)),
   );
   let searches = 0;
@@ -288,11 +282,11 @@ test('each request makes at most three index requests and reads only the partiti
   subjects.forEach((entry, index) => {
     if (index % 3 === 0) fake.put({ ...entry, visibility: 'taken_down', securityRevision: 2 });
   });
-  for (const pageSize of [1, 10, 50]) {
+  for (const pageSize of [1, 10, 100]) {
     searches = 0;
     reads.length = 0;
-    const page = await service.search('anonymous', { text: 'growth', sort: 'name', page_size: pageSize });
-    expect({ pageSize, results: page.results.length }).toEqual({ pageSize, results: pageSize });
+    const page = await service.search('anonymous', { text: 'growth', sort: 'name', limit: pageSize });
+    expect({ pageSize, subjects: page.subjects.length }).toEqual({ pageSize, subjects: pageSize });
     expect(searches).toBeLessThanOrEqual(3);
     expect(reads.length).toBeLessThanOrEqual(3 * 4);
     for (const read of reads) expect(read.length).toBeLessThanOrEqual(2 * pageSize + 1);

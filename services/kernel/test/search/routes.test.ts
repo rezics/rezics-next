@@ -46,12 +46,12 @@ const service: SearchService = {
   async search(principal, request) {
     calls.push(['search', principal, request]);
     if (failure) throw failure;
-    return { results: [result], total: { value: 1, relation: 'exact' }, next_page_token: null, as_of: asOf };
+    return { subjects: [result], total: { value: 1, relation: 'exact' }, next: null, as_of: asOf };
   },
   async suggest(q, limit) {
     calls.push(['suggest', q, limit]);
     if (failure) throw failure;
-    return { results: [result], as_of: asOf };
+    return { subjects: [result], as_of: asOf };
   },
 };
 const kernel = createKernel({ pool, access, tokens, routeKey, search: service });
@@ -84,28 +84,27 @@ const both = [
 test('search and suggest pass the caller, the body and the query to the service, authorizing once on the Global Context', async () => {
   calls.length = 0;
   checks.length = 0;
-  const body = { text: 'kokoro', filter: { type: { in: ['schema:Book'] } }, sort: 'name', page_size: 5 };
+  const body = { text: 'kokoro', filter: { type: { in: ['schema:Book'] } }, sort: 'name', limit: 5 };
   const anonymous = await call(kernel, 'POST', '/v1/subjects:search', { body });
   expect(anonymous.response.status).toBe(200);
   expect(anonymous.body).toEqual({
-    results: [result],
+    subjects: [result],
     total: { value: 1, relation: 'exact' },
-    next_page_token: null,
+    next: null,
     as_of: asOf,
   });
   expect(
-    (await call(kernel, 'POST', '/v1/subjects:search', { token: 'reader', body: { page_token: 'abc' } })).response
-      .status,
+    (await call(kernel, 'POST', '/v1/subjects:search', { token: 'reader', body: { cursor: 'abc' } })).response.status,
   ).toBe(200);
   const suggested = await call(kernel, 'GET', '/v1/subjects:suggest?q=Koko&limit=3');
   expect(suggested.response.status).toBe(200);
-  expect(suggested.body).toEqual({ results: [result], as_of: asOf });
+  expect(suggested.body).toEqual({ subjects: [result], as_of: asOf });
   expect((await call(kernel, 'GET', '/v1/subjects:suggest?q=%E5%BF%83', { token: 'reader' })).response.status).toBe(
     200,
   );
   expect(calls).toEqual([
     ['search', 'anonymous', body],
-    ['search', `account:${reader.accountId}`, { page_token: 'abc' }],
+    ['search', `account:${reader.accountId}`, { cursor: 'abc' }],
     ['suggest', 'Koko', 3],
     ['suggest', '心', undefined],
   ]);
@@ -136,10 +135,10 @@ test('malformed bodies and query parameters are 400 with field errors', async ()
   const bodies: [unknown, { pointer: string; code: string }[]][] = [
     [{ colour: 'red' }, [{ pointer: '/colour', code: 'unknown_field' }]],
     [{ text: 5 }, [{ pointer: '/text', code: 'invalid_type' }]],
-    [{ page_size: 'x' }, [{ pointer: '/page_size', code: 'invalid_type' }]],
-    [{ page_size: 51 }, [{ pointer: '/page_size', code: 'out_of_range' }]],
-    [{ page_size: 0 }, [{ pointer: '/page_size', code: 'out_of_range' }]],
-    [{ page_token: 7 }, [{ pointer: '/page_token', code: 'invalid_type' }]],
+    [{ limit: 'x' }, [{ pointer: '/limit', code: 'invalid_type' }]],
+    [{ limit: 101 }, [{ pointer: '/limit', code: 'out_of_range' }]],
+    [{ limit: 0 }, [{ pointer: '/limit', code: 'out_of_range' }]],
+    [{ cursor: 7 }, [{ pointer: '/cursor', code: 'invalid_type' }]],
   ];
   for (const [body, errors] of bodies) {
     const response = await call(kernel, 'POST', '/v1/subjects:search', { body });
@@ -169,7 +168,7 @@ test('malformed bodies and query parameters are 400 with field errors', async ()
 test('service problems keep their status, code, errors and headers, and every problem on these reads is not_applicable', async () => {
   const cases: [ProblemError, number][] = [
     [new ProblemError('unsupported_query', { errors: [{ pointer: '/text', code: 'unsupported' }] }), 422],
-    [new ProblemError('invalid_request', { errors: [{ pointer: '/page_token', code: 'invalid_format' }] }), 400],
+    [new ProblemError('invalid_request', { errors: [{ pointer: '/cursor', code: 'invalid_format' }] }), 400],
     [new ProblemError('search_restart_required'), 409],
     [new ProblemError('index_not_ready', { headers: { 'retry-after': '3' } }), 503],
   ];
