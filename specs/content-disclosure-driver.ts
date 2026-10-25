@@ -148,18 +148,33 @@ export interface ContentDisclosureDriver {
   ): Promise<Reply<{ securityRevision: string }>>;
   /** Erase every revision authored by this account in this thread's scope. */
   erase(persona: Persona, thread: Target, author: 'author', key: string): Promise<Reply<unknown>>;
+  /**
+   * Use actual kernel HTTP/Auth/Access/shared receipts and trusted verification.
+   * Receipt identity includes principal_kind (account | anonymous) and
+   * principal_id; anonymous uses nil UUID as a kind marker, never an account.
+   * Do not provision a dummy account or an alternate content receipt engine.
+   * Anonymous keys are client-generated UUIDv4 (122-bit possession proof).
+   * Turnstile and rate limits stay in front; the anonymous floor must authorize
+   * at authoritative T before receipt lookup or stored response disclosure.
+   * Missing trusted public eligibility never falls back to a catalogue flag.
+   * Replay requires the same semantic digest of target/revision/evidence;
+   * changed payload returns idempotency_conflict (422), without stored response.
+   * Ephemeral Turnstile proof, like bearer proof, is authentication evidence and
+   * excluded from that digest. Each attempt needs a fresh valid bot proof.
+   */
   report(
     persona: Persona,
     input: {
       target: Target;
       revisionId?: string;
       evidence?: string;
-      key: string;
+      /** Optional only to test a missing header: omit it on HTTP, never invent a default. */
+      key?: string;
       botToken?: string;
       verified?: boolean;
     },
   ): Promise<Reply<{ reportId: string }>>;
-  /** Token traverses the trusted Turnstile test verification port, not a boolean bypass. */
+  /** Fresh token traverses the trusted Turnstile test verification port, not a boolean bypass. */
   verifiedBotToken(): Promise<string>;
   inspectReports(persona: Persona, target: Target): Promise<Reply<Report[]>>;
   observe(target: Target): Promise<Observation>;

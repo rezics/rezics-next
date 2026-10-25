@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, setDefaultTimeout, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import { isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { Board, Content, ContentDisclosureDriver, Persona, Reply, Target } from './content-disclosure-driver';
@@ -38,8 +39,11 @@ async function ok<T>(reply: Reply<T>): Promise<T> {
   expect(reply.value).toBeDefined();
   return reply.value!;
 }
-async function problem(reply: Reply<unknown>, code: 'not_found' | 'invalid_request' | 'forbidden') {
-  const status = { not_found: 404, invalid_request: 400, forbidden: 403 }[code];
+async function problem(
+  reply: Reply<unknown>,
+  code: 'not_found' | 'invalid_request' | 'forbidden' | 'idempotency_conflict',
+) {
+  const status = { not_found: 404, invalid_request: 400, forbidden: 403, idempotency_conflict: 422 }[code];
   expect(reply.response.status).toBe(status);
   expect(reply.response.headers.get('content-type')).toContain('application/problem+json');
   expect(reply.value).toBeUndefined();
@@ -49,7 +53,7 @@ async function problem(reply: Reply<unknown>, code: 'not_found' | 'invalid_reque
     code,
     status,
     retryable: false,
-    effect_status: code === 'forbidden' ? 'not_applied' : 'not_applicable',
+    effect_status: code === 'forbidden' || code === 'idempotency_conflict' ? 'not_applied' : 'not_applicable',
   });
   expect(typeof body.request_id).toBe('string');
   const { request_id: _request, ...stable } = body;
@@ -373,6 +377,7 @@ test('reports persist with their own anchor exact target evidence and idempotenc
 test('anonymous reports require trusted Turnstile verification and reject caller verified assertions', async () => {
   const { thread } = await fixture();
   const before = await d().observe(thread);
+  const key = randomUUID();
   for (const evidence of [
     {},
     { verified: true },
@@ -381,7 +386,7 @@ test('anonymous reports require trusted Turnstile verification and reject caller
   ]) {
     const response = await d().report('anonymous', {
       target: thread,
-      key: 'bot-report',
+      key,
       ...evidence,
     });
     expect([400, 403]).toContain(response.response.status);
@@ -389,9 +394,102 @@ test('anonymous reports require trusted Turnstile verification and reject caller
     expect(await d().observe(thread)).toEqual(before);
   }
   const botToken = await d().verifiedBotToken();
-  const receipt = await ok(await d().report('anonymous', { target: thread, key: 'bot-report', botToken }));
+  const receipt = await ok(await d().report('anonymous', { target: thread, key, botToken }));
   expect((await d().observe(thread)).reports.map((r) => r.id)).toEqual([receipt.reportId]);
   await ok(await d().read('anonymous', thread));
+});
+
+test('anonymous report keys reject missing malformed and non-v4 UUIDs before anchoring a report', async () => {
+  const { thread } = await fixture();
+  const before = await d().observe(thread);
+  for (const key of [
+    undefined,
+    '',
+    'bot-report',
+    '00000000-0000-0000-0000-000000000000',
+    '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
+    '550e8400-e29b-41d4-0716-446655440000',
+  ]) {
+    const response = await d().report('anonymous', {
+      target: thread,
+      ...(key === undefined ? {} : { key }),
+      botToken: await d().verifiedBotToken(),
+    });
+    await problem(response, 'invalid_request');
+    expect(await d().observe(thread)).toEqual(before);
+  }
+  const receipt = await ok(
+    await d().report('anonymous', {
+      target: thread,
+      key: randomUUID(),
+      botToken: await d().verifiedBotToken(),
+    }),
+  );
+  const after = await d().observe(thread);
+  expect(after.reports.map((r) => r.id)).toEqual([receipt.reportId]);
+  expect(after.reports[0]!.anchorId).toBeTruthy();
+  expect(after.effects.filter((e) => e.kind === 'report')).toHaveLength(1);
+});
+
+test('anonymous reports use UUIDv4 possession keys with matching digest replay and conflict', async () => {
+  const { thread } = await fixture();
+  const input = {
+    target: thread,
+    revisionId: thread.revision.id,
+    evidence: 'anonymous-exact-evidence',
+    key: randomUUID(),
+  };
+  const receipt = await ok(await d().report('anonymous', { ...input, botToken: await d().verifiedBotToken() }));
+  const once = await d().observe(thread);
+  expect(once.reports).toHaveLength(1);
+  const report = once.reports[0]!;
+  expect(report).toMatchObject({
+    id: receipt.reportId,
+    target: { kind: thread.kind, id: thread.id },
+    revisionId: input.revisionId,
+    evidence: input.evidence,
+  });
+  expect(report.anchorId).toBeTruthy();
+  expect(report.anchorId).not.toBe(thread.id);
+  expect(once.effects.filter((e) => e.kind === 'report')).toHaveLength(1);
+  expect(once.effects.find((e) => e.kind === 'report')).toMatchObject({
+    partition: report.partition,
+    transactionId: report.transactionId,
+  });
+  expect(await ok(await d().report('anonymous', { ...input, botToken: await d().verifiedBotToken() }))).toEqual(
+    receipt,
+  );
+  expect(await d().observe(thread)).toEqual(once);
+  const conflict = await d().report('anonymous', {
+    ...input,
+    evidence: 'changed-anonymous-evidence',
+    botToken: await d().verifiedBotToken(),
+  });
+  await problem(conflict, 'idempotency_conflict');
+  for (const secret of [receipt.reportId, input.evidence]) expect(await wire(conflict)).not.toContain(secret);
+  expect(await d().observe(thread)).toEqual(once);
+});
+
+test('revoked public eligibility denies replay before stored report disclosure', async () => {
+  for (const eligibility of ['protected', 'missing'] as const) {
+    const { board, thread } = await fixture();
+    const input = {
+      target: thread,
+      revisionId: thread.revision.id,
+      evidence: `private-report-${eligibility}`,
+      key: randomUUID(),
+    };
+    const receipt = await ok(await d().report('anonymous', { ...input, botToken: await d().verifiedBotToken() }));
+    const once = await d().observe(thread);
+    if (eligibility === 'protected') await d().protect(thread);
+    else await d().failContainer(board, 'missing');
+    const revoked = await d().observe(thread);
+    expect(revoked.reports).toEqual(once.reports);
+    expect(revoked.effects).toEqual(once.effects);
+    const replay = await d().report('anonymous', { ...input, botToken: await d().verifiedBotToken() });
+    await denied(replay, [receipt.reportId, input.evidence]);
+    expect(await d().observe(thread)).toEqual(revoked);
+  }
 });
 
 test('authorized erasure nulls every authored revision and exact references remain erased without substituted bytes', async () => {
