@@ -3,6 +3,12 @@
   "mainBranch": "main",
   "branchPrefix": "worker/",
   "terminationGraceMs": 1500,
+  "derivedFiles": [
+    {
+      "path": "bun.lock",
+      "command": ["bun", "install"]
+    }
+  ],
   "integration": {
     "gateConcurrency": 1,
     "gateTimeoutMs": 1800000,

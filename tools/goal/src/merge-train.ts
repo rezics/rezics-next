@@ -1,11 +1,54 @@
 import { randomUUID } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import defaults from '../defaults.json';
 import { StaleAttemptError } from './contracts.ts';
 import type { AttemptFence, GateOutcome, GateOutcomeSink, GateStage } from './contracts.ts';
 import { SqliteLandingQueue, type LandingEntry } from './land.ts';
 import { acquireDirectoryLease, waitForDirectoryLease } from './lease.ts';
 import { changedFiles, firstFailure, gateRunner, git, outsideScope, type GateRunner } from './merge.ts';
+
+type DerivedFile = { path: string; command: string[] };
+const derivedFiles = defaults.derivedFiles as DerivedFile[];
+
+function unmergedFiles(cwd: string): string[] {
+  return git(cwd, 'diff', '--name-only', '--diff-filter=U', '-z').split('\0').filter(Boolean);
+}
+
+function rebaseOnto(cwd: string, base: string, originalBase: string, logPath: string): void {
+  try {
+    git(cwd, '-c', 'rebase.updateRefs=false', 'rebase', '--onto', base, originalBase);
+    return;
+  } catch (initialError) {
+    let rebaseError: unknown = initialError;
+    const derivedByPath = new Map(derivedFiles.map(file => [file.path, file]));
+    for (;;) {
+      const conflicts = unmergedFiles(cwd);
+      if (!conflicts.length || conflicts.some(path => !derivedByPath.has(path))) throw rebaseError;
+
+      for (const path of conflicts) git(cwd, 'checkout', '--ours', '--', path);
+      for (const path of conflicts) {
+        const file = derivedByPath.get(path)!;
+        if (!file.command.length) throw new Error(`No regeneration command configured for ${path}`);
+        const commandCwd = dirname(join(cwd, file.path));
+        const result = spawnSync(file.command[0]!, file.command.slice(1), { cwd: commandCwd, encoding: 'utf8' });
+        const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+        appendFileSync(logPath, `$ ${file.command.join(' ')} (cwd: ${commandCwd})\n${output}`);
+        if (result.status !== 0) throw new Error(`Failed to regenerate ${path}: ${output || result.error?.message || 'command failed'}`);
+      }
+      git(cwd, 'add', '--', ...conflicts);
+      try {
+        git(cwd, '-c', 'core.editor=true', 'rebase', '--continue');
+        return;
+      } catch (continueError) {
+        const nextConflicts = unmergedFiles(cwd);
+        if (!nextConflicts.length || nextConflicts.some(path => !derivedByPath.has(path))) throw continueError;
+        rebaseError = continueError;
+      }
+    }
+  }
+}
 
 export type TrainOptions = {
   mainCheckout: string; stateDirectory: string; worktreeRoot: string;
@@ -79,7 +122,7 @@ export class MergeTrain {
         stage = 'rebase';
         git(trainTree, 'reset', '--hard', tip);
         git(trainTree, 'clean', '-fdx');
-        git(trainTree, '-c', 'rebase.updateRefs=false', 'rebase', '--onto', base, originalBase);
+        rebaseOnto(trainTree, base, originalBase, logPath);
         stage = 'scope';
         result.changedFiles = changedFiles(trainTree, base);
         result.diffLines = git(trainTree, 'diff', '--numstat', base, 'HEAD').split('\n').reduce((sum, line) => {

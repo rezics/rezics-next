@@ -141,6 +141,8 @@ same commit. Baseline results are cached durably by main commit and gate command
 identity. A changed main commit or command gets a new baseline. Main-only failures, setup problems and timeouts rerun
 the original profile without consuming a fix round.
 
+When a rebase conflicts only in derived files, the train restores their upstream versions, regenerates them with the commands in `defaults.json`, stages them and continues; any other conflict fails at the rebase stage.
+
 Specification conflicts, tool failures and exhausted quota are attempt facts, parsed from a structured worker exit or
 native CLI failure, and stored on the attempt. A CLI failure before a session or commit is rerun once; a second
 consecutive launch failure or repeated environment fingerprint is escalated as stalled to the owning manager. Gate
