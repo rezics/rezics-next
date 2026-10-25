@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { checkPlan, ownDiagnostics } from '../scripts/check.ts';
+import { checkPlan, cleanup, ownDiagnostics, startPostgresContainer } from '../scripts/check.ts';
 
 const PROJECT_ROOT = resolve(import.meta.dir, '../../..');
 
@@ -72,4 +72,24 @@ test('a focused typecheck reports only diagnostics in the named files', () => {
     .filter((line) => !line.startsWith('error'))
     .join('\n');
   expect(ownDiagnostics(elsewhere, ['src/search/b.ts'])).toEqual([]);
+});
+
+test("the check's PostgreSQL container keeps its logs when it exits early and is removed by cleanup", () => {
+  const calls: string[][] = [];
+  const stubDocker = (args: string[]): string => {
+    calls.push(args);
+    return args[0] === 'run' ? 'postgres-container' : '';
+  };
+
+  const postgresContainer = startPostgresContainer(stubDocker);
+
+  expect(calls[0]?.[0]).toBe('run');
+  expect(calls[0]).not.toContain('--rm');
+  expect(postgresContainer).toBe('postgres-container');
+
+  cleanup(['search-container', postgresContainer], stubDocker);
+  expect(calls.slice(1)).toEqual([
+    ['rm', '-f', 'search-container'],
+    ['rm', '-f', 'postgres-container'],
+  ]);
 });
