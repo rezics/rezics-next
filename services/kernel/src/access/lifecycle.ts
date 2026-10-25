@@ -302,7 +302,7 @@ async function grants(
   });
 }
 async function membership(
-  tx: AccessClient,
+  tx: CommandTransaction,
   organizationId: string,
   memberId: string,
   reservationId: string,
@@ -315,6 +315,7 @@ async function membership(
     member_id: memberId,
     reservation_id: reservationId,
     removed: role === null,
+    at: authoritativeTimeValue(currentCommand(tx).time),
     transaction_id: transactionId,
   };
   requireAllowed(affected(await membershipChange.run(tx, input)));
