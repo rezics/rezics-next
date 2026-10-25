@@ -83,11 +83,6 @@ export function clientAuthority(
     const connection = await pool.connect();
     try {
       await connection.query('BEGIN');
-      // A small population must obey the same bounded seek as a large one;
-      // PostgreSQL may otherwise prefer a scan/sort over an available index.
-      await connection.query('SET LOCAL enable_seqscan = off');
-      await connection.query('SET LOCAL enable_bitmapscan = off');
-      await connection.query('SET LOCAL enable_sort = off');
       await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`auth-client:${clientId}`]);
       const value = await action(connection);
       await connection.query('COMMIT');

@@ -59,6 +59,10 @@ async function restart() {
   workflows = createAccountWorkflows(options);
   await workflows.start();
 }
+test('client reduction retains bounded native seek without forcing PostgreSQL planner settings', async () => {
+  const source = await Bun.file(new URL('../src/account-workflows.ts', import.meta.url)).text();
+  expect(source).not.toMatch(/\b(?:enable_seqscan|enable_bitmapscan|enable_sort)\b/i);
+});
 beforeAll(async () => {
   fixture = testDatabase();
   pool = new Pool({ connectionString: fixture.url });
