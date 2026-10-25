@@ -1,5 +1,6 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": { "types": ["bun"] },
+  "contentMappers": [{ "package": "reylo", "extensions": [".sql"] }],
   "include": ["src", "scripts", "test"]
 }
