@@ -1,9 +1,11 @@
 import { fromPlainText, hasDocumentContent, type DocumentSnapshot } from '@rezics/document';
-import { RichTextEditor } from '@rezics/ui';
+import { RichTextEditor, type RichTextEditorLabels, type UploadState } from '@rezics/ui';
 import { Button } from '@rezics/ui/button';
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import type { WriteFailure } from './actions';
+import { imageSources, replyImageLimit, uploadReplyImage, UploadRefusal } from './upload';
 
 type WriteResult<T> = { ok: true; value: T } | WriteFailure;
 
@@ -41,6 +43,71 @@ export function refusalText(failure: WriteFailure): string {
   }
 }
 
+function uploadRefusalText(refusal: UploadRefusal): string {
+  switch (refusal.reason) {
+    case 'type':
+      return m.editor_upload_type();
+    case 'too-large':
+      return m.editor_upload_too_large();
+    case 'rejected':
+      return m.editor_upload_rejected();
+    case 'rate-limited':
+      return m.editor_upload_rate_limited({ seconds: refusal.retryAfter ?? 1 });
+    default:
+      return m.editor_upload_unavailable();
+  }
+}
+
+function editorLabels(): RichTextEditorLabels {
+  return {
+    toolbar: m.editor_toolbar(),
+    blocks: m.editor_blocks(),
+    undo: m.editor_undo(),
+    redo: m.editor_redo(),
+    hideKeyboard: m.editor_hide_keyboard(),
+    formatting: m.editor_formatting(),
+    turnInto: m.editor_turn_into(),
+    paragraph: m.editor_paragraph(),
+    heading1: m.editor_heading_1(),
+    heading2: m.editor_heading_2(),
+    heading3: m.editor_heading_3(),
+    bulletList: m.editor_bullet_list(),
+    orderedList: m.editor_ordered_list(),
+    taskList: m.editor_task_list(),
+    quote: m.editor_quote(),
+    codeBlock: m.editor_code_block(),
+    horizontalRule: m.editor_horizontal_rule(),
+    table: m.editor_table(),
+    insertBlock: m.editor_insert_block(),
+    slashEmpty: m.editor_slash_empty(),
+    bold: m.editor_bold(),
+    italic: m.editor_italic(),
+    strike: m.editor_strike(),
+    inlineCode: m.editor_inline_code(),
+    link: m.editor_link(),
+    clearFormatting: m.editor_clear_formatting(),
+    url: m.editor_url(),
+    apply: m.editor_apply(),
+    cancel: m.editor_cancel(),
+    unlink: m.editor_unlink(),
+    editLink: m.editor_edit_link(),
+    openLink: m.editor_open_link(),
+    invalidUrl: m.editor_invalid_url(),
+    image: m.editor_image(),
+    uploadFile: m.editor_upload_file(),
+    imageAlt: m.editor_image_alt(),
+    editImageAlt: m.editor_edit_image_alt(),
+    insertImage: m.editor_insert_image(),
+    uploading: m.editor_uploading(),
+    uploadFailed: m.editor_upload_failed(),
+    retryUpload: m.editor_retry_upload(),
+    dismissUpload: m.editor_dismiss_upload(),
+    unsupportedImage: m.editor_unsupported_image(),
+    imageLimit: m.editor_image_limit(),
+    documentError: m.editor_document_error(),
+  };
+}
+
 export function SignInPrompt({ returnTo }: { returnTo: string }) {
   return (
     <p className="rounded-lg border border-border/70 bg-card p-4 text-muted-foreground">
@@ -57,14 +124,24 @@ export function SignInPrompt({ returnTo }: { returnTo: string }) {
 export function PostComposer<T>({
   initialKey,
   titleRequired = false,
+  containerId,
   onSubmit,
   onSuccess,
 }: {
   initialKey: string;
   titleRequired?: boolean;
-  onSubmit: (input: { title: string; body: DocumentSnapshot; idempotencyKey: string }) => Promise<WriteResult<T>>;
+  containerId?: string;
+  onSubmit: (input: {
+    title: string;
+    body: DocumentSnapshot;
+    idempotencyKey: string;
+    mediaIds: string[];
+  }) => Promise<WriteResult<T>>;
   onSuccess: (value: T) => void;
 }) {
+  const formId = useId();
+  const locale = getLocale();
+  const labels = useMemo(() => editorLabels(), [locale]);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState(() => fromPlainText('', 'blocks'));
   const bodyRef = useRef(body);
@@ -74,8 +151,23 @@ export function PostComposer<T>({
   const [showPlainEditor, setShowPlainEditor] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(initialKey);
   const [failure, setFailure] = useState<WriteFailure | null>(null);
+  const [uploadNotice, setUploadNotice] = useState<string | null>(null);
+  const [pendingUploads, setPendingUploads] = useState(0);
+  const pendingRef = useRef(0);
+  const refusalRef = useRef<UploadRefusal | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const ready = bodyCanSend && (!titleRequired || Boolean(title.trim()));
+  const upload = containerId
+    ? async (file: File, signal: AbortSignal) => {
+        refusalRef.current = null;
+        try {
+          return await uploadReplyImage(containerId, file, signal);
+        } catch (error) {
+          if (error instanceof UploadRefusal) refusalRef.current = error;
+          throw error;
+        }
+      }
+    : undefined;
 
   useEffect(() => {
     const host = editorHost.current;
@@ -96,7 +188,7 @@ export function PostComposer<T>({
     setBodyCanSend(hasDocumentContent(next));
   }
 
-  function captureEditorInput(event: FormEvent<HTMLFormElement>) {
+  function captureEditorInput(event: FormEvent<HTMLDivElement>) {
     const target = event.target;
     if (!(target instanceof HTMLElement) || target.getAttribute('contenteditable') !== 'true') return;
     const next = fromPlainText(target.innerText, 'blocks');
@@ -106,13 +198,26 @@ export function PostComposer<T>({
     setBodyCanSend(hasDocumentContent(next) || hasMedia);
   }
 
+  function handleUploadState(state: UploadState, count: number) {
+    pendingRef.current = count;
+    setPendingUploads(count);
+    if (state === 'pending') setUploadNotice(null);
+    if (state === 'failed') setUploadNotice(uploadRefusalText(refusalRef.current ?? new UploadRefusal('unavailable')));
+  }
+
   async function submit(event?: FormEvent) {
+    if (event && event.target !== event.currentTarget) return;
     event?.preventDefault();
-    if (!hasDocumentContent(bodyRef.current) || !ready || submitting) return;
+    if (pendingRef.current > 0 || !hasDocumentContent(bodyRef.current) || !ready || submitting) return;
+    const sources = imageSources(bodyRef.current);
+    if (sources.length > replyImageLimit) {
+      setUploadNotice(m.thread_image_limit());
+      return;
+    }
     setSubmitting(true);
     setFailure(null);
     try {
-      const result = await onSubmit({ title, body: bodyRef.current, idempotencyKey });
+      const result = await onSubmit({ title, body: bodyRef.current, idempotencyKey, mediaIds: sources });
       if (!result.ok) {
         setFailure(result);
         return;
@@ -123,6 +228,7 @@ export function PostComposer<T>({
       setBody(empty);
       setBodyCanSend(false);
       setShowPlainEditor(true);
+      setUploadNotice(null);
       setIdempotencyKey(crypto.randomUUID());
       onSuccess(result.value);
     } catch {
@@ -134,30 +240,36 @@ export function PostComposer<T>({
 
   const bodyLabel = titleRequired ? m.thread_new_body_label() : m.thread_reply_body_label();
   return (
-    <form
-      className="space-y-5 rounded-xl border border-border/70 bg-card p-5"
-      onInputCapture={captureEditorInput}
-      onSubmit={submit}
-    >
-      {titleRequired ? (
-        <div className="space-y-2">
-          <label className="text-sm font-medium" htmlFor="thread-title">
-            {m.thread_title_label()}
-          </label>
-          <input
-            id="thread-title"
-            className="min-h-11 w-full rounded-lg border border-border bg-background px-3 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            value={title}
-            onChange={(event) => setTitle(event.currentTarget.value)}
-            autoComplete="off"
-          />
-        </div>
-      ) : null}
-      <div className="space-y-2">
+    <div className="rounded-xl border border-border/70 bg-card p-5">
+      <form id={formId} onSubmit={submit}>
+        {titleRequired ? (
+          <div className="mb-5 space-y-2">
+            <label className="text-sm font-medium" htmlFor="thread-title">
+              {m.thread_title_label()}
+            </label>
+            <input
+              id="thread-title"
+              className="min-h-11 w-full rounded-lg border border-border bg-background px-3 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              value={title}
+              onChange={(event) => setTitle(event.currentTarget.value)}
+              autoComplete="off"
+            />
+          </div>
+        ) : null}
+        <input type="hidden" name="idempotency_key" value={idempotencyKey} />
+      </form>
+      <div className="space-y-2" onInputCapture={captureEditorInput}>
         <p className="text-sm font-medium">{bodyLabel}</p>
         <div ref={editorHost}>
           <div className={plainEditorVisible ? 'hidden' : undefined} aria-hidden={plainEditorVisible}>
-            <RichTextEditor value={body} onChange={updateBody} label={bodyLabel} className="thread-post-editor" />
+            <RichTextEditor
+              value={body}
+              onChange={updateBody}
+              label={bodyLabel}
+              labels={labels}
+              className="thread-post-editor"
+              {...(upload ? { upload, onUploadState: handleUploadState } : {})}
+            />
           </div>
           {plainEditorVisible ? (
             <div
@@ -172,18 +284,22 @@ export function PostComposer<T>({
           ) : null}
         </div>
       </div>
-      <input type="hidden" name="idempotency_key" value={idempotencyKey} />
       {failure ? (
-        <div className="space-y-3" role="alert">
+        <div className="mt-5 space-y-3" role="alert">
           <p>{refusalText(failure)}</p>
           <Button type="button" variant="outline" disabled={submitting} onClick={() => void submit()}>
             {m.thread_write_retry()}
           </Button>
         </div>
       ) : null}
-      <Button type="submit" disabled={!ready || submitting}>
+      {uploadNotice ? (
+        <p className="mt-5" role="alert">
+          {uploadNotice}
+        </p>
+      ) : null}
+      <Button className="mt-5" type="submit" form={formId} disabled={!ready || submitting || pendingUploads > 0}>
         {m.thread_write_send()}
       </Button>
-    </form>
+    </div>
   );
 }

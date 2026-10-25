@@ -356,6 +356,17 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 - **Growth check:** `tests/posting.test.ts`: `a signed-in member replies to a thread and sees the reply` records the
   single write
 
+### Reply image
+
+- **Touches:** Per image, one site `POST /media`, one `PUT /media/<id>` and at most 32 `GET /media/<id>` state reads
+  (the backoff reaches 2 s within 2 s of starting, over 60 s at most); each is a single kernel call behind the
+  credential prelude. The reply itself is unchanged apart from `mediaIds` (at most 32)
+- **Bound:** Per image, 1 reserve K, ≤2 K and ≤1 R for the put, and ≤32 state-read K, each behind ≤1 D; waits start at
+  250 ms and double to at most 2 s, stopping by 60 s. The reply remains ≤1 K write
+- **Growth check:** `tests/composer-media.test.ts`:
+  `a member adds an image to a reply, which uploads through the site and is sent with its media id` records the reserve,
+  the put, the state reads and `mediaIds`
+
 ### Subject page (`/<locale>/subjects/<id>`)
 
 - **Touches:** Root preferences/D and subject loader are independent; one public K `GET /v1/subjects/<id>` supplies

@@ -17,7 +17,19 @@ export type ThreadCreated = NonNullable<Awaited<ReturnType<KernelClient['threads
 export type PostCreated = NonNullable<Awaited<ReturnType<ThreadResource['posts']['post']>>['data']>;
 export type CreatedPost = PostCreated['post'];
 
-function validateDraft(input: unknown): { body: DocumentSnapshot; idempotencyKey: string } {
+function validateMediaIds(input: object): string[] | undefined {
+  if (!('mediaIds' in input) || input.mediaIds === undefined) return undefined;
+  const value = input.mediaIds;
+  if (!Array.isArray(value) || value.length > 32) throw new Error('Invalid contribution draft');
+  const seen = new Set<string>();
+  for (const id of value) {
+    if (typeof id !== 'string' || id.length === 0 || seen.has(id)) throw new Error('Invalid contribution draft');
+    seen.add(id);
+  }
+  return value;
+}
+
+function validateDraft(input: unknown): { body: DocumentSnapshot; idempotencyKey: string; mediaIds?: string[] } {
   if (
     !input ||
     typeof input !== 'object' ||
@@ -30,7 +42,12 @@ function validateDraft(input: unknown): { body: DocumentSnapshot; idempotencyKey
     !uuid.test(input.idempotencyKey)
   )
     throw new Error('Invalid contribution draft');
-  return { body: input.body as DocumentSnapshot, idempotencyKey: input.idempotencyKey };
+  const mediaIds = validateMediaIds(input);
+  return {
+    body: input.body as DocumentSnapshot,
+    idempotencyKey: input.idempotencyKey,
+    ...(mediaIds === undefined ? {} : { mediaIds }),
+  };
 }
 
 function validateThreadDraft(input: unknown): {
@@ -130,7 +147,11 @@ export const replyToThread = createServerFn({ method: 'POST' })
       const result = await kernelClient()
         .threads({ id: data.threadId })
         .posts.post(
-          { body: data.body, licence },
+          {
+            body: data.body,
+            licence,
+            ...(data.mediaIds === undefined || data.mediaIds.length === 0 ? {} : { mediaIds: data.mediaIds }),
+          },
           {
             headers: { authorization, 'idempotency-key': data.idempotencyKey } as { 'idempotency-key': string },
           },

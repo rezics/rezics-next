@@ -66,9 +66,15 @@ function ThreadPage() {
       {session === 'signed-in' ? (
         <PostComposer<CreatedPost>
           initialKey={idempotencyKey}
-          onSubmit={async ({ body, idempotencyKey: key }) => {
+          containerId={id}
+          onSubmit={async ({ body, idempotencyKey: key, mediaIds }) => {
             const result = await replyToThread({
-              data: { threadId: id, body, idempotencyKey: key },
+              data: {
+                threadId: id,
+                body,
+                idempotencyKey: key,
+                ...(mediaIds.length > 0 ? { mediaIds } : {}),
+              },
               headers: csrfHeaders(),
               fetch: draftFetch(body),
             });
