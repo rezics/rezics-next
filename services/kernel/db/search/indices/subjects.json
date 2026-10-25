@@ -48,6 +48,9 @@
   "mappings": {
     "dynamic": "strict",
     "properties": {
+      "id": {
+        "type": "keyword"
+      },
       "partition": {
         "type": "integer"
       },

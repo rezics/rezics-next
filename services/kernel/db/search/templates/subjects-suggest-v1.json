@@ -1,0 +1,6 @@
+{
+  "script": {
+    "lang": "mustache",
+    "source": "{\n  \"query\": {\n    \"multi_match\": {\n      \"query\": {{#toJson}}text{{/toJson}},\n      \"type\": \"bool_prefix\",\n      \"fields\": [\"names.typeahead\", \"names.typeahead._2gram\", \"names.typeahead._3gram\"]\n    }\n  },\n  \"size\": {{#toJson}}size{{/toJson}},\n  \"_source\": [\"partition\", \"security_revision\"]\n}"
+  }
+}

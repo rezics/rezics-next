@@ -3,6 +3,7 @@ import { subjectPartition, type IndexedSubject, type SubjectSnapshot } from './s
 export const MISSING_NAME = '\u{10FFFF}';
 
 export type SubjectDocument = {
+  id: string;
   partition: number;
   type: string;
   security_revision: number;
@@ -27,6 +28,7 @@ function subjectDocument(partition: number, subject: IndexedSubject): SubjectDoc
     ...subject.aliases.map((item) => item.value),
   ]);
   return {
+    id: subject.id,
     partition,
     type: subject.type,
     security_revision: subject.securityRevision,
