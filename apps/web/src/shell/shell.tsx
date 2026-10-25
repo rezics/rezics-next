@@ -6,7 +6,8 @@ import { Link, useLocation, useRouter } from '@tanstack/react-router';
 import { getLocale, locales, setLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { useEffect, useState } from 'react';
-import { House, Menu as MenuIcon, Monitor, Moon, Sun } from 'lucide-react';
+import { House, LogIn, LogOut, Menu as MenuIcon, Monitor, Moon, Sun } from 'lucide-react';
+import type { SessionState } from '../session/state.ts';
 
 const names = { en: 'English', 'zh-Hant': '繁體中文', 'zh-Hans': '简体中文', ja: '日本語', ko: '한국어', de: 'Deutsch', fr: 'Français', es: 'Español' } as const;
 const messages = { shell_skip_to_content: m.shell_skip_to_content, shell_navigation: m.shell_navigation,
@@ -32,7 +33,15 @@ function LanguageControl() {
   const options = locales.map(value => ({ value, label: names[value], lang: value }));
   return <><div data-language-js><ChoiceSelect label={m.shell_language()} value={locale} options={options} className="h-9 max-w-32" onValueChange={change}/></div><noscript><details><summary className="cursor-pointer rounded-lg border border-border/60 px-2 py-2">{names[locale]}</summary><div className="absolute z-50 grid rounded-xl bg-popover p-2">{locales.map(value => <a key={value} lang={value} href={`/${value}`} className="px-2 py-1">{names[value]}</a>)}</div></details><style>{'[data-language-js]{display:none!important}'}</style></noscript></>;
 }
-export function AppShell({ children, theme = 'system', collapsed = false }: { children: React.ReactNode; theme?: string; collapsed?: boolean }) {
+function SessionControl({ session }: { session: SessionState }) {
+  const location = useLocation();
+  const className = 'size-9 p-0 sm:w-auto sm:px-3.5';
+  if (session === 'unavailable') return null;
+  if (session === 'signed-in') return <form method="post" action="/auth/sign-out"><Button type="submit" variant="outline" className={className}><LogOut aria-hidden="true" className="size-5"/><span className="sr-only sm:not-sr-only">{m.account_sign_out()}</span></Button></form>;
+  const returnTo = location.publicHref.split('#')[0]!;
+  return <Button asChild variant="outline" className={className}><a href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`}><LogIn aria-hidden="true" className="size-5"/><span className="sr-only sm:not-sr-only">{m.account_sign_in()}</span></a></Button>;
+}
+export function AppShell({ children, theme = 'system', collapsed = false, session }: { children: React.ReactNode; theme?: string; collapsed?: boolean; session: SessionState }) {
   const location = useLocation(); const router = useRouter(); const locale = getLocale(); const [drawer, setDrawer] = useState(false); const [railCollapsed, setRailCollapsed] = useState(collapsed);
   useEffect(() => { const unsub = router.subscribe('onResolved', () => document.getElementById('main-content')?.focus()); return unsub; }, [router]);
   const collapse = () => { const value = !railCollapsed; setRailCollapsed(value); document.cookie = `rezics_nav=${value ? 'collapsed' : 'expanded'}; Max-Age=31536000; Path=/; SameSite=Lax`; };
@@ -42,7 +51,7 @@ export function AppShell({ children, theme = 'system', collapsed = false }: { ch
     <header className="sticky top-0 z-40 border-b border-border/60 bg-background/90 backdrop-blur"><div className="flex h-16 items-center gap-2 px-3">
       <Button className="md:hidden" variant="ghost" size="icon-md" aria-label={m.shell_open_navigation()} onClick={() => setDrawer(!drawer)}><MenuIcon aria-hidden="true"/></Button>
       <Button className="hidden md:inline-flex" variant="ghost" size="icon-md" aria-label={m.shell_collapse_navigation()} onClick={collapse}><MenuIcon aria-hidden="true"/></Button>
-      <Logo locale={locale}/><div className="ms-auto flex items-center gap-2"><LanguageControl/><ThemeControl/></div></div>
+      <Logo locale={locale}/><div className="ms-auto flex items-center gap-2"><LanguageControl/><ThemeControl/><SessionControl session={session}/></div></div>
       {drawer && <div className="absolute inset-x-0 top-full border-b bg-background shadow-lg md:hidden"><Navigation current={location.pathname} onNavigate={() => setDrawer(false)}/></div>}
     </header>
     <div className="flex"><aside className="sticky top-16 hidden h-[calc(100dvh-4rem)] w-64 shrink-0 border-e border-border/60 md:block"><Navigation current={location.pathname}/></aside>

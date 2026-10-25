@@ -9,12 +9,16 @@ Media bytes use the `MEDIA` R2 binding for the `rezics-media` bucket. Developmen
 `PUT /media/<id>` transports a reserved upload; `GET` and `HEAD /media/<id>/<variant>` ask content for permission on every request.
 Viewer credentials come from an explicit `Authorization` header, forwarded unchanged, or from the person's server-side
 session. Access and refresh tokens stay in the Worker; the browser holds an opaque `__Host-rezics_session` cookie.
-Only routes that use the credential resolve the session, currently `/media/`. Page requests do not contact the
-session store or Auth. Media requests resolve before calling the kernel, so unreachable Auth returns 502 even
-for downloads that otherwise conceal upstream errors. An explicit `Authorization` header skips session resolution.
+Only routes that use the credential resolve tokens, currently `/media/`. Pages read the session's presence and lifetime
+from its Durable Object alongside theme preferences, without refreshing tokens or contacting Auth. Missing, invalid,
+expired or unreadable sessions render as signed out without changing the cookie. Media requests resolve before calling
+the kernel, so unreachable Auth returns 502 even for downloads that otherwise conceal upstream errors. An explicit
+`Authorization` header skips session resolution.
 Unsafe requests carrying that cookie require an `Origin` equal to the site's own origin.
 
 Sign-in uses `GET /auth/sign-in?return_to=/ja`, followed by `GET /auth/callback`. Sign-out uses `POST /auth/sign-out`.
+The header offers a sign-in document link returning to the current path and query, or a sign-out form that revokes
+the session and ends it at Auth. Both work without JavaScript. When session configuration is missing, neither appears.
 Login transactions expire after 10 minutes; sessions expire 30 days after sign-in. The `SESSIONS` Durable Object binding
 stores both in SQLite, with one instance per login transaction or session. Development simulates the objects locally.
 

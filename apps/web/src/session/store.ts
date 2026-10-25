@@ -31,6 +31,12 @@ export class SessionStore extends DurableObject<SessionEnv> {
     });
   }
 
+  // Pages need only the session's lifetime, never an access token or a refresh.
+  async signedIn(): Promise<boolean> {
+    const record = await this.ctx.storage.get<Login | Session>('record');
+    return !this.ending && record?.kind === 'session' && record.expiresAt > Date.now();
+  }
+
   // A storage input gate does not span the token endpoint fetch. All callers share
   // this promise until the rotated refresh token has been durably stored.
   credential(): Promise<Credential> {
