@@ -141,8 +141,10 @@ same commit. Baseline results are cached durably by main commit and gate command
 identity. A changed main commit or command gets a new baseline. Main-only failures, setup problems and timeouts rerun
 the original profile without consuming a fix round.
 
-Specification conflicts and exhausted quota are attempt facts, parsed from a structured worker exit or native CLI
-failure, and stored on the attempt. Gate outcomes remain gate-only; assertion and fingerprint text have no special
+Specification conflicts, tool failures and exhausted quota are attempt facts, parsed from a structured worker exit or
+native CLI failure, and stored on the attempt. A CLI failure before a session or commit is rerun once; a second
+consecutive launch failure or repeated environment fingerprint is escalated as stalled to the owning manager. Gate
+outcomes remain gate-only; assertion and fingerprint text have no special
 classification markers. A specification conflict reaches the manager inbox directly. Quota exhaustion chooses another
 allowed pool. Repeating the same first assertion after a fix round triggers one read-only Sol `medium` consultation;
 the original profile receives its answer in a fresh session. Scope growth, stalls, failure after consultation and the

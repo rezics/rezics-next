@@ -93,6 +93,17 @@ export class WorkerJob implements GateOutcomeSink {
           summary: `${kind}: ${attempt.blocker ?? attempt.result}`.replace(/[\r\n]+/g, ' '), evidencePath };
         store.event(ref, 'manager-event', event); this.inbox.deliver(event);
       } else {
+        const previous = ref.attempt > 1 ? store.attempt({ taskId: ref.taskId, attempt: ref.attempt - 1 }) : null;
+        if (kind === 'tool' && previous?.failureKind === 'tool') {
+          const firstLine = (previous.result || previous.blocker || 'Worker CLI failed before starting a session').split(/\r?\n/, 1)[0]!;
+          store.updateTask(ref, t => { t.state = 'stopped'; });
+          store.updateAttempt(ref, a => { a.escalation = 'stalled'; });
+          record.escalation = 'stalled'; store.putRecord(record);
+          const event = { managerId: task.brief.manager, taskId: task.id, kind: 'stalled' as const,
+            summary: `Repeated launch failure: ${firstLine}`.replace(/[\r\n]+/g, ' '), evidencePath };
+          store.event(ref, 'manager-event', event); this.inbox.deliver(event);
+          return;
+        }
         retry = { evidence: evidencePath, escalation: failureClass, fixRound: attempt.fixRound };
         if (kind === 'pool-exhausted') {
           const key = this.tasks.settings.pools.find(pool => pool.name === attempt.pool)?.allowanceKey;
@@ -136,6 +147,18 @@ export class WorkerJob implements GateOutcomeSink {
           summary: `${failureClass}: ${outcome.firstFailure?.assertion ?? outcome.stage}`.replace(/[\r\n]+/g, ' '), evidencePath };
         store.event(outcome, 'manager-event', event); this.inbox.deliver(event);
       } else {
+        const previous = outcome.attempt > 1 ? store.attempt({ taskId: task.id, attempt: outcome.attempt - 1 }) : null;
+        const previousRecord = previous ? store.record({ taskId: task.id, attempt: previous.attempt }) : null;
+        if (failureClass === 'environment' && outcome.firstFailure?.fingerprint
+          && previous?.escalation === 'environment' && previousRecord?.firstFailure === outcome.firstFailure.fingerprint) {
+          record.escalation = 'stalled'; store.putRecord(record);
+          store.updateTask(outcome, t => { t.state = 'stopped'; });
+          store.updateAttempt(outcome, a => { a.escalation = 'stalled'; });
+          const event = { managerId: task.brief.manager, taskId: task.id, kind: 'stalled' as const,
+            summary: `Repeated environment failure: ${outcome.firstFailure.assertion}`.replace(/[\r\n]+/g, ' '), evidencePath };
+          store.event(outcome, 'manager-event', event); this.inbox.deliver(event);
+          return;
+        }
         const options: RetryOptions = { evidence: evidencePath, escalation: failureClass,
           fixRound: attempt.fixRound + (['environment', 'pool-exhausted'].includes(failureClass) ? 0 : 1) };
         if (failureClass === 'pool-exhausted') {
