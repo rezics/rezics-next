@@ -6,7 +6,7 @@ import {
   createCommandAdmission,
   installCommandAdmission,
 } from './command-admission.ts';
-import type { Access, AccessConfig as KernelAccessConfig, Actor, Resource } from '../request/access.ts';
+import type { Access, AccessConfig as KernelAccessConfig, AccountActor, AccessClient, AccessContext, Actor, Resource } from '../request/access.ts';
 import { installResourceRoleCatalogue, resourceRoleCatalogue } from './resource-roles.ts';
 import { createAccess as permissionAccess } from './permission.ts';
 import { createAuthenticator, deadlineClient, within, type AuthenticationConfig } from './authenticate.ts';
@@ -34,6 +34,37 @@ type Prepared = {
   durableTime?: import('../command/command.ts').AuthoritativeTime;
 };
 
+type PlatformGateCheck = (
+  actor: Actor,
+  actions: readonly string[],
+  clientAction: string,
+  resource: Resource,
+  context: AccessContext,
+  at: string,
+) => Promise<boolean>;
+const platformGateChecks = new WeakMap<Access, PlatformGateCheck>();
+const gateActionPattern = /^gate:([a-z][a-z_]{0,62})$/;
+const reservedGateNames = new Set(['any', 'open', 'close']);
+
+function atTimeClient(client: AccessClient, at: string): AccessClient {
+  const query = client.query.bind(client) as (...args: unknown[]) => Promise<unknown>;
+  const bounded = Object.create(client) as AccessClient;
+  bounded.query = ((...args: unknown[]) => {
+    const first = args[0];
+    const statement =
+      typeof first === 'string'
+        ? first
+        : typeof first === 'object' && first !== null && 'text' in first && typeof first.text === 'string'
+          ? first.text
+          : '';
+    if (statement.replace(/\s+/g, ' ').trim().replace(/;$/, '') === 'SELECT clock_timestamp()::text AS at') {
+      return Promise.resolve({ rows: [{ at }], rowCount: 1, command: 'SELECT', oid: 0, fields: [] });
+    }
+    return query(...args);
+  }) as AccessClient['query'];
+  return bounded;
+}
+
 /**
  * App-local Access factory; the kernel supplies the mounted route catalogue.
  * Optional auth overrides the deployment's AUTH_ISSUER (HTTPS origin),
@@ -43,6 +74,9 @@ type Prepared = {
  */
 export function createAccess(config: AccessConfig): Access {
   const actions = new Map([...config.actions].map(([action, metadata]) => [action, { ...metadata }]));
+  // gate:any is an internal Access action used by the Global Context and by the
+  // built-in platform role; it is intentionally absent from the mounted route catalogue.
+  actions.set('gate:any', { anonymous: false });
   const authentication = createAuthenticator(config.auth);
   const admission = createCommandAdmission(authentication.identity);
   const prepared = new WeakMap<object, Prepared>();
@@ -56,6 +90,9 @@ export function createAccess(config: AccessConfig): Access {
     authenticate: authentication.authenticate,
     replayAuthorization: (action) => actions.get(action)?.replay,
     async prepare(actor, action, resource, context) {
+      const gate = gateActionPattern.exec(action)?.[1];
+      if (gate !== undefined && (gate === 'any' || !reservedGateNames.has(gate)))
+        actions.set(action, { anonymous: false });
       if (!actions.has(action)) return null;
       try {
         const identity = actor.kind === 'account' ? authentication.identity(actor) : undefined;
@@ -117,6 +154,74 @@ export function createAccess(config: AccessConfig): Access {
       }
     },
   };
+  platformGateChecks.set(access, async (actor, requested, clientAction, resource, context, at) => {
+    if (
+      actor.kind !== 'account' ||
+      !actor.scopes.includes(clientAction) ||
+      !Number.isFinite(Date.parse(at)) ||
+      !Number.isFinite(context.deadline) ||
+      Date.now() >= context.deadline ||
+      requested.length === 0 ||
+      requested.some((action) => !/^gate:(?:any|[a-z][a-z_]{0,62})$/.test(action))
+    )
+      return false;
+
+    const originals = new WeakMap<AccountActor, AccountActor>();
+    const gateActorFor = (action: string): AccountActor => {
+      const gateActor = Object.freeze({ ...actor, scopes: Object.freeze([action]) });
+      originals.set(gateActor, actor);
+      return gateActor;
+    };
+    const gateActions = new Map(actions);
+    for (const action of requested) gateActions.set(action, { anonymous: false });
+    const gatePermissions = permissionAccess({
+      actions: gateActions,
+      resourceRoles: config.resourceRoles,
+      accountEvidence(candidate) {
+        const original = originals.get(candidate) ?? candidate;
+        return authentication.identity(original)?.account;
+      },
+    });
+    const gateContext = {
+      pool: deadlineClient(context.pool, context.deadline) as typeof context.pool,
+      deadline: context.deadline,
+    };
+
+    const checks: { action: string; actor: AccountActor; evidence: unknown }[] = [];
+    for (const action of [...new Set(requested)]) {
+      const gateActor = gateActorFor(action);
+      const evidence = await gatePermissions.prepare!(gateActor, action, resource, gateContext);
+      checks.push({ action, actor: gateActor, evidence });
+    }
+    if (Date.now() >= context.deadline) return false;
+    return withConnection(context.pool, async (client) => {
+      const bounded = deadlineClient(client, context.deadline);
+      await bounded.query('BEGIN READ ONLY');
+      try {
+        await bounded.query('SET LOCAL enable_seqscan = off');
+        const pinned = atTimeClient(bounded, at);
+        for (const check of checks) {
+          if (Date.now() >= context.deadline) {
+            await bounded.query('ROLLBACK');
+            return false;
+          }
+          if (await gatePermissions.authorize(pinned, check.actor, check.action, resource, check.evidence)) {
+            await bounded.query('COMMIT');
+            return true;
+          }
+        }
+        await bounded.query('COMMIT');
+        return false;
+      } catch (error) {
+        try {
+          await bounded.query('ROLLBACK');
+        } catch {
+          // Preserve the original authorization failure.
+        }
+        throw error;
+      }
+    });
+  });
   installCommandAdmission(access, admission);
   installDurableIdentityBridge(access, {
     scope: authentication.durableScope,
@@ -146,6 +251,19 @@ export function createAccess(config: AccessConfig): Access {
   });
   installResourceRoleCatalogue(access, resourceRoleCatalogue(permissions)!);
   return access;
+}
+
+/** Evaluate exact gate actions on the Global Context, borrowing the mounted operation's scope operand. */
+export function authorizePlatformGate(
+  access: Access,
+  actor: Actor,
+  actions: readonly string[],
+  clientAction: string,
+  resource: Resource,
+  context: AccessContext,
+  at: string,
+): Promise<boolean> {
+  return platformGateChecks.get(access)?.(actor, actions, clientAction, resource, context, at) ?? Promise.resolve(false);
 }
 
 /** Standalone instance denies authorization until an app supplies its own catalogue. */

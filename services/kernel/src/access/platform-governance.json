@@ -2,6 +2,9 @@
   "role": "platform.governance",
   "actions": [
     "access:grant",
+    "gate:any",
+    "exposure:open",
+    "exposure:close",
     "account:suspend",
     "subject:create",
     "subject:batch_write",

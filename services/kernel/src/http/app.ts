@@ -2,6 +2,7 @@ import { Elysia } from 'elysia';
 import { randomBytes } from 'node:crypto';
 import type { Pool } from 'pg';
 import { createAccess } from '../access/index.ts';
+import { admitExposure, PlatformClosedError } from '../access/gates/admission.ts';
 import { withConnection } from '../database/pool.ts';
 import {
   accessCheck,
@@ -16,7 +17,7 @@ import { decodeSession, encodeSession, mergeSession, type SessionComponent } fro
 import type { KeyRing } from '../tokens/seal.ts';
 import { Admission } from './admission.ts';
 import { customMethodVerb } from './custom-method.ts';
-import { ProblemError, problemResponse } from './problem.ts';
+import { PROBLEM_TYPE_BASE, ProblemError, problemResponse } from './problem.ts';
 import {
   actionCatalogue,
   actionLabelOfMountedRoute,
@@ -40,6 +41,7 @@ export function createApp({
   writeRate = createWriteRateLimiter(),
   rateAttribution,
   ratePeer,
+  clock,
 }: {
   pool: Pool;
   admission?: Admission;
@@ -49,7 +51,10 @@ export function createApp({
   rateAttribution?: WriteRateStageOptions;
   /** Trusted transport attribution; never a request header resolver. */
   ratePeer?: (request: Request) => string | undefined;
+  /** The kernel's single domain clock, shared by request admission and commands. */
+  clock?: () => Date;
 }) {
+  const requestClock = clock ?? (() => new Date());
   const sessionKeys = tokens ?? { current: 1, keys: new Map([[1, new Uint8Array(randomBytes(32))]]) };
   const rateStage = createWriteRateStage(writeRate, rateAttribution);
   let socketPeer: (request: Request) => string | undefined = () => undefined;
@@ -92,6 +97,24 @@ export function createApp({
         action = actionLabelOfMountedRoute(mountedFor(request, typeof route === 'string' ? route : undefined));
       } catch {
         action = undefined;
+      }
+      if (error instanceof PlatformClosedError) {
+        const read = action?.endsWith(':read') === true;
+        const effectStatus = read || ['GET', 'HEAD', 'OPTIONS'].includes(request.method.toUpperCase())
+          ? 'not_applicable'
+          : 'not_applied';
+        return new Response(
+          JSON.stringify({
+            type: `${PROBLEM_TYPE_BASE}platform_closed`,
+            title: 'Platform Closed',
+            status: 403,
+            code: 'platform_closed',
+            retryable: false,
+            effect_status: effectStatus,
+            request_id: idFor(request),
+          }),
+          { status: 403, headers: { 'content-type': 'application/problem+json' } },
+        );
       }
       return problemResponse(error, { method: request.method, id: idFor(request), ...(action ? { action } : {}) });
     })
@@ -168,16 +191,24 @@ export function createApp({
         detail?.['x-rate-limit'] === undefined
       )
         return;
-      await admission.run('normal', job, () =>
-        rateStage({
+      await admission.run('normal', job, async () => {
+        await admitExposure({
+          pool,
+          access: accessForApp(),
+          actor,
+          route: mounted,
+          deadline: job.deadline,
+          clock: requestClock,
+        });
+        await rateStage({
           request,
           route,
           body,
           mounted,
           context: { pool, actor, deadline: job.deadline },
           peer: ratePeer ? ratePeer(original) : (server?.requestIP(original)?.address ?? socketPeer(original)),
-        }),
-      );
+        });
+      });
     })
     .get('/health', { detail: { hide: true, ...{ 'x-exposure': 'public' } } }, async ({ admission: lanes, job }) => {
       try {

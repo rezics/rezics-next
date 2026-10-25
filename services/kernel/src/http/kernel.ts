@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { parseExposure } from '../access/gates/declaration.ts';
 import { createAccess } from '../access/index.ts';
 import { accessRoutes } from '../access/routes.ts';
+import { exposureRoutes } from '../access/gates/routes.ts';
 import { communityRoutes } from '../community/routes.ts';
 import { systemClock } from '../clock.ts';
 import { payoutRoutes } from '../commerce/payout-routes.ts';
@@ -45,7 +46,7 @@ export function createKernel(dependencies: KernelDependencies) {
   const resolveAccess = (config: AccessConfig) =>
     (access ??= typeof factory === 'function' ? factory(config) : factory);
   const tokens = dependencies.tokens ?? { current: 1, keys: new Map([[1, new Uint8Array(randomBytes(32))]]) };
-  const subjects = subjectRoutes(createApp({ ...dependencies, access: resolveAccess, tokens }), {
+  const subjects = subjectRoutes(createApp({ ...dependencies, access: resolveAccess, tokens, clock }), {
     ...dependencies,
     tokens,
   });
@@ -107,7 +108,11 @@ export function createKernel(dependencies: KernelDependencies) {
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(granted) }),
   });
-  const community = communityRoutes(granted as unknown as ReturnType<typeof definitionRoutes>, {
+  const exposed = exposureRoutes(granted as unknown as ReturnType<typeof definitionRoutes>, {
+    pool: dependencies.pool,
+    clock,
+  });
+  const community = communityRoutes(exposed as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
     clock,
@@ -130,6 +135,7 @@ export function createKernel(dependencies: KernelDependencies) {
   }
   return personal as typeof personal &
     typeof community &
+    typeof exposed &
     typeof batched &
     typeof presentation &
     typeof granted &

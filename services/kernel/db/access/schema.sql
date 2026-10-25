@@ -319,6 +319,19 @@ CREATE TABLE access.credential_floor_receipt (
 
 
 --
+-- Name: exposure_opening; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.exposure_opening (
+    "group" text NOT NULL,
+    valid tstzrange NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT exposure_opening_group_check CHECK (("group" ~ '^[a-z][a-z_]{0,62}$'::text)),
+    CONSTRAINT exposure_opening_valid_check CHECK (((NOT isempty(valid)) AND (NOT lower_inf(valid)) AND lower_inc(valid) AND (NOT upper_inc(valid))))
+);
+
+
+--
 -- Name: governance_bootstrap; Type: TABLE; Schema: access; Owner: -
 --
 
@@ -759,6 +772,14 @@ ALTER TABLE ONLY access.account
 
 ALTER TABLE ONLY access.credential_floor_receipt
     ADD CONSTRAINT credential_floor_receipt_pkey PRIMARY KEY (route, account_id, opening_receipt_id);
+
+
+--
+-- Name: exposure_opening exposure_opening_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.exposure_opening
+    ADD CONSTRAINT exposure_opening_pkey PRIMARY KEY ("group", valid WITHOUT OVERLAPS);
 
 
 --
