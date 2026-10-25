@@ -13,6 +13,7 @@ import { nativeSessionLimits, pruneExpiredSessions, trimSessionHistory, sessionU
 import { nativeVerificationPlugin, pruneExpiredVerifications } from './verification-maintenance.ts';
 import { clientAuthority } from './account-workflows.ts';
 import { createBarrierProofVerifier, type BarrierProof } from './barrier-proofs.ts';
+import { createRecoveryEstablishmentVerifier } from './recovery-establishment.ts';
 import type { PoolClient } from 'pg';
 import {
   createProvisioningEvidenceVerifier,
@@ -135,6 +136,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
   const proofHash = (token: string) => createHash('sha256').update(token).digest('hex');
 
   const barrierProofs = createBarrierProofVerifier({ database });
+  const recoveryEstablishment = createRecoveryEstablishmentVerifier({ database });
   const digestOf = (value: unknown) => proofHash(JSON.stringify(value));
   // This private writer is reachable only after native session/consent validation
   // or exact native recovery consumption. No HTTP evidence can call it directly.
@@ -544,7 +546,8 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       account.automated ||
       account.state !== 'active' ||
       !Number.isSafeInteger(account.authnEpoch) ||
-      account.authnEpoch < 0
+      account.authnEpoch < 0 ||
+      account.authnEpoch > 2147483647
     )
       throw new Denied();
     return account;
@@ -682,6 +685,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       accessTokenLifetimeSeconds: 300,
     },
     internal: {
+      resolveRecoveryEstablishment: recoveryEstablishment.resolve,
       async accessTokenForProof(proof) {
         const scope = proofScope.getStore();
         const source = proofSources.get(proof);
@@ -1074,10 +1078,35 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           const account = await recoveryAccount(accountId);
           const sourceHash = proofHash(token);
           const operationKey = digestOf(['auth-recovery-v1', accountId, sourceHash]);
+          const effectCommitment = createHmac('sha256', options.secret)
+            .update(JSON.stringify(['auth-recovery-password-v1', accountId, sourceHash, newPassword]))
+            .digest('hex');
+          // Detect committed success before comparing the old credential. No
+          // verification read, hashing, Access barrier or password effect repeats.
+          const completed = (
+            await database.query(
+              `SELECT reference,evidence,applied_at FROM auth_barrier_proof
+               WHERE account_id=$1 AND purpose='recovery' AND operation_key=$2`,
+              [accountId, operationKey],
+            )
+          ).rows[0];
+          if (completed?.applied_at) {
+            const success = await recoveryEstablishment.resolve(completed.reference);
+            if (!success || completed.evidence[8] !== effectCommitment || success.authnEpoch !== account.authnEpoch)
+              throw new Denied();
+            return json({ success: true });
+          }
+          // Native adapter reads use the same pool. Finish them before leasing a
+          // transaction connection, including with a real max=1 pool.
+          const credential = await (await getContext()).internalAdapter.findCredentialAccount(accountId);
+          if (!credential) throw new Denied();
+          const nativeProof = await (
+            await getContext()
+          ).internalAdapter.findVerificationValue(`reset-password:${token}`);
+          const fingerprint = digestOf([credential.password, credential.updatedAt.toISOString()]);
           const connection = await database.connect();
-          const lock = `auth-recovery:${sourceHash}`;
+          let proof;
           try {
-            await connection.query('SELECT pg_advisory_lock(hashtextextended($1, 0))', [lock]);
             await connection.query('BEGIN');
             const source = (
               await connection.query<{
@@ -1092,18 +1121,12 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               )
             ).rows[0];
             if (!source) throw new Denied();
-            const credential = await (await getContext()).internalAdapter.findCredentialAccount(accountId);
-            if (!credential) throw new Denied();
             let verificationId = source.consumed_verification_id;
             let sourceExpiry = source.expires_at;
             if (!source.consumed_operation) {
               if (source.authn_epoch !== account.authnEpoch) throw new Denied();
-              // Resolve with the installed native token processing before touching
-              // receipt data. Delete that exact native row and consume its Auth
-              // epoch binding in the same transaction as the immutable receipt.
-              const nativeProof = await (
-                await getContext()
-              ).internalAdapter.findVerificationValue(`reset-password:${token}`);
+              // Delete the exact installed native verification and consume its
+              // Auth source in the same transaction as the immutable proof.
               if (!nativeProof || nativeProof.value !== accountId || nativeProof.expiresAt.getTime() <= Date.now())
                 throw new Denied();
               verificationId = nativeProof.id;
@@ -1123,7 +1146,6 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
                 [sourceHash, operationKey, verificationId, sourceExpiry],
               );
             } else if (source.consumed_operation !== operationKey) throw new Denied();
-            const fingerprint = digestOf([credential.password, credential.updatedAt.toISOString()]);
             const evidence = [
               'recovery-v1',
               accountId,
@@ -1133,11 +1155,9 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               credential.id,
               fingerprint,
               'set-password',
-              createHmac('sha256', options.secret)
-                .update(JSON.stringify(['auth-recovery-password-v1', accountId, sourceHash, newPassword]))
-                .digest('hex'),
+              effectCommitment,
             ];
-            const proof = await publishBarrier(
+            proof = await publishBarrier(
               connection,
               'recovery',
               accountId,
@@ -1148,38 +1168,75 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               !!source.consumed_operation,
             );
             await connection.query('COMMIT');
-            if (!(await barrierProofs.verify(proof.reference, proof))) throw new Denied();
-            const receipt = await trustedAccess.authorizeRecovery!({
-              accountId,
-              proofEpoch: proof.previousEpoch,
-              proofReference: proof.reference,
-              operationKey,
-            });
-            invalidation(receipt, accountId, proof.previousEpoch);
-            if ((await recoveryAccount(accountId)).authnEpoch !== receipt.minimumAuthnEpoch) throw new Denied();
-            // The native token is already spent. Use the installed native password
-            // hasher and bounded native session revocation, with a credential CAS,
-            // so a lost acknowledgement can retry only this exact intended reset.
-            const passwordHash = await (await getContext()).password.hash(newPassword);
-            await connection.query('BEGIN');
-            const current = (
-              await connection.query('SELECT password,"updatedAt" FROM account WHERE id=$1 FOR UPDATE', [credential.id])
-            ).rows[0];
-            if (!current || digestOf([current.password, current.updatedAt.toISOString()]) !== fingerprint)
-              throw new Denied();
-            await connection.query('SELECT auth_revoke_sessions($1)', [accountId]);
-            await connection.query('UPDATE account SET password=$2,"updatedAt"=statement_timestamp() WHERE id=$1', [
-              credential.id,
-              passwordHash,
-            ]);
-            await applyBarrier(connection, proof.reference, receipt, 'recovery');
-            await connection.query('COMMIT');
           } catch (error) {
             await connection.query('ROLLBACK');
             throw error;
           } finally {
-            await connection.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [lock]);
             connection.release();
+          }
+          // No lease or session advisory lock crosses a callback that can read
+          // Auth again. Immutable operation/effect binding and the final native
+          // credential/proof CAS serialize concurrent callers across both phases.
+          if (!(await barrierProofs.verify(proof.reference, proof))) throw new Denied();
+          const receipt = await trustedAccess.authorizeRecovery!({
+            accountId,
+            proofEpoch: proof.previousEpoch,
+            proofReference: proof.reference,
+            operationKey,
+          });
+          invalidation(receipt, accountId, proof.previousEpoch);
+          if (
+            receipt.minimumAuthnEpoch > 2147483647 ||
+            (await recoveryAccount(accountId)).authnEpoch !== receipt.minimumAuthnEpoch
+          )
+            throw new Denied();
+          const passwordHash = await (await getContext()).password.hash(newPassword);
+          const mutation = await database.connect();
+          try {
+            await mutation.query('BEGIN');
+            const current = (
+              await mutation.query(
+                'SELECT password,"updatedAt","userId","accountId","providerId" FROM account WHERE id=$1 FOR UPDATE',
+                [credential.id],
+              )
+            ).rows[0];
+            if (
+              !current ||
+              current.userId !== accountId ||
+              current.accountId !== accountId ||
+              current.providerId !== 'credential' ||
+              digestOf([current.password, current.updatedAt.toISOString()]) !== fingerprint
+            )
+              throw new Denied();
+            await mutation.query('SELECT auth_revoke_sessions($1)', [accountId]);
+            const updated = (
+              await mutation.query(
+                'UPDATE account SET password=$2,"updatedAt"=statement_timestamp() WHERE id=$1 RETURNING password,"updatedAt"',
+                [credential.id, passwordHash],
+              )
+            ).rows[0];
+            await applyBarrier(mutation, proof.reference, receipt, 'recovery');
+            await mutation.query(
+              `INSERT INTO auth_recovery_establishment
+               (reference,receipt_id,account_id,credential_id,credential_fingerprint,effect_commitment,establishment_id,authn_epoch)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+              [
+                proof.reference,
+                receipt.receiptId,
+                accountId,
+                credential.id,
+                digestOf([updated.password, updated.updatedAt.toISOString()]),
+                effectCommitment,
+                randomUUID(),
+                receipt.minimumAuthnEpoch,
+              ],
+            );
+            await mutation.query('COMMIT');
+          } catch (error) {
+            await mutation.query('ROLLBACK');
+            throw error;
+          } finally {
+            mutation.release();
           }
           return json({ success: true });
         }

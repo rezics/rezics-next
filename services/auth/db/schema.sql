@@ -383,6 +383,25 @@ CREATE TABLE public.auth_recovery (
 
 
 --
+-- Name: auth_recovery_establishment; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_recovery_establishment (
+    reference text NOT NULL,
+    receipt_id text NOT NULL,
+    account_id text NOT NULL,
+    credential_id text NOT NULL,
+    credential_fingerprint text NOT NULL,
+    effect_commitment text NOT NULL,
+    establishment_id text NOT NULL,
+    authn_epoch integer NOT NULL,
+    CONSTRAINT auth_recovery_establishment_authn_epoch_check CHECK ((authn_epoch > 0)),
+    CONSTRAINT auth_recovery_establishment_credential_fingerprint_check CHECK ((credential_fingerprint ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT auth_recovery_establishment_effect_commitment_check CHECK ((effect_commitment ~ '^[0-9a-f]{64}$'::text))
+);
+
+
+--
 -- Name: auth_registration_stage; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -649,6 +668,30 @@ ALTER TABLE ONLY public.auth_provisioning_receipt
 
 ALTER TABLE ONLY public.auth_public_key
     ADD CONSTRAINT auth_public_key_pkey PRIMARY KEY (account_id, kid);
+
+
+--
+-- Name: auth_recovery_establishment auth_recovery_establishment_establishment_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_recovery_establishment
+    ADD CONSTRAINT auth_recovery_establishment_establishment_id_key UNIQUE (establishment_id);
+
+
+--
+-- Name: auth_recovery_establishment auth_recovery_establishment_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_recovery_establishment
+    ADD CONSTRAINT auth_recovery_establishment_pkey PRIMARY KEY (reference);
+
+
+--
+-- Name: auth_recovery_establishment auth_recovery_establishment_receipt_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_recovery_establishment
+    ADD CONSTRAINT auth_recovery_establishment_receipt_id_key UNIQUE (receipt_id);
 
 
 --
@@ -1035,6 +1078,22 @@ ALTER TABLE ONLY public.auth_public_key
 
 ALTER TABLE ONLY public.auth_recovery
     ADD CONSTRAINT auth_recovery_account_id_fkey FOREIGN KEY (account_id) REFERENCES public."user"(id) ON DELETE CASCADE;
+
+
+--
+-- Name: auth_recovery_establishment auth_recovery_establishment_receipt_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_recovery_establishment
+    ADD CONSTRAINT auth_recovery_establishment_receipt_id_fkey FOREIGN KEY (receipt_id) REFERENCES public.auth_effect_receipt(receipt_id);
+
+
+--
+-- Name: auth_recovery_establishment auth_recovery_establishment_reference_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_recovery_establishment
+    ADD CONSTRAINT auth_recovery_establishment_reference_fkey FOREIGN KEY (reference) REFERENCES public.auth_barrier_proof(reference) ON DELETE CASCADE;
 
 
 --

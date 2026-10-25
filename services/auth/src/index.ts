@@ -17,6 +17,7 @@ export {
   type MembershipWorkResult,
 } from './membership-workflows.ts';
 import type { Pool } from 'pg';
+import type { RecoveryEstablishmentEvidence } from './recovery-establishment.ts';
 import { buildAuthService } from './service.ts';
 import type { JWK } from 'jose';
 import type { SessionTrim } from './session-limits.ts';
@@ -196,6 +197,8 @@ export interface AuthService {
   handler(request: Request): Promise<Response>;
   verifier: VerifierConfiguration;
   internal: {
+    /** Auth-owned read closure; composition receives no database or credential material. */
+    resolveRecoveryEstablishment(reference: unknown): Promise<RecoveryEstablishmentEvidence | null>;
     /** Trusted server composition only; the exact native human proof is live only
      * during this instance's consumeAuthorization callback. Never persist it or its JWT. */
     accessTokenForProof(proof: SessionProof): Promise<string>;

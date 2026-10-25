@@ -51,9 +51,7 @@ test('unresolved reference denies without database IO', async () => {
   const db = untouchedDatabase();
   const verifier = createRecoveryEstablishmentVerifier({ database: db.database });
   expect(db.reads()).toBe(0);
-  // Unavailable-only assertion: replace only this successful-resolution candidate
-  // when native committed success and current credential verification exist.
-  expect(await verifier.resolve('a'.repeat(64))).toBeNull();
+  // Valid locators now resolve committed native success in the PostgreSQL/HTTP tests.
   for (const reference of [undefined, null, '', 'x'.repeat(4097), 1, true, [], {}, evidence, JSON.stringify(evidence)])
     expect(await verifier.resolve(reference)).toBeNull();
   const hostile = new Proxy(
