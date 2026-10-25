@@ -1,3 +1,5 @@
+import type { BatchCommand, BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
+
 /**
  * TEST ONLY. IMPORT_LEDGER_DRIVER exports createImportLedgerDriver(options).
  * Bind real importer reconciliation, durable importer-owned SQLite/tables and
@@ -12,8 +14,8 @@
  * All writes are real command proposals through the injected bulk transport;
  * no direct subject SQL, invented proposals, policy evaluation or cached results.
  * The types below are test observations, not a competing semantic bulk API.
- * Map the fixture dispositions to the semantic-owned response at the transport
- * boundary, preserving per-command acknowledgement and idempotency identity.
+ * The harness maps failure dispositions to portable per-command results. The
+ * binding forwards those results unchanged; it must never invent result IDs.
  */
 export interface FenceKey {
   source: string;
@@ -22,17 +24,17 @@ export interface FenceKey {
 }
 export interface CommandObservation extends FenceKey {
   /** Exact serialized semantic command, not a reconstruction from fixture input. */
-  command: unknown;
-  kind: 'proposal' | 'delete';
+  command: BatchCommand;
+  kind: 'create' | 'propose' | 'retract';
   idempotencyKey: string;
-  /** Read from the command's actual proposal, references and rights fields. */
+  /** Read only from actual serialized values/references; facts have no rights. */
   values: string[];
   references: string[];
   licenses: string[];
 }
 export interface FixtureBulkClient {
   /** Receives the real serialized semantic bulk request, never observations. */
-  send(request: unknown): Promise<('acknowledged' | 'rejected')[]>;
+  send(request: BatchWriteRequest): Promise<BatchWriteResult>;
 }
 export interface LedgerRow {
   source: string;
@@ -72,10 +74,18 @@ export interface ImportLedgerDriver {
   /**
    * Validate with the REAL semantic bulk consumer's structural parser/schema;
    * throw on invalid/empty requests. Normalize only fields from parsed commands.
-   * Each observation must point at its underlying command, citation, rights and
+   * Enumerate every command in order. Each observation points at its command and
    * field group. No invented provenance, deletion intent or acknowledgement.
    */
   inspectBulk(request: unknown): CommandObservation[];
+  /**
+   * Actual production conversion outputs captured during run, never reconstructed
+   * policy. Pointer is RFC 6901 into raw and locates source licence metadata or
+   * a real citation. CC0 source permission is distinct from ODbL database rights.
+   * Missing native revisions stay unversioned; both configured revision strings
+   * used by this suite must be explicitly trusted registrations of Wikidata.
+   */
+  conversionOutputs(): { raw: unknown; sourceLicensePointer: string }[];
   /** Real fault boundary after API success, before local acknowledgement commit. */
   interruptNextAfterBulkSuccess(): void;
 }
