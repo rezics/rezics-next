@@ -146,7 +146,11 @@ test('one opaque request charge covers duplicate stage invocation and refuses a 
 
 test('the default kernel composition declares every mounted write and installs the real limiter', async () => {
   const app = createKernel({ pool, routeKey: new Uint8Array(32), ratePeer: () => '192.0.2.1' });
-  const writes = app.routes.filter((route) => !['GET', 'HEAD', 'OPTIONS'].includes(route.method));
+  const writes = app.routes.filter((route) => {
+    const action = route.hooks?.detail?.['x-action'];
+    const readOnly = typeof action === 'string' && /^[a-z][a-z_]*:(read|list)$/.test(action);
+    return !['GET', 'HEAD', 'OPTIONS'].includes(route.method) && !readOnly;
+  });
   expect(writes.length).toBeGreaterThan(0);
   for (const route of writes) expect(route.hooks?.detail).toHaveProperty('x-rate-limit');
   // A body-valid anonymous definition write reaches shared capacity before its handler.
@@ -159,6 +163,66 @@ test('the default kernel composition declares every mounted write and installs t
   expect(response.status).toBe(503);
   expect(await response.json()).toMatchObject({ code: 'rate_limit_unavailable' });
   expect(effects).toBe(0);
+});
+
+test('createKernel subject:read POST custom search authorizes without a write charge', async () => {
+  const actions: string[] = [];
+  const searches: unknown[] = [];
+  let spends = 0;
+  const result = {
+    subjects: [],
+    total: { value: 0, relation: 'exact' as const },
+    next: null,
+    as_of: '2026-10-25T00:00:00.000Z',
+  };
+  const app = createKernel({
+    pool,
+    routeKey: new Uint8Array(32),
+    access: ({ actions: catalogue }) => {
+      expect(catalogue.get('subject:read')).toEqual({ anonymous: true });
+      return {
+        async authenticate() {
+          throw new Error('unused');
+        },
+        async authorize(_client, _actor, action) {
+          actions.push(action);
+          return true;
+        },
+      };
+    },
+    writeRate: {
+      async spend() {
+        spends++;
+        throw new Error('Read-only search must not spend write capacity');
+      },
+    },
+    search: {
+      async search(principal, body) {
+        searches.push([principal, body]);
+        return result;
+      },
+      async suggest() {
+        throw new Error('unused');
+      },
+    },
+  });
+  const send = (body: unknown) =>
+    app.handle(
+      new Request('http://localhost/v1/subjects:search', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-action': 'subject:create', 'x-rate-family': 'write' },
+        body: JSON.stringify(body),
+      }),
+    );
+  expect((await send({ text: 1 })).status).toBe(400);
+  expect(searches).toEqual([]);
+  const response = await send({ text: 'book' });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual(result);
+  expect(actions).toEqual(['subject:read']);
+  expect(searches).toEqual([['anonymous', { text: 'book' }]]);
+  expect(spends).toBe(0);
+  expect((await pool.query('SELECT count FROM access.write_rate_counter')).rows).toEqual([]);
 });
 
 test('trusted exact proxy attribution honors only its configured replaced header', async () => {
