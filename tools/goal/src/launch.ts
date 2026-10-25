@@ -39,15 +39,20 @@ export function workerEnvironment(pool: Pool, extra: NodeJS.ProcessEnv = {}, par
   const key = pool.cli === 'codex' ? 'CODEX_HOME' : pool.cli === 'grok' ? 'GROK_HOME' : pool.cli === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CURSOR_CONFIG_DIR';
   return { ...env, ...extra, [key]: pool.configDirectory };
 }
-export function workerPrompt(task: Task, evidence?: string, consultation?: string, resolutionFiles: readonly string[] = []): string {
+export function workerPrompt(task: Task, evidence: string | undefined, consultation: string | undefined, resolutionFiles: readonly string[], mainCheckout: string): string {
+  const frozen = ((task as Task & { frozenFiles?: { path: string }[] }).frozenFiles ?? []).map(file => file.path);
   return [
     `Work only in ${task.worktree}, on branch ${task.branch}. Read and follow its AGENTS.md.`,
+    `The main checkout ${mainCheckout} is read-only: never write there. Write files only by paths inside ${task.worktree}.`,
     'Work until every acceptance condition holds. Do not send progress reports. Commit the completed changes on this branch.',
     'Do not rebase, merge, change acceptance tests, or expand the declared scope.',
+    frozen.length ? `Frozen acceptance files are already committed and must not be edited: ${frozen.join(', ')}.` : '',
     'Finish with one JSON object matching this exit schema. A blocker is a fact about your attempt; explain the concrete conflict or tool failure in its detail.',
     readFileSync(join(import.meta.dir, '../worker-result.schema.json'), 'utf8'),
     task.brief.kind === 'bulk-text' ? 'Write the text yourself. Do not use translation services, translation scripts, or character mapping tables.' : '',
     'The task contract follows:', task.brief.markdown,
+    'A failure outside your declared paths is not your blocker: when your acceptance command passes, report success and name any such failure in your summary.',
+    "Never stop or remove containers, databases or processes you did not start in this attempt, and never prune Docker: other workers' checks run beside yours.",
     evidence ? `Continue from this evidence bundle:\n${evidence}` : '',
     consultation ? `Read-only consultation:\n${consultation}` : '',
     resolutionFiles.length ? `The control plane has already started a rebase onto current main in this worktree. Conflicted files: ${resolutionFiles.join(', ')}. Resolve and stage them, then run \`git rebase --continue\` until the rebase completes. Do not start another rebase.` : '',

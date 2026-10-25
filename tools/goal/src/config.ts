@@ -3,6 +3,7 @@ import { existsSync, readFileSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import defaults from '../defaults.json';
 import type { Pool, Settings } from './types.ts';
+import { validatePath } from './briefs.ts';
 
 import type { Database } from 'bun:sqlite';
 import { openDb } from './db.ts';
@@ -21,6 +22,22 @@ import type { IntegrationRuntime } from './integration-cli.ts';
 import type { ManagerServices, ManagerSpec } from './managers.ts';
 
 export type SettingsOptions = { cwd?: string; env?: NodeJS.ProcessEnv; localFile?: string };
+export type DerivedFile = { path: string; stage: 'integration' | 'promotion'; command: string[] };
+export function readDerivedFiles(value: unknown = defaults.derivedFiles): DerivedFile[] {
+  if (!Array.isArray(value)) throw new Error('derivedFiles must be an array');
+  return value.map((item, index) => {
+    const file = object(item, `derivedFiles[${index}]`);
+    keys(file, ['path', 'stage', 'command'], `derivedFiles[${index}]`);
+    const path = text(file.path, `derivedFiles[${index}].path`);
+    validatePath(path);
+    if (file.stage !== 'integration' && file.stage !== 'promotion') throw new Error(`invalid derivedFiles[${index}].stage`);
+    if (!Array.isArray(file.command) || !file.command.length || file.command.some(part => typeof part !== 'string' || !part))
+      throw new Error(`derivedFiles[${index}].command must be a command array`);
+    return { path, stage: file.stage, command: [...file.command] };
+  });
+}
+const packageDerivedFiles = readDerivedFiles();
+
 function object(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object`);
   return value as Record<string, unknown>;
@@ -52,7 +69,7 @@ export function loadSettings(options: SettingsOptions = {}): Settings {
   const localFile = resolve(cwd, options.localFile ?? env.GOAL_LOCAL_CONFIG ?? join(initialMain, '.temp/goal/local.json'));
   const local = existsSync(localFile) ? object(JSON.parse(readFileSync(localFile, 'utf8')), 'local settings') : {};
   keys(local, ['version', 'mainCheckout', 'stateDirectory', 'worktreeRoot', 'mainBranch', 'integrationBranch', 'promotionParallelism', 'branchPrefix',
-    'terminationGraceMs', 'gate', 'codex', 'routingFile', 'riskAreasFile', 'integration', 'pools'], 'settings');
+    'terminationGraceMs', 'gate', 'formatCommand', 'codex', 'routingFile', 'riskAreasFile', 'integration', 'pools'], 'settings');
   if (local.version !== undefined && local.version !== 1) throw new Error('unsupported local settings version');
   const main = resolve(dirname(localFile), env.GOAL_MAIN_CHECKOUT ?? String(local.mainCheckout ?? initialMain));
   // Keeping credentials and account policy untracked is checked even for an explicitly selected file.
@@ -66,6 +83,9 @@ export function loadSettings(options: SettingsOptions = {}): Settings {
   keys(managerLimits, Object.keys(defaults.integration.managerLimits), 'managerLimits');
   const gate = local.gate ?? defaults.gate;
   if (!Array.isArray(gate) || !gate.length || gate.some(item => typeof item !== 'string' || !item)) throw new Error('gate must be a command array');
+  const formatCommand = local.formatCommand ?? [resolve(main, 'node_modules/.bin/oxfmt')];
+  if (!Array.isArray(formatCommand) || !formatCommand.length || formatCommand.some(item => typeof item !== 'string' || !item))
+    throw new Error('formatCommand must be a command array');
   const codex: Record<string, unknown> = { ...defaults.codex, ...object(local.codex ?? {}, 'codex') };
   keys(codex, Object.keys(defaults.codex), 'codex');
   const compact = { ...defaults.codex.compactTokens, ...object(codex.compactTokens, 'compactTokens') };
@@ -101,7 +121,7 @@ export function loadSettings(options: SettingsOptions = {}): Settings {
     integrationBranch: text(local.integrationBranch ?? 'dev', 'integrationBranch'),
     promotionParallelism: positive(local.promotionParallelism ?? 4, 'promotionParallelism'),
     routingFile: path(local.routingFile, join(import.meta.dir, '../routing.json')),
-    gate: gate as string[], riskAreasFile: path(local.riskAreasFile, join(import.meta.dir, '../risk-areas.json')), pools,
+    gate: gate as string[], formatCommand: formatCommand as string[], riskAreasFile: path(local.riskAreasFile, join(import.meta.dir, '../risk-areas.json')), pools,
     terminationGraceMs: positive(local.terminationGraceMs ?? defaults.terminationGraceMs, 'terminationGraceMs', true),
     codex: { serviceTier: text(env.GOAL_CODEX_SERVICE_TIER ?? codex.serviceTier, 'serviceTier'),
       compactTokens: { sol: positive(compact.sol, 'compactTokens.sol'), luna: positive(compact.luna, 'compactTokens.luna') },
@@ -130,7 +150,7 @@ export type Runtime = IntegrationRuntime & {
 export type RuntimeOptions = {
   settings?: Settings; db?: Database; tasks?: WorkerTasks; runGate?: GateRunner;
   managerServices?: Partial<ManagerServices>;
-  train?: Pick<TrainOptions, 'merge' | 'beforeRelease' | 'beforeIntegrationAdvance' | 'beforePromotionAdvance' | 'promote'>;
+  train?: Pick<TrainOptions, 'merge' | 'beforeRelease' | 'beforeIntegrationAdvance' | 'beforePromotionAdvance' | 'promote' | 'derivedFiles'>;
 };
 
 /** The only production composition: every module shares this database connection and worker fence. */
@@ -168,8 +188,11 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   });
   train = new MergeTrain({ mainCheckout: settings.mainCheckout, stateDirectory: settings.stateDirectory,
     worktreeRoot: settings.worktreeRoot, mainBranch: settings.mainBranch, integrationBranch: settings.integrationBranch,
+    formatCommand: settings.formatCommand,
     queue, fence: store, sink: job,
-    promote: () => promote({ settings, job, runGate, ...(options.train?.beforePromotionAdvance ? { beforeAdvance: options.train.beforePromotionAdvance } : {}) }),
+    derivedFiles: options.train?.derivedFiles ?? packageDerivedFiles,
+    promote: () => promote({ settings, job, runGate, derivedFiles: options.train?.derivedFiles ?? packageDerivedFiles,
+      ...(options.train?.beforePromotionAdvance ? { beforeAdvance: options.train.beforePromotionAdvance } : {}) }),
     runGate, gateIdentity: JSON.stringify(settings.gate), codeIsCurrent, handOff, ...options.train });
   const landing: IntegrationRuntime['landing'] = taskId => {
     const task = store.task(taskId), ref = { taskId, attempt: task.currentAttempt };
@@ -181,7 +204,6 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     async mergedTasks(goal) { return new Set(tasks.completionScope(goal).filter(taskId => store.task(taskId).state === 'merged')); },
   });
   const command = ['env', `GOAL_MAIN_CHECKOUT=${settings.mainCheckout}`, `GOAL_LOCAL_CONFIG=${settings.localFile}`,
-    `GOAL_STATE_DIRECTORY=${settings.stateDirectory}`, `GOAL_WORKTREE_ROOT=${settings.worktreeRoot}`,
     process.execPath, join(settings.mainCheckout, 'tools/goal/src/cli.ts')];
   const managerServices: ManagerServices = {
     command, checkCompletion,

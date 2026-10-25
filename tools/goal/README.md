@@ -18,6 +18,13 @@ The controller rebases detached candidates onto the integration branch (by defau
 fast-forwards that branch without running a gate. Promotion to `main` is a separate step. A passing attempt record is
 finalized through the real integration outcome sink.
 
+Derived files declare an `integration` or `promotion` stage in `defaults.json`. The integration stage regenerates files
+during rebase; the promotion stage regenerates files on the `dev` head before promotion gates run.
+
+Briefs can carry frozen acceptance files in fenced blocks whose info string includes `path=<relative-path>`, such as
+```` ```ts path=tools/example.test.ts ````. Each path must be inside the brief's declared paths. The controller writes
+and commits these files before launch, records their SHA-256 hashes, and refuses integration if a worker changes one.
+
 Dispatch waits without a model for the child to exit, records its tokens and quota observations, saves its evidence,
 enqueues its landing request, and starts the train. A train releases its lease and checks the queue again, reacquiring
 the lease to drain a request that arrived during shutdown; pumps return quietly when another process holds the lease.
@@ -75,7 +82,7 @@ purchase or reset-card redemption path.
 
 `mainCheckout`, `stateDirectory`, `worktreeRoot`, `mainBranch`, `integrationBranch`, `promotionParallelism`,
 `branchPrefix`, `terminationGraceMs`,
-`gate`, `routingFile` and `riskAreasFile` can be set locally. Git's common directory identifies the main checkout even
+`gate`, `formatCommand` (an argv array, defaulting to `node_modules/.bin/oxfmt`), `routingFile` and `riskAreasFile` can be set locally. Git's common directory identifies the main checkout even
 when invoked from a linked worktree. Repository paths resolve against that main checkout. Pool configuration paths,
 usage files and executable paths containing a slash resolve against the local file's directory.
 `integrationBranch` defaults to `dev`; `promotionParallelism` defaults to `4` and caps concurrent promotion checks.
@@ -194,6 +201,7 @@ bun tools/goal/src/cli.ts report [--json]
 bun tools/goal/src/cli.ts land <task>
 bun tools/goal/src/cli.ts train
 bun tools/goal/src/cli.ts manager start <goal> --engine codex --budget 20000
+bun tools/goal/src/cli.ts manager renew <manager>
 bun tools/goal/src/cli.ts manager stop <manager>
 bun tools/goal/src/cli.ts manager complete <manager>
 bun tools/goal/src/cli.ts inbox wait <manager>

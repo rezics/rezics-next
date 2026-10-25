@@ -25,7 +25,7 @@ export type IntegrationRuntime = {
   manager(goal: string, engine: 'codex' | 'claude', budget: number): ManagerSpec;
   managerServices: ManagerServices;
 };
-export type HostRequest = { command: 'start' | 'stop' | 'complete' | 'decision' | 'turn-start' | 'turn-end';
+export type HostRequest = { command: 'start' | 'renew' | 'stop' | 'complete' | 'decision' | 'turn-start' | 'turn-end';
   manager?: string; spec?: ManagerSpec };
 
 const appServerRegistryName = 'manager-app-servers.json';
@@ -150,6 +150,7 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
         let result: unknown;
         switch (request.command) {
           case 'start': if (!request.spec) throw new Error('Missing manager spec'); result = await managers.start(request.spec); break;
+          case 'renew': if (!request.spec) throw new Error('Missing manager spec'); result = await managers.renew(request.manager!, request.spec); break;
           case 'stop': result = await managers.stop(request.manager!); break;
           case 'complete': result = await managers.complete(request.manager!); break;
           case 'decision': result = await managers.noteCommand(request.manager!); break;
@@ -297,6 +298,17 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
       await ensureHost(runtime);
       await recordManagerCommand(runtime);
       console.log(JSON.stringify(await hostRequest(runtime.managerSocket, { command: 'start', spec: runtime.manager(id, engine, budget) })));
+    } else if (subcommand === 'renew') {
+      if (flags.length) throw new Error('usage: manager renew <manager>');
+      const hasManagerTable = runtime.db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'manager_sessions'").get();
+      const row = hasManagerTable
+        ? runtime.db.query('SELECT state FROM manager_sessions WHERE id = ?').get(id) as { state: string } | null : null;
+      if (!row) throw new Error(`Unknown manager: ${id}`);
+      const current = JSON.parse(row.state) as { engine: 'codex' | 'claude'; budget: number };
+      await ensureHost(runtime);
+      await recordManagerCommand(runtime);
+      console.log(JSON.stringify(await hostRequest(runtime.managerSocket,
+        { command: 'renew', manager: id, spec: runtime.manager(id, current.engine, current.budget) })));
     } else if (subcommand && ['stop', 'complete', 'decision', 'turn-start', 'turn-end'].includes(subcommand)) {
       await ensureHost(runtime);
       if (subcommand === 'complete' || subcommand === 'stop') await recordManagerCommand(runtime);

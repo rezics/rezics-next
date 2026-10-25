@@ -55,14 +55,8 @@ export class WorkerJob implements GateOutcomeSink {
       if (!intent || intent.status !== 'pending') return;
       let task = store.task(ref.taskId);
       if (task.currentAttempt > ref.attempt) {
-        const current = store.attempt({ taskId: ref.taskId, attempt: task.currentAttempt });
-        if (current.state === 'pending' && task.state === 'ready') {
-          const worker = await this.tasks.retry(task.id, intent.options);
-          task = store.task(task.id);
-          store.updateRetryIntent(ref, value => { value.status = 'started'; value.nextAttempt = task.currentAttempt; });
-          if (worker) await this.follow(worker);
-          return;
-        }
+        // Another runner already created the follow-up attempt. The intent can
+        // remain pending if that process exited between retry() and this update.
         store.updateRetryIntent(ref, value => { value.status = 'started'; value.nextAttempt = task.currentAttempt; });
         return;
       }
