@@ -334,7 +334,7 @@ test('named actor and principal bans override their floor without banning an unr
   await pool.query('DELETE FROM access.resource_denial');
   await pool.query(
     `INSERT INTO access.principal_assignment
-    (route,principal_id,request_id,assigned_actor_id,valid,transaction_id) VALUES ($1,$2,$3,$4,'(,)',$4)`,
+    (route,principal_id,request_id,assigned_actor_id,valid,transaction_id,creator_principal_id) VALUES ($1,$2,$3,$4,'(,)',$4,$2)`,
     [routeOf(principal), principal, requestId, person],
   );
   const delegated = await new SignJWT({
@@ -363,7 +363,7 @@ test('real mixed protocol and other-product scopes do not poison a known grant b
   expect(await allowed(mixedToken, resource, 'other:read')).toBe(false);
   await pool.query(
     `INSERT INTO access.principal_assignment
-    (route,principal_id,request_id,assigned_actor_id,valid,transaction_id) VALUES ($1,$2,$3,$4,'(,)',$4)`,
+    (route,principal_id,request_id,assigned_actor_id,valid,transaction_id,creator_principal_id) VALUES ($1,$2,$3,$4,'(,)',$4,$2)`,
     [routeOf(principal), principal, requestId, person],
   );
   const delegated = await new SignJWT({
