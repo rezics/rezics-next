@@ -11,6 +11,7 @@
     "openapi": "bun scripts/openapi.ts",
     "client": "bun scripts/client.ts",
     "derived": "bun scripts/derived.ts",
+    "construct": "bun scripts/construct.ts",
     "check": "bun scripts/check.ts"
   },
   "dependencies": {

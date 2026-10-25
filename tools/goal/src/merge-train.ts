@@ -22,6 +22,7 @@ import {
 } from './merge.ts';
 
 export type DerivedFile = { path: string; stage: 'integration' | 'promotion'; command: string[] };
+export type IntegrationCheck = { paths: string[]; command: string[] };
 const defaultDerivedFiles = defaults.derivedFiles as DerivedFile[];
 
 async function runIntegrationChecks(
@@ -173,7 +174,7 @@ export type TrainOptions = {
   stateDirectory: string;
   worktreeRoot: string;
   formatCommand?: string[];
-  integrationChecks?: string[][];
+  integrationChecks?: IntegrationCheck[];
   queue: SqliteLandingQueue;
   fence: AttemptFence;
   sink: GateOutcomeSink;
@@ -389,11 +390,14 @@ export class MergeTrain {
           }
         }
         const candidate = git(trainTree, 'rev-parse', 'HEAD');
-        const integrationChecks = o.integrationChecks ?? [];
+        const integrationChecks = (o.integrationChecks ?? []).filter((check) =>
+          result.changedFiles.some((path) => matchesPath(path, check.paths)),
+        );
         if (integratesIntoDev && integrationChecks.length) {
           stage = 'gate';
           appendFileSync(logPath, `\nIntegration check on ${candidate}, dev ${base}\n`);
-          const checked = await runIntegrationChecks(integrationChecks, trainTree, logPath);
+          const commands = integrationChecks.map((check) => check.command);
+          const checked = await runIntegrationChecks(commands, trainTree, logPath);
           o.fence.assertCurrent(request);
           if (target() !== base) continue;
           if (!checked.passed) {
@@ -405,7 +409,7 @@ export class MergeTrain {
               git(trainTree, 'reset', '--hard', base);
               git(trainTree, 'clean', '-fdx');
               appendFileSync(logPath, `\nIntegration check baseline on dev ${base}\n`);
-              baseline = await runIntegrationChecks(integrationChecks, trainTree, logPath);
+              baseline = await runIntegrationChecks(commands, trainTree, logPath);
               o.queue.saveBaseline(base, key, baseline);
             }
             o.fence.assertCurrent(request);

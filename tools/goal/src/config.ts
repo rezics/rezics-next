@@ -12,7 +12,7 @@ import { WorkerTasks } from './tasks.ts';
 import { WorkerJob } from './job.ts';
 import { SqliteLandingQueue } from './land.ts';
 import { SqliteManagerInbox } from './inbox.ts';
-import { MergeTrain, type TrainOptions } from './merge-train.ts';
+import { MergeTrain, type IntegrationCheck, type TrainOptions } from './merge-train.ts';
 import { promote } from './promotion.ts';
 import { gateRunner, type GateRunner } from './merge.ts';
 import { codeVersion } from './runtime-version.ts';
@@ -22,7 +22,7 @@ import type { IntegrationRuntime } from './integration-cli.ts';
 import type { ManagerServices, ManagerSpec } from './managers.ts';
 
 export type SettingsOptions = { cwd?: string; env?: NodeJS.ProcessEnv; localFile?: string };
-export type ConfiguredSettings = Settings & { integrationChecks: string[][] };
+export type ConfiguredSettings = Settings & { integrationChecks: IntegrationCheck[] };
 export type DerivedFile = { path: string; stage: 'integration' | 'promotion'; command: string[] };
 export function readDerivedFiles(value: unknown = defaults.derivedFiles): DerivedFile[] {
   if (!Array.isArray(value)) throw new Error('derivedFiles must be an array');
@@ -42,12 +42,25 @@ export function readDerivedFiles(value: unknown = defaults.derivedFiles): Derive
     return { path, stage: file.stage, command: [...file.command] };
   });
 }
-export function readIntegrationChecks(value: unknown = defaults.integrationChecks): string[][] {
+export function readIntegrationChecks(value: unknown = defaults.integrationChecks): IntegrationCheck[] {
   if (!Array.isArray(value)) throw new Error('integrationChecks must be an array');
-  return value.map((command, index) => {
-    if (!Array.isArray(command) || !command.length || command.some((part) => typeof part !== 'string' || !part))
-      throw new Error(`integrationChecks[${index}] must be a command array`);
-    return [...command] as string[];
+  return value.map((item, index) => {
+    const check = object(item, `integrationChecks[${index}]`);
+    keys(check, ['paths', 'command'], `integrationChecks[${index}]`);
+    if (
+      !Array.isArray(check.paths) ||
+      !check.paths.length ||
+      check.paths.some((part) => typeof part !== 'string' || !part)
+    )
+      throw new Error(`integrationChecks[${index}].paths must be a path list`);
+    for (const path of check.paths) validatePath(path);
+    if (
+      !Array.isArray(check.command) ||
+      !check.command.length ||
+      check.command.some((part) => typeof part !== 'string' || !part)
+    )
+      throw new Error(`integrationChecks[${index}].command must be a command array`);
+    return { paths: [...check.paths], command: [...check.command] };
   });
 }
 const packageDerivedFiles = readDerivedFiles();
@@ -307,7 +320,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     mainBranch: settings.mainBranch,
     integrationBranch: settings.integrationBranch,
     formatCommand: settings.formatCommand,
-    integrationChecks: (settings as Settings & { integrationChecks?: string[][] }).integrationChecks ?? [],
+    integrationChecks: (settings as Settings & { integrationChecks?: IntegrationCheck[] }).integrationChecks ?? [],
     queue,
     fence: store,
     sink: job,

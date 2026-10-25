@@ -2,15 +2,22 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { integrationHarness } from './test-support.ts';
 
-function integrationChecks(h: ReturnType<typeof integrationHarness>, commands: string[][]): void {
-  (h.settings as typeof h.settings & { integrationChecks?: string[][] }).integrationChecks = commands;
+type IntegrationCheck = { paths: string[]; command: string[] };
+
+function integrationChecks(h: ReturnType<typeof integrationHarness>, checks: IntegrationCheck[]): void {
+  (h.settings as typeof h.settings & { integrationChecks?: IntegrationCheck[] }).integrationChecks = checks;
 }
 
 test("a branch that fails the integration check is not integrated and gets a gate failure carrying the check's first failure", async () => {
   const h = integrationHarness();
   try {
     h.ensureDev();
-    integrationChecks(h, [['sh', '-c', "test ! -e broken || { echo 'AssertionError: broken integration'; exit 1; }"]]);
+    integrationChecks(h, [
+      {
+        paths: ['**'],
+        command: ['sh', '-c', "test ! -e broken || { echo 'AssertionError: broken integration'; exit 1; }"],
+      },
+    ]);
     const task = h.dispatch('broken');
     await h.start(task);
     const dev = h.head();
@@ -34,7 +41,10 @@ test('a branch integrates when dev already fails the integration check', async (
     h.ensureDev();
     h.advanceDev('broken');
     integrationChecks(h, [
-      ['sh', '-c', "test ! -e broken || { echo 'AssertionError: dev has broken integration'; exit 1; }"],
+      {
+        paths: ['**'],
+        command: ['sh', '-c', "test ! -e broken || { echo 'AssertionError: dev has broken integration'; exit 1; }"],
+      },
     ]);
     const task = h.dispatch('feature');
     await h.start(task);
@@ -55,7 +65,7 @@ test('a branch that passes the integration check integrates into dev as before',
   const h = integrationHarness();
   try {
     h.ensureDev();
-    integrationChecks(h, [['sh', '-c', "echo 'integration check passed'"]]);
+    integrationChecks(h, [{ paths: ['**'], command: ['sh', '-c', "echo 'integration check passed'"] }]);
     const task = h.dispatch('feature');
     await h.start(task);
     const candidate = h.head(task.branch);
@@ -77,11 +87,14 @@ test("the dev head's check result is computed once per dev commit", async () => 
     h.ensureDev();
     const dev = h.head();
     integrationChecks(h, [
-      [
-        'sh',
-        '-c',
-        `if [ "$(git rev-parse HEAD)" = "${dev}" ]; then echo dev-check-run; fi; test ! -e broken || { echo 'AssertionError: broken integration'; exit 1; }`,
-      ],
+      {
+        paths: ['**'],
+        command: [
+          'sh',
+          '-c',
+          `if [ "$(git rev-parse HEAD)" = "${dev}" ]; then echo dev-check-run; fi; test ! -e broken || { echo 'AssertionError: broken integration'; exit 1; }`,
+        ],
+      },
     ]);
     const first = h.dispatch('broken');
     const second = h.dispatch('broken');
@@ -97,6 +110,30 @@ test("the dev head's check result is computed once per dev commit", async () => 
       [false, 'gate'],
     ]);
     expect(logs.match(/^dev-check-run$/gm) ?? []).toHaveLength(1);
+  } finally {
+    h.dispose();
+  }
+});
+
+test("a branch whose changes match no check's paths integrates without running any check", async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    integrationChecks(h, [
+      { paths: ['services/kernel/**'], command: ['sh', '-c', "echo 'integration check ran'; exit 1"] },
+    ]);
+    const task = h.dispatch('feature');
+    await h.start(task);
+    const candidate = h.head(task.branch);
+
+    await h.train(undefined, false);
+
+    expect(h.head()).toBe(candidate);
+    expect(h.outcomes[0]?.passed).toBe(true);
+    expect(h.outcomes[0]?.stage).toBe('merge');
+    const log = readFileSync(h.outcomes[0]!.logPath, 'utf8');
+    expect(log).not.toContain('integration check ran');
+    expect(log).not.toContain('Integration check on');
   } finally {
     h.dispose();
   }
