@@ -31,9 +31,10 @@ export default {
       && request.headers.get('origin') !== url.origin)
       return problemResponse(problem(403, 'forbidden', 'Forbidden'));
     if (url.pathname.startsWith('/auth/')) return authRequest(request, env as Partial<SessionEnv>);
+    if (!url.pathname.startsWith('/media/')) return siteRequest(request);
     try {
       const clear = await prepareSession(request, env as Partial<SessionEnv>);
-      const response = await siteRequest(request);
+      const response = await mediaRequest(request, env as Partial<MediaEnv>);
       if (!clear) return response;
       const headers = new Headers(response.headers);
       headers.append('set-cookie', clearCookie(SESSION_COOKIE));
@@ -47,7 +48,6 @@ export default {
 
 async function siteRequest(request: Request): Promise<Response> {
   const url = new URL(request.url);
-  if (url.pathname.startsWith('/media/')) return mediaRequest(request, env as Partial<MediaEnv>);
   if (url.pathname === '/') {
     const locale = await extractLocaleFromRequestAsync(request);
     const location = localizeUrl(url, { locale });

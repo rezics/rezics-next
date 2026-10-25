@@ -4,13 +4,12 @@ import { cookie, SESSION_COOKIE, validId } from './cookies.ts';
 
 const credentials = new WeakMap<Request, string>();
 
-// Resolve once before routing so even routes that conceal upstream errors cannot
-// turn a failed refresh into a signed-out response. The boolean clears stale cookies.
+// Credential-using routes resolve before their first kernel call, outside any error
+// concealment. Page requests need no lookup. The boolean clears stale cookies.
 export async function prepareSession(request: Request, env: Partial<SessionEnv>): Promise<boolean> {
   const id = cookie(request, SESSION_COOKIE);
-  if (id === undefined) return false;
-  if (!configured(env) || !validId(id)) return true;
-  if (request.headers.has('authorization')) return false;
+  if (id === undefined || !configured(env) || request.headers.has('authorization')) return false;
+  if (!validId(id)) return true;
   const result = await env.SESSIONS.get(env.SESSIONS.idFromName(id)).credential();
   if (result.status === 'unavailable') throw dependencyUnavailable();
   if (result.status === 'absent') return true;

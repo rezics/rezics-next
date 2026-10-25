@@ -9,6 +9,9 @@ Media bytes use the `MEDIA` R2 binding for the `rezics-media` bucket. Developmen
 `PUT /media/<id>` transports a reserved upload; `GET` and `HEAD /media/<id>/<variant>` ask content for permission on every request.
 Viewer credentials come from an explicit `Authorization` header, forwarded unchanged, or from the person's server-side
 session. Access and refresh tokens stay in the Worker; the browser holds an opaque `__Host-rezics_session` cookie.
+Only routes that use the credential resolve the session, currently `/media/`. Page requests do not contact the
+session store or Auth. Media requests resolve before calling the kernel, so unreachable Auth returns 502 even
+for downloads that otherwise conceal upstream errors. An explicit `Authorization` header skips session resolution.
 Unsafe requests carrying that cookie require an `Origin` equal to the site's own origin.
 
 Sign-in uses `GET /auth/sign-in?return_to=/ja`, followed by `GET /auth/callback`. Sign-out uses `POST /auth/sign-out`.
@@ -28,7 +31,7 @@ Auth must register the website client's redirect URI `<site origin>/auth/callbac
 `<site origin>/`, the `private_key_jwt` authentication method with the corresponding public key and `kid`, and the
 scopes `openid offline_access media:complete`. Discovery supplies all Auth endpoints, so connecting the Worker to
 Auth later requires configuration only. If any auth variable is missing, `/auth/` routes return 503
-`dependency_unavailable`, session cookies confer no credential, and the rest of the site keeps working.
+`dependency_unavailable`, session cookies confer no credential and are left intact, and the rest of the site keeps working.
 
 Set `KERNEL_ORIGIN`, the content API's origin, in the environment of `bun run dev`, for example
 `KERNEL_ORIGIN=http://127.0.0.1:3000 bun run dev`. Production supplies it as a Worker variable.
