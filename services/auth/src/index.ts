@@ -24,6 +24,7 @@ export {
 import type { Pool } from 'pg';
 import type { RecoveryEstablishmentEvidence } from './recovery-establishment.ts';
 import { buildAuthService } from './service.ts';
+export { WEBSITE_CLIENT_ID } from './service.ts';
 import type { JWK } from 'jose';
 import type { SessionTrim } from './session-limits.ts';
 export { createAuthHost, AuthHostConfigurationError } from './host.ts';

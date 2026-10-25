@@ -32,6 +32,8 @@ import type {
   SessionProof,
 } from './index.ts';
 
+export const WEBSITE_CLIENT_ID = 'rezics-website';
+
 class Denied extends Error {
   constructor(readonly status = 401) {
     super('Authentication denied');
@@ -235,6 +237,9 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     return account;
   }
   async function clientFor(clientId: string): Promise<Client> {
+    // Cookie, actor-key and operator issuance cannot authenticate the website's
+    // confidential OAuth client. Its registry identity is reserved for bootstrap.
+    if (clientId === WEBSITE_CLIENT_ID) throw new Denied();
     const result = await database.query<Client>(
       'SELECT client_id, first_party, scopes FROM auth_client WHERE client_id=$1 AND EXISTS (SELECT 1 FROM auth_client_coverage v WHERE v.client_id=auth_client.client_id AND v.ready) AND NOT EXISTS (SELECT 1 FROM auth_client_reduction r WHERE r.client_id=auth_client.client_id)',
       [clientId],
@@ -243,6 +248,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     return result.rows[0];
   }
   async function allowed(accountId: string, selected: Binding): Promise<Client> {
+    if (selected.scopes.includes('media:complete')) throw new Denied();
     const client = await clientFor(selected.clientId);
     if (selected.scopes.some((scope) => !client.scopes.includes(scope))) throw new Denied();
     const result = await database.query<{ scopes: string[]; pending_scopes: string[] | null }>(
@@ -968,6 +974,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         const id = text(input.clientId);
         if (typeof input.firstParty !== 'boolean') throw new Denied(400);
         const granted = scopes(input.scopes);
+        if (id === WEBSITE_CLIENT_ID || granted.includes('media:complete')) throw new Denied(400);
         const connection = await database.connect();
         try {
           await connection.query('BEGIN');

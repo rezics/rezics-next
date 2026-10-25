@@ -966,23 +966,37 @@ peers are pinned for a reproducible native-provider diagnostic:
 bun run --cwd services/auth scripts/probe-native-refresh.ts
 ```
 
+The default command asserts the required outcome: replay must make a resumed
+child unusable. It currently exits nonzero on the pinned, unadapted provider.
+`--observe-native` instead asserts the observed native failure and exits zero
+when the reproduction is stable. Neither mode changes the frozen website tests.
+
 This script owns a disposable PostgreSQL database through `testDatabase`. It
 applies the installed provider's native schema only in that database, provisions
 and authenticates a person through the existing Auth service, and exercises the
-native provider over a real loopback HTTP socket with an ES256 registered client
+native provider in two separate processes over real loopback HTTP sockets with an ES256 registered client
 assertion, authorization code, S256 and API resource. Its native assertion uses
 the provider's endpoint audience; it does not implement or change the website's
 required issuer-audience adaptation. The diagnostic prints only statuses and
 counts. Credentials, signing keys, cookies, codes and tokens remain in memory.
 The fixture is not a deployment/bootstrap implementation.
 
-The diagnostic deterministically pauses one native rotation immediately before
-its replacement refresh row is inserted. A concurrent replay detects the revoked
+Both processes use `pool.max=1` against the same isolated issuer database. The
+diagnostic deterministically pauses one native rotation immediately before
+its replacement refresh row is inserted. A replay in the other process detects the revoked
 parent, returns HTTP 400 and finishes deleting all refresh rows. Resuming the
-first request returns HTTP 200, and the child refresh token subsequently returns
-HTTP 200 too. Native replay cleanup therefore does not prevent a concurrent
+first request returns HTTP 200. The replay process is then stopped and restarted;
+the child refresh token returns HTTP 200 through that restarted process too.
+Native replay cleanup therefore does not prevent a concurrent
 rotation from recreating usable refresh authority. Both custom issuance hooks
-are skipped during replay, as the diagnostic also asserts.
+are skipped in the replay process, as its independent hook counter asserts.
+
+A read-only adapter experiment also runs with `pool.max=1`. Inside the official
+`runWithTransaction` context, `getCurrentAdapter` returns a distinct transaction
+adapter and its point read succeeds. A point read through the root adapter waits
+until that transaction releases its connection. This is a connection-binding
+check, not a growth or latency measurement. Only a read is left pending, and the
+script awaits it after commit. A timed-out mutation is never allowed to continue.
 
 The installed package's `dist/introspect-DeWu79D4.mjs` contains the concrete
 conflicting operations:
@@ -1002,15 +1016,49 @@ conflicting operations:
   interfaces expose no replacement or transaction hook for this cleanup or
   the parent-update/child-insert pair.
 
+The binding gap is in the installed `@better-auth/core/dist/context/transaction.mjs`
+and `@better-auth/kysely-adapter/dist/index.mjs`: the former supplies the scoped
+adapter through `getCurrentAdapter`; the latter's `transaction` creates a new
+adapter bound to a Kysely transaction. Native OAuth calls use
+`ctx.context.adapter` directly, including both rotation mutations and replay
+cleanup. Wrapping the handler in `runWithTransaction` alone does not redirect
+those calls. Holding a separate pool connection for a family lock would exhaust
+the demonstrated one-connection pool.
+
 The history read/delete path also conflicts with the required bounded token
 request operations independent of same-account history. No growth measurement
 is claimed here; the executable diagnostic establishes the concurrency failure.
 
-These are native provider constraints, separate from Access floor checks and
-claim signing. Resolving them requires a corrected native rotation/invalidation
-facility, or explicitly permitting an additional storage/serialization adaptation.
-A second grant/family engine would exceed the allowed adaptations. The existing
-production routes, registry, consent authority, session identity and migrations
-are therefore unchanged. `bun run --cwd services/auth check` still reports the
-unimplemented website acceptance failures; this diagnostic is not acceptance
-success.
+An additional PostgreSQL storage/serialization adaptation is permitted, but has
+not been implemented or proved here. The transaction experiment rules out only
+a bare transaction wrapper; it does not establish that a connection-aware
+adapter wrapper is impossible. Such a wrapper must redirect every native call
+to its actual transaction adapter, commit a permanent family guard on replay
+and conditional-update failure, and make every child insert check that guard
+under the same lock. It must also replace broad history cleanup with bounded
+family seeks and cover code replay, revocation and session deletion. The
+current reproduction does not establish those properties, simultaneous
+code/revoke/logout behavior, or the required three-scale growth bounds.
+
+A minimal provider-source alternative would introduce one internal
+`withRefreshFamily` storage seam, taking an exact immutable family key and a
+callback that receives the bound transaction adapter. All refresh validation,
+parent compare-and-swap, child insertion and replay cleanup would use that
+adapter. Replay and compare-and-swap loss would durably mark a family revoked;
+child insertion would check the monotonic marker before becoming usable.
+Invalidation would stop enumerating client/user history. Native token rows,
+hashed bearers, PKCE, consent and grant validation would remain authoritative.
+Access floor invalidation would commit before acquiring the Auth transaction,
+and retention would be separately bounded. This is a patch proposal, not an
+installed package fork or proof that the permitted adapter alternative cannot
+work. No provider source or `node_modules` files are modified.
+
+The production provider remains unmounted. Generic client registration now
+reserves `rezics-website` for confidential bootstrap and rejects `media:complete`
+for every generic client, including first-party clients. Generic cookie,
+actor-key and operator issuance also refuse that client identity and exclusive
+scope. `WEBSITE_CLIENT_ID` is exported, but `registerWebsiteClient` and the
+website's native issuance path are not implemented. Existing consent and
+session authorities and migrations are unchanged.
+`bun run --cwd services/auth check` still reports the unimplemented website
+acceptance failures; this diagnostic is not acceptance success.

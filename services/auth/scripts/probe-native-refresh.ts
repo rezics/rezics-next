@@ -2,18 +2,17 @@ import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import { betterAuth } from 'better-auth';
 import { getMigrations } from 'better-auth/db/migration';
-import { jwt } from 'better-auth/plugins';
-import { oauthProvider } from '@better-auth/oauth-provider';
+import { getCurrentAdapter, runWithTransaction } from '@better-auth/core/context';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { Pool } from 'pg';
-import { betterAuthOptions, credentialOwnerSchema } from '../src/better-auth.ts';
 import { createAuthService, type AccessAccount } from '../src/index.ts';
 import { testDatabase } from './database.ts';
+import { nativeProbeOptions } from './probe-native-worker.ts';
 
 // Diagnostic only: expose the pinned native provider in its own disposable
 // database. Never mount this fixture as an application or log its credentials.
 const fixture = testDatabase();
-const database = new Pool({ connectionString: fixture.url });
+const database = new Pool({ connectionString: fixture.url, max: 1 });
 const audience = 'https://api.rezics.test';
 const secret = 'native-provider-probe-only-secret-at-least-32-bytes';
 const account: AccessAccount = {
@@ -28,37 +27,46 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: (request) => h
 const issuer = `http://127.0.0.1:${server.port}`;
 const redirectUri = 'https://website.rezics.test/auth/callback';
 const selectedScopes = ['openid', 'offline_access', 'media:read'];
+let worker: Bun.Subprocess<'pipe', 'pipe', 'pipe'> | undefined;
+process.once('exit', () => worker?.kill('SIGKILL'));
+
+async function startWorker() {
+  worker = Bun.spawn(['bun', new URL('./probe-native-worker.ts', import.meta.url).pathname], {
+    stdin: 'pipe',
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  worker.stdin.write(JSON.stringify({ url: fixture.url, issuer, secret, audience, scopes: selectedScopes }));
+  await worker.stdin.end();
+  const reader = worker.stdout.getReader();
+  const deadline = setTimeout(() => worker?.kill('SIGKILL'), 15000);
+  let ready = '';
+  try {
+    const decoder = new TextDecoder();
+    while (!ready.includes('\n')) {
+      const chunk = await reader.read();
+      if (chunk.done) throw new Error('Native probe worker exited before listening');
+      ready += decoder.decode(chunk.value, { stream: true });
+    }
+  } finally {
+    clearTimeout(deadline);
+    reader.releaseLock();
+  }
+  const { port } = JSON.parse(ready);
+  assert.ok(Number.isSafeInteger(port) && port > 0, 'worker has a real loopback socket');
+  return `http://127.0.0.1:${port}`;
+}
+
+async function stopWorker() {
+  if (!worker) return;
+  worker.kill('SIGTERM');
+  await worker.exited;
+  worker = undefined;
+}
 
 try {
   let issuanceHooks = 0;
-  const options = {
-    ...betterAuthOptions(database, issuer, secret),
-    logger: { disabled: true },
-    plugins: [
-      credentialOwnerSchema,
-      jwt({ jwt: { issuer }, jwks: { keyPairConfig: { alg: 'ES256' as const } } }),
-      oauthProvider({
-        loginPage: '/signin',
-        consentPage: '/consent',
-        scopes: selectedScopes,
-        resources: [{ identifier: audience, scopes: ['media:read'] }],
-        grantTypes: ['authorization_code', 'refresh_token'],
-        assertionMaxLifetime: 120,
-        accessTokenExpiresIn: 300,
-        refreshTokenReuseInterval: 0,
-        clientPrivileges: () => true,
-        resourcePrivileges: () => true,
-        customAccessTokenClaims: () => {
-          issuanceHooks++;
-          return {};
-        },
-        customTokenResponseFields: () => {
-          issuanceHooks++;
-          return {};
-        },
-      }),
-    ],
-  };
+  const options = nativeProbeOptions(database, issuer, secret, audience, selectedScopes, () => issuanceHooks++);
   // Native migration generation is used only inside this disposable database.
   // No production migration is generated or committed by this diagnostic.
   await (await getMigrations(options)).runMigrations();
@@ -117,7 +125,7 @@ try {
       enable_end_session: true,
     },
   });
-  async function token(fields: Record<string, string>) {
+  async function token(fields: Record<string, string>, origin = issuer) {
     const now = Math.floor(Date.now() / 1000);
     // Native 1.7.12 uses the endpoint audience. The website's stricter issuer
     // audience adaptation is orthogonal to this storage/rotation diagnostic.
@@ -130,7 +138,7 @@ try {
       .setExpirationTime(now + 120)
       .setJti(randomBytes(24).toString('base64url'))
       .sign(clientKey.privateKey);
-    return fetch(`${issuer}/api/auth/oauth2/token`, {
+    return fetch(`${origin}/api/auth/oauth2/token`, {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
@@ -140,6 +148,7 @@ try {
         resource: audience,
         ...fields,
       }),
+      signal: AbortSignal.timeout(15000),
     });
   }
   const verifier = randomBytes(48).toString('base64url');
@@ -169,6 +178,33 @@ try {
   const issued = await exchange.json();
   assert.equal(typeof issued.refresh_token, 'string');
 
+  // The official transaction context exposes a transaction adapter, but native
+  // OAuth operations call ctx.context.adapter directly. Prove the distinction
+  // with reads only, so the timed-out operation cannot mutate authority later.
+  const adapter = context.adapter;
+  let pendingRead: Promise<unknown> | undefined;
+  let directReadUsesTransaction = false;
+  await runWithTransaction(adapter, async () => {
+    const transaction = await getCurrentAdapter(adapter);
+    assert.notEqual(transaction, adapter, 'PostgreSQL provides a distinct native transaction adapter');
+    assert.ok(await transaction.findOne({ model: 'user', where: [{ field: 'id', value: account.accountId }] }));
+    pendingRead = adapter.findOne({ model: 'user', where: [{ field: 'id', value: account.accountId }] });
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      directReadUsesTransaction = await Promise.race([
+        pendingRead.then(() => true),
+        new Promise<boolean>((resolve) => {
+          timeout = setTimeout(() => resolve(false), 1000);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timeout);
+    }
+  });
+  await pendingRead;
+  assert.equal(directReadUsesTransaction, false, 'a bare transaction context does not bind native direct calls');
+  let workerOrigin = await startWorker();
+
   const reachedInsert = Promise.withResolvers<void>();
   const releaseInsert = Promise.withResolvers<void>();
   const originalCreate = context.adapter.create.bind(context.adapter);
@@ -192,9 +228,11 @@ try {
     ]);
     // Rotation has atomically revoked the parent, but has not inserted the child.
     const hooksBeforeReplay = issuanceHooks;
-    const replay = await token({ grant_type: 'refresh_token', refresh_token: issued.refresh_token });
+    const replay = await token({ grant_type: 'refresh_token', refresh_token: issued.refresh_token }, workerOrigin);
     assert.equal(replay.status, 400, 'native replay is detected');
-    assert.equal(issuanceHooks, hooksBeforeReplay, 'native replay skips the issuance hooks');
+    assert.equal(issuanceHooks, hooksBeforeReplay, 'replay cannot reach the other process issuance hooks');
+    const workerHooks = await (await fetch(`${workerOrigin}/probe/hooks`)).json();
+    assert.equal(workerHooks.issuanceHooks, 0, 'native replay skips both hooks in the replay process');
     const afterReplay = await database.query(
       'SELECT count(*)::int AS count FROM "oauthRefreshToken" WHERE "clientId"=$1',
       [client.client_id],
@@ -205,13 +243,18 @@ try {
     releaseInsert.resolve();
   }
   const rotated = await rotation;
-  assert.equal(rotated.status, 200, 'concurrent rotation resurrects a child after replay cleanup');
+  assert.equal(rotated.status, 200, 'native concurrent rotation returns a child after replay cleanup');
   const child = await rotated.json();
-  const survived = await token({ grant_type: 'refresh_token', refresh_token: child.refresh_token });
-  assert.equal(survived.status, 200, 'child remains usable after native replay cleanup');
+  await stopWorker();
+  workerOrigin = await startWorker();
+  const survived = await token({ grant_type: 'refresh_token', refresh_token: child.refresh_token }, workerOrigin);
   console.log(
     JSON.stringify({
       provider: '@better-auth/oauth-provider@1.7.12',
+      processes: 2,
+      poolMaxPerProcess: 1,
+      restartedReplayProcess: true,
+      directReadUsesTransaction,
       replayStatus: 400,
       refreshRowsImmediatelyAfterReplay: 0,
       concurrentRotationStatus: rotated.status,
@@ -219,7 +262,13 @@ try {
       issuanceHooksDuringReplay: 0,
     }),
   );
+  // Required outcome, deliberately failing on the unadapted pinned provider.
+  // Observation mode retains a runnable diagnostic without treating the race
+  // as a successful security assertion.
+  if (process.argv.includes('--observe-native')) assert.equal(survived.status, 200, 'native race reproduced');
+  else assert.ok(survived.status >= 400, 'a replayed family must never regain a usable child, including after restart');
 } finally {
+  await stopWorker();
   await server.stop(true);
   await database.end();
   fixture.close();
