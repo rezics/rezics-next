@@ -47,8 +47,15 @@ export function createCollectionJob(
       if (!time) throw new TypeError('No authoritative database time');
       const candidates: Candidate[] = [];
       for (let offset = 0; offset < 16; offset++) {
+        const route = partition * 16 + offset;
         candidates.push(
-          ...(await selectCandidates.run(client, { route: partition * 16 + offset, at: time.at, batch })),
+          ...(await selectCandidates.run(client, {
+            route,
+            pending_route: route,
+            at: time.at,
+            batch,
+            pending_batch: batch,
+          })),
         );
       }
       // Each of the 32 index seeks contributes at most K rows. The only cross-route
