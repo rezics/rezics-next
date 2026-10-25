@@ -1,4 +1,5 @@
 Run the site locally with `bun run dev` from `apps/web`. Run `bun run check` to generate, type-check, test, and build.
+The Worker inspector is off by default; `WORKER_INSPECTOR_PORT=<port> bun run dev` opens it on that port for DevTools.
 Browser tests wait for `html[data-hydrated]` before interacting with a page.
 
 The Cloudflare Vite plugin deploys with `cf deploy` (not run here).
