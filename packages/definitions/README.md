@@ -8,14 +8,15 @@ Use `validateRelease(input)` before storing a release. An empty array means vali
 otherwise violations carry RFC 6901 pointers and `invalid`, `unsafe_pattern`, or
 `limit` codes. Results are sorted, deduplicated by pointer, and capped at 64.
 Validation checks references, CURIE expansion, sorted unique lists, type bases and
-facets, datatype-specific members, fixed value schemas, context defaults, and
-regular-expression safety. Pattern checks use recheck's in-process synchronous
+facets, datatype-specific members, fixed value schemas, context defaults, saved
+filters, and regular-expression safety. Pattern checks use recheck's in-process synchronous
 entry point, with a three-second timeout per distinct pattern; inconclusive
 results fail validation.
 
 Releases allow at most 256 types, 1,024 properties, 64 properties and 16 facets per
-type, 256 context settings, 64 defaults per settings, and 1 MiB of canonical UTF-8
-JSON. Collection and size limits precede schema and pattern checks.
+type, 256 context settings, 64 defaults per settings, 1,024 saved filters, 64 per
+group, and 1 MiB of canonical UTF-8 JSON. Collection and size limits precede schema
+and pattern checks.
 Inputs are parsed JSON, without cycles. Validation does not mutate them.
 
 `valueSchema(datatype, options)` builds the fixed Wikibase value-content schema.
@@ -28,9 +29,10 @@ The LinkML sources in `catalogue/` define the bundled terms. `rezics.yaml` impor
 the shared `core` terms and each profile schema. These profiles add types and
 properties through catalogue data; they do not need package code. The compiled
 release is checked in at `release/rezics.json`, and `src/bundled.ts` discovers all
-catalogue, presentation, and context-settings YAML files for compilation. Each type
-release records its structural `bases` as CURIEs, nearest first, and its registered
-`facets` in display order. Each vertical declares its own facets.
+catalogue, presentation, context-settings, and saved-filter YAML files for
+compilation. Each type release records its structural `bases` as CURIEs, nearest
+first, and its registered `facets` in display order. Each vertical declares its own
+facets.
 
 To add a vertical, add its schema as `catalogue/<vertical>.yaml`, add that schema
 to the imports in `catalogue/rezics.yaml`, and add one label file per locale at
@@ -53,6 +55,23 @@ ids sorted and omits `contexts` when there are none. The release format stays
 `https://rezics.com/definitions/release/1`. Releases that omit `contexts` stay
 valid. A Context keeps the defaults it was created with. A later settings file
 applies to Contexts created from that release. This package ships no settings file.
+
+Saved filters are named filter documents a reader picks and a Zone starter uses to
+scope itself. Add them beside the vertical layout as `filters/<group>.yaml`. The
+group matches `^[a-z][a-z0-9-]{0,63}$`. The document maps each slug, with the same
+pattern, to `labels` and `filter`. `labels` follows the rules for type labels: a
+BCP 47 tag, nonempty text of at most 256 characters, and an `en` label. `filter`
+names types, facets, years and amounts. Subject ids, concepts included, are runtime
+data that differs per deployment, so a saved filter that names one is refused. A
+saved filter also cannot contain a saved leaf. One group has at most 64 filters,
+and a release has at most 1,024. `src/bundled.ts` reads every `filters/*.yaml` in
+group order, and `scripts/release.ts` compiles them, so a vertical adds a file and
+edits no code. The release records `filters` with keys `<group>/<slug>`, sorted,
+and omits `filters` when there are none. Releases that omit `filters` stay valid.
+A search request references a saved filter with the leaf `{ saved: '<group>/<slug>' }`,
+expanded before admission. A Zone starter scopes itself with that same leaf.
+Releases stay cached by digest, with no request path changes. This package ships
+no filters file.
 
 To change the catalogue, edit its LinkML source or the language files in
 `presentation/`, then run `bun run --cwd packages/definitions release` and review
@@ -200,10 +219,16 @@ Source conventions:
   `^[a-z][a-z0-9-]{0,63}$`. The document allows only `labels` and `defaults`.
   Defaults name properties in the release and use `inherit` or `suppress`. There
   are at most 256 settings and 64 defaults in each. An empty map omits `contexts`.
+- Optional `filters` supplies saved-filter YAML keyed by group. Each group and slug
+  matches `^[a-z][a-z0-9-]{0,63}$`. Each entry allows only `labels` and `filter`.
+  Labels follow the type-label rules, including an `en` label. Each filter is checked
+  with `validateFilter` from `@rezics/filter` against the release being built, with
+  saved leaves refused. Subject ids are refused. There are at most 1,024 filters and
+  64 in each group. An empty map omits `filters`.
 
 Limits and profile checks precede LinkML loading and linting, then mapping, then
-labels, then context settings. A `wikibase-item` range includes its concrete class
-and every concrete descendant reachable through `is_a`, including when the range
+labels, then context settings, then saved filters. A `wikibase-item` range includes
+its concrete class and every concrete descendant reachable through `is_a`, including when the range
 or an intermediate class is abstract. Descendants are resolved across all supplied schemas; an
 abstract range with no concrete descendants is invalid. Emitted targets are
 sorted and unique. Compilation stops at the first stage with violations. LinkML
@@ -219,7 +244,12 @@ prefixes are expanded but omitted. Generator metadata comes from `LinkML.buildIn
 sorted by file and RFC 6901 pointer and capped at 64. Label files are named
 `presentation/<tag>` in diagnostics. Context settings are named `contexts/<id>`,
 and their pointers start at `/contexts/<id>`. A release with more than 256
-settings is reported at `/contexts`. Codes are `unsupported`, `invalid`, `limit`,
+settings is reported at `/contexts`. Saved filters are named `filters/<group>`.
+Pointers use the release key `<group>/<slug>`, with `/` escaped as `~1`. Each
+filter error is reported at `/filters/<group>~1<slug>/filter` plus the filter
+pointer: `limit` when the filter exceeds a limit, otherwise `invalid`. A release
+with more than 1,024 filters is reported at `/filters`. A group with more than 64
+is reported at `/filters/<group>`. Codes are `unsupported`, `invalid`, `limit`,
 `unsafe_pattern`, `linkml`, `duplicate`, and `missing_label`. The final release is
 checked with `validateRelease`; a failure at that point throws a plain `Error`
 because it indicates a compiler defect.

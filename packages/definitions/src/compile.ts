@@ -1,4 +1,5 @@
 import { LinkML, type SchemaValidationReport } from '@neverblink/linkml';
+import { validateFilter, type FilterDocument, type FilterValidationError } from '@rezics/filter';
 import canonicalize from 'canonicalize';
 import { posix } from 'node:path';
 import { checkSync } from 'recheck/lib/browser.js';
@@ -12,6 +13,7 @@ import {
   type DataType,
   type PropertyDefinition,
   type Release,
+  type SavedFilter,
 } from './index.ts';
 
 export type CatalogueViolation = {
@@ -49,12 +51,33 @@ const slotKeys =
 const iri = /^[A-Za-z][A-Za-z0-9+.-]*:[^\s\u0000-\u0020\u007f-\u009f<>"{}|\\^`]*$(?![\s\S])/u;
 const normalize = (file: string) => posix.normalize(file).replace(/\.ya?ml$/u, '');
 const languagePattern = new RegExp(Object.keys(releaseSchema.$defs.labels.patternProperties)[0]!, 'u');
+const subjectIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const filterName = /^[a-z][a-z0-9-]{0,63}$(?![\s\S])/u;
+
+function savedFilterCode(error: FilterValidationError): 'invalid' | 'limit' {
+  return error.problem === 'unsupported_query' && error.code === 'out_of_range' ? 'limit' : 'invalid';
+}
+
+// A shipped filter names types, facets, years and amounts. Subject ids differ per deployment.
+function visitSubjectIds(value: unknown, pointer: string, add: (pointer: string) => void): void {
+  if (typeof value === 'string') {
+    if (subjectIdPattern.test(value)) add(pointer);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index += 1) visitSubjectIds(value[index], at(pointer, index), add);
+    return;
+  }
+  if (!record(value)) return;
+  for (const key of Object.keys(value)) visitSubjectIds(value[key], at(pointer, key), add);
+}
 
 export async function compileCatalogue(input: {
   root: string;
   schemas: Record<string, string>;
   presentation: Record<string, string>;
   contexts?: Record<string, string>;
+  filters?: Record<string, string>;
 }): Promise<Release> {
   const errors: CatalogueViolation[] = [];
   const add = (location: Location, code: CatalogueViolation['code'], message: string) => {
@@ -620,6 +643,81 @@ export async function compileCatalogue(input: {
     contexts[id] = { labels, defaults };
   }
   if (contextIds.length && errors.length === 0) release.contexts = contexts;
+  stop();
+
+  const savedEntries: { key: string; value: SavedFilter }[] = [];
+  let filterCount = 0;
+  for (const group of Object.keys(input.filters ?? {}).sort(compare)) {
+    const file = `filters/${group}`;
+    const groupPointer = at('/filters', group);
+    if (!filterName.test(group)) {
+      add({ file, pointer: groupPointer }, 'invalid', 'Filter group must match ^[a-z][a-z0-9-]{0,63}$');
+      continue;
+    }
+    const source = parse(input.filters![group]!, file, groupPointer);
+    const slugs = Object.keys(source).sort(compare);
+    filterCount += slugs.length;
+    if (slugs.length > 64) {
+      add({ file, pointer: groupPointer }, 'limit', 'At most 64 saved filters are allowed in a group');
+      continue;
+    }
+    for (const slug of slugs) {
+      const key = `${group}/${slug}`;
+      const pointer = at('/filters', key);
+      if (!filterName.test(slug)) {
+        add({ file, pointer }, 'invalid', 'Filter slug must match ^[a-z][a-z0-9-]{0,63}$');
+        continue;
+      }
+      const raw = source[slug];
+      if (!record(raw)) {
+        add({ file, pointer }, 'invalid', 'Expected a saved filter');
+        continue;
+      }
+      const before = errors.length;
+      allowed(raw, 'labels filter', { file, pointer });
+      const labels = dictionary<string>();
+      if (!Object.hasOwn(raw, 'labels'))
+        add({ file, pointer: at(pointer, 'labels') }, 'invalid', 'Labels are required');
+      else if (!record(raw.labels)) add({ file, pointer: at(pointer, 'labels') }, 'invalid', 'Expected a label object');
+      else {
+        for (const tag of Object.keys(raw.labels).sort(compare)) {
+          const label = raw.labels[tag];
+          const location = { file, pointer: at(at(pointer, 'labels'), tag) };
+          if (!languagePattern.test(tag)) add(location, 'invalid', 'Label language must be a BCP 47 tag');
+          else if (typeof label !== 'string' || !label.length || [...label].length > 256)
+            add(location, 'invalid', 'Label must contain between one and 256 characters');
+          else labels[tag] = label;
+        }
+        if (!Object.hasOwn(labels, 'en'))
+          add({ file, pointer: at(at(pointer, 'labels'), 'en') }, 'missing_label', 'English label is required');
+      }
+      const filterPointer = at(pointer, 'filter');
+      if (!Object.hasOwn(raw, 'filter')) add({ file, pointer: filterPointer }, 'invalid', 'Filter is required');
+      else {
+        for (const error of validateFilter(raw.filter, release, { saved: false }))
+          add(
+            { file, pointer: `${filterPointer}${error.pointer}` },
+            savedFilterCode(error),
+            'Saved filter is not admissible',
+          );
+        visitSubjectIds(raw.filter, filterPointer, (subjectPointer) =>
+          add(
+            { file, pointer: subjectPointer },
+            'invalid',
+            'A saved filter names types, facets, years and amounts only',
+          ),
+        );
+      }
+      if (errors.length === before) savedEntries.push({ key, value: { labels, filter: raw.filter as FilterDocument } });
+    }
+  }
+  if (filterCount > 1024)
+    add({ file: 'filters', pointer: '/filters' }, 'limit', 'At most 1,024 saved filters are allowed');
+  if (filterCount > 0 && errors.length === 0) {
+    const filters = dictionary<SavedFilter>();
+    for (const item of savedEntries.sort((left, right) => compare(left.key, right.key))) filters[item.key] = item.value;
+    release.filters = filters;
+  }
   stop();
   const defects = validateRelease(release);
   if (defects.length) throw new Error(`Compiler produced an invalid release: ${JSON.stringify(defects)}`);

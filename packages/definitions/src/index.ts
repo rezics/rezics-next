@@ -1,4 +1,5 @@
 /// <reference path="./recheck.d.ts" />
+import { validateFilter, type FilterDocument, type FilterValidationError } from '@rezics/filter';
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import { checkSync } from 'recheck/lib/browser.js';
@@ -43,6 +44,10 @@ export type ContextSettings = {
   labels: Record<string, string>;
   defaults: Record<string, 'inherit' | 'suppress'>;
 };
+export type SavedFilter = {
+  labels: Record<string, string>;
+  filter: FilterDocument;
+};
 export type Release = {
   format: typeof RELEASE_FORMAT;
   catalogue: { id: string; version: string };
@@ -51,10 +56,12 @@ export type Release = {
   types: Record<string, TypeDefinition>;
   properties: Record<string, PropertyDefinition>;
   contexts?: Record<string, ContextSettings>;
+  filters?: Record<string, SavedFilter>;
 };
 export type ReleaseViolation = { pointer: string; code: 'invalid' | 'unsafe_pattern' | 'limit' };
 
 const UUID = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+const subjectIdPattern = new RegExp(UUID);
 const INTEGER = '^[+-](?:0|[1-9][0-9]*)$';
 const DECIMAL = '^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$';
 type ValueOptions = { pattern?: string; units?: string[]; integer?: boolean };
@@ -165,6 +172,20 @@ function collectionLimits(value: unknown, add: (pointer: string, code: ReleaseVi
       for (const [key, settings] of Object.entries(value.contexts))
         if (record(settings) && record(settings.defaults) && Object.keys(settings.defaults).length > 64)
           add(at(at('/contexts', key), 'defaults'), 'limit');
+  }
+  if (record(value.filters)) {
+    const keys = Object.keys(value.filters);
+    if (keys.length > 1024) add('/filters', 'limit');
+    else {
+      const counts = new Map<string, number>();
+      for (const key of keys) {
+        const slash = key.indexOf('/');
+        if (slash <= 0) continue;
+        const group = key.slice(0, slash);
+        counts.set(group, (counts.get(group) ?? 0) + 1);
+      }
+      for (const [group, count] of counts) if (count > 64) add(at('/filters', group), 'limit');
+    }
   }
 }
 
@@ -297,6 +318,30 @@ function semantics(release: Release, add: (pointer: string, code?: ReleaseViolat
   for (const [id, settings] of Object.entries(release.contexts ?? {}))
     for (const property of Object.keys(settings.defaults))
       if (!own(release.properties, property)) add(at(at(at('/contexts', id), 'defaults'), property));
+  // A shipped filter names types, facets, years and amounts. Subject ids differ per deployment.
+  for (const [key, saved] of Object.entries(release.filters ?? {})) {
+    const filterPointer = at(at('/filters', key), 'filter');
+    for (const error of validateFilter(saved.filter, release, { saved: false }))
+      add(`${filterPointer}${error.pointer}`, savedFilterCode(error));
+    visitSubjectIds(saved.filter, filterPointer, (pointer) => add(pointer));
+  }
+}
+
+function savedFilterCode(error: FilterValidationError): ReleaseViolation['code'] {
+  return error.problem === 'unsupported_query' && error.code === 'out_of_range' ? 'limit' : 'invalid';
+}
+
+function visitSubjectIds(value: unknown, pointer: string, add: (pointer: string) => void): void {
+  if (typeof value === 'string') {
+    if (subjectIdPattern.test(value)) add(pointer);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index += 1) visitSubjectIds(value[index], at(pointer, index), add);
+    return;
+  }
+  if (!record(value)) return;
+  for (const key of Object.keys(value)) visitSubjectIds(value[key], at(pointer, key), add);
 }
 
 export function validateRelease(value: unknown): ReleaseViolation[] {

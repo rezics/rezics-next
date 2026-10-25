@@ -119,6 +119,7 @@
       "dependencies": {
         "@neverblink/linkml": "0.17.1",
         "@rezics/document": "workspace:*",
+        "@rezics/filter": "workspace:*",
         "canonicalize": "5.1.0",
         "recheck": "4.5.0",
         "spdx-license-ids": "3.0.24",

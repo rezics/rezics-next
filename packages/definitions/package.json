@@ -22,6 +22,7 @@
     "recheck": "4.5.0",
     "typebox": "1.4.3",
     "@rezics/document": "workspace:*",
+    "@rezics/filter": "workspace:*",
     "spdx-license-ids": "3.0.24"
   },
   "devDependencies": {

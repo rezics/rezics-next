@@ -11,10 +11,10 @@ const files = (directory: string): string[] =>
     })
     .sort();
 
-function contextSources(): Record<string, string> {
+function namedSources(directory: string): Record<string, string> {
   let entries;
   try {
-    entries = readdirSync(new URL('../contexts', import.meta.url), { withFileTypes: true });
+    entries = readdirSync(new URL(directory, import.meta.url), { withFileTypes: true });
   } catch (error) {
     if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT') return {};
     throw error;
@@ -23,7 +23,7 @@ function contextSources(): Record<string, string> {
     entries
       .flatMap((entry) => (entry.isFile() && entry.name.endsWith('.yaml') ? [entry.name] : []))
       .sort()
-      .map((name) => [posix.basename(name, '.yaml'), source(`../contexts/${name}`)]),
+      .map((name) => [posix.basename(name, '.yaml'), source(`${directory}/${name}`)]),
   );
 }
 
@@ -39,7 +39,8 @@ export function bundledSources() {
     root: 'rezics.yaml',
     schemas,
     presentation,
-    contexts: contextSources(),
+    contexts: namedSources('../contexts'),
+    filters: namedSources('../filters'),
   };
 }
 
