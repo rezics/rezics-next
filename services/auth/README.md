@@ -154,8 +154,10 @@ Only trusted application code may call the internal effects:
 - `internal.revokeSessions(accountId)` uses Better Auth's
   `internalAdapter.deleteUserSessions`. Operator authorization and any epoch fence
   must already have succeeded as Access commands before this effect is called.
-- `internal.registerClient({ clientId, firstParty, scopes })` persists trusted
-  client configuration. Only trusted deployment/application code decides which
+- `internal.registerClient({ clientId, firstParty, scopes, displayName? })` persists trusted
+  client configuration. When supplied, `displayName` must contain 1–100 characters
+  after trimming; invalid names are refused with 400. Re-registration replaces the
+  display name, and omitting it stores null. Only trusted deployment/application code decides which
   clients are first party. Scope growth does not change existing sessions.
   Removing scopes or changing a first-party client to third party uses the workflow
   host's `reduceClientScopes`; direct `registerClient` calls continue to refuse reductions.
