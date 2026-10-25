@@ -1,6 +1,4 @@
-import { planReads, shownProperties } from '../../../../../packages/composition/src/reads.ts';
-import { platformRegistry, type CompositionDocument } from '../../../../../packages/composition/src/registry.ts';
-import { pickText } from '../../../../../packages/composition/src/strings.ts';
+import { pickText, planReads, platformRegistry, shownProperties, type CompositionDocument } from '@rezics/composition';
 import { createContext, useContext, type ComponentType, type ReactNode } from 'react';
 import type { Related, Subject } from '../../subject/types';
 import type { PageDocument } from './render';

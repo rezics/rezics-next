@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-import { createHash } from 'node:crypto';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import canonicalize from 'canonicalize';
 import type {
   CompositionDocument,
@@ -261,7 +262,7 @@ export function validateProfile(registry: CompositionRegistry, value: unknown): 
 
 /** `sha256:` and the lowercase hex SHA-256 of the RFC 8785 canonical UTF-8 JSON. */
 export function profileDigest(profile: PresentationProfile): string {
-  return `sha256:${createHash('sha256').update(canonicalize(profile)!, 'utf8').digest('hex')}`;
+  return `sha256:${bytesToHex(sha256(utf8ToBytes(canonicalize(profile)!)))}`;
 }
 
 /** Binary search. `entries` are sorted by `read` in code-unit order. */

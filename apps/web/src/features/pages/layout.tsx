@@ -1,4 +1,4 @@
-import { APPEARANCE, platformRegistry } from '../../../../../packages/composition/src/registry.ts';
+import { APPEARANCE, platformRegistry } from '@rezics/composition';
 import { createContext, isValidElement, useContext, type ReactNode } from 'react';
 import { pageText, usePageLocale, usePageMessages } from './data';
 

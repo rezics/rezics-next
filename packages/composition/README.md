@@ -1,5 +1,7 @@
 # @rezics/composition
 
+The package runs unchanged in Node, Workers and browsers, and its entry must not import Node built-in modules.
+
 The closed page format used by a type's default page, a Zone template and a Zone page.
 A document is Puck's data shape with children in slot props:
 

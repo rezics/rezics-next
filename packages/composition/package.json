@@ -12,6 +12,7 @@
     "check": "oxfmt --check . && tsc --noEmit -p tsconfig.json && bun test && bun scripts/schema.ts --check"
   },
   "dependencies": {
+    "@noble/hashes": "2.4.0",
     "typebox": "1.4.3",
     "canonicalize": "5.1.0"
   },
