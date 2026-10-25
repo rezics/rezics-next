@@ -6,6 +6,7 @@ import { setSessionCookie } from 'better-auth/cookies';
 import { publicCredential, verifyKeyAssertion } from './key-credentials.ts';
 import { betterAuthOptions, credentialOwnerSchema } from './better-auth.ts';
 import { createSigner } from './signing.ts';
+import { signSessionAccessToken } from './session-proof-capability.ts';
 import { issuerOrigin } from './issuer.ts';
 import { nativeAttemptRequest } from './rate-limit.ts';
 import { nativeSessionLimits, pruneExpiredSessions, trimSessionHistory, sessionUpgradePage } from './session-limits.ts';
@@ -116,6 +117,10 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
   if (!options.secret || options.secret.length < 32)
     throw new Error('Configure a persistent Better Auth secret of at least 32 characters');
   const signer = await createSigner(database, options.signing);
+  // Object identity, source and scope belong to this instance. No caller can
+  // install a brand, and inherited async contexts lose authority on callback exit.
+  const proofSources = new WeakMap<SessionProof, { id: string; expiresAt: number }>();
+  const proofScope = new AsyncLocalStorage<{ proof: SessionProof; live: boolean }>();
   const binding = new AsyncLocalStorage<Binding>();
   const recoveryBinding = new AsyncLocalStorage<{ accountId: string; epoch: number }>();
   // Native router admission runs before this private alias dispatch hook. A
@@ -225,7 +230,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     if (!result.rows[0]) throw new Denied();
     return result.rows[0];
   }
-  async function allowed(accountId: string, selected: Binding): Promise<void> {
+  async function allowed(accountId: string, selected: Binding): Promise<Client> {
     const client = await clientFor(selected.clientId);
     if (selected.scopes.some((scope) => !client.scopes.includes(scope))) throw new Denied();
     if (!client.first_party) {
@@ -237,6 +242,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       if (!consent || selected.scopes.some((scope) => !consent.scopes.includes(scope))) throw new Denied();
     }
     if (binding.getStore()) await materialize(accountId, selected.clientId, client.scopes, client.first_party);
+    return client;
   }
   function nativeAuth() {
     return betterAuth({
@@ -372,7 +378,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       throw new Denied();
     const granted = session.grantedScope ? scopes(session.grantedScope.split(' ')) : [];
     await allowed(account.accountId, { clientId: session.clientId, scopes: granted });
-    return {
+    const proof: SessionProof = {
       account_id: account.accountId,
       client_id: session.clientId,
       scope: granted,
@@ -380,6 +386,11 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       auth_time: session.authTime,
       amr: session.authMethods.split(' '),
     };
+    Object.freeze(proof.scope);
+    Object.freeze(proof.amr);
+    Object.freeze(proof);
+    proofSources.set(proof, { id: session.id, expiresAt: session.expiresAt.getTime() });
+    return proof;
   }
 
   async function owner(accountId: string): Promise<void> {
@@ -424,7 +435,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
   }
   async function humanProof(headers: Headers): Promise<SessionProof> {
     const human = await sessionProof(headers);
-    if ((await activeActor(human.account_id)).automated) throw new Denied();
+    if ((await activeActor(human.account_id)).automated || human.amr.includes('operator')) throw new Denied();
     return human;
   }
   function invalidation(receipt: InvalidationReceipt, accountId: string, previousEpoch: number): void {
@@ -444,11 +455,18 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     const human = await humanProof(input.headers);
     const before = await activeActor(input.subjectAccountId);
     const previousEpoch = before.authnEpoch;
-    const receipt = await trustedAccess.consumeAuthorization({
-      authorization: text(input.authorization),
-      subjectAccountId: input.subjectAccountId,
-      purpose,
-      human,
+    const scope = { proof: human, live: true };
+    const receipt = await proofScope.run(scope, async () => {
+      try {
+        return await trustedAccess.consumeAuthorization!({
+          authorization: text(input.authorization),
+          subjectAccountId: input.subjectAccountId,
+          purpose,
+          human,
+        });
+      } finally {
+        scope.live = false;
+      }
     });
     if (
       !receipt?.receiptId ||
@@ -532,6 +550,58 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       accessTokenLifetimeSeconds: 300,
     },
     internal: {
+      async accessTokenForProof(proof) {
+        const scope = proofScope.getStore();
+        const source = proofSources.get(proof);
+        const live = () => {
+          if (!source || !scope?.live || scope.proof !== proof || source.expiresAt <= Date.now()) throw new Denied();
+        };
+        // Copies, foreign instances and non-live proofs fail before any I/O.
+        live();
+        const issued = await withIssuance(proof.client_id, async () => {
+          live();
+          const current = (
+            await database.query<{
+              userId: string;
+              clientId: string;
+              grantedScope: string;
+              authnEpoch: number;
+              authTime: number;
+              authMethods: string;
+              expiresAt: Date;
+            }>(
+              'SELECT "userId","clientId","grantedScope","authnEpoch","authTime","authMethods","expiresAt" FROM session WHERE id=$1',
+              [source!.id],
+            )
+          ).rows[0];
+          if (
+            !current ||
+            current.userId !== proof.account_id ||
+            current.clientId !== proof.client_id ||
+            current.grantedScope !== proof.scope.join(' ') ||
+            current.authnEpoch !== proof.authn_epoch ||
+            current.authTime !== proof.auth_time ||
+            current.authMethods !== proof.amr.join(' ') ||
+            current.expiresAt.getTime() <= Date.now() ||
+            proof.amr.includes('operator')
+          )
+            throw new Denied();
+          const account = await activeActor(proof.account_id);
+          if (account.automated || account.authnEpoch > proof.authn_epoch) throw new Denied();
+          const client = await allowed(proof.account_id, { clientId: proof.client_id, scopes: proof.scope });
+          await materialize(proof.account_id, proof.client_id, client.scopes, client.first_party);
+          live();
+          const expiresAt = Math.min(source!.expiresAt, current.expiresAt.getTime());
+          const token = await signSessionAccessToken(signer, options, proof, expiresAt);
+          live();
+          if (expiresAt <= Date.now()) throw new Denied();
+          return { token, expiresAt };
+        });
+        // Releasing the native issuance barrier is asynchronous too.
+        live();
+        if (issued.expiresAt <= Date.now()) throw new Denied();
+        return issued.token;
+      },
       pruneExpiredVerifications: () => pruneExpiredVerifications(database),
       pruneExpiredSessions: (batch) => pruneExpiredSessions(database, batch),
       trimSessionHistory: (accountId, batch) => trimSessionHistory(database, accountId, batch),
@@ -1094,20 +1164,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               await activeActor(assignment.principalId);
               requestedBy = `urn:rezics:request:${assignment.principalId}:${assignment.requestId}`;
             }
-            const now = Math.floor(Date.now() / 1000);
-            const accessToken = await signer.sign({
-              iss: options.issuer,
-              aud: options.audience,
-              sub: proof.account_id,
-              client_id: proof.client_id,
-              scope: proof.scope.join(' '),
-              authn_epoch: proof.authn_epoch,
-              iat: now,
-              exp: now + 300,
-              auth_time: proof.auth_time,
-              amr: proof.amr,
-              ...(requestedBy === undefined ? {} : { requested_by: requestedBy }),
-            });
+            const accessToken = await signSessionAccessToken(signer, options, proof, Infinity, requestedBy);
             return json({ access_token: accessToken, token_type: 'Bearer', expires_in: 300 });
           });
         }

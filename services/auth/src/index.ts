@@ -181,6 +181,9 @@ export interface AuthService {
   handler(request: Request): Promise<Response>;
   verifier: VerifierConfiguration;
   internal: {
+    /** Trusted server composition only; the exact native human proof is live only
+     * during this instance's consumeAuthorization callback. Never persist it or its JWT. */
+    accessTokenForProof(proof: SessionProof): Promise<string>;
     /** One native expiry batch, at most 1000 rows; scheduled by the Auth host. */
     pruneExpiredVerifications(): Promise<number>;
     /** Bounded maintenance; the host registers and schedules these ports. */
