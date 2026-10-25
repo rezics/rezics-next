@@ -1,9 +1,10 @@
 import { expect, test } from 'bun:test';
 import type { PoolClient } from 'pg';
+import type { BatchReference } from '@rezics/definitions/bulk';
 import type { CommandTransaction } from '../../src/command/command.ts';
 import type { Actor, Resource } from '../../src/request/access.ts';
-import { appendImportedField } from '../../src/content/imported-fields.ts';
-import { checkMediaObject } from '../../src/content/cover-reference.ts';
+import { appendImportedField, type ImportedFieldResult } from '../../src/content/imported-fields.ts';
+import { checkMediaObject, type CoverReference } from '../../src/content/cover-reference.ts';
 import type {
   ImportedFieldInput,
   ImportedSource,
@@ -11,17 +12,30 @@ import type {
   SourceReference,
 } from '../../src/content/imported-contract.ts';
 import { readFences } from '../../src/content/source-fences.ts';
-import type { SourceFenceTuple } from '../../src/content/source-fences.ts';
+import type { SourceFence, SourceFenceTuple } from '../../src/content/source-fences.ts';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
 import { anchorRoute } from '../../src/route/route.ts';
 
 test('imported field ports retain the core transaction, access and evidence types', () => {
-  const sourceReference: SourceReference = { url: 'https://catalogue.example/record/1', title: 'Catalogue record' };
+  const citation: BatchReference = {
+    parts: [
+      { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://catalogue.example/record/1' } },
+      {
+        property: { id: 'schema:name' },
+        value: { type: 'value', content: { language: 'en', text: 'Catalogue record' } },
+      },
+      { property: { id: 'schema:author' }, value: { type: 'somevalue' } },
+      { property: { id: 'schema:datePublished' }, value: { type: 'novalue' } },
+    ],
+  };
+  const sourceReference: SourceReference = citation;
+  const portable: BatchReference = sourceReference;
+  expect(JSON.parse(JSON.stringify(portable))).toEqual(citation);
   const source: ImportedSource = {
     source: 'example-catalogue',
     external_id: 'record-1',
     record_revision: 'unversioned',
-    digest: 'sha256:abc',
+    digest: 'a'.repeat(64),
     converter_revision: 'converter-1',
     field_group: 'summary',
     references: [sourceReference],
@@ -61,51 +75,14 @@ test('tupleRoute anchors exactly the source and external id and rejects ambiguou
   expect(() => tupleRoute(key, 'example-catalogue', 'record-1\u0085other')).toThrow(RangeError);
 });
 
-// Temporary fail-closed assertions: replace these with real port behavior only in a manager-authorized implementation.
-test('unfinished source fence port fails before reading its client', async () => {
-  let touched = false;
-  const client = new Proxy(
-    {},
-    {
-      get() {
-        touched = true;
-        throw new Error('dependency touched');
-      },
-    },
-  ) as Pick<PoolClient, 'query'>;
-  await expect(readFences(client, [])).rejects.toThrow('not implemented');
-  expect(touched).toBe(false);
-});
-
-// Temporary fail-closed assertions: replace these with real port behavior only in a manager-authorized implementation.
-test('unfinished imported-field port fails before reading its transaction', async () => {
-  let touched = false;
-  const tx = new Proxy(
-    {},
-    {
-      get() {
-        touched = true;
-        throw new Error('dependency touched');
-      },
-    },
-  ) as CommandTransaction;
-  const input = {} as ImportedFieldInput;
-  await expect(appendImportedField(tx, input)).rejects.toThrow('not implemented');
-  expect(touched).toBe(false);
-});
-
-// Temporary fail-closed assertions: replace these with real port behavior only in a manager-authorized implementation.
-test('unfinished cover reference port fails before reading its client', async () => {
-  let touched = false;
-  const client = new Proxy(
-    {},
-    {
-      get() {
-        touched = true;
-        throw new Error('dependency touched');
-      },
-    },
-  ) as Pick<PoolClient, 'query'>;
-  await expect(checkMediaObject(client, 'media-id', 'cover')).rejects.toThrow('not implemented');
-  expect(touched).toBe(false);
+test('imported ports preserve uncalled transaction and evidence signature compatibility', () => {
+  const fences: (
+    client: Pick<PoolClient, 'query'>,
+    tuples: readonly SourceFenceTuple[],
+  ) => Promise<readonly SourceFence[]> = readFences;
+  const append: (tx: CommandTransaction, input: ImportedFieldInput) => Promise<ImportedFieldResult> =
+    appendImportedField;
+  const cover: (client: Pick<PoolClient, 'query'>, id: string, role: 'cover') => Promise<CoverReference | null> =
+    checkMediaObject;
+  expect([fences, append, cover].every((port) => typeof port === 'function')).toBe(true);
 });

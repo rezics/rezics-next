@@ -1,10 +1,8 @@
+import type { BatchReference } from '@rezics/definitions/bulk';
 import { anchorRoute } from '../route/route.ts';
 
 /** Cited evidence attached to an imported source record. */
-export type SourceReference = Readonly<{
-  url: string;
-  title?: string;
-}>;
+export type SourceReference = BatchReference;
 
 /** Rights on an imported field. Cover rights are recorded separately on media. */
 export type Rights = Readonly<{
