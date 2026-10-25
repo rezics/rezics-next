@@ -47,8 +47,5 @@
     "solContextWindow": 500000,
     "toolOutputTokens": 4000
   },
-  "gate": [
-    "bun",
-    "scripts/gate.ts"
-  ]
+  "gate": ["bun", "scripts/gate.ts"]
 }

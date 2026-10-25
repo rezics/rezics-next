@@ -31,8 +31,13 @@ export function readDerivedFiles(value: unknown = defaults.derivedFiles): Derive
     keys(file, ['path', 'stage', 'command'], `derivedFiles[${index}]`);
     const path = text(file.path, `derivedFiles[${index}].path`);
     validatePath(path);
-    if (file.stage !== 'integration' && file.stage !== 'promotion') throw new Error(`invalid derivedFiles[${index}].stage`);
-    if (!Array.isArray(file.command) || !file.command.length || file.command.some(part => typeof part !== 'string' || !part))
+    if (file.stage !== 'integration' && file.stage !== 'promotion')
+      throw new Error(`invalid derivedFiles[${index}].stage`);
+    if (
+      !Array.isArray(file.command) ||
+      !file.command.length ||
+      file.command.some((part) => typeof part !== 'string' || !part)
+    )
       throw new Error(`derivedFiles[${index}].command must be a command array`);
     return { path, stage: file.stage, command: [...file.command] };
   });
@@ -40,7 +45,7 @@ export function readDerivedFiles(value: unknown = defaults.derivedFiles): Derive
 export function readIntegrationChecks(value: unknown = defaults.integrationChecks): string[][] {
   if (!Array.isArray(value)) throw new Error('integrationChecks must be an array');
   return value.map((command, index) => {
-    if (!Array.isArray(command) || !command.length || command.some(part => typeof part !== 'string' || !part))
+    if (!Array.isArray(command) || !command.length || command.some((part) => typeof part !== 'string' || !part))
       throw new Error(`integrationChecks[${index}] must be a command array`);
     return [...command] as string[];
   });
@@ -56,7 +61,8 @@ function text(value: unknown, label: string): string {
   return value;
 }
 function positive(value: unknown, label: string, zero = false): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < (zero ? 0 : 1)) throw new Error(`invalid ${label}`);
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < (zero ? 0 : 1))
+    throw new Error(`invalid ${label}`);
   return value;
 }
 function keys(value: Record<string, unknown>, allowed: string[], label: string): void {
@@ -64,7 +70,10 @@ function keys(value: Record<string, unknown>, allowed: string[], label: string):
 }
 /** The common Git directory identifies the main checkout even when invoked from a linked worktree. */
 export function mainCheckout(cwd = process.cwd()): string {
-  const result = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd, encoding: 'utf8' });
+  const result = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
+    cwd,
+    encoding: 'utf8',
+  });
   if (result.status !== 0) throw new Error('Run inside a Git repository or set GOAL_MAIN_CHECKOUT');
   const common = result.stdout.trim();
   return dirname(common);
@@ -75,27 +84,69 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
   const env = options.env ?? process.env;
   const cwd = resolve(options.cwd ?? process.cwd());
   const initialMain = resolve(cwd, env.GOAL_MAIN_CHECKOUT || mainCheckout(cwd));
-  const localFile = resolve(cwd, options.localFile ?? env.GOAL_LOCAL_CONFIG ?? join(initialMain, '.temp/goal/local.json'));
+  const localFile = resolve(
+    cwd,
+    options.localFile ?? env.GOAL_LOCAL_CONFIG ?? join(initialMain, '.temp/goal/local.json'),
+  );
   const local = existsSync(localFile) ? object(JSON.parse(readFileSync(localFile, 'utf8')), 'local settings') : {};
-  keys(local, ['version', 'mainCheckout', 'stateDirectory', 'worktreeRoot', 'mainBranch', 'integrationBranch', 'promotionParallelism', 'branchPrefix',
-    'terminationGraceMs', 'gate', 'formatCommand', 'integrationChecks', 'codex', 'routingFile', 'riskAreasFile', 'integration', 'pools'], 'settings');
+  keys(
+    local,
+    [
+      'version',
+      'mainCheckout',
+      'stateDirectory',
+      'worktreeRoot',
+      'mainBranch',
+      'integrationBranch',
+      'promotionParallelism',
+      'branchPrefix',
+      'terminationGraceMs',
+      'gate',
+      'formatCommand',
+      'integrationChecks',
+      'codex',
+      'routingFile',
+      'riskAreasFile',
+      'integration',
+      'pools',
+    ],
+    'settings',
+  );
   if (local.version !== undefined && local.version !== 1) throw new Error('unsupported local settings version');
   const main = resolve(dirname(localFile), env.GOAL_MAIN_CHECKOUT ?? String(local.mainCheckout ?? initialMain));
   // Keeping credentials and account policy untracked is checked even for an explicitly selected file.
   const tracked = spawnSync('git', ['ls-files', '--error-unmatch', '--', localFile], { cwd: main, encoding: 'utf8' });
   if (tracked.status === 0) throw new Error('local settings must be untracked');
-  const path = (value: unknown, fallback: string, variable?: string) => resolve(main, variable ?? (value === undefined ? fallback : text(value, 'path')));
+  const path = (value: unknown, fallback: string, variable?: string) =>
+    resolve(main, variable ?? (value === undefined ? fallback : text(value, 'path')));
   const stateDirectory = path(local.stateDirectory, '.temp/goal', env.GOAL_STATE_DIRECTORY);
-  const integration: Record<string, unknown> = { ...defaults.integration, ...object(local.integration ?? {}, 'integration') };
-  keys(integration, [...Object.keys(defaults.integration), 'managerDirectory', 'inboxDirectory', 'managerSocket', 'tmuxSocket'], 'integration');
-  const managerLimits = { ...defaults.integration.managerLimits, ...object(integration.managerLimits, 'managerLimits') };
+  const integration: Record<string, unknown> = {
+    ...defaults.integration,
+    ...object(local.integration ?? {}, 'integration'),
+  };
+  keys(
+    integration,
+    [...Object.keys(defaults.integration), 'managerDirectory', 'inboxDirectory', 'managerSocket', 'tmuxSocket'],
+    'integration',
+  );
+  const managerLimits = {
+    ...defaults.integration.managerLimits,
+    ...object(integration.managerLimits, 'managerLimits'),
+  };
   keys(managerLimits, Object.keys(defaults.integration.managerLimits), 'managerLimits');
   const gate = local.gate ?? defaults.gate;
-  if (!Array.isArray(gate) || !gate.length || gate.some(item => typeof item !== 'string' || !item)) throw new Error('gate must be a command array');
+  if (!Array.isArray(gate) || !gate.length || gate.some((item) => typeof item !== 'string' || !item))
+    throw new Error('gate must be a command array');
   const formatCommand = local.formatCommand ?? [resolve(main, 'node_modules/.bin/oxfmt')];
-  if (!Array.isArray(formatCommand) || !formatCommand.length || formatCommand.some(item => typeof item !== 'string' || !item))
+  if (
+    !Array.isArray(formatCommand) ||
+    !formatCommand.length ||
+    formatCommand.some((item) => typeof item !== 'string' || !item)
+  )
     throw new Error('formatCommand must be a command array');
-  const integrationChecks = readIntegrationChecks(local.integrationChecks === undefined ? defaults.integrationChecks : local.integrationChecks);
+  const integrationChecks = readIntegrationChecks(
+    local.integrationChecks === undefined ? defaults.integrationChecks : local.integrationChecks,
+  );
   const codex: Record<string, unknown> = { ...defaults.codex, ...object(local.codex ?? {}, 'codex') };
   keys(codex, Object.keys(defaults.codex), 'codex');
   const compact = { ...defaults.codex.compactTokens, ...object(codex.compactTokens, 'compactTokens') };
@@ -106,7 +157,8 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
     const pool = object(raw, 'pool');
     keys(pool, ['name', 'cli', 'classes', 'configDirectory', 'command', 'allowanceKey', 'usageFile', 'policy'], 'pool');
     if (!['codex', 'grok', 'cursor', 'claude'].includes(String(pool.cli))) throw new Error('unsupported pool CLI');
-    if (!Array.isArray(pool.classes) || !pool.classes.length || pool.classes.some(c => typeof c !== 'string' || !c)) throw new Error('pool classes required');
+    if (!Array.isArray(pool.classes) || !pool.classes.length || pool.classes.some((c) => typeof c !== 'string' || !c))
+      throw new Error('pool classes required');
     const policy = object(pool.policy, 'pool policy');
     keys(policy, ['weight', 'reservePercent', 'allowUnknown', 'maxAgeMs', 'maxBurnPerHour'], 'pool policy');
     if (typeof policy.allowUnknown !== 'boolean') throw new Error('allowUnknown must be explicit');
@@ -114,54 +166,96 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
     if (reservePercent >= 100) throw new Error('reservePercent must be less than 100');
     const command = text(pool.command, 'pool command');
     return {
-      name: text(pool.name, 'pool name'), cli: pool.cli as Pool['cli'], classes: pool.classes as string[],
+      name: text(pool.name, 'pool name'),
+      cli: pool.cli as Pool['cli'],
+      classes: pool.classes as string[],
       configDirectory: resolve(dirname(localFile), text(pool.configDirectory, 'configDirectory')),
       command: command.includes('/') ? resolve(dirname(localFile), command) : command,
       allowanceKey: text(pool.allowanceKey, 'allowanceKey'),
-      ...(pool.usageFile === undefined ? {} : { usageFile: resolve(dirname(localFile), text(pool.usageFile, 'usageFile')) }),
-      policy: { weight: positive(policy.weight, 'weight'), reservePercent, allowUnknown: policy.allowUnknown,
+      ...(pool.usageFile === undefined
+        ? {}
+        : { usageFile: resolve(dirname(localFile), text(pool.usageFile, 'usageFile')) }),
+      policy: {
+        weight: positive(policy.weight, 'weight'),
+        reservePercent,
+        allowUnknown: policy.allowUnknown,
         maxAgeMs: positive(policy.maxAgeMs, 'maxAgeMs'),
-        ...(policy.maxBurnPerHour === undefined ? {} : { maxBurnPerHour: positive(policy.maxBurnPerHour, 'maxBurnPerHour') }) },
+        ...(policy.maxBurnPerHour === undefined
+          ? {}
+          : { maxBurnPerHour: positive(policy.maxBurnPerHour, 'maxBurnPerHour') }),
+      },
     };
   });
-  if (new Set(pools.map(p => p.name)).size !== pools.length) throw new Error('duplicate pool name');
+  if (new Set(pools.map((p) => p.name)).size !== pools.length) throw new Error('duplicate pool name');
   return {
-    version: 1, mainCheckout: main, stateDirectory, worktreeRoot: path(local.worktreeRoot, '.temp/worktrees', env.GOAL_WORKTREE_ROOT), localFile,
-    mainBranch: text(local.mainBranch ?? defaults.mainBranch, 'mainBranch'), branchPrefix: text(local.branchPrefix ?? defaults.branchPrefix, 'branchPrefix'),
+    version: 1,
+    mainCheckout: main,
+    stateDirectory,
+    worktreeRoot: path(local.worktreeRoot, '.temp/worktrees', env.GOAL_WORKTREE_ROOT),
+    localFile,
+    mainBranch: text(local.mainBranch ?? defaults.mainBranch, 'mainBranch'),
+    branchPrefix: text(local.branchPrefix ?? defaults.branchPrefix, 'branchPrefix'),
     integrationBranch: text(local.integrationBranch ?? 'dev', 'integrationBranch'),
     promotionParallelism: positive(local.promotionParallelism ?? 4, 'promotionParallelism'),
     routingFile: path(local.routingFile, join(import.meta.dir, '../routing.json')),
-    gate: gate as string[], formatCommand: formatCommand as string[], integrationChecks,
-    riskAreasFile: path(local.riskAreasFile, join(import.meta.dir, '../risk-areas.json')), pools,
+    gate: gate as string[],
+    formatCommand: formatCommand as string[],
+    integrationChecks,
+    riskAreasFile: path(local.riskAreasFile, join(import.meta.dir, '../risk-areas.json')),
+    pools,
     terminationGraceMs: positive(local.terminationGraceMs ?? defaults.terminationGraceMs, 'terminationGraceMs', true),
-    codex: { serviceTier: text(env.GOAL_CODEX_SERVICE_TIER ?? codex.serviceTier, 'serviceTier'),
-      compactTokens: { sol: positive(compact.sol, 'compactTokens.sol'), luna: positive(compact.luna, 'compactTokens.luna') },
-      solContextWindow: positive(codex.solContextWindow, 'solContextWindow'), toolOutputTokens: positive(codex.toolOutputTokens, 'toolOutputTokens') },
+    codex: {
+      serviceTier: text(env.GOAL_CODEX_SERVICE_TIER ?? codex.serviceTier, 'serviceTier'),
+      compactTokens: {
+        sol: positive(compact.sol, 'compactTokens.sol'),
+        luna: positive(compact.luna, 'compactTokens.luna'),
+      },
+      solContextWindow: positive(codex.solContextWindow, 'solContextWindow'),
+      toolOutputTokens: positive(codex.toolOutputTokens, 'toolOutputTokens'),
+    },
     integration: {
       managerSocket: path(integration.managerSocket, join(stateDirectory, 'manager.sock')),
       tmuxSocket: path(integration.tmuxSocket, join(stateDirectory, 'tmux.sock')),
       termspacesCommand: text(integration.termspacesCommand, 'termspacesCommand'),
       supermanager: text(integration.supermanager, 'supermanager'),
-      managerLimits: { turns: positive(managerLimits.turns, 'managerLimits.turns'), turnsWithoutDecision: positive(managerLimits.turnsWithoutDecision, 'managerLimits.turnsWithoutDecision'), wallMs: positive(managerLimits.wallMs, 'managerLimits.wallMs') },
-      gateConcurrency: positive(integration.gateConcurrency, 'gateConcurrency'), gateTimeoutMs: positive(integration.gateTimeoutMs, 'gateTimeoutMs'),
+      managerLimits: {
+        turns: positive(managerLimits.turns, 'managerLimits.turns'),
+        turnsWithoutDecision: positive(managerLimits.turnsWithoutDecision, 'managerLimits.turnsWithoutDecision'),
+        wallMs: positive(managerLimits.wallMs, 'managerLimits.wallMs'),
+      },
+      gateConcurrency: positive(integration.gateConcurrency, 'gateConcurrency'),
+      gateTimeoutMs: positive(integration.gateTimeoutMs, 'gateTimeoutMs'),
       managerDirectory: path(integration.managerDirectory, join(stateDirectory, 'managers')),
       inboxDirectory: path(integration.inboxDirectory, join(stateDirectory, 'inboxes')),
-      tmuxCommand: text(integration.tmuxCommand, 'tmuxCommand'), tmuxSession: text(integration.tmuxSession, 'tmuxSession'),
+      tmuxCommand: text(integration.tmuxCommand, 'tmuxCommand'),
+      tmuxSession: text(integration.tmuxSession, 'tmuxSession'),
       managerCompactTokens: positive(integration.managerCompactTokens, 'managerCompactTokens'),
     },
   };
 }
 
-
 export type Runtime = IntegrationRuntime & {
-  settings: Settings; store: WorkerStore; tasks: WorkerTasks; job: WorkerJob;
-  queue: SqliteLandingQueue; inbox: SqliteManagerInbox; train: MergeTrain;
-  pump(): Promise<void>; drain(): Promise<void>; close(): void;
+  settings: Settings;
+  store: WorkerStore;
+  tasks: WorkerTasks;
+  job: WorkerJob;
+  queue: SqliteLandingQueue;
+  inbox: SqliteManagerInbox;
+  train: MergeTrain;
+  pump(): Promise<void>;
+  drain(): Promise<void>;
+  close(): void;
 };
 export type RuntimeOptions = {
-  settings?: Settings; db?: Database; tasks?: WorkerTasks; runGate?: GateRunner;
+  settings?: Settings;
+  db?: Database;
+  tasks?: WorkerTasks;
+  runGate?: GateRunner;
   managerServices?: Partial<ManagerServices>;
-  train?: Pick<TrainOptions, 'merge' | 'beforeRelease' | 'beforeIntegrationAdvance' | 'beforePromotionAdvance' | 'promote' | 'derivedFiles'>;
+  train?: Pick<
+    TrainOptions,
+    'merge' | 'beforeRelease' | 'beforeIntegrationAdvance' | 'beforePromotionAdvance' | 'promote' | 'derivedFiles'
+  >;
 };
 
 /** The only production composition: every module shares this database connection and worker fence. */
@@ -169,13 +263,15 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   const settings = options.settings ?? options.tasks?.settings ?? loadSettings();
   // Synthetic runtime fixtures may not contain the control-plane tree in their main checkout.
   const startedCodeVersion = existsSync(join(settings.mainCheckout, 'tools/goal'))
-    ? codeVersion(settings.mainCheckout, 'tools/goal') : undefined;
-  const codeIsCurrent = () => startedCodeVersion === undefined
-    || codeVersion(settings.mainCheckout, 'tools/goal') === startedCodeVersion;
+    ? codeVersion(settings.mainCheckout, 'tools/goal')
+    : undefined;
+  const codeIsCurrent = () =>
+    startedCodeVersion === undefined || codeVersion(settings.mainCheckout, 'tools/goal') === startedCodeVersion;
   const databasePath = join(settings.stateDirectory, 'goal.sqlite');
   mkdirSync(settings.stateDirectory, { recursive: true });
   const db = options.db ?? options.tasks?.store.db ?? openDb(databasePath);
-  if (options.tasks && options.tasks.store.db !== db) throw new Error('Runtime modules must share one database connection');
+  if (options.tasks && options.tasks.store.db !== db)
+    throw new Error('Runtime modules must share one database connection');
   const store = options.tasks?.store ?? new WorkerStore(db);
   const tasks = options.tasks ?? new WorkerTasks(settings, store);
   const queue = new SqliteLandingQueue(db, store);
@@ -185,63 +281,149 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   let train!: MergeTrain;
   const pump = () => train.pump();
   // Short commands hand the train to a detached process, so recovering an orphan never makes `status` wait for a gate.
-  const afterSettle = () => process.env.GOAL_TRAIN_MODE === 'detached' ? handOff() : pump();
+  const afterSettle = () => (process.env.GOAL_TRAIN_MODE === 'detached' ? handOff() : pump());
   const job = new WorkerJob(tasks, queue, inbox, undefined, afterSettle);
-  const handOff = () => new Promise<void>((resolve, reject) => {
-    const env = { ...process.env };
-    for (const key of Object.keys(env)) if (key.startsWith('GOAL_')) delete env[key];
-    delete env.CODEX_THREAD_ID;
-    const child = spawn(process.execPath, [join(settings.mainCheckout, 'tools/goal/src/cli.ts'), 'train'], {
-      cwd: settings.mainCheckout, detached: true, stdio: 'ignore', env,
+  const handOff = () =>
+    new Promise<void>((resolve, reject) => {
+      const env = { ...process.env };
+      for (const key of Object.keys(env)) if (key.startsWith('GOAL_')) delete env[key];
+      delete env.CODEX_THREAD_ID;
+      const child = spawn(process.execPath, [join(settings.mainCheckout, 'tools/goal/src/cli.ts'), 'train'], {
+        cwd: settings.mainCheckout,
+        detached: true,
+        stdio: 'ignore',
+        env,
+      });
+      child.once('error', reject);
+      child.once('spawn', () => {
+        child.unref();
+        resolve();
+      });
     });
-    child.once('error', reject);
-    child.once('spawn', () => { child.unref(); resolve(); });
-  });
-  train = new MergeTrain({ mainCheckout: settings.mainCheckout, stateDirectory: settings.stateDirectory,
-    worktreeRoot: settings.worktreeRoot, mainBranch: settings.mainBranch, integrationBranch: settings.integrationBranch,
+  train = new MergeTrain({
+    mainCheckout: settings.mainCheckout,
+    stateDirectory: settings.stateDirectory,
+    worktreeRoot: settings.worktreeRoot,
+    mainBranch: settings.mainBranch,
+    integrationBranch: settings.integrationBranch,
     formatCommand: settings.formatCommand,
     integrationChecks: (settings as Settings & { integrationChecks?: string[][] }).integrationChecks ?? [],
-    queue, fence: store, sink: job,
+    queue,
+    fence: store,
+    sink: job,
     derivedFiles: options.train?.derivedFiles ?? packageDerivedFiles,
-    promote: () => promote({ settings, job, runGate, derivedFiles: options.train?.derivedFiles ?? packageDerivedFiles,
-      ...(options.train?.beforePromotionAdvance ? { beforeAdvance: options.train.beforePromotionAdvance } : {}) }),
-    runGate, gateIdentity: JSON.stringify(settings.gate), codeIsCurrent, handOff, ...options.train });
-  const landing: IntegrationRuntime['landing'] = taskId => {
-    const task = store.task(taskId), ref = { taskId, attempt: task.currentAttempt };
-    store.assertCurrent(ref);
-    return { ...ref, branch: task.branch, worktree: task.worktree, declaredPaths: task.brief.paths, gate: task.brief.acceptance.command };
-  };
-  const checkCompletion = completionChecker({ ...settings, runGate,
-    condition(goal) { return { taskIds: tasks.completionScope(goal), gate: settings.gate }; },
-    async mergedTasks(goal) { return new Set(tasks.completionScope(goal).filter(taskId => store.task(taskId).state === 'merged')); },
+    promote: () =>
+      promote({
+        settings,
+        job,
+        runGate,
+        derivedFiles: options.train?.derivedFiles ?? packageDerivedFiles,
+        ...(options.train?.beforePromotionAdvance ? { beforeAdvance: options.train.beforePromotionAdvance } : {}),
+      }),
+    runGate,
+    gateIdentity: JSON.stringify(settings.gate),
+    codeIsCurrent,
+    handOff,
+    ...options.train,
   });
-  const command = ['env', `GOAL_MAIN_CHECKOUT=${settings.mainCheckout}`, `GOAL_LOCAL_CONFIG=${settings.localFile}`,
-    process.execPath, join(settings.mainCheckout, 'tools/goal/src/cli.ts')];
+  const landing: IntegrationRuntime['landing'] = (taskId) => {
+    const task = store.task(taskId),
+      ref = { taskId, attempt: task.currentAttempt };
+    store.assertCurrent(ref);
+    return {
+      ...ref,
+      branch: task.branch,
+      worktree: task.worktree,
+      declaredPaths: task.brief.paths,
+      gate: task.brief.acceptance.command,
+    };
+  };
+  const checkCompletion = completionChecker({
+    ...settings,
+    runGate,
+    condition(goal) {
+      return { taskIds: tasks.completionScope(goal), gate: settings.gate };
+    },
+    async mergedTasks(goal) {
+      return new Set(tasks.completionScope(goal).filter((taskId) => store.task(taskId).state === 'merged'));
+    },
+  });
+  const command = [
+    'env',
+    `GOAL_MAIN_CHECKOUT=${settings.mainCheckout}`,
+    `GOAL_LOCAL_CONFIG=${settings.localFile}`,
+    process.execPath,
+    join(settings.mainCheckout, 'tools/goal/src/cli.ts'),
+  ];
   const managerServices: ManagerServices = {
-    command, checkCompletion,
-    windows: new TermspacesWindows({ socket: settings.integration.tmuxSocket, session: settings.integration.tmuxSession,
-      tmuxCommand: settings.integration.tmuxCommand, termspacesCommand: settings.integration.termspacesCommand }),
+    command,
+    checkCompletion,
+    windows: new TermspacesWindows({
+      socket: settings.integration.tmuxSocket,
+      session: settings.integration.tmuxSession,
+      tmuxCommand: settings.integration.tmuxCommand,
+      termspacesCommand: settings.integration.termspacesCommand,
+    }),
     ...options.managerServices,
   };
   const manager = (goal: string, engine: 'codex' | 'claude', budget: number): ManagerSpec => {
     const file = join(settings.integration.managerDirectory, `${encodeURIComponent(goal)}.json`);
     const local = existsSync(file) ? object(JSON.parse(readFileSync(file, 'utf8')), 'manager') : {};
-    const pool = settings.pools.find(p => p.cli === engine && (local.pool ? p.name === local.pool : p.classes.includes('manager')));
+    const pool = settings.pools.find(
+      (p) => p.cli === engine && (local.pool ? p.name === local.pool : p.classes.includes('manager')),
+    );
     if (!pool) throw new Error(`Configure a local ${engine} manager pool`);
-    const scoped = store.tasks().filter(task => task.brief.goal === goal);
+    const scoped = store.tasks().filter((task) => task.brief.goal === goal);
     const limits = { ...settings.integration.managerLimits, ...object(local.limits ?? {}, 'manager limits') };
-    return { id: goal, goal, engine, budget, cwd: settings.mainCheckout,
+    return {
+      id: goal,
+      goal,
+      engine,
+      budget,
+      cwd: settings.mainCheckout,
       pool: { id: pool.name, codexHome: pool.configDirectory, executable: pool.command },
       objective: text(local.objective ?? `Complete Goal ${goal}`, 'manager objective'),
-      brief: text(local.brief ?? scoped.map(task => task.brief.markdown).join('\n\n'), 'manager brief'),
-      compactTokens: settings.integration.managerCompactTokens, effort: (local.effort ?? 'high') as ManagerSpec['effort'], supermanager: text(local.supermanager ?? settings.integration.supermanager, 'supermanager'),
-      limits: { turns: positive(limits.turns, 'turns'), turnsWithoutDecision: positive(limits.turnsWithoutDecision, 'turnsWithoutDecision'), wallMs: positive(limits.wallMs, 'wallMs') },
+      brief: text(local.brief ?? scoped.map((task) => task.brief.markdown).join('\n\n'), 'manager brief'),
+      compactTokens: settings.integration.managerCompactTokens,
+      effort: (local.effort ?? 'high') as ManagerSpec['effort'],
+      supermanager: text(local.supermanager ?? settings.integration.supermanager, 'supermanager'),
+      limits: {
+        turns: positive(limits.turns, 'turns'),
+        turnsWithoutDecision: positive(limits.turnsWithoutDecision, 'turnsWithoutDecision'),
+        wallMs: positive(limits.wallMs, 'wallMs'),
+      },
     };
   };
-  return { db, ...settings, settings, store, tasks, job, queue, inbox, train, fence: store, sink: job,
-    managerSocket: settings.integration.managerSocket, supermanager: settings.integration.supermanager, managerServices, landing, manager, pump,
-    hostCommand: command, codeIsCurrent, recoverOrphans: async (options?: { adoptRunning?: boolean }) => {
-      await job.recoverOrphans(options); await afterSettle();
+  return {
+    db,
+    ...settings,
+    settings,
+    store,
+    tasks,
+    job,
+    queue,
+    inbox,
+    train,
+    fence: store,
+    sink: job,
+    managerSocket: settings.integration.managerSocket,
+    supermanager: settings.integration.supermanager,
+    managerServices,
+    landing,
+    manager,
+    pump,
+    hostCommand: command,
+    codeIsCurrent,
+    recoverOrphans: async (options?: { adoptRunning?: boolean }) => {
+      await job.recoverOrphans(options);
+      await afterSettle();
     },
-    async drain() { await pump(); await job.drain(); }, close() { db.close(); } };
+    async drain() {
+      await pump();
+      await job.drain();
+    },
+    close() {
+      db.close();
+    },
+  };
 }

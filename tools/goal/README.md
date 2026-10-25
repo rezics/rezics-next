@@ -22,7 +22,7 @@ Derived files declare an `integration` or `promotion` stage in `defaults.json`. 
 during rebase; the promotion stage regenerates files on the `dev` head before promotion gates run.
 
 Briefs can carry frozen acceptance files in fenced blocks whose info string includes `path=<relative-path>`, such as
-```` ```ts path=tools/example.test.ts ````. Each path must be inside the brief's declared paths. The controller writes
+` ```ts path=tools/example.test.ts `. Each path must be inside the brief's declared paths. The controller writes
 and commits these files before launch, records their SHA-256 hashes, and refuses integration if a worker changes one.
 
 Dispatch waits without a model for the child to exit, records its tokens and quota observations, saves its evidence,
@@ -61,20 +61,20 @@ fields listed below; the empty policy object deliberately provides no account po
 }
 ```
 
-| Pool field | Meaning |
-| --- | --- |
-| `name` | Local pool name; appears only in local state and configuration. |
-| `cli` | `codex`, `grok` or `cursor` for workers; `claude` is available only for managers. |
-| `classes` | Routing pool classes it permits, such as `codex`; add `manager` for manager admission. |
-| `command` | Official CLI executable or an absolute local launcher path. |
-| `configDirectory` | Becomes `CODEX_HOME`, `GROK_HOME`, `CURSOR_CONFIG_DIR` or `CLAUDE_CONFIG_DIR`. |
-| `allowanceKey` | Pools and CLI aliases sharing quota must use the same local key. |
-| `usageFile` | Optional normalized `PoolReading` JSON for providers without Codex rollout quota events. |
-| `policy.weight` | Required positive number for relative pool preference. |
-| `policy.reservePercent` | Required number from zero up to, but excluding, 100. |
-| `policy.allowUnknown` | Required boolean: whether dispatch may proceed without fresh quota observations. |
-| `policy.maxAgeMs` | Required positive observation lifetime in milliseconds. |
-| `policy.maxBurnPerHour` | Optional positive limit on recent same-window percentage consumption per hour. |
+| Pool field              | Meaning                                                                                  |
+| ----------------------- | ---------------------------------------------------------------------------------------- |
+| `name`                  | Local pool name; appears only in local state and configuration.                          |
+| `cli`                   | `codex`, `grok` or `cursor` for workers; `claude` is available only for managers.        |
+| `classes`               | Routing pool classes it permits, such as `codex`; add `manager` for manager admission.   |
+| `command`               | Official CLI executable or an absolute local launcher path.                              |
+| `configDirectory`       | Becomes `CODEX_HOME`, `GROK_HOME`, `CURSOR_CONFIG_DIR` or `CLAUDE_CONFIG_DIR`.           |
+| `allowanceKey`          | Pools and CLI aliases sharing quota must use the same local key.                         |
+| `usageFile`             | Optional normalized `PoolReading` JSON for providers without Codex rollout quota events. |
+| `policy.weight`         | Required positive number for relative pool preference.                                   |
+| `policy.reservePercent` | Required number from zero up to, but excluding, 100.                                     |
+| `policy.allowUnknown`   | Required boolean: whether dispatch may proceed without fresh quota observations.         |
+| `policy.maxAgeMs`       | Required positive observation lifetime in milliseconds.                                  |
+| `policy.maxBurnPerHour` | Optional positive limit on recent same-window percentage consumption per hour.           |
 
 Only local policy determines unknown-quota admission, reserves and pacing. A retry prefers its current pool; a native
 quota failure excludes all aliases of that allowance before selecting another permitted pool. There is no credit
@@ -87,13 +87,13 @@ when invoked from a linked worktree. Repository paths resolve against that main 
 usage files and executable paths containing a slash resolve against the local file's directory.
 `integrationBranch` defaults to `dev`; `promotionParallelism` defaults to `4` and caps concurrent promotion checks.
 
-| Environment variable | Override |
-| --- | --- |
-| `GOAL_LOCAL_CONFIG` | Local JSON file. |
-| `GOAL_MAIN_CHECKOUT` | Main checkout. |
-| `GOAL_STATE_DIRECTORY` | State directory; defaults to `<main checkout>/.temp/goal`. |
-| `GOAL_WORKTREE_ROOT` | Worktree parent; defaults to `<main checkout>/.temp/worktrees`. |
-| `GOAL_CODEX_SERVICE_TIER` | Codex service tier for the invocation. |
+| Environment variable      | Override                                                        |
+| ------------------------- | --------------------------------------------------------------- |
+| `GOAL_LOCAL_CONFIG`       | Local JSON file.                                                |
+| `GOAL_MAIN_CHECKOUT`      | Main checkout.                                                  |
+| `GOAL_STATE_DIRECTORY`    | State directory; defaults to `<main checkout>/.temp/goal`.      |
+| `GOAL_WORKTREE_ROOT`      | Worktree parent; defaults to `<main checkout>/.temp/worktrees`. |
+| `GOAL_CODEX_SERVICE_TIER` | Codex service tier for the invocation.                          |
 
 The `codex` settings layer exposes `serviceTier`, `compactTokens` by family, `solContextWindow` and `toolOutputTokens`.
 The `integration` layer exposes `gateTimeoutMs`, `gateConcurrency`,
@@ -123,6 +123,7 @@ estimate:
 criticalPath: false
 waiting: []
 ---
+
 Implement the behavior described by the failing acceptance test.
 ```
 
