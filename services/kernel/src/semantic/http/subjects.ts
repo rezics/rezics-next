@@ -16,12 +16,11 @@ import { activeRelease, GLOBAL_CONTEXT, readRelease } from '../definitions.ts';
 import { routeOf } from '../../route/route.ts';
 import type { AccountActor } from '../../request/access.ts';
 import { AuthenticationError } from '../../request/access.ts';
-import { createResourcePublicEligibility } from '../../access/index.ts';
 import { createApp } from '../../http/app.ts';
 import { defineRateLimit } from '../../http/rate-limit.ts';
 import { ProblemError, problemSchema } from '../../http/problem.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, requestDigest, SESSION_HEADER } from '../../http/request.ts';
-import subjectExists from '../subject-exists.sql';
+import { subjectReadEligibility } from '../eligibility.ts';
 
 const DataTypeSchema = t.Unsafe<DataType>(t.Union(DATA_TYPES.map((dataType) => t.Literal(dataType))));
 const ValueSchema = t.Union([
@@ -118,17 +117,6 @@ function relatedIds(subject: Item): { propertyIds: Set<string>; subjectIds: Set<
 }
 
 function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey }: SubjectRouteDependencies) {
-  const publicRead = (resource: { route: number; id: string }) =>
-    createResourcePublicEligibility({
-      resource,
-      action: 'subject:read',
-      async prepare() {
-        return null;
-      },
-      async verify({ client }) {
-        return (await subjectExists.run(client, { route: resource.route, subject_id: resource.id })) !== null;
-      },
-    });
   return app
     .post(
       '/v1/subjects',
@@ -214,7 +202,7 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey }: Su
         const route = routeOf(params.id);
         if (route === null) throw new ProblemError('not_found');
         const resource = { route, id: params.id };
-        const check = await authorize({ ...resource, eligibility: publicRead(resource) });
+        const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
         const result = await admission.run('normal', job, () => readSubject(pool, params.id, check));
         if (!result) throw new ProblemError('not_found');
 
@@ -231,7 +219,10 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey }: Su
             const relatedRoute = routeOf(id);
             if (relatedRoute === null) return null;
             const relatedResource = { route: relatedRoute, id };
-            const relatedCheck = await authorize({ ...relatedResource, eligibility: publicRead(relatedResource) });
+            const relatedCheck = await authorize({
+              ...relatedResource,
+              eligibility: subjectReadEligibility(relatedResource),
+            });
             return admission.run('normal', job, async () => {
               const allowed = await withConnection(pool, (client) => relatedCheck(client));
               return allowed ? id : null;
