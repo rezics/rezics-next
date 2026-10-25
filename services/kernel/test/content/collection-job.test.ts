@@ -114,7 +114,7 @@ async function media(
     `INSERT INTO content.media
     (route,media_id,container_id,uploader_id,reservation_request_id,purpose,media_type,byte_count,
      actual_byte_count,sha256,state,decision,key,created_at,transaction_id)
-    VALUES ($1,$2,$3,$4,$2,'post-image','image/png',$5,$6,$7,$8,$9,$10,$11,$12)`,
+    VALUES ($1,$2::uuid,$3,$4,$2::uuid::text,'post-image','image/png',$5,$6,$7,$8,$9,$10,$11,$12)`,
     [
       selectedRoute,
       id,
@@ -166,13 +166,13 @@ async function reference(m: Media) {
   await admin.query(
     `INSERT INTO content.board
     (route,board_id,subject_id,title,visibility,security_revision,recorded_transaction_id)
-    VALUES ($1,$2,$3,'Board','public',1,$4)`,
+    VALUES ($1,$2,$3,'Board','published',1,$4)`,
     [route, board, newId(route), randomUUID()],
   );
   await admin.query(
     `INSERT INTO content.thread
     (route,thread_id,author_account_id,board_id,title,visibility,security_revision,recorded_transaction_id)
-    VALUES ($1,$2,$3,$4,'Thread','public',1,$5)`,
+    VALUES ($1,$2,$3,$4,'Thread','published',1,$5)`,
     [route, m.containerId, m.uploaderId, board, randomUUID()],
   );
   const itemId = newId(route),
@@ -215,7 +215,7 @@ async function reference(m: Media) {
       await tx.query(
         `INSERT INTO content.post
         (route,thread_id,post_id,author_account_id,head_revision_id,visibility,security_revision,recorded_transaction_id)
-        VALUES ($1,$2,$3,$4,$5,'public',1,$6)`,
+        VALUES ($1,$2,$3,$4,$5,'published',1,$6)`,
         [route, m.containerId, itemId, m.uploaderId, revisionId, command.transactionId],
       );
       await tx.query(
@@ -303,13 +303,20 @@ test('selection enumerates sixteen exact routes with two bounded seeks and caps 
   expect(await job().collectPartition(partition, 100)).toMatchObject({ collected: 100, complete: false });
   const selections = records.filter(({ text }) => /FROM content\.media\b/.test(text) && /ORDER BY/.test(text));
   expect(selections).toHaveLength(16);
-  expect(selections.map(({ values }) => values[0]).sort((a, b) => Number(a) - Number(b))).toEqual(
-    Array.from({ length: 16 }, (_, i) => route + i),
-  );
+  expect(
+    selections
+      .map(({ text, values }) => {
+        const bindings = [...text.matchAll(/route\s*=\s*\$(\d+)/gi)];
+        expect(bindings).toHaveLength(2);
+        const selectedRoute = values[Number(bindings[0]![1]) - 1];
+        for (const binding of bindings) expect(values[Number(binding[1]) - 1]).toBe(selectedRoute);
+        return selectedRoute;
+      })
+      .sort((a, b) => Number(a) - Number(b)),
+  ).toEqual(Array.from({ length: 16 }, (_, i) => route + i));
   for (const { text, values } of selections) {
     expect(text).not.toMatch(/\bBETWEEN\b|\bOFFSET\b/i);
     expect(text.match(/\bLIMIT\b/gi)).toHaveLength(2);
-    expect(text.match(/route\s*=\s*\$1/gi)).toHaveLength(2);
     expect(values).toContain(100);
   }
   expect(await job().collectPartition(partition, 100)).toMatchObject({ collected: 5, complete: true });
