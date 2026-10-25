@@ -1,5 +1,17 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "jsx": "react-jsx", "types": ["vite/client", "@cloudflare/workers-types"] },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "scripts/**/*.ts", "*.ts"]
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "resolveJsonModule": true,
+    "types": ["vite/client", "@cloudflare/workers-types"]
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "scripts/**/*.ts",
+    ".storybook/**/*.ts",
+    ".storybook/**/*.tsx",
+    "vitest.config.ts",
+    "*.ts"
+  ]
 }

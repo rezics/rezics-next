@@ -5,6 +5,25 @@ type Fixtures = {
   redirects: Record<string, string>;
 };
 
+export type KernelRecording = { status: number; [key: string]: unknown };
+
+/** Replay committed API bodies through the same fetch boundary used by fixture-backed tests. */
+export function createRecordedKernelFetch(recordings: Record<string, KernelRecording>): typeof fetch {
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    const url = new URL(request.url);
+    const match = /^\/v1\/subjects\/([^/]+)$/.exec(url.pathname);
+    const id = match ? decodeURIComponent(match[1]!) : undefined;
+    const name = id === '00000000-0000-4000-8000-000000000000' ? 'missing-subject' : id ? 'subject' : undefined;
+    const recording = request.method === 'GET' && name ? recordings[name] : undefined;
+    if (!recording) return new Response(null, { status: 404 });
+    return Response.json(recording, {
+      status: recording.status,
+      headers: { 'content-type': recording.status === 404 ? 'application/problem+json' : 'application/json' },
+    });
+  }) as typeof fetch;
+}
+
 export function createFakeKernelFetch(fixtures: Fixtures): typeof fetch {
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init);

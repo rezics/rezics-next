@@ -4,8 +4,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite --config vite.config.ts",
+    "storybook": "storybook dev -p 6006",
+    "record": "bun scripts/record.ts",
     "build": "vite build --config vite.config.ts",
-    "check": "oxfmt --check . && bun run generate && bun run generate:routes && tsc --noEmit -p tsconfig.json && bun run test && bun run test:host && bun run build",
+    "check": "oxfmt --check . && bun run generate && bun run generate:routes && tsc --noEmit -p tsconfig.json && bun run test && bun run test:host && bun run build && bun scripts/isolated.ts bun test tests/page-stories.test.ts",
     "generate": "bun scripts/generate.ts",
     "generate:routes": "vite build --config vite.config.ts --mode development --emptyOutDir false",
     "test": "bun scripts/isolated.ts bun test",
@@ -33,13 +35,19 @@
     "tailwindcss": "4.3.3"
   },
   "devDependencies": {
+    "@storybook/addon-a11y": "11.0.0-alpha.8",
+    "@storybook/addon-vitest": "11.0.0-alpha.8",
+    "@storybook/react-vite": "11.0.0-alpha.8",
     "@types/node": "26.6.5",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
+    "@vitest/browser-playwright": "5.1.0-beta.1",
     "jose": "6.2.13",
     "pg": "8.23.1",
     "playwright": "1.64.1",
-    "vite": "8.3.5"
+    "vite": "8.3.5",
+    "storybook": "11.0.0-alpha.8",
+    "vitest": "5.1.0-beta.1"
   }
 }

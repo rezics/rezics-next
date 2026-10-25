@@ -99,7 +99,7 @@ afterAll(async () => {
 });
 
 // Change to test(...) when web has recorded page and shell stories running through the Storybook vitest addon.
-test.failing(
+test(
   'every page story renders from recorded kernel responses and passes as an accessible browser test',
   async () => {
     const report = join(temporary, 'stories.json');
@@ -205,7 +205,7 @@ test.failing(
 );
 
 // Change to test(...) when every recorded JSON response satisfies its kernel client response contract.
-test.failing(
+test(
   'each recorded response type-checks against the kernel client',
   async () => {
     const files = recordings();
