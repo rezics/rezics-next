@@ -16,7 +16,7 @@ import type {
   PostId,
   ReadContext,
   RevisionId,
-  RevisionView,
+  RevisionView as StoredRevisionView,
   ThreadId,
   ThreadView as StoredThreadView,
   Visibility,
@@ -30,9 +30,12 @@ import viewerReactions from './reaction-viewer.sql';
 const reactionKinds: ReadonlySet<string> = new Set(REACTION_KINDS);
 export type ViewerReactionKind = (typeof REACTION_KINDS)[number];
 
-/** Published erased slots remain readable, but never disclose revision bodies. */
-export type ItemView = StoredItemView &
-  (Readonly<{ availability: 'available' }> | Readonly<{ availability: 'erased'; removed: true }>);
+/** Erased slots retain identity without disclosing bytes or a digest of erased text. */
+type ContentPayload =
+  | Readonly<{ availability: 'available'; body: NonNullable<StoredItemView['body']>; sha256: string }>
+  | Readonly<{ availability: 'erased'; removed: true; body: null; sha256: null }>;
+export type ItemView = Omit<StoredItemView, 'availability' | 'body' | 'sha256'> & ContentPayload;
+export type RevisionView = Omit<StoredRevisionView, 'availability' | 'body' | 'sha256'> & ContentPayload;
 export type ThreadView = Omit<StoredThreadView, 'firstPost'> & Readonly<{ firstPost: ItemView }>;
 
 export type ContentReadDependencies = Readonly<{ pool: Pool; access: Access; tokens: KeyRing; clock?: () => Date }>;
@@ -262,7 +265,7 @@ async function disclose(
     }
   }
   return snapshot(dependencies, threadId, context, async (client) => {
-    if (!initial || !board?.value || checks.length !== rows.length || (erased && revisionId)) return null;
+    if (!initial || !board?.value || checks.length !== rows.length) return null;
     const current = await chain(client, threadId, initial.posts[0]?.id, revisionId);
     if (!current || fingerprint(initial) !== fingerprint(current)) return null;
     for (let index = 0; index < rows.length; index++) {
@@ -312,13 +315,17 @@ function itemView(post: Row, revision: Row, erased: boolean): ItemView | null {
     securityRevision: post.security_revision,
     createdAt: post.created_at.toISOString(),
     revisedAt: post.revised_at === null ? null : post.revised_at.toISOString(),
-    sha256: revision.sha256.toString('hex'),
     mediaIds: revision.media_ids,
     revisionId: revision.id,
   };
-  if (erased) return { ...metadata, removed: true, body: null, availability: 'erased' };
+  if (erased) return { ...metadata, removed: true, body: null, sha256: null, availability: 'erased' };
   if (revision.availability !== 'available' || !revision.body) return null;
-  return { ...metadata, body: JSON.parse(revision.body.toString('utf8')), availability: 'available' };
+  return {
+    ...metadata,
+    body: JSON.parse(revision.body.toString('utf8')),
+    sha256: revision.sha256.toString('hex'),
+    availability: 'available',
+  };
 }
 
 /** One partition seek for the account viewer's slots. Anonymous responses omit the field. */

@@ -221,7 +221,7 @@ describe('moderation HTTP with migrated storage and current Access', () => {
       expect(exact.body.post).toMatchObject({
         id: post.id,
         revisionId: revision.revisionId,
-        sha256: revision.sha256,
+        sha256: null,
         body: null,
         availability: 'erased',
       });

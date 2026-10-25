@@ -146,7 +146,10 @@ const item = {
 export const ItemViewSchema = t.Unsafe<ItemView & ViewerReactionSlot>(
   t.Union([
     t.Object({ ...item, availability: t.Literal('available'), body: document }, closed),
-    t.Object({ ...item, availability: t.Literal('erased'), removed: t.Literal(true), body: t.Null() }, closed),
+    t.Object(
+      { ...item, availability: t.Literal('erased'), removed: t.Literal(true), body: t.Null(), sha256: t.Null() },
+      closed,
+    ),
   ]),
 );
 export const ThreadViewSchema = t.Unsafe<ThreadView & ViewerReactionSlot>(

@@ -2281,8 +2281,7 @@
                                     "type": "string"
                                   },
                                   "sha256": {
-                                    "pattern": "^[0-9a-f]{64}$",
-                                    "type": "string"
+                                    "type": "null"
                                   },
                                   "subjectIds": {
                                     "items": {
@@ -44832,8 +44831,7 @@
                               "type": "string"
                             },
                             "sha256": {
-                              "pattern": "^[0-9a-f]{64}$",
-                              "type": "string"
+                              "type": "null"
                             },
                             "subjectIds": {
                               "items": {
@@ -48162,8 +48160,7 @@
                                 "type": "string"
                               },
                               "sha256": {
-                                "pattern": "^[0-9a-f]{64}$",
-                                "type": "string"
+                                "type": "null"
                               },
                               "subjectIds": {
                                 "items": {
@@ -49018,8 +49015,7 @@
                               "type": "string"
                             },
                             "sha256": {
-                              "pattern": "^[0-9a-f]{64}$",
-                              "type": "string"
+                              "type": "null"
                             },
                             "subjectIds": {
                               "items": {
@@ -50255,8 +50251,7 @@
                               "type": "string"
                             },
                             "sha256": {
-                              "pattern": "^[0-9a-f]{64}$",
-                              "type": "string"
+                              "type": "null"
                             },
                             "subjectIds": {
                               "items": {
@@ -97116,8 +97111,7 @@
                                   "type": "string"
                                 },
                                 "sha256": {
-                                  "pattern": "^[0-9a-f]{64}$",
-                                  "type": "string"
+                                  "type": "null"
                                 },
                                 "subjectIds": {
                                   "items": {
@@ -98361,8 +98355,7 @@
                                   "type": "string"
                                 },
                                 "sha256": {
-                                  "pattern": "^[0-9a-f]{64}$",
-                                  "type": "string"
+                                  "type": "null"
                                 },
                                 "subjectIds": {
                                   "items": {
@@ -99256,8 +99249,7 @@
                                 "type": "string"
                               },
                               "sha256": {
-                                "pattern": "^[0-9a-f]{64}$",
-                                "type": "string"
+                                "type": "null"
                               },
                               "subjectIds": {
                                 "items": {
@@ -100112,8 +100104,7 @@
                               "type": "string"
                             },
                             "sha256": {
-                              "pattern": "^[0-9a-f]{64}$",
-                              "type": "string"
+                              "type": "null"
                             },
                             "subjectIds": {
                               "items": {
