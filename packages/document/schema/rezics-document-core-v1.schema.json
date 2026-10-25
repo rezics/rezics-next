@@ -5,7 +5,9 @@
   "$defs": {
     "CoreMark": {
       "type": "object",
-      "required": ["type"],
+      "required": [
+        "type"
+      ],
       "properties": {
         "type": {
           "type": "string",
@@ -22,7 +24,9 @@
     },
     "CoreNode": {
       "type": "object",
-      "required": ["type"],
+      "required": [
+        "type"
+      ],
       "properties": {
         "type": {
           "type": "string",
@@ -54,7 +58,11 @@
     },
     "CoreDocument": {
       "type": "object",
-      "required": ["version", "profile", "doc"],
+      "required": [
+        "version",
+        "profile",
+        "doc"
+      ],
       "properties": {
         "version": {
           "type": "string",
@@ -74,7 +82,10 @@
         },
         "doc": {
           "type": "object",
-          "required": ["type", "content"],
+          "required": [
+            "type",
+            "content"
+          ],
           "properties": {
             "type": {
               "type": "string",

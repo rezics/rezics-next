@@ -7,7 +7,9 @@
       "anyOf": [
         {
           "type": "object",
-          "required": ["type"],
+          "required": [
+            "type"
+          ],
           "properties": {
             "type": {
               "type": "string",
@@ -18,7 +20,9 @@
         },
         {
           "type": "object",
-          "required": ["type"],
+          "required": [
+            "type"
+          ],
           "properties": {
             "type": {
               "type": "string",
@@ -29,7 +33,9 @@
         },
         {
           "type": "object",
-          "required": ["type"],
+          "required": [
+            "type"
+          ],
           "properties": {
             "type": {
               "type": "string",
@@ -40,7 +46,9 @@
         },
         {
           "type": "object",
-          "required": ["type"],
+          "required": [
+            "type"
+          ],
           "properties": {
             "type": {
               "type": "string",
@@ -51,7 +59,9 @@
         },
         {
           "type": "object",
-          "required": ["type"],
+          "required": [
+            "type"
+          ],
           "properties": {
             "type": {
               "type": "string",
@@ -62,7 +72,9 @@
         },
         {
           "type": "object",
-          "required": ["type"],
+          "required": [
+            "type"
+          ],
           "properties": {
             "type": {
               "type": "string",
@@ -73,7 +85,10 @@
         },
         {
           "type": "object",
-          "required": ["type", "attrs"],
+          "required": [
+            "type",
+            "attrs"
+          ],
           "properties": {
             "type": {
               "type": "string",
@@ -81,7 +96,9 @@
             },
             "attrs": {
               "type": "object",
-              "required": ["href"],
+              "required": [
+                "href"
+              ],
               "properties": {
                 "href": {
                   "type": "string",
@@ -135,7 +152,10 @@
         },
         {
           "type": "object",
-          "required": ["type", "attrs"],
+          "required": [
+            "type",
+            "attrs"
+          ],
           "properties": {
             "type": {
               "type": "string",
@@ -174,7 +194,10 @@
         },
         {
           "type": "object",
-          "required": ["type", "attrs"],
+          "required": [
+            "type",
+            "attrs"
+          ],
           "properties": {
             "type": {
               "type": "string",
@@ -250,7 +273,10 @@
         },
         {
           "type": "object",
-          "required": ["type", "attrs"],
+          "required": [
+            "type",
+            "attrs"
+          ],
           "properties": {
             "type": {
               "type": "string",
@@ -305,7 +331,11 @@
     },
     "blocks_Document": {
       "type": "object",
-      "required": ["version", "profile", "doc"],
+      "required": [
+        "version",
+        "profile",
+        "doc"
+      ],
       "properties": {
         "version": {
           "type": "string",
@@ -323,7 +353,10 @@
     },
     "blocks_Doc": {
       "type": "object",
-      "required": ["type", "content"],
+      "required": [
+        "type",
+        "content"
+      ],
       "properties": {
         "type": {
           "type": "string",
@@ -378,7 +411,10 @@
     },
     "blocks_paragraph": {
       "type": "object",
-      "required": ["type", "attrs"],
+      "required": [
+        "type",
+        "attrs"
+      ],
       "properties": {
         "type": {
           "type": "string",
@@ -386,7 +422,9 @@
         },
         "attrs": {
           "type": "object",
-          "required": ["id"],
+          "required": [
+            "id"
+          ],
           "properties": {
             "id": {
               "type": "string",
@@ -484,7 +522,10 @@
     },
     "blocks_heading": {
       "type": "object",
-      "required": ["type", "attrs"],
+      "required": [
+        "type",
+        "attrs"
+      ],
       "properties": {
         "type": {
           "type": "string",
@@ -492,7 +533,9 @@
         },
         "attrs": {
           "type": "object",
-          "required": ["id"],
+          "required": [
+            "id"
+          ],
           "properties": {
             "id": {
               "type": "string",
@@ -595,7 +638,10 @@
     },
     "blocks_blockquote": {
       "type": "object",
-      "required": ["type", "attrs"],
+      "required": [
+        "type",
+        "attrs"
+      ],
       "properties": {
         "type": {
           "type": "string",
@@ -603,7 +649,9 @@
         },
         "attrs": {
           "type": "object",
-          "required": ["id"],
+          "required": [
+            "id"
+          ],
           "properties": {
             "id": {
               "type": "string",
@@ -698,7 +746,10 @@
     },
     "blocks_bulletList": {
       "type": "object",
-      "required": ["type", "attrs"],
+      "required": [
+        "type",
+        "attrs"
+      ],
       "properties": {
         "type": {
           "type": "string",
@@ -706,7 +757,9 @@
         },
         "attrs": {
           "type": "object",
-          "required": ["id"],
+          "required": [
+            "id"
+          ],
           "properties": {
             "id": {
               "type": "string",
@@ -768,7 +821,10 @@
     },
     "blocks_orderedList": {
       "type": "object",
-      "required": ["type", "attrs"],
+      "required": [
+        "type",
+        "attrs"
+      ],
       "properties": {
         "type": {
           "type": "string",
@@ -776,7 +832,9 @@
         },
         "attrs": {
           "type": "object",
-          "required": ["id"],
+          "required": [
+            "id"
+          ],
           "properties": {
             "id": {
               "type": "string",
@@ -842,7 +900,10 @@
     },
     "blocks_listItem": {
       "type": "object",
-      "required": ["type", "attrs"],
+      "required": [
+        "type",
+        "attrs"
+      ],
       "properties": {
         "type": {
           "type": "string",
@@ -850,7 +911,9 @@
         },
         "attrs": {
           "type": "object",
-          "required": ["id"],
+          "required": [
+            "id"
+          ],
           "properties": {
             "id": {
               "type": "string",
@@ -945,7 +1008,10 @@
     },
     "blocks_taskList": {
       "type": "object",
-      "required": ["type", "attrs"],
+      "required": [
+        "type",
+        "attrs"
+      ],
       "properties": {
         "type": {
           "type": "string",
@@ -953,7 +1019,9 @@
         },
         "attrs": {
           "type": "object",
-          "required": ["id"],
+          "required": [
+            "id"
+          ],
           "properties": {
             "id": {
               "type": "string",
@@ -1015,7 +1083,10 @@
     },
     "blocks_taskItem": {
       "type": "object",
-      "required": ["type", "attrs"],
+      "required": [
+        "type",
+        "attrs"
+      ],
       "properties": {
         "type": {
           "type": "string",
@@ -1023,7 +1094,9 @@
         },
         "attrs": {
           "type": "object",
-          "required": ["id"],
+          "required": [
+            "id"
+          ],
           "properties": {
             "id": {
               "type": "string",
@@ -1121,7 +1194,10 @@
     },
     "blocks_codeBlock": {
       "type": "object",
-      "required": ["type", "attrs"],
+      "required": [
+        "type",
+        "attrs"
+      ],
       "properties": {
         "type": {
           "type": "string",
@@ -1129,7 +1205,9 @@
         },
         "attrs": {
           "type": "object",
-          "required": ["id"],
+          "required": [
+            "id"
+          ],
           "properties": {
             "id": {
               "type": "string",
@@ -1201,7 +1279,10 @@
     },
     "blocks_horizontalRule": {
       "type": "object",
-      "required": ["type", "attrs"],
+      "required": [
+        "type",
+        "attrs"
+      ],
       "properties": {
         "type": {
           "type": "string",
@@ -1209,7 +1290,9 @@
         },
         "attrs": {
           "type": "object",
-          "required": ["id"],
+          "required": [
+            "id"
+          ],
           "properties": {
             "id": {
               "type": "string",
@@ -1260,7 +1343,9 @@
     },
     "blocks_hardBreak": {
       "type": "object",
-      "required": ["type"],
+      "required": [
+        "type"
+      ],
       "properties": {
         "type": {
           "type": "string",
@@ -1277,7 +1362,10 @@
     },
     "blocks_ruby": {
       "type": "object",
-      "required": ["type", "attrs"],
+      "required": [
+        "type",
+        "attrs"
+      ],
       "properties": {
         "type": {
           "type": "string",
@@ -1285,7 +1373,9 @@
         },
         "attrs": {
           "type": "object",
-          "required": ["rt"],
+          "required": [
+            "rt"
+          ],
           "properties": {
             "rt": {
               "type": "string"
@@ -1344,7 +1434,10 @@
     },
     "blocks_text": {
       "type": "object",
-      "required": ["type", "text"],
+      "required": [
+        "type",
+        "text"
+      ],
       "properties": {
         "type": {
           "type": "string",
@@ -1365,7 +1458,10 @@
     },
     "blocks_table": {
       "type": "object",
-      "required": ["type", "attrs"],
+      "required": [
+        "type",
+        "attrs"
+      ],
       "properties": {
         "type": {
           "type": "string",
@@ -1373,7 +1469,9 @@
         },
         "attrs": {
           "type": "object",
-          "required": ["id"],
+          "required": [
+            "id"
+          ],
           "properties": {
             "id": {
               "type": "string",
@@ -1435,7 +1533,10 @@
     },
     "blocks_tableRow": {
       "type": "object",
-      "required": ["type", "attrs"],
+      "required": [
+        "type",
+        "attrs"
+      ],
       "properties": {
         "type": {
           "type": "string",
@@ -1443,7 +1544,9 @@
         },
         "attrs": {
           "type": "object",
-          "required": ["id"],
+          "required": [
+            "id"
+          ],
           "properties": {
             "id": {
               "type": "string",
@@ -1508,7 +1611,10 @@
     },
     "blocks_tableCell": {
       "type": "object",
-      "required": ["type", "attrs"],
+      "required": [
+        "type",
+        "attrs"
+      ],
       "properties": {
         "type": {
           "type": "string",
@@ -1516,7 +1622,9 @@
         },
         "attrs": {
           "type": "object",
-          "required": ["id"],
+          "required": [
+            "id"
+          ],
           "properties": {
             "id": {
               "type": "string",
@@ -1660,7 +1768,10 @@
     },
     "blocks_tableHeader": {
       "type": "object",
-      "required": ["type", "attrs"],
+      "required": [
+        "type",
+        "attrs"
+      ],
       "properties": {
         "type": {
           "type": "string",
@@ -1668,7 +1779,9 @@
         },
         "attrs": {
           "type": "object",
-          "required": ["id"],
+          "required": [
+            "id"
+          ],
           "properties": {
             "id": {
               "type": "string",
@@ -1812,7 +1925,10 @@
     },
     "blocks_image": {
       "type": "object",
-      "required": ["type", "attrs"],
+      "required": [
+        "type",
+        "attrs"
+      ],
       "properties": {
         "type": {
           "type": "string",
@@ -1820,7 +1936,10 @@
         },
         "attrs": {
           "type": "object",
-          "required": ["id", "src"],
+          "required": [
+            "id",
+            "src"
+          ],
           "properties": {
             "id": {
               "type": "string",
@@ -1920,7 +2039,10 @@
     },
     "blocks_media": {
       "type": "object",
-      "required": ["type", "attrs"],
+      "required": [
+        "type",
+        "attrs"
+      ],
       "properties": {
         "type": {
           "type": "string",
@@ -1928,7 +2050,11 @@
         },
         "attrs": {
           "type": "object",
-          "required": ["id", "src", "kind"],
+          "required": [
+            "id",
+            "src",
+            "kind"
+          ],
           "properties": {
             "id": {
               "type": "string",
@@ -2002,7 +2128,10 @@
     },
     "blocks_extensionBlock": {
       "type": "object",
-      "required": ["type", "attrs"],
+      "required": [
+        "type",
+        "attrs"
+      ],
       "properties": {
         "type": {
           "type": "string",
@@ -2010,7 +2139,13 @@
         },
         "attrs": {
           "type": "object",
-          "required": ["id", "definition", "version", "payload", "fallback"],
+          "required": [
+            "id",
+            "definition",
+            "version",
+            "payload",
+            "fallback"
+          ],
           "properties": {
             "id": {
               "type": "string",
@@ -2073,7 +2208,10 @@
     },
     "blocks_extensionInline": {
       "type": "object",
-      "required": ["type", "attrs"],
+      "required": [
+        "type",
+        "attrs"
+      ],
       "properties": {
         "type": {
           "type": "string",
@@ -2081,7 +2219,13 @@
         },
         "attrs": {
           "type": "object",
-          "required": ["id", "definition", "version", "payload", "fallback"],
+          "required": [
+            "id",
+            "definition",
+            "version",
+            "payload",
+            "fallback"
+          ],
           "properties": {
             "id": {
               "type": "string",
