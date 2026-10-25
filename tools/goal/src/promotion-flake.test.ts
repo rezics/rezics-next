@@ -108,3 +108,18 @@ test('a specification task whose suite is red by design does not fail promotion'
     for (const task of [spec, next]) expect(h.store.task(task.id).state).toBe('merged');
   } finally { h.dispose(); }
 });
+
+test('a failing root gate at the head stops the head gate before the acceptance commands', async () => {
+  const h = integrationHarness();
+  try {
+    await h.seed('alpha', [], ['fixture-acceptance-a']);
+    await h.seed('beta', [], ['fixture-acceptance-b']);
+    const dev = h.head();
+    const atHead: string[] = [];
+    await h.promote(async (command, cwd) => {
+      if (git(cwd, 'rev-parse', 'HEAD') === dev) atHead.push(command[0]!);
+      return command.join(' ') === h.settings.gate.join(' ') && git(cwd, 'rev-parse', 'HEAD') === dev ? failure : success;
+    });
+    expect(atHead.filter(command => command.startsWith('fixture-acceptance'))).toEqual([]);
+  } finally { h.dispose(); }
+});
