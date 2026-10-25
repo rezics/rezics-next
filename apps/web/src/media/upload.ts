@@ -22,32 +22,46 @@ export async function upload(request: Request, id: string, env: MediaEnv): Promi
 
   let measured = 0;
   const fixed = new FixedLengthStream(media.byteCount);
-  const [hashBytes, storageBytes] = fixed.readable.tee();
   const digest = new (crypto as Crypto & { DigestStream: typeof DigestStream }).DigestStream('SHA-256');
+  const digestWriter = digest.getWriter();
+  let digestFailed = false;
   const controller = new AbortController();
   let writeBegan = false;
   try {
     const counted = request.body.pipeThrough(
       new TransformStream<Uint8Array, Uint8Array>({
-        transform(chunk, stream) {
+        async transform(chunk, stream) {
           measured += chunk.byteLength;
           if (measured > media.byteCount) throw tooLarge();
+          try {
+            await digestWriter.write(chunk);
+          } catch (error) {
+            digestFailed = true;
+            throw error;
+          }
           stream.enqueue(chunk);
         },
-        flush() {
+        async flush() {
           if (measured < media.byteCount) throw invalidRequest();
+          try {
+            await digestWriter.close();
+          } catch (error) {
+            digestFailed = true;
+            throw error;
+          }
         },
       }),
     );
     const pumping = counted.pipeTo(fixed.writable, { signal: controller.signal });
-    const hashing = Promise.all([hashBytes.pipeTo(digest, { signal: controller.signal }), digest.digest]);
+    const hashing = Promise.all([pumping, digest.digest]);
     writeBegan = true;
-    const writing = env.MEDIA.put(media.key, storageBytes, {
+    const writing = env.MEDIA.put(media.key, fixed.readable, {
       httpMetadata: { contentType: media.mediaType },
       ...(media.sha256 === null ? {} : { sha256: media.sha256 }),
     });
     // Wait for storage to finish before cleanup, so a late put cannot restore failed bytes.
     const [pumped, hashed, written] = await Promise.allSettled([pumping, hashing, writing]);
+    if (digestFailed) throw dependencyUnavailable();
     if (measured > media.byteCount) throw tooLarge();
     if (measured < media.byteCount || pumped.status === 'rejected') throw invalidRequest();
     if (hashed.status === 'rejected') throw dependencyUnavailable();
@@ -63,6 +77,7 @@ export async function upload(request: Request, id: string, env: MediaEnv): Promi
     return Response.json(completion, { headers: { 'cache-control': 'private, no-store' } });
   } catch (error) {
     controller.abort();
+    await digestWriter.abort(error).catch(() => {});
     if (writeBegan) await env.MEDIA.delete(media.key);
     throw error;
   }
