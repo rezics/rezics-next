@@ -74,7 +74,7 @@ describe('moderation HTTP with migrated storage and current Access', () => {
     method: string,
     path: string,
     body?: unknown,
-    key = randomUUID(),
+    key: string = randomUUID(),
     account: string | null = fixture.actor,
   ) {
     const response = await app.handle(
@@ -323,7 +323,7 @@ describe('moderation HTTP with migrated storage and current Access', () => {
     for (const { cost } of report.samples) {
       expect(cost.statements).toBeGreaterThan(0);
       expect(cost.rows).toBeGreaterThan(0);
-      expect(cost.plans).toBeGreaterThan(0);
+      expect((cost as typeof cost & { plans: number }).plans).toBeGreaterThan(0);
     }
     console.info(JSON.stringify(report));
   });
