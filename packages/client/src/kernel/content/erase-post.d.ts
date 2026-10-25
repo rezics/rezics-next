@@ -61,4 +61,16 @@ export declare function erasePostLogicalAsInitiator(deps: Omit<ErasePostDependen
     postId: string;
     securityRevision: string;
 }>>;
+/** One bounded logical page, authorized completely at the command's T before
+ * receipt lookup or mutations. Each post uses the ordinary point seam; one
+ * denied point rolls back the entire page, including its events and receipt.
+ */
+export declare function erasePostLogicalPageAsInitiator(deps: Omit<ErasePostDependencies, 'routeKey'>, initiator: ErasureInitiator, input: Readonly<{
+    postIds: readonly string[];
+    reason: string;
+}>, context: ErasePostContext): Promise<CommandOutcome<{
+    postIds: string[];
+    processedPosts: number;
+    erasedRevisions: number;
+}>>;
 export {};
