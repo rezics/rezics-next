@@ -274,6 +274,7 @@ export class ManagerSessions {
         state.goalState = updated.goal; this.save(state);
       }
       this.inbox.deliver({ managerId: id, kind: 'goal-unmet', summary: evidence.summary.replace(/[\r\n]+/g, ' '), evidencePath: evidence.evidencePath });
+      if (state.supermanager !== id) this.inbox.deliver({ managerId: state.supermanager, kind: 'goal-unmet', summary: evidence.summary.replace(/[\r\n]+/g, ' '), evidencePath: evidence.evidencePath });
       return false;
     }
     await this.stopInternal(id);
@@ -284,9 +285,16 @@ export class ManagerSessions {
       completed.goalState = updated.goal;
     }
     this.save(completed);
+    const event = { kind: 'goal-met' as const, summary: evidence.summary.replace(/[\r\n]+/g, ' '), evidencePath: evidence.evidencePath };
+    this.inbox.deliver({ managerId: id, ...event });
+    if (completed.supermanager !== id) this.inbox.deliver({ managerId: completed.supermanager, ...event });
     return true;
   }
-  complete(id: string): Promise<boolean> { return this.serial(id, () => this.completeInternal(id)); }
+  complete(id: string): Promise<boolean> {
+    this.get(id);
+    this.background(id, () => this.completeInternal(id));
+    return Promise.resolve(true);
+  }
 
   /** Rejoin persisted threads on host restart and retry committed, unsignalled inbox deliveries. */
   async recover(): Promise<void> {

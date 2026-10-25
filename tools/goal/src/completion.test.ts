@@ -20,13 +20,13 @@ test('completion requires every declared task and a passing gate on main', async
   } finally { repo.close(); }
 });
 
-test('completion rejects a main movement while its gate runs', async () => {
+test('completion accepts a main descendant while its gate runs', async () => {
   const repo = repository();
   try {
     const check = completionChecker({ mainCheckout: repo.main, stateDirectory: join(repo.path, 'state'), worktreeRoot: join(repo.path, 'trees'),
       condition: () => ({ taskIds: [], gate: ['true'] }), mergedTasks: async () => new Set(),
       runGate: async () => { repo.commit('moved'); return { passed: true, timedOut: false, output: '' }; } });
-    expect((await check('refactor')).summary).toContain('Main moved');
+    expect((await check('refactor')).passed).toBe(true);
   } finally { repo.close(); }
 });
 

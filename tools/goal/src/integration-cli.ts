@@ -179,7 +179,7 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
         if ((option !== '--task' && option !== '--evidence') || !value || values.has(option)) throw new Error(`invalid inbox send option: ${option ?? '(missing value)'}`);
         values.set(option, value);
       }
-      const allowed = ['spec-conflict', 'scope-growth', 'environment', 'round-limit', 'stalled', 'failed-after-consult', 'goal-unmet', 'instruction'];
+      const allowed = ['spec-conflict', 'scope-growth', 'environment', 'round-limit', 'stalled', 'failed-after-consult', 'goal-unmet', 'goal-met', 'instruction'];
       if (!allowed.includes(kind)) throw new Error(`unknown inbox event kind: ${kind}. Valid kinds: ${allowed.join(', ')}`);
       if (/[\r\n]/.test(summary)) throw new Error('inbox event summary must be one line');
       await recordManagerCommand(runtime);

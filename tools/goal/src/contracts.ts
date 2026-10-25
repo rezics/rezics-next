@@ -78,6 +78,7 @@ export type ManagerEventKind =
   | 'stalled'
   | 'failed-after-consult'
   | 'goal-unmet'
+  | 'goal-met'
   | 'goal-idle'
   | 'instruction';
 

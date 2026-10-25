@@ -10,12 +10,12 @@ test('manager complete returns at once and the verdict arrives as an inbox event
   const temporary = temporaryDirectory();
   const db = openDb(join(temporary.path, 'state.sqlite'));
   const inbox = new SqliteManagerInbox(db, temporary.path);
-  let finish!: (evidence: { passed: boolean; evidencePath: string; summary: string }) => void;
-  let started!: () => void;
-  const checkStarted = new Promise<void>(resolve => { started = resolve; });
+  const checks: ((evidence: { passed: boolean; evidencePath: string; summary: string }) => void)[] = [];
+  const starts: (() => void)[] = [];
+  const waitForStart = () => new Promise<void>(resolve => starts.push(resolve));
   const managers = new ManagerSessions(db, inbox, {
     windows: { register: () => '@1', unregister() {} },
-    checkCompletion: () => { started(); return new Promise(resolve => { finish = resolve; }); },
+    checkCompletion: () => new Promise(resolve => { checks.push(resolve); starts.shift()?.(); }),
     command: ['goal'],
   });
   const spec: ManagerSpec = {
@@ -26,17 +26,25 @@ test('manager complete returns at once and the verdict arrives as an inbox event
   };
   try {
     await managers.start(spec);
+    const firstStarted = waitForStart();
     const request = managers.complete(spec.id);
-    await checkStarted;
-    let settled = false;
-    void request.then(() => { settled = true; });
-    await Promise.resolve();
-    finish({ passed: false, evidencePath: join(temporary.path, 'completion.log'), summary: 'First failure: assertion failed' });
+    await firstStarted;
+    const immediate = await Promise.race([request.then(() => true), new Promise<boolean>(resolve => setTimeout(() => resolve(false), 20))]);
+    checks.shift()!({ passed: false, evidencePath: join(temporary.path, 'completion.log'), summary: 'First failure: assertion failed' });
     await managers.flush();
-    expect(settled).toBe(true);
+    expect(immediate).toBe(true);
     for (const id of [spec.id, spec.supermanager]) {
       expect(inbox.pending(id).map(entry => entry.event.kind)).toEqual(['goal-unmet']);
       expect(inbox.pending(id)[0]?.event.summary).toContain('First failure');
+    }
+    const secondStarted = waitForStart();
+    const success = managers.complete(spec.id);
+    await secondStarted;
+    checks.shift()!({ passed: true, evidencePath: join(temporary.path, 'completion.log'), summary: 'All checks passed' });
+    await managers.flush();
+    await success;
+    for (const id of [spec.id, spec.supermanager]) {
+      expect(inbox.pending(id).map(entry => entry.event.kind)).toEqual(['goal-unmet', 'goal-met']);
     }
   } finally {
     await managers.close(); db.close(); temporary.close();

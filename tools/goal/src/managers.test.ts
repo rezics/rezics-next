@@ -142,7 +142,7 @@ test('completion is checked, unmet evidence is delivered, and only a validated g
     expect(s.inbox.pending(manager.id)[0]?.event.evidencePath).toEndWith('completion.log');
     expect(s.managers.get(manager.id).status).toBe('running');
     expect(s.managers.get(manager.id).goalState?.status).toBe('active');
-    s.pass(); expect(await s.managers.complete(manager.id)).toBe(true);
+    s.pass(); await s.managers.complete(manager.id); await s.managers.flush();
     expect(s.managers.get(manager.id).status).toBe('complete'); expect(s.removed).toContain(manager.id);
   } finally { await s.close(); }
 });

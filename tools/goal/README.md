@@ -207,8 +207,12 @@ configuration directory, interactive window and turn-accounting hooks.
 
 Manager events are committed to SQLite and signaled through filesystem notifications. Inbox waiting has no sleep loop.
 Managers receive only decisions requiring judgment; gates, merges and mechanical reruns do not wake them. Completion is
-a proposal: the controller checks all scoped tasks are merged and the main gate passes in an isolated checkout.
-Manager commands are attributed through `GOAL_MANAGER` or a registered Codex thread; workers get fresh session identities.
+a proposal: `manager complete <goal>` records the request and returns immediately while the host checks that all scoped
+tasks are merged and the main gate passes in an isolated checkout. The gate checks the main commit captured when it
+starts; its result remains valid while that commit is an ancestor of main, since the landing train gates every later
+commit. When the check finishes, the manager and its supermanager receive a waking `goal-met` or `goal-unmet` event.
+An unmet event includes the first gate failure in its summary and links to the completion evidence. A met event is
+delivered after the manager stops. Manager commands are attributed through `GOAL_MANAGER` or a registered Codex thread; workers get fresh session identities.
 Brief front matter can use `after: [task-id, ...]` to hold dispatch until each named task has merged; unknown task ids are
 refused, and already merged dependencies are ready immediately. For a Goal that uses `after`, once a merge leaves no ready,
 running, landing, or held tasks, the control plane delivers one waking `goal-idle` event to its manager; replayed merge

@@ -40,13 +40,15 @@ export function completionChecker(options: CompletionOptions): (goal: string) =>
       const gated = await (options.runGate ?? gateRunner())(condition.gate, tree, evidencePath);
       if (!gated.passed) return fail(`Main gate failed${gated.timedOut ? ' (timed out)' : ''}: ${gated.output.slice(0, 1000).replace(/[\r\n]+/g, ' ')}`);
       if (git(tree, 'rev-parse', 'HEAD') !== base) return fail('Main gate changed the commit being checked');
-      if (git(options.mainCheckout, 'rev-parse', `refs/heads/${options.mainBranch ?? 'main'}`) !== base) return fail('Main moved during the completion gate; propose completion again');
+      const mainRef = `refs/heads/${options.mainBranch ?? 'main'}`;
+      const currentMain = git(options.mainCheckout, 'rev-parse', mainRef);
+      if (git(options.mainCheckout, 'merge-base', base, currentMain) !== base)
+        return fail('The checked main commit is no longer an ancestor of main');
       const remaining = await missing();
       if (remaining.length) return fail(`Unmerged tasks: ${remaining.join(', ')}`);
       const latest = options.condition(goal);
       if (JSON.stringify([...latest.taskIds].sort()) !== JSON.stringify([...condition.taskIds].sort())
         || JSON.stringify(latest.gate) !== JSON.stringify(condition.gate)) return fail('Goal condition changed during the completion gate');
-      if (git(options.mainCheckout, 'rev-parse', `refs/heads/${options.mainBranch ?? 'main'}`) !== base) return fail('Main moved during the completion check; propose completion again');
       const summary = `All scoped tasks are merged and the gate passes on main ${base}.`;
       writeFileSync(evidencePath, `${summary}\n`, { flag: 'a' });
       return { passed: true, summary, evidencePath };
