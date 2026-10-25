@@ -157,7 +157,10 @@ test('content ports are published and fail closed before touching dependencies',
   const args = Array.from({ length: 8 }, () => dependency) as never[];
   for (const port of ports) {
     expect(typeof port).toBe('function');
-    await expect(Promise.resolve().then(() => (port as Port)(...args))).rejects.toThrow(/unfinished/i);
+    await expect(Promise.resolve().then(() => (port as Port)(...args))).rejects.toMatchObject({
+      name: 'UnfinishedPortError',
+      port: port.name,
+    });
   }
   expect(touches).toBe(0);
 });
