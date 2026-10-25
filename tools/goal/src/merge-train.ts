@@ -25,6 +25,15 @@ function changedWorkingFiles(cwd: string): string[] {
   return [...new Set([...tracked.stdout.split('\0'), ...untracked.stdout.split('\0')].filter(Boolean))];
 }
 
+/** A path gone from both the index and the worktree is an already staged deletion, and naming it fails `git add`. */
+export function stagePaths(cwd: string, paths: Iterable<string>): void {
+  const all = [...paths];
+  if (!all.length) return;
+  const indexed = new Set(git(cwd, 'ls-files', '-z', '--', ...all).split('\0'));
+  const present = all.filter(path => indexed.has(path) || existsSync(join(cwd, path)));
+  if (present.length) git(cwd, 'add', '-A', '--', ...present);
+}
+
 function unmergedFiles(cwd: string): string[] {
   return git(cwd, 'diff', '--name-only', '--diff-filter=U', '-z').split('\0').filter(Boolean);
 }
@@ -73,7 +82,7 @@ function rebaseWithDerivedFiles(cwd: string, base: string, originalBase: string,
       }
       const stageFiles = new Set(derivedConflicts);
       for (const path of changedWorkingFiles(cwd)) if (derivedForPath(path, files).length) stageFiles.add(path);
-      git(cwd, 'add', '-A', '--', ...stageFiles);
+      stagePaths(cwd, stageFiles);
       if (derivedConflicts.length !== conflicts.length) return rebaseError;
       try {
         git(cwd, '-c', 'core.editor=true', 'rebase', '--continue');
