@@ -45,6 +45,21 @@ test('a culprit whose failing prefix passes on confirmation is not reverted and 
   } finally { h.dispose(); }
 });
 
+test('a paused promotion gates nothing and leaves main where it is', async () => {
+  const h = integrationHarness();
+  try {
+    await h.seed('alpha');
+    const main = h.head('main');
+    writeFileSync(`${h.settings.stateDirectory}/promotion.paused`, '');
+    let gates = 0;
+    await h.promote(async () => { gates++; return success; });
+
+    expect(gates).toBe(0);
+    expect(h.head('main')).toBe(main);
+    expect(h.store.promotion()).toBeFalsy();
+  } finally { h.dispose(); }
+});
+
 test('a culprit whose failing prefix fails again with the same first failure is reverted as before', async () => {
   const h = integrationHarness();
   try {
