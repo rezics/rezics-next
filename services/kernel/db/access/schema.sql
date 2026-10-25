@@ -24,6 +24,25 @@ CREATE SCHEMA access;
 
 
 --
+-- Name: advance_operator_relation(); Type: FUNCTION; Schema: access; Owner: -
+--
+
+CREATE FUNCTION access.advance_operator_relation() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.operator_account_id IS DISTINCT FROM OLD.operator_account_id
+     OR NEW.operator_reservation_id IS DISTINCT FROM OLD.operator_reservation_id THEN
+    NEW.operator_relation_version := OLD.operator_relation_version + 1;
+  ELSIF NEW.operator_relation_version IS DISTINCT FROM OLD.operator_relation_version THEN
+    RAISE EXCEPTION 'Operator relation version is command owned' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: guard_account_identity(); Type: FUNCTION; Schema: access; Owner: -
 --
 
@@ -91,12 +110,15 @@ CREATE TABLE access.account (
     registration_expires_at timestamp with time zone,
     authn_fenced boolean DEFAULT false NOT NULL,
     fence_receipt_id uuid,
+    operator_relation_version bigint DEFAULT 0 NOT NULL,
+    operator_reservation_id uuid,
     CONSTRAINT account_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT account_check1 CHECK (((operator_account_id IS NULL) OR ((kind = 'actor'::text) AND (operator_account_id <> account_id)))),
     CONSTRAINT account_content_preferences_check CHECK ((jsonb_typeof(content_preferences) = 'object'::text)),
     CONSTRAINT account_handle_check CHECK ((handle ~ '^[a-z0-9][a-z0-9_-]{0,63}$'::text)),
     CONSTRAINT account_kind_check CHECK ((kind = ANY (ARRAY['actor'::text, 'organization'::text]))),
     CONSTRAINT account_minimum_authn_epoch_check CHECK ((minimum_authn_epoch > 0)),
+    CONSTRAINT account_operator_relation_version_check CHECK ((operator_relation_version >= 0)),
     CONSTRAINT account_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT account_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'active'::text, 'suspended'::text, 'deleted'::text])))
 );
@@ -169,6 +191,54 @@ CREATE TABLE access.lifecycle_membership_slot (
     terminal boolean DEFAULT false NOT NULL,
     transaction_id uuid NOT NULL,
     CONSTRAINT lifecycle_membership_slot_check CHECK ((route = ((get_byte(uuid_send(organization_id), 10) * 256) + get_byte(uuid_send(organization_id), 11))))
+);
+
+
+--
+-- Name: operator_opening_receipt; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.operator_opening_receipt (
+    route integer NOT NULL,
+    operator_account_id uuid NOT NULL,
+    receipt_id uuid NOT NULL,
+    subject_account_id uuid NOT NULL,
+    acting_human_id uuid NOT NULL,
+    purpose text NOT NULL,
+    action text NOT NULL,
+    client_id text NOT NULL,
+    scopes text[] NOT NULL,
+    requested_by text,
+    human_authn_epoch bigint NOT NULL,
+    human_epoch_floor bigint NOT NULL,
+    operator_epoch_floor bigint NOT NULL,
+    subject_epoch_floor bigint NOT NULL,
+    relation_version bigint NOT NULL,
+    reservation_id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    consumed_at timestamp with time zone,
+    transaction_id uuid NOT NULL,
+    consumed_transaction_id uuid,
+    CONSTRAINT operator_opening_receipt_check CHECK ((route = ((get_byte(uuid_send(operator_account_id), 10) * 256) + get_byte(uuid_send(operator_account_id), 11)))),
+    CONSTRAINT operator_opening_receipt_check1 CHECK ((expires_at <= (created_at + '00:01:00'::interval))),
+    CONSTRAINT operator_opening_receipt_human_authn_epoch_check CHECK ((human_authn_epoch > 0)),
+    CONSTRAINT operator_opening_receipt_purpose_check CHECK ((purpose = ANY (ARRAY['session'::text, 'credential-management'::text])))
+);
+
+
+--
+-- Name: operator_relation_slot; Type: TABLE; Schema: access; Owner: -
+--
+
+CREATE TABLE access.operator_relation_slot (
+    route integer NOT NULL,
+    subject_account_id uuid NOT NULL,
+    reservation_id uuid NOT NULL,
+    operator_account_id uuid NOT NULL,
+    terminal boolean NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT operator_relation_slot_check CHECK ((route = ((get_byte(uuid_send(subject_account_id), 10) * 256) + get_byte(uuid_send(subject_account_id), 11))))
 );
 
 
@@ -290,6 +360,22 @@ ALTER TABLE ONLY access.lifecycle_membership_slot
 
 
 --
+-- Name: operator_opening_receipt operator_opening_receipt_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.operator_opening_receipt
+    ADD CONSTRAINT operator_opening_receipt_pkey PRIMARY KEY (route, operator_account_id, receipt_id);
+
+
+--
+-- Name: operator_relation_slot operator_relation_slot_pkey; Type: CONSTRAINT; Schema: access; Owner: -
+--
+
+ALTER TABLE ONLY access.operator_relation_slot
+    ADD CONSTRAINT operator_relation_slot_pkey PRIMARY KEY (route, subject_account_id, reservation_id);
+
+
+--
 -- Name: organization_member organization_member_pkey; Type: CONSTRAINT; Schema: access; Owner: -
 --
 
@@ -333,6 +419,13 @@ CREATE TRIGGER account_identity BEFORE UPDATE ON access.account FOR EACH ROW EXE
 --
 
 CREATE TRIGGER lifecycle_responsibility BEFORE UPDATE ON access.account FOR EACH ROW EXECUTE FUNCTION access.guard_lifecycle_responsibility();
+
+
+--
+-- Name: account operator_relation_version; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE TRIGGER operator_relation_version BEFORE UPDATE ON access.account FOR EACH ROW EXECUTE FUNCTION access.advance_operator_relation();
 
 
 --
