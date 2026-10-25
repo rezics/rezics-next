@@ -110,7 +110,7 @@ test("the source reads a subject's terms and adopted Global statements in one sn
           'schema:datePublished': [
             statement('schema:datePublished', {
               time: '+1905-01-01T00:00:00Z',
-              precision: 9,
+              precision: 11,
               calendarmodel: GREGORIAN,
             }),
           ],
@@ -156,7 +156,7 @@ test("the source reads a subject's terms and adopted Global statements in one sn
         descriptions: [{ language: 'en', value: 'A satirical novel' }],
         statements: expect.arrayContaining([
           { property: 'schema:author', value: soseki.id, facet: { kind: 'item' } },
-          { property: 'schema:inLanguage', value: 'ja' },
+          { property: 'schema:inLanguage', value: 'ja', facet: { kind: 'code' } },
           { property: 'schema:datePublished', value: '+1905-01-01T00:00:00Z', facet: { kind: 'time', year: 1905 } },
         ]),
       },
@@ -201,7 +201,7 @@ test('subjects that are not visible or redirected are reported for deletion and 
   await ok('/v1/subjects:merge', { subjects: [survivor, redirected] });
   expect(await counted(redirected!)).toBe(redirectedBefore - 1);
   const merged = (await source.read(subjectPartition(redirected!), [redirected!])).subjects[0]!;
-  expect([merged.redirect, merged.visibility]).toEqual([survivor, 'hidden']);
+  expect([merged.redirect, merged.visibility]).toEqual([survivor!, 'hidden']);
   const count = await source.count(subjectPartition(redirected!));
   expect(count.position).toBe(await position(subjectPartition(redirected!)));
 });

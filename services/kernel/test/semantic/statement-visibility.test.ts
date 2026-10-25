@@ -159,7 +159,7 @@ test('a hidden or taken-down statement leaves every view and listing until its m
       client.release();
     }
   };
-  expect(await disclosure(language)).toEqual({ disclosed: false, security_revision: 1 });
+  expect(await disclosure(language!)).toEqual({ disclosed: false, security_revision: 1 });
   expect(await disclosure(randomUUID())).toBeNull();
   const during = await read(work.id);
   expect(ids(during.subject, 'schema:inLanguage')).toEqual([]);
@@ -179,7 +179,7 @@ test('a hidden or taken-down statement leaves every view and listing until its m
   expect((await moderate(`${work.id}/candidates/${language}`, 'restore', appeal, 'hider')).response.status).toBe(403);
   const restored = await moderate(`${work.id}/candidates/${language}`, 'restore', appeal);
   expect(restored.body).toEqual({ subject: work.id, candidate: language, visibility: 'visible', security_revision: 3 });
-  expect(await disclosure(language)).toEqual({ disclosed: true, security_revision: 3 });
+  expect(await disclosure(language!)).toEqual({ disclosed: true, security_revision: 3 });
   const after = await read(work.id);
   expect([after.subject, after.related]).toEqual([before.subject, before.related]);
 
@@ -187,7 +187,7 @@ test('a hidden or taken-down statement leaves every view and listing until its m
     `SELECT data FROM core.outbox
      WHERE partition_no = $1 AND subject = $2 AND type = 'com.rezics.subject.statement_visibility_changed.v1'
      ORDER BY position, event_seq`,
-    [routeOf(work.id) >> 4, work.id],
+    [routeOf(work.id)! >> 4, work.id],
   );
   expect(events.map(({ data }) => data)).toEqual([
     { id: work.id, candidate: language, visibility: 'hidden', security_revision: 1 },
@@ -290,14 +290,14 @@ test('a statement or subject that is not visible leaves the links of its target 
     statements: { 'schema:exampleOfWork': [statement('schema:exampleOfWork', kokoro.id)] },
   });
   const [link] = ids(penguin, 'schema:exampleOfWork');
-  expect(await links(kokoro.id, 'editor')).toEqual([link]);
+  expect(await links(kokoro.id, 'editor')).toEqual([link!]);
 
   expect((await moderate(`${penguin.id}/candidates/${link}`, 'hide', { reason: 'spam' })).response.status).toBe(200);
   expect(await links(kokoro.id)).toEqual([]);
   expect((await moderate(`${penguin.id}/candidates/${link}`, 'restore', { reason: 'appeal' })).response.status).toBe(
     200,
   );
-  expect(await links(kokoro.id)).toEqual([link]);
+  expect(await links(kokoro.id)).toEqual([link!]);
 
   expect((await moderate(penguin.id, 'takedown', { notice })).response.status).toBe(200);
   expect(await links(kokoro.id)).toEqual([]);
@@ -305,7 +305,7 @@ test('a statement or subject that is not visible leaves the links of its target 
   const gone = await call('GET', `/v1/subjects/${penguin.id}/links`);
   expect([gone.response.status, comparable(gone.body)]).toEqual([404, comparable(unknown.body)]);
   expect((await moderate(penguin.id, 'restore', { reason: 'appeal' })).response.status).toBe(200);
-  expect(await links(kokoro.id)).toEqual([link]);
+  expect(await links(kokoro.id)).toEqual([link!]);
 
   const { rows } = await admin.query(
     `SELECT present, source_security_revision::int AS source_security_revision FROM semantic.inbound_link

@@ -301,7 +301,8 @@ export function subjectSource(pool: Pool): SubjectSource {
           if (!row) continue;
           const facts = termRows.get(id) ?? [];
           const release = row.currentRelease ? releases.get(row.currentRelease) : undefined;
-          const properties = indexed.get(id) ?? new Map();
+          const properties: Map<string, { ordinal: number; statement: IndexedStatement }[]> =
+            indexed.get(id) ?? new Map();
           const order = release?.types[row.type]?.properties ?? [...properties.keys()].sort(ASCII);
           const orderedProperties = [
             ...order,
