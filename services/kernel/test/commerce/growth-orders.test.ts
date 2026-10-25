@@ -385,6 +385,8 @@ async function grow(database: GrowthDatabase, population: Population, scale: num
 }
 
 async function resetGrowthData(database: GrowthDatabase) {
+  // The check database has a 1 GiB tmpfs; recycle migration and prior-check WAL before each population.
+  await database.admin.query('CHECKPOINT');
   await database.admin.query(`
     TRUNCATE commerce.order_transaction, commerce.entitlement, commerce.purchase_order, commerce.offer,
       access.resource_role_grant, access.resource_initialization, access.resource_grant, access.resource_denial,
