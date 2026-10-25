@@ -53,7 +53,7 @@ async function reserve(purpose = 'cover') {
     `INSERT INTO content.media
        (route, media_id, container_id, uploader_id, reservation_request_id, purpose,
         media_type, byte_count, state, key, transaction_id, source_url, credit, provenance)
-     VALUES ($1,$2,$3,$4,$2,$5,NULL,NULL,'reserved',$6,$2,$7,$8,$9)`,
+     VALUES ($1,$2::uuid,$3,$4,$2::text,$5,NULL,NULL,'reserved',$6,$2::uuid,$7,$8,$9)`,
     [
       route,
       id,
@@ -117,7 +117,7 @@ test('URL cover reservation has no invented measurements; website reservations r
   await db.admin.query(
     `INSERT INTO content.media (route,media_id,container_id,uploader_id,reservation_request_id,purpose,
        media_type,byte_count,state,key,transaction_id)
-     VALUES ($1,$2,$3,$4,$2,'post-image','image/jpeg',256,'reserved',$5,$2)`,
+     VALUES ($1,$2::uuid,$3,$4,$2::text,'post-image','image/jpeg',256,'reserved',$5,$2::uuid)`,
     [route, websiteId, containerId, uploaderId, `m/${websiteId}/original`],
   );
   for (const column of ['byte_count', 'media_type'])

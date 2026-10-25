@@ -77,6 +77,25 @@ $$;
 
 
 --
+-- Name: guard_media_security(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.guard_media_security() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.security_revision < OLD.security_revision
+     OR (NEW.taken_down IS DISTINCT FROM OLD.taken_down
+         AND NEW.security_revision <= OLD.security_revision) THEN
+    RAISE EXCEPTION 'Media takedown changes require an increasing security revision'
+      USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: guard_revision(); Type: FUNCTION; Schema: content; Owner: -
 --
 
@@ -188,8 +207,8 @@ CREATE TABLE content.media (
     uploader_id uuid NOT NULL,
     reservation_request_id text NOT NULL,
     purpose text NOT NULL,
-    media_type text NOT NULL,
-    byte_count bigint NOT NULL,
+    media_type text,
+    byte_count bigint,
     declared_sha256 text,
     actual_byte_count bigint,
     sha256 text,
@@ -201,22 +220,30 @@ CREATE TABLE content.media (
     transaction_id uuid NOT NULL,
     erased boolean DEFAULT false NOT NULL,
     collection_pending boolean DEFAULT false NOT NULL,
+    source_url text,
+    credit jsonb,
+    provenance jsonb,
+    taken_down boolean DEFAULT false NOT NULL,
+    security_revision bigint DEFAULT 0 NOT NULL,
     CONSTRAINT media_actual_byte_count_check CHECK (((actual_byte_count IS NULL) OR (actual_byte_count > 0))),
     CONSTRAINT media_byte_count_check CHECK (((byte_count >= 1) AND (byte_count <= 20971520))),
     CONSTRAINT media_check CHECK ((route = ((get_byte(uuid_send(media_id), 10) * 256) + get_byte(uuid_send(media_id), 11)))),
     CONSTRAINT media_check1 CHECK ((route = ((get_byte(uuid_send(container_id), 10) * 256) + get_byte(uuid_send(container_id), 11)))),
     CONSTRAINT media_check2 CHECK ((key = (('m/'::text || (media_id)::text) || '/original'::text))),
     CONSTRAINT media_check3 CHECK (((sha256 IS NULL) OR (declared_sha256 IS NULL) OR (sha256 = declared_sha256))),
-    CONSTRAINT media_check4 CHECK ((((state = 'reserved'::text) AND (actual_byte_count IS NULL) AND (sha256 IS NULL) AND (decision IS NULL) AND (claimed_at IS NULL)) OR ((state = 'uploaded'::text) AND (actual_byte_count = byte_count) AND (sha256 IS NOT NULL) AND (decision IS NULL) AND (claimed_at IS NULL)) OR ((state = 'available'::text) AND (actual_byte_count = byte_count) AND (sha256 IS NOT NULL) AND (decision IS NULL)) OR ((state = 'rejected'::text) AND (actual_byte_count = byte_count) AND (sha256 IS NOT NULL) AND (decision IS NOT NULL) AND (claimed_at IS NULL)))),
     CONSTRAINT media_check5 CHECK (((claimed_at IS NULL) OR (state = 'available'::text))),
     CONSTRAINT media_check6 CHECK (((NOT collection_pending) OR (claimed_at IS NULL))),
     CONSTRAINT media_check7 CHECK ((NOT (collection_pending AND erased))),
+    CONSTRAINT media_cover_provenance_check CHECK (((purpose <> 'cover'::text) OR (((source_url IS NOT NULL) AND (source_url ~ '^https://[^[:space:]]+$'::text) AND (char_length(source_url) <= 2048) AND (credit IS NOT NULL) AND (jsonb_typeof(credit) = 'object'::text) AND (jsonb_typeof((credit -> 'rightsHolder'::text)) = 'string'::text) AND ((char_length((credit ->> 'rightsHolder'::text)) >= 1) AND (char_length((credit ->> 'rightsHolder'::text)) <= 1024)) AND (jsonb_typeof((credit -> 'via'::text)) = 'object'::text) AND (jsonb_typeof(((credit -> 'via'::text) -> 'name'::text)) = 'string'::text) AND ((char_length(((credit -> 'via'::text) ->> 'name'::text)) >= 1) AND (char_length(((credit -> 'via'::text) ->> 'name'::text)) <= 1024)) AND (((credit -> 'via'::text) ->> 'url'::text) ~ '^https://[^[:space:]]+$'::text) AND (jsonb_typeof((credit -> 'license'::text)) = 'string'::text) AND (char_length((credit ->> 'license'::text)) > 0) AND (jsonb_typeof((credit -> 'obligations'::text)) = 'array'::text) AND (provenance IS NOT NULL) AND (jsonb_typeof(provenance) = 'object'::text) AND ((provenance ->> 'source'::text) ~ '^[a-z][a-z0-9_-]{0,31}$'::text) AND (char_length((provenance ->> 'external_id'::text)) > 0) AND (char_length((provenance ->> 'record_revision'::text)) > 0) AND ((provenance ->> 'digest'::text) ~ '^[0-9a-f]{64}$'::text) AND (char_length((provenance ->> 'converter_revision'::text)) > 0) AND ((provenance ->> 'field_group'::text) = 'cover'::text) AND (jsonb_typeof((provenance -> 'references'::text)) = 'array'::text) AND ((jsonb_array_length((provenance -> 'references'::text)) >= 1) AND (jsonb_array_length((provenance -> 'references'::text)) <= 128))) IS TRUE))),
     CONSTRAINT media_decision_check CHECK (((decision IS NULL) OR (char_length(decision) > 0))),
+    CONSTRAINT media_declared_measurements_check CHECK (((purpose = 'cover'::text) OR ((byte_count IS NOT NULL) AND (media_type IS NOT NULL)))),
     CONSTRAINT media_declared_sha256_check CHECK ((declared_sha256 ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT media_measurements_check CHECK (((((state = 'reserved'::text) AND (actual_byte_count IS NULL) AND (sha256 IS NULL) AND (decision IS NULL) AND (claimed_at IS NULL)) OR ((state = ANY (ARRAY['uploaded'::text, 'available'::text, 'rejected'::text])) AND (byte_count IS NOT NULL) AND (media_type IS NOT NULL) AND (actual_byte_count IS NOT NULL) AND (actual_byte_count = byte_count) AND (sha256 IS NOT NULL) AND (((state = 'uploaded'::text) AND (decision IS NULL) AND (claimed_at IS NULL)) OR ((state = 'available'::text) AND (decision IS NULL)) OR ((state = 'rejected'::text) AND (decision IS NOT NULL) AND (claimed_at IS NULL)))) OR ((purpose = 'cover'::text) AND (state = 'rejected'::text) AND (byte_count IS NULL) AND (media_type IS NULL) AND (actual_byte_count IS NULL) AND (sha256 IS NULL) AND (declared_sha256 IS NULL) AND (decision IS NOT NULL) AND (claimed_at IS NULL))) IS TRUE)),
     CONSTRAINT media_media_type_check CHECK ((media_type = ANY (ARRAY['image/avif'::text, 'image/gif'::text, 'image/jpeg'::text, 'image/png'::text, 'image/webp'::text]))),
-    CONSTRAINT media_purpose_check CHECK ((purpose = 'post-image'::text)),
+    CONSTRAINT media_purpose_check CHECK ((purpose = ANY (ARRAY['post-image'::text, 'cover'::text]))),
     CONSTRAINT media_reservation_request_id_check CHECK (((char_length(reservation_request_id) >= 1) AND (char_length(reservation_request_id) <= 255))),
     CONSTRAINT media_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT media_security_revision_check CHECK ((security_revision >= 0)),
     CONSTRAINT media_sha256_check CHECK ((sha256 ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT media_state_check CHECK ((state = ANY (ARRAY['reserved'::text, 'uploaded'::text, 'available'::text, 'rejected'::text])))
 );
@@ -516,6 +543,13 @@ CREATE INDEX media_collection_pending_idx ON content.media USING btree (route, c
 
 
 --
+-- Name: media_cover_reference_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX media_cover_reference_idx ON content.media USING btree (route, media_id) WHERE ((purpose = 'cover'::text) AND (state = 'available'::text) AND (NOT erased) AND (NOT collection_pending) AND (NOT taken_down));
+
+
+--
 -- Name: media_variant_slot_idx; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -563,6 +597,13 @@ CREATE TRIGGER board_identity BEFORE UPDATE ON content.board FOR EACH ROW EXECUT
 --
 
 CREATE TRIGGER operation_identity BEFORE INSERT OR DELETE OR UPDATE ON content.operation FOR EACH ROW EXECUTE FUNCTION content.guard_operation_identity();
+
+
+--
+-- Name: media media_security_guard; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER media_security_guard BEFORE UPDATE ON content.media FOR EACH ROW EXECUTE FUNCTION content.guard_media_security();
 
 
 --
