@@ -291,10 +291,10 @@ describe('content HTTP with native database adapters', () => {
     expect(spoof.body.code).toBe('invalid_request');
     expect(await effects()).toEqual(before);
     const thread = await create();
-    await db.admin.query("UPDATE content.thread SET visibility = 'taken_down' WHERE route = $1 AND thread_id = $2", [
-      thread.route,
-      thread.id,
-    ]);
+    await db.admin.query(
+      "UPDATE content.thread SET visibility = 'taken_down', security_revision = security_revision + 1 WHERE route = $1 AND thread_id = $2",
+      [thread.route, thread.id],
+    );
     const hidden = await call('GET', `/v1/threads/${thread.id}`, undefined, undefined, false);
     const missing = await call('GET', `/v1/threads/${newId(thread.route)}`, undefined, undefined, false);
     expect(hidden.response.status).toBe(404);
