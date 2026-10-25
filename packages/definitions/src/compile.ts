@@ -8,6 +8,7 @@ import {
   RELEASE_FORMAT,
   validateRelease,
   valueSchema,
+  type ContextSettings,
   type DataType,
   type PropertyDefinition,
   type Release,
@@ -53,6 +54,7 @@ export async function compileCatalogue(input: {
   root: string;
   schemas: Record<string, string>;
   presentation: Record<string, string>;
+  contexts?: Record<string, string>;
 }): Promise<Release> {
   const errors: CatalogueViolation[] = [];
   const add = (location: Location, code: CatalogueViolation['code'], message: string) => {
@@ -62,13 +64,13 @@ export async function compileCatalogue(input: {
   const stop = () => {
     if (errors.length) throw new CatalogueError(errors);
   };
-  const parse = (text: string, file: string): Node => {
+  const parse = (text: string, file: string, pointer = ''): Node => {
     try {
       const value: unknown = Bun.YAML.parse(text);
       if (record(value)) return value;
-      add({ file, pointer: '' }, 'invalid', 'Expected a YAML object');
+      add({ file, pointer }, 'invalid', 'Expected a YAML object');
     } catch (error) {
-      add({ file, pointer: '' }, 'invalid', String(error));
+      add({ file, pointer }, 'invalid', String(error));
     }
     return object(undefined);
   };
@@ -562,6 +564,62 @@ export async function compileCatalogue(input: {
           'missing_label',
           'English label is required',
         );
+  stop();
+
+  const contextIds = Object.keys(input.contexts ?? {}).sort(compare);
+  if (contextIds.length > 256)
+    add({ file: 'contexts', pointer: '/contexts' }, 'limit', 'At most 256 context settings are allowed');
+  const contextId = /^[a-z][a-z0-9-]{0,63}$(?![\s\S])/u;
+  const contexts = dictionary<ContextSettings>();
+  for (const id of contextIds) {
+    const file = `contexts/${id}`;
+    const pointer = at('/contexts', id);
+    if (!contextId.test(id)) {
+      add({ file, pointer }, 'invalid', 'Context id must match ^[a-z][a-z0-9-]{0,63}$');
+      continue;
+    }
+    const source = parse(input.contexts![id]!, file, pointer);
+    allowed(source, 'labels defaults', { file, pointer });
+    const labels = dictionary<string>();
+    if (!Object.hasOwn(source, 'labels'))
+      add({ file, pointer: at(pointer, 'labels') }, 'invalid', 'Labels are required');
+    else if (!record(source.labels))
+      add({ file, pointer: at(pointer, 'labels') }, 'invalid', 'Expected a label object');
+    else {
+      for (const tag of Object.keys(source.labels).sort(compare)) {
+        const label = source.labels[tag];
+        const location = { file, pointer: at(at(pointer, 'labels'), tag) };
+        if (!languagePattern.test(tag)) add(location, 'invalid', 'Label language must be a BCP 47 tag');
+        else if (typeof label !== 'string' || !label.length || [...label].length > 256)
+          add(location, 'invalid', 'Label must contain between one and 256 characters');
+        else labels[tag] = label;
+      }
+      if (!Object.hasOwn(labels, 'en'))
+        add({ file, pointer: at(at(pointer, 'labels'), 'en') }, 'missing_label', 'English label is required');
+    }
+    const defaults = dictionary<'inherit' | 'suppress'>();
+    if (!Object.hasOwn(source, 'defaults'))
+      add({ file, pointer: at(pointer, 'defaults') }, 'invalid', 'Defaults are required');
+    else if (!record(source.defaults))
+      add({ file, pointer: at(pointer, 'defaults') }, 'invalid', 'Expected a defaults object');
+    else {
+      const properties = Object.keys(source.defaults).sort(compare);
+      if (properties.length > 64)
+        add({ file, pointer: at(pointer, 'defaults') }, 'limit', 'At most 64 defaults are allowed');
+      else
+        for (const property of properties) {
+          const mode = source.defaults[property];
+          const location = { file, pointer: at(at(pointer, 'defaults'), property) };
+          if (!Object.hasOwn(release.properties, property))
+            add(location, 'invalid', 'Default names a property that is not in the release');
+          else if (mode !== 'inherit' && mode !== 'suppress')
+            add(location, 'invalid', 'A default is inherit or suppress; replace needs a per-subject selection');
+          else defaults[property] = mode;
+        }
+    }
+    contexts[id] = { labels, defaults };
+  }
+  if (contextIds.length && errors.length === 0) release.contexts = contexts;
   stop();
   const defects = validateRelease(release);
   if (defects.length) throw new Error(`Compiler produced an invalid release: ${JSON.stringify(defects)}`);

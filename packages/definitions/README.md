@@ -8,13 +8,14 @@ Use `validateRelease(input)` before storing a release. An empty array means vali
 otherwise violations carry RFC 6901 pointers and `invalid`, `unsafe_pattern`, or
 `limit` codes. Results are sorted, deduplicated by pointer, and capped at 64.
 Validation checks references, CURIE expansion, sorted unique lists, type bases and
-facets, datatype-specific members, fixed value schemas, and regular-expression safety. Pattern checks use
-recheck's in-process synchronous entry point, with a three-second timeout per distinct
-pattern; inconclusive results fail validation.
+facets, datatype-specific members, fixed value schemas, context defaults, and
+regular-expression safety. Pattern checks use recheck's in-process synchronous
+entry point, with a three-second timeout per distinct pattern; inconclusive
+results fail validation.
 
 Releases allow at most 256 types, 1,024 properties, 64 properties and 16 facets per
-type, and 1 MiB of canonical UTF-8 JSON. Collection and size limits precede schema
-and pattern checks.
+type, 256 context settings, 64 defaults per settings, and 1 MiB of canonical UTF-8
+JSON. Collection and size limits precede schema and pattern checks.
 Inputs are parsed JSON, without cycles. Validation does not mutate them.
 
 `valueSchema(datatype, options)` builds the fixed Wikibase value-content schema.
@@ -27,16 +28,32 @@ The LinkML sources in `catalogue/` define the bundled terms. `rezics.yaml` impor
 the shared `core` terms and each profile schema. These profiles add types and
 properties through catalogue data; they do not need package code. The compiled
 release is checked in at `release/rezics.json`, and `src/bundled.ts` discovers all
-catalogue and presentation YAML files for compilation. Each type release records
-its structural `bases` as CURIEs, nearest first, and its registered `facets` in
-display order. The bundled verticals declare no facets, so their types have empty
-facet lists.
+catalogue, presentation, and context-settings YAML files for compilation. Each type
+release records its structural `bases` as CURIEs, nearest first, and its registered
+`facets` in display order. The bundled verticals declare no facets, so their types
+have empty facet lists.
 
 To add a vertical, add its schema as `catalogue/<vertical>.yaml`, add that schema
 to the imports in `catalogue/rezics.yaml`, and add one label file per locale at
 `presentation/<vertical>/<tag>.yaml` for each locale the vertical supports. Keep
 each term's labels in the group named for the schema file that defines that term.
 Profiles with no current terms can contain only metadata and an import of `core`.
+
+Context settings are the defaults a community Context created for that vertical
+starts with. Add them beside the vertical layout as `contexts/<id>.yaml`. The id
+matches `^[a-z][a-z0-9-]{0,63}$`. Presentation keys stay label files only. The
+document has `labels` and `defaults` only. `labels` maps a locale tag to the
+Context's name under the rules for type labels: a BCP 47 tag, nonempty text of at
+most 256 characters, and an `en` label. `defaults` maps a property CURIE to
+`inherit` or `suppress`. A default must name a property in the release. `replace`
+is never a default: it needs a per-subject selection. One settings file has at
+most 64 defaults, and a release has at most 256 settings. `src/bundled.ts` reads
+every `contexts/*.yaml` in id order, and `scripts/release.ts` compiles them, so a
+vertical adds a file and edits no code. The release records `contexts` with those
+ids sorted and omits `contexts` when there are none. The release format stays
+`https://rezics.com/definitions/release/1`. Releases that omit `contexts` stay
+valid. A Context keeps the defaults it was created with. A later settings file
+applies to Contexts created from that release. This package ships no settings file.
 
 To change the catalogue, edit its LinkML source or the language files in
 `presentation/`, then run `bun run --cwd packages/definitions release` and review
@@ -180,11 +197,15 @@ Source conventions:
   merge; a term can be labelled only once per tag. Labels must be nonempty strings
   of at most 256 characters. Unknown terms and other keys are refused. Every
   emitted type and property requires an `en` label; other locales may be partial.
+- Optional `contexts` supplies Context settings YAML keyed by id. Each id matches
+  `^[a-z][a-z0-9-]{0,63}$`. The document allows only `labels` and `defaults`.
+  Defaults name properties in the release and use `inherit` or `suppress`. There
+  are at most 256 settings and 64 defaults in each. An empty map omits `contexts`.
 
 Limits and profile checks precede LinkML loading and linting, then mapping, then
-labels. A `wikibase-item` range includes its concrete class and every concrete
-descendant reachable through `is_a`, including when the range or an intermediate
-class is abstract. Descendants are resolved across all supplied schemas; an
+labels, then context settings. A `wikibase-item` range includes its concrete class
+and every concrete descendant reachable through `is_a`, including when the range
+or an intermediate class is abstract. Descendants are resolved across all supplied schemas; an
 abstract range with no concrete descendants is invalid. Emitted targets are
 sorted and unique. Compilation stops at the first stage with violations. LinkML
 warnings are permitted; errors are refused. Derived JSON with derivation enabled supplies
@@ -197,7 +218,9 @@ prefixes are expanded but omitted. Generator metadata comes from `LinkML.buildIn
 
 `CatalogueError.violations` contains `{ file, pointer, code, message }` records,
 sorted by file and RFC 6901 pointer and capped at 64. Label files are named
-`presentation/<tag>` in diagnostics. Codes are `unsupported`, `invalid`, `limit`,
+`presentation/<tag>` in diagnostics. Context settings are named `contexts/<id>`,
+and their pointers start at `/contexts/<id>`. A release with more than 256
+settings is reported at `/contexts`. Codes are `unsupported`, `invalid`, `limit`,
 `unsafe_pattern`, `linkml`, `duplicate`, and `missing_label`. The final release is
 checked with `validateRelease`; a failure at that point throws a plain `Error`
 because it indicates a compiler defect.

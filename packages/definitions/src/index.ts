@@ -39,6 +39,10 @@ export type PropertyDefinition = {
   qualifiers: string[];
   value: object;
 };
+export type ContextSettings = {
+  labels: Record<string, string>;
+  defaults: Record<string, 'inherit' | 'suppress'>;
+};
 export type Release = {
   format: typeof RELEASE_FORMAT;
   catalogue: { id: string; version: string };
@@ -46,6 +50,7 @@ export type Release = {
   prefixes: Record<string, string>;
   types: Record<string, TypeDefinition>;
   properties: Record<string, PropertyDefinition>;
+  contexts?: Record<string, ContextSettings>;
 };
 export type ReleaseViolation = { pointer: string; code: 'invalid' | 'unsafe_pattern' | 'limit' };
 
@@ -154,6 +159,13 @@ function collectionLimits(value: unknown, add: (pointer: string, code: ReleaseVi
       }
   }
   if (record(value.properties) && Object.keys(value.properties).length > 1024) add('/properties', 'limit');
+  if (record(value.contexts)) {
+    if (Object.keys(value.contexts).length > 256) add('/contexts', 'limit');
+    else
+      for (const [key, settings] of Object.entries(value.contexts))
+        if (record(settings) && record(settings.defaults) && Object.keys(settings.defaults).length > 64)
+          add(at(at('/contexts', key), 'defaults'), 'limit');
+  }
 }
 
 // Canonical ordering does not change byte length. Count JSON bytes before sorting
@@ -282,6 +294,9 @@ function semantics(release: Release, add: (pointer: string, code?: ReleaseViolat
     if (canonicalize(value) !== canonicalize(valueSchema(property.datatype, options))) add(at(pointer, 'value'));
     patterns(value, at(pointer, 'value'));
   }
+  for (const [id, settings] of Object.entries(release.contexts ?? {}))
+    for (const property of Object.keys(settings.defaults))
+      if (!own(release.properties, property)) add(at(at(at('/contexts', id), 'defaults'), property));
 }
 
 export function validateRelease(value: unknown): ReleaseViolation[] {

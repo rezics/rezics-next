@@ -11,6 +11,22 @@ const files = (directory: string): string[] =>
     })
     .sort();
 
+function contextSources(): Record<string, string> {
+  let entries;
+  try {
+    entries = readdirSync(new URL('../contexts', import.meta.url), { withFileTypes: true });
+  } catch (error) {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT') return {};
+    throw error;
+  }
+  return Object.fromEntries(
+    entries
+      .flatMap((entry) => (entry.isFile() && entry.name.endsWith('.yaml') ? [entry.name] : []))
+      .sort()
+      .map((name) => [posix.basename(name, '.yaml'), source(`../contexts/${name}`)]),
+  );
+}
+
 export function bundledSources() {
   const schemas = Object.fromEntries(files('../catalogue').map((path) => [posix.basename(path), source(path)]));
   const presentation = Object.fromEntries(
@@ -23,6 +39,7 @@ export function bundledSources() {
     root: 'rezics.yaml',
     schemas,
     presentation,
+    contexts: contextSources(),
   };
 }
 
