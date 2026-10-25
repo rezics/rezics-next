@@ -176,6 +176,9 @@ export class MergeTrain {
         stage = 'rebase';
         git(trainTree, 'reset', '--hard', tip);
         git(trainTree, 'clean', '-fdx');
+        // A worker that left its work uncommitted would otherwise integrate nothing and release its dependents.
+        if (Number(git(trainTree, 'rev-list', '--count', `${originalBase}..HEAD`)) === 0)
+          throw new Error('No committed changes beyond the base: commit the work before finishing');
         rebaseOnto(trainTree, base, originalBase, logPath);
         stage = 'scope';
         result.changedFiles = changedFiles(trainTree, base);
@@ -184,8 +187,6 @@ export class MergeTrain {
         result.nonGeneratedDiffLines = diffLineCount(trainTree, base, result.nonGeneratedChangedFiles);
         const outside = outsideScope(result.changedFiles, request.declaredPaths);
         if (outside.length) throw new Error(`Changes outside declared paths: ${outside.join(', ')}`);
-        // A worker that left its work uncommitted would otherwise integrate nothing and release its dependents.
-        if (!result.changedFiles.length) throw new Error('No committed changes beyond the base: commit the work before finishing');
         const candidate = git(trainTree, 'rev-parse', 'HEAD');
         if (!integratesIntoDev) {
           stage = 'gate';
