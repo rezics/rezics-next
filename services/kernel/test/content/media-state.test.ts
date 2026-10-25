@@ -79,7 +79,7 @@ async function grant(id: string, action: string, resource = thread) {
 async function container(id: string) {
   await db.admin.query(
     `INSERT INTO content.thread(route,thread_id,author_account_id,board_id,title,visibility,security_revision,recorded_transaction_id)
-     VALUES ($1,$2,$3,$4,'Images','public',1,$3)`,
+     VALUES ($1,$2,$3,$4,'Images','published',1,$3)`,
     [routeOf(id), id, author.accountId, board],
   );
   for (const action of ['media:create', 'thread:read', 'post:create']) await grant(author.accountId, action, id);
@@ -96,7 +96,7 @@ beforeAll(async () => {
   }
   await db.admin.query(
     `INSERT INTO content.board(route,board_id,subject_id,title,visibility,security_revision,recorded_transaction_id)
-     VALUES ($1,$2,$3,'Images','public',1,$3)`,
+     VALUES ($1,$2,$3,'Images','published',1,$3)`,
     [routeOf(board), board, author.accountId],
   );
   await grant(author.accountId, 'board:read', board);
@@ -252,7 +252,7 @@ test('invalid metadata, missing or concealed containers and new-ID grants cannot
   );
   await unchanged(() => reserveMedia(dependencies(), author, input(), context()));
   await db.admin.query(
-    "UPDATE content.board SET visibility='public',security_revision=security_revision+1 WHERE route=$1 AND board_id=$2",
+    "UPDATE content.board SET visibility='published',security_revision=security_revision+1 WHERE route=$1 AND board_id=$2",
     [routeOf(board), board],
   );
   const { sha256: declared, ...withoutDigest } = input();
@@ -360,7 +360,7 @@ async function reference(
         reply_to_post_id: null,
         author_account_id: actor.accountId,
         head_revision_id: revisionId,
-        visibility: 'public',
+        visibility: 'published',
         security_revision: 1,
         transaction_id: command.transactionId,
       });
