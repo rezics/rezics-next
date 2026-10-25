@@ -36,13 +36,21 @@ beforeAll(async () => {
         name: 'erasure-test',
         register() {
           DBOS.registerWorkflow(
-            async (operationId: string) =>
+            async (operationId: string, pauseAfter?: string) =>
               runAuthorErasure(
                 {
                   pool: fixture.pool,
                   access: fixture.access,
+                  readConsent: fixture.readConsent,
                   currentTime: () => new Date(),
-                  durableStep: (name, action) => DBOS.runStep(action, { name }),
+                  durableStep: async (name, action) => {
+                    const value = await DBOS.runStep(action, { name });
+                    if (name === pauseAfter) {
+                      await DBOS.setEvent('barrier', name);
+                      expect(await DBOS.recv('continue', 30)).toBe(true);
+                    }
+                    return value;
+                  },
                   checkpoint: {
                     read: (id) => DBOS.getEvent<OperationProgress>(id, 'progress', 0),
                     write: (_id, progress) => DBOS.setEvent('progress', progress),
@@ -324,3 +332,125 @@ test('native workflow resolves persisted initiating identity and physically comp
       licence: 'MIT',
     });
 });
+
+async function launchSelection(selected: Awaited<ReturnType<typeof scope>>, pause = false) {
+  const source = await beginAuthorErasure(
+    {
+      pool: fixture.pool,
+      access: fixture.access,
+      clock: () => new Date(),
+      workflows: {
+        async enqueue() {
+          throw new Error('Only the durable relay may enqueue');
+        },
+        async status() {
+          throw new Error('No status read during initiation');
+        },
+      },
+    },
+    selected.actor,
+    { threadId: selected.threadId, authorId: selected.actor.accountId },
+    context(),
+  );
+  let envelope: Envelope | undefined;
+  await readBatch(fixture.pool, {
+    partition,
+    consumer: `erasure_${crypto.randomUUID()}`,
+    apply: async (envelopes) => {
+      envelope = envelopes.find((item) => item.position === source.position);
+    },
+  });
+  expect(envelope).toBeDefined();
+  const tx = await fixture.pool.connect();
+  try {
+    await tx.query('BEGIN');
+    await readPartition(tx, partition);
+    await bindAuthorErasureWorkflow(tx, source.value.operationId, envelope!, 0);
+    await tx.query('COMMIT');
+  } finally {
+    tx.release();
+  }
+  const workflowId = contentWorkWorkflowId(source, 0, 'authorErase', source.value.operationId);
+  const barrier = `wf:${source.value.operationId}:erase:${selected.ids[0]}`;
+  const handle = await client.enqueue(
+    { workflowName: 'content.authorErase', queueName: 'governance', workflowID: workflowId },
+    source.value.operationId,
+    pause ? barrier : undefined,
+  );
+  if (pause) expect(await client.getEvent(workflowId, 'barrier', 30)).toBe(barrier);
+  return { handle, workflowId, operationId: source.value.operationId };
+}
+
+for (const revocation of ['grant', 'consent'] as const) {
+  test(`native ${revocation} revocation at the logical step barrier preserves cleanup and stops later posts`, async () => {
+    const selected = await scope(3, 101);
+    const started = await launchSelection(selected, true);
+    expect(
+      (
+        await fixture.reader.query('SELECT availability FROM content.post WHERE route=$1 AND post_id=$2', [
+          route,
+          selected.ids[0],
+        ])
+      ).rows,
+    ).toEqual([{ availability: 'erased' }]);
+    expect(
+      (
+        await fixture.reader.query(
+          'SELECT body IS NOT NULL AS retained FROM content.revision WHERE route=$1 AND post_id=$2',
+          [route, selected.ids[0]],
+        )
+      ).rows.every((row) => row.retained),
+    ).toBe(true);
+    if (revocation === 'grant') {
+      await fixture.reader.query(
+        "DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=ANY($2::uuid[]) AND subject_id=$3 AND action='post:erase'",
+        [route, selected.ids, selected.actor.accountId],
+      );
+    } else {
+      // Auth owns the current consent fact. Use a separate real connection to
+      // its own database, never a replacement reader or persisted scope ceiling.
+      const { Pool } = await import('pg');
+      const url = new URL(process.env.DATABASE_URL!);
+      url.pathname = `/standing_auth_${process.pid}`;
+      const auth = new Pool({ connectionString: url.toString() });
+      try {
+        await auth.query('DELETE FROM auth_consent WHERE account_id=$1 AND client_id=$2', [
+          selected.actor.accountId,
+          selected.actor.clientId,
+        ]);
+      } finally {
+        await auth.end();
+      }
+      expect(
+        await fixture.readConsent({
+          actorAccountId: selected.actor.accountId,
+          clientId: selected.actor.clientId,
+          deadline: Date.now() + 5000,
+        }),
+      ).toBeNull();
+    }
+    await client.send(started.workflowId, true, 'continue');
+    await expect(started.handle.getResult()).rejects.toMatchObject({ code: 7 });
+    expect((await started.handle.getStatus())?.status).toBe('ERROR');
+    expect(await client.getEvent(started.workflowId, 'progress', 0)).toMatchObject({
+      processedPosts: 1,
+      erasedRevisions: 101,
+    });
+    expect(
+      (
+        await fixture.reader.query(
+          'SELECT body, search_text, availability FROM content.revision WHERE route=$1 AND post_id=$2',
+          [route, selected.ids[0]],
+        )
+      ).rows.every((row) => row.body === null && row.search_text === null && row.availability === 'erased'),
+    ).toBe(true);
+    expect(
+      (
+        await fixture.reader.query('SELECT availability FROM content.post WHERE route=$1 AND post_id=ANY($2::uuid[])', [
+          route,
+          selected.ids.slice(1),
+        ])
+      ).rows,
+    ).toEqual([{ availability: 'available' }, { availability: 'available' }]);
+  });
+}
