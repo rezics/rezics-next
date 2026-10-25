@@ -75,6 +75,7 @@ test('an inner index scan multiplies per-loop rows by its loop count', async () 
   try {
     await client.query('SET LOCAL enable_hashjoin = off');
     await client.query('SET LOCAL enable_mergejoin = off');
+    await client.query('SET LOCAL enable_seqscan = off');
     const plan = await explain(`
       SELECT o.lookup_id, i.payload
       FROM growth_cost_test.loop_outer AS o
@@ -130,8 +131,20 @@ test('an unreferenced data-modifying CTE contributes its relation rows and block
 test('transaction control is counted separately from application statements', async () => {
   const plan = await explain('SELECT 1');
   const cost = costOf({
-    statements: ['  BEGIN;', 'START TRANSACTION', 'COMMIT', 'END', 'ABORT', 'ROLLBACK', 'SAVEPOINT s', 'RELEASE s',
-      'SET LOCAL statement_timeout = 0', 'SET TRANSACTION READ ONLY', 'SELECT 1', 'INSERT INTO t VALUES (1)'],
+    statements: [
+      '  BEGIN;',
+      'START TRANSACTION',
+      'COMMIT',
+      'END',
+      'ABORT',
+      'ROLLBACK',
+      'SAVEPOINT s',
+      'RELEASE s',
+      'SET LOCAL statement_timeout = 0',
+      'SET TRANSACTION READ ONLY',
+      'SELECT 1',
+      'INSERT INTO t VALUES (1)',
+    ],
     plans: [plan],
   });
 
