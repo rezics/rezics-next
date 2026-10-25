@@ -6,6 +6,7 @@ import { readAccount } from '../../src/access/account-data.ts';
 import { accessCommandAuthorization, type AccountActor } from '../../src/request/access.ts';
 import { appendImportedField, readImportedField } from '../../src/content/imported-fields.ts';
 import type { ImportedFieldInput } from '../../src/content/imported-contract.ts';
+import { createTurnstileVerifier } from '../../src/content/turnstile.ts';
 import { principalCommandIdentity, runCommand, type CommandTransaction } from '../../src/command/command.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, seed, type Population, type Row } from '../support/growth.ts';
@@ -301,4 +302,32 @@ test('Imported document append and read stays within its bound as P grows', asyn
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
   expectNoContentSequentialScans(report);
+}, 90_000);
+
+test('Report admission proof stays within its bound as T grows', async () => {
+  const verifier = createTurnstileVerifier({
+    secret: 'growth-secret',
+    hostname: 'reports.example.test',
+    action: 'report',
+    fetch: async () => Response.json({ success: true, hostname: 'reports.example.test', action: 'report' }),
+  });
+  const report = await checkGrowth(db, {
+    name: 'Report admission proof',
+    bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
+    grow: async () => {},
+    operation: async () => {
+      expect(await verifier.verify('fixed-growth-token')).toEqual({
+        ok: true,
+        hostname: 'reports.example.test',
+        action: 'report',
+      });
+    },
+  });
+  expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
+  expect(report.samples.map(({ cost }) => [cost.rows, cost.blocks, cost.statements])).toEqual([
+    [0, 0, 0],
+    [0, 0, 0],
+    [0, 0, 0],
+  ]);
+  expect(report.samples.every(({ cost }) => Object.keys(cost.relations ?? {}).length === 0)).toBe(true);
 }, 90_000);
