@@ -2,9 +2,17 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import { checkBatchWrite, type BatchCommand, type BatchReference, type BatchStatement } from '@rezics/definitions/bulk';
 import type { PropertyDefinition } from '@rezics/definitions';
 import { ConversionError, type ConversionInput, type ConvertedRecord, type ConversionDiagnostic } from './index';
-import { commandKey, safeSourceUrl, sourceDigest, sourceEnvelope, type ConversionContext } from './support';
+import {
+  canonicalLanguageTag,
+  commandKey,
+  labelLanguageTag,
+  safeSourceUrl,
+  sourceDigest,
+  sourceEnvelope,
+  type ConversionContext,
+} from './support';
 
-export const converter_revision = 'wikidata-2';
+export const converter_revision = 'wikidata-3';
 export const wikidataLimits = Object.freeze({
   bytes: 128 * 1024,
   statements: 64,
@@ -58,7 +66,6 @@ const types = new Map(
 );
 const qid = /^Q[1-9][0-9]{0,15}$/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const language = /^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/;
 const fail: (code: string, pointer?: string) => never = (code, pointer = '') => {
   throw new ConversionError(code, pointer);
 };
@@ -143,29 +150,37 @@ export function convertWikidata(
     fail('Invalid registered converter revision');
   if (context.subjectId !== undefined && !uuid.test(context.subjectId)) fail('Invalid resolved subject UUID');
 
+  // Count and read only the platform projection. Rejected keys are never read, so
+  // they cannot trip the term cap, the byte budget, or record validation.
   function terms(key: 'labels' | 'aliases' | 'descriptions') {
     const pointer = `/${key}`;
     const value = read(raw, key, pointer);
     const result = dictionary<Term | Term[]>();
     if (value === undefined) return result;
     const map = object(value, pointer);
-    const languages = Object.keys(map).sort();
-    if (languages.length > wikidataLimits.terms) fail('Source term limit exceeded', pointer);
-    for (const lang of languages) {
-      if (!language.test(lang)) fail('Invalid source term language', pointer);
+    const seen = new Set<string>();
+    for (const lang of Object.keys(map)) {
+      const canonical = labelLanguageTag(lang);
+      if (canonical === null) continue;
+      if (seen.has(canonical)) {
+        diagnose('Duplicate canonical term language; kept the first source key', `${pointer}/${lang}`);
+        continue;
+      }
+      if (seen.size === wikidataLimits.terms) fail('Source term limit exceeded', pointer);
+      seen.add(canonical);
       const term = read(map, lang, pointer);
       const convert = (entry: unknown): Term => {
         if (++termCount > wikidataLimits.terms) fail('Source term limit exceeded', pointer);
         const body = object(entry, pointer);
         if (read(body, 'language', pointer) !== lang) fail('Source term language mismatch', pointer);
-        return { language: lang, value: text(read(body, 'value', pointer), pointer) };
+        return { language: canonical, value: text(read(body, 'value', pointer), pointer) };
       };
-      result[lang] = key === 'aliases' ? list(term, wikidataLimits.terms, pointer).map(convert) : convert(term);
+      result[canonical] = key === 'aliases' ? list(term, wikidataLimits.terms, pointer).map(convert) : convert(term);
     }
     return result;
   }
 
-  function snak(entry: unknown, property: string, pointer: string): Snak {
+  function snak(entry: unknown, property: string, pointer: string): Snak | undefined {
     const body = object(entry, pointer);
     if (read(body, 'property', pointer) !== property) fail('Mismatched mainsnak property', pointer);
     const snaktype = read(body, 'snaktype', pointer);
@@ -231,8 +246,14 @@ export function convertWikidata(
     } else if (datatype === 'monolingualtext') {
       if (kind !== 'monolingualtext') fail('Invalid monolingual datavalue', pointer);
       const term = object(value, pointer);
-      const lang = text(read(term, 'language', pointer), pointer, 64);
-      if (!language.test(lang)) fail('Invalid monolingual language', pointer);
+      const rawLanguage = read(term, 'language', pointer);
+      if (typeof rawLanguage !== 'string' || !rawLanguage.isWellFormed()) fail('Invalid monolingual language', pointer);
+      const lang = canonicalLanguageTag(rawLanguage);
+      // No canonical tag writes no value. Leave the text unread so it cannot fail the record.
+      if (lang === null) {
+        diagnose('Monolingual text has no canonical language tag', pointer);
+        return undefined;
+      }
       projection = { language: lang, text: text(read(term, 'text', pointer), pointer) };
     } else {
       if (kind !== 'string') fail('Invalid string datavalue', pointer);
@@ -253,7 +274,10 @@ export function convertWikidata(
       const items = list(entries, wikidataLimits.snaks, pointer);
       count += items.length;
       if (count > wikidataLimits.snaks) fail('Source snak limit exceeded', pointer);
-      result[property] = items.map((item) => snak(item, property, pointer));
+      result[property] = items.flatMap((item) => {
+        const parsed = snak(item, property, pointer);
+        return parsed === undefined ? [] : [parsed];
+      });
     }
     return result;
   }
@@ -275,7 +299,8 @@ export function convertWikidata(
     const entries = list(value, wikidataLimits.statements, pointer);
     statementCount += entries.length;
     if (statementCount > wikidataLimits.statements) fail('Source statement limit exceeded', '/claims');
-    normalizedRecord.claims[property] = entries.map((entry) => {
+    const kept: Claim[] = [];
+    for (const entry of entries) {
       const body = object(entry, pointer);
       const rank = read(body, 'rank', pointer);
       if (
@@ -283,11 +308,9 @@ export function convertWikidata(
         read(body, 'type', pointer) !== 'statement'
       )
         fail('Malformed Wikidata statement or rank', pointer);
-      const result: Claim = {
-        type: 'statement',
-        rank: rank as string,
-        mainsnak: snak(read(body, 'mainsnak', pointer), property, pointer),
-      };
+      const main = snak(read(body, 'mainsnak', pointer), property, pointer);
+      if (main === undefined) continue;
+      const result: Claim = { type: 'statement', rank: rank as string, mainsnak: main };
       const claimId = read(body, 'id', pointer);
       if (claimId !== undefined) {
         result.id = text(claimId, pointer, 255);
@@ -297,12 +320,13 @@ export function convertWikidata(
       if (qualifiers !== undefined) result.qualifiers = snaks(qualifiers, false, pointer);
       const references = read(body, 'references', pointer);
       if (references !== undefined)
-        result.references = list(references, wikidataLimits.references, pointer).map((entry) => {
-          const reference = object(entry, pointer);
+        result.references = list(references, wikidataLimits.references, pointer).map((referenceEntry) => {
+          const reference = object(referenceEntry, pointer);
           return { snaks: snaks(read(reference, 'snaks', pointer), true, pointer) };
         });
-      return result;
-    });
+      kept.push(result);
+    }
+    if (kept.length) normalizedRecord.claims[property] = kept;
   }
   const inputBytes = Buffer.byteLength(JSON.stringify(normalizedRecord), 'utf8');
   if (inputBytes > wikidataLimits.bytes) fail('Source record exceeds 128 KiB');
