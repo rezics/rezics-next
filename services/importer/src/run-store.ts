@@ -1,5 +1,6 @@
 import { Database, type SQLQueryBindings } from 'bun:sqlite';
 import { randomBytes } from 'node:crypto';
+import type { SourceId } from '@rezics/conversion';
 import {
   BatchStatementSchema,
   checkBatchWrite,
@@ -13,8 +14,10 @@ import type { ImportBatchRequest, ImportBatchResult } from './import-contract.ts
 import type { RecordRow } from './record-store.ts';
 
 export type Run = { source: string; id: string; lease: string };
-export type Staged = { row: RecordRow; projection: BatchStatement[] };
-export type Omission = { field_group: FieldGroup; disposition: 'fenced'; securityRevision: number };
+/** Callers supply only the pure converter's sanitized normalized record, never raw dump data. */
+export type SourceProjection = { sourceKind: SourceId; normalizedRecord: unknown };
+export type Staged<Projection = BatchStatement[]> = { row: RecordRow; projection: Projection };
+export type Omission = { field_group: FieldGroup; disposition: 'fenced'; securityRevision: string };
 export type Pending = { after: string; recordKey: string; bytes: string; keys: string[] };
 export type Seal = {
   status: 'ready' | 'invalid-input' | 'mass-disappearance';
@@ -95,8 +98,17 @@ function exact(
     !value ||
     typeof value !== 'object' ||
     Array.isArray(value) ||
+    ![Object.prototype, null].includes(Object.getPrototypeOf(value)) ||
     required.some((k) => !Object.hasOwn(value, k)) ||
-    Object.keys(value).some((k) => !required.includes(k) && !optional.includes(k))
+    Reflect.ownKeys(value).some((k) => {
+      const descriptor = Object.getOwnPropertyDescriptor(value, k)!;
+      return (
+        typeof k !== 'string' ||
+        (!required.includes(k) && !optional.includes(k)) ||
+        !descriptor.enumerable ||
+        !Object.hasOwn(descriptor, 'value')
+      );
+    })
   )
     fail();
 }
@@ -119,30 +131,61 @@ function pageLimit(value: number) {
   if (!Number.isInteger(value) || value < 1 || value > 100) fail();
 }
 function boundedJson(value: unknown, cap = 65536): string {
+  // Serialize data descriptors directly so neither accessors nor toJSON can run.
   let budget = cap;
+  const parts: string[] = [];
   const parents = new Set<object>();
+  function append(bytes: string) {
+    budget -= Buffer.byteLength(bytes);
+    if (budget < 0) fail();
+    parts.push(bytes);
+  }
+  function string(value: string) {
+    if (Buffer.byteLength(value) > budget) fail();
+    append(JSON.stringify(value));
+  }
   function visit(v: unknown, depth: number) {
-    if (depth > 64 || (budget -= 2) < 0) fail();
+    if (depth > 64) fail();
     if (typeof v === 'string') {
-      budget -= Buffer.byteLength(v);
-      if (budget < 0) fail();
+      string(v);
       return;
     }
-    if (v === null || typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v))) return;
-    if (!v || typeof v !== 'object' || parents.has(v)) fail();
-    if (!Array.isArray(v) && Object.getPrototypeOf(v) !== Object.prototype) fail();
-    parents.add(v);
-    for (const [k, item] of Object.entries(v)) {
-      budget -= Buffer.byteLength(k);
-      visit(item, depth + 1);
+    if (v === null || typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v))) {
+      append(JSON.stringify(v));
+      return;
     }
+    if (!v || typeof v !== 'object' || parents.has(v)) fail();
+    const array = Array.isArray(v);
+    if (
+      array
+        ? Object.getPrototypeOf(v) !== Array.prototype
+        : ![Object.prototype, null].includes(Object.getPrototypeOf(v))
+    )
+      fail();
+    parents.add(v);
+    append(array ? '[' : '{');
+    const keys = Reflect.ownKeys(v);
+    const length = array ? (Object.getOwnPropertyDescriptor(v, 'length')!.value as number) : 0;
+    if (array && (length > budget || keys.length !== length + 1)) fail();
+    let count = 0;
+    for (const k of keys) {
+      if (array && k === 'length') continue;
+      const descriptor = Object.getOwnPropertyDescriptor(v, k)!;
+      if (typeof k !== 'string' || !descriptor.enumerable || !Object.hasOwn(descriptor, 'value')) fail();
+      if (array && k !== String(count)) fail();
+      if (count++) append(',');
+      if (!array) {
+        string(k);
+        append(':');
+      }
+      visit(descriptor.value, depth + 1);
+    }
+    append(array ? ']' : '}');
     parents.delete(v);
   }
   try {
     visit(value, 0);
-    const bytes = JSON.stringify(value);
-    if (Buffer.byteLength(bytes) > cap) fail();
-    return bytes;
+    return parts.join('');
   } catch {
     return fail();
   }
@@ -221,10 +264,19 @@ const rowBytes = (row: RecordRow) =>
  * All methods are synchronous bounded operations, suitable for an async coordinator to forward.
  * The constructor instruments the actual handle before schema work or preparing any statement.
  */
-export class RunStore {
+export class RunStore<Projection = BatchStatement[]> {
   readonly database: Database;
   private closed = false;
-  constructor(path: string | Database, options: { instrumentDatabase?: (database: Database) => Database } = {}) {
+  private readonly projectionMode: 'source-record' | undefined;
+  constructor(
+    path: string | Database,
+    options: {
+      instrumentDatabase?: (database: Database) => Database;
+      projectionMode?: 'source-record';
+    } = {},
+  ) {
+    if (options.projectionMode !== undefined && options.projectionMode !== 'source-record') fail();
+    this.projectionMode = options.projectionMode;
     const db = typeof path === 'string' ? new Database(path, { create: true, strict: true }) : path;
     try {
       this.database = options.instrumentDatabase?.(db) ?? db;
@@ -370,12 +422,23 @@ export class RunStore {
       return 'abandoned';
     });
   }
-  stage(run: Run, record: Staged): void {
+  stage(run: Run, record: Staged<Projection>): void {
     exact(record, ['row', 'projection']);
     validateRow(record.row);
-    if (record.row.source !== run.source || record.row.state !== 'present' || !Array.isArray(record.projection)) fail();
-    const projection = boundedJson(record.projection);
-    if (!record.projection.every((p) => matchesStatementSchema(BatchStatementSchema, p))) fail();
+    if (record.row.source !== run.source || record.row.state !== 'present') fail();
+    let projection: string;
+    if (this.projectionMode === 'source-record') {
+      const sourceProjection: unknown = record.projection;
+      exact(sourceProjection, ['sourceKind', 'normalizedRecord']);
+      if (!['bangumi', 'vndb', 'openlibrary', 'wikidata'].includes(sourceProjection.sourceKind as string)) fail();
+      // Only the caller's sanitized converter input is retained; row metadata stays separate.
+      const normalizedRecord = boundedJson(sourceProjection.normalizedRecord);
+      projection = `{"sourceKind":${JSON.stringify(sourceProjection.sourceKind)},"normalizedRecord":${normalizedRecord}}`;
+    } else {
+      if (!Array.isArray(record.projection)) fail();
+      projection = boundedJson(record.projection);
+      if (!record.projection.every((p) => matchesStatementSchema(BatchStatementSchema, p))) fail();
+    }
     const duplicate = this.transaction(() => {
       const g = this.generation(run);
       if (g.status !== 'staging') throw new Error('Run is sealed');
@@ -492,14 +555,8 @@ export class RunStore {
     const groups = new Set<FieldGroup>();
     for (const o of omissions) {
       exact(o, ['field_group', 'disposition', 'securityRevision']);
-      if (
-        !FIELD_GROUPS.includes(o.field_group) ||
-        o.disposition !== 'fenced' ||
-        !Number.isSafeInteger(o.securityRevision) ||
-        o.securityRevision < 0 ||
-        groups.has(o.field_group)
-      )
-        fail();
+      if (!FIELD_GROUPS.includes(o.field_group) || o.disposition !== 'fenced' || groups.has(o.field_group)) fail();
+      identifier(o.securityRevision, 256, /^[1-9][0-9]*$/u);
       groups.add(o.field_group);
     }
     return this.transaction(() => {
@@ -607,7 +664,11 @@ export class RunStore {
       for (const omission of omissions) {
         const i = saved.findIndex((o) => o.field_group === omission.field_group);
         if (i < 0) saved.push(omission);
-        else if (saved[i]!.securityRevision <= omission.securityRevision) saved[i] = omission;
+        else {
+          const prior = saved[i]!.securityRevision;
+          const next = omission.securityRevision;
+          if (prior.length < next.length || (prior.length === next.length && prior <= next)) saved[i] = omission;
+        }
       }
       if (omissions.length) {
         this.write(
@@ -795,7 +856,12 @@ export class RunStore {
     source: string,
     key: string,
     run?: Run,
-  ): { baseline: RecordRow | null; acknowledged: RecordRow | null; staged: Staged | null; omissions: Omission[] } {
+  ): {
+    baseline: RecordRow | null;
+    acknowledged: RecordRow | null;
+    staged: Staged<Projection> | null;
+    omissions: Omission[];
+  } {
     sourceId(source);
     keyId(key);
     const s = this.source(source);
