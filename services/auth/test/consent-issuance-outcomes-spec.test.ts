@@ -3,11 +3,17 @@ import { expect, test } from 'bun:test';
 // Spec verifier. Synthetic reference drivers prove that each outcome assertion
 // rejects a demonstrably wrong behaviour and admits a correct one; they are not
 // production proof. The native runs bind the same outcomes to the product.
+// References always run every case as a plain test (SPEC_STRICT=1). Native runs
+// inherit this verifier's switch: without it the product-red cases are expected
+// failures; SPEC_STRICT=1 runs them as plain tests and shows their native reasons.
+const strict = process.env.SPEC_STRICT === '1';
 const suiteFile = `${import.meta.dir}/consent-issuance-outcomes.test.ts`;
 async function suite(reference: string | null, filter: string) {
   const env = { ...process.env };
   delete env.CONSENT_OUTCOME_REFERENCE;
+  delete env.SPEC_STRICT;
   if (reference) env.CONSENT_OUTCOME_REFERENCE = reference;
+  if (reference || strict) env.SPEC_STRICT = '1';
   const child = Bun.spawn([process.execPath, 'test', suiteFile, '--test-name-pattern', filter], {
     env,
     stdout: 'pipe',
