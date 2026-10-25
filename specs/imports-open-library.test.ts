@@ -1,5 +1,6 @@
 import { expect, spyOn, test } from 'bun:test';
 import { checkBatchWrite, type BatchCommand } from '@rezics/definitions/bulk';
+import type { CoverCredit, CoverProvenance } from '@rezics/definitions/media-import';
 import * as fs from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
 import * as childProcess from 'node:child_process';
@@ -200,7 +201,7 @@ test('edition remains distinct from work and preserves ISBN authors and source d
   expect(JSON.stringify(output.accepted)).not.toContain('May 1980');
 });
 
-test('bibliographic facts and verbatim descriptions and covers have separate rights and field groups', async () => {
+test('Open Library distinguishes edition bootstrap and actual independent unknown asset rights', async () => {
   const driver = await loadOpenLibraryDriver();
   const record = await fixture('work');
   const output = converted(driver, record);
@@ -208,6 +209,7 @@ test('bibliographic facts and verbatim descriptions and covers have separate rig
   // description as non-command metadata without assigning catalogue database rights.
   expect(values(output, 'description')).toEqual([]);
   expect(output.result.proposals.some((c) => c.source.field_group === 'summary')).toBe(false);
+  expect(output.accepted.some((c) => c.op === 'propose' && c.statement.property.id === 'schema:abstract')).toBe(false);
   const metadata = driver.inspectMetadata(output.result);
   const description = metadata.assets.filter((a) => a.kind === 'description');
   const covers = metadata.assets.filter((a) => a.kind === 'cover');
@@ -217,11 +219,28 @@ test('bibliographic facts and verbatim descriptions and covers have separate rig
   const cover = covers[0]!;
   const sourceUrl = pointer(output.result, cover.value) as string;
   expect(sourceUrl).toMatch(/^https:\/\/covers\.openlibrary\.org\/b\/id\/900000001-[SML]\.jpg$/);
-  for (const asset of [description[0]!, cover]) expect(pointer(output.result, asset.license)).toBeNull();
-  expect(String(pointer(output.result, cover.credit!))).toMatch(/\(c\)|©|rights[ -]?holder|copyright/i);
-  expect(String(pointer(output.result, cover.credit!))).toMatch(/rights[ -]?holder/i);
-  expect(String(pointer(output.result, cover.credit!))).toMatch(/via.*Open Library/i);
-  expect(JSON.stringify(pointer(output.result, cover.provenance!))).toContain(`https://openlibrary.org${record.key}`);
+  expect<unknown[]>([null, 'LicenseRef-unknown']).toContain(pointer(output.result, description[0]!.license));
+  const credit = pointer(output.result, cover.credit!) as CoverCredit;
+  nonempty(credit.rightsHolder);
+  expect(credit.rightsHolder).toMatch(/rights[ -]?holder/i);
+  expect(credit.via.name).toBe('Open Library');
+  expect(credit.via.url).toBe(`https://openlibrary.org${record.key}`);
+  expect(cover.license).toBe(`${cover.credit}/license`);
+  expect(pointer(output.result, cover.license)).toBe('LicenseRef-unknown');
+  expect(credit.license).toBe('LicenseRef-unknown');
+  expect(credit.obligations).toEqual([]);
+  const provenance = pointer(output.result, cover.provenance!) as CoverProvenance;
+  expect(provenance).toMatchObject({ ...output.accepted[0]!.source, field_group: 'cover' });
+  const referenceValues = provenance.references.flatMap((ref) =>
+    ref.parts.flatMap((part) => (part.value.type === 'value' ? [part.value.content] : [])),
+  );
+  for (const value of [
+    record.key,
+    `https://openlibrary.org${record.key}`,
+    (record.last_modified as { value: string }).value,
+  ])
+    expect(referenceValues).toContain(value);
+  expect(referenceValues.some((value) => value === record.revision || value === String(record.revision))).toBe(true);
   expect(pointer(output.result, cover.role!)).toBe('cover');
   expect(pointer(output.result, cover.takedownEligible!)).toBe(true);
   expect(values(output, 'cover')).toEqual([]);
@@ -239,6 +258,8 @@ test('bibliographic facts and verbatim descriptions and covers have separate rig
     expect(pointer(final.result, finalCover[key]!)).toEqual(pointer(output.result, cover[key]!));
   }
   expect(final.result.proposals.some((c) => c.source.field_group === 'summary')).toBe(false);
+  expect(values(final, 'description')).toEqual([]);
+  expect(final.accepted.some((c) => c.op === 'propose' && c.statement.property.id === 'schema:abstract')).toBe(false);
   const field = final.fields.find((f) => f.kind === 'cover')!;
   expect(final.accepted[field.command]).toMatchObject({
     op: 'propose',
@@ -538,9 +559,13 @@ test('absent author and work identifiers produce no relationship proposals', asy
   );
 });
 
-test('Open Library bootstrap has one facts-only Book with creation labels and source provenance', async () => {
+test('Open Library bootstrap distinguishes Work Book and Edition Instance with labels and source claims', async () => {
   const driver = await loadOpenLibraryDriver();
-  for (const name of ['work', 'edition']) {
+  const claims: string[] = [];
+  for (const [name, expectedType] of [
+    ['work', 'http://schema.org/Book'],
+    ['edition', 'http://id.loc.gov/ontologies/bibframe/Instance'],
+  ] as const) {
     const record = await fixture(name);
     const output = converted(driver, record, null);
     const command = output.accepted[0]!;
@@ -549,8 +574,9 @@ test('Open Library bootstrap has one facts-only Book with creation labels and so
     expect(
       command.subject.type
         .replace(/^schema:/, 'http://schema.org/')
-        .replace(/^https:\/\/schema\.org\//, 'http://schema.org/'),
-    ).toBe('http://schema.org/Book');
+        .replace(/^https:\/\/schema\.org\//, 'http://schema.org/')
+        .replace(/^bf:/, 'http://id.loc.gov/ontologies/bibframe/'),
+    ).toBe(expectedType);
     expect<unknown>(Object.values(command.subject.labels)).toContain(record.title);
     expect(command.source).toMatchObject({
       source: 'open-library',
@@ -566,5 +592,8 @@ test('Open Library bootstrap has one facts-only Book with creation labels and so
     ).toBe(false);
     expect(values(output, 'identity')).toEqual([record.key]);
     expect(values(output, 'title')).toEqual([record.title]);
+    claims.push(`${command.source.source}:${command.source.external_id}`);
   }
+  expect(claims).toEqual(['open-library:/works/OL900000001W', 'open-library:/books/OL900000002M']);
+  expect(new Set(claims).size).toBe(2);
 });

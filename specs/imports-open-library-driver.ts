@@ -19,6 +19,11 @@
  * Enumerate ALL actual commands/fields, including unsupported emissions. Metadata
  * pointers resolve into unchanged production output, including unknown-licensed
  * descriptions and importFromUrl intents; neither is a second bulk command shape.
+ * Unknown prose is inspection metadata, never a document or publication permission.
+ * Cover credit points to the real structured @rezics/definitions/media-import
+ * credit (rightsHolder, via{name,url}, license, obligations), never a synthesized
+ * display line. Its license pointer must locate credit.license. Description
+ * license metadata may be null or LicenseRef-unknown; neither permits a summary.
  * Forward context unchanged to production. No resolving IDs, creating media,
  * constructing documents or licensing decisions in the binding.
  *
@@ -72,6 +77,7 @@ export interface OpenLibraryDriver {
       value: string;
       license: string;
       group: string;
+      /** Pointer to the unchanged structured CoverCredit, not a display string. */
       credit?: string;
       provenance?: string;
       role?: string;
