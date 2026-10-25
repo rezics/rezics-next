@@ -136,7 +136,6 @@ function unrelatedPopulation(name: string): Population {
       const id = newId(route);
       const slot = newId(route);
       const candidate = newId(route);
-      const concealed = newId(route);
       const transactionId = randomUUID();
       const releaseDigest = `sha256:${createHash('sha256').update(`facet-release-${ordinal}`).digest('hex')}`;
       const term = itemFacts(id, { labels: { en: `Unrelated ${ordinal}` } })[0]!;
@@ -152,6 +151,24 @@ function unrelatedPopulation(name: string): Population {
             security_revision: 0,
             current_facts: 2,
             current_release: bundledDigest,
+          },
+        ],
+        'semantic.revision': [
+          {
+            route,
+            subject_id: id,
+            revision: 1,
+            kind: 'create',
+            release: bundledDigest,
+            recorded_transaction_id: transactionId,
+          },
+          {
+            route,
+            subject_id: id,
+            revision: 2,
+            kind: 'adopt',
+            release: bundledDigest,
+            recorded_transaction_id: transactionId,
           },
         ],
         'semantic.fact': [
@@ -225,7 +242,7 @@ function unrelatedPopulation(name: string): Population {
           },
         ],
         'semantic.hidden_candidate': [
-          { route, subject_id: id, candidate_id: concealed, visibility: 'hidden', security_revision: 1 },
+          { route, subject_id: id, candidate_id: candidate, visibility: 'hidden', security_revision: 1 },
         ],
         'semantic.definition_release': [
           {
