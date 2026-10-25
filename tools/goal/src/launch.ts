@@ -20,7 +20,9 @@ export function launchCommand(options: LaunchOptions): [string, string[]] {
   const config = join(pool.configDirectory, 'config.toml');
   if (existsSync(config)) {
     const servers = (Bun.TOML.parse(readFileSync(config, 'utf8')) as { mcp_servers?: Record<string, unknown> }).mcp_servers;
-    for (const name of Object.keys(servers ?? {})) mcp.push('-c', `mcp_servers.${JSON.stringify(name)}.enabled=false`);
+    // A dotted `-c` path keeps the quotes in the key, defining a new server without a transport; an inline table merges.
+    const disabled = Object.keys(servers ?? {}).map(name => `${JSON.stringify(name)}={enabled=false}`);
+    if (disabled.length) mcp.push('-c', `mcp_servers={${disabled.join(',')}}`);
   }
   return [pool.command, ['exec', '--json', '-m', profile.model, '-c', `model_reasoning_effort=${profile.effort}`,
     '-c', `model_auto_compact_token_limit=${profile.model.includes('luna') ? codex.compactTokens.luna : codex.compactTokens.sol}`,

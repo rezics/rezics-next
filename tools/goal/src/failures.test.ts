@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
-import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { GateOutcome, ManagerEvent } from './contracts.ts';
 import { WorkerJob } from './job.ts';
@@ -113,4 +114,12 @@ test('official CLI flags preserve dash-leading prompts, per-pool configuration, 
     expect(env.CODEX_THREAD_ID).toBeUndefined();
     expect(env[cli === 'codex' ? 'CODEX_HOME' : cli === 'grok' ? 'GROK_HOME' : 'CURSOR_CONFIG_DIR']).toBe(pool.configDirectory);
   }
+});
+
+test('Codex workers disable the account MCP servers with one merged inline table', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'goal-mcp-'));
+  writeFileSync(join(directory, 'config.toml'), '[mcp_servers.browser]\nurl = "http://127.0.0.1:1/mcp"\n[mcp_servers."two.part"]\ncommand = "x"\n');
+  const [, args] = launchCommand({ profile: { cli: 'codex', model: 'gpt-6-luna', effort: 'high', poolClass: 'codex' },
+    pool: fixturePool(directory), worktree: '/fixture', prompt: 'contract', logPath: '/fixture/log' });
+  expect(args.filter(arg => arg.startsWith('mcp_servers'))).toEqual(['mcp_servers={"browser"={enabled=false},"two.part"={enabled=false}}']);
 });
