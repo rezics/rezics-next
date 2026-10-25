@@ -6,6 +6,7 @@
     "exposure:open",
     "exposure:close",
     "account:suspend",
+    "client:manage",
     "subject:create",
     "subject:batch_write",
     "source_fence:read",

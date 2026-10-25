@@ -24,8 +24,12 @@ import type { LifecycleRequest } from './lifecycle.ts';
 import credentialRead from './auth-credential-capability-workflow-read.sql';
 import approvalInsert from './workflow-approvals-insert.sql';
 import approvalSweep from './workflow-approvals-sweep.sql';
+import clientManagementAnchor from './workflow-approvals-client-anchor.sql';
+import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
 
 export const MAX_WORKFLOW_APPROVAL_LIFETIME_MS = 300_000;
+/** Host composition registers these workflow actions without a kernel HTTP route. */
+export const WORKFLOW_APPROVAL_ACTIONS: ActionCatalogue = new Map([['client:manage', { anonymous: false }]]);
 /** Nonsecret integrity-bound locator only; no actor, credentials or authority. */
 export type WorkflowApproval = { reference: string; expiresAt: string };
 export type WorkflowApprovalConfig = { pool: Pool; access: Access; actions: ActionCatalogue; referenceKeys: KeyRing };
@@ -73,8 +77,8 @@ const id = (value: unknown): value is string => typeof value === 'string' && rou
 const text = (value: unknown, max = 255): value is string =>
   typeof value === 'string' && value.length > 0 && value.length <= max;
 
-type NativeKind = 'rename' | 'delete' | 'membership' | 'automated' | 'opening';
-type Descriptor = { action: string; target: string; targetKind: 'actor' | 'organization' | 'either' };
+type NativeKind = 'rename' | 'delete' | 'membership' | 'automated' | 'opening' | 'client-reduction';
+type Descriptor = { action: string; target: string; targetKind: 'actor' | 'organization' | 'either' | 'global' };
 /** Server-owned closed descriptors. Missing adapters deny explicitly; a catalogue
  * entry alone can never manufacture native authority for one of these kinds. */
 const unavailableAdapters = {
@@ -83,7 +87,6 @@ const unavailableAdapters = {
   revoke: 'Auth session revocation',
   'fence-operator': 'operator fence',
   consent: 'Auth consent reduction',
-  'client-reduction': 'Auth client management',
 } as const satisfies Record<Exclude<AccountOperation['kind'], NativeKind>, string>;
 
 function operationSnapshot(value: NativeOperation): { operation: NativeOperation; descriptor: Descriptor } {
@@ -95,6 +98,17 @@ function operationSnapshot(value: NativeOperation): { operation: NativeOperation
   let descriptor: Descriptor;
   let fields: string[];
   switch (operation.kind) {
+    case 'client-reduction':
+      requireAllowed(
+        text(operation.clientId, 1024) &&
+          typeof operation.firstParty === 'boolean' &&
+          Array.isArray(operation.scopes) &&
+          operation.scopes.length <= 100 &&
+          operation.scopes.every((scope) => text(scope, 128) && /^[\x21\x23-\x5b\x5d-\x7e]+$/.test(scope)),
+      );
+      fields = ['kind', 'clientId', 'firstParty', 'scopes', 'authorization'];
+      descriptor = { action: 'client:manage', target: PLATFORM_RESOURCE.id, targetKind: 'global' };
+      break;
     case 'credential':
       requireAllowed(
         id(operation.subjectAccountId) &&
@@ -190,6 +204,7 @@ function anchor(descriptor: Descriptor) {
   return {
     resource,
     async validate(client: Parameters<Access['authorize']>[0]) {
+      if (descriptor.targetKind === 'global') return !!(await clientManagementAnchor.run(client, {}));
       const account = await readAccount(client, resource.route, resource.id);
       return (
         !!account &&

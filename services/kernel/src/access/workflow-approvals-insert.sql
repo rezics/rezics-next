@@ -9,7 +9,7 @@ SELECT :route, :approval_id, :actor_id, :client_id, :scopes::text[],
        :requested_by::nullable(text), :authn_epoch::bigint, :operation_key,
        i.operation, :digest, i.at,
        CASE WHEN i.operation->>'kind' = 'credential'
-         THEN LEAST(i.jwt_expires_at, i.evidence_expires_at, i.at + interval '60 seconds')
+         THEN LEAST(i.jwt_expires_at, i.at + interval '60 seconds')
          ELSE LEAST(i.jwt_expires_at, i.at + interval '300 seconds') END,
        i.jwt_expires_at, :transaction_id
 FROM input i

@@ -119,13 +119,10 @@ test('missing native workflow adapter remains unavailable', async () => {
   const request = approvals.approve(
     'bearer',
     {
-      operationKey: 'client-reduction',
+      operationKey: 'session-revocation',
       operation: {
-        kind: 'client-reduction',
-        clientId: 'client',
-        firstParty: false,
-        scopes: [],
-        authorization: 'reference',
+        kind: 'revoke',
+        accountId: 'account',
       },
     },
     { pool, deadline: Date.now() + 5000 },

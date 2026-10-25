@@ -30,7 +30,7 @@ import { createNativeAccountBindings } from '../../src/access/native-account-bin
 import { readAccount } from '../../src/access/account-data.ts';
 import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
 import { LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
-import { createWorkflowApprovals } from '../../src/access/workflow-approvals.ts';
+import { createWorkflowApprovals, WORKFLOW_APPROVAL_ACTIONS } from '../../src/access/workflow-approvals.ts';
 import { APPROVAL_REFERENCE_PURPOSE } from '../../src/access/approved-identity.ts';
 import { AuthBindingDeniedError } from '../../src/access/auth-bindings.ts';
 import { OperatorDeniedError } from '../../src/access/operator.ts';
@@ -47,6 +47,7 @@ const scopes = [
   'account:suspend',
   'organization:membership',
   'access:grant',
+  ...WORKFLOW_APPROVAL_ACTIONS.keys(),
 ].sort();
 type Caller = { headers: Headers; email: string; password: string; clientId: string; scopes: string[] };
 const cookies = (response: Response) =>
@@ -103,7 +104,6 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
   let clientId = 'credential-consented';
   const loginClient = 'credential-login';
   const callers = new Map<string, Caller>();
-  const consentCallers = new Map<string, string>();
   const organizationFixtures = new Map<string, { owner: string; memberReservationId: string }>();
   const routeKey = randomBytes(32);
   const referenceKeys = { current: 1, keys: new Map([[1, randomBytes(32)]]) };
@@ -332,7 +332,6 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
       password: originalPassword,
     });
     const initial = await login(email, originalPassword, loginClient);
-    consentCallers.set(email, initial);
     for (const id of [clientId, 'credential-other-client'])
       await successful(await request('/consent', { client_id: id, scope: scopes }, initial), 'native consent');
     const caller = await login(email);
@@ -712,7 +711,7 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
         });
       } else if (fact === 'consent') {
         const human = required(callers.get(f.caller), 'Missing consenting human');
-        const current = required(consentCallers.get(human.email), 'Missing current consenting session');
+        const current = await login(human.email, human.password, loginClient);
         await successful(
           await request(
             '/consent',
