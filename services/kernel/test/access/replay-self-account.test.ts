@@ -1,4 +1,4 @@
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createPool } from '../../src/database/pool.ts';
 import { createAccess } from '../../src/access/index.ts';
@@ -8,12 +8,18 @@ import { actionCatalogue, requestDigest } from '../../src/http/request.ts';
 import { createLifecycleCommands, LifecycleDeniedError } from '../../src/access/lifecycle.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { delegatedAssignmentFixture } from './delegated-auth-fixture.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(url);
 const admin = createPool(url);
+let assignments: Awaited<ReturnType<typeof delegatedAssignmentFixture>>;
+beforeAll(async () => {
+  assignments = await delegatedAssignmentFixture(admin);
+}, 60_000);
 afterAll(async () => {
+  await assignments?.close();
   await pool.end();
   await admin.end();
 });
@@ -69,11 +75,12 @@ async function fixture(action = 'account:leave', delegated = false) {
       [routeOf(id), id, Bun.randomUUIDv7()],
     );
   if (delegated)
-    await admin.query(
-      `INSERT INTO access.principal_assignment(route,principal_id,request_id,assigned_actor_id,valid,transaction_id)
-     VALUES ($1,$2,$3,$4,'(,)',$5)`,
-      [routeOf(principalId), principalId, assignmentId, accountId, Bun.randomUUIDv7()],
-    );
+    await assignments.create({
+      principalId,
+      requestId: assignmentId,
+      assignedActorId: accountId,
+      valid: '(,)',
+    });
   const grant = (resource: string, subject: string, permission: string) =>
     admin.query(
       `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id) VALUES ($1,$2,$3,$4,'(,)',$5)`,

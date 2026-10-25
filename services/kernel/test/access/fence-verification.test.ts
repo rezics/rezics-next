@@ -7,6 +7,7 @@ import { createAccess } from '../../src/access/index.ts';
 import { createAccess as permissionAccess } from '../../src/access/permission.ts';
 import { createLifecycleInternals, type RecoveryEvidence } from '../../src/access/lifecycle.ts';
 import { accessCheck, AuthenticationError, type AccountActor } from '../../src/request/access.ts';
+import { delegatedAssignmentFixture } from './delegated-auth-fixture.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -17,6 +18,7 @@ const authUrl = new URL(url);
 authUrl.pathname = `/${authDatabase}`;
 let authPool: Pool;
 let service: AuthService;
+let assignments: Awaited<ReturnType<typeof delegatedAssignmentFixture>>;
 let signingKey: JWK;
 let cookie: string;
 let token: string;
@@ -119,8 +121,7 @@ async function grant(id: string, role = '') {
   );
 }
 async function delegatedToken() {
-  // Auth does not issue assignments yet. Preserve its signed identity claims and
-  // add only the canonical assignment reference, using the fixture's real key.
+  // Preserve the actor claims while exercising verification of the command-created assignment.
   const claims = decodeJwt(token);
   return new SignJWT({ ...claims, requested_by: `urn:rezics:request:${principal}:${requestId}` })
     .setProtectedHeader({ alg: 'ES256', kid: signingKey.kid!, typ: 'at+jwt' })
@@ -134,6 +135,7 @@ async function run(access = verifier(), jwt = token) {
 }
 
 beforeAll(async () => {
+  assignments = await delegatedAssignmentFixture(pool);
   await pool.query(`CREATE DATABASE ${authDatabase}`);
   const { migrate } = await import(new URL('../../../auth/scripts/database.ts', import.meta.url).href);
   migrate(authUrl.toString());
@@ -167,11 +169,7 @@ beforeEach(async () => {
   for (const table of ['resource_grant', 'resource_denial', 'principal_assignment', 'organization_member', 'account'])
     await pool.query(`DELETE FROM access.${table}`);
   for (const id of [person, principal, organization]) await account(id);
-  await pool.query(
-    `INSERT INTO access.principal_assignment
-    (route,principal_id,request_id,assigned_actor_id,valid,transaction_id) VALUES ($1,$2,$3,$4,'(,)',$4)`,
-    [routeOf(principal), principal, requestId, person],
-  );
+  await assignments.create({ principalId: principal, requestId, assignedActorId: person, valid: '(,)' });
   await grant(person);
   await grant(principal);
   const response = await signin();
@@ -185,6 +183,7 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
+  await assignments?.close();
   await authPool?.end();
   await pool.query(`DROP DATABASE IF EXISTS ${authDatabase} WITH (FORCE)`);
   await pool.end();
