@@ -7,6 +7,7 @@ export type GrantSubject =
   | Readonly<{ kind: 'account'; id: string }>
   | Readonly<{ kind: 'organization'; id: string; role: 'owner' | 'member' }>
   | Readonly<{ kind: 'realm'; id: string; role: 'owner' | 'member' }>;
+export type PublicGrantSubject = Exclude<GrantSubject, { kind: 'realm' }>;
 
 // Native temporal primary keys require non-null components. This sentinel has
 // meaning only with the explicit builtin discriminant; it is never an identity

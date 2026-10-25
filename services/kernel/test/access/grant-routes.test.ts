@@ -404,6 +404,18 @@ test('closed bodies fail before rate spend or effects on every direct and role r
   }
 });
 
+test('the public grant schema refuses realm subjects before rate spend or effects', async () => {
+  const before = await effects();
+  const spent = spends;
+  const result = await call(root.bearer, '/v1/grants', {
+    ...inputFor(recipient.accountId),
+    subject: { kind: 'realm', id: recipient.accountId, role: 'member' },
+  });
+  expect(result.response.status).toBe(400);
+  expect(spends).toBe(spent);
+  expect(await effects()).toEqual(before);
+});
+
 test('native resource, subject and interval failures return problems without effects', async () => {
   for (const body of [
     { ...inputFor(recipient.accountId), resource: { route: 1, id: PLATFORM_RESOURCE.id } },

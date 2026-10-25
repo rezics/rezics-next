@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import type { CommandOutcome } from '../command/command.ts';
 import type { Access, Resource } from '../request/access.ts';
-import { grantSubject, type GrantSubject } from './grant-subject.ts';
+import { grantSubject, type PublicGrantSubject } from './grant-subject.ts';
 import { resourceRoleCatalogue } from './resource-roles.ts';
 import roleStatement from './role-grant-mutate.sql';
 import { grantCommand, validActions, validResource, type GrantCommandContext } from './grant-command.ts';
@@ -16,7 +16,7 @@ export class GrantDeniedError extends Error {
   }
 }
 export type GrantRecipient =
-  | { subject: GrantSubject; subjectId?: never; subjectRole?: never }
+  | { subject: PublicGrantSubject; subjectId?: never; subjectRole?: never }
   | { subject?: never; subjectId: string; subjectRole: '' | 'owner' | 'member' };
 export type GrantInput = GrantRecipient & {
   resource: Resource;
@@ -28,11 +28,17 @@ type GrantValue<Input extends GrantInput> = {
   resource: Resource;
   actions: string[];
   valid: string;
-} & (Input extends { subject: infer Subject extends GrantSubject }
+} & (Input extends { subject: infer Subject extends PublicGrantSubject }
   ? { subject: Subject }
   : { subjectId: string; subjectRole: '' | 'owner' | 'member' });
 export type GrantChangeInput = GrantInput & { previous: { actions: readonly string[]; valid: string } };
-export type RoleGrantInput = { resource: Resource; subject: GrantSubject; role: string; valid: string; key: string };
+export type RoleGrantInput = {
+  resource: Resource;
+  subject: PublicGrantSubject;
+  role: string;
+  valid: string;
+  key: string;
+};
 export type RoleGrantChangeInput = RoleGrantInput & { previous: { role: string; valid: string } };
 function recipient(input: GrantRecipient) {
   if (input.subject !== undefined) {
@@ -109,7 +115,7 @@ export function createGrantCommands(config: {
         if (rows.length !== actions.length) throw new GrantDeniedError();
         const value: {
           resource: Resource;
-          subject?: GrantSubject;
+          subject?: PublicGrantSubject;
           subjectId?: string;
           subjectRole?: '' | 'owner' | 'member';
           actions: string[];
