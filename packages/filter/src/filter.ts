@@ -332,6 +332,15 @@ function typeFacets(types: unknown, type: string): Set<string> {
   return result;
 }
 
+export function facetProperties(release: FilterRelease, types: readonly string[]): string[] {
+  const definitions = dataField(release, 'types');
+  const result = new Set<string>();
+  for (const type of types) {
+    for (const property of typeFacets(definitions, type)) result.add(property);
+  }
+  return [...result];
+}
+
 const allFacetsByRelease = new WeakMap<object, ReadonlySet<string>>();
 
 // One compiled pattern per property definition. A missing or unusable pattern is cached as null.

@@ -51,7 +51,9 @@ admission expands it and checks the expanded document against the same limits. A
 types, statement facets, property datatypes, values, ranges, units and qualifiers against a structural `FilterRelease`.
 Facets are admitted from the types a query can return: a top-level type leaf selects its values, a top-level `and`
 intersects its direct type children, and other forms may return every release type. A type contributes its own facets
-and the facets of its bases. Lookups use own properties only. A registered string facet admits `in` only when its
+and the facets of its bases. The exported `facetProperties(release, types)` provides the same rule for display: in the
+supplied type order, it returns each type's own facets followed by each base's facets in base order, without repeats.
+Lookups use own properties only. A registered string facet admits `in` only when its
 definition declares `value.pattern`: each value must be 1 to 128 code units and match that pattern, compiled with the
 `u` flag once per property definition; without a pattern the condition stays unsupported, and qualifiers stay item-only.
 
