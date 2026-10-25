@@ -153,9 +153,13 @@ class Harness {
             for (const value of [...c.references, ...c.licenses, ...c.values, c.field_group, c.idempotencyKey])
               expect(wire).toContain(JSON.stringify(value));
             if (command.op !== 'create')
-              expect(c.references.some((reference) =>
-                new RegExp(String.raw`^https://www\.wikidata\.org/wiki/${c.external_id}(?:\?oldid=[1-9][0-9]*)?$`).test(reference),
-              )).toBe(true);
+              expect(
+                c.references.some((reference) =>
+                  new RegExp(
+                    String.raw`^https://www\.wikidata\.org/wiki/${c.external_id}(?:\?oldid=[1-9][0-9]*)?$`,
+                  ).test(reference),
+                ),
+              ).toBe(true);
             if (command.source.field_group === 'facts') expect(command).not.toHaveProperty('rights');
           }
           // Raw transport privacy is checked before observations or failure injection.
