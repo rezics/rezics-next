@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, test } from 'bun:test';
 import { withConnection } from '../src/database/pool.ts';
 import { runCommand } from '../src/command/command.ts';
 import { newId } from '../src/route/route.ts';
