@@ -48,6 +48,25 @@ $$;
 
 
 --
+-- Name: guard_media_security(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.guard_media_security() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.security_revision < OLD.security_revision
+     OR (NEW.taken_down IS DISTINCT FROM OLD.taken_down
+         AND NEW.security_revision <= OLD.security_revision) THEN
+    RAISE EXCEPTION 'Media takedown changes require an increasing security revision'
+      USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: guard_operation_identity(); Type: FUNCTION; Schema: content; Owner: -
 --
 
@@ -70,25 +89,6 @@ BEGIN
         NEW.source_partition, NEW.source_position, NEW.source_event_index) IS DISTINCT FROM
       ROW(OLD.native_workflow_id, OLD.source_epoch, OLD.source_partition, OLD.source_position, OLD.source_event_index)) THEN
     RAISE EXCEPTION 'Operation identity and source binding are immutable' USING ERRCODE = '23514';
-  END IF;
-  RETURN NEW;
-END;
-$$;
-
-
---
--- Name: guard_media_security(); Type: FUNCTION; Schema: content; Owner: -
---
-
-CREATE FUNCTION content.guard_media_security() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-  IF NEW.security_revision < OLD.security_revision
-     OR (NEW.taken_down IS DISTINCT FROM OLD.taken_down
-         AND NEW.security_revision <= OLD.security_revision) THEN
-    RAISE EXCEPTION 'Media takedown changes require an increasing security revision'
-      USING ERRCODE = '23514';
   END IF;
   RETURN NEW;
 END;
@@ -593,17 +593,17 @@ CREATE TRIGGER board_identity BEFORE UPDATE ON content.board FOR EACH ROW EXECUT
 
 
 --
--- Name: operation operation_identity; Type: TRIGGER; Schema: content; Owner: -
---
-
-CREATE TRIGGER operation_identity BEFORE INSERT OR DELETE OR UPDATE ON content.operation FOR EACH ROW EXECUTE FUNCTION content.guard_operation_identity();
-
-
---
 -- Name: media media_security_guard; Type: TRIGGER; Schema: content; Owner: -
 --
 
 CREATE TRIGGER media_security_guard BEFORE UPDATE ON content.media FOR EACH ROW EXECUTE FUNCTION content.guard_media_security();
+
+
+--
+-- Name: operation operation_identity; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER operation_identity BEFORE INSERT OR DELETE OR UPDATE ON content.operation FOR EACH ROW EXECUTE FUNCTION content.guard_operation_identity();
 
 
 --
