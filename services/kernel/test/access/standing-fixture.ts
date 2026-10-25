@@ -126,12 +126,17 @@ export async function standingFixture() {
       fetch: async (url, init) => auth.handler(new Request(url, init)),
     },
   });
-  async function context(id = actor, scopes = actions, requestedBy?: string, clientId = 'web') {
+  async function context(id = actor, scopes = ordinaryClientScopes, requestedBy?: string, clientId = 'web') {
     const response = await auth.handler(
       new Request(`${issuer}/signin`, {
         method: 'POST',
         headers: { origin: issuer, 'content-type': 'application/json' },
-        body: JSON.stringify({ email: `${id}@example.test`, password, client_id: clientId, scope: scopes }),
+        body: JSON.stringify({
+          email: `${id}@example.test`,
+          password,
+          client_id: clientId,
+          scope: clientId === 'website' ? scopes : scopes.filter((action) => action !== 'media:complete'),
+        }),
       }),
     );
     if (response.status !== 200) throw new Error(`Fixture sign-in failed: ${response.status}`);
@@ -196,7 +201,7 @@ export async function standingFixture() {
     for (const action of ['subject:read', 'subject:update', 'access:grant']) await grant(actor, action);
   }
   async function permitted(id: string, action: string, requestedBy?: string) {
-    const ctx = await context(id, actions, requestedBy);
+    const ctx = await context(id, ordinaryClientScopes, requestedBy);
     const check = await accessCheck(access, ctx.actor, action, resource, ctx);
     return check(pool);
   }
