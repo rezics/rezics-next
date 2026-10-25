@@ -2,7 +2,6 @@ import { afterAll, afterEach, beforeAll, test } from 'bun:test';
 import pg from 'pg';
 import { runCommand, type CommandAuthorization, type CommandEvent } from '../src/command/command.ts';
 import { newId } from '../src/route/route.ts';
-import { createPool } from '../src/database/pool.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from './support/growth.ts';
 import { readPartition } from '../src/partition/partition.ts';
 
@@ -19,7 +18,6 @@ const kind = 'growth-command';
 const prefix = 'growth-command-';
 const events = (): CommandEvent[] => [{ type: 'com.rezics.growth.event.v1', subject: 'fixed', data: { value: 1 } }];
 const basis = { actorAccountId: actor, clientId, requestedBy: null };
-const pool = createPool(databaseUrl);
 const ordinalsPerScale = 64;
 
 // These rows mirror fence.sql's outbox, receipt and write_basis inserts, using route-shaped UUIDs and one event.
@@ -32,7 +30,7 @@ const population: Population = {
       'core.outbox': [
         {
           partition_no: partition,
-          position: ordinal + 100,
+          position: ordinal * 100 + 100,
           event_seq: 0,
           event_count: 1,
           epoch: 1,
@@ -47,7 +45,7 @@ const population: Population = {
           partition_no: partition,
           transaction_id: tx,
           epoch: 1,
-          position: ordinal + 100,
+          position: ordinal * 100 + 100,
           actor_account_id: actor,
           client_id: clientId,
           requested_by: null,
@@ -61,7 +59,7 @@ const population: Population = {
           idempotency_key: `${prefix}seed-${ordinal}`,
           request_digest: digest,
           epoch: 1,
-          position: ordinal + 100,
+          position: ordinal * 100 + 100,
           transaction_id: tx,
           response: { ok: true },
         },
@@ -72,7 +70,7 @@ const population: Population = {
     await connection.query(
       `UPDATE core.partition p SET position = GREATEST(p.position, v.position)
        FROM (SELECT partition_no, max(position)::bigint AS position FROM core.outbox
-             WHERE position >= $1 + 100 AND position < $2 + 100 GROUP BY partition_no) v
+             WHERE position >= $1 * 100 + 100 AND position < $2 * 100 + 100 GROUP BY partition_no) v
        WHERE p.partition_no = v.partition_no`,
       [range.from, range.to],
     );
@@ -80,8 +78,10 @@ const population: Population = {
 };
 
 let db: GrowthDatabase;
+let pool: GrowthDatabase['pool'];
 beforeAll(async () => {
   db = await dbPromise;
+  pool = db.pool;
 });
 afterEach(async () => {
   await admin.query('DELETE FROM core.receipt WHERE command_kind = $1', [kind]);
@@ -92,7 +92,6 @@ afterEach(async () => {
   ), 0)`);
 });
 afterAll(async () => {
-  await pool.end();
   await admin.end();
   await db?.pool.end();
   await db?.admin.end();
@@ -169,25 +168,46 @@ test('Idempotent replay stays within its bound as N grows', async () => {
 test('Denied replay stays within its bound as N grows', async () => {
   await reset();
   await createAnchorCommand();
+  const denial = new Error('denied');
   const authorization: CommandAuthorization = {
     action: 'growth.denied',
     resource: { route: anchorRoute, id: newId(anchorRoute) },
     authorize: async () => 'receipt-only',
-    denied: () => new Error('denied'),
+    denied: () => denial,
   };
-  await check('Denied replay', async () =>
-    runCommand(pool, { partition: anchorPartition, authorization }, async () => {
-      throw new Error('denied command must not run');
-    }),
-  );
+  await check('Denied replay', async (_growthDb, scale, repetition) => {
+    try {
+      await runCommand(
+        pool,
+        {
+          partition: anchorPartition,
+          basis,
+          receipt: {
+            actorAccountId: actor,
+            kind,
+            key: `${prefix}denied-miss-${scale}-${repetition}`,
+            digest,
+          },
+          authorization,
+        },
+        async () => {
+          throw new Error('denied command must not run');
+        },
+      );
+    } catch (error) {
+      if (error === denial) return;
+      throw error;
+    }
+    throw new Error('denied replay unexpectedly succeeded');
+  });
 }, 90_000);
 
 test('One contention retry stays within its bound as N grows', async () => {
   await reset();
   await createAnchorCommand();
-  let injected = false;
-  await check('One contention retry', async (_growthDb, scale, repetition) =>
-    runCommand(
+  await check('One contention retry', async (_growthDb, scale, repetition) => {
+    let injected = false;
+    return runCommand(
       pool,
       {
         partition: anchorPartition,
@@ -201,12 +221,13 @@ test('One contention retry stays within its bound as N grows', async () => {
         }
         return { value: { ok: true }, events: events() };
       },
-    ),
-  );
+    );
+  });
 }, 90_000);
 
 test('Partition state stays within its bound as N grows', async () => {
   await reset();
+  await createAnchorCommand();
   await check('Partition state', async (growthDb) => {
     const client = await growthDb.pool.connect();
     try {
