@@ -40,7 +40,7 @@ export default {
     )
       return problemResponse(problem(403, 'forbidden', 'Forbidden'));
     if (url.pathname.startsWith('/auth/')) return authRequest(request, env as Partial<SessionEnv>);
-    if (!url.pathname.startsWith('/media/')) return siteRequest(request);
+    if (url.pathname !== '/media' && !url.pathname.startsWith('/media/')) return siteRequest(request);
     try {
       const clear = await prepareSession(request, env as Partial<SessionEnv>);
       const response = await mediaRequest(request, env as Partial<MediaEnv>);

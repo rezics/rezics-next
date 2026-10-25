@@ -9,6 +9,7 @@ export type Media = NonNullable<ReadResponse['data']>['media'];
 export type DownloadDecision = NonNullable<DownloadResponse['data']>;
 export type Completion = NonNullable<CompletionResponse['data']>;
 export type CompletionInput = Parameters<CompletionCall>[0];
+export type ReservationInput = Parameters<KernelClient['media']['post']>[0];
 
 type ProblemBody = { type: string; title: string; status: number; code: string };
 export class MediaProblem extends Error {
@@ -54,6 +55,18 @@ function throwClientError(error: { value: unknown; status: number }): never {
 
 export async function readReservation(client: KernelClient, id: string, credential: string | null): Promise<Media> {
   const { data, error } = await client.media({ id }).get({ headers: viewerHeaders(credential) });
+  if (error) throwClientError(error);
+  return data.media;
+}
+
+export async function reserveMedia(
+  client: KernelClient,
+  credential: string | null,
+  input: ReservationInput,
+): Promise<Media> {
+  const { data, error } = await client.media.post(input, {
+    headers: { ...viewerHeaders(credential), 'idempotency-key': JSON.stringify(crypto.randomUUID()) },
+  });
   if (error) throwClientError(error);
   return data.media;
 }
