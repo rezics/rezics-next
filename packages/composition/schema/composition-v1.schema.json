@@ -115,6 +115,18 @@
         },
         {
           "$ref": "#/$defs/Slot"
+        },
+        {
+          "$ref": "#/$defs/SubjectHeader"
+        },
+        {
+          "$ref": "#/$defs/Statements"
+        },
+        {
+          "$ref": "#/$defs/MoreStatements"
+        },
+        {
+          "$ref": "#/$defs/SubjectList"
         }
       ]
     },
@@ -339,6 +351,128 @@
               "items": {
                 "$ref": "#/$defs/node"
               }
+            }
+          }
+        }
+      }
+    },
+    "SubjectHeader": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "props"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "SubjectHeader"
+        },
+        "props": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}(?![\\s\\S])"
+            }
+          }
+        }
+      }
+    },
+    "Statements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "props"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "Statements"
+        },
+        "props": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "properties"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}(?![\\s\\S])"
+            },
+            "properties": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 128,
+                "pattern": "^[a-z][a-z0-9]*:[A-Za-z][A-Za-z0-9_]*(?![\\s\\S])"
+              },
+              "minItems": 1,
+              "maxItems": 32,
+              "uniqueItems": true
+            }
+          }
+        }
+      }
+    },
+    "MoreStatements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "props"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "MoreStatements"
+        },
+        "props": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}(?![\\s\\S])"
+            }
+          }
+        }
+      }
+    },
+    "SubjectList": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "props"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "SubjectList"
+        },
+        "props": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "title", "property", "limit"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}(?![\\s\\S])"
+            },
+            "title": {
+              "type": "string",
+              "maxLength": 120,
+              "pattern": "^(?:(?!<[A-Za-z/!?])[^\\u0000-\\u0008\\u000B-\\u001F\\u007F-\\u009F])*(?![\\s\\S])"
+            },
+            "property": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^[a-z][a-z0-9]*:[A-Za-z][A-Za-z0-9_]*(?![\\s\\S])"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 24
             }
           }
         }

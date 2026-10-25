@@ -5,11 +5,13 @@ import {
   MAX_COMPOSITION_DEPTH,
   MAX_COMPOSITION_NODES,
   type CompositionComponent,
+  type CompositionDocument,
   type CompositionRegistry,
   type CompositionViolation,
   type CompositionViolationCode,
   type SchemaNode,
 } from './registry.ts';
+import { PageReadLimitError, planReads } from './reads.ts';
 import { CURIE, HREF, NODE_ID, PLAIN_TEXT, safetyKind } from './strings.ts';
 
 const MAX_VIOLATIONS = 64;
@@ -170,6 +172,9 @@ function walkArray(schema: SchemaNode, value: unknown, pointer: string, add: Add
     (schema.maxItems !== undefined && value.length > schema.maxItems) ||
     (schema.minItems !== undefined && value.length < schema.minItems)
   ) {
+    add(pointer, 'invalid');
+  }
+  if (schema.uniqueItems && new Set(value.map((item) => canonicalize(item))).size !== value.length) {
     add(pointer, 'invalid');
   }
   if (!schema.items) return;
@@ -382,5 +387,13 @@ export function validateComposition(registry: CompositionRegistry, value: unknow
   if (limit) return [limit];
   const found = new Map<string, CompositionViolationCode>();
   validateDocument(registry, value, (pointer, code) => put(found, pointer, code));
+  if (found.size === 0) {
+    try {
+      planReads(registry, value as CompositionDocument, { subject: '00000000-0000-8000-8000-000000000000' });
+    } catch (error) {
+      if (error instanceof PageReadLimitError) return [{ pointer: '/content', code: 'limit' }];
+      throw error;
+    }
+  }
   return finish(found);
 }

@@ -29,11 +29,15 @@ It runs when a page is published, not on each view.
 | RFC 8785 canonical UTF-8 JSON | 65,536 bytes | `""`                          |
 | Nodes in the document         | 256          | `/content`                    |
 | Node depth                    | 8            | the first node past the limit |
+| Distinct page reads           | 16           | `/content`                    |
 
 A node in `content` has depth 1. A node in a slot of a depth-d node has depth d + 1. Size is
 checked first. A document over the node budget returns only the node limit, including when it
 is also too deep. A document inside that budget and past the depth limit returns only that
 depth violation.
+When no other violation exists, validation plans reads with the placeholder subject
+`00000000-0000-8000-8000-000000000000`. A plan over the read budget returns only
+`{ pointer: '/content', code: 'limit' }`.
 
 ## Safety
 
@@ -62,7 +66,7 @@ against that schema applies the same safety.
 | `unknown_type` | `type` is not registered; that node's props are not checked                           |
 | `unsafe`       | A string fails a plain-text, link or CURIE pattern                                    |
 | `duplicate`    | A repeated `props.id` after its first occurrence                                      |
-| `limit`        | Canonical size, node count or depth                                                   |
+| `limit`        | Canonical size, node count, depth or distinct page reads                              |
 
 Document order visits a node before its slot children, and slots in registry order. One
 violation is kept per pointer, and `unsafe` wins over `invalid`. Results are sorted by
@@ -70,25 +74,71 @@ pointer in code-unit order and capped at 64.
 
 ## Platform registry
 
-`platformRegistry` is the layout vocabulary. Data components that read the page subject are
-added separately. Root props are `{ appearance?: Appearance }`. `APPEARANCE` closes the
+`platformRegistry` contains layout and data components. Root props are
+`{ appearance?: Appearance }`. `APPEARANCE` closes the
 tokens: `density` (`compact` or `comfortable`), `radius` (`sm`, `md` or `lg`), `surface`
 (`flat` or `cards`), `cover` (`portrait`, `square` or `landscape`) and `headingScale` (`md`
 or `lg`). Every token is optional. Colours and type faces are not tokens; pages share the
 REZICS visual language.
 
-| Component | Props                                        | Slots          |
-| --------- | -------------------------------------------- | -------------- |
-| `Stack`   | `gap`: `sm`, `md` or `lg`                    | `children`     |
-| `Columns` | `split`: `even`, `start` or `end`            | `start`, `end` |
-| `Heading` | `text` (plain text, 200), `level`: 2, 3 or 4 |                |
-| `Text`    | `text` (plain text, 2,000)                   |                |
-| `Slot`    | `name`: one of `SLOT_NAMES`                  | `children`     |
+| Component        | Props                                                                   | Slots          |
+| ---------------- | ----------------------------------------------------------------------- | -------------- |
+| `Stack`          | `gap`: `sm`, `md` or `lg`                                               | `children`     |
+| `Columns`        | `split`: `even`, `start` or `end`                                       | `start`, `end` |
+| `Heading`        | `text` (plain text, 200), `level`: 2, 3 or 4                            |                |
+| `Text`           | `text` (plain text, 2,000)                                              |                |
+| `Slot`           | `name`: one of `SLOT_NAMES`                                             | `children`     |
+| `SubjectHeader`  | none                                                                    |                |
+| `Statements`     | `properties`: 1–32 unique `curie()` values                              |                |
+| `MoreStatements` | none                                                                    |                |
+| `SubjectList`    | `title` (plain text, 120), `property`: `curie()`, `limit`: integer 1–24 |                |
 
 `SLOT_NAMES` is `header`, `hero`, `entity`, `aside` and `footer`. `Slot` is the platform's
 rendering; reviewed first-party Zone code may wrap or replace it.
 
+All four data components read nothing when `page.subject` is `null`. `SubjectHeader`,
+`Statements` and `MoreStatements` otherwise read the page subject. `Statements` shows the
+named properties; `MoreStatements` shows the subject's statements whose properties no
+`Statements` node on the page names. `shownProperties(document)` lists those named properties
+once, in document order. `SubjectList` reads subjects whose `property` statement points at the
+page subject, sorted by name and bounded by `limit`.
+
+## Read planning
+
+A component definition may supply `read(props, page)`, where `page` is
+`{ subject: string | null }`, returning a `PageRead` or `null`. This function is code owned by
+the registry. It is absent from the generated JSON Schema, and documents cannot name reads.
+`PageRead` is either:
+
+```ts
+{ kind: 'subject'; id: string }
+// GET /v1/subjects/{id}
+
+{ kind: 'search'; body: {
+  filter: { statement: { property: string; in: string[] } };
+  sort: 'name';
+  limit: number;
+} }
+// POST /v1/subjects:search
+```
+
+`SubjectList` uses its `property` and `limit` with `in: [page.subject]`.
+`planReads(registry, document, page)` accepts a valid document and returns `{ reads, nodes }`.
+It walks parents before their slot children, with slots in registry order. Descriptors with
+equal RFC 8785 canonical JSON share a read. `reads` assigns `r0`, `r1`, … in order of first
+use; `nodes` maps every node id with a read to its key. The planner does not mutate the
+document or execute reads. The later kernel aggregate route will dispatch each descriptor
+through its standalone route; data component rendering belongs to the website.
+
+`MAX_PAGE_READS` is 16, and planning throws if more distinct reads are needed. Every page
+subject plans the same number of reads, so the publish-time count bounds every read; a null
+subject needs none. Planning is one walk over at most 256 nodes with one canonical
+serialization per data node (each descriptor is under 1 KiB). It is linear in the document
+and never depends on the catalogue. A page issues at most 16 distinct reads whatever its
+node count or subject, enforced at publish. The growth check covers 1, 16 and 200 data nodes
+planning 1, 16 and 1 reads, and refuses 17 distinct reads.
+
 `bun scripts/schema.ts` writes `schema/composition-v1.schema.json` from this registry.
 `bun scripts/schema.ts --check` fails when that file is stale. The schema covers the closed
 shape and the safety patterns. Runtime validation also enforces size, node count, depth and
-unique ids.
+unique ids and the distinct read limit.

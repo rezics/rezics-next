@@ -1,7 +1,32 @@
 // SPDX-License-Identifier: Apache-2.0
 import Type, { type TSchema } from 'typebox';
 
-import { CURIE_PATTERN, HREF_PATTERN, PLAIN_TEXT_PATTERN, type SafetyKind, plainText, safetyKind } from './strings.ts';
+import {
+  CURIE_PATTERN,
+  HREF_PATTERN,
+  PLAIN_TEXT_PATTERN,
+  type SafetyKind,
+  curie,
+  plainText,
+  safetyKind,
+} from './strings.ts';
+
+export interface PageContext {
+  subject: string | null;
+}
+
+export type PageRead =
+  | { kind: 'subject'; id: string }
+  | {
+      kind: 'search';
+      body: {
+        filter: { statement: { property: string; in: string[] } };
+        sort: 'name';
+        limit: number;
+      };
+    };
+
+type ComponentRead = (props: CompositionNode['props'], page: PageContext) => PageRead | null;
 
 export const MAX_COMPOSITION_BYTES = 65_536;
 export const MAX_COMPOSITION_NODES = 256;
@@ -38,6 +63,7 @@ export interface CompositionComponent {
   type: string;
   props: TSchema;
   slots: readonly string[];
+  read?: ComponentRead;
 }
 
 export interface CompositionRegistry {
@@ -64,6 +90,7 @@ export interface SchemaNode {
   exclusiveMaximum?: number;
   minItems?: number;
   maxItems?: number;
+  uniqueItems?: boolean;
 }
 
 const TYPE_NAME = /^[A-Z][A-Za-z0-9]{0,63}$/u;
@@ -128,6 +155,7 @@ export interface ComponentDefinition {
   type: string;
   props: TSchema;
   slots?: readonly string[];
+  read?: ComponentRead;
 }
 
 export function defineRegistry(input: {
@@ -164,7 +192,12 @@ export function defineRegistry(input: {
       slots.push(slot);
     }
     for (const [key, property] of Object.entries(properties)) assertAdmitted(property, `${component.type}.${key}`);
-    components.push({ type: component.type, props: component.props, slots });
+    components.push({
+      type: component.type,
+      props: component.props,
+      slots,
+      ...(component.read ? { read: component.read } : {}),
+    });
   }
   return { root: input.root, components };
 }
@@ -179,6 +212,9 @@ const appearance = Type.Object(
   },
   closed,
 );
+
+const readSubject: ComponentRead = (_props, page) =>
+  page.subject === null ? null : { kind: 'subject', id: page.subject };
 
 export const platformRegistry = defineRegistry({
   root: Type.Object({ appearance: Type.Optional(appearance) }, closed),
@@ -205,6 +241,43 @@ export const platformRegistry = defineRegistry({
       type: 'Slot',
       props: Type.Object({ name: enumeration(SLOT_NAMES) }, closed),
       slots: ['children'],
+    },
+    {
+      type: 'SubjectHeader',
+      props: Type.Object({}, closed),
+      read: readSubject,
+    },
+    {
+      type: 'Statements',
+      props: Type.Object({ properties: Type.Array(curie(), { minItems: 1, maxItems: 32, uniqueItems: true }) }, closed),
+      read: readSubject,
+    },
+    {
+      type: 'MoreStatements',
+      props: Type.Object({}, closed),
+      read: readSubject,
+    },
+    {
+      type: 'SubjectList',
+      props: Type.Object(
+        {
+          title: plainText({ maxLength: 120 }),
+          property: curie(),
+          limit: Type.Integer({ minimum: 1, maximum: 24 }),
+        },
+        closed,
+      ),
+      read: (props, page) =>
+        page.subject === null
+          ? null
+          : {
+              kind: 'search',
+              body: {
+                filter: { statement: { property: props.property as string, in: [page.subject] } },
+                sort: 'name',
+                limit: props.limit as number,
+              },
+            },
     },
   ],
 });
