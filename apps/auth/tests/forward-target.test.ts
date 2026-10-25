@@ -5,14 +5,24 @@ import { createServer } from 'node:net';
 import { join } from 'node:path';
 
 const received: { path: string; cookie: string | null }[] = [];
+const forwarded: { path: string; method: string; body: string; headers: Record<string, string> }[] = [];
 const escaped: string[] = [];
 const fake = Bun.serve({
   port: 0,
   hostname: '127.0.0.1',
-  fetch(request) {
+  async fetch(request) {
     const url = new URL(request.url);
     received.push({ path: url.pathname + url.search, cookie: request.headers.get('cookie') });
-    return new Response('Auth');
+    forwarded.push({
+      path: url.pathname + url.search,
+      method: request.method,
+      body: await request.text(),
+      headers: Object.fromEntries(request.headers),
+    });
+    return new Response('Auth', {
+      status: 202,
+      headers: { 'cache-control': 'no-store', 'set-cookie': 'auth_session=renewed; HttpOnly; SameSite=Lax' },
+    });
   },
 });
 const other = Bun.serve({
@@ -24,6 +34,7 @@ const other = Bun.serve({
   },
 });
 let child: ChildProcess | undefined;
+let started: Promise<string> | undefined;
 
 function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -36,7 +47,11 @@ function freePort(): Promise<number> {
   });
 }
 
-async function site(): Promise<string> {
+function site(): Promise<string> {
+  return (started ??= startSite());
+}
+
+async function startSite(): Promise<string> {
   const port = await freePort();
   let output = '';
   const keep = (chunk: Buffer) => {
@@ -96,4 +111,48 @@ test('a forwarded path always reaches AUTH_ORIGIN, even when it starts with two 
   }
   expect(escaped, 'the second fake must never receive a forwarded request').toEqual([]);
   expect(received).toEqual(paths.map((path) => ({ path, cookie })));
+}, 300_000);
+
+test('POST /consent and POST /signup reach Auth unchanged and return its answer without page headers', async () => {
+  const origin = await site();
+  for (const path of ['/consent', '/signup']) {
+    const body = '{ "client_id": "reader+client", "scope": ["openid"] }';
+    const headers = {
+      'content-type': 'application/json',
+      cookie: 'auth_session=opaque-session; rezics_locale=fr',
+      origin,
+      'x-client-request': 'preserved',
+    };
+    const before = forwarded.length;
+    const response = await fetch(`${origin}${path}?source=client`, { method: 'POST', body, headers });
+    expect(response.status).toBe(202);
+    expect(await response.text()).toBe('Auth');
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(response.headers.get('set-cookie')).toBe('auth_session=renewed; HttpOnly; SameSite=Lax');
+    expect(response.headers.has('content-security-policy')).toBe(false);
+    expect(response.headers.has('x-frame-options')).toBe(false);
+    expect(response.headers.has('set-cookie') && response.headers.get('set-cookie')).not.toContain('rezics_locale');
+    expect(forwarded.slice(before)).toEqual([
+      { path: `${path}?source=client`, method: 'POST', body, headers: expect.objectContaining(headers) },
+    ]);
+  }
+}, 300_000);
+
+test('GET and HEAD still render page paths without reaching Auth', async () => {
+  const origin = await site();
+  for (const path of ['/consent', '/signup']) {
+    for (const method of ['GET', 'HEAD']) {
+      const before = forwarded.length;
+      const response = await fetch(`${origin}${path}`, { method, headers: { 'accept-language': 'en' } });
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type')).toContain('text/html');
+      expect(response.headers.get('cache-control')).toBe('private, no-store');
+      expect(response.headers.get('content-security-policy')).toBe("frame-ancestors 'none'");
+      expect(response.headers.get('x-frame-options')).toBe('DENY');
+      const body = await response.text();
+      if (method === 'HEAD') expect(body).toBe('');
+      else expect(body).toContain(path === '/consent' ? 'Review permissions' : 'Create account');
+      expect(forwarded).toHaveLength(before);
+    }
+  }
 }, 300_000);
