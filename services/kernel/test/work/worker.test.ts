@@ -1,6 +1,8 @@
 import { expect, test } from 'bun:test';
 import { readWorkerConfig } from '../../src/worker.ts';
 import { createWorkClient } from '../../src/work/client.ts';
+import { WORK_QUEUES } from '../../src/work/queues.ts';
+import { commerceWorkModule } from '../../src/commerce/work-module.ts';
 import { KERNEL_WORK_MODULES } from '../../src/work/modules.ts';
 import { fixture } from './support/process.ts';
 
@@ -8,7 +10,9 @@ const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 
 test('worker configuration names invalid variables without revealing values', () => {
-  expect(KERNEL_WORK_MODULES).toEqual([]);
+  expect(KERNEL_WORK_MODULES.filter((module) => module === commerceWorkModule)).toHaveLength(1);
+  expect(KERNEL_WORK_MODULES).toEqual([commerceWorkModule]);
+  expect(Object.keys(WORK_QUEUES)).toEqual(['governance', 'effects', 'workflows', 'delivery', 'import', 'maintenance']);
   expect(readWorkerConfig({ DATABASE_URL: databaseUrl })).toMatchObject({ databaseUrl, poolSize: 10 });
   expect(
     readWorkerConfig({ DATABASE_URL: databaseUrl, NOMAD_JOB_NAME: 'kernel', NOMAD_ALLOC_INDEX: '3' }),
@@ -45,6 +49,47 @@ test('worker configuration names invalid variables without revealing values', ()
   expect(() => readWorkerConfig({ DATABASE_URL: databaseUrl, NOMAD_JOB_NAME: 'kernel' })).toThrow('NOMAD_ALLOC_INDEX');
 });
 
+test('a worker missing or rejecting commerce configuration names the variable and hides secret values', async () => {
+  const valid = {
+    DATABASE_URL: databaseUrl,
+    STRIPE_SECRET_KEY: 'sk_test_worker_configuration_secret',
+    STRIPE_MANAGED_PAYMENTS: 'false',
+    CHECKOUT_SUCCESS_URL: 'https://web.example.test/success',
+    CHECKOUT_CANCEL_URL: 'https://web.example.test/cancel',
+  };
+  const cases = [
+    ['STRIPE_SECRET_KEY', undefined, 'STRIPE_SECRET_KEY'],
+    ['STRIPE_SECRET_KEY', 'sk_test_do_not_print_secret', 'STRIPE_SECRET_KEY'],
+    ['STRIPE_MANAGED_PAYMENTS', undefined, 'STRIPE_MANAGED_PAYMENTS'],
+    ['STRIPE_MANAGED_PAYMENTS', 'sometimes', 'STRIPE_MANAGED_PAYMENTS'],
+    ['CHECKOUT_SUCCESS_URL', undefined, 'CHECKOUT_SUCCESS_URL'],
+    ['CHECKOUT_SUCCESS_URL', 'http://web.example.test/success', 'CHECKOUT_SUCCESS_URL'],
+    ['CHECKOUT_CANCEL_URL', undefined, 'CHECKOUT_CANCEL_URL'],
+    ['CHECKOUT_CANCEL_URL', 'javascript:secret-value', 'CHECKOUT_CANCEL_URL'],
+    ['STRIPE_API_HOST', 'ftp://secret-host.invalid', 'STRIPE_API_HOST'],
+  ] as const;
+
+  for (const [variable, value, expected] of cases) {
+    const env = { ...valid, [variable]: value };
+    const child = Bun.spawn([process.execPath, `${import.meta.dir}/../../src/worker.ts`], {
+      env,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const [exitCode, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    const output = `${stdout}${stderr}`;
+    expect(exitCode, output).not.toBe(0);
+    expect(output).toContain(expected);
+    expect(output).not.toContain('do_not_print_secret');
+    expect(output).not.toContain('secret-value');
+    expect(output).not.toContain('secret-host.invalid');
+  }
+}, 60_000);
+
 test('API enqueue before startup survives, duplicate IDs execute once, and SIGTERM drains in-flight work', async () => {
   const client = await createWorkClient(databaseUrl);
   const workflowID = crypto.randomUUID();
@@ -78,7 +123,13 @@ test('stop is idempotent and releases module pools, and the direct entrypoint ha
     runtime.child.kill();
   }
   const direct = Bun.spawn([process.execPath, `${import.meta.dir}/../../src/worker.ts`], {
-    env: process.env,
+    env: {
+      ...process.env,
+      STRIPE_SECRET_KEY: 'sk_test_worker_entrypoint',
+      STRIPE_MANAGED_PAYMENTS: 'false',
+      CHECKOUT_SUCCESS_URL: 'https://web.example.test/success',
+      CHECKOUT_CANCEL_URL: 'https://web.example.test/cancel',
+    },
     stdout: 'pipe',
     stderr: 'pipe',
   });
