@@ -4,6 +4,7 @@ import { Checkbox } from './checkbox.tsx';
 import {
   Field,
   FieldContent,
+  FieldControl,
   FieldDescription,
   FieldError,
   FieldGroup,
@@ -85,7 +86,9 @@ export const Invalid: Story = {
   render: (args) => (
     <Field {...args}>
       <FieldLabel>ISBN-13</FieldLabel>
-      <Input defaultValue="978-0-7653-8203" />
+      <FieldControl>
+        <Input defaultValue="978-0-7653-8203" />
+      </FieldControl>
       <FieldError>An ISBN-13 has 13 digits; this one has 12.</FieldError>
     </Field>
   ),

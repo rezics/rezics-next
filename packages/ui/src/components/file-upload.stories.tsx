@@ -61,7 +61,7 @@ const meta = {
   ],
   render: (args) => (
     <FileUpload {...args}>
-      <FileUploadDropzone>
+      <FileUploadDropzone aria-label="Drop a cover image hereor choose one from your devicePNG, JPG or WebP, up to 5 MB. Portrait covers look best.">
         <FileUploadDropzoneIcon>
           <ImageIcon />
         </FileUploadDropzoneIcon>
@@ -109,7 +109,7 @@ export const Multiple: Story = {
   args: { accept: undefined, maxFiles: 5, defaultAcceptedFiles: [cover, epub, notes] },
   render: (args) => (
     <FileUpload {...args}>
-      <FileUploadDropzone>
+      <FileUploadDropzone aria-label="Attach evidence for your appealScreenshots, PDFs or the original chapter fileUp to 5 files, 5 MB each.">
         <FileUploadDropzoneIcon />
         <FileUploadTitle>Attach evidence for your appeal</FileUploadTitle>
         <FileUploadDescription>
@@ -147,7 +147,7 @@ export const Chinese: Story = {
   args: { defaultAcceptedFiles: [epub], accept: undefined },
   render: (args) => (
     <FileUpload {...args}>
-      <FileUploadDropzone>
+      <FileUploadDropzone aria-label="将封面图片拖到这里或从设备中选择文件支持 PNG、JPG、WebP，最大 5 MB。">
         <FileUploadDropzoneIcon />
         <FileUploadTitle>将封面图片拖到这里</FileUploadTitle>
         <FileUploadDescription>或从设备中选择文件</FileUploadDescription>
