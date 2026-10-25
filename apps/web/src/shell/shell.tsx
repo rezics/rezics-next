@@ -27,7 +27,21 @@ import { getLocale, locales, setLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { use, useEffect, useRef, useState } from 'react';
 import { ShellSearch } from '../search/search.tsx';
-import { House, LogIn, LogOut, Menu as MenuIcon, Monitor, Moon, ShieldCheck, Sun, UserRound, X } from 'lucide-react';
+import {
+  Folders,
+  House,
+  Library,
+  LogIn,
+  LogOut,
+  Menu as MenuIcon,
+  Monitor,
+  Moon,
+  ShieldCheck,
+  Sun,
+  UserRound,
+  Users,
+  X,
+} from 'lucide-react';
 import type { SessionEnv } from '../session/client.ts';
 import type { SessionState } from '../session/state.ts';
 
@@ -63,6 +77,8 @@ const messages = {
 const destinations = [{ to: '/', message: messages.nav_home, icon: House, phone: true }] as const;
 const headerControlClass =
   'h-9 rounded-full border border-border/60 focus-visible:border-primary focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background';
+const accountMenuLinkClass =
+  'flex min-h-9 items-center gap-2.5 rounded-xl px-3 py-2 text-sm outline-none hover:bg-accent hover:text-accent-foreground focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary';
 const readAuthIssuer = createServerFn({ method: 'GET' }).handler(async () => {
   const { env } = await import('cloudflare:workers');
   return (env as Partial<SessionEnv>).AUTH_ISSUER ?? '';
@@ -267,6 +283,7 @@ function SessionControl({ session, csrfToken }: { session: SessionState; csrfTok
       const issuer = use(authIssuerPromise);
       if (issuer) securitySettingsHref = new URL('/security', issuer).href;
     }
+    const locale = getLocale();
     return (
       <>
         <Button
@@ -289,12 +306,19 @@ function SessionControl({ session, csrfToken }: { session: SessionState; csrfTok
           aria-labelledby="account-menu-button"
           className="fixed inset-auto end-3 top-[4.5rem] m-0 grid w-64 max-w-[calc(100vw-1.5rem)] gap-1 rounded-2xl border border-border/60 bg-popover p-1.5 text-popover-foreground shadow-(--aura-shadow-float) outline-none"
         >
-          <a
-            href={securitySettingsHref}
-            data-account-security-settings
-            autoFocus
-            className="flex min-h-9 items-center gap-2.5 rounded-xl px-3 py-2 text-sm outline-none hover:bg-accent hover:text-accent-foreground focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-          >
+          <a href={`/${locale}/library`} className={accountMenuLinkClass}>
+            <Library aria-hidden="true" className="size-4" />
+            {m.library_nav_library()}
+          </a>
+          <a href={`/${locale}/collections`} className={accountMenuLinkClass}>
+            <Folders aria-hidden="true" className="size-4" />
+            {m.library_nav_collections()}
+          </a>
+          <a href={`/${locale}/following`} className={accountMenuLinkClass}>
+            <Users aria-hidden="true" className="size-4" />
+            {m.library_nav_following()}
+          </a>
+          <a href={securitySettingsHref} data-account-security-settings autoFocus className={accountMenuLinkClass}>
             <ShieldCheck aria-hidden="true" className="size-4" />
             {m.account_security_settings()}
           </a>

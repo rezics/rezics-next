@@ -371,6 +371,15 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
   no page does one read per collection or followed target.
 - **Growth check:** `tests/library-mine-cost.test.ts`: `my collections and following stay within their bound as list size grows`
 
+### Personal library
+
+- **Touches:** One session read and `GET /v1/libraryEntries?view=FULL` for one page of at most 100 entries. A state
+  change is one `PUT /v1/libraryEntries/<subjectId>` or `DELETE /v1/libraryEntries/<subjectId>?revision=` after that
+  session read.
+- **Bound:** A view is 1 D, 1 K, 0 R and 0 A. A state change is 1 D and 1 K write, 0 R and 0 A. The list is one page of
+  at most 100 entries. No per-entry reads.
+- **Growth check:** `tests/library-entries-cost.test.ts`: `personal library view and state change stay within their bounds as entries grow`
+
 ### Start a thread
 
 - **Touches:** One `POST /v1/threads`/K after the session read; send the published thread draft and stable idempotency
