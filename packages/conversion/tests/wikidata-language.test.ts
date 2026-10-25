@@ -11,7 +11,9 @@ const ignored = [...others, 'zh-min-nan', 'be-tarask', 'simple'];
 
 function entity() {
   const term = (language: string, value: string) => ({ language, value });
-  const labels = Object.fromEntries([...kept, ...ignored].map((language) => [language, term(language, `Label ${language}`)]));
+  const labels = Object.fromEntries(
+    [...kept, ...ignored].map((language) => [language, term(language, `Label ${language}`)]),
+  );
   const aliases = Object.fromEntries(ignored.map((language) => [language, [term(language, `Alias ${language}`)]]));
   return {
     external_id: 'Q571',
@@ -33,7 +35,10 @@ function entity() {
               snaktype: 'value',
               property: 'P31',
               datatype: 'wikibase-item',
-              datavalue: { type: 'wikibase-entityid', value: { 'entity-type': 'item', 'numeric-id': 47461344, id: 'Q47461344' } },
+              datavalue: {
+                type: 'wikibase-entityid',
+                value: { 'entity-type': 'item', 'numeric-id': 47461344, id: 'Q47461344' },
+              },
             },
           },
         ],
