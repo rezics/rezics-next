@@ -2,6 +2,12 @@ import { accountsWorkModule } from '../access/membership-work.ts';
 import type { WorkModule } from './registry.ts';
 import { commerceWorkModule } from '../commerce/work-module.ts';
 import { libraryWorkModule } from '../library/work-module.ts';
+import { searchWorkModule } from '../search/work.ts';
 
 /** Add each module's registration here, in dependency order, once. */
-export const KERNEL_WORK_MODULES: readonly WorkModule[] = [accountsWorkModule, commerceWorkModule, libraryWorkModule];
+export const KERNEL_WORK_MODULES: readonly WorkModule[] = [
+  accountsWorkModule,
+  commerceWorkModule,
+  libraryWorkModule,
+  searchWorkModule,
+];

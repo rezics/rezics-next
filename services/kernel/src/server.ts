@@ -11,7 +11,11 @@ import { createWorkClient } from './work/client.ts';
 export { ConfigError } from './commerce/config.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { setupPresentation } from './presentation/setup.ts';
+import { subjectSource } from './semantic/search-source.ts';
 import { setupSemantic } from './semantic/setup.ts';
+import { createOpenSearch } from './search/opensearch.ts';
+import { createSearchService } from './search/service.ts';
+import { readSearchConfig, type SearchConfig } from './search/work.ts';
 
 export type ServerConfig = {
   databaseUrl: string;
@@ -19,7 +23,8 @@ export type ServerConfig = {
   port: number;
   routeKey: Uint8Array;
   tokens: KeyRing;
-  commerce: CommerceConfig;
+  commerce?: CommerceConfig;
+  search?: SearchConfig;
   writeRate?: WriteRateLimiter;
   rateAttribution?: WriteRateStageOptions;
 };
@@ -72,68 +77,124 @@ export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
     clientIpHeader: env.KERNEL_RATE_CLIENT_IP_HEADER ?? 'cf-connecting-ip',
   };
   createWriteRateStage(writeRate, rateAttribution); // Validate trusted transport configuration at startup.
+  const search = readSearchConfig(env);
+  // Commerce is configured only when an operator sets it. A partial set still names the missing variable.
+  const commerceConfigured = [
+    'STRIPE_SECRET_KEY',
+    'STRIPE_WEBHOOK_SECRETS',
+    'STRIPE_MANAGED_PAYMENTS',
+    'STRIPE_API_HOST',
+    'CHECKOUT_SUCCESS_URL',
+    'CHECKOUT_CANCEL_URL',
+  ].some((variable) => env[variable] !== undefined);
+  const commerce = commerceConfigured ? readCommerceConfig(env) : undefined;
   return {
     databaseUrl,
     hostname,
     port,
     routeKey,
     tokens: { current, keys },
-    commerce: readCommerceConfig(env),
     writeRate,
     rateAttribution,
+    ...(commerce === undefined ? {} : { commerce }),
+    ...(search === undefined ? {} : { search }),
   };
 }
 
-export async function startServer(config: ServerConfig) {
+type RunningServer = {
+  url: URL;
+  stop(): Promise<void>;
+};
+
+export function startServer(config: ServerConfig): Promise<RunningServer> & RunningServer {
   const pool = createPool(config.databaseUrl);
-  await setupSemantic(pool, bundledRelease);
-  await setupPresentation(pool);
-  const workClient = createWorkClient(config.databaseUrl);
-  // Observe startup rejection immediately; the webhook and stop still receive it.
-  void workClient.catch(() => {});
   const peers = new WeakMap<Request, string>();
-  const app = createKernel({
-    pool,
-    routeKey: config.routeKey,
-    tokens: config.tokens,
-    ...(config.writeRate === undefined ? {} : { writeRate: config.writeRate }),
-    ...(config.rateAttribution === undefined ? {} : { rateAttribution: config.rateAttribution }),
-    ratePeer: (request) => peers.get(request),
-    commerce: {
-      stripe: createStripePort({ ...config.commerce.stripe, clock: () => new Date() }),
-      successUrl: config.commerce.successUrl,
-      cancelUrl: config.commerce.cancelUrl,
-      webhookSecrets: config.commerce.webhookSecrets,
-      work: {
-        async enqueueStripeEvent(ref) {
-          await createCommerceWork(await workClient).enqueueStripeEvent(ref);
-        },
-      },
-    },
-  });
+  const searchConfig = config.search;
+  const commerce = config.commerce;
+  // One client for the process. The server enqueues no index work and runs no relay.
+  const openSearch = searchConfig === undefined ? undefined : createOpenSearch(searchConfig.url);
+  let app: ReturnType<typeof createKernel> | undefined;
+  let workClient: ReturnType<typeof createWorkClient> | undefined;
+  const boot = (async () => {
+    await setupSemantic(pool, bundledRelease);
+    await setupPresentation(pool);
+    workClient = createWorkClient(config.databaseUrl);
+    // Observe startup rejection immediately; the webhook and stop still receive it.
+    void workClient.catch(() => {});
+    const client = workClient;
+    app = createKernel({
+      pool,
+      routeKey: config.routeKey,
+      tokens: config.tokens,
+      ...(config.writeRate === undefined ? {} : { writeRate: config.writeRate }),
+      ...(config.rateAttribution === undefined ? {} : { rateAttribution: config.rateAttribution }),
+      ratePeer: (request) => peers.get(request),
+      ...(openSearch === undefined || searchConfig === undefined
+        ? {}
+        : {
+            search: createSearchService({
+              pool,
+              client: openSearch,
+              prefix: searchConfig.prefix,
+              source: subjectSource(pool),
+              cursors: config.tokens,
+            }),
+          }),
+      ...(commerce === undefined
+        ? {}
+        : {
+            commerce: {
+              stripe: createStripePort({ ...commerce.stripe, clock: () => new Date() }),
+              successUrl: commerce.successUrl,
+              cancelUrl: commerce.cancelUrl,
+              webhookSecrets: commerce.webhookSecrets,
+              work: {
+                async enqueueStripeEvent(ref) {
+                  await createCommerceWork(await client).enqueueStripeEvent(ref);
+                },
+              },
+            },
+          }),
+    });
+  })();
+  // The socket is listening before setup finishes. Requests wait for that setup.
   const server = Bun.serve({
     hostname: config.hostname,
     port: config.port,
-    fetch(request, transport) {
+    async fetch(request, transport) {
+      await boot;
+      if (!app) throw new Error('Kernel server is not ready');
       const address = transport.requestIP(request)?.address;
       if (address) peers.set(request, address);
       return app.fetch(request);
     },
   });
-  return {
+  let stopping: Promise<void> | undefined;
+  const running: RunningServer = {
     url: server.url,
-    async stop(): Promise<void> {
-      try {
-        await server.stop(true);
-      } finally {
+    stop() {
+      return (stopping ??= (async () => {
         try {
-          await (await workClient).close();
+          await server.stop(true);
         } finally {
-          await pool.end();
+          try {
+            await boot.catch(() => {});
+            if (workClient) await (await workClient).close();
+          } finally {
+            await pool.end();
+          }
         }
-      }
+      })());
     },
   };
+  const pending = boot.then(
+    () => running,
+    async (error: unknown) => {
+      await running.stop().catch(() => {});
+      throw error;
+    },
+  );
+  return Object.assign(pending, running);
 }
 
 if (import.meta.main) {

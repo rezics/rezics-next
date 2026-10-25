@@ -128,6 +128,42 @@ async function up(): Promise<void> {
   await Bun.write(envFile, developmentEnv(existingEnv, url));
 }
 
+async function rebuild(): Promise<void> {
+  const { ConfigError } = await import('../src/server.ts');
+  const { readSearchConfig } = await import('../src/search/work.ts');
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) throw new ConfigError('DATABASE_URL');
+  const config = readSearchConfig(process.env);
+  if (!config) throw new ConfigError('OPENSEARCH_URL');
+  const { createPool } = await import('../src/database/pool.ts');
+  const { createOpenSearch } = await import('../src/search/opensearch.ts');
+  const { RebuildError, rebuildSubjects } = await import('../src/search/generations.ts');
+  const { subjectSource } = await import('../src/semantic/search-source.ts');
+  const pool = createPool(databaseUrl);
+  try {
+    const result = await rebuildSubjects({
+      pool,
+      search: createOpenSearch(config.url),
+      source: subjectSource(pool),
+      prefix: config.prefix,
+      // The worker's runner discovers the new generation on its own.
+      runner: { async refresh() {} },
+    });
+    console.log(JSON.stringify(result));
+  } catch (error) {
+    if (error instanceof RebuildError) {
+      console.error(
+        JSON.stringify({ reason: error.reason, generation: error.generation, partitions: error.partitions }),
+      );
+      process.exitCode = 1;
+      return;
+    }
+    throw error;
+  } finally {
+    await pool.end();
+  }
+}
+
 async function main(): Promise<void> {
   const action = process.argv[2] ?? 'up';
   if (action === 'up') await up();
@@ -143,7 +179,8 @@ async function main(): Promise<void> {
       // A missing volume is already reset.
     }
     await up();
-  } else throw new Error(`Unknown search action: ${action}`);
+  } else if (action === 'rebuild') await rebuild();
+  else throw new Error(`Unknown search action: ${action}`);
 }
 
 if (import.meta.main) {

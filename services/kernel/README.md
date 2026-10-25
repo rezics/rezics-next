@@ -17,6 +17,12 @@ Run `bun run search up` from this workspace to create or start the local OpenSea
 to `.env`. Use `bun run search down` to stop it while keeping its volume, or `bun run search reset` to remove and
 recreate it. The check command starts its own disposable OpenSearch node.
 
+## Rebuilding the search index
+
+Run `bun run search rebuild` from this workspace to build the next subject generation and switch the alias to it.
+The worker replays the log into the new generation. A failed rebuild reports one of `timeout`, `mismatch`, `busy`,
+`running`, or `limit`. The previous generation is deleted 15 minutes after the switch.
+
 ## Run the kernel
 
 Run `bun run db up`, then `bun run dev` from this workspace to serve the API locally. The server reads

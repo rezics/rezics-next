@@ -5,6 +5,8 @@ import { DBOS_SCHEMA, WORK_APPLICATION, type WorkClient } from './client.ts';
 import { registerEffects, type Effect } from '../events/effects.ts';
 import { WORK_QUEUES } from './queues.ts';
 
+export type WorkService = { stop(): Promise<void> };
+
 export type WorkContext = {
   readonly pool: Pool;
   readonly queues: typeof WORK_QUEUES;
@@ -12,6 +14,7 @@ export type WorkContext = {
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly clock: KernelClock;
   addEffects(effects: Effect[]): void;
+  addService(start: () => WorkService | Promise<WorkService>): void;
 };
 export type WorkModule = { name: string; register(context: WorkContext): void | Promise<void> };
 export type WorkOptions = {
@@ -52,7 +55,9 @@ export async function composeWork(modules: readonly WorkModule[], options: WorkO
     await options.client.registerQueue(name, parameters);
   }
   const collectedEffects: Effect[] = [];
-  let acceptingEffects = true;
+  const serviceStarters: Array<() => WorkService | Promise<WorkService>> = [];
+  const started: WorkService[] = [];
+  let accepting = true;
   const context: WorkContext = Object.freeze({
     pool: options.pool,
     queues: WORK_QUEUES,
@@ -60,16 +65,33 @@ export async function composeWork(modules: readonly WorkModule[], options: WorkO
     env: options.env ?? process.env,
     clock,
     addEffects(effects) {
-      if (!acceptingEffects) throw new Error('Cannot add effects after work composition');
+      if (!accepting) throw new Error('Cannot add effects after work composition');
       collectedEffects.push(...effects);
+    },
+    addService(start) {
+      if (!accepting) throw new Error('Cannot add a service after composition');
+      serviceStarters.push(start);
     },
   });
   try {
     for (const module of registrations) await module.register(context);
   } finally {
-    acceptingEffects = false;
+    accepting = false;
   }
   const effects = registerEffects(collectedEffects);
+
+  // Stop every service. One failure does not skip the rest; the first one is returned.
+  const stopServices = async (services: readonly WorkService[]): Promise<unknown> => {
+    let failure: unknown;
+    for (let index = services.length - 1; index >= 0; index -= 1) {
+      try {
+        await services[index]!.stop();
+      } catch (error) {
+        failure ??= error;
+      }
+    }
+    return failure;
+  };
 
   let launching: Promise<void> | undefined;
   let stopping: Promise<void> | undefined;
@@ -77,16 +99,35 @@ export async function composeWork(modules: readonly WorkModule[], options: WorkO
     effects,
     launch(): Promise<void> {
       if (stopping) return Promise.reject(new Error('Work launch refused after shutdown'));
-      return (launching ??= DBOS.launch());
+      return (launching ??= (async () => {
+        await DBOS.launch();
+        const running: WorkService[] = [];
+        try {
+          for (const start of serviceStarters) running.push(await start());
+        } catch (error) {
+          await stopServices(running);
+          throw error;
+        }
+        started.push(...running);
+      })());
     },
     shutdown(): Promise<void> {
       return (stopping ??= (async () => {
+        let failure: unknown;
         try {
           await launching;
-        } finally {
+        } catch (error) {
+          failure = error;
+        }
+        const stopFailure = await stopServices(started.splice(0));
+        failure ??= stopFailure;
+        try {
           // SDK stops receivers and queue dispatch before draining, then disconnects.
           await DBOS.shutdown({ workflowCompletionTimeoutMS: 2_147_483_647 });
+        } catch (error) {
+          failure ??= error;
         }
+        if (failure) throw failure;
       })());
     },
   };
