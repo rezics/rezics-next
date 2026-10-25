@@ -9,6 +9,8 @@ const writes = new Set([
   'subject:create',
   'definitions:publish',
   'definitions:activate',
+  'presentation:publish',
+  'presentation:activate',
   'offer:create',
   'offer:manage',
   'order:create',

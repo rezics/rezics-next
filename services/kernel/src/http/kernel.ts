@@ -9,6 +9,7 @@ import type { ContentBoardDependencies } from '../content/boards.ts';
 import { mediaRoutes } from '../content/media-routes.ts';
 import { contentRoutes } from '../content/routes.ts';
 import type { ContentRuntime } from '../content/runtime.ts';
+import { profileRoutes } from '../presentation/http/profiles.ts';
 import type { Access, AccessConfig } from '../request/access.ts';
 import { searchRoutes, type SearchService } from '../search/http/routes.ts';
 import { definitionRoutes } from '../semantic/http/definitions.ts';
@@ -44,6 +45,7 @@ export function createKernel(dependencies: KernelDependencies) {
     subjectRoutes(createApp({ ...dependencies, access: resolveAccess, tokens }), { ...dependencies, tokens }),
     dependencies,
   );
+  const presentation = profileRoutes(app, dependencies);
   const payouts = payoutRoutes(app, {
     ...dependencies,
     access: () => resolveAccess({ actions: actionCatalogue(app) }),
@@ -96,6 +98,7 @@ export function createKernel(dependencies: KernelDependencies) {
   });
   declareKernelWriteRates(community);
   return community as typeof community &
+    typeof presentation &
     typeof granted &
     typeof media &
     typeof content &
