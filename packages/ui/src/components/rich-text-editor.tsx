@@ -20,6 +20,7 @@ import { LinkMenu, type LinkRange } from './editor-link.tsx';
 import { ImageInsert, withImageView } from './editor-image.tsx';
 import { editorUploads, type ImageUploader, type UploadEntry, type UploadState } from './editor-uploads.ts';
 import { availableCommands, imageCommand } from './editor-commands.ts';
+import { idleSlashHandlers, SlashMenu, slashExtension } from './editor-slash-menu.tsx';
 import { Button } from './button.tsx';
 
 export type { ImageUploader, UploadedImage, UploadState } from './editor-uploads.ts';
@@ -107,6 +108,7 @@ export function RichTextEditor({
 
   const labelsRef = useRef(resolvedLabels);
   labelsRef.current = resolvedLabels;
+  const slashHandlers = useRef(idleSlashHandlers);
 
   const publish = useCallback(
     (editor: TiptapEditor) => {
@@ -154,13 +156,16 @@ export function RichTextEditor({
 
   const editor = useEditor(
     {
-      extensions: withImageView(
-        editorExtensions(value.profile, {
-          ...(placeholder === undefined ? {} : { placeholder }),
-          ...(maxLength === undefined ? {} : { maxLength }),
-        }),
-        () => labelsRef.current,
-      ),
+      extensions: [
+        ...withImageView(
+          editorExtensions(value.profile, {
+            ...(placeholder === undefined ? {} : { placeholder }),
+            ...(maxLength === undefined ? {} : { maxLength }),
+          }),
+          () => labelsRef.current,
+        ),
+        slashExtension(slashHandlers),
+      ],
       content: normalizedValue.doc as JSONContent,
       immediatelyRender: false,
       shouldRerenderOnTransaction: false,
@@ -343,6 +348,14 @@ export function RichTextEditor({
               onClose={() => setImagePosition(null)}
             />
           ) : null}
+          <SlashMenu
+            editor={editor}
+            labels={resolvedLabels}
+            upload={hasUpload}
+            handlers={slashHandlers}
+            onLink={openLink}
+            onImage={() => setImagePosition(editor.state.selection.from)}
+          />
           <SelectionMenu
             editor={editor}
             labels={resolvedLabels}

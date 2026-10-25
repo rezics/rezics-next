@@ -1,5 +1,6 @@
 import type { Editor } from '@tiptap/core';
-import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
+import { Fragment, type Node as ProseMirrorNode } from '@tiptap/pm/model';
+import { TextSelection } from '@tiptap/pm/state';
 import { useEditorState } from '@tiptap/react';
 import type { RichTextEditorLabels } from './editor-labels.ts';
 
@@ -8,6 +9,8 @@ export interface EditorCommand {
   label: keyof RichTextEditorLabels;
   node?: string;
   mark?: string;
+  /** Extra words the slash menu matches besides the localized label. */
+  keywords?: readonly string[];
   active?: (editor: Editor) => boolean;
   run: (editor: Editor, openLink: () => void, openImage?: () => void) => void;
 }
@@ -61,6 +64,7 @@ export const imageCommand: EditorCommand = {
   id: 'image',
   label: 'image',
   node: 'image',
+  keywords: ['picture', 'photo', 'img'],
   run: (_editor, _openLink, openImage) => openImage?.(),
 };
 
@@ -89,13 +93,20 @@ const heading = (level: 1 | 2 | 3): EditorCommand => ({
   id: `heading${level}`,
   label: `heading${level}`,
   node: 'heading',
+  keywords: [`h${level}`, 'heading', 'title'],
   active: (editor) => editor.isActive('heading', { level }),
   run: (editor) => setTextblock(editor, editor.isActive('heading', { level }) ? 'paragraph' : 'heading', { level }),
 });
-const list = (node: string, item: string, label: keyof RichTextEditorLabels): EditorCommand => ({
+const list = (
+  node: string,
+  item: string,
+  label: keyof RichTextEditorLabels,
+  keywords: readonly string[],
+): EditorCommand => ({
   id: node,
   label,
   node,
+  keywords,
   active: (editor) => editor.isActive(node),
   run: (editor) => {
     if (editor.isActive('heading') || editor.isActive('codeBlock')) setTextblock(editor, 'paragraph');
@@ -107,19 +118,21 @@ export const blockCommands: readonly EditorCommand[] = [
     id: 'paragraph',
     label: 'paragraph',
     node: 'paragraph',
+    keywords: ['text', 'plain'],
     active: (editor) => editor.isActive('paragraph'),
     run: (editor) => setTextblock(editor, 'paragraph'),
   },
   heading(1),
   heading(2),
   heading(3),
-  list('bulletList', 'listItem', 'bulletList'),
-  list('orderedList', 'listItem', 'orderedList'),
-  list('taskList', 'taskItem', 'taskList'),
+  list('bulletList', 'listItem', 'bulletList', ['ul', 'bullet', 'list']),
+  list('orderedList', 'listItem', 'orderedList', ['ol', 'numbered', 'list']),
+  list('taskList', 'taskItem', 'taskList', ['todo', 'task', 'checkbox', 'checklist']),
   {
     id: 'blockquote',
     label: 'quote',
     node: 'blockquote',
+    keywords: ['quote', 'blockquote', 'citation'],
     active: (editor) => editor.isActive('blockquote'),
     run: (editor) => {
       if (editor.isActive('heading') || editor.isActive('codeBlock')) setTextblock(editor, 'paragraph');
@@ -130,9 +143,65 @@ export const blockCommands: readonly EditorCommand[] = [
     id: 'codeBlock',
     label: 'codeBlock',
     node: 'codeBlock',
+    keywords: ['code', 'pre', 'snippet'],
     active: (editor) => editor.isActive('codeBlock'),
     run: (editor) => setTextblock(editor, editor.isActive('codeBlock') ? 'paragraph' : 'codeBlock'),
   },
+];
+
+/** A leaf block replaces an emptied paragraph; text before the slash keeps its block. */
+function insertBlock(editor: Editor, content: Record<string, unknown>) {
+  const block = editor.schema.nodeFromJSON(content);
+  editor
+    .chain()
+    .focus()
+    .command(({ tr, state }) => {
+      const { $from } = state.selection;
+      if (!$from.parent.isTextblock) return false;
+      const paragraph = state.schema.nodes.paragraph?.createAndFill();
+      const inserted = paragraph && !block.isTextblock ? Fragment.from([block, paragraph]) : block;
+      const at = $from.parent.content.size === 0 ? $from.before() : $from.after();
+      if ($from.parent.content.size === 0) tr.replaceWith($from.before(), $from.after(), inserted);
+      else tr.insert($from.after(), inserted);
+      const inside = at + block.nodeSize + (paragraph && !block.isTextblock ? 1 : 0);
+      tr.setSelection(TextSelection.near(tr.doc.resolve(Math.min(inside, tr.doc.content.size))));
+      return true;
+    })
+    .run();
+}
+
+const cell = (type: 'tableHeader' | 'tableCell') => ({ type, content: [{ type: 'paragraph' }] });
+const tableRow = (type: 'tableHeader' | 'tableCell') => ({
+  type: 'tableRow',
+  content: [cell(type), cell(type), cell(type)],
+});
+
+export const horizontalRuleCommand: EditorCommand = {
+  id: 'horizontalRule',
+  label: 'horizontalRule',
+  node: 'horizontalRule',
+  keywords: ['hr', 'divider', 'rule', 'line'],
+  run: (editor) => insertBlock(editor, { type: 'horizontalRule' }),
+};
+
+export const tableCommand: EditorCommand = {
+  id: 'table',
+  label: 'table',
+  node: 'table',
+  keywords: ['grid', 'rows', 'columns'],
+  run: (editor) =>
+    insertBlock(editor, {
+      type: 'table',
+      content: [tableRow('tableHeader'), tableRow('tableCell'), tableRow('tableCell')],
+    }),
+};
+
+/** Blocks the slash menu can insert. Image stays in the set and is offered only when an upload exists. */
+export const insertCommands: readonly EditorCommand[] = [
+  ...blockCommands.filter((command) => command.id !== 'paragraph'),
+  horizontalRuleCommand,
+  tableCommand,
+  imageCommand,
 ];
 
 /** Schema membership, rather than a profile flag, determines the offered commands. */
