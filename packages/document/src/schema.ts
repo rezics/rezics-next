@@ -11,9 +11,7 @@ const closed = { additionalProperties: false };
 const id = Type.String({ minLength: 1, maxLength: 256 });
 const optionalString = Type.Optional(Type.Union([Type.String(), Type.Null()]));
 // CSS Color syntax remains browser-defined; delimiters cannot escape a single declaration.
-const color = Type.Optional(
-  Type.Union([Type.String({ pattern: '^[^;{}\\u0000-\\u001f]*$' }), Type.Null()]),
-);
+const color = Type.Optional(Type.Union([Type.String({ pattern: '^[^;{}\\u0000-\\u001f]*$' }), Type.Null()]));
 const dimension = Type.Optional(Type.Union([Type.Number({ exclusiveMinimum: 0 }), Type.Null()]));
 const language = Type.Optional(
   Type.Union([
@@ -24,9 +22,7 @@ const language = Type.Optional(
 const choice = (values: string[]) => Type.Union(values.map((value) => Type.Literal(value)));
 const direction = Type.Optional(Type.Union([choice(['ltr', 'rtl', 'auto']), Type.Null()]));
 const common = { id, lang: language, dir: direction };
-const align = Type.Optional(
-  Type.Union([choice(['left', 'right', 'center', 'justify']), Type.Null()]),
-);
+const align = Type.Optional(Type.Union([choice(['left', 'right', 'center', 'justify']), Type.Null()]));
 const commonAttrs = { id: { default: null }, lang: { default: null }, dir: { default: null } };
 
 /** Attributes are shared by wire validation and the reference ProseMirror schema. */
@@ -170,19 +166,14 @@ function block(spec: NodeSpec): NodeSpec {
     ...spec,
     attrs,
     toDOM: (node) => {
-          const originalOutput = original(node);
-          if (!Array.isArray(originalOutput)) return originalOutput;
-          const output = originalOutput as readonly unknown[];
-          if (typeof output[0] !== 'string') return originalOutput;
-          const hasAttrs =
-            output[1] !== null && typeof output[1] === 'object' && !Array.isArray(output[1]);
-          const attrs = hasAttrs ? (output[1] as Record<string, unknown>) : {};
-          return [
-            output[0],
-            { ...attrs, ...domAttrs(node.attrs) },
-            ...output.slice(hasAttrs ? 2 : 1),
-          ] as DOMOutputSpec;
-        },
+      const originalOutput = original(node);
+      if (!Array.isArray(originalOutput)) return originalOutput;
+      const output = originalOutput as readonly unknown[];
+      if (typeof output[0] !== 'string') return originalOutput;
+      const hasAttrs = output[1] !== null && typeof output[1] === 'object' && !Array.isArray(output[1]);
+      const attrs = hasAttrs ? (output[1] as Record<string, unknown>) : {};
+      return [output[0], { ...attrs, ...domAttrs(node.attrs) }, ...output.slice(hasAttrs ? 2 : 1)] as DOMOutputSpec;
+    },
   };
 }
 
@@ -278,11 +269,7 @@ function createSchema(profile: DocumentProfile): Schema {
       group: 'block',
       atom: true,
       attrs: { src: {}, kind: {}, caption: { default: '' } },
-      toDOM: (node) => [
-        'figure',
-        { 'data-media-kind': node.attrs.kind },
-        node.attrs.caption || node.attrs.src,
-      ],
+      toDOM: (node) => ['figure', { 'data-media-kind': node.attrs.kind }, node.attrs.caption || node.attrs.src],
     });
     const extensionAttrs = {
       id: { default: null },
@@ -386,12 +373,7 @@ interface WireRules {
 
 function wireRules(profile: DocumentProfile): WireRules {
   const names = profile === 'text' ? textNodeNames : blocksNodeNames;
-  const inlineNames = [
-    'text',
-    'hardBreak',
-    'ruby',
-    ...(profile === 'blocks' ? ['extensionInline'] : []),
-  ];
+  const inlineNames = ['text', 'hardBreak', 'ruby', ...(profile === 'blocks' ? ['extensionInline'] : [])];
   const blockNames = names.filter(
     (name) =>
       ![
@@ -461,10 +443,7 @@ function wireSchema(profile: DocumentProfile): TSchema {
       },
       closed,
     ),
-    [definition('Doc')]: Type.Object(
-      { type: Type.Literal('doc'), content: array(rules.content.doc!) },
-      closed,
-    ),
+    [definition('Doc')]: Type.Object({ type: Type.Literal('doc'), content: array(rules.content.doc!) }, closed),
   };
   for (const name of rules.names) {
     const shell = rules.shells[name]!;
@@ -486,9 +465,7 @@ function wireSchema(profile: DocumentProfile): TSchema {
  */
 export function wireNodeChecker(profile: DocumentProfile): (node: unknown) => boolean {
   const rules = wireRules(profile);
-  const shells = new Map(
-    rules.names.map((name) => [name, Type.Object(rules.shells[name]!, closed)] as const),
-  );
+  const shells = new Map(rules.names.map((name) => [name, Type.Object(rules.shells[name]!, closed)] as const));
   const content = new Map(
     Object.entries(rules.content).map(([name, rule]) => [name, { ...rule, allowed: new Set(rule.allowed) }]),
   );
@@ -544,10 +521,7 @@ export const CoreSnapshotSchema = Type.Cyclic(
       {
         version: Type.Literal(documentVersion),
         profile: choice(['text', 'blocks']),
-        doc: Type.Object(
-          { type: Type.Literal('doc'), content: Type.Array(Type.Ref('CoreNode')) },
-          closed,
-        ),
+        doc: Type.Object({ type: Type.Literal('doc'), content: Type.Array(Type.Ref('CoreNode')) }, closed),
       },
       closed,
     ),
@@ -558,11 +532,7 @@ export const CoreSnapshotSchema = Type.Cyclic(
 /** Portable JSON Schema: local refs, with TypeBox metadata removed. */
 export function documentJsonSchema(profile: DocumentProfile | 'core'): Record<string, unknown> {
   const source =
-    profile === 'core'
-      ? CoreSnapshotSchema
-      : profile === 'text'
-        ? TextSnapshotSchema
-        : BlocksSnapshotSchema;
+    profile === 'core' ? CoreSnapshotSchema : profile === 'text' ? TextSnapshotSchema : BlocksSnapshotSchema;
   const clean = (value: unknown, definition = false): unknown => {
     if (Array.isArray(value)) return value.map((item) => clean(item));
     if (value === null || typeof value !== 'object') return value;
@@ -575,10 +545,7 @@ export function documentJsonSchema(profile: DocumentProfile | 'core'): Record<st
             ? `#/$defs/${String(item)}`
             : key === '$defs'
               ? Object.fromEntries(
-                  Object.entries(item as Record<string, unknown>).map(([name, schema]) => [
-                    name,
-                    clean(schema, true),
-                  ]),
+                  Object.entries(item as Record<string, unknown>).map(([name, schema]) => [name, clean(schema, true)]),
                 )
               : clean(item),
         ]),

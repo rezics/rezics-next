@@ -45,8 +45,7 @@ tokenizer.block.ruler.at(
 tokenizer.inline.ruler.before('text', 'rezics_spoiler', (state, silent) => {
   if (!state.src.startsWith('>!', state.pos)) return false;
   const close = state.src.indexOf('!<', state.pos + 2);
-  if (close < 0 || close + 2 > state.posMax || state.src.slice(state.pos, close).includes('\n'))
-    return false;
+  if (close < 0 || close + 2 > state.posMax || state.src.slice(state.pos, close).includes('\n')) return false;
   if (!silent) {
     state.push('spoiler_open', 'span', 1);
     const inner: typeof state.tokens = [];
@@ -70,16 +69,17 @@ const importSchema = new Schema({
     toDOM: () => ['span', { 'data-spoiler': 'true' }, 0],
   }),
 });
-const markdownParser = new MarkdownParser(importSchema, tokenizer as unknown as ConstructorParameters<typeof MarkdownParser>[1], {
-  ...defaultMarkdownParser.tokens,
-  spoiler: { mark: 'spoiler' },
-});
+const markdownParser = new MarkdownParser(
+  importSchema,
+  tokenizer as unknown as ConstructorParameters<typeof MarkdownParser>[1],
+  {
+    ...defaultMarkdownParser.tokens,
+    spoiler: { mark: 'spoiler' },
+  },
+);
 
 /** CommonMark import uses the maintained ProseMirror parser. HTML remains literal text. */
-export function fromMarkdown(
-  markdown: string,
-  profile: DocumentProfile = 'blocks',
-): DocumentSnapshot {
+export function fromMarkdown(markdown: string, profile: DocumentProfile = 'blocks'): DocumentSnapshot {
   const source = markdownParser.parse(markdown).toJSON() as DocumentNode;
   const marks = (items: DocumentMark[] | undefined): DocumentMark[] | undefined =>
     items?.map((mark) => ({
@@ -108,10 +108,7 @@ export function fromMarkdown(
     const children = node.content?.flatMap(convert);
     if (children) translated.content = children;
     // CommonMark images are inline; the Blocks profile gives each media object a stable block identity.
-    if (
-      (type === 'paragraph' || type === 'heading') &&
-      children?.some((child) => child.type === 'image')
-    ) {
+    if ((type === 'paragraph' || type === 'heading') && children?.some((child) => child.type === 'image')) {
       const result: DocumentNode[] = [];
       let chunk: DocumentNode[] = [];
       const flush = () => {

@@ -24,17 +24,17 @@ const paragraph = (id: string, text: string): DocumentNode => ({
   attrs: { id },
   ...(text ? { content: [{ type: 'text', text }] } : {}),
 });
-const snapshot = (
-  content: DocumentNode[],
-  profile: 'text' | 'blocks' = 'blocks',
-): DocumentSnapshot => ({
+const snapshot = (content: DocumentNode[], profile: 'text' | 'blocks' = 'blocks'): DocumentSnapshot => ({
   version: documentVersion,
   profile,
   doc: { type: 'doc', content },
 });
 
 test('image content attributes and author concealment round-trip', () => {
-  const image = { type: 'image', attrs: { id: 'occurrence', src: '/media/image', alt: 'image', title: null, width: 20, height: 10, conceal: true } };
+  const image = {
+    type: 'image',
+    attrs: { id: 'occurrence', src: '/media/image', alt: 'image', title: null, width: 20, height: 10, conceal: true },
+  };
   const document = normalizeDocument(snapshot([image]));
   expect(document.doc.content![0]!.attrs).toMatchObject(image.attrs);
   expect(parseDocument(JSON.parse(serializeDocument(document)))).toEqual(document);
@@ -249,10 +249,7 @@ test('editor ID repair preserves existing unique units and does not mutate sourc
 test('published schemas match their source declaration', async () => {
   for (const profile of ['core', 'text', 'blocks'] as const) {
     const schema = await Bun.file(
-      new URL(
-        `../schema/rezics-${profile === 'core' ? 'document-core' : profile}-v1.schema.json`,
-        import.meta.url,
-      ),
+      new URL(`../schema/rezics-${profile === 'core' ? 'document-core' : profile}-v1.schema.json`, import.meta.url),
     ).json();
     expect(schema).toEqual(documentJsonSchema(profile));
   }
@@ -262,9 +259,7 @@ test('CommonMark import retains marks, ordered list starts and promotes images w
   const result = fromMarkdown(
     '# Heading\n\n**strong** and [link](/work)\n\n3. third\n4. fourth\n\nBefore ![alt](/image.png) after\n\n```ts\nconst x = 1;\n```',
   );
-  expect(documentText(result)).toBe(
-    'Heading\nstrong and link\nthird\nfourth\nBefore \nalt\n after\nconst x = 1;',
-  );
+  expect(documentText(result)).toBe('Heading\nstrong and link\nthird\nfourth\nBefore \nalt\n after\nconst x = 1;');
   const ordered = result.doc.content?.find((node) => node.type === 'orderedList');
   expect(ordered?.attrs?.start).toBe(3);
   const image = result.doc.content?.find((node) => node.type === 'image');
@@ -275,16 +270,12 @@ test('CommonMark import retains marks, ordered list starts and promotes images w
 });
 
 test('legacy inline spoilers retain concealment and inner formatting without interpreting code markers', () => {
-  const result = fromMarkdown(
-    '>!**ending**!<\n\nBefore >![secret](/work)!< after\n\n`>!literal!<`',
-  );
+  const result = fromMarkdown('>!**ending**!<\n\nBefore >![secret](/work)!< after\n\n`>!literal!<`');
   expect(documentText(result)).toBe('ending\nBefore secret after\n>!literal!<');
   const headingText = result.doc.content?.[0]?.content?.[0];
   expect(headingText?.marks?.map((mark) => mark.type)).toEqual(['bold', 'spoiler']);
   expect(
-    result.doc.content?.[1]?.content
-      ?.find((node) => node.text === 'secret')
-      ?.marks?.map((mark) => mark.type),
+    result.doc.content?.[1]?.content?.find((node) => node.text === 'secret')?.marks?.map((mark) => mark.type),
   ).toEqual(['spoiler', 'link']);
   expect(result.doc.content?.[2]?.content?.[0]?.marks).toEqual([{ type: 'code' }]);
 });
@@ -310,8 +301,21 @@ test('editing work is proportional to the edit: unchanged normalized blocks are 
   // Reused blocks still take part in the checks that span the document.
   const duplicated = [...first.doc.content!, first.doc.content![0]!];
   expect(checkDocument(snapshot(duplicated))).toBe(false);
-  const table = normalizeDocument(snapshot([{ type: 'table', attrs: { id: 't' }, content: [{ type: 'tableRow', attrs: { id: 'r' },
-    content: [{ type: 'tableCell', attrs: { id: 'c' }, content: [paragraph('cp', 'cell')] }] }] }]));
+  const table = normalizeDocument(
+    snapshot([
+      {
+        type: 'table',
+        attrs: { id: 't' },
+        content: [
+          {
+            type: 'tableRow',
+            attrs: { id: 'r' },
+            content: [{ type: 'tableCell', attrs: { id: 'c' }, content: [paragraph('cp', 'cell')] }],
+          },
+        ],
+      },
+    ]),
+  );
   expect(checkDocument(snapshot([...table.doc.content!], 'text'))).toBe(false);
 });
 
@@ -328,34 +332,79 @@ test('the runtime node checker accepts exactly what the published schema accepts
   const { Value } = await import('typebox/value');
   const { DocumentSnapshotSchema, topLevelNodeNames, wireNodeChecker } = await import('../src/schema.ts');
   const rich: DocumentNode[] = [
-    { type: 'heading', attrs: { id: 'h', level: 2 }, content: [{ type: 'text', text: 'Title', marks: [{ type: 'bold' }] }] },
-    { type: 'paragraph', attrs: { id: 'p', lang: 'ja', dir: 'ltr' }, content: [
-      { type: 'ruby', attrs: { rt: 'かん', position: 'over' }, content: [{ type: 'text', text: '漢' }] },
-      { type: 'text', text: 'link', marks: [{ type: 'link', attrs: { href: 'https://example.test/' } }] },
-      { type: 'hardBreak' },
-    ] },
-    { type: 'bulletList', attrs: { id: 'l' }, content: [{ type: 'listItem', attrs: { id: 'li' }, content: [paragraph('lp', 'item')] }] },
+    {
+      type: 'heading',
+      attrs: { id: 'h', level: 2 },
+      content: [{ type: 'text', text: 'Title', marks: [{ type: 'bold' }] }],
+    },
+    {
+      type: 'paragraph',
+      attrs: { id: 'p', lang: 'ja', dir: 'ltr' },
+      content: [
+        { type: 'ruby', attrs: { rt: 'かん', position: 'over' }, content: [{ type: 'text', text: '漢' }] },
+        { type: 'text', text: 'link', marks: [{ type: 'link', attrs: { href: 'https://example.test/' } }] },
+        { type: 'hardBreak' },
+      ],
+    },
+    {
+      type: 'bulletList',
+      attrs: { id: 'l' },
+      content: [{ type: 'listItem', attrs: { id: 'li' }, content: [paragraph('lp', 'item')] }],
+    },
     { type: 'blockquote', attrs: { id: 'q' }, content: [paragraph('qp', 'quoted')] },
     { type: 'codeBlock', attrs: { id: 'c' }, content: [{ type: 'text', text: 'x = 1' }] },
-    { type: 'table', attrs: { id: 't' }, content: [{ type: 'tableRow', attrs: { id: 'r' },
-      content: [{ type: 'tableCell', attrs: { id: 'tc' }, content: [paragraph('tp', 'cell')] }] }] },
+    {
+      type: 'table',
+      attrs: { id: 't' },
+      content: [
+        {
+          type: 'tableRow',
+          attrs: { id: 'r' },
+          content: [{ type: 'tableCell', attrs: { id: 'tc' }, content: [paragraph('tp', 'cell')] }],
+        },
+      ],
+    },
     { type: 'horizontalRule', attrs: { id: 'hr' } },
   ];
   const mutations: ((node: Record<string, unknown>) => void)[] = [
-    (node) => { delete node.attrs; },
-    (node) => { node.attrs = { ...(node.attrs as object), unknown: true }; },
-    (node) => { node.extra = 1; },
-    (node) => { node.type = 'unknownType'; },
-    (node) => { node.content = []; },
-    (node) => { node.content = [{ type: 'text', text: '' }]; },
-    (node) => { node.content = [{ type: 'paragraph', attrs: { id: 'n' } }]; },
-    (node) => { node.marks = [{ type: 'bold' }]; },
-    (node) => { node.marks = [{ type: 'noSuchMark' }]; },
-    (node) => { node.text = 'loose text'; },
-    (node) => { node.attrs = { ...(node.attrs as object), level: 9 }; },
+    (node) => {
+      delete node.attrs;
+    },
+    (node) => {
+      node.attrs = { ...(node.attrs as object), unknown: true };
+    },
+    (node) => {
+      node.extra = 1;
+    },
+    (node) => {
+      node.type = 'unknownType';
+    },
+    (node) => {
+      node.content = [];
+    },
+    (node) => {
+      node.content = [{ type: 'text', text: '' }];
+    },
+    (node) => {
+      node.content = [{ type: 'paragraph', attrs: { id: 'n' } }];
+    },
+    (node) => {
+      node.marks = [{ type: 'bold' }];
+    },
+    (node) => {
+      node.marks = [{ type: 'noSuchMark' }];
+    },
+    (node) => {
+      node.text = 'loose text';
+    },
+    (node) => {
+      node.attrs = { ...(node.attrs as object), level: 9 };
+    },
   ];
-  const walk = (node: DocumentNode, path: number[] = []): number[][] =>
-    [path, ...(node.content ?? []).flatMap((child, index) => walk(child, [...path, index]))];
+  const walk = (node: DocumentNode, path: number[] = []): number[][] => [
+    path,
+    ...(node.content ?? []).flatMap((child, index) => walk(child, [...path, index])),
+  ];
   let compared = 0;
   for (const profile of ['text', 'blocks'] as const) {
     const check = wireNodeChecker(profile);
@@ -379,4 +428,3 @@ test('the runtime node checker accepts exactly what the published schema accepts
   expect(compared).toBeGreaterThan(300);
   // The reference resolves the published schema's references for every node, which is the cost the runtime checker avoids.
 }, 180_000);
-

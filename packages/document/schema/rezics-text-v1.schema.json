@@ -7,9 +7,7 @@
       "anyOf": [
         {
           "type": "object",
-          "required": [
-            "type"
-          ],
+          "required": ["type"],
           "properties": {
             "type": {
               "type": "string",
@@ -20,9 +18,7 @@
         },
         {
           "type": "object",
-          "required": [
-            "type"
-          ],
+          "required": ["type"],
           "properties": {
             "type": {
               "type": "string",
@@ -33,9 +29,7 @@
         },
         {
           "type": "object",
-          "required": [
-            "type"
-          ],
+          "required": ["type"],
           "properties": {
             "type": {
               "type": "string",
@@ -46,9 +40,7 @@
         },
         {
           "type": "object",
-          "required": [
-            "type"
-          ],
+          "required": ["type"],
           "properties": {
             "type": {
               "type": "string",
@@ -59,9 +51,7 @@
         },
         {
           "type": "object",
-          "required": [
-            "type"
-          ],
+          "required": ["type"],
           "properties": {
             "type": {
               "type": "string",
@@ -72,9 +62,7 @@
         },
         {
           "type": "object",
-          "required": [
-            "type"
-          ],
+          "required": ["type"],
           "properties": {
             "type": {
               "type": "string",
@@ -85,10 +73,7 @@
         },
         {
           "type": "object",
-          "required": [
-            "type",
-            "attrs"
-          ],
+          "required": ["type", "attrs"],
           "properties": {
             "type": {
               "type": "string",
@@ -96,9 +81,7 @@
             },
             "attrs": {
               "type": "object",
-              "required": [
-                "href"
-              ],
+              "required": ["href"],
               "properties": {
                 "href": {
                   "type": "string",
@@ -152,10 +135,7 @@
         },
         {
           "type": "object",
-          "required": [
-            "type",
-            "attrs"
-          ],
+          "required": ["type", "attrs"],
           "properties": {
             "type": {
               "type": "string",
@@ -194,10 +174,7 @@
         },
         {
           "type": "object",
-          "required": [
-            "type",
-            "attrs"
-          ],
+          "required": ["type", "attrs"],
           "properties": {
             "type": {
               "type": "string",
@@ -273,10 +250,7 @@
         },
         {
           "type": "object",
-          "required": [
-            "type",
-            "attrs"
-          ],
+          "required": ["type", "attrs"],
           "properties": {
             "type": {
               "type": "string",
@@ -331,11 +305,7 @@
     },
     "text_Document": {
       "type": "object",
-      "required": [
-        "version",
-        "profile",
-        "doc"
-      ],
+      "required": ["version", "profile", "doc"],
       "properties": {
         "version": {
           "type": "string",
@@ -353,10 +323,7 @@
     },
     "text_Doc": {
       "type": "object",
-      "required": [
-        "type",
-        "content"
-      ],
+      "required": ["type", "content"],
       "properties": {
         "type": {
           "type": "string",
@@ -399,10 +366,7 @@
     },
     "text_paragraph": {
       "type": "object",
-      "required": [
-        "type",
-        "attrs"
-      ],
+      "required": ["type", "attrs"],
       "properties": {
         "type": {
           "type": "string",
@@ -410,9 +374,7 @@
         },
         "attrs": {
           "type": "object",
-          "required": [
-            "id"
-          ],
+          "required": ["id"],
           "properties": {
             "id": {
               "type": "string",
@@ -507,10 +469,7 @@
     },
     "text_heading": {
       "type": "object",
-      "required": [
-        "type",
-        "attrs"
-      ],
+      "required": ["type", "attrs"],
       "properties": {
         "type": {
           "type": "string",
@@ -518,9 +477,7 @@
         },
         "attrs": {
           "type": "object",
-          "required": [
-            "id"
-          ],
+          "required": ["id"],
           "properties": {
             "id": {
               "type": "string",
@@ -620,10 +577,7 @@
     },
     "text_blockquote": {
       "type": "object",
-      "required": [
-        "type",
-        "attrs"
-      ],
+      "required": ["type", "attrs"],
       "properties": {
         "type": {
           "type": "string",
@@ -631,9 +585,7 @@
         },
         "attrs": {
           "type": "object",
-          "required": [
-            "id"
-          ],
+          "required": ["id"],
           "properties": {
             "id": {
               "type": "string",
@@ -716,10 +668,7 @@
     },
     "text_bulletList": {
       "type": "object",
-      "required": [
-        "type",
-        "attrs"
-      ],
+      "required": ["type", "attrs"],
       "properties": {
         "type": {
           "type": "string",
@@ -727,9 +676,7 @@
         },
         "attrs": {
           "type": "object",
-          "required": [
-            "id"
-          ],
+          "required": ["id"],
           "properties": {
             "id": {
               "type": "string",
@@ -791,10 +738,7 @@
     },
     "text_orderedList": {
       "type": "object",
-      "required": [
-        "type",
-        "attrs"
-      ],
+      "required": ["type", "attrs"],
       "properties": {
         "type": {
           "type": "string",
@@ -802,9 +746,7 @@
         },
         "attrs": {
           "type": "object",
-          "required": [
-            "id"
-          ],
+          "required": ["id"],
           "properties": {
             "id": {
               "type": "string",
@@ -870,10 +812,7 @@
     },
     "text_listItem": {
       "type": "object",
-      "required": [
-        "type",
-        "attrs"
-      ],
+      "required": ["type", "attrs"],
       "properties": {
         "type": {
           "type": "string",
@@ -881,9 +820,7 @@
         },
         "attrs": {
           "type": "object",
-          "required": [
-            "id"
-          ],
+          "required": ["id"],
           "properties": {
             "id": {
               "type": "string",
@@ -966,10 +903,7 @@
     },
     "text_taskList": {
       "type": "object",
-      "required": [
-        "type",
-        "attrs"
-      ],
+      "required": ["type", "attrs"],
       "properties": {
         "type": {
           "type": "string",
@@ -977,9 +911,7 @@
         },
         "attrs": {
           "type": "object",
-          "required": [
-            "id"
-          ],
+          "required": ["id"],
           "properties": {
             "id": {
               "type": "string",
@@ -1041,10 +973,7 @@
     },
     "text_taskItem": {
       "type": "object",
-      "required": [
-        "type",
-        "attrs"
-      ],
+      "required": ["type", "attrs"],
       "properties": {
         "type": {
           "type": "string",
@@ -1052,9 +981,7 @@
         },
         "attrs": {
           "type": "object",
-          "required": [
-            "id"
-          ],
+          "required": ["id"],
           "properties": {
             "id": {
               "type": "string",
@@ -1140,10 +1067,7 @@
     },
     "text_codeBlock": {
       "type": "object",
-      "required": [
-        "type",
-        "attrs"
-      ],
+      "required": ["type", "attrs"],
       "properties": {
         "type": {
           "type": "string",
@@ -1151,9 +1075,7 @@
         },
         "attrs": {
           "type": "object",
-          "required": [
-            "id"
-          ],
+          "required": ["id"],
           "properties": {
             "id": {
               "type": "string",
@@ -1225,10 +1147,7 @@
     },
     "text_horizontalRule": {
       "type": "object",
-      "required": [
-        "type",
-        "attrs"
-      ],
+      "required": ["type", "attrs"],
       "properties": {
         "type": {
           "type": "string",
@@ -1236,9 +1155,7 @@
         },
         "attrs": {
           "type": "object",
-          "required": [
-            "id"
-          ],
+          "required": ["id"],
           "properties": {
             "id": {
               "type": "string",
@@ -1289,9 +1206,7 @@
     },
     "text_hardBreak": {
       "type": "object",
-      "required": [
-        "type"
-      ],
+      "required": ["type"],
       "properties": {
         "type": {
           "type": "string",
@@ -1308,10 +1223,7 @@
     },
     "text_ruby": {
       "type": "object",
-      "required": [
-        "type",
-        "attrs"
-      ],
+      "required": ["type", "attrs"],
       "properties": {
         "type": {
           "type": "string",
@@ -1319,9 +1231,7 @@
         },
         "attrs": {
           "type": "object",
-          "required": [
-            "rt"
-          ],
+          "required": ["rt"],
           "properties": {
             "rt": {
               "type": "string"
@@ -1380,10 +1290,7 @@
     },
     "text_text": {
       "type": "object",
-      "required": [
-        "type",
-        "text"
-      ],
+      "required": ["type", "text"],
       "properties": {
         "type": {
           "type": "string",

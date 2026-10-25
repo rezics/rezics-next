@@ -29,8 +29,11 @@ test('stored text is the RFC 8785 canonical form of the normalized snapshot', ()
     {
       type: 'extensionBlock',
       attrs: {
-        payload: { '€': 1e21, '😀': 0.000001, 'דּ': 'x', z: [1.5, 'a'], A: { b: null, a: true } },
-        fallback: 'fallback', version: '1', definition: 'https://example.org/block', id: 'x1',
+        payload: { '€': 1e21, '😀': 0.000001, דּ: 'x', z: [1.5, 'a'], A: { b: null, a: true } },
+        fallback: 'fallback',
+        version: '1',
+        definition: 'https://example.org/block',
+        id: 'x1',
       },
     },
   ]);
@@ -42,20 +45,39 @@ test('stored text is the RFC 8785 canonical form of the normalized snapshot', ()
 test('a Blocks image keeps its content attributes and no longer carries legacy media identities', () => {
   const image = {
     type: 'image',
-    attrs: { id: 'i1', src: 'https://example.org/a.png', alt: 'A', title: null, width: 640, height: 480, conceal: true },
+    attrs: {
+      id: 'i1',
+      src: 'https://example.org/a.png',
+      alt: 'A',
+      title: null,
+      width: 640,
+      height: 480,
+      conceal: true,
+    },
   };
   expect(checkDocument(snapshot([image]))).toBe(true);
-  expect(checkDocument(snapshot([{ ...image, attrs: { ...image.attrs, representationId: '11111111-1111-4111-8111-111111111111' } }]))).toBe(false);
-  expect(checkDocument(snapshot([{ ...image, attrs: { ...image.attrs, mediaUseId: '22222222-2222-4222-8222-222222222222' } }]))).toBe(false);
+  expect(
+    checkDocument(
+      snapshot([{ ...image, attrs: { ...image.attrs, representationId: '11111111-1111-4111-8111-111111111111' } }]),
+    ),
+  ).toBe(false);
+  expect(
+    checkDocument(
+      snapshot([{ ...image, attrs: { ...image.attrs, mediaUseId: '22222222-2222-4222-8222-222222222222' } }]),
+    ),
+  ).toBe(false);
 });
 
 test('blocks from the retired legacy vocabulary are ordinary opaque extensions', () => {
-  expect(Object.keys(exported).filter(name => name.includes('WorkReference'))).toEqual([]);
+  expect(Object.keys(exported).filter((name) => name.includes('WorkReference'))).toEqual([]);
   const block = {
     type: 'extensionBlock',
     attrs: {
-      id: 'w1', definition: 'https://rezics.com/definition/work-reference-block-v1', version: '1',
-      fallback: 'A work', payload: { anything: ['kept', 1] },
+      id: 'w1',
+      definition: 'https://rezics.com/definition/work-reference-block-v1',
+      version: '1',
+      fallback: 'A work',
+      payload: { anything: ['kept', 1] },
     },
   };
   expect(normalizeDocument(snapshot([block])).doc.content![0]!.attrs!.payload).toEqual({ anything: ['kept', 1] });
@@ -81,8 +103,11 @@ test('published schemas are generated from the source and omit retired attribute
 
 test('the package is an Apache-2.0 workspace with exact dependency versions', async () => {
   const manifest = (await Bun.file(join(root, 'package.json')).json()) as {
-    name: string; license: string; scripts?: Record<string, string>;
-    dependencies?: Record<string, string>; devDependencies?: Record<string, string>;
+    name: string;
+    license: string;
+    scripts?: Record<string, string>;
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
   };
   expect(manifest.name).toBe('@rezics/document');
   expect(manifest.license).toBe('Apache-2.0');

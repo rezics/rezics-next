@@ -31,18 +31,16 @@ function isJson(value: unknown, ancestors = new Set<object>()): boolean {
   if (
     Object.entries(descriptors).some(
       ([key, descriptor]) =>
-        !(Array.isArray(value) && key === 'length') &&
-        (!descriptor.enumerable || !('value' in descriptor)),
+        !(Array.isArray(value) && key === 'length') && (!descriptor.enumerable || !('value' in descriptor)),
     )
   )
     return false;
   if (Array.isArray(value) && Object.keys(value).length !== value.length) return false;
   ancestors.add(value);
   const valid = Array.isArray(value)
-    ? Array.from(
-        { length: value.length },
-        (_, i) => Object.hasOwn(value, i) && isJson(value[i], ancestors),
-      ).every(Boolean)
+    ? Array.from({ length: value.length }, (_, i) => Object.hasOwn(value, i) && isJson(value[i], ancestors)).every(
+        Boolean,
+      )
     : Object.values(value).every((item) => isJson(item, ancestors));
   ancestors.delete(value);
   return valid;
@@ -147,9 +145,7 @@ function checkBlocks(value: unknown): CheckedBlock[] | null {
     checked.push(block);
   }
   const schema = schemaForProfile(profile);
-  return schema.topNodeType.validContent(Fragment.fromArray(checked.map((block) => block.node)))
-    ? checked
-    : null;
+  return schema.topNodeType.validContent(Fragment.fromArray(checked.map((block) => block.node))) ? checked : null;
 }
 
 export function checkDocument(value: unknown): value is DocumentSnapshot {
@@ -168,10 +164,7 @@ export function parseDocument(value: unknown): DocumentSnapshot {
 }
 
 /** Editor/import helper. Existing unique IDs survive; duplicate or absent IDs become new units. */
-export function withDocumentIds(
-  doc: DocumentNode,
-  generateId: () => string = () => crypto.randomUUID(),
-): DocumentNode {
+export function withDocumentIds(doc: DocumentNode, generateId: () => string = () => crypto.randomUUID()): DocumentNode {
   const used = new Set<string>();
   const visit = (node: DocumentNode): DocumentNode => {
     let attrs = node.attrs;
@@ -179,8 +172,7 @@ export function withDocumentIds(
       let id = attrs?.id;
       if (typeof id !== 'string' || !id || used.has(id)) {
         id = generateId();
-        if (!id || used.has(id))
-          throw new TypeError('Document ID generator must return a new nonempty ID');
+        if (!id || used.has(id)) throw new TypeError('Document ID generator must return a new nonempty ID');
       }
       used.add(id);
       attrs = { ...attrs, id };
@@ -243,8 +235,7 @@ export function fromPlainText(text: string, profile: DocumentProfile = 'text'): 
 function inlineText(node: DocumentNode): string {
   if (node.type === 'text') return node.text ?? '';
   if (node.type === 'hardBreak') return '\n';
-  if (node.type === 'extensionInline' || node.type === 'extensionBlock')
-    return String(node.attrs?.fallback ?? '');
+  if (node.type === 'extensionInline' || node.type === 'extensionBlock') return String(node.attrs?.fallback ?? '');
   if (node.type === 'image') return String(node.attrs?.alt ?? '');
   if (node.type === 'media') return String(node.attrs?.caption ?? '');
   return (node.content ?? []).map(inlineText).join('');
@@ -257,9 +248,7 @@ function paragraphsOf(block: DocumentNode): readonly DocumentParagraph[] {
   if (cached) return cached;
   const units: DocumentParagraph[] = [];
   const visit = (node: DocumentNode): void => {
-    if (
-      ['paragraph', 'heading', 'codeBlock', 'image', 'media', 'extensionBlock'].includes(node.type)
-    ) {
+    if (['paragraph', 'heading', 'codeBlock', 'image', 'media', 'extensionBlock'].includes(node.type)) {
       units.push({ id: String(node.attrs?.id), text: inlineText(node) });
       return;
     }
@@ -287,9 +276,8 @@ export function hasDocumentContent(snapshot: DocumentSnapshot): boolean {
   const visit = (node: DocumentNode): boolean =>
     node.type === 'text'
       ? Boolean(node.text?.trim())
-      : ['image', 'media', 'extensionBlock', 'extensionInline', 'horizontalRule', 'table'].includes(
-          node.type,
-        ) || (node.content ?? []).some(visit);
+      : ['image', 'media', 'extensionBlock', 'extensionInline', 'horizontalRule', 'table'].includes(node.type) ||
+        (node.content ?? []).some(visit);
   return visit(snapshot.doc);
 }
 

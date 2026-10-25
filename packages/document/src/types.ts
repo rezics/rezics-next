@@ -1,13 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 export const documentVersion = 'rezics-document-v1' as const;
 export type DocumentProfile = 'text' | 'blocks';
-export type JsonValue =
-  | null
-  | boolean
-  | number
-  | string
-  | JsonValue[]
-  | { [key: string]: JsonValue };
+export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
 /** ProseMirror's JSON shape. Node and mark names are fixed by the profile. */
 export interface DocumentMark {
