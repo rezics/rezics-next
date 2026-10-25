@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { DBOS } from '@dbos-inc/dbos-sdk';
 import { randomBytes } from 'node:crypto';
 import { developmentEnv } from '../scripts/database.ts';
 import { newId } from '../src/route/route.ts';
@@ -69,6 +70,7 @@ test('a started server answers health and the subject routes over HTTP, then sto
   const origin = server.url.href.replace(/\/$/, '');
   try {
     expect(server.url.hostname).toBe('127.0.0.1');
+    expect(DBOS.isInitialized()).toBe(false);
     const health = await fetch(`${origin}/health`);
     expect([health.status, await health.json()]).toEqual([200, { status: 'ok' }]);
     const missing = await fetch(`${origin}/v1/subjects/${newId(0x0042)}`);
@@ -84,6 +86,30 @@ test('a started server answers health and the subject routes over HTTP, then sto
     await server.stop();
   }
   await expect(fetch(`${origin}/health`)).rejects.toThrow();
+});
+
+test('a server with a missing Turnstile secret serves public reads while reports fail closed', async () => {
+  const server = await startServer(readConfig({ ...env, KERNEL_PORT: '0' }));
+  const origin = server.url.href.replace(/\/$/, '');
+  try {
+    const publicRead = await fetch(`${origin}/v1/subjects/${newId(0x0042)}`);
+    expect(publicRead.status).toBe(404);
+    const report = await fetch(`${origin}/v1/reports`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'idempotency-key': JSON.stringify(crypto.randomUUID()),
+      },
+      body: JSON.stringify({
+        target: { kind: 'board', id: newId(0x0042) },
+        reason: 'spam',
+        botToken: 'cannot-pass-without-a-provider-secret',
+      }),
+    });
+    expect(report.status).toBe(404);
+  } finally {
+    await server.stop();
+  }
 });
 
 test('db up writes development secrets once and keeps them across restarts', () => {
