@@ -31,6 +31,7 @@ import membershipChange from './lifecycle-membership.sql';
 import memberInsert from './lifecycle-member-insert.sql';
 import ownersRead from './lifecycle-owners.sql';
 import fenceStatement from './lifecycle-fence.sql';
+import authBarrier from './auth-barriers-advance.sql';
 import fenceRead from './lifecycle-fence-read.sql';
 import fenceClear from './lifecycle-fence-clear.sql';
 import handleHold from './lifecycle-handle-hold.sql';
@@ -91,6 +92,13 @@ function epoch(value: number): boolean {
 type Boundary = { pool: Pool; clock?: () => Date };
 export type LifecycleRequest = Omit<PermissionContext, 'pool'> & { actor: AccountActor };
 export type LifecycleCommand = { accountId: string; key: string };
+export type AuthenticationBarrierCommand = LifecycleCommand & {
+  purpose: 'consent-reduction' | 'recovery';
+  expectedMinimumAuthnEpoch: number;
+  proofReference: string;
+  proofDigest: string;
+  proofExpiresAt: string;
+};
 export type HandleTransition = LifecycleCommand & {
   handle: string;
   reservationId: string;
@@ -986,6 +994,69 @@ export function createLifecycleInternals(
           );
           await grants(tx, input.organizationId, input.organizationId, 'owner', transactionId, ORGANIZATION_ACTIONS);
           return { accountId: input.organizationId, ownerAccountId: input.ownerAccountId };
+        },
+      );
+    },
+    /** Trusted Auth composition only. Proof resolution happens at each native
+     * attempt, including receipt replay; floor comparison holds the account lock.
+     * A later floor can never authorize an earlier operation's receipt.
+     */
+    async advanceAuthenticationFloor(value: AuthenticationBarrierCommand, verifyAtAttempt: () => Promise<boolean>) {
+      const input = { ...value };
+      const route = accountRoute(input.accountId);
+      requireAllowed(
+        ['consent-reduction', 'recovery'].includes(input.purpose) &&
+          epoch(input.expectedMinimumAuthnEpoch) &&
+          input.expectedMinimumAuthnEpoch < 2147483647 &&
+          /^[a-f0-9]{64}$/.test(input.proofReference) &&
+          /^[a-f0-9]{64}$/.test(input.proofDigest) &&
+          Number.isFinite(Date.parse(input.proofExpiresAt)) &&
+          typeof verifyAtAttempt === 'function',
+      );
+      return execute(
+        {
+          route,
+          id: input.accountId,
+          kind: 'authentication-floor-advanced',
+          key: input.key,
+          input,
+          authorization: {
+            action: 'authentication-floor-advance',
+            resource: { route, id: input.accountId },
+            prepare: () => verifyAtAttempt(),
+            async authorize(tx, attempt, verified) {
+              requireAllowed(
+                verified === true &&
+                  Date.parse(input.proofExpiresAt) > Date.parse(authoritativeTimeValue(attempt.time)),
+              );
+              const account = await locked(tx, input.accountId);
+              requireAllowed(
+                account.state === 'active' &&
+                  account.kind === 'actor' &&
+                  account.operatorAccountId === null &&
+                  (input.purpose !== 'recovery' || account.fenced),
+              );
+              const floor = BigInt(account.minimumAuthnEpoch);
+              requireAllowed(
+                floor === BigInt(input.expectedMinimumAuthnEpoch) ||
+                  floor === BigInt(input.expectedMinimumAuthnEpoch + 1),
+              );
+              return floor === BigInt(input.expectedMinimumAuthnEpoch) ? 'execute' : 'receipt-only';
+            },
+            denied: () => new LifecycleDeniedError(),
+          },
+        },
+        async (tx, transactionId) => {
+          const receipts = await authBarrier.run(tx, {
+            route,
+            account_id: input.accountId,
+            receipt_id: derivedId(ID_NAMESPACE, `${transactionId}:fence`, route),
+            transaction_id: transactionId,
+            expected_floor: String(input.expectedMinimumAuthnEpoch),
+            purpose: input.purpose,
+          });
+          requireAllowed(receipts[0]);
+          return receipts[0];
         },
       );
     },

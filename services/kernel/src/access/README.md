@@ -21,6 +21,53 @@ Page size may change without changing the ordering or filter semantics.
 Malformed, expired, wrong-key, differently bound and stale-epoch cursors fail before the responsibility query.
 A token conveys no permission: only trusted composition may call this internal port, and Auth still authorizes its operation before its bounded 64-row fanout steps.
 
+## Native Auth barriers
+
+Auth's trusted server composition supplies `createAuthBarrierCapabilities({lifecycle, proofs})`:
+
+- `lifecycle` is the concrete `createLifecycleInternals(...)` result, specifically
+  `advanceAuthenticationFloor`, `readFenceReceipt` and `readFenceState`. Its existing kernel pool,
+  stable `routeKey`, provisioning evidence resolver and new-establishment recovery resolver remain host configuration.
+- `proofs` is Auth's `createBarrierProofVerifier({database: authPool})` result, or its host-owned
+  closure exposing only `verify(reference, {accountId,purpose,previousEpoch,operationKey})`.
+  Auth retains its pool, credentials and receipt writers. Kernel receives only this proof capability.
+
+The Auth host composes its `AuthServiceOptions.trustedAccess` as follows (other capabilities stay host-owned):
+
+```ts
+const barriers = createAuthBarrierCapabilities({
+  lifecycle,
+  proofs: createBarrierProofVerifier({ database: authPool }),
+});
+const trustedAccess = {
+  ...createAuthBindings({ pool: kernelPool, ...otherCapabilities }),
+  ...barriers.trustedAccess,
+};
+```
+
+Spread `barriers.trustedAccess` last. It translates exact native receipt floors to Auth's numeric receipt
+contract and lets native receipt identity authorize retries. The factory also exposes `invalidateAccount`
+and `authorizeRecovery` matching `AuthBindingCapabilities`, returning `LifecycleFenceReceipt`; the older
+`createAuthBindings` barrier wrappers pre-read the previous floor and therefore cannot resume a committed barrier.
+No public route accepts these capabilities, their command arguments or caller-supplied account/epoch authority.
+
+Both calls require Auth's actual `proofReference` and `operationKey`. Consent proofs bind the authenticated
+session and exact reducing consent revision; recovery proofs bind the consumed native verification and intended
+credential establishment. Missing, unavailable, expired, consumed or mismatched proof resolution denies before
+mutation. Proof resolution repeats for every native attempt, including receipt replay. The account lock checks
+active human eligibility and proof expiry at authoritative T; recovery additionally requires the native fence.
+The command digest binds purpose, expected current floor, operation key and exact proof identity. Its SQL
+compares the floor again, advances once and inserts one persistent native receipt in that transaction.
+Concurrent exact retries return that receipt; other operations at the old floor and later supersession deny.
+Committed receipt and current account state are read back before returning to Auth.
+
+Consent preserves `authn_fenced`: an unfenced human can sign in again at the new floor, while an existing fence
+stays raised. Recovery retains its fence even when Auth credential/session work fails. Only existing `clearFence`
+with trusted new establishment evidence bound to the exact account, receipt and current floor can clear it.
+The focused tests exercise Auth's real HTTP consent/recovery flows and concrete proof verifier against native
+PostgreSQL lifecycle commands. This establishes the barrier seam; provisioning and fence-clear evidence readers
+remain separately required host capabilities and are not supplied by this factory.
+
 ## Cost
 
 These bounds follow the TypeScript adapters, their SQL, `db/access/migrations/` and `db/access/schema.sql`; they are derivations, not measurements or asserted query plans.
@@ -55,6 +102,7 @@ Retries repeat those costs (parent preparation repeats too); contention retries 
 | Tombstone erasure                       | P for delete and possible self-read replay fallback; boundary Q (fallback Q only after denial), lock 1 account, Q, indexed EXISTS in `lifecycle_coordination` via `(route,account_id)` prefix, organization-only owner count via membership GiST, account scrub/fence update plus 1 fence receipt, Q. All body relations are on target account/organization partition; grants, assignments, memberships, handles and coordination facts are retained. Grow A/Gt and organization m/h separately, fixing target, holds and permission neighbourhood.                                                                                                                                             | Up to `2P+4Q`; constant account/hold/receipt rows, organization `O(h)` examined; blocks `L(A)+L(C)+L(F)+I_M(h)`; 3 actor or 4 organization body statements; **exceeds the criterion** through P/Q and organization owner count. No erasure fan-out across Gt.                                                                                               | `test/access/growth-commands.test.ts`: `Tombstone erasure stays within its bound as m grows`                       |
 | Operator responsibility list            | One `readPartition` point read on the operator anchor plus one `operator-page.sql` keyset seek through `lifecycle_coordination_purpose_page(route,account_id,purpose,reservation_id)`. Equality predicates select route/operator/purpose before the reservation range and ordering; at most `limit+1 <= 101` rows, including pending holds.                                                                                                                                                                                                                                                                                                                                                     | With total stored data `R = N + U*t + M` (subjects/history, activity and media), `O(log R + limit)` rows/index work, `O(1)` epoch read, fixed bounded cursor payload validation/hashing; 2 data statements plus BEGIN/COMMIT. No OFFSET, count, unrelated-account enumeration or all-page fetch.                                                            | `test/access/growth-operator-cursor.test.ts`: first and late fixed-20 pages at three scales.                       |
 | Provisioning proof                      | `createRegistrationProofBindings({pool,referenceKeys: KeyRing})`: `createProvisioningReference({input,outcome})` takes the exact `createPending` input `{accountId,key,handle,reservationId}` and awaited native `CommandOutcome`; `verifyProvisioningReceipt(reference)` verifies one core receipt via the trusted reader. Fixed internal principal, `access.actor-pending`, derived partition and route-prefixed key; digest, transaction, epoch/position and response must agree. `registration-proof-account.sql` binds the pending actor, handle, reservation, expiry and creation transaction, enforcing expiry at PostgreSQL time regardless of cleanup.                                 | `R=N+U*t+M` (subjects/history, activity, media): constant rows/statements, `O(log R)` buffers; at most 1 receipt, 1 account and 1 partition epoch/fence read. 3 data statements plus BEGIN/COMMIT; invalid keys/digests stop earlier. Seal input/output <=4096 chars. References confer no Auth authority/completion; no registry or Auth credential read.  | `test/access/growth-registration-proof.test.ts`: valid/invalid, same-account history, unrelated accounts, 1/8/64.  |
+| Native Auth barriers                    | `createAuthBarrierCapabilities`: host-owned Auth proof resolution before mutation and at each command attempt; native account lock, exact expected-floor compare/update and one `lifecycle_fence_receipt` insertion in `auth-barriers-advance.sql`. Exact `core.receipt` identity handles retry; committed fence receipt and account state are point reads on the same account anchor.                                                                                                                                                                                                                                                                                                          | With `R=N+U*t+M` (subjects/history, activity, media), fixed effect size: O(1) rows/statements and O(log R) buffers per attempt; retry bounded by the existing command deadline. No session/recovery/receipt/account enumeration; Auth effects retain their separate session cap/GC bounds.                                                                  | `test/access/growth-auth-barriers.test.ts`: same-account history and unrelated accounts, 1/8/64.                   |
 
 Permission preparation exceeds the criterion even with ideal indexes because O and q are uncapped and the loop issues up to two statements per candidate organization.
 The final formula exceeds the criterion because grants/denials and JSON membership evidence are uncapped, including denial-only anonymous requests and unrelated-action resource-prefix work; EXISTS can stop early but supplies no worst-case cap.
