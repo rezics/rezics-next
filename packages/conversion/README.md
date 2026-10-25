@@ -1,0 +1,237 @@
+# `@rezics/conversion`
+
+`@rezics/conversion` is a pure source-record converter shared by platform and
+community tools. It returns sanitized source data, deterministic digests, and
+portable create or proposal commands. It does not fetch records or images, call
+an API, write storage, authorize a caller, create or adopt a subject, run a job,
+or retract a previous candidate.
+
+## Package API
+
+The [package exports](package.json) are only these entry points:
+
+| Import                            | Named exports                                                                                               |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `@rezics/conversion`              | `SourceId`, `SourceRecord`, `ConversionInput`, `ConversionDiagnostic`, `ConvertedRecord`, `ConversionError` |
+| `@rezics/conversion/bangumi`      | `convertBangumi`, `converter_revision`, `BangumiConversion`                                                 |
+| `@rezics/conversion/vndb`         | `convertVndb`, `converter_revision`, `vndbLimits`, `VndbConversion`, `VndbOptions`                          |
+| `@rezics/conversion/open-library` | `convertOpenLibrary`, `converter_revision`, `OpenLibraryConversion`                                         |
+| `@rezics/conversion/wikidata`     | `convertWikidata`, `converter_revision`, `wikidataLimits`, `WikidataConversion`                             |
+
+Each converter takes an input, an optional context, and optional registered
+converter options. The option is `converterRevision`; import the matching
+module's `converter_revision` and pass it explicitly, as shown in the example
+below. The source value on the input record is never a converter registration.
+Core types and `ConversionError` are defined in [`index.ts`](src/index.ts).
+
+Converters emit commands from `@rezics/definitions/bulk`. That package owns
+`BatchCommand`, `BatchWriteRequest`, `BatchWriteResult`, their schemas, and
+`checkBatchWrite`. Use those public contracts for the caller's chosen transport;
+do not define a second batch schema. Conversion functions return portable
+commands and do not send them.
+
+The shared input type is:
+
+```ts
+type ConversionInput<T = unknown> = {
+  external_id: string;
+  record_revision: string | null;
+  record: T;
+};
+```
+
+`external_id` and `record_revision` come from the source record. Never derive a
+revision from a dump date, file checksum, row position, or converter version.
+Where the source contract permits a missing native revision, the source
+envelope serializes it as literal `unversioned`; the digest still detects
+changes in accepted source fields. Bangumi accepts a missing native revision as
+`null`. Wikidata requires
+`record_revision: 'unversioned'` when its entity has no `lastrevid`; otherwise
+the input must match that native revision. VNDB and Open Library require their
+native revisions. A missing revision is never fabricated.
+
+Context supplies trusted, real target bindings separately from the source body:
+
+| Context field        | Meaning                                                                                                                                                           |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `subjectId`          | Existing or actually created REZICS subject UUID. With no subject, converters that support bootstrap return a `create`; with one, they return `propose` commands. |
+| `resolvedReferences` | Source-native relation key to an actual resolved subject UUID. Unresolved relations remain unresolved.                                                            |
+| `mediaIds`           | Exact source URL to an actual available media UUID. No image statement is proposed without this mapping.                                                          |
+| `source`             | Trusted registration alias written to source envelopes and used in command keys. Set it from registration configuration, never from `record`.                     |
+
+The context shape is accepted by the converter functions, but its implementation
+type is internal to [`support.ts`](src/support.ts), not an exported package
+subpath. The converter's `converter_revision` option is also trusted
+registration data, not a field read from the source body.
+
+Each result includes a `normalizedRecord` containing only the source fields the
+converter accepts. Unknown and private subtrees are not carried into it. Its
+`digest` is a deterministic SHA-256 digest of that sanitized source projection;
+target bindings, source aliases, and converter registration are excluded. The
+digest changes when the sanitized source projection changes, but not when that
+same data is rebound to a target or registration. Converter revision is part
+of command identity, so changing it changes command keys while the source
+digest remains data-only.
+
+Invalid input or context throws `ConversionError` with a `code` and an
+RFC 6901 `pointer`; it does not expose source text in an error message.
+`diagnostics` report fields that were safely retained or skipped because they
+have no supported mapping or permission. A diagnostic is not a proposal.
+
+## Bootstrap and proposal example
+
+This example uses a record and nullable native revision supplied by the caller,
+plus its existing authorized public bulk transport. It contains no example
+identifiers or synthesized revisions:
+
+```ts
+import { convertBangumi, converter_revision } from '@rezics/conversion/bangumi';
+import type { ConversionInput } from '@rezics/conversion';
+import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
+
+type BatchWrite = (request: BatchWriteRequest) => Promise<BatchWriteResult>;
+
+async function importBangumiRecord(input: ConversionInput, batchWrite: BatchWrite) {
+  const bootstrap = convertBangumi(input, {}, { converterRevision: converter_revision });
+  const create = bootstrap.proposals[0];
+  if (bootstrap.proposals.length !== 1 || create?.op !== 'create') {
+    throw new Error('Expected one bootstrap create command');
+  }
+
+  const response = await batchWrite({ commands: [create] });
+  const result = response.results.find((entry) => entry.key === create.key);
+  if (!result || !('value' in result) || !('id' in result.value)) {
+    throw new Error('The public bulk response did not return a created subject id');
+  }
+
+  const converted = convertBangumi(
+    { ...input, record: bootstrap.normalizedRecord },
+    { subjectId: result.value.id },
+    { converterRevision: converter_revision },
+  );
+  return batchWrite({ commands: converted.proposals });
+}
+```
+
+The bootstrap command contains subject type and labels only; it has no source
+statements. After a successful create response, the second conversion uses the
+actual returned subject id and emits source statements as `propose` commands.
+The caller owns transport, authorization, response handling, retries, storage,
+and any adoption workflow.
+
+## Source mappings and limits
+
+| Source       | Accepted record and mapping                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Rights and exclusions                                                                                                                                                                                                                                                                                                                                     |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Bangumi      | A subject whose `type` is `1` (book), `2` (TV series), `3` (music album), `4` (video game), or `6` (TV series). The external id maps to `wdt:P5732`; names are candidates. A non-empty summary becomes a literal Text-profile `schema:abstract` snapshot, with the serialized snapshot capped at 32 KiB.                                                                                                                                                                                                                                                                                    | The summary proposal carries CC-BY-SA-3.0 attribution and ShareAlike obligations. A cover has separate unknown rights. Other accepted fields such as tags, platform, infobox, date, and NSFW status are retained only in sanitized source data or diagnostics, not invented catalogue properties.                                                         |
+| VNDB         | Grouped metadata from real COPY `.header` tables: `vn`, `vn_titles`, and `entry_meta`. The converter also accepts grouped `vn_extlinks` and `extlinks` data. The projection uses VN identity, native `entry_meta.revision`, titles, and supported external links. Titles become names; only supported website links become URL facts.                                                                                                                                                                                                                                                       | Source metadata identifies ODbL-1.0 database permission and `LicenseRef-DbCL-1.0` contents permission for the permitted metadata projection. Descriptions, covers, posts, and other creative content are not proposed. These source permissions do not license all VNDB contents or set the output database's license.                                    |
+| Open Library | The JSON payload carried by the native TSV row, for `/type/work` or `/type/edition`. A work bootstraps as `schema:Book`; an edition as `bf:Instance`. The native revision is cited as `schema:version`, and `last_modified` is cited as a day-precision `schema:dateModified`. For editions, valid ISBN-10 values are checksum-validated and converted to ISBN-13; only ISBN-13 is proposed. An unresolved author or work relation has value `somevalue` and keeps its Open Library identifier as a `wdt:P648` qualifier; a real native resolution may be supplied in `resolvedReferences`. | `CC0-1.0` describes the permitted bibliographic metadata source. Unknown-licensed descriptions are kept as metadata and never proposed as summary text. Links and publishers are metadata-only. Covers have separate unknown rights. This permission does not claim all dataset contents share the metadata license or set the output database's license. |
+| Wikidata     | A real Q entity with `type: 'item'`. The bundled catalogue vocabulary controls supported types, property mappings, datatypes, ranks, qualifiers, and time/quantity handling. Entity labels become name candidates; supported claims become proposals.                                                                                                                                                                                                                                                                                                                                       | Source metadata cites CC0-1.0 structured data. Unknown property mappings are skipped rather than invented. The converter does not import user or talk-page content. CC0 source data does not set the output database's license.                                                                                                                           |
+
+For Bangumi, the canonical default source alias is `bangumi`; for VNDB it is
+`vndb`; and for Wikidata it is `wikidata`. Open Library's default source
+envelope alias is `open-library`, while importer `sourceKind` and reader
+`SourceId` use `openlibrary`. A trusted importer registration may configure
+another envelope alias through `context.source`; keep that registration
+separate from each input record.
+
+The complete source envelope records `source`, `external_id`,
+`record_revision`, `converter_revision`, `digest`, and `field_group` (`facts`,
+`summary`, or `cover`). Source permissions apply only to the fields described
+above. They are not a blanket license statement for a whole dataset, and they
+do not assert a license for the REZICS output database.
+
+Source-specific hard limits reject oversized records and fields rather than
+silently truncating them. The main caps are:
+
+- Bangumi: 64 KiB normalized projection, at most 64 tags, and a serialized Text
+  snapshot no larger than 32 KiB.
+- VNDB: 64 KiB projection, at most 64 titles, at most 32 external links, and at
+  most 97 commands.
+- Open Library: 2 MiB projection, at most 64 entries per collection and 64
+  combined author/work relations, at most 1 MiB of unlicensed prose retained as
+  metadata, and at most 100 commands.
+- Wikidata: 128 KiB source record, at most 64 terms and statements, 15
+  references per statement, 16 snaks per group, and 100 commands.
+
+See the source implementations for detailed field validation and limits:
+[`bangumi.ts`](src/bangumi.ts), [`vndb.ts`](src/vndb.ts),
+[`open-library.ts`](src/open-library.ts), and [`wikidata.ts`](src/wikidata.ts).
+The canonical digest and source-envelope helpers are in
+[`support.ts`](src/support.ts).
+
+## Covers, candidate identity, and trust boundaries
+
+Bangumi and Open Library return `coverAssets` as deferred source assets without
+a `containerId` when there is no bound subject. Once `subjectId` is known,
+`mediaImportIntents` contain complete validated requests with that container.
+An actual available media UUID can then be supplied in `context.mediaIds`, keyed
+by the exact `sourceUrl`, to receive a `schema:image` proposal. The converter
+never publishes a source hotlink, downloads bytes, or relays an image.
+
+Each cover request has structured `rightsHolder`, `via`, and
+`LicenseRef-unknown` credit plus cover-group source provenance and references.
+Image rights are independent of metadata rights; a source metadata license does
+not grant a cover license. The request and status shapes are defined in
+[`media-import.ts`](../definitions/src/media-import.ts).
+
+For platform imports, the caller uses the public content
+`media:importFromUrl` operation with action `media:importFromUrl` and bearer
+scope `media:import_from_url`. A reservation or accepted job is not an available
+media id: wait for the actual status to become `available` before binding its
+returned UUID. Community tools may provide only a media mapping they actually
+obtained through their legitimate media workflow. Neither caller may fabricate
+an id, relay fetched bytes, or bypass the public media contract with a BFF,
+completion operation, or service token.
+
+The converter does not run media jobs, check permissions, or enforce source
+fences. Import refreshes check the `(source, external_id, field_group)` fence
+again on every refresh, including unchanged source data; the server checks
+disclosure authority separately when content is requested. A media item's
+`available` state is not public disclosure authorization. See the
+[importer contract](../../services/importer/src/import-contract.ts),
+[returned-id and media bindings](../../services/importer/src/record-bindings.ts),
+and [media authorization path](../../services/kernel/src/content/media.ts).
+
+`create` establishes only subject metadata. `propose` creates source fact
+candidates; it does not mean the community adopted those facts. Conversion
+modules do not know the server-assigned id of an earlier candidate, so they
+cannot safely retract it. The importer tracks actual returned candidate ids
+for later reconciliation and retraction.
+
+## Runtime cost and verification
+
+This documentation adds no runtime path. Converter calls perform local
+projection and hashing only: zero partitions, database rows, indexes, or network
+requests. For a single record, let `M` be its accepted projected fields and
+bytes. Hard per-source byte and field caps bound `M`; canonical key sorting
+makes source projection `O(M log M)`. The converter has no access to unrelated
+catalogue size `N` or history size `U × t`, so those populations do not change
+its work. The existing growth tests use generated allowed records at scales 1,
+8, and 64, count source-field visits or bytes, enforce declared caps, and guard
+SQL/network/filesystem operations. They are operation-count and bound checks,
+not timing measurements.
+
+Run an existing focused source growth test with:
+
+```sh
+bun test packages/conversion/tests/bangumi-growth.test.ts
+bun test packages/conversion/tests/vndb-growth.test.ts
+bun test packages/conversion/tests/open-library-growth.test.ts
+bun test packages/conversion/tests/wikidata-growth.test.ts
+```
+
+The `*-outcomes.test.ts` wrappers also bind the real converters to narrow typed
+drivers and run the existing fixture-based source outcome suites. They cover
+converted fields, rights references, diagnostics, and source revisions through
+the converter output. These pure converter tests prove mapping, validation,
+deterministic output, bounded projection, and source rights references. They do
+not prove API authorization, remote media fetching, import-job execution, or
+server-side disclosure enforcement. The corresponding public API and importer
+contracts remain separate from this package. The package's current checks are declared in
+[`package.json`](package.json); README formatting is checked with
+`node_modules/.bin/oxfmt --check packages/conversion/README.md`.
+
+More detail lives in the actual [bulk contract](../definitions/src/bulk.ts),
+[document implementation](../document/src/index.ts), and the converter source
+modules linked above. No design proposal replaces those executable contracts.
