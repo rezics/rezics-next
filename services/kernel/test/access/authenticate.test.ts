@@ -2,7 +2,6 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { decodeJwt, exportJWK, generateKeyPair, importJWK, SignJWT, type JWK } from 'jose';
 import { createAuthService, type AuthService, type AuthServiceOptions } from '@rezics/auth';
-import { migrate } from '../../../auth/scripts/database.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { accessCheck, actorOf, AuthenticationError, type ActionCatalogue } from '../../src/request/access.ts';
@@ -111,6 +110,7 @@ function verifier(catalogue = actions) {
 
 beforeAll(async () => {
   await pool.query(`CREATE DATABASE ${authDatabase}`);
+  const { migrate } = await import(new URL('../../../auth/scripts/database.ts', import.meta.url).href);
   migrate(authUrl.toString());
   authPool = new Pool({ connectionString: authUrl.toString() });
   signingKey = {
@@ -249,7 +249,7 @@ test('forged expired revoked and wrong-audience sessions fail closed', async () 
   const now = Math.floor(Date.now() / 1000);
   const badKey = {
     ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
-    kid: signingKey.kid,
+    kid: signingKey.kid!,
   };
   await invalid(access.authenticate(await signed({}, signingKey.kid!, badKey), context()));
   for (const claims of [
