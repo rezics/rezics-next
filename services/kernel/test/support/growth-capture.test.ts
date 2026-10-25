@@ -6,6 +6,7 @@ const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 
 let db: GrowthDatabase | undefined;
+let dbClosed = false;
 
 beforeAll(async () => {
   db = await openGrowthDatabase(databaseUrl);
@@ -30,7 +31,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  if (!db) return;
+  if (!db || dbClosed) return;
   await db.admin.query('DROP SCHEMA IF EXISTS growth_capture_test CASCADE');
   await db.close();
 });
@@ -143,4 +144,21 @@ test('fails at open when the database cannot report plans', async () => {
   } finally {
     await database.admin.query(`DROP ROLE "${role}"`);
   }
+});
+
+test('captures and closes an extra library pool with the production pool', async () => {
+  const database = db!;
+  const libraryPool = database.openPool({ max: 2 });
+  const result = await capture(database, async () => {
+    await withConnection(database.pool, (client) => client.query('SELECT 71 AS answer'));
+    await libraryPool.query('SELECT 72 AS answer');
+  });
+
+  expect(result.capture.statements).toEqual(['SELECT 71 AS answer', 'SELECT 72 AS answer']);
+  expect(result.capture.plans).toHaveLength(2);
+
+  await database.admin.query('DROP SCHEMA IF EXISTS growth_capture_test CASCADE');
+  await database.close();
+  dbClosed = true;
+  await expect(libraryPool.query('SELECT 73 AS answer')).rejects.toThrow();
 });
