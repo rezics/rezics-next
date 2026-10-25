@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { releaseDigest, type Release } from '@rezics/definitions';
 import {
   publishRelease,
@@ -49,22 +49,26 @@ const release = (version: string): Release => ({
 });
 const body = release('1.0.0');
 const digest = releaseDigest(body);
+const seededRelease = (ordinal: number): Release => release(`population-${String(ordinal).padStart(3, '0')}`);
 let db: GrowthDatabase;
 const population: Population = {
   name: 'semantic-definition-revisions',
   hotPartition: 0,
   hotShare: 1,
-  // Release rows match definitions-publish.sql: immutable validated JSON bodies and unique route/digest keys.
-  rows: ({ ordinal }) => ({
-    'semantic.definition_release': [
-      {
-        route: 0,
-        digest: `sha256:${createHash('sha256').update(String(ordinal)).digest('hex')}`,
-        body,
-        recorded_transaction_id: '00000000-0000-0000-0000-000000000000',
-      },
-    ],
-  }),
+  // Release rows match definitions-publish.sql: each digest identifies its validated, fixed-size JSON body.
+  rows: ({ ordinal }) => {
+    const releaseBody = seededRelease(ordinal);
+    return {
+      'semantic.definition_release': [
+        {
+          route: 0,
+          digest: releaseDigest(releaseBody),
+          body: releaseBody,
+          recorded_transaction_id: '00000000-0000-0000-0000-000000000000',
+        },
+      ],
+    };
+  },
 };
 const auth = async () => true;
 function options() {
