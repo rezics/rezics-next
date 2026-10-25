@@ -67,10 +67,10 @@ function request(requestKey: string, input: unknown) {
 }
 
 async function followCount(accountId: string): Promise<number> {
-  const result = await pool.query('SELECT count(*)::int AS count FROM library.follow WHERE route=$1 AND account_id=$2', [
-    route,
-    accountId,
-  ]);
+  const result = await pool.query(
+    'SELECT count(*)::int AS count FROM library.follow WHERE route=$1 AND account_id=$2',
+    [route, accountId],
+  );
   return result.rows[0].count;
 }
 
@@ -117,7 +117,11 @@ test('own-account commands execute once, replay the same result, and conflict on
     runs++;
     return commandBody(accountIds.active, targetId)(tx, command);
   };
-  const first = await runner.ownAccount(actor(accountIds.active), request(requestKey, { targetId, reason: 'explicit' }), body);
+  const first = await runner.ownAccount(
+    actor(accountIds.active),
+    request(requestKey, { targetId, reason: 'explicit' }),
+    body,
+  );
   const replay = await runner.ownAccount(
     actor(accountIds.active),
     request(requestKey, { reason: 'explicit', targetId }),
@@ -240,18 +244,10 @@ test('trusted workflow steps replay by step key, keep account attribution, and r
     runs++;
     return commandBody(accountIds.other, targetId)(tx, command);
   };
-  const first = await runner.trustedAccount(
-    accountIds.other,
-    { kind, stepKey, input: { targetId } },
-    body,
-  );
-  const replay = await runner.trustedAccount(
-    accountIds.other,
-    { kind, stepKey, input: { targetId } },
-    body,
-  );
+  const first = await runner.trustedAccount(accountIds.other, { kind, stepKey, input: { targetId } }, body);
+  const replay = await runner.trustedAccount(accountIds.other, { kind, stepKey, input: { targetId } }, body);
 
-  expect(first).toMatchObject({ value: { accountId: accountIds.other, targetId, changed: false }, replayed: false });
+  expect(first).toMatchObject({ value: { accountId: accountIds.other, targetId, changed: true }, replayed: false });
   expect(replay).toEqual({ ...first, replayed: true });
   expect(runs).toBe(1);
   const receipt = await pool.query(
@@ -281,7 +277,7 @@ test('trusted workflow steps replay by step key, keep account attribution, and r
 test('the injected kernel clock supplies the command time', async () => {
   const expected = new Date('2026-10-26T04:05:06.000Z');
   const runner = createLibraryCommandRunner({ pool, clock: () => expected });
-  let actual: string | undefined;
+  let actual = '';
   const result = await runner.ownAccount(
     actor(accountIds.active),
     request(`clock:${newId(route)}`, { targetId: newId(route) }),
@@ -292,7 +288,7 @@ test('the injected kernel clock supplies the command time', async () => {
   );
 
   expect(result.value.seen).toBe(actual);
-  expect(new Date(actual!).toISOString()).toBe(expected.toISOString());
+  expect(new Date(actual).toISOString()).toBe(expected.toISOString());
 });
 
 test('helper fixtures use routable Access account identities', () => {
