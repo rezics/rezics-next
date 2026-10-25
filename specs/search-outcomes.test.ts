@@ -52,33 +52,33 @@ function unsupported(response: HttpResponse, pointer: string, descendants = fals
     && ['unsupported', 'out_of_range'].includes(error.code))).toBe(true);
 }
 interface Hit { id: string; type: string; labels: Labels }
-interface Page { results: Hit[]; total: { value: number; relation: 'exact' | 'lower_bound' }; next_page_token: string | null; as_of: string }
+interface Page { subjects: Hit[]; total: { value: number; relation: 'exact' | 'lower_bound' }; next: string | null; as_of: string }
 function hits(response: HttpResponse, limit: number) {
   const received = Date.now();
   expect(response.status).toBe(200);
   expect(response.headers.get('content-type')).toContain('application/json');
-  const results = response.body.results as Hit[];
-  expect(Array.isArray(results)).toBe(true);
-  expect(results.length).toBeLessThanOrEqual(limit);
-  expect(new Set(results.map(hit => hit.id)).size).toBe(results.length);
-  for (const hit of results) {
+  const subjects = response.body.subjects as Hit[];
+  expect(Array.isArray(subjects)).toBe(true);
+  expect(subjects.length).toBeLessThanOrEqual(limit);
+  expect(new Set(subjects.map(hit => hit.id)).size).toBe(subjects.length);
+  for (const hit of subjects) {
     expect(hit).toEqual({ id: expect.any(String), type: expect.any(String), labels: expect.any(Object) });
     for (const label of Object.values(hit.labels)) expect(typeof label).toBe('string');
   }
   expect(response.body.as_of).toEqual(expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/));
   expect(Number.isFinite(Date.parse(response.body.as_of as string))).toBe(true);
   expect(Date.parse(response.body.as_of as string)).toBeLessThanOrEqual(received);
-  return results;
+  return subjects;
 }
 function page(response: HttpResponse, limit = 20): Page {
   hits(response, limit);
   expect(response.body.total).toEqual({ value: expect.any(Number), relation: expect.stringMatching(/^(exact|lower_bound)$/) });
   const total = response.body.total as Page['total'];
   expect(Number.isInteger(total.value) && total.value >= 0).toBe(true);
-  expect(response.body.next_page_token === null || typeof response.body.next_page_token === 'string').toBe(true);
+  expect(response.body.next === null || typeof response.body.next === 'string').toBe(true);
   return response.body as unknown as Page;
 }
-const ids = (result: { results: Hit[] }) => result.results.map(hit => hit.id);
+const ids = (result: { subjects: Hit[] }) => result.subjects.map(hit => hit.id);
 const hit = (subject: Subject): Hit => ({ id: subject.id, type: subject.type, labels: subject.labels });
 async function create(label: string | Labels, options: {
   type?: string; aliases?: Record<string, string[]>; descriptions?: Labels; statements?: Record<string, StatementInput[]>;
@@ -105,12 +105,12 @@ async function eventually<T>(read: () => Promise<T>, ready: (result: T) => boole
   throw new Error('Search outcome did not become visible within 15 seconds');
 }
 async function indexed(subjects: Subject[], body: Record<string, unknown> = { text: marker }) {
-  return eventually(async () => page(await search(body), Number(body.page_size ?? 20)),
+  return eventually(async () => page(await search(body), Number(body.limit ?? 20)),
     result => subjects.every(subject => ids(result).includes(subject.id)));
 }
 async function found(subject: Subject, text: string) {
   const result = page(await search({ text: `${marker} ${text}` }));
-  expect(result.results).toContainEqual(hit(subject));
+  expect(result.subjects).toContainEqual(hit(subject));
 }
 async function absent(subject: Subject, text: string) {
   expect(ids(page(await search({ text: `${marker} ${text}` })))).not.toContain(subject.id);
@@ -156,10 +156,10 @@ test('Search is public for editor and anonymous while suspended credentials fail
   await indexed([book]);
   const anonymous = page(await search({ text: marker }));
   const editor = page(await search({ text: marker }, 'editor'));
-  expect(editor.results).toEqual(anonymous.results);
+  expect(editor.subjects).toEqual(anonymous.subjects);
   expect(editor.total).toEqual(anonymous.total);
-  expect(editor.results).toContainEqual(hit(book));
-  expect(page(await search({ text: marker, sort: 'relevance' })).results).toEqual(anonymous.results);
+  expect(editor.subjects).toContainEqual(hit(book));
+  expect(page(await search({ text: marker, sort: 'relevance' })).subjects).toEqual(anonymous.subjects);
   await eventually(async () => hits(await suggest(marker), 8), result => result.some(item => item.id === book.id));
   expect(hits(await suggest(marker, undefined, 'editor'), 8)).toEqual(hits(await suggest(marker), 8));
   problem(await search({ text: marker }, 'suspended'), 401, 'invalid_credentials');
@@ -175,7 +175,7 @@ test('New subjects become searchable and suggestible within fifteen seconds with
     const suggestion = await suggest(marker);
     return { result: page(response), suggestions: hits(suggestion, 8), suggestion };
   }, result => ids(result.result).includes(book.id) && result.suggestions.some(item => item.id === book.id));
-  expect(visible.result.results).toContainEqual(hit(book));
+  expect(visible.result.subjects).toContainEqual(hit(book));
   expect(visible.suggestions).toContainEqual(hit(book));
   expect(Date.parse(visible.result.as_of)).toBeGreaterThanOrEqual(started);
   expect(Date.parse(visible.suggestion.body.as_of as string)).toBeGreaterThanOrEqual(started);
@@ -232,8 +232,8 @@ test('Committed takedown and hiding remove stale hits immediately and refill pag
   try {
     const check = async (removed: Subject[], survivors: Subject[]) => {
       for (const persona of ['anonymous', 'editor'] as const) {
-        const result = page(await search({ text: marker, sort: 'name', page_size: 3 }, persona), 3);
-        expect(result.results).toEqual(survivors.slice(0, 3).map(hit));
+        const result = page(await search({ text: marker, sort: 'name', limit: 3 }, persona), 3);
+        expect(result.subjects).toEqual(survivors.slice(0, 3).map(hit));
         const suggestions = hits(await suggest(marker, 10, persona), 10);
         for (const subject of removed) {
           expect(ids(result)).not.toContain(subject.id);
@@ -264,26 +264,26 @@ test('Name paging has exact totals stable ties and request principal and signatu
   const subjects = [first, tie, beta, gamma, unlabelled];
   await indexed(subjects);
   const expected = [...[first, tie].sort((a, b) => a.id < b.id ? -1 : 1), beta, gamma, unlabelled];
-  const body = { text: marker, sort: 'name', page_size: 2 };
+  const body = { text: marker, sort: 'name', limit: 2 };
   const one = page(await search(body), 2);
-  expect(typeof one.next_page_token).toBe('string');
-  const two = page(await search({ ...body, page_token: one.next_page_token }), 2);
-  expect(typeof two.next_page_token).toBe('string');
-  const three = page(await search({ ...body, page_token: two.next_page_token }), 2);
+  expect(typeof one.next).toBe('string');
+  const two = page(await search({ ...body, cursor: one.next }), 2);
+  expect(typeof two.next).toBe('string');
+  const three = page(await search({ ...body, cursor: two.next }), 2);
   for (const result of [one, two, three]) expect(result.total).toEqual({ value: 5, relation: 'exact' });
-  expect([one.results.length, two.results.length, three.results.length]).toEqual([2, 2, 1]);
-  const all = [...one.results, ...two.results, ...three.results];
+  expect([one.subjects.length, two.subjects.length, three.subjects.length]).toEqual([2, 2, 1]);
+  const all = [...one.subjects, ...two.subjects, ...three.subjects];
   expect(all).toEqual(expected.map(hit));
   expect(new Set(all.map(item => item.id)).size).toBe(5);
-  expect(three.next_page_token).toBeNull();
-  const token = one.next_page_token!;
-  field(await search({ ...body, text: `${marker} changed`, page_token: token }), '/page_token');
-  field(await search({ ...body, page_token: token }, 'editor'), '/page_token');
+  expect(three.next).toBeNull();
+  const token = one.next!;
+  field(await search({ ...body, text: `${marker} changed`, cursor: token }), '/cursor');
+  field(await search({ ...body, cursor: token }, 'editor'), '/cursor');
   const tampered = `${token[0] === 'A' ? 'B' : 'A'}${token.slice(1)}`;
-  field(await search({ ...body, page_token: tampered }), '/page_token');
+  field(await search({ ...body, cursor: tampered }), '/cursor');
   // Default name sort without text and explicit id sort use the same five hits.
   const byName = page(await search({ filter: typeFilter() }));
-  expect(byName.results.filter(item => subjects.some(subject => subject.id === item.id))).toEqual(expected.map(hit));
+  expect(byName.subjects.filter(item => subjects.some(subject => subject.id === item.id))).toEqual(expected.map(hit));
   const byId = page(await search({ text: marker, sort: 'id' }));
   expect(ids(byId)).toEqual(subjects.map(subject => subject.id).sort());
 });
@@ -291,18 +291,18 @@ test('Name paging has exact totals stable ties and request principal and signatu
 test('Rebuild invalidates old page tokens and preserves all visible subjects while excluding takedowns', async () => {
   const subjects = [await create('A'), await create('B'), await create('C')];
   await indexed(subjects);
-  const body = { text: marker, sort: 'id', page_size: 1 };
+  const body = { text: marker, sort: 'id', limit: 1 };
   const before = page(await search(body), 1);
-  expect(typeof before.next_page_token).toBe('string');
+  expect(typeof before.next).toBe('string');
   await driver.remove(subjects[0]!.id, 'taken_down');
   const rebuilt = await driver.rebuild();
   expect(Number.isInteger(rebuilt.generation)).toBe(true);
-  problem(await search({ ...body, page_token: before.next_page_token }), 409, 'search_restart_required');
+  problem(await search({ ...body, cursor: before.next }), 409, 'search_restart_required');
   const fresh = page(await search({ text: marker, sort: 'id' }));
   expect(new Set(ids(fresh))).toEqual(new Set(subjects.slice(1).map(subject => subject.id)));
   expect(ids(fresh)).not.toContain(subjects[0]!.id);
   expect(fresh.total).toEqual({ value: 2, relation: 'exact' });
-  expect(fresh.next_page_token).toBeNull();
+  expect(fresh.next).toBeNull();
   expect(hits(await suggest(marker), 8).map(item => item.id)).not.toContain(subjects[0]!.id);
 });
 
@@ -333,7 +333,7 @@ test('Text admission rejects malformed syntax and budgets while all operators pr
     unsupported(await search({ text }), '/text');
   }
   const valid = page(await search({ text: `${marker} ("Alpha Beta" | Delta) -Delta` }));
-  expect(valid.results).toEqual([hit(book)]);
+  expect(valid.subjects).toEqual([hit(book)]);
   expect(ids(valid)).not.toContain(excluded.id);
   for (const escape of ['\\\\', '\\"', '\\|', '\\(', '\\)', '\\-']) {
     page(await search({ text: `${marker} | "literal${escape}value"` }));
@@ -356,10 +356,10 @@ test('Filter admission rejects excessive budgets unknown facets and malformed se
     problem(response, 400, 'invalid_request');
     expect((response.body.errors as { pointer: string }[]).some(error => error.pointer.startsWith('/filter/'))).toBe(true);
   }
-  for (const page_size of [0, 51, 1.5, '2']) field(await search({ text: marker, page_size }), '/page_size');
+  for (const limit of [0, 101, 1.5, '2']) field(await search({ text: marker, limit }), '/limit');
   field(await search({ text: marker, unknown: true }), '/unknown');
   problem(await search([]), 400, 'invalid_request');
-  expect((await indexed([book], { text: marker, filter: { or: [typeFilter(), typeFilter('schema:Person')] }, page_size: 50 })).results)
+  expect((await indexed([book], { text: marker, filter: { or: [typeFilter(), typeFilter('schema:Person')] }, limit: 100 })).subjects)
     .toContainEqual(hit(book));
 });
 
@@ -379,7 +379,7 @@ test('Unavailable index returns retryable problems on both routes while subject 
   } finally {
     await driver.searchNode('up');
   }
-  expect((await indexed([book])).results).toContainEqual(hit(book));
+  expect((await indexed([book])).subjects).toContainEqual(hit(book));
   await eventually(async () => hits(await suggest(marker), 8), result => result.some(item => item.id === book.id));
   await absent(book, 'unrelatedavailabilityword');
 });
