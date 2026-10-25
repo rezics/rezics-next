@@ -149,3 +149,9 @@ export {
   type WorkflowApprovalRequest,
   type WorkflowApprovalBinding,
 } from './workflow-approvals.ts';
+export {
+  createCredentialCapability,
+  type CredentialCapability,
+  type CredentialCapabilityConfig,
+  type CredentialOpeningLocator,
+} from './auth-credential-capability.ts';

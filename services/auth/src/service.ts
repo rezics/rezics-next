@@ -33,6 +33,8 @@ import type {
   EffectAuthorization,
   EffectPurpose,
   InvalidationReceipt,
+  LegacyCredentialAuthorizationInput,
+  SessionAuthorizationInput,
   SessionProof,
 } from './index.ts';
 
@@ -491,12 +493,13 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     const scope = { proof: human, live: true };
     const receipt = await proofScope.run(scope, async () => {
       try {
-        return await trustedAccess.consumeAuthorization!({
+        const authorization: SessionAuthorizationInput | LegacyCredentialAuthorizationInput = {
           authorization: text(input.authorization),
           subjectAccountId: input.subjectAccountId,
           purpose,
           human,
-        });
+        };
+        return await trustedAccess.consumeAuthorization!(authorization);
       } finally {
         scope.live = false;
       }
@@ -872,6 +875,18 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         const account = await trustedAccess.readAccount(accountId);
         if (!account || account.state !== 'deleted' || !account.fenced) throw new Denied();
         await database.query('DELETE FROM "user" WHERE id=$1', [accountId]);
+      },
+      async stageCredentialEffect() {
+        throw new Denied(503);
+      },
+      async approveCredentialEffect() {
+        throw new Denied(503);
+      },
+      async applyCredentialEffect() {
+        throw new Denied(503);
+      },
+      async verifyCredentialEffect() {
+        throw new Denied(503);
       },
       async setCredential(input) {
         const value = input.credential;

@@ -59,14 +59,126 @@ export interface InvalidationReceipt {
 }
 
 export type EffectPurpose = 'session' | 'set-password' | 'remove-password' | 'add-key' | 'remove-key';
+export type CredentialPurpose = Exclude<EffectPurpose, 'session'>;
 
-/** A consumed durable Access authorization, never a caller-supplied approval. */
-export interface EffectAuthorization {
+/** Auth-owned nonsecret commitment, never credential material or permission context.
+ * The keyed digest binds version, stage locator, immutable (subject, operationKey),
+ * exact purpose, normalized payload, selected credential row identity/version,
+ * human, client and exact consented scopes. Null row identity/version denotes
+ * expected absence, including a first password or new key. Caller hashes are
+ * comparisons only; only Auth establishes provenance. Changed input under a used
+ * key conflicts even after consumption or restart. Access/DBOS retain only these
+ * locators, never passwords, private keys, cookies, JWTs or SessionProof objects.
+ */
+export interface CredentialEffectBinding {
+  operationKey: string;
+  effectReference: string;
+  effectDigest: string;
+  subjectAccountId: string;
+  purpose: CredentialPurpose;
+  credentialRowId: string | null;
+  credentialRowVersion: string | null;
+  actingHumanId: string;
+  clientId: string;
+  scopes: string[];
+}
+
+/** Expected current identity and immutable operation; an optional digest only compares. */
+export type CredentialEffectExpectation = Pick<
+  CredentialEffectBinding,
+  'operationKey' | 'subjectAccountId' | 'purpose' | 'actingHumanId' | 'clientId' | 'scopes'
+> & { effectDigest?: string };
+
+/** Auth-owned read closure, supplied only by trusted host composition. Point-read
+ * the committed stage and verify its keyed provenance, exact expected binding and
+ * selected credential row/version. After commit resolve the exact terminal receipt,
+ * never treat the old row version as new mutation authority. No minting path, Auth
+ * database/key/runtime exposure to the kernel, or caller digest as provenance.
+ */
+export type CredentialEffectVerifier = (
+  reference: string,
+  expected: CredentialEffectExpectation,
+) => Promise<CredentialEffectBinding>;
+
+/** Exact credential consume result. Auth compares every field with its own stage
+ * before writing; a session/device approval or broad credential opening cannot
+ * substitute. A durable reference is a locator, never current authorization.
+ */
+export interface CredentialEffectAuthorization extends EffectAuthorizationBase {
+  operationKey: string;
+  effectReference: string;
+  effectDigest: string;
+  purpose: CredentialPurpose;
+}
+
+/** A committed native floor receipt, bound to the exact stage and consumed opening.
+ * minimumAuthnEpoch must equal previousFloor + 1 and the existing fence is preserved.
+ * Resolve provenance from native storage; equal caller epochs/foreign receipts deny.
+ */
+export interface CredentialFloorReceipt extends InvalidationReceipt {
+  operationKey: string;
+  effectReference: string;
+  effectDigest: string;
+  purpose: CredentialPurpose;
+  openingReceiptId: string;
+  previousFloor: number;
+  fenced: boolean;
+}
+
+/** Credential-only trusted floor hook. Bind Auth's verified stage, already consumed
+ * opening, expected previous subject floor, immutable key and purpose. Commit the
+ * exact next floor before mutation for password replacement/remove-password/remove-key;
+ * add-key and first password installation do not advance it. Recheck current
+ * authority, including the operator for automation, and preserve fences. Never widen
+ * consent/recovery hooks or relabel this effect as either. The in-flight own-human
+ * operation may finish against only its exact committed barrier and unchanged next
+ * floor; its invalidated source session grants no consume/replay authority.
+ */
+export type CredentialFloorPort = (input: {
+  stage: CredentialEffectBinding;
+  consumedOpening: CredentialEffectAuthorization;
+  expectedPreviousFloor: number;
+  key: string;
+  purpose: CredentialPurpose;
+}) => Promise<CredentialFloorReceipt>;
+
+/** The session input stays byte-for-byte equivalent to the existing contract. */
+export type SessionAuthorizationInput = {
+  authorization: string;
+  subjectAccountId: string;
+  purpose: 'session';
+  human: SessionProof;
+};
+
+/** One exact credential purpose; both immutable stage locators are mandatory. */
+export type CredentialAuthorizationInput = {
+  [Purpose in CredentialPurpose]: Omit<SessionAuthorizationInput, 'purpose'> & {
+    purpose: Purpose;
+    operationKey: string;
+    effectReference: string;
+  };
+}[CredentialPurpose];
+
+/** @deprecated Only legacy internal.setCredential produces this unbound input.
+ * Native kernel capabilities must reject it: it carries no exact effect binding.
+ * A later task removes this variant together with the legacy setCredential path.
+ */
+export type LegacyCredentialAuthorizationInput = Omit<SessionAuthorizationInput, 'purpose'> & {
+  purpose: CredentialPurpose;
+  operationKey?: undefined;
+  effectReference?: undefined;
+};
+
+export type AuthorizationConsumeInput =
+  | SessionAuthorizationInput
+  | CredentialAuthorizationInput
+  | LegacyCredentialAuthorizationInput;
+
+interface EffectAuthorizationBase {
   receiptId: string;
   subjectAccountId: string;
   actingHumanId: string;
   operatorAccountId: string | null;
-  purpose: EffectPurpose;
   clientId: string;
   scopes: string[];
   humanEpoch: number;
@@ -74,6 +186,20 @@ export interface EffectAuthorization {
   expiresAt: string;
   invalidation?: InvalidationReceipt;
 }
+
+/** A consumed durable Access authorization, never a caller-supplied approval.
+ * Native credential results carry the complete credential extension. The unbound
+ * branch exists for sessions and legacy setCredential only; it cannot carry a
+ * partial credential binding. Auth must compare the native extension to its stage.
+ */
+export type EffectAuthorization =
+  | (EffectAuthorizationBase & {
+      purpose: EffectPurpose;
+      operationKey?: undefined;
+      effectReference?: undefined;
+      effectDigest?: undefined;
+    })
+  | CredentialEffectAuthorization;
 
 export type CredentialEffect =
   | { kind: 'password'; password: string | null }
@@ -96,13 +222,13 @@ export interface TrustedAccessPorts {
   /** Bind Access readAssignment: checks provenance, actor, validity, revocation and principal state/fence. */
   readAssignment?(requestedBy: string, assignedActorId: string): Promise<AssignmentProof>;
   authorizeProvisioning(commandReference: string): Promise<ProvisioningAuthorization>;
-  /** Consume once while rechecking operator relationship, permission, epochs and client evidence. */
-  consumeAuthorization?(input: {
-    authorization: string;
-    subjectAccountId: string;
-    purpose: EffectPurpose;
-    human: SessionProof;
-  }): Promise<EffectAuthorization>;
+  /** Consume once while rechecking relationship, formula, floors and client evidence.
+   * Exact credential calls return CredentialEffectAuthorization; Auth compares its
+   * operationKey, effectReference, effectDigest, purpose and subject with its own
+   * immutable stage before writing. Native capabilities reject the legacy variant.
+   */
+  consumeAuthorization?(input: AuthorizationConsumeInput): Promise<EffectAuthorization>;
+  advanceCredentialFloor?: CredentialFloorPort;
   /** Commit a durable floor increase before returning; never clear an existing fence. */
   invalidateAccount?:
     | ((input: {
@@ -243,6 +369,73 @@ export interface AuthService {
       subjectAccountId: string;
       headers: Headers;
     }): Promise<Response>;
+    /** Auth-host command only; no kernel HTTP route. Authenticate the current human
+     * and validate an actor subject (organizations never hold credentials). Derive
+     * one of the four exact purposes from the closed body; reject unknown fields,
+     * generic management bodies and private JWK d/k. Keys must be public ES256 with
+     * matching kid. Only Auth invokes the installed Better Auth password hasher.
+     * Commit an immutable stage keyed by (subject, key), encrypted input or an
+     * Auth-native staged hash using purpose-separated keys and workflows.ts's
+     * AES-GCM/AAD pattern. Bind all CredentialEffectBinding fields and the complete
+     * normalized payload in Auth's keyed commitment. Changed input under a used key
+     * conflicts forever, including after restart/consumption. Return locators only.
+     * Until native implementation, throw the existing unavailable error before I/O.
+     */
+    stageCredentialEffect(input: {
+      key: string;
+      subjectAccountId: string;
+      headers: Headers;
+      credential:
+        | { kind: 'password'; password: string }
+        | { kind: 'password'; password: null }
+        | { kind: 'key'; kid: string; publicJwk: JWK; remove?: undefined }
+        | { kind: 'key'; kid: string; remove: true; publicJwk?: undefined };
+    }): Promise<{ effectRef: string; key: string; subjectId: string; purpose: CredentialPurpose; digest: string }>;
+    /** Resolve Auth's stage; enter the live proof callback and request an exact
+     * native approval for this purpose/key/commitment. Authenticate anew; never
+     * serialize proof/JWT/context. Own-human account:manage uses actor grant AND
+     * consented client scope AND principal grant when present, with explicit deny
+     * or missing evidence denying. Activation installs self account:manage beside
+     * self account:read for actor accounts only, never organizations or automated
+     * accounts. No self-owner bypass/fake operator relation. Native opening rules
+     * and expiry are specified by createCredentialCapability. Fresh authenticated
+     * approval may resume only the same unfinished immutable operation.
+     * Until native implementation, throw unavailable before inspecting input/I/O.
+     */
+    approveCredentialEffect(input: {
+      effectRef: string;
+      key: string;
+      subjectAccountId: string;
+      headers: Headers;
+    }): Promise<{ reference: string; expiresAt: string }>;
+    /** Resolve the same immutable stage; consume an exact credential authorization,
+     * compare its binding with Auth's stage, then revalidate current authority at
+     * the Auth commit boundary. Revocation in that gap leaves the opening spent
+     * and credentials unchanged. One Auth transaction commits ONE credential CAS,
+     * required session revocation (at most 64), and an exact auth_effect_receipt
+     * success result. Old four-column rows never mean success. Lost acknowledgement
+     * returns the saved receipt with replayed=true only after current authorization;
+     * never repeat mutation. A consumed opening without exact success fails closed;
+     * only NEW authenticated approval may resume the same immutable operation.
+     * Destructive changes require the exact committed CredentialFloorPort receipt.
+     * Refuse removal of a person's last interactive credential with 409 and
+     * effect_status=not_applied (doc 20 section 3); automation may lose its last key.
+     * Reject unknown/device/session fields; transport purpose/digest, if present,
+     * only compare against Auth's resolved stage. No secret enters Access/DBOS.
+     * Cost: O(log R + (1+K) log G), R=N+U*t+M, fixed selected rows/statements,
+     * logarithmic buffers; no history/session scans. Native tasks prove growth with
+     * checkGrowth at 1x/8x/64x separately growing consumed same-subject openings,
+     * old Auth effects and unrelated owners. Until native, throw unavailable pre-I/O.
+     */
+    applyCredentialEffect(input: {
+      authorization: string;
+      effectRef: string;
+      key: string;
+      subjectAccountId: string;
+      headers: Headers;
+    }): Promise<{ receiptId: string; replayed: boolean }>;
+    /** Auth-owned point-read verifier; no minting path. Unavailable until native. */
+    verifyCredentialEffect: CredentialEffectVerifier;
     setCredential(input: {
       authorization: string;
       subjectAccountId: string;
