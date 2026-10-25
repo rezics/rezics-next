@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import type { CommandAuthorization } from '../command/command.ts';
+import { type CommandAuthorization } from '../command/command.ts';
 import type { AccessCheck, AccountActor, Resource } from '../request/access.ts';
 export declare const CREATE_CONTEXT = "context.create";
 export declare function contextTarget(routeKey: Uint8Array, accountId: string, idempotencyKey: string): Resource;

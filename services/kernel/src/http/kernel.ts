@@ -4,6 +4,7 @@ import { payoutRoutes } from '../commerce/payout-routes.ts';
 import { commerceRoutes, type CommerceDependencies } from '../commerce/routes.ts';
 import type { Access, AccessConfig } from '../request/access.ts';
 import { definitionRoutes } from '../semantic/http/definitions.ts';
+import { contextRoutes } from '../semantic/http/contexts.ts';
 import { subjectRoutes } from '../semantic/http/subjects.ts';
 import { createApp } from './app.ts';
 import { actionCatalogue } from './request.ts';
@@ -31,7 +32,8 @@ export function createKernel(dependencies: KernelDependencies) {
     access: () => resolveAccess({ actions: actionCatalogue(app) }),
     ...(dependencies.commerce === undefined ? {} : { commerce: dependencies.commerce }),
   });
-  return commerce as typeof commerce & typeof payouts;
+  const kernel = contextRoutes(commerce as unknown as ReturnType<typeof definitionRoutes>, dependencies);
+  return kernel as unknown as typeof commerce & typeof payouts & typeof kernel;
 }
 
 /** The app's type is the Eden contract. */
