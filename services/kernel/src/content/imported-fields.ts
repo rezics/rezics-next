@@ -7,15 +7,19 @@ import append from './append-imported-field.sql';
 import read from './read-imported-field.sql';
 
 export type ImportedFieldResult = Readonly<{ id: string; digest: string }>;
-export type StoredImportedField = ImportedFieldResult &
+export type ImportedFieldView = ImportedFieldResult &
   Readonly<{
     subject: string;
+    candidate: string;
+    revision: number;
     source: ImportedSource;
     rights: Rights;
     language: string;
     availability: 'available' | 'erased';
     body: Buffer | null;
   }>;
+
+export type StoredImportedField = ImportedFieldView;
 
 const controls = /[\u0000-\u001f\u007f-\u009f]/u;
 function text(value: unknown, maximum: number): value is string {
@@ -54,6 +58,7 @@ function validateEnvelope(input: ImportedFieldInput): void {
     source.references.length > 128 ||
     !record(rights) ||
     !onlyKeys(rights, ['license', 'obligations', 'attribution']) ||
+    !text(rights.license, 128) ||
     !text(rights.attribution, 16384) ||
     !Array.isArray(rights.obligations) ||
     rights.obligations.length > 32 ||
@@ -107,6 +112,9 @@ export async function appendImportedField(
     command.authorization.resource.route !== route
   )
     throw new TypeError('Imported summary requires current subject command authorization');
+  if (routeOf(input.candidate) !== route) throw new RangeError('Imported candidate must carry the subject route');
+  if (!Number.isSafeInteger(input.revision) || input.revision < 1)
+    throw new RangeError('Imported revision must be a positive safe integer allocated by semantic');
   validateEnvelope(input);
   const document = validateContentDocument({
     body: input.document,
@@ -125,6 +133,8 @@ export async function appendImportedField(
     route,
     id,
     subject: input.subject,
+    candidate: input.candidate,
+    revision: input.revision,
     body: Buffer.from(document.canonicalBytes),
     body_sha256: Buffer.from(document.sha256, 'hex'),
     source: input.source,
@@ -138,12 +148,22 @@ export async function appendImportedField(
  * The public caller must independently check current semantic container/candidate disclosure
  * and the current source fence; possession of a document ID grants no publication permission.
  */
-export async function readImportedField(
+export function readImportedField(client: Pick<PoolClient, 'query'>, id: string): Promise<ImportedFieldView | null>;
+/** Explicit-route form also rejects mismatched IDs before I/O. */
+export function readImportedField(
   client: Pick<PoolClient, 'query'>,
   route: number,
   id: string,
-): Promise<StoredImportedField | null> {
-  if (routeOf(id) !== route) throw new RangeError('Imported document ID must carry the supplied route');
+): Promise<ImportedFieldView | null>;
+export async function readImportedField(
+  client: Pick<PoolClient, 'query'>,
+  routeOrId: number | string,
+  exactId?: string,
+): Promise<ImportedFieldView | null> {
+  const id = typeof routeOrId === 'string' ? routeOrId : exactId!;
+  const route = typeof routeOrId === 'number' ? routeOrId : routeOf(id);
+  if (route === null || routeOf(id) !== route)
+    throw new RangeError('Imported document ID must carry the supplied route');
   const rows = await read.run(client, { route, id });
   const row = rows[0];
   if (!row) return null;
@@ -151,8 +171,10 @@ export async function readImportedField(
     id: row.id,
     digest: row.digest,
     subject: row.subject,
+    candidate: row.candidate,
+    revision: row.revision,
     body: row.body === null ? null : Buffer.from(row.body),
-    availability: row.availability as StoredImportedField['availability'],
+    availability: row.availability as ImportedFieldView['availability'],
     source: row.source as ImportedSource,
     rights: row.rights as Rights,
     language: row.language,

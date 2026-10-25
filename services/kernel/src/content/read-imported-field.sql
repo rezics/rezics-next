@@ -1,5 +1,5 @@
 -- A collection result preserves absence for the low-level exact storage reader.
-SELECT id, subject, body, encode(body_sha256, 'hex') AS digest,
+SELECT id, subject, candidate, revision::double precision AS revision, body, encode(body_sha256, 'hex') AS digest,
        source, rights, language, availability
 FROM content.imported_field
 WHERE route = :route::integer AND id = ANY (ARRAY[:id::uuid]);
