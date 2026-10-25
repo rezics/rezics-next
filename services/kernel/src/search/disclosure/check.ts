@@ -1,3 +1,4 @@
+import type { FilterQualifier, FilterRange } from '@rezics/filter';
 import { subjectPartition, type IndexedSubject, type SubjectSource } from '../source.ts';
 
 /** One OpenSearch hit, including the indexed partition, security revision and matched query names. */
@@ -6,13 +7,37 @@ export type Hit = { id: string; partition: number; securityRevision: number; mat
 /** A filter leaf compiled by the route, keyed by its query name. */
 export type FactClause =
   | { facet: 'type'; values: readonly string[] }
-  | { facet: 'statement'; property: string; values: readonly string[] };
+  | ({ facet: 'statement'; property: string; qualifiers?: readonly FilterQualifier[] } & (
+      | { values: readonly string[] }
+      | { range: FilterRange }
+    ));
 
 function holds(subject: IndexedSubject, clause: FactClause): boolean {
   if (clause.facet === 'type') return clause.values.includes(subject.type);
-  return subject.statements.some(
-    (statement) => statement.property === clause.property && clause.values.includes(statement.value),
-  );
+  return subject.statements.some((statement) => {
+    if (statement.property !== clause.property) return false;
+    if ('values' in clause) {
+      if (!clause.values.includes(statement.value)) return false;
+    } else {
+      const { gte, lte, unit } = clause.range;
+      const facet = statement.facet;
+      let value: number;
+      if (unit === undefined) {
+        if (facet?.kind !== 'time') return false;
+        value = facet.year;
+      } else {
+        if (facet?.kind !== 'quantity' || facet.unit !== unit) return false;
+        value = facet.amount;
+      }
+      if (!Number.isFinite(value) || (gte !== undefined && value < gte) || (lte !== undefined && value > lte))
+        return false;
+    }
+    return (clause.qualifiers ?? []).every((qualifier) =>
+      statement.qualifiers?.some(
+        (value) => value.property === qualifier.property && qualifier.in.includes(value.value),
+      ),
+    );
+  });
 }
 
 /** Recheck candidates against current anchor snapshots; any failed read rejects the whole page. */

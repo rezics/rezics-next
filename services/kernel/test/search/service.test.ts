@@ -88,7 +88,17 @@ async function deployment(
   for (const entry of subjects) fake.put(entry);
   await publish(prefix, fake, subjects, 1);
   const source = options.source ? options.source(fake) : fake;
-  const service = createSearchService({ pool, client: options.client ?? client, prefix, source, cursors });
+  const service = createSearchService({
+    pool,
+    client: options.client ?? client,
+    prefix,
+    source,
+    cursors,
+    release: async () => ({
+      types: { 'schema:Book': { facets: [] }, 'schema:Recipe': { facets: [] } },
+      properties: {},
+    }),
+  });
   return { prefix, fake, service };
 }
 

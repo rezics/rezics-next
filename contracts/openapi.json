@@ -37602,6 +37602,7 @@
                   "properties": {
                     "code": {
                       "enum": [
+                        "semantic_not_ready",
                         "index_not_ready",
                         "overloaded",
                         "deadline_exceeded"
@@ -37655,6 +37656,7 @@
                       "enum": [
                         true,
                         true,
+                        true,
                         true
                       ],
                       "type": "string"
@@ -37665,6 +37667,7 @@
                     },
                     "title": {
                       "enum": [
+                        "Semantic Layer Not Ready",
                         "Search Index Not Ready",
                         "Service Overloaded",
                         "Deadline Exceeded"
@@ -37673,6 +37676,7 @@
                     },
                     "type": {
                       "enum": [
+                        "https://rezics.com/problems/semantic_not_ready",
                         "https://rezics.com/problems/index_not_ready",
                         "https://rezics.com/problems/overloaded",
                         "https://rezics.com/problems/deadline_exceeded"
@@ -37693,7 +37697,7 @@
                 }
               }
             },
-            "description": "Index not ready; Overloaded; Deadline exceeded"
+            "description": "Semantic not ready; Index not ready; Overloaded; Deadline exceeded"
           }
         },
         "security": [

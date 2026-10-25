@@ -1,9 +1,11 @@
+import { admitFilter, FilterError, parseFilter, positiveFilter, type FilterRelease } from '@rezics/filter';
 import type { Pool } from 'pg';
 import { ProblemError, type FieldErrorCode } from '../http/problem.ts';
+import { activeRelease } from '../semantic/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { decodeSearchCursor, encodeSearchCursor } from './cursor.ts';
 import { checkHits, type FactClause } from './disclosure/check.ts';
-import { compileFilter, FilterError, parseFilter, positiveFilter } from './filter.ts';
+import { compileFilter } from './filter.ts';
 import { createFreshness } from './freshness.ts';
 import { subjectGenerations, subjectIndexName } from './indices.ts';
 import { OpenSearchError, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
@@ -80,8 +82,6 @@ function validate(request: SearchRequest) {
       });
     throw error;
   }
-  if ((text || filter) && !(text && positiveText(text)) && !(filter && positiveFilter(filter)))
-    unsupported(text ? '/text' : '/filter');
 
   const sort = request.sort === undefined ? (text ? 'relevance' : 'name') : request.sort;
   if (sort !== 'relevance' && sort !== 'name' && sort !== 'id') invalid('/sort', 'invalid_format');
@@ -110,12 +110,14 @@ export function createSearchService({
   prefix,
   source,
   cursors,
+  release = async () => (await activeRelease(pool))?.release ?? null,
 }: {
   pool: Pool;
   client: OpenSearch;
   prefix: string;
   source: SubjectSource;
   cursors: KeyRing;
+  release?: () => Promise<FilterRelease | null>;
 }) {
   let templates: Promise<void> | undefined;
   let alias: { generation: number; expiresAt: number } | undefined;
@@ -181,6 +183,22 @@ export function createSearchService({
   return {
     async search(principal: 'anonymous' | `account:${string}`, request: SearchRequest, now = Date.now()) {
       const { text, filter, sort, limit, bindingRequest } = validate(request);
+      let admitted;
+      if (filter) {
+        const current = await release();
+        if (!current) throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
+        try {
+          admitted = admitFilter(filter, current);
+        } catch (error) {
+          if (error instanceof FilterError)
+            throw new ProblemError(error.problem, {
+              errors: error.errors.map(({ pointer, code }) => ({ pointer: `/filter${pointer}`, code })),
+            });
+          throw error;
+        }
+      }
+      if ((text || admitted) && !(text && positiveText(text)) && !(admitted && positiveFilter(admitted)))
+        unsupported(text ? '/text' : '/filter');
       const binding = { operation: 'subjects.search', request: bindingRequest, principal };
       const cursor =
         request.cursor === undefined ? undefined : decodeSearchCursor(cursors, binding, request.cursor, now);
@@ -190,7 +208,7 @@ export function createSearchService({
       }
 
       const compiledText = text ? compileText(text, { field: 'search_text', prefix: 't' }) : undefined;
-      const compiledFilter = filter ? compileFilter(filter, { prefix: 'f' }) : undefined;
+      const compiledFilter = admitted ? compileFilter(admitted, { prefix: 'f' }) : undefined;
       const clauses = new Map<string, FactClause>(
         compiledFilter?.leaves.filter((leaf) => !leaf.negated).map((leaf) => [leaf.name, leaf]),
       );

@@ -157,3 +157,61 @@ test('a failed read fails the whole check closed', async () => {
   };
   await expect(checkHits(failing, [hit(a), hit(b)], none)).rejects.toThrow('partition unavailable');
 });
+
+test('range and qualifier rechecks require one current statement with the right facet and unit', async () => {
+  const fake = createFakeSource();
+  const qualifiers = [
+    { property: 'rezics:role', in: [author] },
+    { property: 'rezics:credit', in: [other] },
+  ];
+  const clause: FactClause = {
+    facet: 'statement',
+    property: 'schema:totalTime',
+    range: { gte: 30, lte: 60, unit: 'unit:MIN' },
+    qualifiers,
+  };
+  const minutes = (
+    amount: number,
+    unit = 'unit:MIN',
+    roles = [
+      { property: 'rezics:role', value: author },
+      { property: 'rezics:credit', value: other },
+    ],
+  ): IndexedSubject['statements'][number] => ({
+    property: 'schema:totalTime',
+    value: 'quantity',
+    facet: { kind: 'quantity', amount, unit },
+    qualifiers: roles,
+  });
+  const statements = [
+    [minutes(30)],
+    [minutes(60)],
+    [minutes(45, 'unit:HUR')],
+    [minutes(29)],
+    [minutes(61)],
+    [
+      minutes(45, 'unit:MIN', [{ property: 'rezics:role', value: author }]),
+      minutes(45, 'unit:MIN', [{ property: 'rezics:credit', value: other }]),
+    ],
+    [{ ...minutes(45), facet: { kind: 'time' as const, year: 45 } }],
+    [{ ...minutes(45), property: 'schema:other' }],
+    [{ property: 'schema:totalTime', value: 'quantity' }],
+  ];
+  const subjects = statements.map((statements, index) => ({ ...book(index + 1), statements }));
+  for (const subject of subjects) fake.put(subject);
+  const result = await checkHits(
+    fake,
+    subjects.map((subject) => hit(subject, ['f0'])),
+    new Map([['f0', clause]]),
+  );
+  expect(result.passed.map(({ subject }) => subject.id)).toEqual(subjects.slice(0, 2).map((subject) => subject.id));
+  expect(result.dropped).toBe(subjects.length - 2);
+
+  const time: FactClause = { facet: 'statement', property: 'schema:totalTime', range: { gte: 45, lte: 45 } };
+  const years = await checkHits(
+    fake,
+    subjects.map((subject) => hit(subject, ['f0'])),
+    new Map([['f0', time]]),
+  );
+  expect(years.passed.map(({ subject }) => subject.id)).toEqual([subjects[6]!.id]);
+});

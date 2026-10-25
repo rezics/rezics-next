@@ -57,7 +57,7 @@ export function searchRoutes<App>(
           403: problemSchema('forbidden'),
           409: problemSchema('search_restart_required'),
           422: problemSchema('unsupported_query'),
-          503: unavailable,
+          503: problemSchema('semantic_not_ready', 'index_not_ready', 'overloaded', 'deadline_exceeded'),
         },
         detail: { operationId: 'subject.search', 'x-action': 'subject:read', security: [{ bearerAuth: [] }, {}] },
       },

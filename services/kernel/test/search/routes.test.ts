@@ -193,6 +193,20 @@ test('service problems keep their status, code, errors and headers, and every pr
   expect(command.body.effect_status).toBe('not_applied');
 });
 
+test('search preserves semantic readiness failures and their retry header', async () => {
+  failure = new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
+  try {
+    const { response, body } = await call(kernel, 'POST', '/v1/subjects:search', {
+      body: { filter: { type: { in: ['schema:Book'] } } },
+    });
+    expect(response.status).toBe(503);
+    expect(body).toMatchObject({ code: 'semantic_not_ready', retryable: true, effect_status: 'not_applicable' });
+    expect(response.headers.get('retry-after')).toBe('1');
+  } finally {
+    failure = null;
+  }
+});
+
 test('without a search service both routes are index_not_ready and retryable', async () => {
   for (const [method, path, body] of both) {
     const { response, body: problem } = await call(offline, method, path, { body });
