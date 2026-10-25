@@ -1,6 +1,6 @@
-import { APPEARANCE, platformRegistry } from '@rezics/composition';
+import { APPEARANCE, platformRegistry } from '../../../../../packages/composition/src/registry.ts';
 import { createContext, isValidElement, useContext, type ReactNode } from 'react';
-import { pageText, usePageLocale } from './data';
+import { pageText, usePageLocale, usePageMessages } from './data';
 
 /** `{ type, slots }` for every platform component, shared by layout and data renderers. */
 export const pageDefinitions = platformRegistry.components.map((component) => ({
@@ -178,6 +178,60 @@ function Text(props: Record<string, unknown>) {
   );
 }
 
+function SearchBox(props: Record<string, unknown>) {
+  const locale = usePageLocale();
+  const messages = usePageMessages();
+  const placeholder = pageText(props.placeholder, locale);
+  return (
+    <form
+      role="search"
+      method="get"
+      action={`/${encodeURIComponent(locale)}/search`}
+      className="flex w-full max-w-3xl gap-2"
+    >
+      <input
+        type="search"
+        name="q"
+        placeholder={placeholder.text}
+        aria-label={placeholder.text}
+        lang={placeholder.lang}
+        className="min-w-0 flex-1 rounded-xl border border-border bg-background px-4 py-3 text-foreground shadow-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+      />
+      <button
+        type="submit"
+        className="shrink-0 rounded-xl bg-primary px-5 py-3 font-medium text-primary-foreground hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      >
+        {messages.search}
+      </button>
+    </form>
+  );
+}
+
+function LinkGrid(props: Record<string, unknown>) {
+  const locale = usePageLocale();
+  const links = Array.isArray(props.links) ? props.links : [];
+  return (
+    <ul className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-4">
+      {links.map((item, index) => {
+        if (!isRecord(item) || typeof item.href !== 'string') return null;
+        const label = pageText(item.label, locale);
+        const href = item.href.startsWith('/') ? `/${encodeURIComponent(locale)}${item.href}` : item.href;
+        return (
+          <li key={`${item.href}:${index}`}>
+            <a
+              href={href}
+              lang={label.lang}
+              className="flex min-h-14 items-center justify-center rounded-xl border border-border/70 bg-card px-4 py-3 text-center font-semibold text-card-foreground shadow-sm transition-colors hover:border-link/50 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {label.text}
+            </a>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 function Slot(props: Record<string, unknown>) {
   const actions = useContext(PageHostContext);
   const children = content(props.children);
@@ -210,7 +264,7 @@ function Slot(props: Record<string, unknown>) {
   }
 }
 
-export const layoutComponents = { Stack, Columns, Heading, Text, Slot };
+export const layoutComponents = { Stack, Columns, Heading, Text, SearchBox, LinkGrid, Slot };
 
 /** One wrapper. Appearance tokens are emitted only when they belong to `APPEARANCE`. */
 export function PageRoot(props: Record<string, unknown>) {

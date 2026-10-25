@@ -150,6 +150,17 @@ function byEnglishLabel(left: Subject, right: Subject): number {
 /** Subjects with a statement of that property naming one of the filter's subjects. */
 function searchRead(fixtures: Fixtures, read: Extract<PageRead, { kind: 'search' }>) {
   const filter = read.body.filter;
+  if ('type' in filter) {
+    const types = new Set(filter.type.in);
+    const matched = fixtures.subjects.filter((subject) => types.has(subject.type)).sort(byEnglishLabel);
+    const subjects = matched.slice(0, read.body.limit).map(({ id, type, labels }) => ({ id, type, labels }));
+    return {
+      subjects,
+      total: { value: matched.length, relation: 'exact' as const },
+      next: null,
+      as_of: '2026-10-26T00:00:00.000Z',
+    };
+  }
   const named = 'statement' in filter ? filter.statement : undefined;
   const ids = new Set(named?.in ?? []);
   const matched = named
@@ -181,27 +192,33 @@ async function pageRead(fixtures: Fixtures, request: Request): Promise<Response>
   }
   const target = isRecord(body) ? body.target : undefined;
   const requested = isRecord(target) && typeof target.subject === 'string' ? target.subject : undefined;
-  if (!requested) return notFound();
-  const payload = subjectPayload(fixtures, requested);
-  if (!payload) return notFound();
-  const definition = fixtures.types[payload.subject.type];
-  const resolved = resolveTemplate(platformProfile, {
-    type: payload.subject.type,
-    ...(definition ? { bases: definition.bases } : {}),
-  });
-  const plan = planReads(platformRegistry, resolved.document, { subject: payload.subject.id });
+  const requestedRoute = isRecord(target) && typeof target.route === 'string' ? target.route : undefined;
+  if (!requested && requestedRoute === undefined) return notFound();
+  const payload = requested ? subjectPayload(fixtures, requested) : undefined;
+  if (requested && !payload) return notFound();
+  const definition = payload ? fixtures.types[payload.subject.type] : undefined;
+  const resolved = resolveTemplate(
+    platformProfile,
+    requestedRoute !== undefined
+      ? { route: requestedRoute }
+      : {
+          type: payload!.subject.type,
+          ...(definition ? { bases: definition.bases } : {}),
+        },
+  );
+  const plan = planReads(platformRegistry, resolved.document, { subject: payload?.subject.id ?? null });
   const reads: Record<string, { status: number; body: unknown }> = {};
   for (const [key, descriptor] of Object.entries(plan.reads)) {
     // The subject read that selected the template is reused.
     reads[key] =
-      descriptor.kind === 'subject' && descriptor.id === payload.subject.id
+      descriptor.kind === 'subject' && descriptor.id === payload?.subject.id && payload
         ? { status: 200, body: payload }
         : descriptor.kind === 'search'
           ? { status: 200, body: searchRead(fixtures, descriptor) }
           : { status: 404, body: { code: 'not_found' } };
   }
   return Response.json({
-    subject: payload.subject.id,
+    ...(payload ? { subject: payload.subject.id } : {}),
     profile: platformDigest,
     template: { scope: resolved.scope, key: resolved.key },
     document: resolved.document,

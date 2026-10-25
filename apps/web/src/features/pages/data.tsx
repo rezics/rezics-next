@@ -1,9 +1,18 @@
-import { pickText, planReads, platformRegistry, shownProperties, type CompositionDocument } from '@rezics/composition';
+import { planReads, shownProperties } from '../../../../../packages/composition/src/reads.ts';
+import { platformRegistry, type CompositionDocument } from '../../../../../packages/composition/src/registry.ts';
+import { pickText } from '../../../../../packages/composition/src/strings.ts';
 import { createContext, useContext, type ComponentType, type ReactNode } from 'react';
 import type { Related, Subject } from '../../subject/types';
 import type { PageDocument } from './render';
 
-export type PageMessages = { unknown: string; none: string; unlabelled: string; sources: string; aliases: string };
+export type PageMessages = {
+  unknown: string;
+  none: string;
+  unlabelled: string;
+  sources: string;
+  aliases: string;
+  search: string;
+};
 
 type LinkProps = { href: string; lang?: string; children: ReactNode };
 type PageLink = ComponentType<LinkProps>;
@@ -13,8 +22,9 @@ type SubjectRead = { subject: Subject; related: Related };
 type SearchRead = { subjects: Pick<Subject, 'id' | 'labels'>[] };
 type PreparedRead = { header?: ReactNode; groups?: Map<string, ReactNode>; more?: ReactNode[]; list?: ReactNode[] };
 
-const PageContext = createContext<{ locale: string; nodes: Map<string, PreparedRead> }>({
+const PageContext = createContext<{ locale: string; messages: PageMessages; nodes: Map<string, PreparedRead> }>({
   locale: 'en',
+  messages: { unknown: '', none: '', unlabelled: '', sources: '', aliases: '', search: '' },
   nodes: new Map(),
 });
 const linkClass = 'text-link underline decoration-link/30 underline-offset-4 hover:decoration-current';
@@ -22,6 +32,10 @@ const listClass = 'space-y-5 in-data-[density=compact]:space-y-3';
 
 export function usePageLocale(): string {
   return useContext(PageContext).locale;
+}
+
+export function usePageMessages(): PageMessages {
+  return useContext(PageContext).messages;
 }
 
 /** Localized props and read text share the composition fallback policy. */
@@ -291,7 +305,7 @@ export function PageData({
     const read = prepared.get(key);
     if (read) nodes.set(id, read);
   }
-  return <PageContext.Provider value={{ locale, nodes }}>{children}</PageContext.Provider>;
+  return <PageContext.Provider value={{ locale, messages, nodes }}>{children}</PageContext.Provider>;
 }
 
 function useNodeRead(id: unknown) {
@@ -317,6 +331,14 @@ function MoreStatements(props: Record<string, unknown>) {
 }
 
 function SubjectList(props: Record<string, unknown>) {
+  return <TypeListContent {...props} />;
+}
+
+function TypeList(props: Record<string, unknown>) {
+  return <TypeListContent {...props} />;
+}
+
+function TypeListContent(props: Record<string, unknown>) {
   const list = useNodeRead(props.id)?.list;
   const locale = usePageLocale();
   const title = pageText(props.title, locale);
@@ -334,4 +356,4 @@ function SubjectList(props: Record<string, unknown>) {
   );
 }
 
-export const dataComponents = { SubjectHeader, Statements, MoreStatements, SubjectList };
+export const dataComponents = { SubjectHeader, Statements, MoreStatements, SubjectList, TypeList };

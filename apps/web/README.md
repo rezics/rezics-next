@@ -245,9 +245,9 @@ HTTP requests; omitted categories are zero. Arrows mean sequential work. Bounds 
 
 Let s count the subject payload's entries (including labels, aliases, statements, qualifiers, references and related
 subjects, even entries filtered out before display), the board page's threads, or the thread page's posts, as applicable;
-M is one media object's bytes, and t is tokens or stored entries in one session object. Home shows only a heading;
-subject reads have no pagination or app-side cap on s. Board and thread reads use the kernel's default page size, at most
-100 entries.
+M is one media object's bytes, and t is tokens or stored entries in one session object. Home reads one route template
+and renders its bounded search results; subject reads have no pagination or app-side cap on s. Board and thread reads
+use the kernel's default page size, at most 100 entries.
 Each SQLite object has one `record` and an expiry alarm: a login record holds state, nonce, PKCE verifier, return path
 and expiry (10 minutes); a session record holds subject, access/refresh/ID tokens, a 128-bit CSRF token and expiries
 (30 days from sign-in).
@@ -310,8 +310,10 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 
 ### Home page (`/<locale>`)
 
-- **Touches:** Root preferences → D `signedIn` with a valid configured session cookie; static heading
-- **Bound:** ≤1 D, 0 K/R/A; O(t) record bytes, constant page output; no result, label or media calls per item
+- **Touches:** Root preferences → D `signedIn` with a valid configured session cookie; one `POST /v1/pages:read`
+  for route `/`, including the platform search box, vertical links and type lists
+- **Bound:** ≤1 K (four searches of at most 12 subjects each inside the page read), ≤1 D, 0 R/A; O(t) session bytes
+  and O(document + read results) rendering, bounded by composition limits; no result, label or media calls per item
 - **Growth check:** `tests/session-controls.test.ts`:
   `pages read the signed-in state without contacting Auth or refreshing tokens` asserts zero A;
   `tests/request-cost.test.ts`: `home page stays within its bound as s grows` for D/K

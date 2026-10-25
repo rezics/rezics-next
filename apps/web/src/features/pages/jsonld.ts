@@ -155,6 +155,19 @@ export function subjectJsonLd({
   return Object.fromEntries(entries);
 }
 
+/** Describe the localized site home and its search entry point. */
+export function homeJsonLd({ origin, locale }: { origin: string; locale: string }): Record<string, JsonValue> {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    potentialAction: {
+      '@type': 'SearchAction',
+      target: `${origin.replace(/\/+$/, '')}/${encodeURIComponent(locale)}/search?q={search_term_string}`,
+      'query-input': 'required name=search_term_string',
+    },
+  };
+}
+
 /** Escape HTML-sensitive characters while preserving the JSON value exactly. */
 export function serializeJsonLd(value: unknown): string {
   return JSON.stringify(value).replace(
