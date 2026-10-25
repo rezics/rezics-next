@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { createAccess } from '../access/index.ts';
+import { systemClock, type KernelClock } from '../clock.ts';
 import { payoutRoutes } from '../commerce/payout-routes.ts';
 import { commerceRoutes, type CommerceDependencies } from '../commerce/routes.ts';
 import type { ContentBoardDependencies } from '../content/boards.ts';
@@ -17,7 +18,7 @@ import { declareKernelWriteRates } from './write-rate-routes.ts';
 export type KernelDependencies = Parameters<typeof createApp>[0] & {
   routeKey: Uint8Array;
   /** Trusted domain time only; authentication and request budgets retain real time. */
-  clock?: () => Date;
+  clock?: KernelClock;
   commerce?: CommerceDependencies;
   content?: ContentRuntime & Pick<ContentBoardDependencies, 'cursorNow'>;
   search?: SearchService;
@@ -25,7 +26,7 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
 
 /** The route key must stay the same across restarts, or retries lose their receipts. */
 export function createKernel(dependencies: KernelDependencies) {
-  const sourceClock = dependencies.clock ?? (() => new Date());
+  const sourceClock = dependencies.clock ?? systemClock;
   const clock = () => {
     const instant = sourceClock();
     if (!(instant instanceof Date) || !Number.isFinite(instant.getTime())) throw new TypeError('Invalid command clock');

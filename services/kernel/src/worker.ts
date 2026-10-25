@@ -1,4 +1,5 @@
 import pg from 'pg';
+import type { KernelClock } from './clock.ts';
 import { ConfigError } from './server.ts';
 import { createWorkClient } from './work/client.ts';
 import { KERNEL_WORK_MODULES } from './work/modules.ts';
@@ -6,7 +7,13 @@ import { composeWork, type WorkModule } from './work/registry.ts';
 import { effectsRelay } from './events/effects.ts';
 import { startRelays } from './events/relays.ts';
 
-export type WorkerConfig = { databaseUrl: string; executorId?: string; poolSize: number };
+export type WorkerConfig = {
+  databaseUrl: string;
+  executorId?: string;
+  poolSize: number;
+  /** Trusted service composition only; never read from the environment. */
+  clock?: KernelClock;
+};
 
 export function readWorkerConfig(env: NodeJS.ProcessEnv): WorkerConfig {
   const databaseUrl = env.DATABASE_URL;

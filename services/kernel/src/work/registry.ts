@@ -1,5 +1,6 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool } from 'pg';
+import { systemClock, type KernelClock } from '../clock.ts';
 import { DBOS_SCHEMA, WORK_APPLICATION, type WorkClient } from './client.ts';
 import { registerEffects, type Effect } from '../events/effects.ts';
 import { WORK_QUEUES } from './queues.ts';
@@ -9,6 +10,7 @@ export type WorkContext = {
   readonly queues: typeof WORK_QUEUES;
   readonly client: WorkClient;
   readonly env: Readonly<Record<string, string | undefined>>;
+  readonly clock: KernelClock;
   addEffects(effects: Effect[]): void;
 };
 export type WorkModule = { name: string; register(context: WorkContext): void | Promise<void> };
@@ -18,6 +20,8 @@ export type WorkOptions = {
   pool: Pool;
   client: WorkClient;
   env?: Readonly<Record<string, string | undefined>>;
+  /** Trusted service composition only. */
+  clock?: KernelClock;
 };
 
 let composed = false;
@@ -31,6 +35,7 @@ export async function composeWork(modules: readonly WorkModule[], options: WorkO
     if (names.has(module.name)) throw new Error(`Duplicate work module: ${module.name}`);
     names.add(module.name);
   }
+  const clock = options.clock ?? systemClock;
   composed = true;
   DBOS.setConfig({
     name: WORK_APPLICATION,
@@ -53,6 +58,7 @@ export async function composeWork(modules: readonly WorkModule[], options: WorkO
     queues: WORK_QUEUES,
     client: options.client,
     env: options.env ?? process.env,
+    clock,
     addEffects(effects) {
       if (!acceptingEffects) throw new Error('Cannot add effects after work composition');
       collectedEffects.push(...effects);
