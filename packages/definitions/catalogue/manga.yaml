@@ -29,7 +29,7 @@ classes:
     exact_mappings:
       - wd:Q21198342
     annotations:
-      facets: keywords genre datePublished author illustrator voiceActor publisher contributor character partOfSeries
+      facets: keywords genre datePublished author illustrator voiceActor publisher contributor character partOfSeries inLanguage
     slots:
       - abstract
       - author
@@ -57,7 +57,7 @@ classes:
     exact_mappings:
       - wd:Q1238720
     annotations:
-      facets: keywords genre datePublished author illustrator voiceActor publisher contributor character partOfSeries
+      facets: keywords genre datePublished author illustrator voiceActor publisher contributor character partOfSeries inLanguage
     slots:
       - author
       - illustrator

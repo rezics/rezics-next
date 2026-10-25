@@ -26,4 +26,4 @@ classes:
     slots:
       - bangumiSubjectId
     annotations:
-      facets: contributor partOfSeries genre keywords
+      facets: contributor partOfSeries genre keywords inLanguage

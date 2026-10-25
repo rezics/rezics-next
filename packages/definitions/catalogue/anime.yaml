@@ -138,7 +138,7 @@ classes:
       - genre
       - keywords
     annotations:
-      facets: isPartOf datePublished duration director musicBy voiceActor contributor character partOfSeries genre keywords
+      facets: isPartOf datePublished duration director musicBy voiceActor contributor character partOfSeries genre keywords inLanguage
 slots:
   numberOfEpisodes:
     slot_uri: schema:numberOfEpisodes

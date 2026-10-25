@@ -51,7 +51,7 @@ classes:
       - distributionFormat
       - vndbId
     annotations:
-      facets: gamePlatform datePublished ageRating distributionFormat releaseType exampleOfWork developer publisher
+      facets: gamePlatform datePublished ageRating distributionFormat releaseType exampleOfWork developer publisher inLanguage
   BangumiVideoGame:
     is_a: VideoGame
     class_uri: schema:VideoGame
