@@ -14,6 +14,8 @@ import {
 import { readOrder } from './store.ts';
 import { createPayouts } from './payouts.ts';
 import {
+  CHECKOUT_SYNC_WORKFLOW,
+  checkoutWorkflowId,
   ORDER_RECONCILE_WORKFLOW,
   orderReconcileWorkflowId,
   STRIPE_EVENT_WORKFLOW,
@@ -79,10 +81,23 @@ export function createCommerceWork(deps: CommerceWorkDependencies): WorkModule {
         const snapshot = await readCheckout(sessionId, observedAt);
         await applyCheckout(snapshot, workflowId);
       }
+      const checkoutSync = DBOS.registerWorkflow(
+        async (sessionId: string) => {
+          await sync(sessionId, DBOS.workflowID!);
+        },
+        { name: CHECKOUT_SYNC_WORKFLOW },
+      );
       DBOS.registerWorkflow(
         async (ref: StripeEventRef) => {
           const sessionId = await resolveCheckout(ref);
-          if (sessionId) await sync(sessionId, DBOS.workflowID!);
+          if (sessionId) {
+            const child = await DBOS.startWorkflow(checkoutSync, {
+              workflowID: checkoutWorkflowId(sessionId, ref.eventId),
+              workflowIDReusePolicy: 'return-existing',
+              queueName: WORKFLOWS_QUEUE,
+            })(sessionId);
+            await child.getResult();
+          }
         },
         { name: STRIPE_EVENT_WORKFLOW },
       );
