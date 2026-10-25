@@ -90,6 +90,7 @@ const response = <S extends TSchema>(schema: S) =>
   withHeaders(t.Object({ grant: schema }, closed), { [SESSION_HEADER]: t.String() });
 const detail = (operationId: string) => ({
   operationId,
+  'x-exposure': 'public',
   'x-action': 'access:grant',
   'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
   security: [{ bearerAuth: [] }],

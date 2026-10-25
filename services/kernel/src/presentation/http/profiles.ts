@@ -72,6 +72,7 @@ export function profileRoutes(
         },
         detail: {
           operationId: 'presentation.publish',
+          'x-exposure': 'public',
           'x-action': 'presentation:publish',
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
           security: [{ bearerAuth: [] }],
@@ -116,6 +117,7 @@ export function profileRoutes(
         },
         detail: {
           operationId: 'presentation.read_profile',
+          'x-exposure': 'public',
           'x-action': 'presentation:read',
           security: [{ bearerAuth: [] }, {}],
         },
@@ -146,6 +148,7 @@ export function profileRoutes(
         },
         detail: {
           operationId: 'presentation.read_active',
+          'x-exposure': 'public',
           'x-action': 'presentation:read',
           security: [{ bearerAuth: [] }, {}],
         },
@@ -184,6 +187,7 @@ export function profileRoutes(
         },
         detail: {
           operationId: 'presentation.activate',
+          'x-exposure': 'public',
           'x-action': 'presentation:activate',
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
           security: [{ bearerAuth: [] }],

@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { parseExposure } from '../access/gates/declaration.ts';
 import { createAccess } from '../access/index.ts';
 import { accessRoutes } from '../access/routes.ts';
 import { communityRoutes } from '../community/routes.ts';
@@ -97,6 +98,14 @@ export function createKernel(dependencies: KernelDependencies) {
     access: () => resolveAccess({ actions: actionCatalogue(community) }),
   });
   declareKernelWriteRates(community);
+  for (const route of community.routes) {
+    if (route.hooks.detail?.hide === true) continue;
+    try {
+      parseExposure(route.hooks.detail);
+    } catch (cause) {
+      throw new Error(`${route.method.toUpperCase()} ${route.path}: invalid x-exposure declaration`, { cause });
+    }
+  }
   return community as typeof community &
     typeof presentation &
     typeof granted &

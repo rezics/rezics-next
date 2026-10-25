@@ -179,7 +179,7 @@ export function createApp({
         }),
       );
     })
-    .get('/health', { detail: { hide: true } }, async ({ admission: lanes, job }) => {
+    .get('/health', { detail: { hide: true, ...{ 'x-exposure': 'public' } } }, async ({ admission: lanes, job }) => {
       try {
         await lanes.run('reserved', job, () =>
           withConnection(pool, async (client) => {

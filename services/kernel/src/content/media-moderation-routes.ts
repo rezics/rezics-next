@@ -113,6 +113,7 @@ export function mediaModerationRoutes(
       },
       detail: {
         operationId: 'media.takedown',
+        'x-exposure': 'public',
         'x-action': 'moderation:takedown',
         'x-rate-limit': writeRate,
         security: [{ bearerAuth: [] }],

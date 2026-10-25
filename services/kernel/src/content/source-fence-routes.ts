@@ -91,7 +91,12 @@ export function sourceFenceRoutes(app: ReturnType<typeof definitionRoutes>, depe
           'dependency_unavailable',
         ),
       },
-      detail: { operationId: 'source_fence.read', 'x-action': 'source_fence:read', security: [{ bearerAuth: [] }] },
+      detail: {
+        operationId: 'source_fence.read',
+        'x-exposure': 'public',
+        'x-action': 'source_fence:read',
+        security: [{ bearerAuth: [] }],
+      },
       mapResponse({ set }) {
         set.headers['cache-control'] = 'private, no-store';
       },

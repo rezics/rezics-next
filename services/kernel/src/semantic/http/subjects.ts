@@ -270,6 +270,7 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
         },
         detail: {
           operationId: 'subject.create',
+          'x-exposure': 'public',
           'x-action': 'subject:create',
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
           security: [{ bearerAuth: [] }],
@@ -326,6 +327,7 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
         },
         detail: {
           operationId: 'subject.get',
+          'x-exposure': 'public',
           'x-action': 'subject:read',
           security: [{ bearerAuth: [] }, {}],
         },
@@ -394,6 +396,7 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
         },
         detail: {
           operationId: 'subject.hide',
+          'x-exposure': 'public',
           'x-action': 'moderation:hide',
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
           security: [{ bearerAuth: [] }],
@@ -451,6 +454,7 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
         },
         detail: {
           operationId: 'subject.take_down',
+          'x-exposure': 'public',
           'x-action': 'moderation:takedown',
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
           security: [{ bearerAuth: [] }],
@@ -508,6 +512,7 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
         },
         detail: {
           operationId: 'subject.restore',
+          'x-exposure': 'public',
           'x-action': 'moderation:takedown',
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
           security: [{ bearerAuth: [] }],
@@ -571,6 +576,7 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
         },
         detail: {
           operationId: 'subject.propose',
+          'x-exposure': 'public',
           'x-action': 'statement:propose',
           security: [{ bearerAuth: [] }],
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
@@ -630,6 +636,7 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
         },
         detail: {
           operationId: 'subject.accept_candidate',
+          'x-exposure': 'public',
           'x-action': 'context:accept',
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
           security: [{ bearerAuth: [] }],
@@ -695,6 +702,7 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
         },
         detail: {
           operationId: 'subject.reject_candidate',
+          'x-exposure': 'public',
           'x-action': 'context:accept',
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
           security: [{ bearerAuth: [] }],
@@ -760,6 +768,7 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
         },
         detail: {
           operationId: 'subject.adopt',
+          'x-exposure': 'public',
           'x-action': 'context:adopt',
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
           security: [{ bearerAuth: [] }],
@@ -835,6 +844,7 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
         },
         detail: {
           operationId: 'subject.list_candidates',
+          'x-exposure': 'public',
           'x-action': 'subject:read',
           security: [{ bearerAuth: [] }, {}],
         },
@@ -876,6 +886,7 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
         },
         detail: {
           operationId: 'subject.list_revisions',
+          'x-exposure': 'public',
           'x-action': 'subject:read',
           security: [{ bearerAuth: [] }, {}],
         },
@@ -931,6 +942,7 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
         },
         detail: {
           operationId: 'subject.links',
+          'x-exposure': 'public',
           'x-action': 'subject:read',
           security: [{ bearerAuth: [] }, {}],
         },

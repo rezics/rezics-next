@@ -101,6 +101,7 @@ export function sourceFenceGovernanceRoutes(app: ReturnType<typeof sourceFenceRo
       },
       detail: {
         operationId: 'source_fence.takedown',
+        'x-exposure': 'public',
         'x-action': 'source_fence:takedown',
         'x-rate-limit': writeRate,
         security: [{ bearerAuth: [] }],

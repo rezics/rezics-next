@@ -45,7 +45,7 @@ export function stripeWebhookRoutes(
     {
       parse: 'none',
       // This provider endpoint has no Access action and is excluded from its catalogue.
-      detail: { hide: true },
+      detail: { hide: true, 'x-exposure': 'public' },
       response: {
         200: t.Object({ received: t.Literal(true) }, { additionalProperties: false }),
         400: problemSchema('invalid_request', 'invalid_signature'),

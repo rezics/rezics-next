@@ -289,6 +289,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         },
         detail: {
           operationId: 'space.create',
+          'x-exposure': 'public',
           'x-action': 'space:create',
           'x-rate-limit': writeRate,
           security: writeSecurity,
@@ -329,6 +330,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         },
         detail: {
           operationId: 'space.get',
+          'x-exposure': 'public',
           'x-action': 'space:read',
           security: readSecurity,
         },
@@ -362,6 +364,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         },
         detail: {
           operationId: 'space.update',
+          'x-exposure': 'public',
           'x-action': 'space:manage',
           'x-rate-limit': writeRate,
           security: writeSecurity,
@@ -407,6 +410,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         },
         detail: {
           operationId: 'realm.create',
+          'x-exposure': 'public',
           'x-action': 'realm:create',
           'x-rate-limit': writeRate,
           security: writeSecurity,
@@ -455,6 +459,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         },
         detail: {
           operationId: 'realm.get',
+          'x-exposure': 'public',
           'x-action': 'realm:read',
           security: readSecurity,
         },
@@ -481,6 +486,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         },
         detail: {
           operationId: 'realm.update',
+          'x-exposure': 'public',
           'x-action': 'realm:manage',
           'x-rate-limit': writeRate,
           security: writeSecurity,
@@ -531,6 +537,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         },
         detail: {
           operationId: 'realm.board_scheme',
+          'x-exposure': 'public',
           'x-action': 'realm:manage',
           'x-rate-limit': writeRate,
           security: writeSecurity,
@@ -578,6 +585,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         },
         detail: {
           operationId: 'publication.publish',
+          'x-exposure': 'public',
           'x-action': 'realm:publish',
           'x-rate-limit': writeRate,
           security: writeSecurity,
@@ -624,6 +632,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         },
         detail: {
           operationId: 'publication.list',
+          'x-exposure': 'public',
           'x-action': 'realm:read',
           security: readSecurity,
         },
@@ -658,6 +667,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         },
         detail: {
           operationId: 'publication.get',
+          'x-exposure': 'public',
           'x-action': 'realm:read',
           security: readSecurity,
         },
@@ -682,6 +692,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         },
         detail: {
           operationId: 'publication.withdraw',
+          'x-exposure': 'public',
           'x-action': 'realm:publish',
           'x-rate-limit': writeRate,
           security: writeSecurity,
@@ -725,6 +736,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         },
         detail: {
           operationId: 'publication.reject',
+          'x-exposure': 'public',
           'x-action': 'realm:publish',
           'x-rate-limit': writeRate,
           security: writeSecurity,

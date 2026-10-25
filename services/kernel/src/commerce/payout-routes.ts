@@ -120,7 +120,12 @@ export function payoutRoutes(
           400: problemSchema('invalid_request', 'invalid_cursor'),
           409: problemSchema('stale_cursor'),
         },
-        detail: { operationId: 'payout_statement.list', 'x-action': 'payout_statement:list', security },
+        detail: {
+          operationId: 'payout_statement.list',
+          'x-exposure': 'public',
+          'x-action': 'payout_statement:list',
+          security,
+        },
       },
       async ({ actor, authorize, query, admission, job }) => {
         const check = await authorize(accountAnchor(actor));
@@ -134,7 +139,12 @@ export function payoutRoutes(
       {
         params,
         response: { 200: t.Object({ statement }), ...errors },
-        detail: { operationId: 'payout_statement.get', 'x-action': 'payout_statement:read', security },
+        detail: {
+          operationId: 'payout_statement.get',
+          'x-exposure': 'public',
+          'x-action': 'payout_statement:read',
+          security,
+        },
       },
       async ({ actor, authorize, params, admission, job }) => {
         const check = await authorize(accountAnchor(actor));
@@ -156,7 +166,12 @@ export function payoutRoutes(
           400: problemSchema('invalid_request', 'invalid_cursor'),
           409: problemSchema('stale_cursor'),
         },
-        detail: { operationId: 'payout_statement.lines', 'x-action': 'payout_statement:read', security },
+        detail: {
+          operationId: 'payout_statement.lines',
+          'x-exposure': 'public',
+          'x-action': 'payout_statement:read',
+          security,
+        },
       },
       async ({ actor, authorize, params, query, admission, job }) => {
         const check = await authorize(accountAnchor(actor));
@@ -182,6 +197,7 @@ export function payoutRoutes(
         },
         detail: {
           operationId: 'payout_statement.mark_paid',
+          'x-exposure': 'public',
           'x-action': 'payout_statement:mark_paid',
           security: [{ bearerAuth: [] }],
         },

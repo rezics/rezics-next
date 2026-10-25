@@ -72,6 +72,7 @@ export function definitionRoutes(
         },
         detail: {
           operationId: 'definitions.publish',
+          'x-exposure': 'public',
           'x-action': 'definitions:publish',
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
           security: [{ bearerAuth: [] }],
@@ -116,6 +117,7 @@ export function definitionRoutes(
         },
         detail: {
           operationId: 'definitions.read_release',
+          'x-exposure': 'public',
           'x-action': 'definitions:read',
           security: [{ bearerAuth: [] }, {}],
         },
@@ -146,6 +148,7 @@ export function definitionRoutes(
         },
         detail: {
           operationId: 'definitions.read_active',
+          'x-exposure': 'public',
           'x-action': 'definitions:read',
           security: [{ bearerAuth: [] }, {}],
         },
@@ -184,6 +187,7 @@ export function definitionRoutes(
         },
         detail: {
           operationId: 'definitions.activate',
+          'x-exposure': 'public',
           'x-action': 'definitions:activate',
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
           security: [{ bearerAuth: [] }],

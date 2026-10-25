@@ -90,6 +90,7 @@ export function mediaImportRoutes(
         },
         detail: {
           operationId: 'media.import_from_url',
+          'x-exposure': 'public',
           'x-action': 'media:import_from_url',
           'x-rate-limit': uploadRate,
           security,
@@ -129,7 +130,12 @@ export function mediaImportRoutes(
       {
         params: t.Object({ id: t.String() }, { additionalProperties: false }),
         response: { 200: MediaImportPollSchema, ...failures },
-        detail: { operationId: 'media.import_status', 'x-action': 'media:read_reservation', security },
+        detail: {
+          operationId: 'media.import_status',
+          'x-exposure': 'public',
+          'x-action': 'media:read_reservation',
+          security,
+        },
       },
       async ({ actor, params, admission, job }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');

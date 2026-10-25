@@ -68,6 +68,7 @@ function contextRoutes(
         },
         detail: {
           operationId: 'context.create',
+          'x-exposure': 'public',
           'x-action': 'context:create',
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
           security: [{ bearerAuth: [] }],
@@ -152,6 +153,7 @@ function contextRoutes(
         },
         detail: {
           operationId: 'context.get',
+          'x-exposure': 'public',
           'x-action': 'context:read',
           security: [{ bearerAuth: [] }, {}],
         },

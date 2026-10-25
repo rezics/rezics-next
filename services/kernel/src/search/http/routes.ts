@@ -87,7 +87,12 @@ export function searchRoutes<App>(
           422: problemSchema('unsupported_query'),
           503: problemSchema('semantic_not_ready', 'index_not_ready', 'overloaded', 'deadline_exceeded'),
         },
-        detail: { operationId: 'subject.search', 'x-action': 'subject:read', security: [{ bearerAuth: [] }, {}] },
+        detail: {
+          operationId: 'subject.search',
+          'x-exposure': 'public',
+          'x-action': 'subject:read',
+          security: [{ bearerAuth: [] }, {}],
+        },
       },
       async ({ body, authorize, admission, job, actor }) => {
         const check = await authorize({
@@ -129,7 +134,12 @@ export function searchRoutes<App>(
           422: problemSchema('unsupported_query'),
           503: problemSchema('semantic_not_ready', 'index_not_ready', 'overloaded', 'deadline_exceeded'),
         },
-        detail: { operationId: 'subject.facets', 'x-action': 'subject:read', security: [{ bearerAuth: [] }, {}] },
+        detail: {
+          operationId: 'subject.facets',
+          'x-exposure': 'public',
+          'x-action': 'subject:read',
+          security: [{ bearerAuth: [] }, {}],
+        },
       },
       async ({ body, authorize, admission, job, actor }) => {
         const check = await authorize({
@@ -154,7 +164,12 @@ export function searchRoutes<App>(
           403: problemSchema('forbidden'),
           503: unavailable,
         },
-        detail: { operationId: 'subject.suggest', 'x-action': 'subject:read', security: [{ bearerAuth: [] }, {}] },
+        detail: {
+          operationId: 'subject.suggest',
+          'x-exposure': 'public',
+          'x-action': 'subject:read',
+          security: [{ bearerAuth: [] }, {}],
+        },
       },
       async ({ query, authorize, admission, job }) => {
         if (query.limit !== undefined && (query.limit < 1 || query.limit > 10))

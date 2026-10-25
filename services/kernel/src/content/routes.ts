@@ -226,6 +226,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         },
         detail: {
           operationId: 'thread.create',
+          'x-exposure': 'public',
           'x-action': 'thread:create',
           'x-rate-limit': writeRate,
           security: writeSecurity,
@@ -269,7 +270,12 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       {
         params,
         response: { 200: withHeaders(threadResponse, sessionHeader), ...readFailures },
-        detail: { operationId: 'thread.get', 'x-action': 'thread:read', security: readSecurity },
+        detail: {
+          operationId: 'thread.get',
+          'x-exposure': 'public',
+          'x-action': 'thread:read',
+          security: readSecurity,
+        },
       },
       async ({ params: { id }, actor, admission, job, session }) => {
         existingId(id);
@@ -294,6 +300,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         response: { 201: withHeaders(postResponse, sessionHeader), ...writeFailures },
         detail: {
           operationId: 'post.create',
+          'x-exposure': 'public',
           'x-action': 'post:create',
           'x-rate-limit': writeRate,
           security: writeSecurity,
@@ -326,7 +333,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         params,
         query: ContentPageQuerySchema,
         response: { 200: withHeaders(postPageResponse, sessionHeader), ...readFailures },
-        detail: { operationId: 'post.list', 'x-action': 'post:read', security: readSecurity },
+        detail: { operationId: 'post.list', 'x-exposure': 'public', 'x-action': 'post:read', security: readSecurity },
       },
       async ({ params: { id }, query, actor, admission, job, session }) => {
         existingId(id);
@@ -350,7 +357,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       {
         params,
         response: { 200: withHeaders(postResponse, sessionHeader), ...readFailures },
-        detail: { operationId: 'post.get', 'x-action': 'post:read', security: readSecurity },
+        detail: { operationId: 'post.get', 'x-exposure': 'public', 'x-action': 'post:read', security: readSecurity },
       },
       async ({ params: { id }, actor, admission, job, session }) =>
         contentOperation(() =>
@@ -370,6 +377,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         response: { 204: withHeaders(t.Void(), sessionHeader), ...writeFailures },
         detail: {
           operationId: 'post.erase',
+          'x-exposure': 'public',
           'x-action': 'post:erase',
           'x-rate-limit': writeRate,
           security: writeSecurity,
@@ -402,6 +410,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         response: { 200: withHeaders(postResponse, sessionHeader), ...writeFailures },
         detail: {
           operationId: 'post.revise',
+          'x-exposure': 'public',
           'x-action': 'post:revise',
           'x-rate-limit': writeRate,
           security: writeSecurity,
@@ -434,7 +443,12 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         params,
         query: ContentPageQuerySchema,
         response: { 200: withHeaders(revisionPageResponse, sessionHeader), ...readFailures },
-        detail: { operationId: 'post.history', 'x-action': 'post:read', security: readSecurity },
+        detail: {
+          operationId: 'post.history',
+          'x-exposure': 'public',
+          'x-action': 'post:read',
+          security: readSecurity,
+        },
       },
       async ({ params: { id }, query, actor, admission, job, session }) =>
         contentOperation(() =>
@@ -455,7 +469,12 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       {
         params: t.Object({ id: t.String(), revisionId: t.String() }, { additionalProperties: false }),
         response: { 200: withHeaders(postResponse, sessionHeader), ...readFailures },
-        detail: { operationId: 'post.revision', 'x-action': 'post:read', security: readSecurity },
+        detail: {
+          operationId: 'post.revision',
+          'x-exposure': 'public',
+          'x-action': 'post:read',
+          security: readSecurity,
+        },
       },
       async ({ params: { id, revisionId }, actor, admission, job, session }) =>
         contentOperation(() =>
@@ -477,7 +496,12 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
           if ('issues' in boardThreadsQuery['~standard'].validate(query)) throw new ProblemError('invalid_request');
         },
         response: { 200: withHeaders(boardThreadsResponse, sessionHeader), ...readFailures },
-        detail: { operationId: 'board_threads.list', 'x-action': 'thread:read', security: readSecurity },
+        detail: {
+          operationId: 'board_threads.list',
+          'x-exposure': 'public',
+          'x-action': 'thread:read',
+          security: readSecurity,
+        },
       },
       async ({ params: { id }, query, actor, admission, job, session }) => {
         existingId(id);
@@ -496,7 +520,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       {
         params,
         response: { 200: withHeaders(boardResponse, sessionHeader), ...readFailures },
-        detail: { operationId: 'board.get', 'x-action': 'board:read', security: readSecurity },
+        detail: { operationId: 'board.get', 'x-exposure': 'public', 'x-action': 'board:read', security: readSecurity },
       },
       async ({ params: { id }, actor, admission, job, session }) => {
         existingId(id);

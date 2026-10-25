@@ -87,7 +87,7 @@ const unavailable = problemSchema(
 );
 const bearer = [{ bearerAuth: [] }];
 function detail(operationId: string, action: string, anonymous = false) {
-  return { operationId, 'x-action': action, security: anonymous ? [...bearer, {}] : bearer };
+  return { operationId, 'x-exposure': 'public', 'x-action': action, security: anonymous ? [...bearer, {}] : bearer };
 }
 function offerView(offer: Offer) {
   const { id, targetSubjectId, title, currency, unitAmountMinor, state } = offer;

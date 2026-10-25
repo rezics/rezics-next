@@ -108,6 +108,7 @@ export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependenci
         },
         detail: {
           operationId: 'media.create',
+          'x-exposure': 'public',
           'x-action': 'media:create',
           'x-rate-limit': upload,
           security: secured,
@@ -137,6 +138,7 @@ export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependenci
         },
         detail: {
           operationId: 'media.read_reservation',
+          'x-exposure': 'public',
           'x-action': 'media:read_reservation',
           security: secured,
         },
@@ -165,6 +167,7 @@ export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependenci
         },
         detail: {
           operationId: 'media.complete',
+          'x-exposure': 'public',
           'x-action': 'media:complete',
           'x-rate-limit': upload,
           security: secured,
@@ -195,6 +198,7 @@ export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependenci
         },
         detail: {
           operationId: 'media.authorize_download',
+          'x-exposure': 'public',
           'x-action': 'media:read',
           security: [...secured, {}],
         },
