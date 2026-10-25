@@ -4,7 +4,12 @@ import { Value } from 'typebox/value';
 import { currentCommand, type CommandTransaction } from '../command/command.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { validateContentDocument } from './document.ts';
-import type { ImportedFieldInput, ImportedSource, Rights } from './imported-contract.ts';
+import {
+  validateImportedFieldMetadata,
+  type ImportedFieldInput,
+  type ImportedSource,
+  type Rights,
+} from './imported-contract.ts';
 import append from './append-imported-field.sql';
 import read from './read-imported-field.sql';
 
@@ -105,6 +110,8 @@ export async function appendImportedField(
   if (!Number.isSafeInteger(input.revision) || input.revision < 1)
     throw new RangeError('Imported revision must be a positive safe integer allocated by semantic');
   validateEnvelope(input);
+  const metadataErrors = validateImportedFieldMetadata(input);
+  if (metadataErrors.length > 0) throw new TypeError(`Invalid imported metadata fields: ${metadataErrors.join(', ')}`);
   const document = validateContentDocument({
     body: input.document,
     licence: input.rights.license,

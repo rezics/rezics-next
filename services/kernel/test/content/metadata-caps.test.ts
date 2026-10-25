@@ -96,7 +96,7 @@ test('PostgreSQL accepts every metadata cap and rejects one character or byte be
         provenance,
       ],
     );
-    const coverAtCap = { ...credit, via: { ...credit.via, url: url2048('https://catalogue.example/') } };
+    const coverAtCap = { ...credit, via: { ...credit.via, url: url1024('https://catalogue.example/') } };
     await client.query('UPDATE content.media SET credit=$3 WHERE route=$1 AND media_id=$2', [
       route,
       coverId,

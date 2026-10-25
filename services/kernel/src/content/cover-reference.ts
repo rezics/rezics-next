@@ -38,7 +38,7 @@ export function validateCoverReferenceMetadata(value: unknown): string[] {
     !bytes(credit, 8192) ||
     !text(credit.rightsHolder, 1024) ||
     !text((credit.via as Record<string, unknown> | null)?.name, 1024) ||
-    !text((credit.via as Record<string, unknown> | null)?.url, 2048) ||
+    !text((credit.via as Record<string, unknown> | null)?.url, 1024) ||
     !text(credit.license, 128)
   )
     errors.push('credit');

@@ -1,5 +1,6 @@
 import type { BatchReference } from '@rezics/definitions/bulk';
 import { anchorRoute } from '../route/route.ts';
+import { isSpdxLicense } from './document.ts';
 
 /** Cited evidence attached to an imported source record. */
 export type SourceReference = BatchReference;
@@ -59,7 +60,7 @@ export function validateImportedFieldMetadata(value: unknown): string[] {
     !rights ||
     typeof rights !== 'object' ||
     !bytes(rights, 8192) ||
-    !text(rights.license, 128) ||
+    !isSpdxLicense(rights.license) ||
     !text(rights.attribution, 1024) ||
     !Array.isArray(rights.obligations) ||
     !rights.obligations.every((item) => text(item, 1024))

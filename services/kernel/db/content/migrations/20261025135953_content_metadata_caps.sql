@@ -28,7 +28,7 @@ ALTER TABLE content.media
       AND octet_length(convert_to(credit::text, 'UTF8')) <= 8192
       AND char_length(credit ->> 'rightsHolder') BETWEEN 1 AND 1024
       AND char_length(credit -> 'via' ->> 'name') BETWEEN 1 AND 1024
-      AND char_length(credit -> 'via' ->> 'url') BETWEEN 1 AND 2048
+      AND char_length(credit -> 'via' ->> 'url') BETWEEN 1 AND 1024
       AND char_length(credit ->> 'license') BETWEEN 1 AND 128
       AND (credit ->> 'license' ~ '^[A-Za-z0-9.+-]+$' OR credit ->> 'license' ~ '^LicenseRef-[A-Za-z0-9.-]+$')
       AND octet_length(convert_to(provenance::text, 'UTF8')) <= 65536
