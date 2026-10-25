@@ -6,6 +6,7 @@ import { communityRoutes } from '../community/routes.ts';
 import { systemClock } from '../clock.ts';
 import { payoutRoutes } from '../commerce/payout-routes.ts';
 import { commerceRoutes, type CommerceDependencies } from '../commerce/routes.ts';
+import { progressRoutes } from '../library/progress-routes.ts';
 import type { ContentBoardDependencies } from '../content/boards.ts';
 import { mediaRoutes } from '../content/media-routes.ts';
 import { contentRoutes } from '../content/routes.ts';
@@ -65,7 +66,14 @@ export function createKernel(dependencies: KernelDependencies) {
     access: () => resolveAccess({ actions: actionCatalogue(app) }),
     ...(dependencies.commerce === undefined ? {} : { commerce: dependencies.commerce }),
   });
-  const contextual = contextRoutes(commercial as unknown as ReturnType<typeof definitionRoutes>, {
+  let progress: ReturnType<typeof progressRoutes>;
+  progress = progressRoutes(commercial as unknown as ReturnType<typeof definitionRoutes>, {
+    pool: dependencies.pool,
+    tokens,
+    clock,
+    access: () => resolveAccess({ actions: actionCatalogue(progress) }),
+  });
+  const contextual = contextRoutes(progress as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
     access: () => resolveAccess({ actions: actionCatalogue(contextual) }),
@@ -130,6 +138,7 @@ export function createKernel(dependencies: KernelDependencies) {
     typeof searched &
     typeof payouts &
     typeof commercial &
+    typeof progress &
     typeof contextual;
 }
 

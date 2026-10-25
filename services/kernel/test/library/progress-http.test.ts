@@ -145,6 +145,11 @@ beforeAll(async () => {
     routeKey: new Uint8Array(32).fill(23),
     tokens,
     access,
+    writeRate: {
+      async spend() {
+        return { allowed: true as const };
+      },
+    },
   });
 
   for (const [accountId, state] of [
@@ -254,6 +259,13 @@ test('owners start and record every mode, page units and changes, and publish an
   });
   expect(scalarRecord.response.status).toBe(200);
   expect(scalarRecord.body.progressSession).toMatchObject({ amount: '12.5', state: 'active' });
+  expect(await session(scalar.id)).toEqual(scalarRecord.body.progressSession);
+  const stale = await request('owner', 'POST', `/v1/progressSessions/${scalar.id}:record`, {
+    revision: scalar.revision,
+    amount: '13',
+  });
+  expect(stale.response.status).toBe(409);
+  expect(await session(scalar.id)).toEqual(scalarRecord.body.progressSession);
 
   const cursorRecord = await request('owner', 'POST', `/v1/progressSessions/${cursor.id}:record`, {
     revision: cursor.revision,
@@ -262,6 +274,7 @@ test('owners start and record every mode, page units and changes, and publish an
   });
   expect(cursorRecord.response.status).toBe(200);
   expect(cursorRecord.body.progressSession).toMatchObject({ locator: 'chapter:three', position: '90.5' });
+  expect(await session(cursor.id)).toEqual(cursorRecord.body.progressSession);
 
   const firstUnits = await request('owner', 'POST', `/v1/progressSessions/${units.id}:record`, {
     revision: units.revision,
@@ -284,6 +297,7 @@ test('owners start and record every mode, page units and changes, and publish an
   expect(
     (await progressPage<string>(`/v1/progressSessions/${units.id}/completedUnits`, 'completedUnits')).sort(),
   ).toEqual(['1', '7']);
+  expect(await session(units.id)).toEqual(units);
   const changes = await progressPage<Record<string, any>>(`/v1/progressSessions/${units.id}/changes`, 'changes');
   expect(changes.map((change) => change.intent)).toEqual([{ add: ['1', '3', '7'] }, { remove: ['3'] }]);
   expect(changes.map((change) => change.revision)).toEqual([2, 3]);
@@ -295,7 +309,7 @@ test('owners start and record every mode, page units and changes, and publish an
   });
   expect(logResponse.response.status).toBe(201);
   const log = logResponse.body.publishedLog;
-  expect(log).toMatchObject({
+  expect(structuredClone(log)).toMatchObject({
     id: expect.any(String),
     accountId: owner,
     subjectId,
@@ -319,6 +333,14 @@ test('owners start and record every mode, page units and changes, and publish an
   expect(reread.id).not.toBe(units.id);
   expect((await request('owner', 'GET', `/v1/publishedLogs/${log.id}`)).body).toEqual({ publishedLog: log });
 
+  const toAbandon = await start(subjectId, 'cursor_position', 'page');
+  const abandon = await request('owner', 'POST', `/v1/progressSessions/${toAbandon.id}:abandon`, {
+    revision: toAbandon.revision,
+  });
+  expect(abandon.response.status).toBe(200);
+  expect(abandon.body.progressSession).toMatchObject({ state: 'abandoned', completedAt: null });
+  expect(await session(toAbandon.id)).toEqual(abandon.body.progressSession);
+
   const sessions = await progressPage<Record<string, any>>(
     `/v1/progressSessions?subjectId=${subjectId}`,
     'progressSessions',
@@ -341,6 +363,14 @@ test('hidden private session ids are concealed and suspended writes leave data u
   const anonymous = await request('anonymous', 'GET', `/v1/progressSessions/${current.id}`);
   expect(anonymous.response.status).toBe(404);
   expect(stableProblem(anonymous.body)).toEqual(stableProblem(unknown.body));
+  const suspendedRead = await request('suspended', 'GET', `/v1/progressSessions/${current.id}`);
+  expect(suspendedRead.response.status).toBe(404);
+  expect(stableProblem(suspendedRead.body)).toEqual(stableProblem(unknown.body));
+  expect(
+    await progressPage<Record<string, any>>(`/v1/progressSessions?subjectId=${subjectId}`, 'progressSessions', 'other'),
+  ).toEqual([]);
+  expect((await request('anonymous', 'GET', `/v1/progressSessions?subjectId=${subjectId}`)).response.status).toBe(401);
+  expect((await request('suspended', 'GET', `/v1/progressSessions?subjectId=${subjectId}`)).response.status).toBe(403);
 
   const logResponse = await request('owner', 'POST', '/v1/publishedLogs', { sessionId: current.id });
   expect(logResponse.response.status).toBe(201);
@@ -401,7 +431,7 @@ test('record requests and changes pages use equal statements at three data scale
         `INSERT INTO library.progress_change(route, session_id, change_no, intent, recorded_at, transaction_id)
          SELECT $1, $2, number, '{"amount":"0"}'::jsonb, now(), gen_random_uuid()
          FROM generate_series($3::integer + 1, $4::integer) AS number`,
-        [accountRoute, current.id, previous, scale],
+        [accountRoute, current.id, previous + 1, scale],
       );
       await db.admin.query('UPDATE library.progress_session SET revision = $3 WHERE route = $1 AND session_id = $2', [
         accountRoute,
