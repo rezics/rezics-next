@@ -132,7 +132,7 @@ beforeAll(async () => {
     },
   };
   app = contentRoutes(createApp(dependencies) as unknown as ReturnType<typeof definitionRoutes>, dependencies);
-  root = createKernel(dependencies);
+  root = createKernel({ ...dependencies, content: { fetchConfig: dependencies.fetchConfig } });
   expect(checkMediaImportRequest(input)).toEqual([]);
 });
 afterAll(async () => {
