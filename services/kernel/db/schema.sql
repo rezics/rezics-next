@@ -23,6 +23,20 @@ SET row_security = off;
 CREATE SCHEMA core;
 
 
+--
+-- Name: btree_gist; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA public;
+
+
+--
+-- Name: EXTENSION btree_gist; Type: COMMENT; Schema: -; Owner: -
+--
+
+COMMENT ON EXTENSION btree_gist IS 'support for indexing common datatypes in GiST';
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;

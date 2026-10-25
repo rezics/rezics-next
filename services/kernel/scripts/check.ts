@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { migrate, POSTGRES_IMAGE, schemaDumps } from './database.ts';
+import { migrate, moduleExtensionFiles, POSTGRES_IMAGE, schemaDumps } from './database.ts';
 
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const pid = String(process.pid);
@@ -45,6 +45,9 @@ function fail(message: string): never {
 }
 
 async function main(): Promise<void> {
+  const extensionFiles = moduleExtensionFiles();
+  if (extensionFiles.length) fail(`Module migrations must not create extensions:\n${extensionFiles.join('\n')}`);
+
   cleanupStale();
   container = docker([
     'run',

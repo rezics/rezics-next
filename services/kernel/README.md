@@ -25,6 +25,9 @@ directories. `0001_core_partition.sql` keeps its name and sorts first. Dbmate ap
 directory in version order, so a module migration may merge behind a newer migration from another directory. Once a
 migration is merged, never rename or edit it. Run `bun run db dump` to update and commit every schema dump.
 
+Only kernel migrations create PostgreSQL extensions. A module that needs an extension asks the kernel to install it;
+module migrations may use extensions but must not create them.
+
 A 16-bit route value maps to its partition by taking the top 12 bits.
 
 Every SQL statement is stored in one reylo-typed `.sql` file and run through `pg` from an adapter module (ADR-0026).

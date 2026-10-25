@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -49,6 +49,21 @@ function modules(root: string): string[] {
       return entry.name;
     })
     .sort();
+}
+
+export function moduleExtensionFiles(root = directory): string[] {
+  return modules(root).flatMap((name) => {
+    const relativeDirectory = `db/${name}/migrations`;
+    return readdirSync(resolve(root, relativeDirectory), { withFileTypes: true })
+      .filter((entry) => entry.isFile() && entry.name.endsWith('.sql'))
+      .sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0))
+      .filter((entry) =>
+        /\bcreate\s+extension\b/i.test(
+          readFileSync(resolve(root, relativeDirectory, entry.name), 'utf8').replace(/--[^\r\n]*/g, ''),
+        ),
+      )
+      .map((entry) => `${relativeDirectory}/${entry.name}`);
+  });
 }
 
 export function migrate(url: string, root = directory): void {
