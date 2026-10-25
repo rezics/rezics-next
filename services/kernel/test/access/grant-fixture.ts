@@ -150,6 +150,7 @@ export async function grantFixture() {
     );
     return { rows: rows.rows, ...effects.rows[0] };
   }
+  let closing: Promise<void> | undefined;
   return {
     pool,
     reader,
@@ -165,11 +166,21 @@ export async function grantFixture() {
     reset,
     permitted,
     snapshot,
-    async close() {
-      await authPool.end();
-      await reader.query(`DROP DATABASE ${authDatabase} WITH (FORCE)`);
-      await pool.end();
-      await reader.end();
+    close() {
+      // Repeated teardown shares one Auth pool close and one exact database drop.
+      closing ??= (async () => {
+        try {
+          await authPool.end();
+          await reader.query(`DROP DATABASE ${authDatabase} WITH (FORCE)`);
+        } finally {
+          try {
+            await pool.end();
+          } finally {
+            await reader.end();
+          }
+        }
+      })();
+      return closing;
     },
   };
 }

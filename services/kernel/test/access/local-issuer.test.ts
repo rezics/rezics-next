@@ -43,6 +43,8 @@ for (const [index, host] of ['127.0.0.1', 'localhost', '[::1]'].entries()) {
         return service.handler(request);
       },
     });
+    let stopping: Promise<void> | undefined;
+    const stopServer = () => (stopping ??= Promise.resolve(server.stop(true)));
     const port = server.port!;
     const issuer = `http://${host}:${port}`;
     const post = (path: string, body: unknown, cookie = '', origin = issuer) =>
@@ -175,7 +177,7 @@ for (const [index, host] of ['127.0.0.1', 'localhost', '[::1]'].entries()) {
           )
         ).status,
       ).toBe(400);
-      await server.stop(true);
+      await stopServer();
       // A second verification succeeds using cached public keys with Auth offline.
       expect(await access.authenticate(token, context())).toMatchObject({ accountId: person });
       expect(requests.filter((path) => path === '/.well-known/jwks.json')).toHaveLength(1);
@@ -259,7 +261,7 @@ for (const [index, host] of ['127.0.0.1', 'localhost', '[::1]'].entries()) {
       );
       await invalid(access.authenticate(token, context()));
     } finally {
-      await server.stop(true);
+      await stopServer();
       await authPool?.end();
       await pool.query('DELETE FROM access.account WHERE route=$1 AND account_id=$2', [route, person]);
       await pool.query(`DROP DATABASE IF EXISTS ${database} WITH (FORCE)`);
