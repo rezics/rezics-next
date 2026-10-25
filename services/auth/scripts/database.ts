@@ -26,6 +26,27 @@ export function migrate(url: string): void {
   ]);
 }
 
+export function schemaDump(url: string): string {
+  const dump = run('docker', [
+    'run',
+    '--rm',
+    '--network',
+    'host',
+    POSTGRES_IMAGE,
+    'pg_dump',
+    '--schema-only',
+    '--no-owner',
+    '--no-privileges',
+    url,
+  ]);
+  return (
+    dump
+      .split('\n')
+      .filter((line) => !/^\\(?:un)?restrict\b/.test(line) && !/^-- Dumped (?:from|by)\b/.test(line))
+      .join('\n') + '\n'
+  );
+}
+
 export function testDatabase(): { url: string; close: () => void } {
   const label = 'rezics.auth.check.pid';
   for (const id of run('docker', ['ps', '-aq', '--filter', `label=${label}`])
@@ -90,5 +111,7 @@ export function testDatabase(): { url: string; close: () => void } {
 if (import.meta.main) {
   const url = process.env.AUTH_DATABASE_URL;
   if (!url) throw new Error('Set AUTH_DATABASE_URL to the separate Auth database');
-  migrate(url);
+  if (process.argv[2] === 'dump') await Bun.write(resolve(directory, 'db/schema.sql'), schemaDump(url));
+  else if (!process.argv[2] || process.argv[2] === 'migrate') migrate(url);
+  else throw new Error('Use db migrate or db dump');
 }

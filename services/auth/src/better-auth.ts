@@ -2,7 +2,7 @@ import type { BetterAuthOptions } from 'better-auth';
 import type { Pool } from 'pg';
 
 /** Shared with the official Better Auth migration generator. */
-export function betterAuthOptions(database: Pool, issuer: string, secret: string): BetterAuthOptions {
+export function betterAuthOptions(database: Pool, issuer: string, secret: string) {
   return {
     database,
     baseURL: issuer,
@@ -19,5 +19,5 @@ export function betterAuthOptions(database: Pool, issuer: string, secret: string
         authMethods: { type: 'string', required: true, input: false },
       },
     },
-  };
+  } satisfies BetterAuthOptions;
 }

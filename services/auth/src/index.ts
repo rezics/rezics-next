@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { buildAuthService } from './service.ts';
 import type { JWK } from 'jose';
 
 export interface AccessAccount {
@@ -31,6 +32,19 @@ export interface SessionProof {
   authn_epoch: number;
   auth_time: number;
   amr: string[];
+}
+
+/** Public ES256 verification material; private JWK members are intentionally absent. */
+export interface PublicJwks {
+  keys: Array<{
+    kty: 'EC';
+    crv: 'P-256';
+    x: string;
+    y: string;
+    kid: string;
+    alg: 'ES256';
+    use: 'sig';
+  }>;
 }
 
 export interface AccessTokenClaims {
@@ -69,6 +83,6 @@ export interface AuthService {
   };
 }
 
-export async function createAuthService(_options: AuthServiceOptions): Promise<AuthService> {
-  throw new Error('Auth foundation is not implemented');
+export async function createAuthService(options: AuthServiceOptions): Promise<AuthService> {
+  return buildAuthService(options);
 }
