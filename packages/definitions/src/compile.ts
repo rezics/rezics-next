@@ -42,7 +42,7 @@ const names = (value: unknown): string[] =>
 const words = (value: unknown) => (typeof value === 'string' ? value.trim().split(/\s+/u).filter(Boolean) : []);
 const schemaKeys =
   'id name title description version license prefixes default_prefix default_range imports classes slots';
-const classKeys = 'class_uri description is_a abstract slots slot_usage exact_mappings close_mappings';
+const classKeys = 'class_uri description is_a abstract slots slot_usage exact_mappings close_mappings annotations';
 const slotKeys =
   'description range any_of multivalued pattern minimum_value maximum_value exact_mappings close_mappings annotations';
 const iri = /^[A-Za-z][A-Za-z0-9+.-]*:[^\s\u0000-\u0020\u007f-\u009f<>"{}|\\^`]*$(?![\s\S])/u;
@@ -138,7 +138,19 @@ export async function compileCatalogue(input: {
         if (collection === 'slots') slotProfile(value, location);
         else {
           allowed(value, classKeys, location);
-          const usage = object(value).slot_usage;
+          const definition = object(value);
+          if (definition.annotations !== undefined) {
+            const annotationLocation = { ...location, pointer: at(location.pointer, 'annotations') };
+            allowed(definition.annotations, 'facets', annotationLocation);
+            const facets = object(definition.annotations).facets;
+            if (facets !== undefined && typeof facets !== 'string')
+              add(
+                { ...annotationLocation, pointer: at(annotationLocation.pointer, 'facets') },
+                'invalid',
+                'Facets must be space-separated slot names',
+              );
+          }
+          const usage = definition.slot_usage;
           if (usage !== undefined && !record(usage))
             add({ file, pointer: at(location.pointer, 'slot_usage') }, 'invalid', 'Expected an object');
           for (const [slot, definition] of Object.entries(object(usage)))
@@ -273,6 +285,13 @@ export async function compileCatalogue(input: {
     });
   };
   const classes = terms('classes', object(derived.classes));
+  const sourceClasses = new Map<string, { value: Node; location: Location }>();
+  const parents = new Map<string, string>();
+  for (const [file, source] of Object.entries(parsed))
+    for (const [name, definition] of Object.entries(object(source.classes))) {
+      sourceClasses.set(name, { value: object(definition), location: { file, pointer: at('/classes', name) } });
+      if (typeof object(definition).is_a === 'string') parents.set(name, object(definition).is_a as string);
+    }
   // Use induced attributes for properties used by concrete classes. A global
   // property cannot represent two different class-specific value contracts.
   const effective = new Map<string, string>();
@@ -309,11 +328,17 @@ export async function compileCatalogue(input: {
   const slots = terms('slots', globals);
   const classKeysByName = new Map(classes.map((term) => [term.name, term.key]));
   const slotKeysByName = new Map(slots.map((term) => [term.name, term.key]));
-  const parents = new Map<string, string>();
-  for (const source of Object.values(parsed))
-    for (const [name, definition] of Object.entries(object(source.classes))) {
-      if (typeof object(definition).is_a === 'string') parents.set(name, object(definition).is_a as string);
+  const classChain = (name: string) => {
+    const result: string[] = [];
+    const seen = new Set<string>();
+    let current: string | undefined = name;
+    while (current && !seen.has(current)) {
+      result.push(current);
+      seen.add(current);
+      current = parents.get(current);
     }
+    return result;
+  };
   const descendants = (range: string): string[] =>
     classes
       .filter((term) => {
@@ -333,16 +358,63 @@ export async function compileCatalogue(input: {
       expand(mapping, { ...term.location, pointer: at(term.location.pointer, 'exact_mappings') });
     return result;
   };
+  const facetOrigins = new Map<string, Map<string, { name: string; location: Location }>>();
   for (const term of classes) {
     const properties = unique(
       Object.keys(object(term.value.attributes)).flatMap((name) => slotKeysByName.get(name) ?? []),
     );
     if (properties.length > 64) add(term.location, 'limit', 'A type may have at most 64 properties');
+    const bases: string[] = [];
+    const seenBases = new Set<string>();
+    for (const ancestor of classChain(term.name).slice(1)) {
+      const definition = sourceClasses.get(ancestor);
+      const classUri = definition?.value.class_uri;
+      if (typeof classUri !== 'string') continue;
+      const location = { ...definition!.location, pointer: at(definition!.location.pointer, 'class_uri') };
+      if (!expand(classUri, location) || classUri === term.key || seenBases.has(classUri)) continue;
+      seenBases.add(classUri);
+      bases.push(classUri);
+    }
+    const facets: string[] = [];
+    const facetNames = new Set<string>();
+    const origins = new Map<string, { name: string; location: Location }>();
+    for (const ancestor of classChain(term.name).reverse()) {
+      const definition = sourceClasses.get(ancestor);
+      if (!definition) continue;
+      const annotation = object(definition.value.annotations);
+      const declaration = annotation.facets;
+      if (declaration === undefined || typeof declaration !== 'string') continue;
+      const location = {
+        ...definition.location,
+        pointer: at(at(definition.location.pointer, 'annotations'), 'facets'),
+      };
+      for (const name of words(declaration)) {
+        const property = slotKeysByName.get(name);
+        if (!property || !properties.includes(property)) {
+          add(location, 'invalid', `Facet slot ${name} is not a property of type ${term.name}`);
+          continue;
+        }
+        if (facetNames.has(property)) {
+          add(location, 'duplicate', `Facet slot ${name} is listed more than once in the type hierarchy`);
+          continue;
+        }
+        facetNames.add(property);
+        origins.set(property, { name, location });
+        if (facets.length === 16) {
+          add(location, 'limit', `Facet slot ${name} exceeds the limit of 16 facets`);
+          continue;
+        }
+        facets.push(property);
+      }
+    }
+    facetOrigins.set(term.key, origins);
     release.types[term.key] = {
       iri: expand(term.key, term.location)!,
       labels: dictionary(),
       mappings: mappings(term),
+      bases,
       properties,
+      facets,
     };
   }
   for (const term of slots) {
@@ -429,6 +501,18 @@ export async function compileCatalogue(input: {
     });
     release.properties[term.key] = property;
   }
+  for (const [key, type] of Object.entries(release.types))
+    for (const facet of type.facets) {
+      const property = release.properties[facet];
+      if (property && !['wikibase-item', 'time', 'quantity'].includes(property.datatype)) {
+        const origin = facetOrigins.get(key)?.get(facet);
+        add(
+          origin?.location ?? { file: input.root, pointer: at(at('/types', key), 'facets') },
+          'invalid',
+          `Facet slot ${origin?.name ?? facet} has unfilterable datatype ${property.datatype}`,
+        );
+      }
+    }
   if (classes.length > 256 || slots.length > 1024)
     add({ file: input.root, pointer: '' }, 'limit', 'Release collection limit exceeded');
   if (typeof release.catalogue.id !== 'string' || !iri.test(release.catalogue.id))

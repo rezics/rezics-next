@@ -15,13 +15,17 @@ const release = (): Release => ({
       iri: 'http://schema.org/MusicComposition',
       labels: { en: 'musical composition', ja: '楽曲' },
       mappings: ['wd:Q207628'],
+      bases: [],
       properties: ['schema:composer', 'schema:duration', 'schema:url'],
+      facets: [],
     },
     'schema:Person': {
       iri: 'http://schema.org/Person',
       labels: { en: 'person' },
       mappings: ['wd:Q5'],
+      bases: [],
       properties: ['schema:url'],
+      facets: [],
     },
   },
   properties: {
@@ -183,7 +187,9 @@ test('patterns must be safe and releases are bounded', () => {
         iri: `http://schema.org/T${index}`,
         labels: { en: 't' },
         mappings: [],
+        bases: [],
         properties: [],
+        facets: [],
       };
   });
   expect(pointers(crowded)).toEqual(['limit /types']);

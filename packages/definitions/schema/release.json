@@ -96,7 +96,7 @@
     },
     "type": {
       "type": "object",
-      "required": ["iri", "labels", "mappings", "properties"],
+      "required": ["iri", "labels", "mappings", "bases", "properties", "facets"],
       "additionalProperties": false,
       "properties": {
         "iri": {
@@ -108,8 +108,19 @@
         "mappings": {
           "$ref": "#/$defs/curies"
         },
+        "bases": {
+          "$ref": "#/$defs/curies"
+        },
         "properties": {
           "$ref": "#/$defs/curies"
+        },
+        "facets": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/curie"
+          }
         }
       }
     },

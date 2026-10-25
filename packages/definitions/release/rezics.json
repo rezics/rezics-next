@@ -31,6 +31,7 @@
         "zh-Hant": "電視系列節目"
       },
       "mappings": ["wd:Q5398426"],
+      "bases": ["schema:CreativeWork"],
       "properties": [
         "schema:abstract",
         "schema:contributor",
@@ -44,7 +45,8 @@
         "schema:url",
         "wdt:P179",
         "wdt:P5732"
-      ]
+      ],
+      "facets": []
     },
     "bf:Instance": {
       "iri": "http://id.loc.gov/ontologies/bibframe/Instance",
@@ -59,6 +61,7 @@
         "zh-Hant": "版本"
       },
       "mappings": ["wd:Q3331189"],
+      "bases": ["schema:CreativeWork"],
       "properties": [
         "schema:author",
         "schema:contributor",
@@ -77,7 +80,8 @@
         "schema:url",
         "wdt:P179",
         "wdt:P648"
-      ]
+      ],
+      "facets": []
     },
     "schema:Book": {
       "iri": "http://schema.org/Book",
@@ -92,6 +96,7 @@
         "zh-Hant": "書籍"
       },
       "mappings": ["wd:Q47461344"],
+      "bases": ["schema:CreativeWork"],
       "properties": [
         "schema:abstract",
         "schema:author",
@@ -107,7 +112,8 @@
         "wdt:P179",
         "wdt:P5732",
         "wdt:P648"
-      ]
+      ],
+      "facets": []
     },
     "wd:Q95074": {
       "iri": "http://www.wikidata.org/entity/Q95074",
@@ -122,7 +128,9 @@
         "zh-Hant": "虛構角色"
       },
       "mappings": [],
-      "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url"]
+      "bases": [],
+      "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url"],
+      "facets": []
     },
     "skos:Concept": {
       "iri": "http://www.w3.org/2004/02/skos/core#Concept",
@@ -137,6 +145,7 @@
         "zh-Hant": "概念"
       },
       "mappings": [],
+      "bases": [],
       "properties": [
         "foaf:focus",
         "schema:image",
@@ -145,7 +154,8 @@
         "schema:url",
         "skos:broader",
         "skos:inScheme"
-      ]
+      ],
+      "facets": []
     },
     "skos:ConceptScheme": {
       "iri": "http://www.w3.org/2004/02/skos/core#ConceptScheme",
@@ -160,7 +170,9 @@
         "zh-Hant": "概念體系"
       },
       "mappings": [],
-      "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url"]
+      "bases": [],
+      "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url"],
+      "facets": []
     },
     "schema:Organization": {
       "iri": "http://schema.org/Organization",
@@ -175,7 +187,9 @@
         "zh-Hant": "組織"
       },
       "mappings": ["wd:Q43229"],
-      "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url", "wdt:P3180"]
+      "bases": [],
+      "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url", "wdt:P3180"],
+      "facets": []
     },
     "schema:Person": {
       "iri": "http://schema.org/Person",
@@ -190,6 +204,7 @@
         "zh-Hant": "人物"
       },
       "mappings": ["wd:Q5"],
+      "bases": [],
       "properties": [
         "schema:birthDate",
         "schema:deathDate",
@@ -200,7 +215,8 @@
         "wdt:P3180",
         "wdt:P6298",
         "wdt:P648"
-      ]
+      ],
+      "facets": []
     },
     "schema:VideoGame": {
       "iri": "http://schema.org/VideoGame",
@@ -215,6 +231,7 @@
         "zh-Hant": "電子遊戲"
       },
       "mappings": ["wd:Q7889"],
+      "bases": ["schema:CreativeWork"],
       "properties": [
         "schema:abstract",
         "schema:contributor",
@@ -228,7 +245,8 @@
         "schema:url",
         "wdt:P179",
         "wdt:P5732"
-      ]
+      ],
+      "facets": []
     },
     "schema:Recipe": {
       "iri": "http://schema.org/Recipe",
@@ -243,6 +261,7 @@
         "zh-Hant": "食譜"
       },
       "mappings": ["wd:Q219239"],
+      "bases": [],
       "properties": [
         "schema:abstract",
         "schema:author",
@@ -254,7 +273,8 @@
         "schema:recipeYield",
         "schema:sameAs",
         "schema:url"
-      ]
+      ],
+      "facets": []
     },
     "wd:Q7725310": {
       "iri": "http://www.wikidata.org/entity/Q7725310",
@@ -269,6 +289,7 @@
         "zh-Hant": "系列創意作品"
       },
       "mappings": [],
+      "bases": ["schema:CreativeWorkSeries", "schema:CreativeWork"],
       "properties": [
         "schema:contributor",
         "schema:genre",
@@ -278,7 +299,8 @@
         "schema:sameAs",
         "schema:url",
         "wdt:P179"
-      ]
+      ],
+      "facets": []
     },
     "wd:Q689445": {
       "iri": "http://www.wikidata.org/entity/Q689445",
@@ -293,6 +315,7 @@
         "zh-Hant": "視覺小說"
       },
       "mappings": [],
+      "bases": ["schema:VideoGame", "schema:CreativeWork"],
       "properties": [
         "schema:abstract",
         "schema:contributor",
@@ -306,7 +329,8 @@
         "schema:url",
         "wdt:P179",
         "wdt:P3180"
-      ]
+      ],
+      "facets": []
     },
     "schema:MusicAlbum": {
       "iri": "http://schema.org/MusicAlbum",
@@ -321,6 +345,7 @@
         "zh-Hant": "音樂專輯"
       },
       "mappings": ["wd:Q482994"],
+      "bases": ["schema:CreativeWork"],
       "properties": [
         "schema:abstract",
         "schema:contributor",
@@ -334,7 +359,8 @@
         "schema:url",
         "wdt:P179",
         "wdt:P5732"
-      ]
+      ],
+      "facets": []
     }
   },
   "properties": {

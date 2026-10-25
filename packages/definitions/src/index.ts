@@ -22,7 +22,9 @@ export type TypeDefinition = {
   iri: string;
   labels: Record<string, string>;
   mappings: string[];
+  bases: string[];
   properties: string[];
+  facets: string[];
 };
 export type PropertyDefinition = {
   iri: string;
@@ -147,6 +149,8 @@ function collectionLimits(value: unknown, add: (pointer: string, code: ReleaseVi
       for (const [key, type] of Object.entries(value.types)) {
         if (record(type) && Array.isArray(type.properties) && type.properties.length > 64)
           add(at(at('/types', key), 'properties'), 'limit');
+        if (record(type) && Array.isArray(type.facets) && type.facets.length > 16)
+          add(at(at('/types', key), 'facets'), 'limit');
       }
   }
   if (record(value.properties) && Object.keys(value.properties).length > 1024) add('/properties', 'limit');
@@ -232,8 +236,24 @@ function semantics(release: Release, add: (pointer: string, code?: ReleaseViolat
       list(definition.mappings, at(pointer, 'mappings'));
     }
   }
-  for (const [key, type] of Object.entries(release.types))
-    list(type.properties, at(at('/types', key), 'properties'), release.properties);
+  for (const [key, type] of Object.entries(release.types)) {
+    const pointer = at('/types', key);
+    list(type.properties, at(pointer, 'properties'), release.properties);
+    type.bases.forEach((base, index) => {
+      if (expand(base) === undefined) add(at(at(pointer, 'bases'), index));
+    });
+    type.facets.forEach((facet, index) => {
+      const facetPointer = at(at(pointer, 'facets'), index);
+      const property = release.properties[facet];
+      if (
+        expand(facet) === undefined ||
+        !type.properties.includes(facet) ||
+        !property ||
+        !['wikibase-item', 'time', 'quantity'].includes(property.datatype)
+      )
+        add(facetPointer);
+    });
+  }
   for (const [key, property] of Object.entries(release.properties)) {
     const pointer = at('/properties', key);
     list(property.qualifiers, at(pointer, 'qualifiers'), release.properties);

@@ -7,13 +7,14 @@ exports the release types, the JSON Schema 2020-12 document at
 Use `validateRelease(input)` before storing a release. An empty array means valid;
 otherwise violations carry RFC 6901 pointers and `invalid`, `unsafe_pattern`, or
 `limit` codes. Results are sorted, deduplicated by pointer, and capped at 64.
-Validation checks references, CURIE expansion, sorted unique lists, datatype-specific
-members, fixed value schemas, and regular-expression safety. Pattern checks use
+Validation checks references, CURIE expansion, sorted unique lists, type bases and
+facets, datatype-specific members, fixed value schemas, and regular-expression safety. Pattern checks use
 recheck's in-process synchronous entry point, with a three-second timeout per distinct
 pattern; inconclusive results fail validation.
 
-Releases allow at most 256 types, 1,024 properties, 64 properties per type, and 1 MiB
-of canonical UTF-8 JSON. Collection and size limits precede schema and pattern checks.
+Releases allow at most 256 types, 1,024 properties, 64 properties and 16 facets per
+type, and 1 MiB of canonical UTF-8 JSON. Collection and size limits precede schema
+and pattern checks.
 Inputs are parsed JSON, without cycles. Validation does not mutate them.
 
 `valueSchema(datatype, options)` builds the fixed Wikibase value-content schema.
@@ -26,7 +27,10 @@ The LinkML sources in `catalogue/` define the bundled terms. `rezics.yaml` impor
 the shared `core` terms and each profile schema. These profiles add types and
 properties through catalogue data; they do not need package code. The compiled
 release is checked in at `release/rezics.json`, and `src/bundled.ts` discovers all
-catalogue and presentation YAML files for compilation.
+catalogue and presentation YAML files for compilation. Each type release records
+its structural `bases` as CURIEs, nearest first, and its registered `facets` in
+display order. The bundled verticals declare no facets, so their types have empty
+facet lists.
 
 To add a vertical, add its schema as `catalogue/<vertical>.yaml`, add that schema
 to the imports in `catalogue/rezics.yaml`, and add one label file per locale at
@@ -136,9 +140,19 @@ Source conventions:
   `license`, `prefixes`, `default_prefix`, `default_range`, `imports`, `classes`,
   and `slots`. The root's `id` and `version` identify the release catalogue.
 - Class keys are limited to `class_uri`, `description`, `is_a`, `abstract`,
-  `slots`, `slot_usage`, `exact_mappings`, and `close_mappings`. Every concrete
-  class needs an explicit `class_uri` CURIE and becomes a type. LinkML derives
-  its properties through `is_a` and `slot_usage`; each type has at most 64.
+  `slots`, `slot_usage`, `exact_mappings`, `close_mappings`, and `annotations`.
+  Every concrete class needs an explicit `class_uri` CURIE and becomes a type.
+  LinkML derives its properties through `is_a` and `slot_usage`; each type has at
+  most 64.
+- A class may set `annotations.facets` to a space-separated list of slot names.
+  A type inherits its ancestors' declarations from root to leaf, retaining that
+  display order. Each facet must be one of the type's properties and have the
+  `wikibase-item`, `time`, or `quantity` datatype. A slot may appear only once
+  in the inheritance chain, and a type may have at most 16 facets. The type
+  itself is always a facet and is not listed in this annotation.
+- A type's `bases` list contains its `is_a` ancestors that declare `class_uri`,
+  nearest first. It omits the type's own CURIE and repeated CURIEs; ancestors
+  without `class_uri` are skipped.
 - Slot keys are limited to `slot_uri`, `description`, `range`, `any_of`,
   `multivalued`, `pattern`, `minimum_value`, `maximum_value`, `exact_mappings`,
   `close_mappings`, and `annotations`. `slot_usage` entries allow the same keys
@@ -147,7 +161,7 @@ Source conventions:
   Class and slot keys must each be unique. Prefix expansions must be consistent
   across files. Different induced contracts for the same property cannot be
   represented in one release and are refused.
-- `annotations` permits only `datatype`, `units`, and `qualifiers`. `datatype`
+- Slot `annotations` permits only `datatype`, `units`, and `qualifiers`. `datatype`
   is required: `wikibase-item` needs a concrete class range or `any_of` concrete
   class ranges; `string`, `external-id`, `monolingualtext`, `document`, and `media` need `string`;
   `url` needs `uri`; `quantity` needs `integer` or `decimal`; `time` needs `date`.
@@ -172,13 +186,14 @@ labels. A `wikibase-item` range includes its concrete class and every concrete
 descendant reachable through `is_a`, including when the range or an intermediate
 class is abstract. Descendants are resolved across all supplied schemas; an
 abstract range with no concrete descendants is invalid. Emitted targets are
-sorted and unique. Compilation stops at the first stage with violations. LinkML warnings
-are permitted; errors are refused. Derived JSON with derivation enabled supplies
+sorted and unique. Compilation stops at the first stage with violations. LinkML
+warnings are permitted; errors are refused. Derived JSON with derivation enabled supplies
 classes and induced attributes. An auxiliary abstract class induces all global
 slots through LinkML, preserving unused qualifier properties without resolving
-inheritance in this compiler. Lists are sorted and deduplicated. Release prefixes
-contain exactly those used in keys, mappings, and targets; unit-only prefixes are
-expanded but omitted. Generator metadata comes from `LinkML.buildInfo()`.
+inheritance in this compiler. CURIE lists are sorted and deduplicated except for
+`bases` and `facets`, which retain ancestor and display order. Release prefixes
+contain exactly those used in keys, mappings, targets, bases, and facets; unit-only
+prefixes are expanded but omitted. Generator metadata comes from `LinkML.buildInfo()`.
 
 `CatalogueError.violations` contains `{ file, pointer, code, message }` records,
 sorted by file and RFC 6901 pointer and capped at 64. Label files are named

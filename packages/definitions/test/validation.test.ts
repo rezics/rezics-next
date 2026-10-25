@@ -9,7 +9,16 @@ function fixture(datatype: DataType = 'string'): Release {
     catalogue: { id: 'urn:catalogue:test', version: '1' },
     generator: { name: 'test', version: '1' },
     prefixes: { ex: 'https://example.org/' },
-    types: { 'ex:T': { iri: 'https://example.org/T', labels: { en: 'type' }, mappings: [], properties: ['ex:p'] } },
+    types: {
+      'ex:T': {
+        iri: 'https://example.org/T',
+        labels: { en: 'type' },
+        mappings: [],
+        bases: [],
+        properties: ['ex:p'],
+        facets: [],
+      },
+    },
     properties: {
       'ex:p': {
         iri: 'https://example.org/p',
@@ -78,6 +87,46 @@ test('lists are sorted, references are own keys, and quantity bounds are ordered
   quantity.properties['ex:p']!.minimum = 2;
   quantity.properties['ex:p']!.maximum = 1;
   expect(validateRelease(quantity)).toEqual([{ pointer: '/properties/ex:p/maximum', code: 'invalid' }]);
+});
+
+test('bases are CURIEs and facets are registered facetable properties', () => {
+  const type = fixture();
+  type.types['ex:T']!.bases = ['missing:Base'];
+  expect(validateRelease(type)).toEqual([{ pointer: '/types/ex:T/bases/0', code: 'invalid' }]);
+
+  const facets = fixture('quantity');
+  facets.types['ex:T']!.facets = ['ex:p'];
+  expect(validateRelease(facets)).toEqual([]);
+  facets.properties['ex:p']!.datatype = 'string';
+  Reflect.deleteProperty(facets.properties['ex:p']!, 'units');
+  facets.properties['ex:p']!.value = valueSchema('string');
+  expect(validateRelease(facets)).toEqual([{ pointer: '/types/ex:T/facets/0', code: 'invalid' }]);
+
+  const outside = fixture();
+  outside.properties['ex:outside'] = { ...outside.properties['ex:p']!, iri: 'https://example.org/outside' };
+  outside.types['ex:T']!.facets = ['ex:outside'];
+  expect(validateRelease(outside)).toEqual([{ pointer: '/types/ex:T/facets/0', code: 'invalid' }]);
+
+  const duplicate = fixture('quantity');
+  duplicate.types['ex:T']!.facets = ['ex:p', 'ex:p'];
+  expect(validateRelease(duplicate)).toEqual([{ pointer: '/types/ex:T/facets', code: 'invalid' }]);
+
+  const crowded = fixture();
+  for (let index = 0; index < 17; index++) {
+    const key = `ex:p${index}`;
+    crowded.properties[key] = { ...crowded.properties['ex:p']!, iri: `https://example.org/p${index}` };
+    crowded.types['ex:T']!.properties.push(key);
+    crowded.types['ex:T']!.facets.push(key);
+  }
+  expect(validateRelease(crowded)).toEqual([{ pointer: '/types/ex:T/facets', code: 'limit' }]);
+
+  const missing = fixture() as Release & { types: Record<string, Record<string, unknown>> };
+  Reflect.deleteProperty(missing.types['ex:T']!, 'bases');
+  Reflect.deleteProperty(missing.types['ex:T']!, 'facets');
+  expect(validateRelease(missing)).toEqual([
+    { pointer: '/types/ex:T/bases', code: 'invalid' },
+    { pointer: '/types/ex:T/facets', code: 'invalid' },
+  ]);
 });
 
 test('invalid pattern lengths and malformed JSON values fail without throwing', () => {

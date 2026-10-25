@@ -22,8 +22,13 @@ type SlotDefinition = {
 };
 
 async function compileFixture(classes: Record<string, ClassDefinition>, slots: Record<string, SlotDefinition>) {
-  const types = [...new Set(Object.values(classes).filter((item) => !item.abstract).map((item) => item.class_uri))]
-    .filter((item): item is string => Boolean(item));
+  const types = [
+    ...new Set(
+      Object.values(classes)
+        .filter((item) => !item.abstract)
+        .map((item) => item.class_uri),
+    ),
+  ].filter((item): item is string => Boolean(item));
   const properties = [...new Set(Object.values(slots).map((item) => item.slot_uri))];
   return compileCatalogue({
     root: 'fixture.yaml',
@@ -61,7 +66,12 @@ async function facetViolations(
   throw new Error('Expected facet compilation to fail');
 }
 
-const slot = (name: string, datatype: string, range = 'string', extra: Partial<SlotDefinition> = {}): SlotDefinition => ({
+const slot = (
+  name: string,
+  datatype: string,
+  range = 'string',
+  extra: Partial<SlotDefinition> = {},
+): SlotDefinition => ({
   slot_uri: `ex:${name}`,
   range,
   annotations: { datatype },
@@ -107,13 +117,7 @@ test("a type registers its facets in display order, inheriting its ancestors' fa
     },
   );
 
-  expect(release.types['ex:Book']!.facets).toEqual([
-    'ex:amount',
-    'ex:date',
-    'ex:person',
-    'ex:score',
-    'ex:published',
-  ]);
+  expect(release.types['ex:Book']!.facets).toEqual(['ex:amount', 'ex:date', 'ex:person', 'ex:score', 'ex:published']);
   expect(release.types['ex:Person']!.facets).toEqual([]);
 });
 
@@ -150,13 +154,18 @@ test('facets outside the type, of an unfilterable datatype, repeated or over the
     },
     { count: slot('count', 'quantity', 'decimal', { annotations: { datatype: 'quantity', units: '1' } }) },
   );
-  expect(repeated.some((violation) => violation.code === 'duplicate' && violation.message.includes('count'))).toBe(true);
+  expect(repeated.some((violation) => violation.code === 'duplicate' && violation.message.includes('count'))).toBe(
+    true,
+  );
 
   const names = Array.from({ length: 17 }, (_, index) => `facet${index}`);
   const overLimit = await facetViolations(
     { Bad: { class_uri: 'ex:Bad', slots: names, annotations: { facets: names.join(' ') } } },
     Object.fromEntries(
-      names.map((name) => [name, slot(name, 'quantity', 'decimal', { annotations: { datatype: 'quantity', units: '1' } })]),
+      names.map((name) => [
+        name,
+        slot(name, 'quantity', 'decimal', { annotations: { datatype: 'quantity', units: '1' } }),
+      ]),
     ),
   );
   expect(overLimit.some((violation) => violation.message.includes('facet16'))).toBe(true);

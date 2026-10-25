@@ -33,7 +33,9 @@ const release = (version: string): Release => ({
       iri: 'http://schema.org/Person',
       labels: { en: 'person' },
       mappings: [],
+      bases: [],
       properties: ['schema:url'],
+      facets: [],
     },
   },
   properties: {
