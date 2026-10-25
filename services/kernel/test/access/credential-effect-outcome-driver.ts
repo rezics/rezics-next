@@ -769,6 +769,14 @@ export async function createNativeCredentialEffectDriver(): Promise<NativeCreden
           'native grant renunciation',
         );
       } else if (fact === 'human-floor' || fact === 'subject-floor' || fact === 'operator-floor') {
+        if (fact === 'operator-floor' && f.operatorId === f.organizationId) {
+          // Organizations have no Auth credentials; suspension advances their native floor.
+          await createSuspensionCommands({ pool: kernel(), access, clock: () => new Date() }).suspend(
+            await context(gov.caller),
+            { accountId: f.organizationId, key: randomUUID() },
+          );
+          return;
+        }
         const subjectId =
           fact === 'human-floor'
             ? f.humanId

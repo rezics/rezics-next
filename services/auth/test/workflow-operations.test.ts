@@ -206,10 +206,10 @@ beforeAll(async () => {
           if (failErase) throw new Error('Auth erasure unavailable');
           await auth.internal.eraseAccount(id);
         },
-        async revokeSessions(id) {
+        async revokeSessions(id, cleanup) {
           calls.push('auth-revoke');
           if (failRevoke === id) throw new Error('Auth revocation unavailable');
-          await auth.internal.revokeSessions(id);
+          return auth.internal.revokeSessions(id, cleanup);
         },
       },
     },
@@ -380,7 +380,13 @@ test('consent reduction commits native fence before actual Auth mutation and kee
 
 test('client scope reduction gates issuance and durably fences bounded owner pages before changing Auth configuration', async () => {
   await auth.internal.registerClient({ clientId: 'reduce-client', firstParty: true, scopes: ['read', 'write'] });
-  const failure = [...accounts.keys()].sort()[1]!;
+  // Reduction visits only this client's consent and issuance owners.
+  await database.query(
+    `INSERT INTO auth_consent (account_id,client_id,scopes)
+     SELECT id,'reduce-client',ARRAY['read','write'] FROM "user"`,
+  );
+  const ownerIds = (await database.query<{ id: string }>('SELECT id FROM "user" ORDER BY id')).rows.map((r) => r.id);
+  const failure = ownerIds[1]!;
   failRevoke = failure;
   await expect(
     workflows.reduceClientScopes({
@@ -407,7 +413,6 @@ test('client scope reduction gates issuance and durably fences bounded owner pag
     (await database.query('SELECT scopes,first_party FROM auth_client WHERE client_id=$1', ['reduce-client'])).rows,
   ).toEqual([{ scopes: ['read'], first_party: false }]);
   expect((await database.query('SELECT client_id FROM auth_client_reduction')).rows).toEqual([]);
-  const ownerIds = (await database.query<{ id: string }>('SELECT id FROM "user"')).rows.map((r) => r.id);
   expect(ownerIds.every((id) => accounts.get(id)!.fenced)).toBe(true);
   expect(
     (

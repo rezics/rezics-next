@@ -6,6 +6,7 @@ import { testDatabase } from '../../../auth/scripts/database.ts';
 import { createAuthBarrierCapabilities } from '../../src/access/auth-barriers.ts';
 import { createAuthBindings } from '../../src/access/auth-bindings.ts';
 import { createLifecycleInternals } from '../../src/access/lifecycle.ts';
+import { createRecoveryCompletion } from '../../src/access/recovery-completion.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -48,12 +49,27 @@ async function login(accountId = human) {
 async function floor() {
   return lifecycle.readFenceState(human);
 }
+async function startRecovery() {
+  // Each scenario needs an independent delivery, outside the mail cooldown contract.
+  await database.query('DELETE FROM auth_attempt_counter');
+  delivery = '';
+  expect((await request('/recovery/start', { email: `${human}@example.test` })).status).toBe(200);
+  const deadline = Date.now() + 5000;
+  while (!delivery && Date.now() < deadline) await Bun.sleep(5);
+  expect(delivery).not.toBe('');
+}
 
 beforeAll(async () => {
   fixture = testDatabase();
   database = new Pool({ connectionString: fixture.url });
   barriers = createAuthBarrierCapabilities({ lifecycle, proofs: createBarrierProofVerifier({ database }) });
-  access = { ...createAuthBindings({ pool }), ...barriers.trustedAccess };
+  access = {
+    ...createAuthBindings({
+      pool,
+      ...createRecoveryCompletion({ pool, routeKey: new Uint8Array(32), auth: () => service }),
+    }),
+    ...barriers.trustedAccess,
+  };
   const key = { ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)), kid: 'test' };
   service = await createAuthService({
     database,
@@ -92,6 +108,8 @@ beforeAll(async () => {
       [routeOf(id), id],
     );
     // Provisioning is outside this barrier contract; native accounts remain the authority.
+    const provisioningAccess = { ...access };
+    delete provisioningAccess.readProvisioningAccount;
     const provisioning = await createAuthService({
       database,
       issuer,
@@ -99,7 +117,7 @@ beforeAll(async () => {
       secret: 'native-barrier-secret-at-least-32-bytes',
       signing: { activeKid: key.kid, privateKeys: [key] },
       trustedAccess: {
-        ...access,
+        ...provisioningAccess,
         readAccount: async (accountId) =>
           accountId === id ? { accountId, kind: 'actor', state: 'pending', authnEpoch: 1, automated: false } : null,
         authorizeProvisioning: async () => ({ accountId: id }),
@@ -146,7 +164,7 @@ test('native consent commits an exact floor barrier before Auth effects without 
 
 test('recovery binds consumed native proof, preserves fence on failed Auth work and replays exact native receipt', async () => {
   await lifecycle.raiseFence({ accountId: human, key: 'initial-recovery-fence' });
-  expect((await request('/recovery/start', { account_id: human })).status).toBe(200);
+  await startRecovery();
   const complete = () => request('/recovery/complete', { account_id: human, token: delivery, new_password: password });
   const previous = Number((await floor())!.minimumAuthnEpoch);
   fail = 'after';
@@ -180,7 +198,7 @@ test('recovery binds consumed native proof, preserves fence on failed Auth work 
   ).rejects.toThrow();
   fail = null;
   expect((await complete()).status).toBe(200);
-  expect(await floor()).toMatchObject({ minimumAuthnEpoch: String(previous + 1), fenced: true });
+  expect(await floor()).toMatchObject({ minimumAuthnEpoch: String(previous + 1), fenced: false });
   await expect(barriers.authorizeRecovery(captured)).rejects.toThrow();
 });
 
@@ -209,7 +227,8 @@ test('missing and unavailable proof capabilities deny before native mutation', a
 });
 
 test('native attempt denies changed eligibility, stale proof and later floor supersession', async () => {
-  expect((await request('/recovery/start', { account_id: human })).status).toBe(200);
+  await lifecycle.raiseFence({ accountId: human, key: 'native-attempt-recovery-fence' });
+  await startRecovery();
   fail = 'before';
   expect(
     (await request('/recovery/complete', { account_id: human, token: delivery, new_password: password })).status,
@@ -253,7 +272,7 @@ test('native attempt denies changed eligibility, stale proof and later floor sup
   ).rejects.toThrow();
   expect(await floor()).toEqual(before);
   const first = { ...captured };
-  expect((await request('/recovery/start', { account_id: human })).status).toBe(200);
+  await startRecovery();
   expect(
     (await request('/recovery/complete', { account_id: human, token: delivery, new_password: password })).status,
   ).toBe(503);

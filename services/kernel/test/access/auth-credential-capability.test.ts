@@ -536,7 +536,7 @@ test('activation grants self account manage to persons only', async () => {
   });
   await internal.activate({ accountId: id, key: f.key(), evidence: {} });
   const grants = await db.admin.query(
-    "SELECT action FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND subject_id=$2 AND action='account:manage'",
+    "SELECT action FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND subject_id=$2 AND subject_role='' AND action='account:manage'",
     [routeOf(id)!, id],
   );
   expect(grants.rows).toEqual([{ action: 'account:manage' }]);
@@ -576,7 +576,7 @@ test('activation grants self account manage to persons only', async () => {
   expect(
     (
       await db.admin.query(
-        "SELECT action FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND subject_id=$2 AND action='account:manage'",
+        "SELECT action FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND subject_id=$2 AND subject_role='' AND action='account:manage'",
         [routeOf(automated)!, automated],
       )
     ).rows,
@@ -597,7 +597,7 @@ test('activation grants self account manage to persons only', async () => {
   expect(
     (
       await db.admin.query(
-        "SELECT action FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND action='account:manage'",
+        "SELECT action FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND subject_id=$2 AND subject_role='' AND action='account:manage'",
         [routeOf(organization)!, organization],
       )
     ).rows,

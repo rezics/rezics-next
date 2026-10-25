@@ -6,7 +6,7 @@ import type {
   SessionProof,
   TrustedAccessPorts,
 } from '@rezics/auth';
-import { AuthBindingUnavailableError } from '../../src/access/auth-bindings.ts';
+import { AuthBindingDeniedError, AuthBindingUnavailableError } from '../../src/access/auth-bindings.ts';
 import { createCredentialCapability } from '../../src/access/auth-credential-capability.ts';
 
 type ConsumeInput = Parameters<NonNullable<TrustedAccessPorts['consumeAuthorization']>>[0];
@@ -74,7 +74,7 @@ function unread<T>(): T {
   }) as T;
 }
 
-test('credential capability factory validates config without I/O and every credential call fails closed until native', async () => {
+test('credential capability validates config and refuses malformed or legacy input without I/O', async () => {
   const { config, calls } = fixture();
   for (const value of [undefined, null, {}]) {
     expect(() => createCredentialCapability(value as unknown as typeof config)).toThrow();
@@ -96,10 +96,12 @@ test('credential capability factory validates config without I/O and every crede
   expect(calls()).toBe(0);
   expect(Object.keys(capability).sort()).toEqual([
     'advanceCredentialFloor',
+    'approveCredentialEffect',
     'consumeAuthAuthorization',
     'createOpeningReference',
+    'revalidateCredentialEffect',
   ]);
-  expect(() => capability.createOpeningReference(unread())).toThrow(AuthBindingUnavailableError);
+  expect(() => capability.createOpeningReference({} as never)).toThrow(AuthBindingDeniedError);
   for (const purpose of ['set-password', 'remove-password', 'add-key', 'remove-key'] as const) {
     await expect(
       capability.consumeAuthAuthorization({
@@ -110,10 +112,23 @@ test('credential capability factory validates config without I/O and every crede
         effectReference: 'stage-reference',
         human: unread(),
       }),
+    ).rejects.toThrow();
+    await expect(
+      capability.consumeAuthAuthorization({
+        authorization: 'opening-reference',
+        subjectAccountId: 'subject',
+        purpose,
+        human: unread(),
+      } as unknown as Parameters<typeof capability.consumeAuthAuthorization>[0]),
     ).rejects.toBeInstanceOf(AuthBindingUnavailableError);
   }
-  await expect(capability.consumeAuthAuthorization(unread())).rejects.toBeInstanceOf(AuthBindingUnavailableError);
-  await expect(capability.advanceCredentialFloor(unread())).rejects.toBeInstanceOf(AuthBindingUnavailableError);
+  await expect(
+    capability.advanceCredentialFloor({
+      stage: { subjectAccountId: 'invalid-subject' },
+      consumedOpening: {},
+      expectedPreviousFloor: 1,
+    } as never),
+  ).rejects.toBeInstanceOf(AuthBindingDeniedError);
   expect(calls()).toBe(0);
 });
 

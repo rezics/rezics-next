@@ -38,8 +38,14 @@ async function login(id = 'human', value = password) {
     .map((v) => v.split(';')[0])
     .join('; ');
 }
-async function start() {
-  expect((await request('/recovery/start', { account_id: 'human' })).status).toBe(200);
+async function start(accountId = 'human') {
+  // Each scenario needs an independent delivery, outside the mail cooldown contract.
+  await database.query('DELETE FROM auth_attempt_counter');
+  delivery = '';
+  expect((await request('/recovery/start', { email: `${accountId}@example.test` })).status).toBe(200);
+  const deadline = Date.now() + 5000;
+  while (!delivery && Date.now() < deadline) await Bun.sleep(5);
+  expect(delivery).not.toBe('');
   return delivery;
 }
 async function verify(overrides = {}) {
@@ -371,8 +377,7 @@ test('proof expiry follows the native session lifetime and a superseded consent 
 });
 
 test('receipt insertion failure rolls back exact native consumption; absence alone cannot authorize a retry', async () => {
-  expect((await request('/recovery/start', { account_id: 'other' })).status).toBe(200);
-  const token = delivery;
+  const token = await start('other');
   const nativeId = (
     await database.query(`SELECT id FROM verification WHERE value='other' ORDER BY "createdAt" DESC,id DESC LIMIT 1`)
   ).rows[0].id;
