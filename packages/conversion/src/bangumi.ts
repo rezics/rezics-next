@@ -147,8 +147,9 @@ export function convertBangumi(
 function convert(input: ConversionInput, context: ConversionContext, revision: string): BangumiConversion {
   const record = normalize(input);
   const digest = sourceDigest(record);
+  const sourceId = context.source === undefined ? 'bangumi' : context.source;
   const metadata = {
-    source: 'bangumi',
+    source: sourceId,
     external_id: input.external_id,
     record_revision: input.record_revision ?? 'unversioned',
     converter_revision: revision,
@@ -163,7 +164,7 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
   ];
   const key = (field: string, group: FieldGroup) =>
     commandKey([
-      'bangumi',
+      sourceId,
       input.external_id,
       metadata.record_revision,
       digest,

@@ -142,6 +142,7 @@ export function convertWikidata(
   const record_revision = revision === undefined ? 'unversioned' : String(revision);
   if (input.record_revision !== record_revision) fail('Source envelope revision does not match entity', '/lastrevid');
   const registeredRevision = options.converterRevision ?? converter_revision;
+  const sourceId = context.source === undefined ? 'wikidata' : context.source;
   if (typeof registeredRevision !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(registeredRevision))
     fail('Invalid registered converter revision');
   if (context.subjectId !== undefined && !uuid.test(context.subjectId)) fail('Invalid resolved subject UUID');
@@ -310,7 +311,7 @@ export function convertWikidata(
   const inputBytes = Buffer.byteLength(JSON.stringify(normalizedRecord), 'utf8');
   if (inputBytes > wikidataLimits.bytes) fail('Source record exceeds 128 KiB');
   const digest = sourceDigest(normalizedRecord);
-  const meta = { source: 'wikidata', external_id: id, record_revision, converter_revision: registeredRevision, digest };
+  const meta = { source: sourceId, external_id: id, record_revision, converter_revision: registeredRevision, digest };
   const source = sourceEnvelope(meta, 'facts');
   const sourceUrl = safeSourceUrl(
     `https://www.wikidata.org/wiki/${id}${revision === undefined ? '' : `?oldid=${record_revision}`}`,
@@ -517,15 +518,7 @@ export function convertWikidata(
         subject: context.subjectId!,
         source,
         statement,
-        key: commandKey([
-          'wikidata',
-          id,
-          record_revision,
-          registeredRevision,
-          digest,
-          context.subjectId!,
-          String(index),
-        ]),
+        key: commandKey([sourceId, id, record_revision, registeredRevision, digest, context.subjectId!, String(index)]),
       }),
     );
   } else {
@@ -536,7 +529,7 @@ export function convertWikidata(
     proposals.push({
       op: 'create',
       source,
-      key: commandKey(['wikidata', id, record_revision, registeredRevision, digest, 'bootstrap']),
+      key: commandKey([sourceId, id, record_revision, registeredRevision, digest, 'bootstrap']),
       subject: {
         type: subjectType,
         labels: termValues(normalizedRecord.labels),

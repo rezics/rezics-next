@@ -193,8 +193,9 @@ export function convertVndb(
     const revision = String(normalizedRecord.entry_meta.revision);
     const digest = sourceDigest(normalizedRecord);
     const registration = options.converterRevision ?? converter_revision;
+    const sourceId = context.source === undefined ? 'vndb' : context.source;
     const source = sourceEnvelope(
-      { source: 'vndb', external_id: id, record_revision: revision, converter_revision: registration, digest },
+      { source: sourceId, external_id: id, record_revision: revision, converter_revision: registration, digest },
       'facts',
     );
     if (
@@ -244,7 +245,7 @@ export function convertVndb(
         });
     }
     const key = (operation: string, group: string): string =>
-      commandKey(['vndb', id, revision, digest, registration, 'facts', operation, context.subjectId ?? '', group]);
+      commandKey([sourceId, id, revision, digest, registration, 'facts', operation, context.subjectId ?? '', group]);
     const groupedStatements: Record<string, BatchStatement[]> = Object.create(null);
     for (const entry of statements) (groupedStatements[entry.property.id] ??= []).push(entry);
     const proposals: BatchCommand[] =
