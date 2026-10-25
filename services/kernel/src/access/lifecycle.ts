@@ -298,11 +298,14 @@ export type RecoveryEvidence = {
   minimumAuthnEpoch: string;
   authnEpoch: number;
   establishmentId: string;
+  /** Expiring sources must supply their original expiry (native Auth always does). */
+  expiresAt?: string;
 };
 
 /** INTERNAL SERVICE CAPABILITY for the later registration/fencing coordinator.
  * Mount neither this factory nor its inputs as public HTTP commands. Evidence
- * resolvers validate trusted coordinator records; they must not call Auth here.
+ * resolvers validate trusted coordinator records. Recovery may point-read the
+ * Auth-owned witness before checkout, never while holding the account anchor.
  * An unrecognized/serialized proof resolves to null. No public trusted flag exists.
  * There is deliberately no multi-anchor workflow or operator transfer in this API.
  *
@@ -330,8 +333,8 @@ export type RecoveryEvidence = {
  * it does not release the human's responsibility on another anchor.
  *
  * Recovery: clearFence requires resolver-verified new establishment evidence
- * bound to accountId, receiptId, EXACT minimumAuthnEpoch and authnEpoch at/above
- * that floor. It returns {accountId, receiptId, minimumAuthnEpoch}; the floor never
+ * bound to accountId, receiptId and the exact minimumAuthnEpoch/authnEpoch.
+ * It returns {accountId, receiptId, minimumAuthnEpoch}; the floor never
  * decreases. Old proofs cannot clear a later fence, including the same account.
  */
 export function createLifecycleInternals(
@@ -1089,11 +1092,62 @@ export function createLifecycleInternals(
         proof &&
           proof.accountId === input.accountId &&
           proof.establishmentId &&
+          proof.receiptId &&
           epoch(proof.authnEpoch) &&
-          /^[1-9][0-9]*$/.test(proof.minimumAuthnEpoch),
+          /^[1-9][0-9]*$/.test(proof.minimumAuthnEpoch) &&
+          BigInt(proof.authnEpoch) === BigInt(proof.minimumAuthnEpoch),
       );
+      // Snapshot every field in the digest. Each native attempt must resolve
+      // this same immutable witness again, with no account connection held.
+      const binding = JSON.stringify(proof);
       return execute(
-        { route, id: input.accountId, kind: 'authentication-established', key: input.key, input: proof },
+        {
+          route,
+          id: input.accountId,
+          kind: 'authentication-established',
+          key: input.key,
+          input: proof,
+          authorization: {
+            action: 'authentication-establish',
+            resource: { route, id: input.accountId },
+            async prepare() {
+              const current = await resolveEvidence(config.recoveryEvidence, input.evidence);
+              return current !== null && JSON.stringify(current) === binding;
+            },
+            async authorize(tx, attempt, verified) {
+              requireAllowed(
+                verified === true &&
+                  (proof.expiresAt === undefined ||
+                    Date.parse(proof.expiresAt) > Date.parse(authoritativeTimeValue(attempt.time))),
+              );
+              const account = await locked(tx, input.accountId);
+              requireAllowed(
+                account.state === 'active' &&
+                  account.kind === 'actor' &&
+                  account.operatorAccountId === null &&
+                  account.receiptId === proof.receiptId &&
+                  account.minimumAuthnEpoch === proof.minimumAuthnEpoch,
+              );
+              const receipt = await fenceRead.run(tx, {
+                route,
+                account_id: input.accountId,
+                receipt_id: proof.receiptId,
+              });
+              requireAllowed(
+                receipt &&
+                  receipt.accountId === proof.accountId &&
+                  receipt.receiptId === proof.receiptId &&
+                  receipt.minimumAuthnEpoch === proof.minimumAuthnEpoch &&
+                  receipt.kind === 'fence' &&
+                  receipt.priorOperatorAccountId === null,
+              );
+              // An unfenced account can only retrieve this exact command's
+              // receipt. A missing/mismatched receipt cannot execute an effect.
+              return account.fenced ? 'execute' : 'receipt-only';
+            },
+            denied: () => new LifecycleDeniedError(),
+          },
+        },
         async (tx, transactionId) => {
           requireAllowed(
             affected(

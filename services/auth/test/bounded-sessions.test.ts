@@ -319,11 +319,14 @@ if (process.env.NODE_ENV !== 'production') {
     let failBarrier = false;
     let serial = 0;
     const delivered: string[] = [];
+    const receipts = new Map<string, { accountId: string; minimumAuthnEpoch: number; receiptId: string }>();
     const barrier = (accountId: string) => {
       if (failBarrier) throw new Error('Access barrier unavailable');
       const account = accounts.get(accountId)!;
       account.authnEpoch++;
-      return { accountId, minimumAuthnEpoch: account.authnEpoch, receiptId: `bounded-effect-${serial++}` };
+      const receipt = { accountId, minimumAuthnEpoch: account.authnEpoch, receiptId: `bounded-effect-${serial++}` };
+      receipts.set(accountId, receipt);
+      return receipt;
     };
     const options: AuthServiceOptions = {
       database: pool,
@@ -351,6 +354,22 @@ if (process.env.NODE_ENV !== 'production') {
         },
         async authorizeRecovery({ accountId }) {
           return barrier(accountId);
+        },
+        async completeRecovery(reference) {
+          const witness = await service.internal.resolveRecoveryEstablishment(reference);
+          const account = witness && accounts.get(witness.accountId);
+          const receipt = witness && receipts.get(witness.accountId);
+          if (
+            !witness ||
+            !account ||
+            account.state !== 'active' ||
+            account.automated ||
+            account.authnEpoch !== witness.authnEpoch ||
+            receipt?.receiptId !== witness.receiptId ||
+            receipt.minimumAuthnEpoch !== witness.authnEpoch
+          )
+            throw new Error('Invalid completion');
+          account.fenced = false;
         },
         async consumeAuthorization({ subjectAccountId, purpose, human }) {
           const invalidation = purpose === 'session' ? undefined : barrier(subjectAccountId);

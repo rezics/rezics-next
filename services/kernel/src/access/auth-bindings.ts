@@ -44,6 +44,7 @@ export type AuthBindingCapabilities = {
   consumeAuthAuthorization?: (input: ConsumeInput) => Promise<AuthAuthorizationReceipt | null>;
   invalidateAccount?: (input: InvalidateInput) => Promise<LifecycleFenceReceipt | null>;
   authorizeRecovery?: (input: RecoveryInput) => Promise<LifecycleFenceReceipt | null>;
+  completeRecovery?: TrustedAccessPorts['completeRecovery'];
 };
 export class AuthBindingUnavailableError extends Error {
   constructor(capability: keyof AuthBindingCapabilities) {
@@ -188,6 +189,7 @@ export function createAuthBindings(config: { pool: Pool } & AuthBindingCapabilit
     return { receiptId: receipt.receiptId, accountId: receipt.accountId, minimumAuthnEpoch };
   }
   return {
+    ...(config.completeRecovery ? { completeRecovery: config.completeRecovery } : {}),
     readAccount: (id) => read(id),
     async readProvisioningAccount(id, reference) {
       try {

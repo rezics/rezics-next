@@ -80,6 +80,7 @@ beforeAll(async () => {
   // Access fixture persists its native floor and exact CAS receipt. Auth evidence
   // always comes from real provider sessions, consent and recovery rows.
   await database.query(`CREATE TABLE test_access (id text PRIMARY KEY, epoch integer NOT NULL, automated boolean DEFAULT false);
+    CREATE TABLE test_recovery_clear (reference text PRIMARY KEY);
     CREATE TABLE test_barrier (key text PRIMARY KEY, account_id text NOT NULL, previous integer NOT NULL, epoch integer NOT NULL, digest text NOT NULL);
     INSERT INTO test_access VALUES ('human',1,false),('other',1,false),('robot',1,true)`);
   const readAccount = async (id: string) => {
@@ -169,6 +170,23 @@ beforeAll(async () => {
       authorizeProvisioning: async (accountId) => ({ accountId }),
       invalidateAccount: (input) => barrier(input, 'consent-reduction', input.previousEpoch),
       authorizeRecovery: (input) => barrier(input, 'recovery', input.proofEpoch),
+      async completeRecovery(reference) {
+        const witness = await service.internal.resolveRecoveryEstablishment(reference);
+        const current = witness && (await readAccount(witness.accountId));
+        const receipt =
+          witness && (await database.query('SELECT * FROM test_barrier WHERE key=$1', [witness.receiptId])).rows[0];
+        if (
+          !witness ||
+          !current ||
+          current.automated ||
+          current.authnEpoch !== witness.authnEpoch ||
+          !receipt ||
+          receipt.account_id !== witness.accountId ||
+          receipt.epoch !== witness.authnEpoch
+        )
+          throw new Error('Invalid completion');
+        await database.query('INSERT INTO test_recovery_clear VALUES ($1) ON CONFLICT DO NOTHING', [reference]);
+      },
     },
     recoveryDelivery: {
       async deliver({ token }) {
@@ -272,7 +290,21 @@ test('native token verification and atomic exact consumption precede recovery pr
   expect(results.filter((r) => r.status === 200)).toHaveLength(1);
   expect(observed).toEqual(exact);
   expect(await verify()).toBeNull();
-  expect((await complete()).status).toBe(401);
+  const snapshot = async () => ({
+    credential: (await database.query(`SELECT id,password,"updatedAt" FROM account WHERE "userId"='human'`)).rows,
+    witness: (await database.query(`SELECT * FROM auth_recovery_establishment WHERE account_id='human'`)).rows,
+    proof: (await database.query(`SELECT * FROM auth_recovery WHERE account_id='human'`)).rows,
+    receipts: (await database.query('SELECT * FROM test_barrier ORDER BY key')).rows,
+    clears: (await database.query('SELECT * FROM test_recovery_clear ORDER BY reference')).rows,
+    floor: await options.trustedAccess.readRecoveryAccount!('human'),
+  });
+  const saved = await snapshot();
+  expect((await complete()).status).toBe(200);
+  expect(await snapshot()).toEqual(saved);
+  expect(saved.witness).toHaveLength(1);
+  expect(saved.clears).toHaveLength(1);
+  expect(saved.proof.every((row) => row.consumed_operation !== null)).toBe(true);
+  expect((await complete(token, 'different intended password')).status).toBe(401);
   expect((await login('human', changed)).length).toBeGreaterThan(0);
   const receipts = await database.query('SELECT * FROM auth_barrier_proof');
   expect(JSON.stringify(receipts.rows)).not.toContain(token);

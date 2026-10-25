@@ -122,8 +122,9 @@ export interface TrustedAccessPorts {
     operationKey?: string;
   }): Promise<InvalidationReceipt>;
   /** Trusted Auth-host composition only, after a successful native credential
-   * transaction commits. The nonsecret bounded locator must resolve to verified
-   * establishment evidence; the current Access receipt is checked separately. */
+   * transaction commits and releases its connection. The nonsecret locator
+   * resolves to the actual Auth witness; Access authorizes the exact current
+   * receipt/floor before execution or replay. HTTP success awaits completion. */
   completeRecovery?: (reference: string) => Promise<void>;
 }
 

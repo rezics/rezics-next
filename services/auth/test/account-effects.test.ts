@@ -22,6 +22,21 @@ let fixture: ReturnType<typeof testDatabase> | undefined;
 let outage = false;
 let fence = false;
 let sequence = 0;
+let recoveryReceipt: { receiptId: string; accountId: string; minimumAuthnEpoch: number } | undefined;
+const completedRecoveries = new Set<string>();
+async function recoverySnapshot() {
+  return {
+    credential: (await pool.query(`SELECT id,password,"updatedAt" FROM account WHERE "userId"='effects-human'`)).rows,
+    witness: (await pool.query(`SELECT * FROM auth_recovery_establishment WHERE account_id='effects-human'`)).rows,
+    proof: (await pool.query(`SELECT * FROM auth_recovery WHERE account_id='effects-human'`)).rows,
+    effects: (
+      await pool.query(`SELECT * FROM auth_effect_receipt WHERE account_id='effects-human' ORDER BY receipt_id`)
+    ).rows,
+    floor: accounts.get('effects-human')!.authnEpoch,
+    sequence,
+    clears: completedRecoveries.size,
+  };
+}
 const credentialKey = await generateKeyPair('ES256', { extractable: true });
 const publicJwk = { ...(await exportJWK(credentialKey.publicKey)), kid: 'own-key', alg: 'ES256' as const };
 
@@ -225,16 +240,49 @@ beforeAll(async () => {
           minimumAuthnEpoch: subject.authnEpoch,
         };
       },
+      async completeRecovery(reference) {
+        const witness = await service.internal.resolveRecoveryEstablishment(reference);
+        const current = witness && accounts.get(witness.accountId);
+        if (
+          outage ||
+          !witness ||
+          !current ||
+          current.state !== 'active' ||
+          current.kind !== 'actor' ||
+          current.automated ||
+          current.authnEpoch !== witness.authnEpoch ||
+          recoveryReceipt?.receiptId !== witness.receiptId ||
+          recoveryReceipt.accountId !== witness.accountId ||
+          recoveryReceipt.minimumAuthnEpoch !== witness.authnEpoch
+        )
+          throw new Error('Invalid completion');
+        if (fence) {
+          expect(await options.trustedAccess.readAccount(witness.accountId)).toBeNull();
+          expect(
+            (
+              await request('/signin', {
+                email: 'effects-human@example.test',
+                password,
+                client_id: 'effects-web',
+                scope: ['read'],
+              })
+            ).status,
+          ).toBeGreaterThanOrEqual(400);
+        }
+        fence = false;
+        completedRecoveries.add(reference);
+      },
       async authorizeRecovery(input) {
         if (outage) throw new Error('Access unavailable');
         const account = accounts.get(input.accountId)!;
         if (input.proofEpoch !== account.authnEpoch || account.automated) throw new Error('Stale recovery');
         account.authnEpoch++;
-        return {
+        recoveryReceipt = {
           receiptId: `recovery-${++sequence}`,
           accountId: account.accountId,
           minimumAuthnEpoch: account.authnEpoch,
         };
+        return recoveryReceipt;
       },
     },
   };
@@ -435,9 +483,12 @@ test('native human recovery delivers short lived one-use proof and requires Acce
   const response = await request('/recovery/complete', { account_id: 'effects-human', token, new_password: password });
   expect(response.status).toBe(200);
   expect(await kernelAccepts(old)).toBe(false);
+  const saved = await recoverySnapshot();
   expect(
     (await request('/recovery/complete', { account_id: 'effects-human', token, new_password: password })).status,
-  ).toBeGreaterThanOrEqual(400);
+  ).toBe(200);
+  expect(await recoverySnapshot()).toEqual(saved);
+  expect(saved.proof.every((row) => row.consumed_operation !== null)).toBe(true);
   expect((await login('effects-human')).length).toBeGreaterThan(0);
   expect((await request('/recovery/start', { account_id: 'effects-agent' })).status).toBeGreaterThanOrEqual(400);
   expect(deliveries.has('effects-agent')).toBe(false);
@@ -482,18 +533,9 @@ test('stale expired wrong-owner recovery and Access outage cannot clear a newer 
     (await request('/recovery/complete', { account_id: 'effects-human', token: current, new_password: password }))
       .status,
   ).toBe(200);
-  expect(fence).toBe(true);
-  expect(
-    (
-      await request('/signin', {
-        email: 'effects-human@example.test',
-        password,
-        client_id: 'effects-web',
-        scope: ['read'],
-      })
-    ).status,
-  ).toBeGreaterThanOrEqual(400);
-  fence = false; // Only Access lifecycle clears its own fence after fresh recovery evidence.
+  expect(fence).toBe(false);
+  expect(accounts.get('effects-human')!.authnEpoch).toBe(floor + 1);
+  expect((await login('effects-human')).length).toBeGreaterThan(0);
 });
 
 test('consent reductions invalidate already-issued signed authority through Access before Auth changes and outages fail closed', async () => {

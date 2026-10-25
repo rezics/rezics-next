@@ -19,6 +19,7 @@ import {
   createLifecycleInternals,
 } from './lifecycle.ts';
 import { createOperatorCommands } from './operator.ts';
+import { createRecoveryCompletion } from './recovery-completion.ts';
 
 import { createAuthBindings, AuthBindingDeniedError } from './auth-bindings.ts';
 import { createRegistrationProofBindings } from './registration-proof.ts';
@@ -58,6 +59,8 @@ export type NativeAccountBindingsConfig = {
   access: Access;
   actions: ActionCatalogue;
   routeKey: Uint8Array;
+  /** Kernel command clock; production uses the authoritative system clock. */
+  clock?: () => Date;
   referenceKeys: KeyRing;
   /** Deferred access permits Auth to consume trustedAccess during construction. */
   auth: () => AuthService;
@@ -96,6 +99,8 @@ export class NativeAccountBindingsUnavailableError extends Error {
  * Test clients register normally through Auth.internal.registerClient with
  * explicit action scopes, independently of website-client/provider identities
  * and media:complete. No fixture outcome SQL or JWT resigning supplies authority.
+ * Human recovery clears only through Auth's actual committed establishment
+ * witness, revalidated against the native current fence receipt on every attempt.
  *
  * Only the approved bootstrap CLI establishes the grantor's initial platform
  * role. Subsequent grant/delegation commands apply the exact Global Context
@@ -126,6 +131,7 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
   const internalLifecycle = createLifecycleInternals({
     pool,
     routeKey: config.routeKey,
+    ...(config.clock ? { clock: config.clock } : {}),
     provisioningEvidence: (evidence) => proofs.provisioning.resolve(evidence),
     recoveryEvidence: (evidence) => proofs.recoveryEvidence?.(evidence) ?? Promise.resolve(null),
   });
@@ -160,6 +166,12 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
   const trustedAccess: TrustedAccessPorts = {
     ...createAuthBindings({
       pool,
+      ...createRecoveryCompletion({
+        pool,
+        routeKey: config.routeKey,
+        auth: config.auth,
+        ...(config.clock ? { clock: config.clock } : {}),
+      }),
       ...registration,
       ...session,
       async verifyPendingIdentity(reference) {

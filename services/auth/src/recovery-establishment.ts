@@ -8,6 +8,8 @@ export type RecoveryEstablishmentEvidence = Readonly<{
   minimumAuthnEpoch: string;
   authnEpoch: number;
   establishmentId: string;
+  /** Original source-proof expiry; resolving a witness never renews it. */
+  expiresAt: string;
 }>;
 
 const hash = async (value: unknown) =>
@@ -98,6 +100,7 @@ export function createRecoveryEstablishmentVerifier({ database }: { database: Po
         minimumAuthnEpoch: String(row.authn_epoch),
         authnEpoch: row.authn_epoch,
         establishmentId: row.establishment_id,
+        expiresAt: row.expires_at.toISOString(),
       });
     },
   };

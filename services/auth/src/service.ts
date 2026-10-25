@@ -1054,6 +1054,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         }
         if (url.pathname === '/recovery/complete') {
           fields(body, ['account_id', 'token', 'new_password']);
+          if (!trustedAccess.completeRecovery) throw new Denied(503);
           const accountId = text(body.account_id);
           const token = text(body.token);
           const newPassword = text(body.new_password);
@@ -1081,6 +1082,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             const success = await recoveryEstablishment.resolve(completed.reference);
             if (!success || completed.evidence[8] !== effectCommitment || success.authnEpoch !== account.authnEpoch)
               throw new Denied();
+            await trustedAccess.completeRecovery(completed.reference);
             return json({ success: true });
           }
           // Native adapter reads use the same pool. Finish them before leasing a
@@ -1225,6 +1227,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           } finally {
             mutation.release();
           }
+          await trustedAccess.completeRecovery(proof.reference);
           return json({ success: true });
         }
         if (url.pathname === '/signin/key') {
