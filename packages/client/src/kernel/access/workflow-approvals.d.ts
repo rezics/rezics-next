@@ -1,5 +1,5 @@
 import type { CredentialEffectBinding } from '@rezics/auth-contract';
-import type { AccountOperation } from '@rezics/auth-contract';
+import type { AccountOperation as ContractAccountOperation, WorkflowResponsibility } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 import type { Access, AccessContext, AccountActor, ActionCatalogue } from '../request/access.ts';
 import { type KeyRing } from '../tokens/seal.ts';
@@ -24,6 +24,22 @@ export type CredentialOperation = Pick<CredentialEffectBinding, 'subjectAccountI
     subjectEpoch: number;
     authorization: string;
 };
+type TransferOperation = Extract<ContractAccountOperation, {
+    kind: 'transfer';
+}> & {
+    acceptance?: string;
+};
+type TransferAcceptanceOperation = {
+    kind: 'transfer-acceptance';
+    previous: WorkflowResponsibility;
+    expectedVersion: string;
+    operatorAccountId: string;
+    sourceOperationKey: string;
+    authorization: string;
+};
+type AccountOperation = Exclude<ContractAccountOperation, {
+    kind: 'transfer';
+}> | TransferOperation | TransferAcceptanceOperation;
 export type WorkflowApprovalRequest = {
     operationKey: string;
     operation: AccountOperation;

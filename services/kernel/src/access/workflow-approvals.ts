@@ -2,7 +2,11 @@ import type { CredentialEffectBinding } from '@rezics/auth-contract';
 import credentialConsume from './workflow-approvals-credential-consume.sql';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
-import type { AccountOperation, NativeWorkflowProofPorts } from '@rezics/auth-contract';
+import type {
+  AccountOperation as ContractAccountOperation,
+  NativeWorkflowProofPorts,
+  WorkflowResponsibility,
+} from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 import type { Access, AccessContext, AccountActor, ActionCatalogue } from '../request/access.ts';
 import { seal, unseal, type KeyRing } from '../tokens/seal.ts';
@@ -26,6 +30,8 @@ import credentialRead from './auth-credential-capability-workflow-read.sql';
 import approvalInsert from './workflow-approvals-insert.sql';
 import approvalSweep from './workflow-approvals-sweep.sql';
 import clientManagementAnchor from './workflow-approvals-client-anchor.sql';
+import operatorAccount from './operator-account.sql';
+import operatorSlot from './operator-slot.sql';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
 
 export const MAX_WORKFLOW_APPROVAL_LIFETIME_MS = 300_000;
@@ -38,6 +44,19 @@ export type CredentialOperation = Pick<
   CredentialEffectBinding,
   'subjectAccountId' | 'purpose' | 'operationKey' | 'effectReference' | 'effectDigest'
 > & { kind: 'credential'; subjectEpoch: number; authorization: string };
+type TransferOperation = Extract<ContractAccountOperation, { kind: 'transfer' }> & { acceptance?: string };
+type TransferAcceptanceOperation = {
+  kind: 'transfer-acceptance';
+  previous: WorkflowResponsibility;
+  expectedVersion: string;
+  operatorAccountId: string;
+  sourceOperationKey: string;
+  authorization: string;
+};
+type AccountOperation =
+  | Exclude<ContractAccountOperation, { kind: 'transfer' }>
+  | TransferOperation
+  | TransferAcceptanceOperation;
 type NativeOperation = AccountOperation | CredentialOperation;
 export type WorkflowApprovalRequest = { operationKey: string; operation: AccountOperation };
 export type WorkflowApprovalBinding = Readonly<{
@@ -78,12 +97,20 @@ const id = (value: unknown): value is string => typeof value === 'string' && rou
 const text = (value: unknown, max = 255): value is string =>
   typeof value === 'string' && value.length > 0 && value.length <= max;
 
-type NativeKind = 'rename' | 'delete' | 'membership' | 'automated' | 'opening' | 'organization' | 'client-reduction';
+type NativeKind =
+  | 'rename'
+  | 'delete'
+  | 'membership'
+  | 'automated'
+  | 'opening'
+  | 'organization'
+  | 'client-reduction'
+  | 'transfer'
+  | 'transfer-acceptance';
 type Descriptor = { action: string; target: string; targetKind: 'actor' | 'organization' | 'either' | 'global' };
 /** Server-owned closed descriptors. Missing adapters deny explicitly; a catalogue
  * entry alone can never manufacture native authority for one of these kinds. */
 const unavailableAdapters = {
-  transfer: 'operator responsibility transfer',
   revoke: 'Auth session revocation',
   'fence-operator': 'operator fence',
   consent: 'Auth consent reduction',
@@ -180,6 +207,42 @@ function operationSnapshot(value: NativeOperation): { operation: NativeOperation
       }
       fields = ['kind', 'accountId', 'responsibility', 'authorization'];
       descriptor = { action: 'account:delete', target: operation.accountId, targetKind: 'either' };
+      break;
+    case 'transfer':
+      requireAllowed(
+        id(operation.previous?.operatorAccountId) &&
+          id(operation.previous?.subjectAccountId) &&
+          text(operation.previous?.reservationId) &&
+          Object.keys(operation.previous).sort().join(',') === 'operatorAccountId,reservationId,subjectAccountId' &&
+          id(operation.operatorAccountId) &&
+          operation.operatorAccountId !== operation.previous.operatorAccountId &&
+          operation.operatorAccountId !== operation.previous.subjectAccountId &&
+          typeof operation.expectedVersion === 'string' &&
+          /^(0|[1-9][0-9]*)$/.test(operation.expectedVersion) &&
+          (operation.acceptance === undefined || text(operation.acceptance, 4096)),
+      );
+      fields = ['kind', 'previous', 'expectedVersion', 'operatorAccountId', 'acceptance', 'authorization'];
+      descriptor = {
+        action: 'account:manage',
+        target: operation.previous.operatorAccountId,
+        targetKind: 'either',
+      };
+      break;
+    case 'transfer-acceptance':
+      requireAllowed(
+        id(operation.previous?.operatorAccountId) &&
+          id(operation.previous?.subjectAccountId) &&
+          text(operation.previous?.reservationId) &&
+          Object.keys(operation.previous).sort().join(',') === 'operatorAccountId,reservationId,subjectAccountId' &&
+          id(operation.operatorAccountId) &&
+          operation.operatorAccountId !== operation.previous.operatorAccountId &&
+          operation.operatorAccountId !== operation.previous.subjectAccountId &&
+          typeof operation.expectedVersion === 'string' &&
+          /^(0|[1-9][0-9]*)$/.test(operation.expectedVersion) &&
+          text(operation.sourceOperationKey, 128),
+      );
+      fields = ['kind', 'previous', 'expectedVersion', 'operatorAccountId', 'sourceOperationKey', 'authorization'];
+      descriptor = { action: 'account:manage', target: operation.operatorAccountId, targetKind: 'either' };
       break;
     case 'membership':
       requireAllowed(
@@ -302,12 +365,91 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
     requireAllowed(account?.kind === 'actor' && account.operatorAccountId === null && actor.requestedBy === null);
   }
 
-  async function resolve(
+  async function authorizeActor(
+    actor: AccountActor,
+    descriptor: Descriptor,
+    context: AccessContext,
+    deadline: number,
+  ): Promise<void> {
+    requireAllowed(config.actions.has(descriptor.action) && config.access.prepare && Date.now() < deadline);
+    const evidence = await config.access.prepare(actor, descriptor.action, resourceOf(descriptor), {
+      pool: config.pool,
+      deadline,
+    });
+    // The final native formula obtains authoritative SQL T. Identity/principal
+    // preparation has released its connections before this resource checkout.
+    const allowed = await within(deadline, () =>
+      withConnection(config.pool, async (client) => {
+        const boundedClient = deadlineClient(client, deadline);
+        return (
+          (await anchor(descriptor).validate(boundedClient)) &&
+          (await config.access.authorize(boundedClient, actor, descriptor.action, resourceOf(descriptor), evidence))
+        );
+      }),
+    );
+    requireAllowed(allowed && Date.now() < deadline);
+  }
+  async function validateTransferRecord(
+    operation: Extract<AccountOperation, { kind: 'transfer' }>,
+    deadline: number,
+  ): Promise<void> {
+    const subjectRoute = routeOf(operation.previous.subjectAccountId)!;
+    const destinationRoute = routeOf(operation.operatorAccountId)!;
+    const subject = await within(deadline, () =>
+      withConnection(config.pool, (client) =>
+        operatorAccount.run(deadlineClient(client, deadline), {
+          route: subjectRoute,
+          account_id: operation.previous.subjectAccountId,
+        }),
+      ),
+    );
+    const destination = await within(deadline, () =>
+      withConnection(config.pool, (client) =>
+        operatorAccount.run(deadlineClient(client, deadline), {
+          route: destinationRoute,
+          account_id: operation.operatorAccountId,
+        }),
+      ),
+    );
+    requireAllowed(
+      subject &&
+        subject.kind === 'actor' &&
+        subject.state === 'active' &&
+        !subject.fenced &&
+        destination &&
+        destination.state === 'active' &&
+        !destination.fenced &&
+        destination.operatorAccountId === null,
+    );
+    const expectedVersion = BigInt(operation.expectedVersion);
+    if (
+      subject.operatorAccountId === operation.previous.operatorAccountId &&
+      subject.reservationId === operation.previous.reservationId &&
+      BigInt(subject.version) === expectedVersion
+    )
+      return;
+    requireAllowed(
+      subject.operatorAccountId === operation.operatorAccountId && BigInt(subject.version) === expectedVersion + 1n,
+    );
+    const oldSlot = await within(deadline, () =>
+      withConnection(config.pool, (client) =>
+        operatorSlot.run(deadlineClient(client, deadline), {
+          route: subjectRoute,
+          subject_id: operation.previous.subjectAccountId,
+          reservation_id: operation.previous.reservationId,
+        }),
+      ),
+    );
+    // The relation command terminalizes the old slot atomically with publication.
+    requireAllowed(oldSlot?.terminal === true && oldSlot.operatorAccountId === operation.previous.operatorAccountId);
+    requireAllowed(Date.now() < deadline);
+  }
+  async function resolveSingle(
     reference: string,
     input: AccountOperation,
     context: AccessContext,
     caller?: AccountActor,
-  ): Promise<LifecycleRequest> {
+  ) {
     const bounded = boundary(context);
     const { operation, descriptor } = operationSnapshot(input);
     const { row, actor } = await within(bounded.deadline, () =>
@@ -336,25 +478,8 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
       hash([row.operationKey, businessOperation(approvedOperation)]) === row.digest &&
         canonicalize(row.operation) === canonicalize(businessOperation(approvedOperation)),
     );
-    requireAllowed(config.actions.has(descriptor.action));
     const deadline = Math.min(bounded.deadline, Date.parse(row.expiresAt), Date.parse(row.jwtExpiresAt));
-    requireAllowed(Date.now() < deadline && config.access.prepare);
-    const evidence = await config.access.prepare(actor, descriptor.action, resourceOf(descriptor), {
-      pool: config.pool,
-      deadline,
-    });
-    // The final native formula obtains authoritative SQL T. Identity/principal
-    // preparation has released its connections before this resource checkout.
-    const allowed = await within(deadline, () =>
-      withConnection(config.pool, async (client) => {
-        const boundedClient = deadlineClient(client, deadline);
-        return (
-          (await anchor(descriptor).validate(boundedClient)) &&
-          (await config.access.authorize(boundedClient, actor, descriptor.action, resourceOf(descriptor), evidence))
-        );
-      }),
-    );
-    requireAllowed(allowed && Date.now() < deadline);
+    await authorizeActor(actor, descriptor, bounded, deadline);
     const request: LifecycleRequest = Object.freeze({ actor, deadline });
     bindings.set(
       request,
@@ -364,7 +489,39 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
         commandKeyPrefix: `wf:${hash([actor.accountId, row.operationKey])}`,
       }),
     );
-    return request;
+    return { request, row, actor, operation, descriptor };
+  }
+  async function resolve(
+    reference: string,
+    input: AccountOperation,
+    context: AccessContext,
+    caller?: AccountActor,
+  ): Promise<LifecycleRequest> {
+    const bounded = boundary(context);
+    requireAllowed(operationSnapshot(input).operation.kind !== 'transfer-acceptance');
+    const source = await resolveSingle(reference, input, bounded, caller);
+    if (source.operation.kind === 'transfer') {
+      await validateTransferRecord(source.operation, source.request.deadline);
+      const destination: Descriptor = {
+        action: 'account:manage',
+        target: source.operation.operatorAccountId,
+        targetKind: 'either',
+      };
+      if (source.operation.acceptance !== undefined) {
+        const acceptance: AccountOperation = {
+          kind: 'transfer-acceptance',
+          previous: source.operation.previous,
+          expectedVersion: source.operation.expectedVersion,
+          operatorAccountId: source.operation.operatorAccountId,
+          sourceOperationKey: source.row.operationKey,
+          authorization: source.operation.acceptance,
+        };
+        await resolveSingle(source.operation.acceptance, acceptance, bounded);
+      } else {
+        await authorizeActor(source.actor, destination, bounded, source.request.deadline);
+      }
+    }
+    return source.request;
   }
   async function approve(
     token: string | AccountActor,
@@ -376,6 +533,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
       requireAllowed(input && text(input.operationKey));
       const operationKey = input.operationKey;
       const { operation, descriptor } = operationSnapshot(input.operation);
+      requireAllowed(operation.kind !== 'transfer-acceptance' || operation.sourceOperationKey === operationKey);
       requireAllowed(
         operation.kind !== 'automated' || (operation.registrationId === '' && operation.operationKey === operationKey),
       );

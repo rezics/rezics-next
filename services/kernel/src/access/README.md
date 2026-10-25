@@ -122,6 +122,20 @@ A Realm owner or member is a `GrantSubject` `{ kind: 'realm', id, role }` with r
 
 ## Cost
 
+### Operator transfer
+
+Touches: the source approval and optional destination acceptance, with receipts on the actors' anchors (one approval
+row when a shared actor is authorized for both); per step two approval resolutions (each one anchored actor read and
+one grant probe on an operator resource), plus point reads for the subject relation and destination eligibility; the
+destination hold in the destination operator's partition; the relation, version and old slot on the subject; the old
+hold on the source operator.
+
+Bound: O(log R) per statement, a fixed number of statements, independent of how many accounts either operator holds.
+
+Growth check: `test/access/growth-operator-transfer.test.ts` with `checkGrowth` at [1, 8, 64], growing unrelated accounts
+and both operators' other responsibilities with the transferred subject fixed; constant rows and statements,
+logarithmic buffers.
+
 These bounds follow the TypeScript adapters, their SQL, `db/access/migrations/` and `db/access/schema.sql`; measured shapes below refer to the integrated growth checks, not schema-only query-plan guarantees.
 The criterion is a fixed number of anchored hops and results, with work proportional to changes times index depth, regardless of database size.
 `A` is total accounts; `G` is stored grants and denials for one resource/action, including applicable role grants and temporal history; `O` is distinct organizations on that resource, including denial subjects; `R` is roles in a type's template; `Gt` is total grants and denials; `m` is members of one organization.

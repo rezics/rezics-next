@@ -1,6 +1,6 @@
 import type {
   AccountWorkflowPorts,
-  AccountOperation,
+  AccountOperation as ContractAccountOperation,
   WorkflowMembership,
   WorkflowResponsibility,
   WorkflowAccount,
@@ -10,7 +10,6 @@ import type {
 } from '@rezics/auth-contract';
 export type {
   AccountWorkflowPorts,
-  AccountOperation,
   WorkflowMembership,
   WorkflowResponsibility,
   WorkflowAccount,
@@ -18,6 +17,21 @@ export type {
   WorkflowContext,
   WorkflowFence,
 } from '@rezics/auth-contract';
+type TransferOperation = Extract<ContractAccountOperation, { kind: 'transfer' }> & { acceptance?: string };
+export type TransferAcceptanceOperation = {
+  /** Approval-only counterpart to transfer. Auth workflows never execute it. */
+  kind: 'transfer-acceptance';
+  previous: WorkflowResponsibility;
+  expectedVersion: string;
+  operatorAccountId: string;
+  sourceOperationKey: string;
+  authorization: string;
+};
+export type AccountOperation =
+  | Exclude<ContractAccountOperation, { kind: 'transfer' }>
+  | TransferOperation
+  | TransferAcceptanceOperation;
+type ExecutableAccountOperation = Exclude<AccountOperation, { kind: 'transfer-acceptance' }>;
 import { createCipheriv, createDecipheriv, createHash, createHmac, hkdfSync, randomBytes } from 'node:crypto';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { coordinateMembership } from './membership-workflows.ts';
@@ -81,6 +95,10 @@ function isLifecycleDenied(error: unknown): boolean {
 let owner: object | undefined;
 function denied(): never {
   throw new Error('Account workflow denied');
+}
+function executableOperation(input: AccountOperation): ExecutableAccountOperation {
+  if (input.kind === 'transfer-acceptance') denied();
+  return input;
 }
 function required<T>(value: T | null | undefined): T {
   if (value == null) denied();
@@ -213,19 +231,21 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     return row;
   }
   async function approved(input: AccountOperation): Promise<Context> {
+    const executable = executableOperation(input);
     if (
-      !('authorization' in input) ||
-      typeof input.authorization !== 'string' ||
-      input.authorization.length === 0 ||
-      input.authorization.length > 4096
+      !('authorization' in executable) ||
+      typeof executable.authorization !== 'string' ||
+      executable.authorization.length === 0 ||
+      executable.authorization.length > 4096
     )
       denied();
-    const current = await currentOperation(input);
+    const current = await currentOperation(executable);
     if (!('authorization' in current)) denied();
     return required(access.authorizeOperation)(current.authorization, current);
   }
-  async function currentOperation(input: AccountOperation): Promise<AccountOperation> {
-    let current = input;
+  async function currentOperation(input: AccountOperation): Promise<ExecutableAccountOperation> {
+    const executable = executableOperation(input);
+    let current = executable;
     if (DBOS.workflowID) {
       const stored = (
         await database.query<{ request: AccountOperation }>(
@@ -234,8 +254,9 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         )
       ).rows[0]?.request;
       if (stored) {
-        if (JSON.stringify(businessOperation(stored)) !== JSON.stringify(businessOperation(input))) denied();
-        current = stored;
+        const executable = executableOperation(stored);
+        if (JSON.stringify(businessOperation(executable)) !== JSON.stringify(businessOperation(current))) denied();
+        current = executable;
       }
     }
     return current;
@@ -490,7 +511,10 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       async (accountId: string) =>
         (await access.raiseFence({ accountId, key: commandKey(`fence:${accountId}`) })).value,
     );
-    const revoke = step('revoke-auth-sessions', async (accountId: string) => auth.internal.revokeSessions(accountId));
+    const revoke = step('revoke-auth-sessions', async (accountId: string, request?: AccountOperation) => {
+      if (request) await approved(request);
+      return auth.internal.revokeSessions(accountId);
+    });
     const hold = step('hold-new-handle', async (input: WorkflowHandleTransition, request?: AccountOperation) => {
       await required(access.holdHandle)({ ...input, key: await authorizedKey(request, 'hold-handle') });
     });
@@ -599,7 +623,6 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     const reserveOperator = step(
       'reserve-operator',
       async (request: AccountOperation, operatorAccountId: string, subjectAccountId: string) => {
-        await approved(request);
         return (
           await required(access.reserveResponsibility)({
             operatorAccountId,
@@ -618,7 +641,6 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         request: AccountOperation,
         pendingReservationId?: string,
       ) => {
-        await approved(request);
         return (
           await required(access.recordOperatorRelation)(
             {
@@ -646,6 +668,19 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         await required(access.releaseResponsibility)({
           ...input,
           key: await authorizedKey(request, 'release-operator'),
+        });
+      },
+    );
+    const cancelTransferOperator = step(
+      'cancel-transfer-operator',
+      async (input: WorkflowResponsibility, request: AccountOperation) => {
+        await required(access.retireResponsibility)({
+          ...input,
+          key: await authorizedKey(request, 'cancel-transfer-operator'),
+        });
+        await required(access.releaseResponsibility)({
+          ...input,
+          key: await authorizedKey(request, 'release-cancelled-transfer-operator'),
         });
       },
     );
@@ -792,10 +827,17 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         }
         if (input.kind === 'transfer') {
           const held = await reserveOperator(input, input.operatorAccountId, input.previous.subjectAccountId);
-          await relation(held, input.previous.operatorAccountId, input.expectedVersion, input);
-          await revoke(input.previous.subjectAccountId);
-          await retireOperator(input.previous);
-          await releaseOperator(input.previous);
+          try {
+            await relation(held, input.previous.operatorAccountId, input.expectedVersion, input);
+          } catch (error) {
+            // An authorized cancellation terminalizes a held destination slot
+            // after a pre-publication failure. Revoked authority leaves it held.
+            await cancelTransferOperator(held, input);
+            throw error;
+          }
+          await revoke(input.previous.subjectAccountId, input);
+          await retireOperator(input.previous, input);
+          await releaseOperator(input.previous, input);
           return { accountId: held.subjectAccountId };
         }
         if (input.kind === 'delete') {
@@ -948,6 +990,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
   async function runOperation(key: string, input: AccountOperation) {
     active();
     requestKey(key);
+    if (input.kind === 'transfer-acceptance') denied();
     if ('authorization' in input) await approved(input);
     else await access.authorizeUnprotectedOperation?.(input);
     const id = workflowId(`operation:${key}`);
@@ -1176,6 +1219,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         previous: responsibility(input.previous),
         expectedVersion: input.expectedVersion,
         operatorAccountId: input.operatorAccountId,
+        ...(input.acceptance === undefined ? {} : { acceptance: input.acceptance }),
       });
     },
     deleteAccount: (input: Omit<Extract<AccountOperation, { kind: 'delete' }>, 'kind'> & { key: string }) => {
