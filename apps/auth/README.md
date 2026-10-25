@@ -53,9 +53,9 @@ Signed-out visitors get a link to `/login`. Unknown and first-party clients show
 Other failures use the shared status-and-code messages, including valid `Retry-After` seconds; Auth body text is
 never displayed. Pending approval disables both buttons, and a failure permits retrying.
 
-Approval is currently blocked by issuer routing: `src/server.ts` renders `/consent` for every HTTP method, so
-`POST /consent` returns page HTML instead of reaching Auth. The consent acceptance tests expose this integration gap;
-method-aware dispatch is needed before approval can work.
+Page paths render only for GET and HEAD. Other methods, including `POST /consent` and `POST /signup`, pass the
+original request through to Auth at the issuer origin in production, or through the existing `AUTH_ORIGIN` proxy in
+development. Auth's response returns unchanged, without page headers.
 
 ## Security
 

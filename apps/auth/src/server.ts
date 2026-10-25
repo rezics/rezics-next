@@ -23,7 +23,7 @@ export default {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
 
-    if (pagePaths.has(url.pathname)) {
+    if (pagePaths.has(url.pathname) && (request.method === 'GET' || request.method === 'HEAD')) {
       const response = await paraglideMiddleware(request, () => fetchHandler(request));
       const headers = new Headers(response.headers);
       headers.set('Cache-Control', 'private, no-store');
@@ -48,6 +48,9 @@ export default {
       target.search = url.search;
       return fetch(new Request(target, request), { redirect: 'manual' });
     }
+
+    // On the issuer host, fetch continues to Auth at the origin behind this route.
+    if (pagePaths.has(url.pathname)) return fetch(request);
 
     return new Response('Not Found', { status: 404 });
   },
