@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import pg from 'pg';
@@ -13,7 +13,7 @@ const scratch = new URL(databaseUrl);
 scratch.pathname = `/${name}`;
 const url = scratch.href;
 const root = mkdtempSync(join(tmpdir(), 'kernel-modules-'));
-// Each dump starts a container, so these tests outlast the default timeout.
+// Schema dumps use the running database container, but migrations and database setup still need a larger budget.
 const timeout = 60_000;
 function migration(path: string, up: string): void {
   mkdirSync(dirname(join(root, path)), { recursive: true });
@@ -83,6 +83,34 @@ test(
     expect(Object.keys(dumps)).toContain('db/schema.sql');
     for (const [path, dump] of Object.entries(dumps)) {
       expect(await Bun.file(new URL(`../${path}`, import.meta.url)).text()).toBe(dump);
+    }
+  },
+  timeout,
+);
+
+test(
+  'schema dumps run pg_dump in the running database container instead of starting a new one',
+  async () => {
+    const docker = Bun.which('docker');
+    if (!docker) throw new Error('docker must be on PATH');
+    const shim = mkdtempSync(join(tmpdir(), 'kernel-docker-'));
+    const calls = join(shim, 'calls');
+    writeFileSync(join(shim, 'docker'), `#!/bin/sh\nprintf '%s\\n' "$1" >> '${calls}'\nexec '${docker}' "$@"\n`, {
+      mode: 0o755,
+    });
+    const path = process.env.PATH;
+    process.env.PATH = `${shim}:${path}`;
+    try {
+      const dumps = schemaDumps(databaseUrl);
+      for (const [file, dump] of Object.entries(dumps)) {
+        expect(await Bun.file(new URL(`../${file}`, import.meta.url)).text()).toBe(dump);
+      }
+      const subcommands = readFileSync(calls, 'utf8').trim().split('\n');
+      expect(subcommands).toContain('exec');
+      expect(subcommands.filter((subcommand) => ['run', 'create', 'start'].includes(subcommand))).toEqual([]);
+    } finally {
+      process.env.PATH = path;
+      rmSync(shim, { recursive: true, force: true });
     }
   },
   timeout,

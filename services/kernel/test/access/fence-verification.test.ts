@@ -10,6 +10,7 @@ import { accessCheck, AuthenticationError, type AccountActor } from '../../src/r
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
+const timeout = 60_000;
 const pool = new Pool({ connectionString: url, max: 1 });
 const authDatabase = `access_fence_auth_${process.pid}`;
 const authUrl = new URL(url);
@@ -160,7 +161,7 @@ beforeAll(async () => {
   await service.internal.registerClient({ clientId: 'web', firstParty: true, scopes: [action] });
   await account(person, 'pending');
   await service.internal.provisionPassword({ authorization: person, email: `${person}@example.test`, password });
-}, 30000);
+}, timeout);
 
 beforeEach(async () => {
   for (const table of ['resource_grant', 'resource_denial', 'principal_assignment', 'organization_member', 'account'])

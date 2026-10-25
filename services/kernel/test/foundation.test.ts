@@ -6,6 +6,7 @@ import { readPartition } from '../src/partition/partition.ts';
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = new pg.Pool({ connectionString: databaseUrl, max: 2 });
+const timeout = 60_000;
 afterAll(async () => {
   await pool.end();
 });
@@ -68,11 +69,15 @@ test('core.partition refuses inconsistent write states', async () => {
   ).toBeNull();
 });
 
-test('migrations apply once and the committed schema dump matches the database', async () => {
-  const before = await schemaDump(databaseUrl);
-  await migrate(databaseUrl);
-  expect(await schemaDump(databaseUrl)).toBe(before);
-  expect(before).toBe(await Bun.file(new URL('../db/schema.sql', import.meta.url)).text());
-  const { rows } = await pool.query('SELECT count(*)::int AS partitions FROM core.partition');
-  expect(rows).toEqual([{ partitions: 4096 }]);
-}, 30_000);
+test(
+  'migrations apply once and the committed schema dump matches the database',
+  async () => {
+    const before = await schemaDump(databaseUrl);
+    await migrate(databaseUrl);
+    expect(await schemaDump(databaseUrl)).toBe(before);
+    expect(before).toBe(await Bun.file(new URL('../db/schema.sql', import.meta.url)).text());
+    const { rows } = await pool.query('SELECT count(*)::int AS partitions FROM core.partition');
+    expect(rows).toEqual([{ partitions: 4096 }]);
+  },
+  timeout,
+);

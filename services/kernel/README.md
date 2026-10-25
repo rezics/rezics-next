@@ -6,7 +6,10 @@ The kernel workspace owns the database records and adapters used by the service.
 
 Run `bun run db up` from `services/kernel` to create or start the local PostgreSQL database, apply migrations, and write
 its connection string to `.env`. Use `bun run db down` to stop it while keeping its volume, `bun run db reset` to remove
-and recreate the database, and `bun run db dump` to update the committed schema dump.
+and recreate the database, and `bun run db dump` to update the committed schema dump. Dumps run `pg_dump` inside the
+running database container, using its PostgreSQL version. The check command uses its disposable database container;
+the development dump command uses the local development container. Callers that do not set `KERNEL_DATABASE_CONTAINER`
+retain the `docker run` fallback.
 
 ## Run the kernel
 

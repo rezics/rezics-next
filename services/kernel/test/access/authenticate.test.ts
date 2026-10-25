@@ -8,6 +8,7 @@ import { accessCheck, actorOf, AuthenticationError, type ActionCatalogue } from 
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
+const timeout = 60_000;
 const pool = new Pool({ connectionString: url, max: 1 });
 const authDatabase = `access_auth_${process.pid}`;
 const authUrl = new URL(url);
@@ -171,7 +172,7 @@ beforeAll(async () => {
     (route,resource_id,subject_id,action,valid,transaction_id) VALUES ($1,$2,$3,$4,'(,)',$3)`,
     [resource.route, resource.id, person, action],
   );
-}, 30000);
+}, timeout);
 
 afterAll(async () => {
   await authPool?.end();

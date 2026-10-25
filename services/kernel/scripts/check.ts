@@ -77,6 +77,8 @@ async function main(): Promise<void> {
   const match = portOutput.match(/127\.0\.0\.1:(\d+)/);
   if (!match?.[1]) fail(`Could not determine the test database port: ${portOutput}`);
   const url = `postgres://rezics:rezics@127.0.0.1:${match[1]}/rezics?sslmode=disable`;
+  process.env.KERNEL_DATABASE_CONTAINER = container;
+  const env = { ...process.env, DATABASE_URL: url, KERNEL_DATABASE_CONTAINER: container };
 
   migrate(url);
   for (const [path, dump] of Object.entries(schemaDumps(url))) {
@@ -86,7 +88,6 @@ async function main(): Promise<void> {
     }
   }
 
-  const env = { ...process.env, DATABASE_URL: url };
   run(resolve(directory, '../../node_modules/.bin/tsc'), ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json'], env);
   run(resolve(directory, '../../node_modules/.bin/oxlint'), ['--config', '../../.oxlintrc.json', '.'], env);
   run(resolve(directory, '../../node_modules/.bin/oxfmt'), ['--check', '.'], env);

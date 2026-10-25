@@ -112,25 +112,18 @@ export function migrate(url: string, root = directory): void {
 }
 
 function schemaDumpWith(url: string, options: string[] = [], root = directory): string {
-  const dump = command(
-    'docker',
-    [
-      'run',
-      '--rm',
-      '--network',
-      'host',
-      '-e',
-      'PGPASSWORD=rezics',
-      POSTGRES_IMAGE,
-      'pg_dump',
-      '--schema-only',
-      '--no-owner',
-      '--no-privileges',
-      ...options,
-      url,
-    ],
-    { cwd: root },
-  );
+  const container = process.env.KERNEL_DATABASE_CONTAINER;
+  const dumpArgs = ['pg_dump', '--schema-only', '--no-owner', '--no-privileges', ...options];
+  const database = new URL(url);
+  database.hostname = '127.0.0.1';
+  database.port = '5432';
+  const dump = container
+    ? command('docker', ['exec', '-e', 'PGPASSWORD=rezics', container, ...dumpArgs, database.href], { cwd: root })
+    : command(
+        'docker',
+        ['run', '--rm', '--network', 'host', '-e', 'PGPASSWORD=rezics', POSTGRES_IMAGE, ...dumpArgs, url],
+        { cwd: root },
+      );
   return dump
     .split('\n')
     .filter((line) => !/^\\(?:un)?restrict\b/.test(line) && !/^-- Dumped (?:from|by)\b/.test(line))
@@ -212,6 +205,7 @@ async function main(): Promise<void> {
     await up();
   } else if (action === 'dump') {
     const url = databaseUrl(port);
+    process.env.KERNEL_DATABASE_CONTAINER = container;
     for (const [path, dump] of Object.entries(schemaDumps(url))) {
       await Bun.write(resolve(directory, path), dump);
     }
