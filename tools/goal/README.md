@@ -201,6 +201,7 @@ bun tools/goal/src/cli.ts report [--json]
 bun tools/goal/src/cli.ts land <task>
 bun tools/goal/src/cli.ts train
 bun tools/goal/src/cli.ts manager start <goal> --engine codex --budget 20000
+bun tools/goal/src/cli.ts manager renew <manager>
 bun tools/goal/src/cli.ts manager stop <manager>
 bun tools/goal/src/cli.ts manager complete <manager>
 bun tools/goal/src/cli.ts inbox wait <manager>

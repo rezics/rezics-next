@@ -1,0 +1,206 @@
+import { expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { StdioAppServer, type Notification } from './app-server.ts';
+import { openDb } from './db.ts';
+import { SqliteManagerInbox } from './inbox.ts';
+import { ManagerSessions, type ManagerSpec } from './managers.ts';
+import { temporaryDirectory } from './test-support.ts';
+
+async function setup() {
+  const temporary = temporaryDirectory();
+  const db = openDb(join(temporary.path, 'state.sqlite'));
+  const log = join(temporary.path, 'rpc.jsonl');
+  const client = new StdioAppServer([process.execPath, join(import.meta.dir, 'fixtures/fake-app-server.ts')], {
+    ...process.env,
+    FAKE_RPC_LOG: log,
+  });
+  await client.initialize();
+  const inbox = new SqliteManagerInbox(db, temporary.path);
+  const windows: { manager: string; argv: string[] }[] = [];
+  const removed: string[] = [];
+  let now = Date.now();
+  const services = {
+    connect: async () => client,
+    windows: {
+      register(manager: string, argv: string[]) {
+        windows.push({ manager, argv });
+        return `@${windows.length}`;
+      },
+      unregister(manager: string) {
+        removed.push(manager);
+      },
+    },
+    checkCompletion: async () => ({
+      passed: false,
+      evidencePath: join(temporary.path, 'completion.log'),
+      summary: 'Some tasks remain',
+    }),
+    command: ['goal'],
+    now: () => now,
+    onError: (error: unknown) => {
+      throw error;
+    },
+  };
+  const managers = new ManagerSessions(db, inbox, services);
+  const spec: ManagerSpec = {
+    id: 'manager',
+    goal: 'refactor',
+    objective: 'Finish the refactor',
+    brief: 'Manage this scope',
+    cwd: temporary.path,
+    engine: 'codex',
+    pool: { id: 'sol', codexHome: join(temporary.path, 'codex-home') },
+    budget: 40000,
+    effort: 'high',
+    supermanager: 'supervisor',
+    limits: { turns: 20, turnsWithoutDecision: 10, wallMs: 3_600_000 },
+  };
+  const requests = () =>
+    readFileSync(log, 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+  const notify = async (notification: Notification) => {
+    await client.request('test/notify', notification);
+    await managers.flush();
+  };
+  return {
+    ...temporary,
+    db,
+    client,
+    inbox,
+    managers,
+    windows,
+    removed,
+    services,
+    spec,
+    requests,
+    notify,
+    advance(ms: number) {
+      now += ms;
+    },
+    async close() {
+      await managers.close();
+      db.close();
+      temporary.close();
+    },
+  };
+}
+
+test('renewing a paused Codex manager starts a fresh thread under the same id and keeps its inbox', async () => {
+  const s = await setup();
+  try {
+    const first = await s.managers.start(s.spec);
+    await s.managers.noteCommand(first.id);
+    await s.notify({
+      method: 'turn/completed',
+      params: { threadId: first.threadId, turn: { id: first.activeTurnId, status: 'completed' } },
+    });
+    s.inbox.deliver({ managerId: first.id, kind: 'instruction', summary: 'An unread decision' });
+    await s.managers.wake(first.id);
+    await s.client.request('thread/goal/set', {
+      threadId: first.threadId,
+      status: 'active',
+      tokensUsed: 1234,
+      timeUsedSeconds: 90,
+      tokenBudget: s.spec.budget,
+    });
+    await s.managers.flush();
+    await s.notify({
+      method: 'thread/tokenUsage/updated',
+      params: { threadId: first.threadId, tokenUsage: { total: { totalTokens: 2345, cachedInputTokens: 1900 } } },
+    });
+    const paused = s.managers.get(first.id);
+    paused.status = 'paused';
+    s.db.query('UPDATE manager_sessions SET state = ? WHERE id = ?').run(JSON.stringify(paused), first.id);
+    s.inbox.deliver({ managerId: first.id, kind: 'instruction', summary: 'Keep this decision for the new session' });
+
+    const limits = { turns: 8, turnsWithoutDecision: 3, wallMs: 600_000 };
+    const renewed = await s.managers.renew(first.id, { ...s.spec, budget: 25000, limits });
+    await s.managers.flush();
+
+    expect(renewed).toMatchObject({
+      id: first.id,
+      status: 'running',
+      threadId: 'thread-2',
+      budget: 25000,
+      limits,
+      turns: 1,
+      turnsWithoutDecision: 0,
+      goalState: { status: 'active', tokensUsed: 0, tokenBudget: 25000 },
+      usage: null,
+    });
+    expect(renewed.history).toHaveLength(1);
+    expect(renewed.history?.[0]).toMatchObject({
+      threadId: first.threadId,
+      status: 'paused',
+      turns: 2,
+      goalState: { tokensUsed: 1234 },
+      usage: { total: { totalTokens: 2345, cachedInputTokens: 1900 } },
+    });
+    expect(s.removed).toContain(first.id);
+    expect(
+      s.requests().some((request) => request.method === 'turn/interrupt' && request.params.threadId === first.threadId),
+    ).toBe(true);
+    expect(s.requests().filter((request) => request.method === 'thread/start')).toHaveLength(2);
+    expect(
+      s
+        .requests()
+        .some(
+          (request) =>
+            request.method === 'turn/steer' &&
+            request.params.threadId === renewed.threadId &&
+            request.params.input[0]?.text === 'Keep this decision for the new session',
+        ),
+    ).toBe(true);
+    expect(s.inbox.pending(first.id).map((entry) => entry.event.summary)).toContain(
+      'Keep this decision for the new session',
+    );
+  } finally {
+    await s.close();
+  }
+});
+
+test('renewing a paused Claude manager opens a new session under the same id', async () => {
+  const s = await setup();
+  try {
+    const first = await s.managers.start({ ...s.spec, engine: 'claude' });
+    await s.managers.stop(first.id);
+    const renewed = await s.managers.renew(first.id, {
+      ...s.spec,
+      engine: 'claude',
+      limits: { turns: 12, turnsWithoutDecision: 4, wallMs: 900_000 },
+    });
+
+    expect(renewed).toMatchObject({
+      id: first.id,
+      engine: 'claude',
+      status: 'running',
+      threadId: null,
+      turns: 0,
+      turnsWithoutDecision: 0,
+    });
+    expect(renewed.history).toHaveLength(1);
+    expect(renewed.history?.[0]).toMatchObject({ engine: 'claude', status: 'paused' });
+    expect(s.windows).toHaveLength(2);
+    expect(s.windows.every((window) => window.manager === first.id)).toBe(true);
+    expect(s.removed).toContain(first.id);
+  } finally {
+    await s.close();
+  }
+});
+
+test('renewing a running manager is refused without stopping its session', async () => {
+  const s = await setup();
+  try {
+    const running = await s.managers.start(s.spec);
+    await expect(s.managers.renew(running.id, s.spec)).rejects.toThrow('paused');
+    expect(s.managers.get(running.id)).toMatchObject({ status: 'running', threadId: running.threadId });
+    expect(s.requests().filter((request) => request.method === 'thread/start')).toHaveLength(1);
+    expect(s.removed).toHaveLength(0);
+    await s.managers.stop(running.id);
+  } finally {
+    await s.close();
+  }
+});

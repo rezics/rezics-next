@@ -21,11 +21,12 @@ export type ManagerSpec = {
 };
 export type GoalState = { status: 'active' | 'paused' | 'complete' | 'blocked' | 'usageLimited' | 'budgetLimited';
   tokensUsed: number; timeUsedSeconds: number; tokenBudget: number | null };
-export type ManagerState = ManagerSpec & {
+export type ManagerSessionSnapshot = ManagerSpec & {
   threadId: string | null; activeTurnId: string | null; status: 'starting' | 'running' | 'paused' | 'complete';
   startedAt: number; turns: number; turnsWithoutDecision: number; decision: boolean;
   countedTurn: string | null; goalState: GoalState | null; usage: unknown;
 };
+export type ManagerState = ManagerSessionSnapshot & { history?: ManagerSessionSnapshot[] };
 export type CompletionEvidence = { passed: boolean; evidencePath: string; summary: string };
 export type ManagerServices = {
   connect?: (pool: CodexPool, onStart?: (identity: ProcessIdentity) => void) => Promise<AppServer>;
@@ -113,6 +114,8 @@ export class ManagerSessions {
   }
   private async handleNotification(id: string, { method, params }: Notification): Promise<void> {
     const state = this.get(id);
+    // Notifications from a retired Codex thread can already be queued when renewal swaps sessions.
+    if (state.threadId && params?.threadId && state.threadId !== params.threadId) return;
     if (method === 'turn/started') {
       this.turnStarted(state, params.turn.id);
       if (state.status !== 'running') await this.pauseRemote(state);
@@ -145,52 +148,73 @@ export class ManagerSessions {
     this.services.windows.register(state.id, ['env', `CODEX_HOME=${state.pool.codexHome}`, `GOAL_MANAGER=${state.id}`,
       ...viewer], state.cwd);
   }
+  private validateSpec(spec: ManagerSpec): void {
+    if (!Number.isSafeInteger(spec.budget) || spec.budget <= 0 || Object.values(spec.limits).some(n => !Number.isFinite(n) || n <= 0))
+      throw new Error('Manager budget and limits must be positive');
+  }
+  private async startSession(spec: ManagerSpec, history?: ManagerSessionSnapshot[]): Promise<ManagerState> {
+    const state: ManagerState = { ...spec, threadId: null, activeTurnId: null, status: 'starting', startedAt: this.now(),
+      turns: 0, turnsWithoutDecision: 0, decision: false, countedTurn: null, goalState: null, usage: null,
+      ...(history?.length ? { history } : {}) };
+    this.save(state);
+    try {
+      if (spec.engine === 'codex') {
+        const client = await this.client(spec.pool);
+        const started = await client.request('thread/start', { ...FULL_ACCESS, cwd: spec.cwd, model: 'gpt-6.1-sol',
+          config: { model_reasoning_effort: spec.effort, model_auto_compact_token_limit: spec.compactTokens ?? 300000 } });
+        state.threadId = started.thread.id;
+        this.save(state);
+        const goal = await client.request('thread/goal/set', { threadId: state.threadId, objective: spec.objective,
+          status: 'active', tokenBudget: spec.budget, origin: 'user' });
+        state.goalState = goal.goal; state.status = 'running'; this.save(state);
+        this.registerCodexViewer(state, client);
+        const turn = await client.request('turn/start', { threadId: state.threadId, effort: spec.effort, input: textInput(this.opening(spec)) });
+        this.turnStarted(state, turn.turn.id);
+      } else {
+        const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+        const hook = (command: string) => [...this.services.command, 'manager', command, spec.id].map(quote).join(' ');
+        const settings = { skipDangerousModePermissionPrompt: true, hooks: {
+          UserPromptSubmit: [{ hooks: [{ type: 'command', command: hook('turn-start') }] }],
+          Stop: [{ hooks: [{ type: 'command', command: hook('turn-end') }] }],
+        } };
+        // Claude keeps its account state in ~/.claude.json, not in its default configuration directory; pointing
+        // CLAUDE_CONFIG_DIR at that directory would start an unauthenticated, untrusted session.
+        const configDirectory = resolve(spec.pool.codexHome) === join(homedir(), '.claude') ? [] : [`CLAUDE_CONFIG_DIR=${spec.pool.codexHome}`];
+        this.services.windows.register(spec.id, ['env', `GOAL_MANAGER=${spec.id}`, ...configDirectory, spec.pool.executable ?? 'claude', '--model', 'claude-opus-5-5',
+          '--permission-mode', 'bypassPermissions', '--name', `${spec.goal} manager`,
+          '--autocompact', String(spec.compactTokens ?? 300000), '--settings', JSON.stringify(settings), this.opening(spec)], spec.cwd);
+        state.status = 'running';
+      }
+      this.save(state); this.armDeadline(state);
+      await this.dispatch(spec.id);
+      return this.get(spec.id);
+    } catch (error) {
+      state.status = 'paused'; this.save(state);
+      try { await this.pauseRemote(state); } catch (stopError) { this.error(stopError); }
+      throw error;
+    }
+  }
   async start(spec: ManagerSpec): Promise<ManagerState> {
     return this.serial(spec.id, async () => {
-      if (!Number.isSafeInteger(spec.budget) || spec.budget <= 0 || Object.values(spec.limits).some(n => !Number.isFinite(n) || n <= 0))
-        throw new Error('Manager budget and limits must be positive');
+      this.validateSpec(spec);
       // A start that failed before its session existed leaves a paused record without a thread; it may start again.
       const existing = this.list().find(state => state.id === spec.id);
       if (existing && !(existing.status === 'paused' && !existing.threadId)) throw new Error(`Manager already exists: ${spec.id}`);
-      const state: ManagerState = { ...spec, threadId: null, activeTurnId: null, status: 'starting', startedAt: this.now(),
-        turns: 0, turnsWithoutDecision: 0, decision: false, countedTurn: null, goalState: null, usage: null };
-      this.save(state);
-      try {
-        if (spec.engine === 'codex') {
-          const client = await this.client(spec.pool);
-          const started = await client.request('thread/start', { ...FULL_ACCESS, cwd: spec.cwd, model: 'gpt-6.1-sol',
-            config: { model_reasoning_effort: spec.effort, model_auto_compact_token_limit: spec.compactTokens ?? 300000 } });
-          state.threadId = started.thread.id;
-          this.save(state);
-          const goal = await client.request('thread/goal/set', { threadId: state.threadId, objective: spec.objective,
-            status: 'active', tokenBudget: spec.budget, origin: 'user' });
-          state.goalState = goal.goal; state.status = 'running'; this.save(state);
-          this.registerCodexViewer(state, client);
-          const turn = await client.request('turn/start', { threadId: state.threadId, effort: spec.effort, input: textInput(this.opening(spec)) });
-          this.turnStarted(state, turn.turn.id);
-        } else {
-          const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
-          const hook = (command: string) => [...this.services.command, 'manager', command, spec.id].map(quote).join(' ');
-          const settings = { skipDangerousModePermissionPrompt: true, hooks: {
-            UserPromptSubmit: [{ hooks: [{ type: 'command', command: hook('turn-start') }] }],
-            Stop: [{ hooks: [{ type: 'command', command: hook('turn-end') }] }],
-          } };
-          // Claude keeps its account state in ~/.claude.json, not in its default configuration directory; pointing
-          // CLAUDE_CONFIG_DIR at that directory would start an unauthenticated, untrusted session.
-          const configDirectory = resolve(spec.pool.codexHome) === join(homedir(), '.claude') ? [] : [`CLAUDE_CONFIG_DIR=${spec.pool.codexHome}`];
-          this.services.windows.register(spec.id, ['env', `GOAL_MANAGER=${spec.id}`, ...configDirectory, spec.pool.executable ?? 'claude', '--model', 'claude-opus-5-5',
-            '--permission-mode', 'bypassPermissions', '--name', `${spec.goal} manager`,
-            '--autocompact', String(spec.compactTokens ?? 300000), '--settings', JSON.stringify(settings), this.opening(spec)], spec.cwd);
-          state.status = 'running';
-        }
-        this.save(state); this.armDeadline(state);
-        await this.dispatch(spec.id);
-        return this.get(spec.id);
-      } catch (error) {
-        state.status = 'paused'; this.save(state);
-        try { await this.pauseRemote(state); } catch (stopError) { this.error(stopError); }
-        throw error;
-      }
+      return this.startSession(spec, existing?.history);
+    });
+  }
+  async renew(id: string, spec: ManagerSpec): Promise<ManagerState> {
+    return this.serial(id, async () => {
+      if (spec.id !== id) throw new Error(`Manager renewal id does not match: ${id}`);
+      this.validateSpec(spec);
+      const current = this.get(id);
+      if (current.status !== 'paused') throw new Error(`Manager must be paused to renew: ${id}`);
+      // Reapply the stop operation because a paused record can still have a live turn or viewer left behind.
+      await this.stopInternal(id);
+      const stopped = this.get(id);
+      const { history: _history, ...snapshot } = stopped;
+      const history = [...(stopped.history ?? []), snapshot];
+      return this.startSession(spec, history);
     });
   }
   private turnStarted(state: ManagerState, turn: string): void {
@@ -240,7 +264,8 @@ export class ManagerSessions {
   private async pauseRemote(state: ManagerState): Promise<void> {
     if (state.engine === 'codex' && state.threadId) {
       const client = await this.client(state.pool);
-      await client.request('thread/goal/set', { threadId: state.threadId, status: 'paused', origin: 'user' });
+      const goal = await client.request('thread/goal/set', { threadId: state.threadId, status: 'paused', origin: 'user' });
+      state.goalState = goal.goal; this.save(state);
       if (state.activeTurnId) {
         try { await client.request('turn/interrupt', { threadId: state.threadId, turnId: state.activeTurnId }); }
         catch {
