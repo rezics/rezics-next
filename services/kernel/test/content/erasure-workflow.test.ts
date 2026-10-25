@@ -5,6 +5,7 @@ import { runCommand } from '../../src/command/command.ts';
 import { erasePostLogical } from '../../src/content/erase-post.ts';
 import { runAuthorErasure } from '../../src/content/erasure-workflow.ts';
 import { bindAuthorErasureWorkflow } from '../../src/content/erasure-workflow-identity.ts';
+import { beginAuthorErasure } from '../../src/content/operations.ts';
 import type { OperationProgress } from '../../src/content/operation-contract.ts';
 import { contentWorkWorkflowId } from '../../src/content/work-contract.ts';
 import { readBatch, type Envelope } from '../../src/events/log.ts';
@@ -132,6 +133,40 @@ test('production Access requires native identity evidence even when a persisted 
       ])
     ).rows,
   ).toEqual([{ availability: 'available' }]);
+});
+
+test('native initiation commits the provenance receipt required by durable initiator restoration', async () => {
+  const selected = await scope(1);
+  const request = context();
+  const result = await beginAuthorErasure(
+    {
+      pool: fixture.pool,
+      access: fixture.access,
+      clock: () => new Date(),
+      workflows: {
+        async enqueue() {
+          throw new Error('Initiation must publish its native source before enqueue');
+        },
+        async status() {
+          throw new Error('Initiation must not read workflow status');
+        },
+      },
+    },
+    selected.actor,
+    { threadId: selected.threadId, authorId: selected.actor.accountId },
+    request,
+  );
+  const receipt = await fixture.reader.query<{ response: { operationId: string; durableInitiator?: string } }>(
+    `SELECT response FROM core.receipt
+     WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2
+       AND command_kind='content.author-erasure' AND idempotency_key=$3`,
+    [partition, selected.actor.accountId, request.idempotencyKey],
+  );
+  expect(receipt.rows).toHaveLength(1);
+  expect(receipt.rows[0]!.response.operationId).toBe(result.value.operationId);
+  // The Accounts helper independently checks this creation-time commitment.
+  // A workflow reader cannot add it later or reconstruct original snapshots.
+  expect(receipt.rows[0]!.response.durableInitiator).toMatch(/^[0-9a-f]{64}$/);
 });
 
 test('native workflow resolves persisted initiating identity and physically completes more than two post pages', async () => {
