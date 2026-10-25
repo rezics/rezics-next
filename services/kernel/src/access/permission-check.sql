@@ -6,7 +6,7 @@ WITH input AS NOT MATERIALIZED (
 ), authority AS (
   -- Commands bind their opaque attempt time. Unbound read checks retain their
   -- native transaction-time semantics.
-  SELECT COALESCE(NULLIF(:at::text, '')::timestamptz, transaction_timestamp()) AS at,
+  SELECT COALESCE(NULLIF(:at::nullable(text), '')::timestamptz, transaction_timestamp()) AS at,
          clock_timestamp() AS observed_at
 ), roles AS (
   SELECT r.account_id, r.organization_id, r.role, r.valid

@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { authoritativeTimeValue, currentCommand } from '../command/command.ts';
 import type { Access, AccessClient } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { grantCommand, type GrantCommandContext } from './grant-command.ts';
@@ -95,7 +96,7 @@ export function createDelegationCommands(config: { pool: Pool; access: Access; a
         const row =
           operation === 'create' && 'assignedActorId' in input
             ? await createStatement.run(tx, { ...parameters, actor_id: input.assignedActorId, valid: input.valid })
-            : await revokeStatement.run(tx, parameters);
+            : await revokeStatement.run(tx, { ...parameters, at: authoritativeTimeValue(currentCommand(tx).time) });
         if (row.length !== 1) throw new DelegationDeniedError();
         return { requestedBy: `urn:rezics:request:${input.principalId}:${input.requestId}` };
       },

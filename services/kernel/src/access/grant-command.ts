@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
-import { runCommand, type CommandTransaction } from '../command/command.ts';
+import { runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
 import {
   accessCheck,
   type Access,
   type AccessContext,
-  type AccessClient,
+  type AccessCheck,
   type Actor,
   type Resource,
 } from '../request/access.ts';
@@ -26,7 +26,9 @@ export function validActions(actions: readonly string[]): boolean {
 /** Prepare separate anchors before resource checkout, then reuse the original
  * Access evaluator on the same SERIALIZABLE client on every command attempt.
  * Access enforces real evidence budgets at authorization; the command deadline
- * also bounds mutation completion. A mutation may remove its own grantor rights.
+ * also bounds mutation completion. Authorization runs before receipt lookup at
+ * the executor's trusted T, including on replay. A mutation may remove its own
+ * grantor rights.
  */
 export async function grantCommand<T>(
   config: { pool: Pool; access: Access },
@@ -51,10 +53,30 @@ export async function grantCommand<T>(
     options.key.length > 256
   )
     throw options.denied();
-  const checks: ((client: AccessClient) => Promise<boolean>)[] = [];
-  for (const action of new Set(options.actions))
-    checks.push(await accessCheck(config.access, actor, action, options.resource, context));
+  const checks: AccessCheck[] = [];
+  try {
+    for (const action of new Set(options.actions))
+      checks.push(await accessCheck(config.access, actor, action, options.resource, context));
+  } catch {
+    throw options.denied();
+  }
   const basis = { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy };
+  const authorization: CommandAuthorization = {
+    action: options.actions[0]!,
+    resource: Object.freeze({ ...options.resource }),
+    denied: options.denied,
+    async authorize(tx, attempt) {
+      if (
+        attempt.basis?.actorAccountId !== basis.actorAccountId ||
+        attempt.basis.clientId !== basis.clientId ||
+        attempt.basis.requestedBy !== basis.requestedBy
+      )
+        throw options.denied();
+      for (const check of checks) if (!(await check(tx, attempt.time))) throw options.denied();
+      if (Date.now() >= context.deadline) throw options.denied();
+      return 'execute';
+    },
+  };
   const digest = createHash('sha256')
     .update(canonicalize([options.resource, options.kind, basis, options.input])!)
     .digest();
@@ -65,6 +87,7 @@ export async function grantCommand<T>(
         partition: partitionOf(options.resource.route),
         deadline: context.deadline,
         basis,
+        authorization,
         receipt: {
           actorAccountId: actor.accountId,
           kind: options.kind,
@@ -74,7 +97,6 @@ export async function grantCommand<T>(
       },
       async (tx, { transactionId }) => {
         if (conflict !== undefined) throw conflict;
-        for (const check of checks) if (!(await check(tx))) throw options.denied();
         if (Date.now() >= context.deadline) throw options.denied();
         const value = await mutate(tx, transactionId);
         if (Date.now() >= context.deadline) throw options.denied();
