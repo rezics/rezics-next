@@ -1,7 +1,7 @@
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import type { definitionRoutes } from './definitions.ts';
-import { AuthenticationError, type Access, type AccountActor, type Resource } from '../../request/access.ts';
+import { AuthenticationError, type AccountActor, type Resource } from '../../request/access.ts';
 import { routeOf } from '../../route/route.ts';
 import { SubjectInputError } from '../item.ts';
 import {
@@ -14,7 +14,9 @@ import {
 } from '../context.ts';
 import { ProblemError, problemSchema } from '../../http/problem.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, requestDigest, SESSION_HEADER } from '../../http/request.ts';
-import type { KernelDependencies } from '../../http/kernel.ts';
+import { GLOBAL_CONTEXT } from '../definitions.ts';
+
+const globalContext = Object.freeze({ route: 0, id: GLOBAL_CONTEXT });
 
 const LabelsInput = t.Object({ labels: t.Optional(t.Record(t.String(), t.Any())) }, { additionalProperties: false });
 const ContextSchema = t.Object(
@@ -34,7 +36,10 @@ const unavailable = problemSchema(
   'deadline_exceeded',
 );
 
-function contextRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: KernelDependencies) {
+function contextRoutes(
+  app: ReturnType<typeof definitionRoutes>,
+  dependencies: { pool: import('pg').Pool; routeKey: Uint8Array },
+) {
   return app
     .post(
       '/v1/contexts',
@@ -55,11 +60,12 @@ function contextRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: K
           security: [{ bearerAuth: [] }],
         },
       },
-      async ({ body, headers, actor, access, admission, job, session, set }) => {
+      async ({ body, headers, actor, authorizeCommand, admission, job, session, set }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         const account: AccountActor = actor;
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const target = contextTarget(dependencies.routeKey, account.accountId, key);
+        const authorization = await authorizeCommand(globalContext, () => new ContextAccessDeniedError());
         try {
           // Validate before entering the command; validation is shared with subject labels.
           contextLabels(target.id, body);
@@ -70,7 +76,8 @@ function contextRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: K
               idempotencyKey: key,
               digest: requestDigest('context.create', account, body),
               input: body,
-              access: (access as () => Access)(),
+              authorize: authorization.check,
+              authorization,
               deadline: job.deadline,
             }),
           );

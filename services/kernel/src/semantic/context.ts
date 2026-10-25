@@ -1,27 +1,16 @@
 import type { Pool } from 'pg';
-import {
-  createResourcePublicEligibility,
-  initializeResourceGrants,
-  parentCreationAuthorization,
-} from '../access/index.ts';
-import { resourceRoleCatalogue } from '../access/resource-roles.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
-import { runCommand, type CommandOutcome } from '../command/command.ts';
+import { createResourcePublicEligibility } from '../access/index.ts';
+import { runCommand, type CommandAuthorization } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
-import type { Access, AccessCheck, AccountActor, Resource } from '../request/access.ts';
+import type { AccessCheck, AccountActor, Resource } from '../request/access.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../route/route.ts';
 import { itemFacts, resolveItem } from './item.ts';
 import insertContext from './create-context.sql';
-import contextCreationExists from './context-creation-exists.sql';
-import contextParentExists from './context-parent-exists.sql';
 import contextPublicExists from './context-public-exists.sql';
 import readContextStatement from './read-context.sql';
-import { GLOBAL_CONTEXT } from './definitions.ts';
 
 export const CREATE_CONTEXT = 'context.create';
-export const COMMUNITY_CONTEXT_TYPE = 'semantic.community';
-const globalResource = Object.freeze({ route: 0, id: GLOBAL_CONTEXT });
 
 export function contextTarget(routeKey: Uint8Array, accountId: string, idempotencyKey: string): Resource {
   const route = anchorRoute(routeKey, `${accountId}\n${CREATE_CONTEXT}\n${idempotencyKey}`);
@@ -52,7 +41,8 @@ export async function createContext(
     idempotencyKey: string;
     digest: Uint8Array;
     input: unknown;
-    access: Access;
+    authorize: AccessCheck;
+    authorization?: CommandAuthorization;
     deadline?: number;
   },
 ) {
@@ -60,75 +50,40 @@ export async function createContext(
   if (routeOf(id) !== route) throw new RangeError('Context target id must carry its route');
   // itemFacts is the shared validator for subject labels, including language and length limits.
   const labels = contextLabels(id, options.input);
-  const resource = Object.freeze({ route, id });
-  let creationTransactionId: string | null = null;
-  const authorization = parentCreationAuthorization({
-    access: options.access,
-    actor: options.actor,
-    action: 'context:create',
-    parent: {
-      resource: globalResource,
-      async validate(client) {
-        const row = await contextParentExists.run(client, { route: 0, context_id: GLOBAL_CONTEXT });
-        return row !== null;
+  const command = await runCommand(
+    pool,
+    {
+      partition: partitionOf(route),
+      ...(options.deadline === undefined ? {} : { deadline: options.deadline }),
+      receipt: {
+        actorAccountId: options.actor.accountId,
+        kind: CREATE_CONTEXT,
+        key: options.idempotencyKey,
+        digest: options.digest,
       },
-    },
-    context: {
-      pool,
-      deadline: options.deadline ?? Number.MAX_SAFE_INTEGER,
-      resource,
-      creation: {
-        async validate(tx, child) {
-          const row = await contextCreationExists.run(tx, {
-            route: child.route,
-            context_id: child.id,
-            transaction_id: creationTransactionId!,
-          });
-          return row !== null;
+      basis: {
+        actorAccountId: options.actor.accountId,
+        clientId: options.actor.clientId,
+        requestedBy: options.actor.requestedBy,
+      },
+      authorization: options.authorization ?? {
+        action: 'context:create',
+        resource: options.target,
+        denied: () => new ContextAccessDeniedError(),
+        async authorize(tx, attempt) {
+          if (!(await options.authorize(tx, attempt.time))) throw new ContextAccessDeniedError();
+          return 'execute';
         },
       },
     },
-  });
-  let command: CommandOutcome<{ id: string; kind: 'community'; labels: Record<string, string> }>;
-  try {
-    command = await runCommand(
-      pool,
-      {
-        partition: partitionOf(route),
-        ...(options.deadline === undefined ? {} : { deadline: options.deadline }),
-        receipt: {
-          actorAccountId: options.actor.accountId,
-          kind: CREATE_CONTEXT,
-          key: options.idempotencyKey,
-          digest: options.digest,
-        },
-        basis: {
-          actorAccountId: options.actor.accountId,
-          clientId: options.actor.clientId,
-          requestedBy: options.actor.requestedBy,
-        },
-        authorization,
-      },
-      async (tx, { transactionId }) => {
-        creationTransactionId = transactionId;
-        await insertContext.run(tx, { route, context_id: id, labels, transaction_id: transactionId });
-        // Test and embedding Access implementations may not install the production role catalogue.
-        if (resourceRoleCatalogue(options.access))
-          await initializeResourceGrants(tx, {
-            resource,
-            type: COMMUNITY_CONTEXT_TYPE,
-            creator: options.actor.accountId,
-          });
-        return {
-          value: { id, kind: 'community' as const, labels },
-          events: [{ type: 'com.rezics.semantic.context.created.v1', data: { id } }],
-        };
-      },
-    );
-  } catch (error) {
-    if (error instanceof GrantDeniedError) throw new ContextAccessDeniedError();
-    throw error;
-  }
+    async (tx, { transactionId }) => {
+      await insertContext.run(tx, { route, context_id: id, labels, transaction_id: transactionId });
+      return {
+        value: { id, kind: 'community' as const, labels },
+        events: [{ type: 'com.rezics.semantic.context.created.v1', data: { id } }],
+      };
+    },
+  );
   return {
     context: command.value,
     component: { partition: command.partition, epoch: command.epoch, position: command.position },

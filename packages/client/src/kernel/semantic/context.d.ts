@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
-import type { Access, AccessCheck, AccountActor, Resource } from '../request/access.ts';
+import type { CommandAuthorization } from '../command/command.ts';
+import type { AccessCheck, AccountActor, Resource } from '../request/access.ts';
 export declare const CREATE_CONTEXT = "context.create";
-export declare const COMMUNITY_CONTEXT_TYPE = "semantic.community";
 export declare function contextTarget(routeKey: Uint8Array, accountId: string, idempotencyKey: string): Resource;
 export declare class ContextAccessDeniedError extends Error {
     constructor();
@@ -20,7 +20,8 @@ export declare function createContext(pool: Pool, options: {
     idempotencyKey: string;
     digest: Uint8Array;
     input: unknown;
-    access: Access;
+    authorize: AccessCheck;
+    authorization?: CommandAuthorization;
     deadline?: number;
 }): Promise<{
     context: {
