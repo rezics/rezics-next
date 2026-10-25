@@ -125,7 +125,7 @@ export class ManagerSessions {
         throw new Error('Manager budget and limits must be positive');
       // A start that failed before its session existed leaves a paused record without a thread; it may start again.
       const existing = this.list().find(state => state.id === spec.id);
-      if (existing && !(existing.status === 'paused' && existing.threadId === null)) throw new Error(`Manager already exists: ${spec.id}`);
+      if (existing && !(existing.status === 'paused' && !existing.threadId)) throw new Error(`Manager already exists: ${spec.id}`);
       const state: ManagerState = { ...spec, threadId: null, activeTurnId: null, status: 'starting', startedAt: this.now(),
         turns: 0, turnsWithoutDecision: 0, decision: false, countedTurn: null, goalState: null, usage: null };
       this.save(state);
