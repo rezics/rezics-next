@@ -4,6 +4,7 @@ import { claimCoverMedia, checkMediaObject } from '../../src/content/cover-refer
 import { runCommand } from '../../src/command/command.ts';
 import type { ClaimMediaInput } from '../../src/content/media.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
+import type { AccountActor } from '../../src/request/access.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -218,7 +219,7 @@ test('exact cover lookup has bounded actual rows, statements and buffers among s
 
 // These hook tests trust the referencing command's prior authorization. Shared Access,
 // semantic proposal persistence and final disclosure remain integration requirements.
-function claimInput(id: string): Extract<ClaimMediaInput, { reference: unknown }> {
+function claimInput(id: string): Extract<ClaimMediaInput, { reference: unknown }> & { author: AccountActor } {
   return {
     mediaIds: [id],
     containerId,
@@ -347,3 +348,31 @@ test('cover claim rejects every unavailable state and wrong purpose inside a nat
     expect(await claimedAt(id)).toBeNull();
   }
 });
+
+test('intentional cover claim batch growth is linear in changed rows and input bytes', async () => {
+  const ids = await Promise.all(Array.from({ length: 16 }, () => available()));
+  const input = claimInput(ids[0]!);
+  const inputBytes: number[] = [];
+  const report = await checkGrowth(db, {
+    name: 'explicit cover claim batch',
+    scales: [1, 4, 16],
+    bounds: { rows: 'linear', statements: 'constant', blocks: 'linear' },
+    async grow(database, scale) {
+      inputBytes.push(Buffer.byteLength(JSON.stringify({ ...input, mediaIds: ids.slice(0, scale) })));
+      await database.admin.query('ANALYZE content.media');
+    },
+    async operation(database, scale) {
+      await runCommand(database.pool, commandOptions, async (tx) => {
+        await claimCoverMedia(tx, { ...input, mediaIds: ids.slice(0, scale) });
+        return { value: null, events: [claimEvent] };
+      });
+    },
+  });
+  expect(inputBytes[2]! - inputBytes[1]!).toBe(4 * (inputBytes[1]! - inputBytes[0]!));
+  for (const sample of report.samples) {
+    const mediaRows = sample.cost.relations?.['content.media']?.rows;
+    expect(mediaRows).toBeGreaterThanOrEqual(sample.scale);
+    expect(mediaRows).toBeLessThanOrEqual(2 * sample.scale);
+    expect(sample.cost.blocks).toBeGreaterThan(0);
+  }
+}, 60000);
