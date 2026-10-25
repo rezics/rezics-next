@@ -2,12 +2,23 @@
 
 `platformProfile` is the shipped presentation profile, loaded from
 `@rezics/composition/profiles/platform.json`. Its generic template is a header slot holding
-`SubjectHeader`, then `MoreStatements`. Its only base template is `schema:CreativeWork`: that
-same header, then `Statements` for `schema:author`, `schema:illustrator`, `schema:translator`,
-`schema:publisher`, `schema:datePublished`, `schema:inLanguage`, `schema:genre` and
-`schema:isPartOf`, then `MoreStatements`. There are no type templates, route templates or lists.
-`setupPresentation` bootstraps it once at startup, immediately after `setupSemantic`. When a
-profile is already active, that bootstrap is one pointer read.
+`SubjectHeader` and the site `actions` slot, then `MoreStatements`. Every other subject template
+uses that same header.
+
+`schema:CreativeWork` is a base template: that header, then `Statements` for `schema:author`,
+`schema:illustrator`, `schema:translator`, `schema:publisher`, `schema:datePublished`,
+`schema:inLanguage`, `schema:genre` and `schema:isPartOf`, then a `SubjectList` of editions
+(`schema:exampleOfWork`, limit 12), then `MoreStatements`. `schema:CreativeWorkSeries` is a base
+template with that header and those statements, then `SubjectList`s for works in the series
+(`wdt:P179`) and parts (`schema:isPartOf`), limit 24 each, then `MoreStatements`.
+
+Type templates place their `SubjectList`s after the header and before `MoreStatements`.
+`schema:Person` lists `schema:author`, `schema:illustrator`, `schema:director`, `schema:musicBy`
+and `wdt:P725`, limit 12. `schema:Organization` lists `schema:publisher`, `schema:productionCompany`
+and `wdt:P178`, limit 12. `skos:Concept` lists `schema:genre`, limit 24. `wd:Q95074` lists
+`schema:character`, limit 24. There are no route templates. `setupPresentation` bootstraps the
+profile once at startup, immediately after `setupSemantic`. When a profile is already active, that
+bootstrap is one pointer read.
 
 Build checks in `test/presentation/platform-profile.test.ts`:
 

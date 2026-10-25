@@ -50,11 +50,362 @@
               ]
             }
           },
+          {
+            "type": "SubjectList",
+            "props": {
+              "id": "editions",
+              "title": {
+                "en": "Editions",
+                "zh-Hant": "版本",
+                "zh-Hans": "版本",
+                "ja": "版",
+                "ko": "판",
+                "de": "Ausgaben",
+                "fr": "Éditions",
+                "es": "Ediciones"
+              },
+              "property": "schema:exampleOfWork",
+              "limit": 12
+            }
+          },
+          { "type": "MoreStatements", "props": { "id": "more-statements" } }
+        ]
+      }
+    },
+    {
+      "base": "schema:CreativeWorkSeries",
+      "document": {
+        "root": { "props": {} },
+        "content": [
+          {
+            "type": "Slot",
+            "props": {
+              "id": "header",
+              "name": "header",
+              "children": [
+                { "type": "SubjectHeader", "props": { "id": "subject-header" } },
+                { "type": "Slot", "props": { "id": "actions", "name": "actions", "children": [] } }
+              ]
+            }
+          },
+          {
+            "type": "Statements",
+            "props": {
+              "id": "statements",
+              "properties": [
+                "schema:author",
+                "schema:illustrator",
+                "schema:translator",
+                "schema:publisher",
+                "schema:datePublished",
+                "schema:inLanguage",
+                "schema:genre",
+                "schema:isPartOf"
+              ]
+            }
+          },
+          {
+            "type": "SubjectList",
+            "props": {
+              "id": "series-works",
+              "title": {
+                "en": "Works in the series",
+                "zh-Hant": "系列作品",
+                "zh-Hans": "系列作品",
+                "ja": "シリーズの作品",
+                "ko": "시리즈의 작품",
+                "de": "Werke der Serie",
+                "fr": "Œuvres de la série",
+                "es": "Obras de la serie"
+              },
+              "property": "wdt:P179",
+              "limit": 24
+            }
+          },
+          {
+            "type": "SubjectList",
+            "props": {
+              "id": "parts",
+              "title": {
+                "en": "Parts",
+                "zh-Hant": "部分",
+                "zh-Hans": "部分",
+                "ja": "部分",
+                "ko": "부분",
+                "de": "Teile",
+                "fr": "Parties",
+                "es": "Partes"
+              },
+              "property": "schema:isPartOf",
+              "limit": 24
+            }
+          },
           { "type": "MoreStatements", "props": { "id": "more-statements" } }
         ]
       }
     }
   ],
-  "types": [],
+  "types": [
+    {
+      "type": "schema:Organization",
+      "document": {
+        "root": { "props": {} },
+        "content": [
+          {
+            "type": "Slot",
+            "props": {
+              "id": "header",
+              "name": "header",
+              "children": [
+                { "type": "SubjectHeader", "props": { "id": "subject-header" } },
+                { "type": "Slot", "props": { "id": "actions", "name": "actions", "children": [] } }
+              ]
+            }
+          },
+          {
+            "type": "SubjectList",
+            "props": {
+              "id": "publisher",
+              "title": {
+                "en": "Published works",
+                "zh-Hant": "出版作品",
+                "zh-Hans": "出版作品",
+                "ja": "出版した作品",
+                "ko": "발행한 작품",
+                "de": "Verlegte Werke",
+                "fr": "Publications",
+                "es": "Obras publicadas"
+              },
+              "property": "schema:publisher",
+              "limit": 12
+            }
+          },
+          {
+            "type": "SubjectList",
+            "props": {
+              "id": "production-company",
+              "title": {
+                "en": "Productions",
+                "zh-Hant": "製作作品",
+                "zh-Hans": "制作作品",
+                "ja": "制作作品",
+                "ko": "제작한 작품",
+                "de": "Produktionen",
+                "fr": "Productions",
+                "es": "Producciones"
+              },
+              "property": "schema:productionCompany",
+              "limit": 12
+            }
+          },
+          {
+            "type": "SubjectList",
+            "props": {
+              "id": "developer",
+              "title": {
+                "en": "Developed works",
+                "zh-Hant": "開發作品",
+                "zh-Hans": "开发作品",
+                "ja": "開発した作品",
+                "ko": "개발한 작품",
+                "de": "Entwickelte Werke",
+                "fr": "Œuvres développées",
+                "es": "Obras desarrolladas"
+              },
+              "property": "wdt:P178",
+              "limit": 12
+            }
+          },
+          { "type": "MoreStatements", "props": { "id": "more-statements" } }
+        ]
+      }
+    },
+    {
+      "type": "schema:Person",
+      "document": {
+        "root": { "props": {} },
+        "content": [
+          {
+            "type": "Slot",
+            "props": {
+              "id": "header",
+              "name": "header",
+              "children": [
+                { "type": "SubjectHeader", "props": { "id": "subject-header" } },
+                { "type": "Slot", "props": { "id": "actions", "name": "actions", "children": [] } }
+              ]
+            }
+          },
+          {
+            "type": "SubjectList",
+            "props": {
+              "id": "author",
+              "title": {
+                "en": "Written works",
+                "zh-Hant": "著作",
+                "zh-Hans": "著作",
+                "ja": "著作",
+                "ko": "저술한 작품",
+                "de": "Geschriebene Werke",
+                "fr": "Œuvres écrites",
+                "es": "Obras escritas"
+              },
+              "property": "schema:author",
+              "limit": 12
+            }
+          },
+          {
+            "type": "SubjectList",
+            "props": {
+              "id": "illustrator",
+              "title": {
+                "en": "Illustrated works",
+                "zh-Hant": "插畫作品",
+                "zh-Hans": "插画作品",
+                "ja": "挿絵を担当した作品",
+                "ko": "삽화를 맡은 작품",
+                "de": "Illustrierte Werke",
+                "fr": "Œuvres illustrées",
+                "es": "Obras ilustradas"
+              },
+              "property": "schema:illustrator",
+              "limit": 12
+            }
+          },
+          {
+            "type": "SubjectList",
+            "props": {
+              "id": "director",
+              "title": {
+                "en": "Directed works",
+                "zh-Hant": "執導作品",
+                "zh-Hans": "执导作品",
+                "ja": "監督作品",
+                "ko": "연출한 작품",
+                "de": "Werke als Regisseur",
+                "fr": "Réalisations",
+                "es": "Obras dirigidas"
+              },
+              "property": "schema:director",
+              "limit": 12
+            }
+          },
+          {
+            "type": "SubjectList",
+            "props": {
+              "id": "music",
+              "title": {
+                "en": "Music",
+                "zh-Hant": "音樂作品",
+                "zh-Hans": "音乐作品",
+                "ja": "音楽を担当した作品",
+                "ko": "음악을 맡은 작품",
+                "de": "Werke als Komponist",
+                "fr": "Musique",
+                "es": "Música"
+              },
+              "property": "schema:musicBy",
+              "limit": 12
+            }
+          },
+          {
+            "type": "SubjectList",
+            "props": {
+              "id": "voice-roles",
+              "title": {
+                "en": "Voice roles",
+                "zh-Hant": "配音角色",
+                "zh-Hans": "配音角色",
+                "ja": "声の出演",
+                "ko": "성우 출연",
+                "de": "Sprechrollen",
+                "fr": "Rôles vocaux",
+                "es": "Papeles de voz"
+              },
+              "property": "wdt:P725",
+              "limit": 12
+            }
+          },
+          { "type": "MoreStatements", "props": { "id": "more-statements" } }
+        ]
+      }
+    },
+    {
+      "type": "skos:Concept",
+      "document": {
+        "root": { "props": {} },
+        "content": [
+          {
+            "type": "Slot",
+            "props": {
+              "id": "header",
+              "name": "header",
+              "children": [
+                { "type": "SubjectHeader", "props": { "id": "subject-header" } },
+                { "type": "Slot", "props": { "id": "actions", "name": "actions", "children": [] } }
+              ]
+            }
+          },
+          {
+            "type": "SubjectList",
+            "props": {
+              "id": "works",
+              "title": {
+                "en": "Works",
+                "zh-Hant": "作品",
+                "zh-Hans": "作品",
+                "ja": "作品",
+                "ko": "작품",
+                "de": "Werke",
+                "fr": "Œuvres",
+                "es": "Obras"
+              },
+              "property": "schema:genre",
+              "limit": 24
+            }
+          },
+          { "type": "MoreStatements", "props": { "id": "more-statements" } }
+        ]
+      }
+    },
+    {
+      "type": "wd:Q95074",
+      "document": {
+        "root": { "props": {} },
+        "content": [
+          {
+            "type": "Slot",
+            "props": {
+              "id": "header",
+              "name": "header",
+              "children": [
+                { "type": "SubjectHeader", "props": { "id": "subject-header" } },
+                { "type": "Slot", "props": { "id": "actions", "name": "actions", "children": [] } }
+              ]
+            }
+          },
+          {
+            "type": "SubjectList",
+            "props": {
+              "id": "appearances",
+              "title": {
+                "en": "Appearances",
+                "zh-Hant": "登場作品",
+                "zh-Hans": "登场作品",
+                "ja": "登場作品",
+                "ko": "등장 작품",
+                "de": "Auftritte",
+                "fr": "Apparitions",
+                "es": "Apariciones"
+              },
+              "property": "schema:character",
+              "limit": 24
+            }
+          },
+          { "type": "MoreStatements", "props": { "id": "more-statements" } }
+        ]
+      }
+    }
+  ],
   "routes": []
 }

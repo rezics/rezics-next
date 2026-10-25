@@ -303,16 +303,23 @@ page of its own. The package exports it as `@rezics/composition/profiles/platfor
 the website's fake kernel and stories serve the same templates.
 
 `generic` is a `header` slot holding `SubjectHeader` and the `actions` slot, then
-`MoreStatements`.
+`MoreStatements`. Every subject template uses that header.
 
-`bases` has one template, for `schema:CreativeWork`, the structural base of the bundled work
-types. That document is the same header slot, then a `Statements` node, then `MoreStatements`.
-The `Statements` properties are the work facts the bundled release defines, in this order:
-`schema:author`, `schema:illustrator`, `schema:translator`, `schema:publisher`,
-`schema:datePublished`, `schema:inLanguage`, `schema:genre`, `schema:isPartOf`.
+`bases` has `schema:CreativeWork` and `schema:CreativeWorkSeries`. The work template is that
+header, then a `Statements` node, then a `SubjectList` of editions (`schema:exampleOfWork`,
+limit 12), then `MoreStatements`. The `Statements` properties are the work facts the bundled
+release defines, in this order: `schema:author`, `schema:illustrator`, `schema:translator`,
+`schema:publisher`, `schema:datePublished`, `schema:inLanguage`, `schema:genre`,
+`schema:isPartOf`. The series template uses that header and those statements, then
+`SubjectList`s for works in the series (`wdt:P179`) and parts (`schema:isPartOf`), limit 24
+each, then `MoreStatements`.
 
-There are no type templates, no route templates and no lists. Lists for people, organisations,
-concepts and characters come with a later profile change, once the release registers those
-facets. The profile has no headings or other text. Resolution is route, then type, then base,
-then generic, so a bundled work type uses the `schema:CreativeWork` template and every other
-bundled type uses `generic`.
+`types` has four templates. Each list is a `SubjectList` after the header and before
+`MoreStatements`, with its title in the eight UI locales. `schema:Person` lists
+`schema:author`, `schema:illustrator`, `schema:director`, `schema:musicBy` and `wdt:P725`,
+limit 12. `schema:Organization` lists `schema:publisher`, `schema:productionCompany` and
+`wdt:P178`, limit 12. `skos:Concept` lists `schema:genre`, limit 24. `wd:Q95074` lists
+`schema:character`, limit 24. There are no route templates. Resolution is route, then type,
+then base, then generic, so a person, organisation, concept or fictional character uses its
+type template, a series uses `schema:CreativeWorkSeries`, another bundled work uses
+`schema:CreativeWork`, and every other bundled type uses `generic`.
