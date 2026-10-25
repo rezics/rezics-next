@@ -2,7 +2,13 @@ import { expect, setDefaultTimeout, test } from 'bun:test';
 import { isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { AccessTokenClaims, PublicJwks } from '@rezics/auth';
-import { BULK_ACTION, GLOBAL, MISSING_IMPORT_IDENTITY, SEMANTIC_ACTIONS } from './imports-identity-driver.ts';
+import {
+  BULK_ACTION,
+  COMMON_ACTIONS,
+  GLOBAL,
+  IMPORT_ACTIONS,
+  MISSING_IMPORT_IDENTITY,
+} from './imports-identity-driver.ts';
 import type { ImportIdentityDriver, Stage } from './imports-identity-driver.ts';
 import type { ImportCredential, ImportIdentity } from '../services/kernel/test/imports/identity-fixture.ts';
 import type { Resource } from '../services/kernel/src/request/access.ts';
@@ -43,9 +49,10 @@ async function permits(f: ImportIdentity, credential: ImportCredential, action: 
   const check = await accessCheck(f.access, actor, action, resource, context);
   return withConnection(f.database.pool, (client) => check(client));
 }
-async function authority(f: ImportIdentity, credential: ImportCredential, bulk: boolean) {
-  for (const action of SEMANTIC_ACTIONS) expect(await permits(f, credential, action)).toBe(true);
-  expect(await permits(f, credential, BULK_ACTION)).toBe(bulk);
+async function authority(f: ImportIdentity, credential: ImportCredential, bulk: boolean, restricted = bulk) {
+  for (const action of COMMON_ACTIONS) expect(await permits(f, credential, action)).toBe(true);
+  for (const action of IMPORT_ACTIONS)
+    expect(await permits(f, credential, action)).toBe(action === BULK_ACTION ? bulk : restricted);
   expect(await permits(f, credential, 'media:complete')).toBe(false);
 }
 
@@ -76,6 +83,8 @@ test('Auth-issued credentials verify exact subjects client scopes and current ac
         expect(actor.clientId).toBe(payload.client_id);
         expect([...actor.scopes].sort()).toEqual(String(payload.scope).split(' ').sort());
         expect(actor.requestedBy).toBeNull();
+        if (credential === f.ordinary)
+          for (const action of IMPORT_ACTIONS) expect(actor.scopes.includes(action)).toBe(false);
         const account = await d.account(f, credential.accountId);
         expect(account?.kind).toBe('actor');
         expect(account?.state).toBe('active');
@@ -140,7 +149,7 @@ test('bootstrap is a durable same-account no-op and refuses a different active h
     }),
   ));
 
-test('bulk and ordinary grants differ only by batch write and have exact Global scope', () =>
+test('both actors share subject create but only bulk has import grants on exact Global scope', () =>
   scenario((d) =>
     fixture(d, async (f) => {
       for (const [credential, bulk] of [
@@ -151,7 +160,7 @@ test('bulk and ordinary grants differ only by batch write and have exact Global 
         expect(rows.length).toBeGreaterThan(0);
         for (const row of rows) expect(row.resource).toEqual(GLOBAL);
         expect(rows.flatMap((row) => row.actions).sort()).toEqual(
-          [...SEMANTIC_ACTIONS, ...(bulk ? [BULK_ACTION] : [])].sort(),
+          [...COMMON_ACTIONS, ...(bulk ? IMPORT_ACTIONS : [])].sort(),
         );
         await authority(f, credential, bulk);
         const decoys: Resource[] = [
@@ -159,7 +168,7 @@ test('bulk and ordinary grants differ only by batch write and have exact Global 
           { route: 1, id: '00000000-0000-8000-8000-000100000000' },
         ];
         for (const resource of decoys)
-          for (const action of [...SEMANTIC_ACTIONS, BULK_ACTION])
+          for (const action of [...COMMON_ACTIONS, ...IMPORT_ACTIONS])
             expect(await permits(f, credential, action, resource)).toBe(false);
       }
     }),
@@ -168,9 +177,14 @@ test('bulk and ordinary grants differ only by batch write and have exact Global 
 test('real reduced-scope Auth issuance cannot borrow a resource grant and tampered tokens fail verification', () =>
   scenario((d) =>
     fixture(d, async (f) => {
-      const limited = await d.issue(f, f.bulk.accountId, SEMANTIC_ACTIONS);
+      const limited = await d.issue(f, f.bulk.accountId, [
+        ...COMMON_ACTIONS,
+        ...IMPORT_ACTIONS.filter((action) => action !== BULK_ACTION),
+      ]);
       expect(limited.accountId).toBe(f.bulk.accountId);
-      await authority(f, limited, false);
+      await authority(f, limited, false, true);
+      const commonOnly = await d.issue(f, f.bulk.accountId, COMMON_ACTIONS);
+      await authority(f, commonOnly, false);
       const parts = f.bulk.bearer.split('.');
       const payload = JSON.parse(Buffer.from(parts[1]!, 'base64url').toString());
       payload.sub = f.governance.accountId;
@@ -192,11 +206,11 @@ test('bulk revocation preserves the original bearer and all other authority for 
       const ordinaryGrants = await d.grants(f, f.ordinary.accountId);
       await f.setBulkPermission(false);
       expect(f.bulk).toEqual(original);
-      await authority(f, original, false);
+      await authority(f, original, false, true);
       await authority(f, f.ordinary, false);
       expect(await d.grants(f, f.ordinary.accountId)).toEqual(ordinaryGrants);
       expect((await d.grants(f, original.accountId)).flatMap((row) => row.actions).sort()).toEqual(
-        [...SEMANTIC_ACTIONS].sort(),
+        [...COMMON_ACTIONS, ...IMPORT_ACTIONS.filter((action) => action !== BULK_ACTION)].sort(),
       );
       await f.setBulkPermission(true);
       expect(f.bulk).toEqual(original);

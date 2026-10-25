@@ -36,8 +36,9 @@ import type {
 export { MISSING_IMPORT_IDENTITY } from '../services/kernel/test/imports/identity-fixture.ts';
 
 export const GLOBAL: Readonly<Resource> = PLATFORM_RESOURCE;
-export const SEMANTIC_ACTIONS = ['subject:create', 'source_fence:read', 'media:import_from_url'] as const;
+export const COMMON_ACTIONS = ['subject:create'] as const;
 export const BULK_ACTION = 'subject:batch_write';
+export const IMPORT_ACTIONS = [BULK_ACTION, 'source_fence:read', 'media:import_from_url'] as const;
 export type Stage = 'auth-registration' | 'bootstrap' | 'grants';
 export interface BootstrapEvidence {
   /** Exact durable one-time marker on Global's partition, read independently of CLI output. */

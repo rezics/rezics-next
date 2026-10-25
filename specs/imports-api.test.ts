@@ -718,13 +718,13 @@ test('cover fences prevent reimport on unchanged and changed refresh and hide la
     expect(hidden.status).toBe(404);
     expect(new TextDecoder().decode(hidden.bytes)).not.toContain('A traveller builds a catalogue.');
   }));
-test('ordinary actors and revoked bulk replays are denied before receipt disclosure', () =>
+test('ordinary preflight and public bulk replays deny import authority before receipt disclosure', () =>
   scenario(async (d) => {
     const input = await dump('openlibrary'),
       empty = await d.effects();
     const denied = await d.run(input, { as: 'ordinary' });
     expect(denied.outcome).toBe('denied');
-    expect(denied.exchanges.length).toBeGreaterThan(0);
+    // Restricted fence preflight may deny before any public bulk POST.
     for (const x of denied.exchanges) {
       wireCommands(x);
       expect(x.response.status).toBe(403);
@@ -735,26 +735,31 @@ test('ordinary actors and revoked bulk replays are denied before receipt disclos
     expect(await d.baseline(input.source)).toMatchObject({ snapshot: null, records: 0 });
     const allowed = await d.run(input);
     expect(allowed.outcome).toBe('complete');
+    expect(allowed.exchanges.length).toBeGreaterThan(0);
     const before = await d.effects(),
       baseline = await d.baseline(input.source);
     for (const exchange of allowed.exchanges) await commandReceipts(d, exchange);
-    await d.setBulkPermission(false);
-    for (const committed of allowed.exchanges) {
-      const replay = await d.replay(committed);
-      expect(replay.status).toBe(403);
-      expect(replay.body).not.toEqual(committed.response.body);
-      const serialized = JSON.stringify(replay.body);
-      for (const id of ['/works/OL1W', '/works/OL2W']) {
-        const view = await d.read(input.source, id);
-        expect(serialized).not.toContain(view.subject!.id);
-        for (const p of view.proposals) expect(serialized).not.toContain(p.id);
+    const view = await d.read(input.source, '/works/OL1W');
+    expect((await d.fence(input.source, '/works/OL1W', view.proposals[0]!.fieldGroup, 'ordinary')).status).toBe(403);
+    for (const as of ['ordinary', 'bulk'] as const) {
+      if (as === 'bulk') await d.setBulkPermission(false);
+      for (const committed of allowed.exchanges) {
+        const replay = await d.replay(committed, as === 'ordinary' ? { as } : undefined);
+        expect(replay.status).toBe(403);
+        expect(replay.body).not.toEqual(committed.response.body);
+        const serialized = JSON.stringify(replay.body);
+        for (const id of ['/works/OL1W', '/works/OL2W']) {
+          const view = await d.read(input.source, id);
+          expect(serialized).not.toContain(view.subject!.id);
+          for (const p of view.proposals) expect(serialized).not.toContain(p.id);
+        }
+        for (const receipt of committed.receipts) {
+          expect(serialized).not.toContain(receipt.key);
+          expect(serialized).not.toContain(receipt.identity!);
+        }
+        expect(await d.effects()).toEqual(before);
+        expect(await d.baseline(input.source)).toEqual(baseline);
       }
-      for (const receipt of committed.receipts) {
-        expect(serialized).not.toContain(receipt.key);
-        expect(serialized).not.toContain(receipt.identity!);
-      }
-      expect(await d.effects()).toEqual(before);
-      expect(await d.baseline(input.source)).toEqual(baseline);
     }
   }));
 test('importer obeys actual Retry-After and never acknowledges a rejected batch', () =>

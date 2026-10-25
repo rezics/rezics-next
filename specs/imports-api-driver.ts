@@ -12,8 +12,10 @@ import type { ConversionContext } from '../packages/conversion/src/support';
  * SQLite and kernel databases, dump readers and @rezics/conversion source modules.
  * Reuse account-lifecycle/semantic production fixture setup and actual Auth-issued
  * bearer tokens; actual Access checks bulk permission and configured import limits.
- * Ordinary and bulk actors have the same required semantic permissions; only
- * bulk has bulk permission. Revocation removes only bulk permission, preserving
+ * Both actors have subject:create; only bulk has subject:batch_write,
+ * source_fence:read and media:import_from_url, all on the sole Global resource.
+ * Ordinary has no import-only grants or scopes. Governance uses data-defined
+ * moderation/grant authority. Revocation removes only batch write, preserving
  * the original token, other authority and stored receipts.
  * Every write uses the decided public authenticated bulk HTTP handlers (actual
  * createKernel.handle is acceptable). Use POST /v1/subjects:batchWrite and @rezics/definitions/bulk.
@@ -228,10 +230,13 @@ export interface ImportApiDriver {
   restart(): Promise<void>;
   setBulkPermission(allowed: boolean): Promise<void>;
   /**
-   * Reissue exactly this captured request, using the same real actor/token.
+   * Reissue the exact captured public body/keys with the original bulk actor/token
+   * by default (also for as:bulk). Explicit as:ordinary uses the actual ordinary
+   * Auth bearer, never actor/scope mapping. This direct HTTP boundary observation
+   * does not bypass preflight in the production importer.
    * Every command must be reauthorized before its own receipt lookup.
    */
-  replay(exchange: Exchange): Promise<HttpResponse>;
+  replay(exchange: Exchange, options?: { as: 'bulk' | 'ordinary' }): Promise<HttpResponse>;
   adopt(source: Source, externalId: string, property: string, value: Json): Promise<void>;
   /**
    * Final rights complaint: for cover, call the actual content media takedown API
