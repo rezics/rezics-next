@@ -4,7 +4,7 @@ import { dirname, join, resolve, relative, isAbsolute } from 'node:path';
 import { parseBrief, readRiskOwnership } from './briefs.ts';
 import { acquireDirectoryLeaseWaiting } from './lease.ts';
 import { classifyTask, readRouting, routeTask } from './routing.ts';
-import { choosePool } from './allowance.ts';
+import { choosePoolWithFallback } from './allowance.ts';
 import { readPool, type PoolReader } from './usage.ts';
 import { launch, workerPrompt, type RunningWorker } from './launch.ts';
 import { rebaseOnto } from './merge-train.ts';
@@ -206,11 +206,12 @@ export class WorkerTasks {
       const oldConfigDirectory = old ? this.settings.pools.find(candidate => candidate.name === old.pool)?.configDirectory : undefined;
       const route = old ? { profile: old.profile, tableVersion: old.tableVersion, experiment: old.experiment }
         : routeTask(nextBrief, task.sequence, readRouting(this.settings.routingFile));
-      const profile = options.profile ?? route.profile;
       const readings = this.settings.pools.map(pool => this.reader(pool));
       const history = this.store.attempts().flatMap(a => [a.before, a.after]).filter(r => r !== null);
-      const pool = choosePool(profile, this.settings.pools, readings, { history, ...(old ? { preferred: old.pool } : {}),
-        ...(options.excludePools ? { exclude: options.excludePools } : {}) });
+      const fallbacks = options.profile || nextTaskClass === 'mechanical' ? []
+        : readRouting(this.settings.routingFile).classes[nextTaskClass]?.fallbacks ?? [];
+      const { profile, pool } = choosePoolWithFallback(options.profile ?? route.profile, fallbacks, this.settings.pools, readings,
+        { history, ...(old ? { preferred: old.pool } : {}), ...(options.excludePools ? { exclude: options.excludePools } : {}) });
       const make = (n: number): Attempt => ({
         taskId, attempt: n, state: 'pending', profile, pool: pool.name, tableVersion: route.tableVersion, experiment: route.experiment,
         startedAt: new Date().toISOString(), endedAt: null, process: null, driver: null,

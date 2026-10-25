@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import type { Brief, Profile, TaskClass } from './types.ts';
 
-export type Route = { first: Profile; maxSteps: number; maxMs: number };
+// fallbacks are tried in order when no pool of the first profile's CLI has quota.
+export type Route = { first: Profile; fallbacks?: Profile[]; maxSteps: number; maxMs: number };
 export type RoutingTable = {
   version: string; classes: Record<Exclude<TaskClass, 'mechanical'>, Route>;
   experiments: { name: string; class: TaskClass; open: boolean; profiles: Profile[] }[]; consultation: Profile;
@@ -18,6 +19,7 @@ export function readRouting(file: string): RoutingTable {
     const route = table.classes[key];
     if (!route || !(route.maxSteps > 0) || !(route.maxMs > 0)) throw new Error(`invalid route: ${key}`);
     profile(route.first);
+    (route.fallbacks ?? []).forEach(profile);
   }
   profile(table.consultation);
   if (table.consultation.cli !== 'codex' || !table.consultation.model.includes('sol') || table.consultation.effort !== 'medium') throw new Error('consultation must use Codex Sol medium');

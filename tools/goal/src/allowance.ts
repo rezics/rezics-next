@@ -30,3 +30,17 @@ export function choosePool(profile: Profile, pools: readonly Pool[], readings: r
   if (!ranked[0]) throw new Error(`no allowed pool available for ${profile.cli}/${profile.poolClass}`);
   return ranked[0].pool;
 }
+
+/** The routed profile's pool, or the first fallback profile that has one when the routed CLI has no quota. */
+export function choosePoolWithFallback(profile: Profile, fallbacks: readonly Profile[], pools: readonly Pool[],
+  readings: readonly PoolReading[], options: Parameters<typeof choosePool>[3] = {}): { profile: Profile; pool: Pool } {
+  try { return { profile, pool: choosePool(profile, pools, readings, options) }; }
+  catch (error) {
+    for (const candidate of fallbacks) {
+      const { preferred: _preferred, ...rest } = options;
+      try { return { profile: candidate, pool: choosePool(candidate, pools, readings, rest) }; }
+      catch { /* try the next fallback */ }
+    }
+    throw error;
+  }
+}
