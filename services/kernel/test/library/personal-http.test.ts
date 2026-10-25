@@ -1,0 +1,385 @@
+import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { createHash, randomUUID } from 'node:crypto';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { createAccess } from '../../src/access/index.ts';
+import { createKernel } from '../../src/http/kernel.ts';
+import { openApiDocument } from '../../src/http/openapi.ts';
+import * as collections from '../../src/library/collection-store.ts';
+import type { AccountActor } from '../../src/request/access.ts';
+import { newId, routeOf } from '../../src/route/route.ts';
+import { bootstrapRelease } from '../../src/semantic/definitions.ts';
+import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
+import { measure, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+
+let db: GrowthDatabase;
+let app: ReturnType<typeof createKernel>;
+const routeKey = new Uint8Array(32).fill(93);
+const accounts = { owner: newId(0x2200), other: newId(0x2200), suspended: newId(0x2200) };
+type Persona = keyof typeof accounts | 'anonymous';
+const tokens = new Map<string, string>();
+const scopes = [
+  'library_entry:read',
+  'library_entry:list',
+  'library_entry:update',
+  'library_entry:delete',
+  'copy:create',
+  'copy:read',
+  'copy:list',
+  'copy:update',
+  'copy:delete',
+  'follow:create',
+  'follow:delete',
+  'follow:read',
+  'follow:list',
+  'subject:read',
+  'space:read',
+];
+const owner: AccountActor = {
+  kind: 'account',
+  accountId: accounts.owner,
+  clientId: 'personal-http',
+  scopes,
+  requestedBy: null,
+  authnEpoch: 1,
+};
+let now = Date.now();
+const clock = () => new Date((now += 1000));
+function request(
+  method: string,
+  path: string,
+  body?: unknown,
+  as: Persona = 'owner',
+  key: string | null = randomUUID(),
+) {
+  return app.handle(
+    new Request(`http://kernel.test${path}`, {
+      method,
+      headers: {
+        'x-request-id': 'personal-http',
+        ...(as === 'anonymous' ? {} : { authorization: `Bearer ${tokens.get(as)!}` }),
+        ...(key === null ? {} : { 'idempotency-key': JSON.stringify(key) }),
+        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    }),
+  );
+}
+async function json(response: Response, status = 200) {
+  expect(response.status).toBe(status);
+  return response.json();
+}
+async function problem(response: Response, status: number, code?: string) {
+  expect(response.headers.get('content-type')).toContain('application/problem+json');
+  const body = await json(response, status);
+  expect(body).toMatchObject({ status, ...(code ? { code } : {}) });
+  expect(body.type).toBe(`https://rezics.com/problems/${body.code}`);
+  return body;
+}
+async function subject() {
+  const key = randomUUID();
+  return (
+    await createSubject(db.pool, {
+      actor: owner,
+      target: subjectTarget(routeKey, owner.accountId, key),
+      idempotencyKey: key,
+      digest: createHash('sha256').update(key).digest(),
+      item: { type: 'schema:Book', labels: { en: key } },
+      release: { digest: bundledDigest, release: bundledRelease },
+      authorize: async () => true,
+    })
+  ).subject.id;
+}
+async function entry(id: string, state = 'planned', revision?: number) {
+  return (await json(await request('PUT', `/v1/libraryEntries/${id}`, { state, ...(revision ? { revision } : {}) })))
+    .libraryEntry;
+}
+async function copy(id: string) {
+  return (await json(await request('POST', '/v1/copies', { subjectId: id, status: 'owned', note: 'Shelf' }), 201)).copy;
+}
+async function snapshot() {
+  const result = await db.admin.query(`SELECT * FROM (SELECT 'entry' AS kind, to_jsonb(e) AS row FROM library.entry e
+    UNION ALL SELECT 'copy', to_jsonb(c) FROM library.copy c
+    UNION ALL SELECT 'follow', to_jsonb(f) FROM library.follow f) AS rows ORDER BY kind, row::text`);
+  return result.rows;
+}
+beforeAll(async () => {
+  db = await openGrowthDatabase();
+  db.pool.options.max = 1;
+  await bootstrapRelease(db.pool, bundledRelease);
+  const signing = await generateKeyPair('ES256', { extractable: true });
+  const jwk = { ...(await exportJWK(signing.publicKey)), kid: 'personal', alg: 'ES256' };
+  app = createKernel({
+    pool: db.pool,
+    routeKey,
+    clock,
+    tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(17)]]) },
+    access: (config) =>
+      createAccess({
+        ...config,
+        auth: {
+          issuer: 'https://auth.example.test',
+          audience: 'https://api.rezics.test',
+          jwksUrl: 'https://auth.example.test/jwks',
+          fetch: async () => Response.json({ keys: [jwk] }),
+        },
+      }),
+  });
+  for (const [persona, id] of Object.entries(accounts)) {
+    await db.admin.query(
+      `INSERT INTO access.account(route, account_id, kind, state, transaction_id)
+      VALUES ($1,$2,'actor',$3,$2)`,
+      [routeOf(id), id, persona === 'suspended' ? 'suspended' : 'active'],
+    );
+    tokens.set(
+      persona,
+      await new SignJWT({
+        client_id: 'personal-http',
+        scope: scopes.join(' '),
+        authn_epoch: 1,
+        auth_time: Math.floor(Date.now() / 1000),
+        amr: ['pwd'],
+      })
+        .setProtectedHeader({ alg: 'ES256', kid: 'personal', typ: 'at+jwt' })
+        .setIssuer('https://auth.example.test')
+        .setAudience('https://api.rezics.test')
+        .setSubject(id)
+        .setIssuedAt()
+        .setExpirationTime('1h')
+        .sign(signing.privateKey),
+    );
+  }
+});
+afterAll(async () => {
+  await db?.close();
+});
+
+test('personal routes mount once and declare their gate in OpenAPI', () => {
+  const document = openApiDocument(app);
+  const expected = {
+    '/v1/libraryEntries': ['get'],
+    '/v1/libraryEntries/{subjectId}': ['get', 'put', 'delete'],
+    '/v1/copies': ['post', 'get'],
+    '/v1/copies/{copyId}': ['get', 'patch', 'delete'],
+    '/v1/follows': ['get'],
+    '/v1/follows/{targetId}': ['get', 'put', 'delete'],
+  };
+  for (const [path, methods] of Object.entries(expected))
+    for (const method of methods) {
+      expect(document.paths[path]?.[method]?.['x-exposure']).toBe('gate:personal_library');
+      const native = path.replace(/\{(\w+)\}/g, ':$1');
+      expect(app.routes.filter((route) => route.path === native && route.method.toLowerCase() === method)).toHaveLength(
+        1,
+      );
+    }
+});
+
+test('entry states revisions deletion and signed pages use the frozen HTTP views', async () => {
+  const id = await subject();
+  let current = await entry(id);
+  expect(current).toEqual({
+    subjectId: id,
+    state: 'planned',
+    revision: 1,
+    createdAt: expect.any(String),
+    updatedAt: expect.any(String),
+  });
+  for (const state of ['in_progress', 'completed', 'paused', 'dropped']) {
+    const previous = current;
+    current = await entry(id, state, current.revision);
+    expect(current).toMatchObject({ state, revision: previous.revision + 1, createdAt: previous.createdAt });
+    expect((await json(await request('GET', `/v1/libraryEntries?state=${state}`))).libraryEntries).toContainEqual(
+      current,
+    );
+  }
+  const before = await snapshot();
+  for (const body of [{ state: 'planned' }, { state: 'planned', revision: 1 }])
+    await problem(await request('PUT', `/v1/libraryEntries/${id}`, body), 409, 'conflict');
+  for (const suffix of ['', '?revision=1'])
+    await problem(await request('DELETE', `/v1/libraryEntries/${id}${suffix}`), 409, 'conflict');
+  expect(await snapshot()).toEqual(before);
+  expect(await json(await request('GET', `/v1/libraryEntries/${id}`))).toEqual({ libraryEntry: current });
+  const second = await entry(await subject());
+  const firstPage = await json(await request('GET', '/v1/libraryEntries?limit=1'));
+  expect(firstPage.libraryEntries).toEqual([second]);
+  const next = await json(
+    await request('GET', `/v1/libraryEntries?limit=1&cursor=${encodeURIComponent(firstPage.next)}`),
+  );
+  expect(next).toEqual({ libraryEntries: [current], next: null });
+  await problem(
+    await request('GET', `/v1/libraryEntries?state=paused&cursor=${encodeURIComponent(firstPage.next)}`),
+    400,
+    'invalid_cursor',
+  );
+  expect((await request('DELETE', `/v1/libraryEntries/${id}?revision=${current.revision}`)).status).toBe(204);
+  await problem(await request('GET', `/v1/libraryEntries/${id}`), 404, 'not_found');
+});
+
+test('copies remain independent and conceal missing and foreign rows before revision conflicts', async () => {
+  const id = await subject();
+  const a = await copy(id),
+    b = await copy(id);
+  expect(a).toEqual({
+    id: expect.any(String),
+    subjectId: id,
+    status: 'owned',
+    revision: 1,
+    location: null,
+    source: null,
+    acquiredOn: null,
+    disposedOn: null,
+    note: 'Shelf',
+  });
+  expect(a.id).not.toBe(b.id);
+  const changed = (
+    await json(await request('PATCH', `/v1/copies/${a.id}`, { revision: 1, status: 'lent', location: 'Friend' }))
+  ).copy;
+  expect(changed).toEqual({ ...a, revision: 2, status: 'lent', location: 'Friend' });
+  for (const body of [{ status: 'disposed' }, { revision: 1, status: 'disposed' }])
+    await problem(await request('PATCH', `/v1/copies/${a.id}`, body), 409, 'conflict');
+  expect(await json(await request('GET', `/v1/copies/${b.id}`))).toEqual({ copy: b });
+  const page = await json(await request('GET', '/v1/copies?limit=1'));
+  expect(page.copies).toHaveLength(1);
+  expect(page.next).toBeTruthy();
+  expect(
+    (await json(await request('GET', `/v1/copies?limit=1&cursor=${encodeURIComponent(page.next)}`))).copies,
+  ).toHaveLength(1);
+  expect((await request('DELETE', `/v1/copies/${a.id}`)).status).toBe(204);
+  await problem(await request('GET', `/v1/copies/${a.id}`), 404, 'not_found');
+});
+
+test('inferred subject and Collection follows return either state but list only following', async () => {
+  const id = await subject();
+  const shelf = await collections.insertCollection(
+    db.admin,
+    routeOf(accounts.owner)!,
+    {
+      id: newId(routeOf(accounts.owner)!),
+      curatorAccountId: accounts.owner,
+      title: 'Public shelf',
+      description: null,
+      visibility: 'public',
+    },
+    { time: clock().toISOString(), transactionId: newId(routeOf(accounts.owner)!) },
+  );
+  for (const [targetId, targetType] of [
+    [id, 'subject'],
+    [shelf.id, 'collection'],
+  ]) {
+    const result = await json(await request('PUT', `/v1/follows/${targetId}`));
+    expect(result).toEqual({
+      follow: { targetId, targetType, state: 'following', reason: 'explicit', updatedAt: expect.any(String) },
+    });
+    expect(await json(await request('GET', `/v1/follows/${targetId}`))).toEqual(result);
+    await json(await request('DELETE', `/v1/follows/${targetId}`));
+    expect((await json(await request('GET', `/v1/follows/${targetId}`))).follow.state).toBe('unfollowed');
+    expect(
+      (await json(await request('GET', '/v1/follows'))).follows.some(
+        (row: { targetId: string }) => row.targetId === targetId,
+      ),
+    ).toBe(false);
+  }
+  const implied = await entry(id, 'in_progress');
+  expect((await json(await request('GET', `/v1/follows/${id}`))).follow.state).toBe('unfollowed');
+  await entry(id, 'paused', implied.revision);
+});
+
+test('private reads conceal owner unknown and malformed ids and denied writes leave state unchanged', async () => {
+  const id = await subject();
+  const owned = await entry(id, 'in_progress'),
+    item = await copy(id);
+  for (const as of ['other', 'anonymous'] as const) {
+    for (const [base, hidden] of [
+      ['/v1/libraryEntries', id],
+      ['/v1/copies', item.id],
+      ['/v1/follows', id],
+    ]) {
+      const absent = await problem(await request('GET', `${base}/${newId(0x2200)}`, undefined, as), 404, 'not_found');
+      expect(await problem(await request('GET', `${base}/${hidden}`, undefined, as), 404, 'not_found')).toEqual(absent);
+      expect(await problem(await request('GET', `${base}/bad-id`, undefined, as), 404, 'not_found')).toEqual(absent);
+    }
+  }
+  for (const base of ['/v1/libraryEntries', '/v1/copies', '/v1/follows']) {
+    expect(await json(await request('GET', base, undefined, 'other'))).toEqual({
+      [base.split('/').at(-1)!]: [],
+      next: null,
+    });
+    await problem(await request('GET', base, undefined, 'anonymous'), 401);
+    expect([401, 403]).toContain((await request('GET', base, undefined, 'suspended')).status);
+  }
+  const before = await snapshot();
+  for (const as of ['anonymous', 'suspended'] as const)
+    for (const [method, path, body] of [
+      ['PUT', `/v1/libraryEntries/${id}`, { state: 'paused', revision: owned.revision }],
+      ['DELETE', `/v1/libraryEntries/${id}?revision=${owned.revision}`, undefined],
+      ['POST', '/v1/copies', { subjectId: id, status: 'ordered' }],
+      ['PATCH', `/v1/copies/${item.id}`, { revision: item.revision, status: 'disposed' }],
+      ['DELETE', `/v1/copies/${item.id}`, undefined],
+      ['PUT', `/v1/follows/${id}`, undefined],
+      ['DELETE', `/v1/follows/${id}`, undefined],
+    ] as const) {
+      const response = await request(method, path, body, as);
+      expect([401, 403]).toContain(response.status);
+      await problem(response, response.status);
+      expect(await snapshot()).toEqual(before);
+    }
+  for (const method of ['PATCH', 'DELETE']) {
+    const body = method === 'PATCH' ? { revision: 1, status: 'disposed' } : undefined;
+    const hidden = await problem(await request(method, `/v1/copies/${item.id}`, body, 'other'), 404, 'not_found');
+    expect(
+      await problem(await request(method, `/v1/copies/${newId(0x2200)}`, body, 'other'), 404, 'not_found'),
+    ).toEqual(hidden);
+  }
+  expect(await snapshot()).toEqual(before);
+});
+
+test('closed schemas keys limits cursors and hidden targets map to problems', async () => {
+  const id = await subject();
+  for (const path of ['/v1/libraryEntries', '/v1/copies', '/v1/follows']) {
+    for (const limit of [0, 101]) await problem(await request('GET', `${path}?limit=${limit}`), 400);
+    await problem(await request('GET', `${path}?cursor=bad`), 400, 'invalid_cursor');
+  }
+  for (const [method, path, body] of [
+    ['PUT', `/v1/libraryEntries/${id}`, { state: 'planned' }],
+    ['POST', '/v1/copies', { subjectId: id, status: 'owned' }],
+    ['PUT', `/v1/follows/${id}`, undefined],
+    ['DELETE', `/v1/follows/${id}`, undefined],
+  ] as const)
+    await problem(await request(method, path, body, 'owner', null), 400);
+  await problem(await request('PUT', `/v1/libraryEntries/${id}`, { state: 'planned', extra: true }), 400);
+  await problem(await request('POST', '/v1/copies', { subjectId: id, status: 'owned', extra: true }), 400);
+  await problem(await request('PUT', `/v1/follows/${id}`, { targetType: 'subject' }), 400);
+  for (const target of [newId(0x2200), 'bad-id']) {
+    await problem(await request('PUT', `/v1/libraryEntries/${target}`, { state: 'planned' }), 404, 'not_found');
+    await problem(await request('POST', '/v1/copies', { subjectId: target, status: 'owned' }), 404, 'not_found');
+    for (const method of ['PUT', 'DELETE'])
+      await problem(await request(method, `/v1/follows/${target}`), 404, 'not_found');
+  }
+});
+
+test('HTTP entry puts and follows pages use equal statements at three scales', async () => {
+  const id = await subject();
+  let current = await entry(id);
+  const counts: number[][] = [];
+  let previous = 0;
+  for (const scale of [1, 8, 64]) {
+    for (let index = previous; index < scale; index++) {
+      const unrelated = await subject();
+      await entry(unrelated, 'in_progress');
+      await copy(unrelated);
+    }
+    previous = scale;
+    await request('GET', '/v1/follows?limit=1');
+    const put = await measure(db, () =>
+      request('PUT', `/v1/libraryEntries/${id}`, { state: 'paused', revision: current.revision }),
+    );
+    current = (await json(put.value)).libraryEntry;
+    const page = await measure(db, () => request('GET', '/v1/follows?limit=1'));
+    expect((await json(page.value)).follows).toHaveLength(1);
+    expect(put.cost.statements).toBeGreaterThan(0);
+    expect(page.cost.statements).toBeGreaterThan(0);
+    counts.push([put.cost.statements, page.cost.statements]);
+  }
+  expect(counts[1]).toEqual(counts[0]);
+  expect(counts[2]).toEqual(counts[0]);
+}, 120_000);
