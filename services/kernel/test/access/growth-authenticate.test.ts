@@ -21,7 +21,8 @@ const actorId = '00000000-0000-8000-8000-000000000003';
 const requestId = '00000000-0000-8000-8000-000000000004';
 const principalRoute = routeOf(principal)!;
 const actorRoute = routeOf(actorId)!;
-const hotPartition = actorRoute >>> 4;
+const accountPartition = actorRoute >>> 4;
+const assignmentPartition = principalRoute >>> 4;
 const units = 500;
 let db: GrowthDatabase | undefined;
 let publicJwk: JWK;
@@ -31,7 +32,7 @@ let access: ReturnType<typeof createAccess>;
 // This population matches account lifecycle inserts: routed actor rows with active state and default account fields.
 const accounts: Population = {
   name: 'authenticate-accounts',
-  hotPartition,
+  hotPartition: accountPartition,
   hotShare: 1,
   rows: ({ ordinal, route }) => {
     const accountId = derivedId(namespace, `account-${ordinal}`, route);
@@ -54,7 +55,7 @@ const accounts: Population = {
 // This population matches delegation-create rows: one active assignment and its principal/request identity per ordinal.
 const assignments: Population = {
   name: 'authenticate-assignments',
-  hotPartition,
+  hotPartition: assignmentPartition,
   hotShare: 1,
   rows: ({ ordinal, route }) => {
     const id = derivedId(namespace, `request-${ordinal}`, principalRoute);
@@ -131,7 +132,9 @@ test('Bearer verification stays within its bound as A grows', async () => {
   const population = { ...accounts };
   const assignmentPopulation = { ...assignments };
   const anchor = placement(population, 0);
-  expect(anchor.partition).toBe(hotPartition);
+  const assignmentAnchor = placement(assignmentPopulation, 0);
+  expect(anchor.partition).toBe(accountPartition);
+  expect(assignmentAnchor.partition).toBe(assignmentPartition);
   const report = await checkGrowth(database, {
     name: 'Bearer verification stays within its bound as A grows',
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
