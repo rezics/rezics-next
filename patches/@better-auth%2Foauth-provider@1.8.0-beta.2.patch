@@ -1,0 +1,269 @@
+diff --git a/dist/authorize-DXYo-K2n.mjs b/dist/authorize-DXYo-K2n.mjs
+index 28cf3e94393d04c56caf0456781315e292667e88..80cdb92019bfd3bf6bcc3f9233c1bb6fdf9662d4 100644
+--- a/dist/authorize-DXYo-K2n.mjs
++++ b/dist/authorize-DXYo-K2n.mjs
+@@ -1,5 +1,5 @@
+ import { t as __exportAll } from "./rolldown-runtime-wcPFST8Q.mjs";
+-import { A as getAcrValuesSupported, C as authorizationQuerySchema, D as STANDARD_CLAIMS, F as getRequestedUserInfoClaims, I as isValidOidcClaimsRequest, M as canSatisfyEssentialAcrRequest, N as claimsRequestParameterSchema, O as STANDARD_CLAIM_NAMES, P as filterClaimsRequestUserInfoClaims, S as SafeUrlSchema, T as clientRegistrationRequestSchema, _ as logStartupSeedFailure, a as tokenEndpoint, b as userInfoResource, c as normalizeClientCredentialsScopes, d as JWS_ALGORITHMS, f as assertIdentifierValid, g as logEnforcePerClientResourcesResolution, h as isAudienceClaimAllowed, i as invalidateRefreshFamily, j as resolveAuthenticationContext, k as getSupportedClaims, l as validateClientCredentialsScopes, m as invalidateResourceCache, o as userInfoEndpoint, p as getResource, s as findToken, t as introspectEndpoint, u as getEndpointUrl, v as resolveResourcePolicy, w as clientJwksSchema, x as ResourceUriSchema, y as seedResourcesOnce } from "./introspect-kDLwBDTx.mjs";
++import { A as getAcrValuesSupported, C as authorizationQuerySchema, D as STANDARD_CLAIMS, F as getRequestedUserInfoClaims, I as isValidOidcClaimsRequest, M as canSatisfyEssentialAcrRequest, N as claimsRequestParameterSchema, O as STANDARD_CLAIM_NAMES, P as filterClaimsRequestUserInfoClaims, S as SafeUrlSchema, T as clientRegistrationRequestSchema, _ as logStartupSeedFailure, a as tokenEndpoint, b as userInfoResource, c as normalizeClientCredentialsScopes, d as JWS_ALGORITHMS, f as assertIdentifierValid, g as logEnforcePerClientResourcesResolution, h as isAudienceClaimAllowed, i as invalidateRefreshFamily, q as withRefreshFamily, j as resolveAuthenticationContext, k as getSupportedClaims, l as validateClientCredentialsScopes, m as invalidateResourceCache, o as userInfoEndpoint, p as getResource, s as findToken, t as introspectEndpoint, u as getEndpointUrl, v as resolveResourcePolicy, w as clientJwksSchema, x as ResourceUriSchema, y as seedResourcesOnce } from "./introspect-kDLwBDTx.mjs";
+ import { $ as validateOAuthProviderExtensions, A as storeClientSecret, E as removePromptFromQuery, F as validateClientCredentials, J as getSupportedGrantTypes, K as getExtensionInteractionRequest, L as verifyOAuthQueryParams, N as toResourceList, O as resolveSubjectIdentifier, Q as validateExtensionClientMetadata, R as applyOAuthProviderMetadataExtensions, S as parsePrompt, T as removeMaxAgeFromQuery, U as getClientDiscoveries, W as getExtensionClientMetadataFields, Y as hasExtensionClientMetadata, Z as isExtensionTokenEndpointAuthMethod, _ as mergeDiscoveryMetadata, a as decryptStoredClientSecret, b as parseBearerToken, c as extractClientCredentials, d as getConsentReferenceId, f as getJwtPlugin, g as isSessionFreshForSignedQuery, h as isPKCERequired, i as consentCovers, j as storeToken, k as searchParamsToQuery, l as findConsent, n as assertNotTrustedClient, o as deriveSectorIdentifier, q as getSupportedAuthMethods, r as clientAllowsGrant, s as destructureCredentials, t as applyFormParams, tt as stripReservedOAuthClientMetadataExtensions, u as getClient, w as readFormParams, x as parseClientMetadata } from "./utils-CyzcafJL.mjs";
+ import { a as setSignedOAuthQueryParameterNames, i as readSignedOAuthQuery, n as canonicalizeOAuthQueryParams, o as signedQueryIssuedAtParam, r as postLoginClearedParam } from "./signed-query-BDVFtIwB.mjs";
+ import { t as PACKAGE_VERSION } from "./version-BS4NkjRz.mjs";
+@@ -3728,35 +3728,9 @@ async function revokeOpaqueAccessToken(ctx, accessToken) {
+ 		}]
+ 	});
+ }
+-async function revokeRefreshToken(ctx, refreshToken, clientId) {
+-	const { userId } = refreshToken;
+-	if (refreshToken.revoked) {
+-		await invalidateRefreshFamily(ctx, clientId, userId);
+-		return;
+-	}
+-	const iat = Math.floor(Date.now() / 1e3);
+-	if (!await ctx.context.adapter.incrementOne({
+-		model: "oauthRefreshToken",
+-		where: [{
+-			field: "id",
+-			value: refreshToken.id
+-		}, {
+-			field: "revoked",
+-			operator: "eq",
+-			value: null
+-		}],
+-		increment: {},
+-		set: { revoked: /* @__PURE__ */ new Date(iat * 1e3) }
+-	})) {
+-		await invalidateRefreshFamily(ctx, clientId, userId);
+-		return;
+-	}
+-	await ctx.context.adapter.deleteMany({
+-		model: "oauthAccessToken",
+-		where: [{
+-			field: "refreshId",
+-			value: refreshToken.id
+-		}]
++async function revokeRefreshToken(ctx, refreshToken, clientId, opts) {
++	return withRefreshFamily(ctx, opts, refreshToken.authorizationCodeId, clientId, false, async (ctx) => {
++		await invalidateRefreshFamily(ctx, clientId, refreshToken.userId, refreshToken.authorizationCodeId);
+ 	});
+ }
+ async function revokeEndpoint(ctx, opts) {
+@@ -3784,7 +3758,7 @@ async function revokeEndpoint(ctx, opts) {
+ 		}
+ 		if (found.type === "jwt") return await revokeJwtAccessToken(ctx, opts, found.payload);
+ 		if (found.type === "opaque") await revokeOpaqueAccessToken(ctx, found.record);
+-		else await revokeRefreshToken(ctx, found.record, client.clientId);
++		else await revokeRefreshToken(ctx, found.record, client.clientId, opts);
+ 		return null;
+ 	} catch (error) {
+ 		if (error instanceof APIError$1) throw error;
+@@ -4093,6 +4067,12 @@ const schema = {
+ 	*
+ 	* Refresh tokens are linked to a session.
+ 	*/
++	oauthRefreshFamily: { fields: {
++		clientId: { type: "string", required: true },
++		revoked: { type: "boolean", required: true, defaultValue: false },
++		sequence: { type: "number", required: true, defaultValue: 0 },
++		expiresAt: { type: "date", required: true, index: true }
++	} },
+ 	oauthRefreshToken: { fields: {
+ 		token: {
+ 			type: "string",
+diff --git a/dist/introspect-kDLwBDTx.mjs b/dist/introspect-kDLwBDTx.mjs
+index 1398e6d76691366a4c30c56dc0b113ec9d754363..2c8345abb7c12173d21f3ae188442c375852b961 100644
+--- a/dist/introspect-kDLwBDTx.mjs
++++ b/dist/introspect-kDLwBDTx.mjs
+@@ -1,6 +1,7 @@
+ import { t as __exportAll } from "./rolldown-runtime-wcPFST8Q.mjs";
+ import { B as collectExtensionIdTokenClaims, D as resolveSessionAuthTime, F as validateClientCredentials, G as getExtensionGrantHandler, I as validateClientScopes, J as getSupportedGrantTypes, M as toAudienceClaim, N as toResourceList, O as resolveSubjectIdentifier, V as collectExtensionUserInfoClaims, X as hasUserInfoClaimExtension, a as decryptStoredClientSecret, c as extractClientCredentials, f as getJwtPlugin, h as isPKCERequired, j as storeToken, m as getStoredToken, r as clientAllowsGrant, s as destructureCredentials, u as getClient, x as parseClientMetadata, y as normalizeTimestampValue, z as collectExtensionAccessTokenClaims } from "./utils-CyzcafJL.mjs";
+ import { APIError } from "better-auth/api";
++import { getCurrentAdapter, runWithTransaction } from "@better-auth/core/context";
+ import { generateRandomString, symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
+ import { APIError as APIError$1 } from "better-call";
+ import { logger } from "@better-auth/core/env";
+@@ -1626,68 +1627,64 @@ async function createOpaqueAccessToken(ctx, opts, user, client, scopes, payload,
+ 	return (opts.prefix?.opaqueAccessToken ?? "") + token;
+ }
+ /**
+-* Tear down the entire refresh-token family for a (client, user) pair, plus
+-* any access tokens that reference those refresh rows, per RFC 9700 §4.14.
+-* Access tokens are deleted first so the parent rows' foreign-key children
+-* do not block the refresh-row delete.
+-*
+-* TODO(invalidate-family-race): the two `deleteMany` calls are not atomic
+-* with respect to each other. Between them, a concurrent rotation in a
+-* different worker can `create` a fresh refresh row (and, immediately after,
+-* an access-token row referencing it) for the same (client, user) pair,
+-* leaving the family partially rebuilt and the new refresh row orphaned of
+-* any deletion. Closing this window requires the same transactional adapter
+-* contract tracked under FIXME(strict-family-invalidation) in
+-* `createRefreshToken`.
+-*
+-* @internal
+-*/
+-async function invalidateRefreshFamily(ctx, clientId, userId) {
+-	const refreshTokens = await ctx.context.adapter.findMany({
+-		model: "oauthRefreshToken",
+-		where: [{
+-			field: "clientId",
+-			value: clientId
+-		}, {
+-			field: "userId",
+-			value: userId
+-		}]
+-	});
+-	if (refreshTokens.length) await ctx.context.adapter.deleteMany({
+-		model: "oauthAccessToken",
+-		where: [{
+-			field: "refreshId",
+-			operator: "in",
+-			value: refreshTokens.map((r) => r.id)
+-		}]
+-	});
+-	await ctx.context.adapter.deleteMany({
+-		model: "oauthRefreshToken",
+-		where: [{
+-			field: "clientId",
+-			value: clientId
+-		}, {
+-			field: "userId",
+-			value: userId
+-		}]
++ * RFC 9700 section 4.14.2: rotation and reuse must linearize on one durable
++ * family key. Remove this downstream patch when upstream provides equivalent
++ * atomic, permanently revoked, bounded family storage on PostgreSQL.
++ * Native token rows and the authorization-code digest remain authoritative.
++ */
++async function invalidateRefreshFamily(ctx, clientId, userId, authorizationCodeId) {
++	if (!authorizationCodeId) throw new APIError("BAD_REQUEST", { error: "invalid_grant" });
++	await ctx.context.adapter.update({
++		model: "oauthRefreshFamily",
++		where: [{ field: "id", value: authorizationCodeId }, { field: "clientId", value: clientId }],
++		update: { revoked: true }
+ 	});
+ }
+ async function revokeTokensIssuedForAuthorizationCode(ctx, authorizationCodeId) {
+-	const deleteIssuedTokens = async (model) => {
++	await ctx.context.adapter.update({
++		model: "oauthRefreshFamily",
++		where: [{ field: "id", value: authorizationCodeId }],
++		update: { revoked: true }
++	});
++}
++async function withRefreshFamily(ctx, opts, authorizationCodeId, clientId, create, action) {
++	if (!authorizationCodeId) throw new APIError("BAD_REQUEST", { error: "invalid_grant" });
++	const root = ctx.context.adapter;
++	// Only an existing native code can establish a guard. Unknown bearer input
++	// never creates retention metadata. The unique key arbitrates first exchange.
++	if (create && await ctx.context.internalAdapter.findVerificationValue(authorizationCodeId)) {
+ 		try {
+-			await ctx.context.adapter.deleteMany({
+-				model,
+-				where: [{
+-					field: "authorizationCodeId",
+-					value: authorizationCodeId
+-				}]
+-			});
++			await root.create({ model: "oauthRefreshFamily", forceAllowId: true, data: {
++				id: authorizationCodeId, clientId, revoked: false, sequence: 0,
++				expiresAt: new Date(Date.now() + (opts.refreshTokenExpiresIn ?? 2592000) * 1000)
++			} });
+ 		} catch (error) {
+-			ctx.context.logger.error("authorization code replay cleanup failed", error);
++			if (!await root.findOne({ model: "oauthRefreshFamily", where: [{ field: "id", value: authorizationCodeId }] })) throw error;
+ 		}
+-	};
+-	await deleteIssuedTokens("oauthAccessToken");
+-	await deleteIssuedTokens("oauthRefreshToken");
++	}
++	const outcome = await runWithTransaction(root, async () => {
++		const adapter = await getCurrentAdapter(root);
++		// incrementOne is an exact-key UPDATE, which takes the family row lock.
++		// Rebind direct OAuth calls as well as the internal adapter's ALS calls.
++		const family = await adapter.incrementOne({ model: "oauthRefreshFamily",
++			where: [{ field: "id", value: authorizationCodeId }, { field: "clientId", value: clientId }],
++			increment: { sequence: 1 }, set: {} });
++		if (!family || family.revoked || family.expiresAt <= new Date()) return { error: new APIError("BAD_REQUEST", { error: "invalid_grant" }) };
++		const scoped = { ...ctx, context: { ...ctx.context, adapter } };
++		try {
++			const value = await action(scoped);
++			await adapter.update({ model: "oauthRefreshFamily", where: [{ field: "id", value: authorizationCodeId }],
++				update: { expiresAt: new Date(Date.now() + (opts.refreshTokenExpiresIn ?? 2592000) * 1000) } });
++			return { value };
++		} catch (error) {
++			// Protocol failures commit one-use consumption and reuse tombstones.
++			// Infrastructure failures roll back; no token response can escape.
++			if (error instanceof APIError || error instanceof APIError$1) return { error };
++			throw error;
++		}
++	});
++	if (outcome.error) throw outcome.error;
++	return outcome.value;
+ }
+ async function createRefreshToken(ctx, opts, user, referenceId, authorizationCodeId, client, scopes, payload, originalRefresh, authTime, resources, confirmation, requestedUserInfoClaims, authenticationContext) {
+ 	const iat = payload.iat ?? Math.floor(Date.now() / 1e3);
+@@ -1737,10 +1734,10 @@ async function createRefreshToken(ctx, opts, user, referenceId, authorizationCod
+ 		}],
+ 		increment: {},
+ 		set: rotationUpdate
+-	})) throw new APIError("BAD_REQUEST", {
+-		error_description: "invalid refresh token",
+-		error: "invalid_grant"
+-	});
++	})) {
++		await invalidateRefreshFamily(ctx, client.clientId, user.id, originalRefresh.authorizationCodeId);
++		throw new APIError("BAD_REQUEST", { error: "invalid_grant" });
++	}
+ 	return {
+ 		id: (await ctx.context.adapter.create({
+ 			model: "oauthRefreshToken",
+@@ -2134,6 +2131,7 @@ async function handleAuthorizationCodeGrant(ctx, opts) {
+ 	* `invalid_client`, so resolve it before the code lookup can report
+ 	* `invalid_grant` and before a one-time code is consumed). */
+ 	const client = await validateClientCredentials(ctx, opts, client_id, client_secret, void 0, preVerified, "authorization_code", authMethod);
++	return withRefreshFamily(ctx, opts, await storeToken(opts.storeTokens, code, "authorization_code"), client_id, true, async (ctx) => {
+ 	/** Get and check Verification Value */
+ 	const { verificationValue, effectiveResources, authorizedResources, authorizationCodeId } = await checkVerificationValue(ctx, opts, code, client_id, redirect_uri, resources);
+ 	const scopes = verificationValue.query.scope?.split(" ");
+@@ -2211,6 +2209,7 @@ async function handleAuthorizationCodeGrant(ctx, opts) {
+ 		resources: effectiveResources,
+ 		originalResources: authorizedResources
+ 	});
++	});
+ }
+ /**
+ * Grant that allows direct access to an API using the application's credentials
+@@ -2277,6 +2276,9 @@ async function handleRefreshTokenGrant(ctx, opts) {
+ 	* `invalid_client`, so resolve it before the refresh token lookup can
+ 	* report `invalid_grant`). */
+ 	const client = await validateClientCredentials(ctx, opts, client_id, client_secret, void 0, preVerified, "refresh_token", authMethod);
++	const initial = await findRefreshToken(ctx, opts, refresh_token);
++	if (!initial || initial.clientId !== client_id) throw new APIError("BAD_REQUEST", { error: "invalid_grant" });
++	return withRefreshFamily(ctx, opts, initial.authorizationCodeId, client_id, false, async (ctx) => {
+ 	const refreshToken = await findRefreshToken(ctx, opts, refresh_token);
+ 	if (!refreshToken) throw new APIError("BAD_REQUEST", {
+ 		error_description: "session not found",
+@@ -2318,7 +2320,7 @@ async function handleRefreshTokenGrant(ctx, opts) {
+ 				error: "invalid_grant"
+ 			});
+ 		}
+-		await invalidateRefreshFamily(ctx, client_id, refreshToken.userId);
++		await invalidateRefreshFamily(ctx, client_id, refreshToken.userId, refreshToken.authorizationCodeId);
+ 		throw new APIError("BAD_REQUEST", {
+ 			error_description: "invalid refresh token",
+ 			error: "invalid_grant"
+@@ -2345,6 +2347,7 @@ async function handleRefreshTokenGrant(ctx, opts) {
+ 		amr: refreshToken.amr ?? void 0,
+ 		requestedUserInfoClaims: refreshToken.requestedUserInfoClaims
+ 	});
++	});
+ }
+ //#endregion
+ //#region src/introspect.ts
+@@ -2629,4 +2632,4 @@ async function introspectEndpoint(ctx, opts) {
+ 	}
+ }
+ //#endregion
+-export { getAcrValuesSupported as A, authorizationQuerySchema as C, STANDARD_CLAIMS as D, oauthClientMetadataSchema as E, getRequestedUserInfoClaims as F, isValidOidcClaimsRequest as I, canSatisfyEssentialAcrRequest as M, claimsRequestParameterSchema as N, STANDARD_CLAIM_NAMES as O, filterClaimsRequestUserInfoClaims as P, SafeUrlSchema as S, clientRegistrationRequestSchema as T, logStartupSeedFailure as _, tokenEndpoint as a, userInfoResource as b, normalizeClientCredentialsScopes as c, JWS_ALGORITHMS as d, assertIdentifierValid as f, logEnforcePerClientResourcesResolution as g, isAudienceClaimAllowed as h, invalidateRefreshFamily as i, resolveAuthenticationContext as j, getSupportedClaims as k, validateClientCredentialsScopes as l, invalidateResourceCache as m, introspect_exports as n, userInfoEndpoint as o, getResource as p, getOAuthProviderApi as r, findToken as s, introspectEndpoint as t, getEndpointUrl as u, resolveResourcePolicy as v, clientJwksSchema as w, ResourceUriSchema as x, seedResourcesOnce as y };
++export { getAcrValuesSupported as A, authorizationQuerySchema as C, STANDARD_CLAIMS as D, oauthClientMetadataSchema as E, getRequestedUserInfoClaims as F, isValidOidcClaimsRequest as I, canSatisfyEssentialAcrRequest as M, claimsRequestParameterSchema as N, STANDARD_CLAIM_NAMES as O, filterClaimsRequestUserInfoClaims as P, SafeUrlSchema as S, clientRegistrationRequestSchema as T, logStartupSeedFailure as _, tokenEndpoint as a, userInfoResource as b, normalizeClientCredentialsScopes as c, JWS_ALGORITHMS as d, assertIdentifierValid as f, logEnforcePerClientResourcesResolution as g, isAudienceClaimAllowed as h, invalidateRefreshFamily as i, withRefreshFamily as q, resolveAuthenticationContext as j, getSupportedClaims as k, validateClientCredentialsScopes as l, invalidateResourceCache as m, introspect_exports as n, userInfoEndpoint as o, getResource as p, getOAuthProviderApi as r, findToken as s, introspectEndpoint as t, getEndpointUrl as u, resolveResourcePolicy as v, clientJwksSchema as w, ResourceUriSchema as x, seedResourcesOnce as y };

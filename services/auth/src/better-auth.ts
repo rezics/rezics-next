@@ -1,5 +1,7 @@
 import type { BetterAuthOptions, BetterAuthPlugin } from 'better-auth';
 import type { Pool } from 'pg';
+import { jwt } from 'better-auth/plugins';
+import { websiteProvider } from './website-provider.ts';
 import { nativeAttemptOptions } from './rate-limit.ts';
 import { nativeSessionLimits } from './session-limits.ts';
 import { nativeVerificationPlugin } from './verification-maintenance.ts';
@@ -23,7 +25,7 @@ export function betterAuthOptions(database: Pool, issuer: string, secret: string
     baseURL: issuer,
     basePath: '/api/auth',
     secret,
-    plugins: [credentialOwnerSchema, nativeVerificationPlugin, nativeSessionLimits(database)],
+    plugins: [credentialOwnerSchema, nativeVerificationPlugin, nativeSessionLimits(database), jwt(), websiteProvider(issuer, 'https://api.rezics.com', ['openid', 'offline_access'])],
     // Native cleanup is an unbounded DELETE, even behind an indexed adapter.
     // Expiry validation remains native; retention uses the internal batch port.
     verification: { disableCleanup: true },

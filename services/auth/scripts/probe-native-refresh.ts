@@ -13,6 +13,7 @@ import { nativeProbeOptions } from './probe-native-worker.ts';
 // database. Never mount this fixture as an application or log its credentials.
 const fixture = testDatabase();
 const database = new Pool({ connectionString: fixture.url, max: 1 });
+const observer = new Pool({ connectionString: fixture.url, max: 1 });
 const audience = 'https://api.rezics.test';
 const secret = 'native-provider-probe-only-secret-at-least-32-bytes';
 const account: AccessAccount = {
@@ -207,9 +208,9 @@ try {
 
   const reachedInsert = Promise.withResolvers<void>();
   const releaseInsert = Promise.withResolvers<void>();
-  const originalCreate = context.adapter.create.bind(context.adapter);
+  const guarded = (await database.query(`SELECT to_regclass('"oauthRefreshFamily"') IS NOT NULL AS guarded`)).rows[0].guarded;
   let pause = true;
-  context.adapter.create = async (input) => {
+  const pauseCreate = (originalCreate: typeof context.adapter.create): typeof context.adapter.create => async (input) => {
     if (input.model === 'oauthRefreshToken' && pause) {
       pause = false;
       reachedInsert.resolve();
@@ -217,6 +218,12 @@ try {
     }
     return originalCreate(input);
   };
+  context.adapter.create = pauseCreate(context.adapter.create.bind(context.adapter));
+  const originalTransaction = context.adapter.transaction.bind(context.adapter);
+  context.adapter.transaction = (action) => originalTransaction(async (transaction) => {
+    transaction.create = pauseCreate(transaction.create.bind(transaction));
+    return action(transaction);
+  });
   const rotation = token({ grant_type: 'refresh_token', refresh_token: issued.refresh_token });
   let deadline: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -228,16 +235,34 @@ try {
     ]);
     // Rotation has atomically revoked the parent, but has not inserted the child.
     const hooksBeforeReplay = issuanceHooks;
-    const replay = await token({ grant_type: 'refresh_token', refresh_token: issued.refresh_token }, workerOrigin);
+    const replayRequest = token({ grant_type: 'refresh_token', refresh_token: issued.refresh_token }, workerOrigin);
+    if (guarded) {
+      // Synchronize on the real PostgreSQL lock wait, not elapsed time. The
+      // observer never participates in the one-connection native runtime pool.
+      const end = Date.now() + 10000;
+      while (true) {
+        const waiting = await observer.query(`SELECT 1 FROM pg_stat_activity
+          WHERE application_name='native-refresh-probe-worker'
+          AND cardinality(pg_blocking_pids(pid))>0`);
+        if (waiting.rowCount) break;
+        if (Date.now() > end) throw new Error('Replay did not wait for its durable family guard');
+        await Bun.sleep(10);
+      }
+      releaseInsert.resolve();
+    }
+    const replay = await replayRequest;
     assert.equal(replay.status, 400, 'native replay is detected');
     assert.equal(issuanceHooks, hooksBeforeReplay, 'replay cannot reach the other process issuance hooks');
     const workerHooks = await (await fetch(`${workerOrigin}/probe/hooks`)).json();
     assert.equal(workerHooks.issuanceHooks, 0, 'native replay skips both hooks in the replay process');
-    const afterReplay = await database.query(
-      'SELECT count(*)::int AS count FROM "oauthRefreshToken" WHERE "clientId"=$1',
-      [client.client_id],
-    );
-    assert.equal(afterReplay.rows[0].count, 0, 'native replay cleanup completed');
+    if (!guarded) {
+      const afterReplay = await database.query(
+        'SELECT count(*)::int AS count FROM "oauthRefreshToken" WHERE "clientId"=$1',
+        [client.client_id],
+      );
+      assert.equal(afterReplay.rows[0].count, 0, 'native replay cleanup completed');
+    }
+
   } finally {
     clearTimeout(deadline);
     releaseInsert.resolve();
@@ -250,13 +275,15 @@ try {
   const survived = await token({ grant_type: 'refresh_token', refresh_token: child.refresh_token }, workerOrigin);
   console.log(
     JSON.stringify({
-      provider: '@better-auth/oauth-provider@1.7.12',
+      provider: `@better-auth/oauth-provider@${(await Bun.file(new URL('../package.json', import.meta.resolve('@better-auth/oauth-provider'))).json()).version}`,
+      betterAuth: (await Bun.file(new URL('../package.json', import.meta.resolve('better-auth'))).json()).version,
+      guarded,
       processes: 2,
       poolMaxPerProcess: 1,
       restartedReplayProcess: true,
       directReadUsesTransaction,
       replayStatus: 400,
-      refreshRowsImmediatelyAfterReplay: 0,
+      refreshRowsImmediatelyAfterReplay: guarded ? 2 : 0,
       concurrentRotationStatus: rotated.status,
       childRefreshAfterReplayStatus: survived.status,
       issuanceHooksDuringReplay: 0,
@@ -270,6 +297,7 @@ try {
 } finally {
   await stopWorker();
   await server.stop(true);
+  await observer.end();
   await database.end();
   fixture.close();
 }

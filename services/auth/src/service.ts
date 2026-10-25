@@ -1,6 +1,9 @@
 import { createHash, createHmac, randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { betterAuth } from 'better-auth';
+import { jwt } from 'better-auth/plugins';
+import { websiteProvider } from './website-provider.ts';
+import { WEBSITE_CLIENT_ID, websiteRoutes } from './website.ts';
 import { APIError, createAuthEndpoint } from 'better-auth/api';
 import { setSessionCookie } from 'better-auth/cookies';
 import { publicCredential, verifyKeyAssertion } from './key-credentials.ts';
@@ -32,7 +35,7 @@ import type {
   SessionProof,
 } from './index.ts';
 
-export const WEBSITE_CLIENT_ID = 'rezics-website';
+export { WEBSITE_CLIENT_ID } from './website.ts';
 
 class Denied extends Error {
   constructor(readonly status = 401) {
@@ -265,6 +268,10 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     if (binding.getStore()) await materialize(accountId, selected.clientId, client.scopes, client.first_party);
     return client;
   }
+  let websiteScopes = (await database.query<{ scopes: string[] }>('SELECT scopes FROM auth_client WHERE client_id=$1', [WEBSITE_CLIENT_ID])).rows[0]?.scopes ?? ['openid', 'offline_access'];
+  const website = websiteRoutes({ options, database, native: getAuth, withIssuance, sessionProof, getJwks: signer.getJwks,
+    reload(scopes) { websiteScopes=scopes; native=undefined; },
+  });
   function nativeAuth() {
     return betterAuth({
       ...betterAuthOptions(database, options.issuer, options.secret),
@@ -279,6 +286,9 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         credentialOwnerSchema,
         nativeVerificationPlugin,
         nativeSessionLimits(database),
+        jwt({ disableSettingJwtHeader: true, jwks: { remoteUrl: `${options.issuer}/.well-known/jwks.json`, keyPairConfig: { alg: 'ES256' } }, jwt: { issuer: options.issuer, sign: async (payload, header) => signer.signProtocol(header?.typ==='at+jwt' ? await website.accessClaims(payload) : payload, header) } }),
+        website.plugin,
+        websiteProvider(options.issuer, options.audience, websiteScopes, website.claims),
         {
           id: 'trusted-establishment',
           async onRequest() {
@@ -318,6 +328,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       databaseHooks: {
         verification: recoveryBinding.hooks,
         session: {
+          delete: { before: website.beforeDeleteSession },
           create: {
             before: async (session) => {
               // Only a verified password, own-key assertion or consumed Access opening
@@ -970,6 +981,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         if (cleanup?.boundedCleanup) return authority.cleanupFencedSessions(accountId, cleanup.barrier);
         await (await getContext()).internalAdapter.deleteUserSessions(accountId);
       },
+      registerWebsiteClient: website.register,
       async registerClient(input) {
         const id = text(input.clientId);
         if (typeof input.firstParty !== 'boolean') throw new Denied(400);
@@ -1010,6 +1022,8 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     },
     async handler(request) {
       try {
+        const protocol = await website.handler(request);
+        if (protocol) return protocol;
         const url = new URL(request.url);
         if (url.origin !== options.issuer || url.search) throw new Denied(400);
         if (url.pathname === '/.well-known/jwks.json' && request.method === 'GET') return json(await signer.getJwks());

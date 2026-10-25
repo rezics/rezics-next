@@ -24,7 +24,7 @@ export {
 import type { Pool } from 'pg';
 import type { RecoveryEstablishmentEvidence } from './recovery-establishment.ts';
 import { buildAuthService } from './service.ts';
-export { WEBSITE_CLIENT_ID } from './service.ts';
+export { WEBSITE_CLIENT_ID } from './website.ts';
 import type { JWK } from 'jose';
 import type { SessionTrim } from './session-limits.ts';
 export { createAuthHost, AuthHostConfigurationError } from './host.ts';
@@ -108,7 +108,7 @@ export interface TrustedAccessPorts {
     | ((input: {
         accountId: string;
         previousEpoch: number;
-        reason: 'consent-reduction';
+        reason: 'consent-reduction' | 'session-revocation' | 'logout' | 'refresh-replay';
         proofReference?: string;
         operationKey?: string;
       }) => Promise<InvalidationReceipt>)
@@ -136,6 +136,8 @@ export interface AuthServiceOptions {
   secret: string;
   signing: { activeKid: string; privateKeys: JWK[] };
   trustedAccess: TrustedAccessPorts;
+  /** Trusted mounted x-action catalogue, supplied by production composition. */
+  siteActions?: ReadonlyMap<string, { anonymous: boolean; replay?: 'self-account-read' }>;
   recoveryDelivery?: {
     deliver(input: { accountId: string; email: string; token: string; expiresAt: Date }): Promise<void>;
   };
@@ -198,6 +200,14 @@ export interface VerifierConfiguration {
   jwksUrl: string;
   algorithms: ['ES256'];
   accessTokenLifetimeSeconds: 300;
+}
+
+export interface WebsiteClientRegistration {
+  publicJwks: PublicJwks;
+  redirectUris: string[];
+  postLogoutRedirectUris: string[];
+  /** Protocol scopes plus exact mounted site actions from the trusted catalogue. */
+  scopes: string[];
 }
 
 export interface AuthService {
@@ -275,6 +285,7 @@ export interface AuthService {
     /** Bounded cleanup is valid only after a durable Access floor; remaining
      * native rows cannot pass sessionProof and expire when presented. */
     revokeSessions(accountId: string, options?: { boundedCleanup: true; barrier: InvalidationReceipt }): Promise<void>;
+    registerWebsiteClient(input: WebsiteClientRegistration): Promise<void>;
     registerClient(input: { clientId: string; firstParty: boolean; scopes: string[] }): Promise<void>;
   };
 }

@@ -23,7 +23,7 @@ export function nativeProbeOptions(
         loginPage: '/signin',
         consentPage: '/consent',
         scopes,
-        resources: [{ identifier: audience, scopes: ['media:read'] }],
+        resources: [{ identifier: audience, name: 'REZICS API', allowedScopes: scopes }],
         grantTypes: ['authorization_code', 'refresh_token'],
         assertionMaxLifetime: 120,
         accessTokenExpiresIn: 300,
@@ -54,7 +54,7 @@ if (import.meta.main) {
     scopes: string[];
   } = JSON.parse(await Bun.stdin.text());
   const { Pool: PostgresPool } = await import('pg');
-  const database = new PostgresPool({ connectionString: configuration.url, max: 1 });
+  const database = new PostgresPool({ connectionString: configuration.url, max: 1, application_name: 'native-refresh-probe-worker' });
   let issuanceHooks = 0;
   const native = betterAuth(
     nativeProbeOptions(

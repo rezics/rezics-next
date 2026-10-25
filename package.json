@@ -3,7 +3,11 @@
   "private": true,
   "license": "AGPL-3.0-only",
   "type": "module",
-  "workspaces": ["apps/*", "services/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "services/*",
+    "packages/*"
+  ],
   "scripts": {
     "check": "bun scripts/gate.ts"
   },
