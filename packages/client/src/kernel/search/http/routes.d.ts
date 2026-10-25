@@ -357,6 +357,7 @@ export declare function searchRoutes<App>(app: App, { pool, search, access }: {
     };
     detail: {
         operationId: string;
+        'x-exposure': string;
         'x-action': string;
         security: ({
             bearerAuth: never[];
@@ -578,6 +579,7 @@ export declare function searchRoutes<App>(app: App, { pool, search, access }: {
         };
         detail: {
             operationId: string;
+            'x-exposure': string;
             'x-action': string;
             security: ({
                 bearerAuth: never[];
@@ -706,6 +708,7 @@ export declare function searchRoutes<App>(app: App, { pool, search, access }: {
     };
     detail: {
         operationId: string;
+        'x-exposure': string;
         'x-action': string;
         security: ({
             bearerAuth: never[];

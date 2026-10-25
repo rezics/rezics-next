@@ -2,6 +2,15 @@ import type { Pool } from 'pg';
 import { Type } from 'typebox';
 export declare const BATCH_ENVELOPES = 64;
 export declare const EVENT_TYPES: {
+    readonly "com.rezics.subject.merged.v1": Type.TObject<{
+        id: Type.TString;
+        survivor: Type.TString;
+    }>;
+    readonly "com.rezics.semantic.links.moving.v1": Type.TObject<{
+        id: Type.TString;
+        survivor: Type.TString;
+        cursor: Type.TArray<Type.TUnion<[Type.TString, Type.TInteger]>>;
+    }>;
     readonly 'com.rezics.statement.proposed.v1': Type.TObject<{
         candidate: Type.TString;
         revision: Type.TInteger;
@@ -37,6 +46,12 @@ export declare const EVENT_TYPES: {
     }>;
     readonly 'com.rezics.semantic.links.projected.v1': Type.TObject<{
         subjects: Type.TArray<Type.TString>;
+    }>;
+    readonly 'com.rezics.access.account.suspended.v1': Type.TObject<{
+        accountId: Type.TString;
+        state: Type.TLiteral<"suspended">;
+        minimumAuthnEpoch: Type.TString;
+        receiptId: Type.TString;
     }>;
     readonly 'com.rezics.access.grant.create.v1': Type.TUnion<[Type.TObject<{
         resource: Type.TObject<{
@@ -330,6 +345,18 @@ export declare const EVENT_TYPES: {
     }>;
     readonly 'com.rezics.library.subject.listed.v1': Type.TObject<{
         subjectId: Type.TString;
+    }>;
+    readonly 'com.rezics.library.follow.updated.v1': Type.TObject<{
+        targetId: Type.TString;
+    }>;
+    readonly 'com.rezics.library.progress_session.updated.v1': Type.TObject<{
+        sessionId: Type.TString;
+    }>;
+    readonly 'com.rezics.library.copy.updated.v1': Type.TObject<{
+        copyId: Type.TString;
+    }>;
+    readonly 'com.rezics.library.copy.deleted.v1': Type.TObject<{
+        copyId: Type.TString;
     }>;
     readonly 'com.rezics.definitions.published.v1': Type.TObject<{
         digest: Type.TString;

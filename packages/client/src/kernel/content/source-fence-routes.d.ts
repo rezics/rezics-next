@@ -199,6 +199,129 @@ export declare function sourceFenceRoutes(app: ReturnType<typeof definitionRoute
 } & {
     v1: {
         subjects: {
+            $merge: {
+                post: {
+                    body: {
+                        subjects: string[];
+                    };
+                    params: {};
+                    query: unknown;
+                    headers: {
+                        "idempotency-key": string;
+                    };
+                    response: {
+                        200: {
+                            survivor: string;
+                            redirected: string;
+                            revision: number;
+                        };
+                        400: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        401: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        403: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        404: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        409: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        422: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        503: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                    };
+                    error: never;
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        subjects: {
             ":id": {
                 get: {
                     body: unknown;
@@ -275,7 +398,14 @@ export declare function sourceFenceRoutes(app: ReturnType<typeof definitionRoute
                             };
                             related: Record<string, {
                                 labels: Record<string, string>;
+                                redirect?: string;
                             }>;
+                        };
+                        308: {
+                            redirect: {
+                                from: string;
+                                to: string;
+                            };
                         };
                         401: {
                             type: unknown;
@@ -1539,6 +1669,12 @@ export declare function sourceFenceRoutes(app: ReturnType<typeof definitionRoute
                                 };
                                 next: string | null;
                             };
+                            308: {
+                                redirect: {
+                                    from: string;
+                                    to: string;
+                                };
+                            };
                             400: {
                                 type: unknown;
                                 title: unknown;
@@ -2144,6 +2280,7 @@ export declare function sourceFenceRoutes(app: ReturnType<typeof definitionRoute
     };
     detail: {
         operationId: string;
+        'x-exposure': string;
         'x-action': string;
         security: {
             bearerAuth: never[];
@@ -2471,6 +2608,7 @@ export declare function sourceFenceRoutes(app: ReturnType<typeof definitionRoute
         };
         detail: {
             operationId: string;
+            'x-exposure': string;
             'x-action': string;
             security: {
                 bearerAuth: never[];
@@ -2682,6 +2820,7 @@ export declare function sourceFenceRoutes(app: ReturnType<typeof definitionRoute
     };
     detail: {
         operationId: string;
+        'x-exposure': string;
         'x-action': string;
         security: {
             bearerAuth: never[];
@@ -3008,6 +3147,7 @@ export declare function sourceFenceRoutes(app: ReturnType<typeof definitionRoute
             };
             detail: {
                 operationId: string;
+                'x-exposure': string;
                 'x-action': string;
                 security: {
                     bearerAuth: never[];

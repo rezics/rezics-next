@@ -9,7 +9,7 @@ import { customMethod } from '../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
-import { AuthenticationError } from '../request/access.ts';
+import { AuthenticationError, type Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { sourceFenceRoutes } from './source-fence-routes.ts';
 import { mediaModerationRoutes } from './media-moderation-routes.ts';
@@ -25,6 +25,7 @@ import { InvalidMediaClaimError } from './media.ts';
 import { DocumentTooLargeError, InvalidDocumentError, MAX_DOCUMENT_BYTES } from './document.ts';
 import { mediaImportRoutes } from './media-import-routes.ts';
 import type { AnchoredPosition, ReadContext } from './model.ts';
+import { clearReaction, setReaction, type ReactionKind } from './reactions.ts';
 import type { ContentRuntime } from './runtime.ts';
 import { sourceFenceGovernanceRoutes } from './source-fence-governance-routes.ts';
 import {
@@ -35,6 +36,7 @@ import {
   readPost,
   readThread,
   type ThreadView,
+  withViewerReactions,
 } from './reads.ts';
 import {
   BoardResponseSchema,
@@ -45,6 +47,8 @@ import {
   RevisionPageResponseSchema,
   PostInputSchema,
   PostResponseSchema,
+  ReactionInputSchema,
+  ReactionResponseSchema,
   RevisionInputSchema,
   strictContentSchema,
   ThreadInputSchema,
@@ -86,6 +90,8 @@ const commandHeaders = t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { addition
 const readSecurity = [{ bearerAuth: [] }, {}];
 const writeSecurity = [{ bearerAuth: [] }];
 const writeRate = defineRateLimit({ family: 'write', units: 1 });
+const reactionInput = strictContentSchema(ReactionInputSchema);
+const reactionResponse = strictContentSchema(ReactionResponseSchema);
 const threadInput = strictContentSchema(ThreadInputSchema);
 const postInput = strictContentSchema(PostInputSchema);
 const revisionInput = strictContentSchema(RevisionInputSchema);
@@ -143,8 +149,12 @@ async function contentOperation<T>(operation: () => Promise<T>): Promise<T> {
     if (error instanceof InvalidMediaClaimError) throw new ProblemError('idempotency_conflict');
     if (error instanceof CommandNotFoundError || error instanceof ReadNotFoundError)
       throw new ProblemError('not_found');
-    if (error instanceof ContentForbiddenError) throw new ProblemError('forbidden');
-    if (error instanceof TypeError && error.message === 'Invalid content cursor')
+    if (error instanceof ContentForbiddenError || error instanceof GrantDeniedError)
+      throw new ProblemError('forbidden');
+    if (
+      error instanceof TypeError &&
+      (error.message === 'Invalid content cursor' || error.message === 'Invalid reaction kind')
+    )
       throw new ProblemError('invalid_request');
     throw error;
   }
@@ -286,7 +296,9 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             const result = await readThread(dependencies, id, { actor, deadline: job.deadline });
             if (!result.value) throw new ProblemError('not_found');
             session.record(sessionComponent(result.anchor));
-            return { thread: result.value };
+            const [thread] = await withViewerReactions(dependencies, actor, [result.value], job.deadline);
+            if (!thread) throw new ProblemError('not_found');
+            return { thread };
           }),
         );
       },
@@ -349,7 +361,8 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
               query.limit ?? 20,
             );
             session.record(sessionComponent(page.anchor));
-            return { posts: [...page.entries], next: page.nextCursor };
+            const posts = await withViewerReactions(dependencies, actor, page.entries, job.deadline);
+            return { posts: [...posts], next: page.nextCursor };
           }),
         );
       },
@@ -535,5 +548,114 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
           }),
         );
       },
+    )
+    .put(
+      '/v1/threads/:threadId/reaction',
+      {
+        params: t.Object({ threadId: t.String() }, { additionalProperties: false }),
+        headers: commandHeaders,
+        body: reactionInput,
+        response: { 200: reactionResponse, ...writeFailures },
+        detail: {
+          operationId: 'thread.set_reaction',
+          'x-exposure': 'public',
+          'x-action': 'reaction:set',
+          'x-rate-limit': writeRate,
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { threadId }, actor, body, request, admission, job, session }) => {
+        await writeReaction(dependencies, actor, 'thread', threadId, body.kind, request, admission, job, session);
+        return { kind: body.kind };
+      },
+    )
+    .delete(
+      '/v1/threads/:threadId/reaction',
+      {
+        params: t.Object({ threadId: t.String() }, { additionalProperties: false }),
+        headers: commandHeaders,
+        response: { 204: t.Void(), ...writeFailures },
+        detail: {
+          operationId: 'thread.clear_reaction',
+          'x-exposure': 'public',
+          'x-action': 'reaction:set',
+          'x-rate-limit': writeRate,
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { threadId }, actor, request, admission, job, session, set }) => {
+        await writeReaction(dependencies, actor, 'thread', threadId, null, request, admission, job, session);
+        set.status = 204;
+      },
+    )
+    .put(
+      '/v1/posts/:postId/reaction',
+      {
+        params: t.Object({ postId: t.String() }, { additionalProperties: false }),
+        headers: commandHeaders,
+        body: reactionInput,
+        response: { 200: reactionResponse, ...writeFailures },
+        detail: {
+          operationId: 'post.set_reaction',
+          'x-exposure': 'public',
+          'x-action': 'reaction:set',
+          'x-rate-limit': writeRate,
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { postId }, actor, body, request, admission, job, session }) => {
+        await writeReaction(dependencies, actor, 'post', postId, body.kind, request, admission, job, session);
+        return { kind: body.kind };
+      },
+    )
+    .delete(
+      '/v1/posts/:postId/reaction',
+      {
+        params: t.Object({ postId: t.String() }, { additionalProperties: false }),
+        headers: commandHeaders,
+        response: { 204: t.Void(), ...writeFailures },
+        detail: {
+          operationId: 'post.clear_reaction',
+          'x-exposure': 'public',
+          'x-action': 'reaction:set',
+          'x-rate-limit': writeRate,
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { postId }, actor, request, admission, job, session, set }) => {
+        await writeReaction(dependencies, actor, 'post', postId, null, request, admission, job, session);
+        set.status = 204;
+      },
     );
+}
+
+async function writeReaction(
+  dependencies: Dependencies,
+  actor: Actor,
+  targetKind: 'thread' | 'post',
+  targetId: string,
+  kind: ReactionKind | null,
+  request: Request,
+  admission: { run: (lane: 'normal', job: { deadline: number }, work: () => Promise<unknown>) => Promise<unknown> },
+  job: { deadline: number },
+  session: { record: (component: { partition: number; epoch: number; position: bigint }) => void },
+) {
+  if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+  existingId(targetId);
+  const context = requestContext(request, job.deadline);
+  const deps = {
+    pool: dependencies.pool,
+    access: dependencies.access,
+    ...(dependencies.clock === undefined ? {} : { clock: dependencies.clock }),
+  };
+  const target = { targetKind, targetId };
+  await contentOperation(() =>
+    admission.run('normal', job, async () => {
+      const result =
+        kind === null
+          ? await clearReaction(deps, actor, target, context)
+          : await setReaction(deps, actor, { ...target, kind }, context);
+      if (result) session.record(result);
+    }),
+  );
 }

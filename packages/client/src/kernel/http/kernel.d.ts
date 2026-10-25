@@ -20919,7 +20919,24 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                         };
                     };
                     201: {
-                        thread: import("../content/reads.ts").ThreadView;
+                        thread: Omit<Readonly<{
+                            id: import("../content/model.ts").ThreadId;
+                            route: import("../content/model.ts").Route;
+                            authorId: import("../content/model.ts").ContentId;
+                            title: string | null;
+                            licence: string;
+                            subjectIds: readonly import("../content/model.ts").ContentId[];
+                            boardId: import("../content/model.ts").BoardId;
+                            visibility: import("../content/model.ts").Visibility;
+                            securityRevision: import("../content/model.ts").SecurityRevision;
+                            availability: import("../content/model.ts").Availability;
+                            createdAt: string;
+                            firstPost: import("../content/model.ts").ItemView;
+                        }>, "firstPost"> & Readonly<{
+                            firstPost: import("../content/reads.ts").ItemView;
+                        }> & {
+                            readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
+                        };
                     };
                     400: {
                         type: unknown;
@@ -21065,7 +21082,24 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                     headers: unknown;
                     response: {
                         200: {
-                            thread: import("../content/reads.ts").ThreadView;
+                            thread: Omit<Readonly<{
+                                id: import("../content/model.ts").ThreadId;
+                                route: import("../content/model.ts").Route;
+                                authorId: import("../content/model.ts").ContentId;
+                                title: string | null;
+                                licence: string;
+                                subjectIds: readonly import("../content/model.ts").ContentId[];
+                                boardId: import("../content/model.ts").BoardId;
+                                visibility: import("../content/model.ts").Visibility;
+                                securityRevision: import("../content/model.ts").SecurityRevision;
+                                availability: import("../content/model.ts").Availability;
+                                createdAt: string;
+                                firstPost: import("../content/model.ts").ItemView;
+                            }>, "firstPost"> & Readonly<{
+                                firstPost: import("../content/reads.ts").ItemView;
+                            }> & {
+                                readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
+                            };
                         };
                         400: {
                             type: unknown;
@@ -21236,7 +21270,9 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                     availability: 'available';
                                 }> & Readonly<{
                                     availability: 'available';
-                                }>) | (Readonly<Readonly<{
+                                }> & {
+                                    readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
+                                }) | (Readonly<Readonly<{
                                     id: import("../content/model.ts").PostId;
                                     threadId: import("../content/model.ts").ThreadId;
                                     route: import("../content/model.ts").Route;
@@ -21259,7 +21295,9 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                 }> & Readonly<{
                                     availability: 'erased';
                                     removed: true;
-                                }>);
+                                }> & {
+                                    readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
+                                });
                             };
                             400: {
                                 type: unknown;
@@ -21433,7 +21471,9 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                     availability: 'available';
                                 }> & Readonly<{
                                     availability: 'available';
-                                }>) | (Readonly<Readonly<{
+                                }> & {
+                                    readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
+                                }) | (Readonly<Readonly<{
                                     id: import("../content/model.ts").PostId;
                                     threadId: import("../content/model.ts").ThreadId;
                                     route: import("../content/model.ts").Route;
@@ -21456,7 +21496,9 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                 }> & Readonly<{
                                     availability: 'erased';
                                     removed: true;
-                                }>))[];
+                                }> & {
+                                    readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
+                                }))[];
                                 next: string | null;
                             };
                             400: {
@@ -21582,7 +21624,9 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                 availability: 'available';
                             }> & Readonly<{
                                 availability: 'available';
-                            }>) | (Readonly<Readonly<{
+                            }> & {
+                                readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
+                            }) | (Readonly<Readonly<{
                                 id: import("../content/model.ts").PostId;
                                 threadId: import("../content/model.ts").ThreadId;
                                 route: import("../content/model.ts").Route;
@@ -21605,7 +21649,9 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                             }> & Readonly<{
                                 availability: 'erased';
                                 removed: true;
-                            }>);
+                            }> & {
+                                readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
+                            });
                         };
                         400: {
                             type: unknown;
@@ -21874,7 +21920,9 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                     availability: 'available';
                                 }> & Readonly<{
                                     availability: 'available';
-                                }>) | (Readonly<Readonly<{
+                                }> & {
+                                    readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
+                                }) | (Readonly<Readonly<{
                                     id: import("../content/model.ts").PostId;
                                     threadId: import("../content/model.ts").ThreadId;
                                     route: import("../content/model.ts").Route;
@@ -21897,7 +21945,9 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                 }> & Readonly<{
                                     availability: 'erased';
                                     removed: true;
-                                }>);
+                                }> & {
+                                    readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
+                                });
                             };
                             400: {
                                 type: unknown;
@@ -22071,7 +22121,9 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                     availability: 'available';
                                 }> & Readonly<{
                                     availability: 'available';
-                                }>) | (Readonly<Readonly<{
+                                }> & {
+                                    readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
+                                }) | (Readonly<Readonly<{
                                     id: import("../content/model.ts").PostId;
                                     threadId: import("../content/model.ts").ThreadId;
                                     route: import("../content/model.ts").Route;
@@ -22094,7 +22146,9 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                 }> & Readonly<{
                                     availability: 'erased';
                                     removed: true;
-                                }>))[];
+                                }> & {
+                                    readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
+                                }))[];
                                 next: string | null;
                             };
                             400: {
@@ -22223,7 +22277,9 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                         availability: 'available';
                                     }> & Readonly<{
                                         availability: 'available';
-                                    }>) | (Readonly<Readonly<{
+                                    }> & {
+                                        readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
+                                    }) | (Readonly<Readonly<{
                                         id: import("../content/model.ts").PostId;
                                         threadId: import("../content/model.ts").ThreadId;
                                         route: import("../content/model.ts").Route;
@@ -22246,7 +22302,9 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                     }> & Readonly<{
                                         availability: 'erased';
                                         removed: true;
-                                    }>);
+                                    }> & {
+                                        readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
+                                    });
                                 };
                                 400: {
                                     type: unknown;
@@ -22345,7 +22403,24 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                         headers: unknown;
                         response: {
                             200: {
-                                threads: import("../content/reads.ts").ThreadView[];
+                                threads: (Omit<Readonly<{
+                                    id: import("../content/model.ts").ThreadId;
+                                    route: import("../content/model.ts").Route;
+                                    authorId: import("../content/model.ts").ContentId;
+                                    title: string | null;
+                                    licence: string;
+                                    subjectIds: readonly import("../content/model.ts").ContentId[];
+                                    boardId: import("../content/model.ts").BoardId;
+                                    visibility: import("../content/model.ts").Visibility;
+                                    securityRevision: import("../content/model.ts").SecurityRevision;
+                                    availability: import("../content/model.ts").Availability;
+                                    createdAt: string;
+                                    firstPost: import("../content/model.ts").ItemView;
+                                }>, "firstPost"> & Readonly<{
+                                    firstPost: import("../content/reads.ts").ItemView;
+                                }> & {
+                                    readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
+                                })[];
                                 next: string | null;
                             };
                             400: {
@@ -22436,6 +22511,560 @@ export declare function createKernel(dependencies: KernelDependencies): import("
             };
         };
     };
+} & {
+    v1: {
+        boards: {
+            ":id": {
+                get: {
+                    body: unknown;
+                    params: {
+                        id: string;
+                    };
+                    query: unknown;
+                    headers: unknown;
+                    response: {
+                        200: {
+                            board: Readonly<{
+                                id: import("../content/model.ts").BoardId;
+                                route: import("../content/model.ts").Route;
+                                title: string | null;
+                                visibility: import("../content/model.ts").Visibility;
+                                securityRevision: import("../content/model.ts").SecurityRevision;
+                                availability: import("../content/model.ts").Availability;
+                                createdAt: string;
+                            }>;
+                        };
+                        400: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        401: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        404: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        500: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        503: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                    };
+                    error: never;
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        threads: {
+            ":threadId": {
+                reaction: {
+                    put: {
+                        body: {
+                            kind: "downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote";
+                        };
+                        params: {
+                            threadId: string;
+                        };
+                        query: unknown;
+                        headers: {
+                            "idempotency-key": string;
+                        };
+                        response: {
+                            200: {
+                                kind: "downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote";
+                            };
+                            400: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            401: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            403: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            413: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            429: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            500: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            503: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        threads: {
+            ":threadId": {
+                reaction: {
+                    delete: {
+                        body: unknown;
+                        params: {
+                            threadId: string;
+                        };
+                        query: unknown;
+                        headers: {
+                            "idempotency-key": string;
+                        };
+                        response: {
+                            204: void;
+                            400: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            401: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            403: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            413: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            429: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            500: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            503: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        posts: {
+            ":postId": {
+                reaction: {
+                    put: {
+                        body: {
+                            kind: "downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote";
+                        };
+                        params: {
+                            postId: string;
+                        };
+                        query: unknown;
+                        headers: {
+                            "idempotency-key": string;
+                        };
+                        response: {
+                            200: {
+                                kind: "downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote";
+                            };
+                            400: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            401: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            403: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            413: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            429: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            500: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            503: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
 }, import("elysia").DefaultEphemeral, {
     derive: {
         readonly admission: import("./admission.ts").Admission;
@@ -22455,9 +23084,12 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     schemas: {};
     response: {};
     error: [];
-}, "get", "/v1/boards/:id", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
+}, "delete", "/v1/posts/:postId/reaction", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
     params: import("typebox").TObject<{
-        id: import("typebox").TString;
+        postId: import("typebox").TString;
+    }>;
+    headers: import("typebox").TObject<{
+        "idempotency-key": import("typebox").TString;
     }>;
     response: {
         400: import("typebox").TObject<{
@@ -22516,6 +23148,34 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
+        403: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail: import("typebox").TOptional<import("typebox").TString>;
+            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
+        429: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail: import("typebox").TOptional<import("typebox").TString>;
+            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
         503: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
@@ -22530,95 +23190,46 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
-        200: {
-            '~standard': {
-                version: 1;
-                vendor: string;
-                types: {
-                    input: {
-                        board: Readonly<{
-                            id: import("../content/model.ts").BoardId;
-                            route: import("../content/model.ts").Route;
-                            title: string | null;
-                            visibility: import("../content/model.ts").Visibility;
-                            securityRevision: import("../content/model.ts").SecurityRevision;
-                            availability: import("../content/model.ts").Availability;
-                            createdAt: string;
-                        }>;
-                    };
-                    output: {
-                        board: Readonly<{
-                            id: import("../content/model.ts").BoardId;
-                            route: import("../content/model.ts").Route;
-                            title: string | null;
-                            visibility: import("../content/model.ts").Visibility;
-                            securityRevision: import("../content/model.ts").SecurityRevision;
-                            availability: import("../content/model.ts").Availability;
-                            createdAt: string;
-                        }>;
-                    };
-                } | undefined;
-                validate(value: unknown): {
-                    value: {
-                        board: Readonly<{
-                            id: import("../content/model.ts").BoardId;
-                            route: import("../content/model.ts").Route;
-                            title: string | null;
-                            visibility: import("../content/model.ts").Visibility;
-                            securityRevision: import("../content/model.ts").SecurityRevision;
-                            availability: import("../content/model.ts").Availability;
-                            createdAt: string;
-                        }>;
-                    };
-                    issues?: never;
-                } | {
-                    value?: never;
-                    issues: {
-                        message: string;
-                    }[];
-                };
-                jsonSchema: {
-                    input: () => import("typebox").TObject<{
-                        board: import("typebox").TUnsafe<Readonly<{
-                            id: import("../content/model.ts").BoardId;
-                            route: import("../content/model.ts").Route;
-                            title: string | null;
-                            visibility: import("../content/model.ts").Visibility;
-                            securityRevision: import("../content/model.ts").SecurityRevision;
-                            availability: import("../content/model.ts").Availability;
-                            createdAt: string;
-                        }>>;
-                    }>;
-                    output: () => import("typebox").TObject<{
-                        board: import("typebox").TUnsafe<Readonly<{
-                            id: import("../content/model.ts").BoardId;
-                            route: import("../content/model.ts").Route;
-                            title: string | null;
-                            visibility: import("../content/model.ts").Visibility;
-                            securityRevision: import("../content/model.ts").SecurityRevision;
-                            availability: import("../content/model.ts").Availability;
-                            createdAt: string;
-                        }>>;
-                    }>;
-                };
-            };
-        } & {
-            headers: {
-                "rezics-session-token": import("typebox").TString;
-            };
-        };
+        413: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail: import("typebox").TOptional<import("typebox").TString>;
+            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
+        422: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail: import("typebox").TOptional<import("typebox").TString>;
+            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
+        204: import("typebox").TVoid;
     };
     detail: {
         operationId: string;
         'x-exposure': string;
         'x-action': string;
-        security: ({
+        'x-rate-limit': Readonly<import("./rate-limit.ts").RateLimitDeclaration>;
+        security: {
             bearerAuth: never[];
-        } | {
-            bearerAuth?: never;
-        })[];
+        }[];
     };
-}, {}, "/v1/boards/:id">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params: { id }, actor, admission, job, session }: {
+}, {}, "/v1/posts/:postId/reaction">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params: { postId }, actor, request, admission, job, session, set }: {
     server: import("elysia").Server | null;
     redirect: import("elysia").redirect;
     set: {
@@ -22684,6 +23295,34 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 code: never;
             }[];
         };
+        403: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail?: string;
+            errors?: {
+                pointer: string;
+                code: never;
+            }[];
+        };
+        429: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail?: string;
+            errors?: {
+                pointer: string;
+                code: never;
+            }[];
+        };
         503: {
             type: unknown;
             title: unknown;
@@ -22698,17 +23337,35 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 code: never;
             }[];
         };
-        200: {
-            board: Readonly<{
-                id: import("../content/model.ts").BoardId;
-                route: import("../content/model.ts").Route;
-                title: string | null;
-                visibility: import("../content/model.ts").Visibility;
-                securityRevision: import("../content/model.ts").SecurityRevision;
-                availability: import("../content/model.ts").Availability;
-                createdAt: string;
-            }>;
+        413: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail?: string;
+            errors?: {
+                pointer: string;
+                code: never;
+            }[];
         };
+        422: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail?: string;
+            errors?: {
+                pointer: string;
+                code: never;
+            }[];
+        };
+        204: void;
     }>;
     problem: import("elysia").SelectiveProblem<{
         400: {
@@ -22767,6 +23424,34 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 code: never;
             }[];
         };
+        403: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail?: string;
+            errors?: {
+                pointer: string;
+                code: never;
+            }[];
+        };
+        429: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail?: string;
+            errors?: {
+                pointer: string;
+                code: never;
+            }[];
+        };
         503: {
             type: unknown;
             title: unknown;
@@ -22781,21 +23466,42 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 code: never;
             }[];
         };
-        200: {
-            board: Readonly<{
-                id: import("../content/model.ts").BoardId;
-                route: import("../content/model.ts").Route;
-                title: string | null;
-                visibility: import("../content/model.ts").Visibility;
-                securityRevision: import("../content/model.ts").SecurityRevision;
-                availability: import("../content/model.ts").Availability;
-                createdAt: string;
-            }>;
+        413: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail?: string;
+            errors?: {
+                pointer: string;
+                code: never;
+            }[];
         };
+        422: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail?: string;
+            errors?: {
+                pointer: string;
+                code: never;
+            }[];
+        };
+        204: void;
     }>;
     defer: (fn: import("elysia/types").AfterResponseHandler<NoInfer<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
         params: import("typebox").TObject<{
-            id: import("typebox").TString;
+            postId: import("typebox").TString;
+        }>;
+        headers: import("typebox").TObject<{
+            "idempotency-key": import("typebox").TString;
         }>;
         response: {
             400: import("typebox").TObject<{
@@ -22854,6 +23560,34 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                     code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
                 }>>>;
             }>;
+            403: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail: import("typebox").TOptional<import("typebox").TString>;
+                errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                }>>>;
+            }>;
+            429: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail: import("typebox").TOptional<import("typebox").TString>;
+                errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                }>>>;
+            }>;
             503: import("typebox").TObject<{
                 type: import("typebox").TSchema;
                 title: import("typebox").TSchema;
@@ -22868,95 +23602,46 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                     code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
                 }>>>;
             }>;
-            200: {
-                '~standard': {
-                    version: 1;
-                    vendor: string;
-                    types: {
-                        input: {
-                            board: Readonly<{
-                                id: import("../content/model.ts").BoardId;
-                                route: import("../content/model.ts").Route;
-                                title: string | null;
-                                visibility: import("../content/model.ts").Visibility;
-                                securityRevision: import("../content/model.ts").SecurityRevision;
-                                availability: import("../content/model.ts").Availability;
-                                createdAt: string;
-                            }>;
-                        };
-                        output: {
-                            board: Readonly<{
-                                id: import("../content/model.ts").BoardId;
-                                route: import("../content/model.ts").Route;
-                                title: string | null;
-                                visibility: import("../content/model.ts").Visibility;
-                                securityRevision: import("../content/model.ts").SecurityRevision;
-                                availability: import("../content/model.ts").Availability;
-                                createdAt: string;
-                            }>;
-                        };
-                    } | undefined;
-                    validate(value: unknown): {
-                        value: {
-                            board: Readonly<{
-                                id: import("../content/model.ts").BoardId;
-                                route: import("../content/model.ts").Route;
-                                title: string | null;
-                                visibility: import("../content/model.ts").Visibility;
-                                securityRevision: import("../content/model.ts").SecurityRevision;
-                                availability: import("../content/model.ts").Availability;
-                                createdAt: string;
-                            }>;
-                        };
-                        issues?: never;
-                    } | {
-                        value?: never;
-                        issues: {
-                            message: string;
-                        }[];
-                    };
-                    jsonSchema: {
-                        input: () => import("typebox").TObject<{
-                            board: import("typebox").TUnsafe<Readonly<{
-                                id: import("../content/model.ts").BoardId;
-                                route: import("../content/model.ts").Route;
-                                title: string | null;
-                                visibility: import("../content/model.ts").Visibility;
-                                securityRevision: import("../content/model.ts").SecurityRevision;
-                                availability: import("../content/model.ts").Availability;
-                                createdAt: string;
-                            }>>;
-                        }>;
-                        output: () => import("typebox").TObject<{
-                            board: import("typebox").TUnsafe<Readonly<{
-                                id: import("../content/model.ts").BoardId;
-                                route: import("../content/model.ts").Route;
-                                title: string | null;
-                                visibility: import("../content/model.ts").Visibility;
-                                securityRevision: import("../content/model.ts").SecurityRevision;
-                                availability: import("../content/model.ts").Availability;
-                                createdAt: string;
-                            }>>;
-                        }>;
-                    };
-                };
-            } & {
-                headers: {
-                    "rezics-session-token": import("typebox").TString;
-                };
-            };
+            413: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail: import("typebox").TOptional<import("typebox").TString>;
+                errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                }>>>;
+            }>;
+            422: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail: import("typebox").TOptional<import("typebox").TString>;
+                errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                }>>>;
+            }>;
+            204: import("typebox").TVoid;
         };
         detail: {
             operationId: string;
             'x-exposure': string;
             'x-action': string;
-            security: ({
+            'x-rate-limit': Readonly<import("./rate-limit.ts").RateLimitDeclaration>;
+            security: {
                 bearerAuth: never[];
-            } | {
-                bearerAuth?: never;
-            })[];
+            }[];
         };
-    }, {}, "/v1/boards/:id">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
+    }, {}, "/v1/posts/:postId/reaction">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
         derive: {
             readonly admission: import("./admission.ts").Admission;
             readonly job: {
@@ -22980,9 +23665,11 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     body: unknown;
     query: Record<string, string | undefined>;
     params: {
-        id: string;
+        postId: string;
     };
-    headers: Record<string, string | undefined>;
+    headers: {
+        "idempotency-key": string;
+    };
     cookie: Record<string, import("elysia").Cookie<unknown>>;
     readonly admission: import("./admission.ts").Admission;
     readonly job: {
@@ -22996,19 +23683,12 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     };
     readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
     readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
-}) => Promise<{
-    board: Readonly<{
-        id: import("../content/model.ts").BoardId;
-        route: import("../content/model.ts").Route;
-        title: string | null;
-        visibility: import("../content/model.ts").Visibility;
-        securityRevision: import("../content/model.ts").SecurityRevision;
-        availability: import("../content/model.ts").Availability;
-        createdAt: string;
-    }>;
-}>, {
+}) => Promise<void>, {
     params: import("typebox").TObject<{
-        id: import("typebox").TString;
+        postId: import("typebox").TString;
+    }>;
+    headers: import("typebox").TObject<{
+        "idempotency-key": import("typebox").TString;
     }>;
     response: {
         400: import("typebox").TObject<{
@@ -23067,6 +23747,34 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
+        403: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail: import("typebox").TOptional<import("typebox").TString>;
+            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
+        429: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail: import("typebox").TOptional<import("typebox").TString>;
+            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
         503: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
@@ -23081,93 +23789,44 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
-        200: {
-            '~standard': {
-                version: 1;
-                vendor: string;
-                types: {
-                    input: {
-                        board: Readonly<{
-                            id: import("../content/model.ts").BoardId;
-                            route: import("../content/model.ts").Route;
-                            title: string | null;
-                            visibility: import("../content/model.ts").Visibility;
-                            securityRevision: import("../content/model.ts").SecurityRevision;
-                            availability: import("../content/model.ts").Availability;
-                            createdAt: string;
-                        }>;
-                    };
-                    output: {
-                        board: Readonly<{
-                            id: import("../content/model.ts").BoardId;
-                            route: import("../content/model.ts").Route;
-                            title: string | null;
-                            visibility: import("../content/model.ts").Visibility;
-                            securityRevision: import("../content/model.ts").SecurityRevision;
-                            availability: import("../content/model.ts").Availability;
-                            createdAt: string;
-                        }>;
-                    };
-                } | undefined;
-                validate(value: unknown): {
-                    value: {
-                        board: Readonly<{
-                            id: import("../content/model.ts").BoardId;
-                            route: import("../content/model.ts").Route;
-                            title: string | null;
-                            visibility: import("../content/model.ts").Visibility;
-                            securityRevision: import("../content/model.ts").SecurityRevision;
-                            availability: import("../content/model.ts").Availability;
-                            createdAt: string;
-                        }>;
-                    };
-                    issues?: never;
-                } | {
-                    value?: never;
-                    issues: {
-                        message: string;
-                    }[];
-                };
-                jsonSchema: {
-                    input: () => import("typebox").TObject<{
-                        board: import("typebox").TUnsafe<Readonly<{
-                            id: import("../content/model.ts").BoardId;
-                            route: import("../content/model.ts").Route;
-                            title: string | null;
-                            visibility: import("../content/model.ts").Visibility;
-                            securityRevision: import("../content/model.ts").SecurityRevision;
-                            availability: import("../content/model.ts").Availability;
-                            createdAt: string;
-                        }>>;
-                    }>;
-                    output: () => import("typebox").TObject<{
-                        board: import("typebox").TUnsafe<Readonly<{
-                            id: import("../content/model.ts").BoardId;
-                            route: import("../content/model.ts").Route;
-                            title: string | null;
-                            visibility: import("../content/model.ts").Visibility;
-                            securityRevision: import("../content/model.ts").SecurityRevision;
-                            availability: import("../content/model.ts").Availability;
-                            createdAt: string;
-                        }>>;
-                    }>;
-                };
-            };
-        } & {
-            headers: {
-                "rezics-session-token": import("typebox").TString;
-            };
-        };
+        413: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail: import("typebox").TOptional<import("typebox").TString>;
+            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
+        422: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail: import("typebox").TOptional<import("typebox").TString>;
+            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
+        204: import("typebox").TVoid;
     };
     detail: {
         operationId: string;
         'x-exposure': string;
         'x-action': string;
-        security: ({
+        'x-rate-limit': Readonly<import("./rate-limit.ts").RateLimitDeclaration>;
+        security: {
             bearerAuth: never[];
-        } | {
-            bearerAuth?: never;
-        })[];
+        }[];
     };
 }> & (import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
     typebox: {};

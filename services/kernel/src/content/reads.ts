@@ -21,9 +21,14 @@ import type {
   ThreadView as StoredThreadView,
   Visibility,
 } from './model.ts';
+import { REACTION_KINDS } from './events.ts';
 import { pagePostCandidates } from './post-pages.ts';
 import { pageRevisionCandidates } from './revision-pages.ts';
 import read from './read-chain.sql';
+import viewerReactions from './reaction-viewer.sql';
+
+const reactionKinds: ReadonlySet<string> = new Set(REACTION_KINDS);
+export type ViewerReactionKind = (typeof REACTION_KINDS)[number];
 
 /** Published erased slots remain readable, but never disclose revision bodies. */
 export type ItemView = StoredItemView &
@@ -312,6 +317,46 @@ function itemView(post: Row, revision: Row, erased: boolean): ItemView | null {
   if (erased) return { ...metadata, removed: true, body: null, availability: 'erased' };
   if (revision.availability !== 'available' || !revision.body) return null;
   return { ...metadata, body: JSON.parse(revision.body.toString('utf8')), availability: 'available' };
+}
+
+/** One partition seek for the account viewer's slots. Anonymous responses omit the field. */
+export async function withViewerReactions<T extends { readonly id: string }>(
+  dependencies: ContentReadDependencies,
+  actor: Actor,
+  targets: readonly T[],
+  deadline: number,
+): Promise<readonly (T & { viewerReaction?: ViewerReactionKind | null })[]> {
+  if (actor.kind !== 'account' || targets.length === 0) return targets;
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const target of targets) {
+    if (seen.has(target.id)) continue;
+    seen.add(target.id);
+    ids.push(target.id);
+  }
+  if (ids.length > 100) throw new RangeError('At most 100 viewer reaction targets');
+  const home = routeOf(actor.accountId);
+  if (home === null) throw new TypeError('Invalid content identity');
+  const parameters = { route: home, actor_id: actor.accountId, target_ids: ids };
+  // Query the compiled statement directly. run() probes schema freshness once,
+  // which would add a statement on the first page and nowhere else.
+  const rows = await within(deadline, () =>
+    withConnection(dependencies.pool, (client) =>
+      client.query<(typeof viewerReactions)['~reylo']['element']>(
+        viewerReactions.sql,
+        viewerReactions.params.map((name) => parameters[name as keyof typeof parameters]),
+      ),
+    ),
+  );
+  const kinds = new Map<string, ViewerReactionKind>();
+  for (const row of rows.rows) {
+    const targetId = row.targetId;
+    const kind = row.kind;
+    if (targetId === null || typeof kind !== 'string' || !reactionKinds.has(kind))
+      throw new TypeError('Invalid reaction kind');
+    kinds.set(targetId, kind as ViewerReactionKind);
+  }
+  return targets.map((target) => ({ ...target, viewerReaction: kinds.get(target.id) ?? null }));
 }
 
 export async function readThread(

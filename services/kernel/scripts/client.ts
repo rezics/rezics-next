@@ -4,6 +4,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  renameSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -38,6 +39,20 @@ function specifierTargets(content: string): string[] {
   const pattern = /\bfrom\s*(['"])(\.{1,2}\/[^'"]+)\1|\bimport\s*\(\s*(['"])(\.{1,2}\/[^'"]+)\3\s*\)/g;
   for (const match of content.matchAll(pattern)) specifiers.push((match[2] ?? match[4])!);
   return specifiers;
+}
+
+/** TypeScript 7 writes a content-mapped `.sql` module as `name.d.sql.ts`. Resolution also accepts `name.sql.d.ts`, which is the name this closure walks. */
+function publishSqlDeclarations(directory: string): void {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = resolve(directory, entry.name);
+    if (entry.isDirectory()) {
+      publishSqlDeclarations(path);
+      continue;
+    }
+    if (!entry.isFile() || !entry.name.endsWith('.d.sql.ts')) continue;
+    const stem = entry.name.slice(0, -'.d.sql.ts'.length);
+    renameSync(path, resolve(directory, `${stem}.sql.d.ts`));
+  }
 }
 
 function declarationPath(sourcePath: string, specifier: string): string {
@@ -80,6 +95,7 @@ export function clientDeclarations(kernelDirectory = KERNEL): Map<string, string
     if (result.status !== 0) throw new Error(`${result.stdout}${result.stderr}`);
 
     const sourceRoot = resolve(temporaryDirectory, 'src');
+    publishSqlDeclarations(sourceRoot);
     const pending = ['http/kernel.d.ts', 'http/request.d.ts'];
     const declarations = new Map<string, string>();
     while (pending.length) {

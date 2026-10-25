@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, relative, resolve, sep } from 'node:path';
 import { clientDeclarations, committedDeclarations } from '../scripts/client.ts';
 
 // Each declaration emit runs the TypeScript compiler; under a loaded host it exceeds Bun's 5 s default.
@@ -13,6 +13,17 @@ test(
   () => {
     const emitted = clientDeclarations();
     expect([...emitted.keys()]).toEqual(expect.arrayContaining(['http/kernel.d.ts', 'http/request.d.ts']));
+    let sawSqlDeclaration = false;
+    for (const [key, content] of emitted) {
+      for (const match of content.matchAll(/\bfrom\s+['"](\.{1,2}\/[^'"]+\.sql)['"]/g)) {
+        const target = resolve(dirname(resolve('/client', key)), match[1]!);
+        const declaration = relative('/client', `${target}.d.ts`).split(sep).join('/');
+        expect(emitted.has(declaration)).toBe(true);
+        expect(declaration.endsWith('.sql.d.ts')).toBe(true);
+        sawSqlDeclaration = true;
+      }
+    }
+    expect(sawSqlDeclaration).toBe(true);
     if (JSON.stringify([...committedDeclarations()]) !== JSON.stringify([...emitted]))
       throw new Error('packages/client/src/kernel is stale; run `bun run --cwd services/kernel client`');
   },
