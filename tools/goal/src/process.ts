@@ -19,6 +19,16 @@ export function groupMembers(group: number): ProcessIdentity[] {
   return readdirSync('/proc').filter(name => /^\d+$/.test(name)).map(name => processIdentity(Number(name)))
     .filter((p): p is ProcessIdentity => p !== null && p.group === group);
 }
+/** Wait until every process in an identified detached group has exited. */
+export async function waitForProcessGroup(identity: ProcessIdentity): Promise<void> {
+  for (;;) {
+    const members = groupMembers(identity.group);
+    if (members.some(member => member.boot !== identity.boot || BigInt(member.start) < BigInt(identity.start)))
+      throw new Error('process group identity changed');
+    if (!members.length) return;
+    await new Promise<void>(resolve => setTimeout(resolve, 1000));
+  }
+}
 /** Linux pidfds let a restarted controller wait for non-children without polling or a model. */
 export async function waitForProcess(identity: ProcessIdentity, signal?: AbortSignal): Promise<void> {
   if (signal?.aborted || !sameProcess(identity)) return;

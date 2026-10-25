@@ -14,7 +14,7 @@ import { acquireDirectoryLease } from './lease.ts';
 /** Composition belongs to the caller; this module never reads worker configuration or tables. */
 export type IntegrationRuntime = {
   queue?: SqliteLandingQueue; inbox?: SqliteManagerInbox; pump?(): Promise<void>; drain?(): Promise<void>; hostCommand?: string[];
-  codeIsCurrent?(): boolean;
+  codeIsCurrent?(): boolean; recoverOrphans?(): Promise<void>;
   db: Database; mainCheckout: string; stateDirectory: string; worktreeRoot: string; managerSocket: string;
   supermanager?: string;
   fence: AttemptFence; sink: GateOutcomeSink;
@@ -111,11 +111,24 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
     socket.on('error', () => {});
   });
   let checkTimer: ReturnType<typeof setInterval> | undefined;
+  let recoveryTimer: ReturnType<typeof setInterval> | undefined;
+  let recovery: Promise<void> | undefined;
+  const recoverOrphans = () => {
+    if (!runtime.recoverOrphans) return Promise.resolve();
+    if (!recovery) {
+      const current = runtime.recoverOrphans().finally(() => { if (recovery === current) recovery = undefined; });
+      recovery = current;
+    }
+    return recovery;
+  };
   try {
+    await recoverOrphans();
     await managers.recover();
     await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(runtime.managerSocket, resolve); });
     chmodSync(runtime.managerSocket, 0o600);
     console.log('ready');
+    recoveryTimer = setInterval(() => { void recoverOrphans().catch(() => {}); }, 60_000);
+    recoveryTimer.unref();
     await new Promise<void>(resolve => {
       stopServer = resolve;
       const stop = () => { stopRequested = true; stopWhenIdle(); };
@@ -129,6 +142,7 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
       }
     });
   } finally {
+    if (recoveryTimer) clearInterval(recoveryTimer);
     if (checkTimer) clearInterval(checkTimer);
     server.close(); await managers.close(); rmSync(runtime.managerSocket, { force: true }); lease.release();
   }
@@ -165,7 +179,7 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
         if ((option !== '--task' && option !== '--evidence') || !value || values.has(option)) throw new Error(`invalid inbox send option: ${option ?? '(missing value)'}`);
         values.set(option, value);
       }
-      const allowed = ['spec-conflict', 'scope-growth', 'round-limit', 'stalled', 'failed-after-consult', 'goal-unmet', 'instruction'];
+      const allowed = ['spec-conflict', 'scope-growth', 'environment', 'round-limit', 'stalled', 'failed-after-consult', 'goal-unmet', 'instruction'];
       if (!allowed.includes(kind)) throw new Error(`unknown inbox event kind: ${kind}. Valid kinds: ${allowed.join(', ')}`);
       if (/[\r\n]/.test(summary)) throw new Error('inbox event summary must be one line');
       await recordManagerCommand(runtime);

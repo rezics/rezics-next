@@ -115,7 +115,7 @@ export class WorkerTasks {
         ...(options.excludePools ? { exclude: options.excludePools } : {}) });
       const make = (n: number): Attempt => ({
         taskId, attempt: n, state: 'pending', profile, pool: pool.name, tableVersion: route.tableVersion, experiment: route.experiment,
-        startedAt: new Date().toISOString(), endedAt: null, process: null,
+        startedAt: new Date().toISOString(), endedAt: null, process: null, driver: null,
         logPath: join(this.settings.stateDirectory, 'runs', taskId, `${n}.jsonl`),
         evidencePath: join(this.settings.stateDirectory, 'evidence', taskId, String(n)),
         auxiliaryProcesses: [], session: null, fixRound: options.fixRound ?? old?.fixRound ?? 0, consulted: options.consulted ?? old?.consulted ?? false,

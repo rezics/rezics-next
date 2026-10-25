@@ -156,6 +156,8 @@ two-fix-round limit reach the owning manager. An early success claim followed by
 Rebase-stage conflicts with main receive one same-profile resolution attempt after the control plane starts that rebase in
 the task worktree; a second conflict goes to the manager as a specification conflict.
 
+Attempts persist the driver process identity alongside the worker identity. Orphan recovery waits for the worker group to exit, then settles its run log under the task lifecycle lease; unexpected driver exceptions are recorded as environment failures and delivered to the manager.
+
 Each attempt's evidence directory contains `contract.md`, `diff.patch`, `failure.json` and `approaches.json`. Diffs
 include commits, tracked edits and untracked files. Raw session logs stay in the runs directory and never enter the
 consultation bundle. Consultation input uses only these four artifacts, with project-instruction loading and web search

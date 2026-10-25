@@ -63,11 +63,13 @@ export async function launch(store: WorkerStore, task: Task, attempt: Attempt, p
   try {
     // Publication and spawn share the fence's write lock. A retry cannot miss a just-started process.
     child = store.write(attempt, () => {
+      const driver = processIdentity();
+      if (!driver) throw new Error('Cannot identify driver process');
       const started = spawn(program, args, { cwd: task.worktree, detached: true, stdio: ['ignore', out, err], env: workerEnvironment(pool, {
         GOAL_TASK_ID: task.id, GOAL_ATTEMPT: String(attempt.attempt), GOAL_DATABASE_PATH: store.db.filename,
       }) });
       const identity = started.pid ? processIdentity(started.pid) : null;
-      store.updateAttempt(attempt, current => { current.process = identity; current.state = 'running'; });
+      store.updateAttempt(attempt, current => { current.driver = driver; current.process = identity; current.state = 'running'; });
       store.updateTask(attempt, current => { current.state = 'running'; });
       return started;
     });

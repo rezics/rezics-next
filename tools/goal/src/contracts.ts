@@ -70,6 +70,7 @@ export interface GateOutcomeSink {
 export type ManagerEventKind =
   | 'spec-conflict'
   | 'scope-growth'
+  | 'environment'
   | 'round-limit'
   | 'stalled'
   | 'failed-after-consult'

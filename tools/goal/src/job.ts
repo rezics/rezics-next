@@ -1,11 +1,13 @@
 import { watch, type FSWatcher } from 'node:fs';
+import { join } from 'node:path';
 import type { GateOutcome, GateOutcomeSink, LandingQueue, ManagerInbox, AttemptRef } from './contracts.ts';
-import { waitForProcess } from './process.ts';
+import { sameProcess, terminateProcessGroup, waitForProcess, waitForProcessGroup } from './process.ts';
 import { StaleAttemptError } from './contracts.ts';
+import { acquireDirectoryLeaseWaiting } from './lease.ts';
 import { classifyFailure } from './failures.ts';
 import { evidenceBundle } from './evidence.ts';
 import { consult } from './consult.ts';
-import { readMeasurement } from './records.ts';
+import { makeRecord, readMeasurement, reportedApproaches } from './records.ts';
 import { readRouting } from './routing.ts';
 import { settle } from './settle.ts';
 import { git, HeldTaskConflictError, type WorkerTasks, type RetryOptions } from './tasks.ts';
@@ -63,6 +65,10 @@ export class WorkerJob implements GateOutcomeSink {
     return Number(git(task.worktree, ['rev-list', '--count', `${task.base}..HEAD`])) > 0;
   }
   async follow(worker: Pick<RunningWorker, 'attempt' | 'exited'>): Promise<void> {
+    try { await this.followAttempt(worker); }
+    catch (error) { await this.endAsEnvironment(worker.attempt, error); }
+  }
+  private async followAttempt(worker: Pick<RunningWorker, 'attempt' | 'exited'>): Promise<void> {
     const ref = worker.attempt, store = this.tasks.store;
     const task = store.task(ref.taskId);
     const limits = readRouting(this.tasks.settings.routingFile).classes[task.taskClass as Exclude<typeof task.taskClass, 'mechanical'>];
@@ -98,6 +104,80 @@ export class WorkerJob implements GateOutcomeSink {
     if (!stopping) {
       const fact = store.attempt(ref).failureKind;
       if (fact) this.onAttemptExit(ref);
+    }
+  }
+  private async endAsEnvironment(ref: AttemptRef, error: unknown, leaseHeld = false): Promise<void> {
+    if (error instanceof StaleAttemptError) return;
+    const lease = leaseHeld ? undefined : await acquireDirectoryLeaseWaiting(join(this.tasks.settings.stateDirectory, 'leases', ref.taskId));
+    try {
+      const store = this.tasks.store;
+      const current = store.attempt(ref);
+      if (!['pending', 'running'].includes(current.state)) return;
+      const task = store.task(ref.taskId), pool = this.tasks.settings.pools.find(candidate => candidate.name === current.pool);
+      let detail = (error instanceof Error ? `${error.name}: ${error.message}` : String(error)).replace(/[\r\n]+/g, ' ').slice(0, 4000);
+      try {
+        await terminateProcessGroup(current.process, this.tasks.settings.terminationGraceMs);
+        for (const process of current.auxiliaryProcesses) await terminateProcessGroup(process, this.tasks.settings.terminationGraceMs);
+      } catch (cleanupError) {
+        detail = `${detail}; process cleanup failed: ${String(cleanupError)}`.slice(0, 4000);
+      }
+      const endedAt = new Date().toISOString();
+      const ended = { ...current, endedAt };
+      let measurement: ReturnType<typeof readMeasurement>;
+      try { measurement = readMeasurement(ended, { configDirectory: pool?.configDirectory }); }
+      catch (measurementError) {
+        detail = `${detail}; run log measurement failed: ${String(measurementError)}`.slice(0, 4000);
+        measurement = readMeasurement({ ...ended, startedAt: endedAt }, { configDirectory: pool?.configDirectory });
+      }
+      let after: typeof current.after = null;
+      try { if (pool) after = this.tasks.reader(pool); }
+      catch (readingError) { detail = `${detail}; pool reading failed: ${String(readingError)}`.slice(0, 4000); }
+      store.write(ref, () => {
+        const attempt = store.updateAttempt(ref, value => {
+          value.state = 'exited'; value.endedAt = endedAt; value.exitCode = -1; value.after = after;
+          value.failureKind = 'tool'; value.escalation = 'environment'; value.blocker = detail;
+          value.result = measurement.result || `Driver exception: ${detail}`;
+          value.approaches.push(...reportedApproaches(value.result));
+        });
+        const record = makeRecord(task, attempt, measurement, 'stopped');
+        record.escalation = 'environment';
+        store.putRecord(record);
+        store.updateTask(ref, value => { value.state = 'stopped'; });
+        let evidencePath: string | undefined;
+        try { evidencePath = evidenceBundle(task, store.attempt(ref)); } catch { /* The failure event still carries the driver error. */ }
+        const event = { managerId: task.brief.manager, taskId: task.id, kind: 'environment' as const,
+          summary: `environment: driver exception: ${detail}`.slice(0, 1000), ...(evidencePath ? { evidencePath } : {}) };
+        store.event(ref, 'driver-environment-failure', { detail });
+        store.event(ref, 'manager-event', event);
+        this.inbox.deliver(event);
+      });
+    } finally { lease?.release(); }
+  }
+  /** Settle attempts left behind by a dead driver while holding the same lease used for retries and stops. */
+  async recoverOrphans(): Promise<void> {
+    const store = this.tasks.store;
+    const candidates = store.attempts().filter(attempt => ['running', 'exited'].includes(attempt.state)
+      && (!attempt.driver || !sameProcess(attempt.driver)));
+    for (const candidate of candidates) {
+      const ref = { taskId: candidate.taskId, attempt: candidate.attempt };
+      const lease = await acquireDirectoryLeaseWaiting(join(this.tasks.settings.stateDirectory, 'leases', ref.taskId));
+      try {
+        if (store.task(ref.taskId).currentAttempt !== ref.attempt) continue;
+        const attempt = store.attempt(ref);
+        if (!['running', 'exited'].includes(attempt.state) || (attempt.driver && sameProcess(attempt.driver))) continue;
+        const events = store.events(ref.taskId).filter(event => event.attempt === ref.attempt).map(event => event.kind);
+        if (events.includes('landing-requested')) continue;
+        if (events.includes('driver-environment-failure')) continue;
+        if (attempt.state === 'exited' && attempt.failureKind && events.includes('attempt-exit-classified')) continue;
+        if (attempt.state === 'exited' && attempt.failureKind) {
+          this.onAttemptExit(ref);
+          continue;
+        }
+        try {
+          if (attempt.process) await waitForProcessGroup(attempt.process);
+          await this.followAttempt({ attempt, exited: Promise.resolve({ code: null, signal: null }) });
+        } catch (error) { await this.endAsEnvironment(ref, error, true); }
+      } finally { lease.release(); }
     }
   }
   /** Launch/exit facts do not fabricate a gate outcome. */

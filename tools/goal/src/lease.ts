@@ -6,16 +6,26 @@ import { processIdentity, sameProcess, waitForProcess } from './process.ts';
 import type { ProcessIdentity } from './process.ts';
 
 type Owner = ProcessIdentity & { token: string };
-function readOwner(directory: string): Owner | undefined {
-  try {
-    const file = readdirSync(directory).find(file => file.endsWith('.json'));
-    if (!file) return undefined;
-    const value = JSON.parse(readFileSync(join(directory, file), 'utf8')) as Owner;
-    if (!Number.isSafeInteger(value.pid) || value.pid < 1 || typeof value.start !== 'string' || typeof value.boot !== 'string'
-      || typeof value.token !== 'string' || !/^[a-zA-Z0-9-]+$/.test(value.token)) return undefined;
-    // Earlier integration leases recorded start/boot identity without the process group.
-    return { ...value, group: value.group ?? processIdentity(value.pid)?.group ?? 0 };
-  } catch { return undefined; }
+type OwnerRead = { kind: 'absent' } | { kind: 'invalid' } | { kind: 'owner'; owner: Owner };
+function readOwner(directory: string): OwnerRead {
+  let file: string | undefined;
+  try { file = readdirSync(directory).find(name => name.endsWith('.json')); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { kind: 'absent' };
+    throw error;
+  }
+  if (!file) return { kind: 'absent' };
+  let value: Owner;
+  try { value = JSON.parse(readFileSync(join(directory, file), 'utf8')) as Owner; }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { kind: 'absent' };
+    return { kind: 'invalid' };
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)
+    || !Number.isSafeInteger(value.pid) || value.pid < 1 || typeof value.start !== 'string' || typeof value.boot !== 'string'
+    || typeof value.token !== 'string' || !/^[a-zA-Z0-9-]+$/.test(value.token)) return { kind: 'invalid' };
+  // Earlier integration leases recorded start/boot identity without the process group.
+  return { kind: 'owner', owner: { ...value, group: value.group ?? processIdentity(value.pid)?.group ?? 0 } };
 }
 
 export class LeaseHeldError extends Error {}
@@ -59,8 +69,16 @@ export function acquireDirectoryLease(directory: string): DirectoryLease {
       } catch (error) {
         if (!['EEXIST', 'ENOTEMPTY'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error;
       }
-      const owner = readOwner(directory);
-      if (!owner) throw new Error(`Unrecognised lease owner: ${directory}`);
+      const ownerRead = readOwner(directory);
+      if (ownerRead.kind === 'absent') {
+        // A releasing owner can disappear after rename reports EEXIST but before its identity is read.
+        try { rmdirSync(directory); } catch (error) {
+          if (!['ENOENT', 'ENOTEMPTY'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error;
+        }
+        continue;
+      }
+      if (ownerRead.kind === 'invalid') throw new Error(`Unrecognised lease owner: ${directory}`);
+      const owner = ownerRead.owner;
       if (sameProcess(owner)) throw new LeaseHeldError(`Lease held: ${directory}`);
       // Delete only the dead incarnation's file. Concurrent reapers cannot erase a new token.
       try { unlinkSync(join(directory, `${owner.token}.json`)); } catch (error) {
@@ -89,7 +107,7 @@ export async function waitForDirectoryLease(directory: string, timeoutMs = 30_00
       try { return acquireDirectoryLease(directory); }
       catch (error) { if (!(error instanceof LeaseHeldError)) throw error; }
       const owner = readOwner(directory);
-      ownerExit = owner ? waitForProcess(owner, abort.signal) : Promise.resolve();
+      ownerExit = owner.kind === 'owner' ? waitForProcess(owner.owner, abort.signal) : Promise.resolve();
       const remaining = deadline - Date.now();
       if (remaining <= 0) throw new LeaseHeldError(`Lease held after waiting ${timeoutMs}ms: ${directory}`);
       await Promise.race([changed, ownerExit, new Promise<never>((_, reject) => {

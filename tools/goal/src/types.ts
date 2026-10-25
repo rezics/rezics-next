@@ -48,7 +48,7 @@ export type Attempt = AttemptRef & {
   state: 'pending' | 'running' | 'exited' | 'superseded' | 'stopped' | 'cancelled';
   supersededFinalized?: boolean; failureKind?: AttemptFailure | null;
   profile: Profile; pool: string; tableVersion: string; experiment: string | null;
-  startedAt: string; endedAt: string | null; process: ProcessIdentity | null;
+  startedAt: string; endedAt: string | null; process: ProcessIdentity | null; driver: ProcessIdentity | null;
   logPath: string; evidencePath: string; auxiliaryProcesses: ProcessIdentity[]; session: string | null; fixRound: number; consulted: boolean;
   previousFailure: string | null; failure: FirstFailure | null; escalation: string | null;
   before: PoolReading | null; after: PoolReading | null; exitCode: number | null;
