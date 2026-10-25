@@ -24,20 +24,7 @@ export default {
     const url = new URL(request.url);
 
     if (pagePaths.has(url.pathname) && (request.method === 'GET' || request.method === 'HEAD')) {
-      const response = await paraglideMiddleware(request, () => fetchHandler(request));
-      const headers = new Headers(response.headers);
-      headers.set('Cache-Control', 'private, no-store');
-      if (url.pathname === '/recovery') {
-        headers.set('Cache-Control', 'no-store');
-        headers.set('Referrer-Policy', 'no-referrer');
-      }
-      headers.set('Content-Security-Policy', "frame-ancestors 'none'");
-      headers.set('X-Frame-Options', 'DENY');
-      return new Response(response.body, {
-        status: response.status,
-        statusText: response.statusText,
-        headers,
-      });
+      return paraglideMiddleware(request, () => fetchHandler(request));
     }
 
     if (url.pathname.startsWith(assetPrefix)) return new Response('Not Found', { status: 404 });

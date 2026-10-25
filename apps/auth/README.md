@@ -147,3 +147,22 @@ Sign-up makes no kernel reads. A successful submit is one browser `POST /signup`
 The /login frame was inspected at 390 px and 1280 px in light and dark themes. The wordmark and heading remain
 legible, the brand mark is the only red element, the centered card fits the narrow viewport without horizontal
 overflow, and the background and card retain clear contrast in both themes.
+
+## Security headers
+
+GET and HEAD responses for the six page paths use a fresh 16-byte cryptographic nonce per response. TanStack Start
+passes it to its scripts through the router's `ssr.nonce`; Vite's development scripts and styles use its CSP nonce
+marker. The policy trusts nonced scripts with `strict-dynamic`, allows Turnstile scripts and frames at
+`https://challenges.cloudflare.com`, and limits styles to this origin and the nonce. Style attributes are allowed.
+Images use this origin or data URLs. Connections and form submissions stay on this origin; development also allows
+the dev server's websocket origin. Base URLs, objects and framing are forbidden, and insecure requests are upgraded.
+
+Every page sends `Referrer-Policy: no-referrer` and `Cache-Control: private, no-store` to protect authorization and
+recovery state, plus `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` and
+`Cross-Origin-Opener-Policy: same-origin`. Permissions disable camera, microphone, geolocation, payment and USB while
+allowing same-origin passkey creation and authentication. HTTPS responses send HSTS for one year with subdomains,
+without preload. Static assets, unknown paths and Auth forwarding retain their own responses.
+
+The policy costs one 16-byte random nonce and one header set per response, with no reads. Run
+`bun test apps/auth/tests/security-headers.test.ts` from the repository root to build and preview the production
+bundle and check Chromium hydration, policy violations and the real Turnstile script URL with an offline widget.

@@ -231,7 +231,7 @@ test(
           expect(await tab.locator('html').getAttribute('lang')).toBe(locale);
           expect(await tab.getByRole('heading').count()).toBeGreaterThan(0);
           if (path === '/signup') {
-            await tab.locator('.auth-signup-turnstile[data-action="signup"]').waitFor();
+            await tab.locator('.auth-signup-turnstile[data-action="signup"]').waitFor({ state: 'attached' });
             expect(await tab.locator('.auth-signup-turnstile').getAttribute('data-language')).toBe(locale);
             expect(await tab.locator(`script[src="${turnstileUrl}"]`).count()).toBe(1);
             await tab.locator('#signup-handle').fill('reader');
