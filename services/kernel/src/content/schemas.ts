@@ -1,3 +1,10 @@
+import {
+  MediaImportRequestSchema,
+  MediaImportAcceptedSchema,
+  MediaImportStatusSchema,
+  checkMediaImportRequest,
+  checkMediaImportStatus,
+} from '@rezics/definitions/media-import';
 import { DocumentSnapshotSchema, type DocumentSnapshot } from '@rezics/document';
 import { t } from 'elysia';
 import type { Static, TSchema } from 'typebox';
@@ -5,7 +12,10 @@ import { Compile } from 'typebox/compile';
 import type { BoardView, ItemView, ThreadView } from './model.ts';
 
 /** Validate the published TypeBox shape without Elysia removing unknown input or response fields. */
-export function strictContentSchema<S extends TSchema>(schema: S) {
+export function strictContentSchema<S extends TSchema>(
+  schema: S,
+  check?: (value: unknown) => readonly { pointer: string; code: string }[],
+) {
   const validator = Compile(schema);
   return {
     '~standard': {
@@ -13,7 +23,7 @@ export function strictContentSchema<S extends TSchema>(schema: S) {
       vendor: 'typebox',
       types: undefined as { input: Static<S>; output: Static<S> } | undefined,
       validate(value: unknown) {
-        return validator.Check(value)
+        return (check ? check(value).length === 0 : validator.Check(value))
           ? { value: value as Static<S> }
           : { issues: [{ message: 'Value does not match the content schema' }] };
       },
@@ -138,3 +148,9 @@ export const RevisionPageResponseSchema = t.Object(
   { revisions: t.Array(ItemViewSchema, { maxItems: 100 }), next: t.Union([t.String(), t.Null()]) },
   closed,
 );
+
+// Portable semantic validators include the shared bulk Rights checks. The exact
+// portable schema also supplies OpenAPI; Elysia must not strip unknown members.
+export const MediaImportInputSchema = strictContentSchema(MediaImportRequestSchema, checkMediaImportRequest);
+export const MediaImportReceiptSchema = strictContentSchema(MediaImportAcceptedSchema);
+export const MediaImportPollSchema = strictContentSchema(MediaImportStatusSchema, checkMediaImportStatus);

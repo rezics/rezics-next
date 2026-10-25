@@ -19,6 +19,7 @@ import {
   type ContentCommandDependencies,
 } from './commands.ts';
 import { DocumentTooLargeError, InvalidDocumentError, MAX_DOCUMENT_BYTES } from './document.ts';
+import { mediaImportRoutes } from './media-import-routes.ts';
 import type { AnchoredPosition, ReadContext } from './model.ts';
 import type { ContentRuntime } from './runtime.ts';
 import { sourceFenceGovernanceRoutes } from './source-fence-governance-routes.ts';
@@ -198,8 +199,11 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       throw new AuthenticationError(401, 'Bearer');
   });
 
-  return mediaModerationRoutes(
-    sourceFenceGovernanceRoutes(sourceFenceRoutes(app, dependencies), dependencies),
+  return mediaImportRoutes(
+    mediaModerationRoutes(
+      sourceFenceGovernanceRoutes(sourceFenceRoutes(app, dependencies), dependencies),
+      dependencies,
+    ),
     dependencies,
   )
     .post(

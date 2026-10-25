@@ -1090,6 +1090,381 @@ export declare function createKernel(dependencies: KernelDependencies): import("
     };
 } & {
     v1: {
+        media: {
+            $importFromUrl: {
+                post: {
+                    body: {
+                        containerId: string;
+                        sourceUrl: string;
+                        credit: {
+                            rightsHolder: string;
+                            via: {
+                                name: string;
+                                url: string;
+                            };
+                            license: string;
+                            obligations: ("cc:Attribution" | "cc:Notice" | "cc:ShareAlike" | "cc:SourceCode")[];
+                        };
+                        provenance: {
+                            source: string;
+                            external_id: string;
+                            record_revision: string;
+                            digest: string;
+                            converter_revision: string;
+                            field_group: "cover";
+                            references: {
+                                parts: ({
+                                    property: {
+                                        id: string;
+                                    };
+                                    value: {
+                                        type: "value";
+                                        content: unknown;
+                                    };
+                                } | {
+                                    property: {
+                                        id: string;
+                                    };
+                                    value: {
+                                        type: "somevalue";
+                                    } | {
+                                        type: "novalue";
+                                    };
+                                })[];
+                            }[];
+                        };
+                    };
+                    params: {};
+                    query: unknown;
+                    headers: {
+                        "idempotency-key": string;
+                    };
+                    response: {
+                        200: {
+                            media: {
+                                id: string;
+                                containerId: string;
+                                purpose: 'cover';
+                                state: 'reserved';
+                            };
+                        };
+                        202: {
+                            media: {
+                                id: string;
+                                containerId: string;
+                                purpose: "cover";
+                                state: "reserved";
+                            };
+                        };
+                        400: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        401: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        403: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        404: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        422: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        429: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        500: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        503: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                    };
+                    error: never;
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        media: {
+            ":id": {
+                $importStatus: {
+                    get: {
+                        body: unknown;
+                        params: {
+                            id: string;
+                        };
+                        query: unknown;
+                        headers: unknown;
+                        response: {
+                            200: {
+                                media: {
+                                    id: string;
+                                    containerId: string;
+                                    purpose: "cover";
+                                    credit: {
+                                        rightsHolder: string;
+                                        via: {
+                                            name: string;
+                                            url: string;
+                                        };
+                                        license: string;
+                                        obligations: ("cc:Attribution" | "cc:Notice" | "cc:ShareAlike" | "cc:SourceCode")[];
+                                    };
+                                    provenance: {
+                                        source: string;
+                                        external_id: string;
+                                        record_revision: string;
+                                        digest: string;
+                                        converter_revision: string;
+                                        field_group: "cover";
+                                        references: {
+                                            parts: ({
+                                                property: {
+                                                    id: string;
+                                                };
+                                                value: {
+                                                    type: "value";
+                                                    content: unknown;
+                                                };
+                                            } | {
+                                                property: {
+                                                    id: string;
+                                                };
+                                                value: {
+                                                    type: "somevalue";
+                                                } | {
+                                                    type: "novalue";
+                                                };
+                                            })[];
+                                        }[];
+                                    };
+                                    rejection?: {
+                                        code: string;
+                                    };
+                                    state: "rejected" | "reserved";
+                                    byteCount: number | null;
+                                    mediaType: string | null;
+                                    sha256: string | null;
+                                } | {
+                                    id: string;
+                                    containerId: string;
+                                    purpose: "cover";
+                                    byteCount: number;
+                                    mediaType: string;
+                                    sha256: string;
+                                    credit: {
+                                        rightsHolder: string;
+                                        via: {
+                                            name: string;
+                                            url: string;
+                                        };
+                                        license: string;
+                                        obligations: ("cc:Attribution" | "cc:Notice" | "cc:ShareAlike" | "cc:SourceCode")[];
+                                    };
+                                    provenance: {
+                                        source: string;
+                                        external_id: string;
+                                        record_revision: string;
+                                        digest: string;
+                                        converter_revision: string;
+                                        field_group: "cover";
+                                        references: {
+                                            parts: ({
+                                                property: {
+                                                    id: string;
+                                                };
+                                                value: {
+                                                    type: "value";
+                                                    content: unknown;
+                                                };
+                                            } | {
+                                                property: {
+                                                    id: string;
+                                                };
+                                                value: {
+                                                    type: "somevalue";
+                                                } | {
+                                                    type: "novalue";
+                                                };
+                                            })[];
+                                        }[];
+                                    };
+                                    rejection?: {
+                                        code: string;
+                                    };
+                                    state: "available" | "uploaded";
+                                };
+                            };
+                            400: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            401: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            500: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            503: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
         threads: {
             post: {
                 body: {
