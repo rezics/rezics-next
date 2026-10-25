@@ -16,7 +16,7 @@ import {
   type ConversionContext,
 } from './support.ts';
 
-export const converter_revision = 'bangumi@1';
+export const converter_revision = 'bangumi@2';
 
 // Only these source fields are visited. Unknown/private subtrees are never traversed.
 // Projection bytes <=64 KiB; tags <=64 x 200 characters; titles <=500 characters;
@@ -210,7 +210,7 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
       op: 'create',
       key: key('bootstrap', 'facts'),
       source: envelope('facts'),
-      subject: { type: types[record.type]!, labels, statements: { 'wdt:P5732': [facts[0]!], 'schema:name': titles } },
+      subject: { type: types[record.type]!, labels },
     });
   } else {
     for (const [index, statement] of facts.entries()) proposals.push(propose(statement, 'facts', `fact:${index}`));
