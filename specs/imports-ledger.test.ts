@@ -130,7 +130,8 @@ class Harness {
       directory: this.directory,
       readFence: async (key) => {
         this.lookups.push({ ...key });
-        return this.fences.has(fenceId(key));
+        const fenced = this.fences.has(fenceId(key));
+        return { fenced, securityRevision: fenced ? '1' : null };
       },
       bulk: {
         send: async (request) => {

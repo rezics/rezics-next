@@ -93,6 +93,6 @@ export interface DriverOptions {
   directory: string;
   bulk: FixtureBulkClient;
   /** Actual importer fence lookup dependency, invoked even on unchanged refresh. */
-  readFence(key: FenceKey): Promise<boolean>;
+  readFence(key: FenceKey): Promise<{ fenced: boolean; securityRevision: string | null }>;
 }
 export type CreateImportLedgerDriver = (options: DriverOptions) => Promise<ImportLedgerDriver>;
