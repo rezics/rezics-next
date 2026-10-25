@@ -95,3 +95,16 @@ test('the culprit search costs a logarithmic number of probes in the batch size'
   expect(large).toBeLessThanOrEqual(small + 12);
   expect(large).toBeLessThan(32);
 }, 120_000);
+
+test('a specification task whose suite is red by design does not fail promotion', async () => {
+  const h = integrationHarness();
+  try {
+    const spec = await h.seed('outcomes', [], ['fixture-red-suite']);
+    h.store.updateTask({ taskId: spec.id, attempt: 1 }, current => { current.taskClass = 'specification'; });
+    const next = await h.seed('implementation');
+    const dev = h.head();
+    await h.promote(async command => command[0] === 'fixture-red-suite' ? failure : success);
+    expect(h.head('main')).toBe(dev);
+    for (const task of [spec, next]) expect(h.store.task(task.id).state).toBe('merged');
+  } finally { h.dispose(); }
+});
