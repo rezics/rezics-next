@@ -7,7 +7,8 @@ import {
   type DocumentNode,
   type DocumentSnapshot,
 } from '@rezics/document';
-import type { Editor as TiptapEditor, JSONContent } from '@tiptap/core';
+import { Extension, type Editor as TiptapEditor, type JSONContent } from '@tiptap/core';
+import { history } from '@tiptap/pm/history';
 import { useEditor } from '@tiptap/react';
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { cn } from '../utils.ts';
@@ -16,6 +17,7 @@ import { assertSnapshotSize, editorSnapshot } from './rich-text-editor-snapshot.
 
 import { richTextEditorLabels, type RichTextEditorLabels } from './editor-labels.ts';
 import { SelectionMenu } from './editor-selection-menu.tsx';
+import { EditorTouchBar } from './editor-touch-bar.tsx';
 import { LinkMenu, type LinkRange } from './editor-link.tsx';
 import { ImageInsert, withImageView } from './editor-image.tsx';
 import { editorUploads, type ImageUploader, type UploadEntry, type UploadState } from './editor-uploads.ts';
@@ -39,6 +41,7 @@ export interface RichTextEditorProps {
   disabled?: boolean;
   readOnly?: boolean;
   autoFocus?: boolean;
+  toolbar?: 'auto' | 'always' | 'never';
   maxLength?: number;
   upload?: ImageUploader;
   onUploadState?: (state: UploadState, count: number) => void;
@@ -46,6 +49,61 @@ export interface RichTextEditorProps {
   onFocus?: () => void;
   onSave?: () => void;
   onKeyDown?: (event: KeyboardEvent<HTMLDivElement>) => void;
+}
+
+const EditorHistory = Extension.create({
+  name: 'editorHistory',
+  addProseMirrorPlugins: () => [history()],
+});
+
+function useCoarsePointer(): boolean {
+  const [coarse, setCoarse] = useState(false);
+
+  useEffect(() => {
+    const query = window.matchMedia('(pointer: coarse)');
+    const update = () => setCoarse(query.matches);
+    update();
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
+
+  return coarse;
+}
+
+function useEditorFocus(editor: TiptapEditor | null): boolean {
+  const [focused, setFocused] = useState(false);
+
+  useEffect(() => {
+    if (!editor) {
+      setFocused(false);
+      return;
+    }
+
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const focus = () => {
+      if (timer !== null) clearTimeout(timer);
+      timer = null;
+      setFocused(true);
+    };
+    const blur = () => {
+      if (timer !== null) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = null;
+        setFocused(false);
+      }, 150);
+    };
+
+    setFocused(editor.isFocused);
+    editor.on('focus', focus);
+    editor.on('blur', blur);
+    return () => {
+      if (timer !== null) clearTimeout(timer);
+      editor.off('focus', focus);
+      editor.off('blur', blur);
+    };
+  }, [editor]);
+
+  return focused;
 }
 
 function normalizeEditorValue(value: DocumentSnapshot): DocumentSnapshot {
@@ -74,6 +132,7 @@ export function RichTextEditor({
   disabled = false,
   readOnly = false,
   autoFocus = false,
+  toolbar = 'auto',
   maxLength,
   upload,
   onUploadState,
@@ -103,6 +162,7 @@ export function RichTextEditor({
   const [imagePosition, setImagePosition] = useState<number | null>(null);
   const [uploadEntries, setUploadEntries] = useState<UploadEntry[]>([]);
   const [uploadMessage, setUploadMessage] = useState('');
+  const [touchSheetOpen, setTouchSheetOpen] = useState(false);
   const uploads = useRef<ReturnType<typeof editorUploads> | null>(null);
   const resolvedLabels = useMemo(() => ({ ...richTextEditorLabels, ...labels }), [labels]);
 
@@ -157,6 +217,7 @@ export function RichTextEditor({
   const editor = useEditor(
     {
       extensions: [
+        EditorHistory,
         ...withImageView(
           editorExtensions(value.profile, {
             ...(placeholder === undefined ? {} : { placeholder }),
@@ -317,6 +378,11 @@ export function RichTextEditor({
     });
   }, [editor]);
 
+  const coarsePointer = useCoarsePointer();
+  const editorFocused = useEditorFocus(editor);
+  const touchBarVisible =
+    editable && toolbar !== 'never' && (toolbar === 'always' || (coarsePointer && editorFocused) || touchSheetOpen);
+
   return (
     <div ref={menuContainer} className={cn('relative min-w-0', className)}>
       <EditorSurface
@@ -356,6 +422,17 @@ export function RichTextEditor({
             onLink={openLink}
             onImage={() => setImagePosition(editor.state.selection.from)}
           />
+          {toolbar !== 'never' ? (
+            <EditorTouchBar
+              editor={editor}
+              labels={resolvedLabels}
+              onLink={openLink}
+              onImage={() => setImagePosition(editor.state.selection.from)}
+              upload={hasUpload}
+              visible={touchBarVisible}
+              onSheetOpenChange={setTouchSheetOpen}
+            />
+          ) : null}
           <SelectionMenu
             editor={editor}
             labels={resolvedLabels}
@@ -363,6 +440,7 @@ export function RichTextEditor({
             onLink={openLink}
             onLinkClose={closeLink}
             container={menuContainer}
+            visible={!touchBarVisible}
           />
           <LinkMenu
             editor={editor}

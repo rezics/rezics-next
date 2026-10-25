@@ -1,4 +1,5 @@
 import type { Editor } from '@tiptap/core';
+import { redo, redoDepth, undo, undoDepth } from '@tiptap/pm/history';
 import { Fragment, type Node as ProseMirrorNode } from '@tiptap/pm/model';
 import { TextSelection } from '@tiptap/pm/state';
 import { useEditorState } from '@tiptap/react';
@@ -88,6 +89,27 @@ export const markCommands: readonly EditorCommand[] = [
     },
   },
 ];
+
+/** Inline formats kept on the touch bar. The selection menu can offer the full mark command set. */
+export const touchBarFormatCommands: readonly EditorCommand[] = markCommands.filter((command) =>
+  ['bold', 'italic', 'link', 'code'].includes(command.id),
+);
+
+export const undoCommand: EditorCommand = {
+  id: 'undo',
+  label: 'undo',
+  run: (editor) => {
+    undo(editor.state, (transaction) => editor.view.dispatch(transaction));
+  },
+};
+
+export const redoCommand: EditorCommand = {
+  id: 'redo',
+  label: 'redo',
+  run: (editor) => {
+    redo(editor.state, (transaction) => editor.view.dispatch(transaction));
+  },
+};
 
 const heading = (level: 1 | 2 | 3): EditorCommand => ({
   id: `heading${level}`,
@@ -212,6 +234,11 @@ export function availableCommands(commands: readonly EditorCommand[], editor: Ed
   );
 }
 
+/** The touch sheet uses the insertion set and schema/upload rules offered by the slash menu. */
+export function availableInsertCommands(editor: Editor, upload: boolean): EditorCommand[] {
+  return availableCommands(insertCommands, editor).filter((command) => command.id !== 'image' || upload);
+}
+
 /** A constant set of commands is recomputed once per transaction. */
 export function useCommandState(editor: Editor) {
   return useEditorState({
@@ -225,6 +252,8 @@ export function useCommandState(editor: Editor) {
         blocks.find(({ command, active }) => command.id !== 'paragraph' && active)?.command.id ?? 'paragraph';
       return {
         empty: current.state.selection.empty,
+        canUndo: undoDepth(current.state) > 0,
+        canRedo: redoDepth(current.state) > 0,
         marks: availableCommands(markCommands, current).map((command) => ({
           command,
           active: command.active?.(current) ?? false,

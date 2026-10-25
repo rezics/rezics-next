@@ -18,6 +18,7 @@ export function SelectionMenu({
   onLink,
   onLinkClose,
   container,
+  visible = true,
 }: {
   editor: Editor;
   labels: RichTextEditorLabels;
@@ -25,6 +26,7 @@ export function SelectionMenu({
   onLink: () => void;
   onLinkClose: () => void;
   container: RefObject<HTMLDivElement | null>;
+  visible?: boolean;
 }) {
   const state = useCommandState(editor);
   const [blocksOpen, setBlocksOpen] = useState(false);
@@ -75,7 +77,10 @@ export function SelectionMenu({
       options={bubbleOptions}
       appendTo={() => container.current!}
       shouldShow={({ editor: current, state: live, view, element }) =>
-        current.isEditable && !live.selection.empty && (view.hasFocus() || element.contains(document.activeElement))
+        visible &&
+        current.isEditable &&
+        !live.selection.empty &&
+        (view.hasFocus() || element.contains(document.activeElement))
       }
     >
       <div

@@ -1,5 +1,10 @@
 /** English defaults for the editor's controls and upload announcements. */
 export const richTextEditorLabels = {
+  toolbar: 'Formatting toolbar',
+  blocks: 'Blocks',
+  undo: 'Undo',
+  redo: 'Redo',
+  hideKeyboard: 'Hide keyboard',
   formatting: 'Format text',
   turnInto: 'Turn into',
   paragraph: 'Paragraph',
