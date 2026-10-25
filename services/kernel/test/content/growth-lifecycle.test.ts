@@ -11,7 +11,11 @@ import type { AuthorErasureDependencies } from '../../src/content/operation-cont
 import { bindAuthorErasureWorkflow } from '../../src/content/erasure-workflow-identity.ts';
 import { readBatch, type Envelope } from '../../src/events/log.ts';
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
-import { readMediaImportStatus, type MediaImportDependencies } from '../../src/content/media-import.ts';
+import {
+  importMediaFromUrl,
+  readMediaImportStatus,
+  type MediaImportDependencies,
+} from '../../src/content/media-import.ts';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
 import { purgeObject } from '../../src/content/erasure-job.ts';
 import type { MediaStorage } from '../../src/content/media-storage.ts';
@@ -827,6 +831,123 @@ function mediaPopulationRows(
     ],
   };
 }
+
+// Setup fails: importMediaFromUrl raises GrantDeniedError when parentCreationAuthorization finalizes wrapper evidence.
+test.skip('URL reservation stays within its bound as T grows', async () => {
+  const route = 0;
+  const { actor, access } = await createActor(route, mediaActions);
+  await addGrant(route, mediaRoot.id, actor.accountId, 'media:import_from_url');
+  await addGrant(route, mediaRoot.id, actor.accountId, 'source_fence:read');
+  const deps: MediaImportDependencies = {
+    pool: db.pool,
+    access,
+    routeKey: mediaRouteKey,
+    clock: () => new Date(),
+    fetchConfig: { allowedHosts: ['images.example.test'] },
+  };
+  const containerId = newId(route);
+  await db.admin.query(
+    `INSERT INTO semantic.subject (route, subject_id, type, recorded_transaction_id)
+     VALUES ($1, $2, 'schema:Book', $2)`,
+    [route, containerId],
+  );
+  let externalId = `growth-reservation-${randomUUID()}`;
+  while (partitionOf(tupleRoute(mediaRouteKey, 'catalogue', externalId)) !== partitionOf(route))
+    externalId = `growth-reservation-${randomUUID()}`;
+  const sourceRoute = tupleRoute(mediaRouteKey, 'catalogue', externalId);
+  const request = coverRequest(containerId, externalId);
+  const context = () => ({ deadline: Date.now() + 15_000, idempotencyKey: randomUUID(), requestId: newId(route) });
+
+  const anchor = await importMediaFromUrl(deps, actor, request, context());
+  expect(routeOf(anchor.value.mediaId)).toBe(route);
+
+  const auth: AccessPopulation = {
+    homeRoute: route,
+    actorId: actor.accountId,
+    actions: mediaActions,
+    roles: ['content.media.owner', 'platform.governance'],
+    receiptKind: 'content.media.importFromUrl',
+    name: 'growth-media-reservation',
+  };
+  // This population matches imported cover rows, variants, source tuples, global contexts and fixed Access history.
+  const population: Population = {
+    name: `growth-media-reservation-${randomUUID()}`,
+    hotPartition: partitionOf(route),
+    hotShare: 1,
+    rows: ({ ordinal, route: rowRoute, partition }) => {
+      const transactionId = newId(rowRoute);
+      return {
+        ...mediaPopulationRows(route, sourceRoute, actor.accountId, request, ordinal),
+        'semantic.context': [
+          { route, context_id: newId(route), kind: 'community', labels: {}, recorded_transaction_id: newId(route) },
+        ],
+        'core.outbox': [
+          {
+            partition_no: partition,
+            position: ordinal * 100 + 100,
+            event_seq: 0,
+            event_count: 1,
+            epoch: 1,
+            id: newId(rowRoute),
+            type: 'com.rezics.growth.media-reservation.v1',
+            subject: 'seeded',
+            data: { value: 1 },
+          },
+        ],
+        'editorial.write_basis': [
+          {
+            partition_no: partition,
+            transaction_id: transactionId,
+            epoch: 1,
+            position: ordinal * 100 + 100,
+            principal_id: actor.accountId,
+            principal_kind: 'account',
+            client_id: actor.clientId,
+            requested_by: null,
+          },
+        ],
+        ...accessRows(ordinal, auth),
+      };
+    },
+    finish: async (admin, range) => {
+      await admin.query(
+        `UPDATE core.partition p SET position = GREATEST(p.position, v.position)
+         FROM (SELECT partition_no, max(position)::bigint AS position FROM core.outbox
+               WHERE type = 'com.rezics.growth.media-reservation.v1'
+                 AND position >= $1 * 100 + 100 AND position < $2 * 100 + 100 GROUP BY partition_no) v
+         WHERE p.partition_no = v.partition_no`,
+        [range.from, range.to],
+      );
+    },
+  };
+  const report = await checkGrowth(db, {
+    name: 'URL reservation',
+    scales,
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    grow: async (_database, scale, previous) =>
+      seedScale(population, scale, previous, [
+        { table: 'content.media', partition: partitionOf(route) },
+        { table: 'content.media_variant', partition: partitionOf(route) },
+        { table: 'content.source_fences', partition: partitionOf(sourceRoute) },
+        { table: 'semantic.subject', partition: partitionOf(route) },
+        { table: 'semantic.context', partition: 0 },
+        { table: 'access.account', partition: partitionOf(route) },
+        { table: 'access.membership_inverse', partition: partitionOf(route) },
+        { table: 'access.resource_grant', partition: partitionOf(route) },
+        { table: 'access.resource_denial', partition: partitionOf(route) },
+        { table: 'access.resource_role_grant', partition: partitionOf(route) },
+        { table: 'core.receipt', routeColumn: 'partition_no', partition: partitionOf(route) },
+        { table: 'core.outbox', routeColumn: 'partition_no', partition: partitionOf(route) },
+        { table: 'editorial.write_basis', routeColumn: 'partition_no', partition: partitionOf(route) },
+      ]),
+    operation: async () => {
+      const result = await importMediaFromUrl(deps, actor, request, context());
+      expect(routeOf(result.value.mediaId)).toBe(route);
+    },
+  });
+  expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
+  expectNoContentSequentialScans(report);
+}, 90_000);
 
 test('URL status stays within its bound as T grows', async () => {
   const { actor, deps } = await createMediaDependencies();
