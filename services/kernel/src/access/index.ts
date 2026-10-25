@@ -88,6 +88,13 @@ export const access: Access = createAccess({ actions: new Map() });
 
 export { ACTIVE_ACCOUNTS, type GrantSubject } from './grant-subject.ts';
 export {
+  resourceAuthorization,
+  ResourceAuthorizationUnavailableError,
+  type AuthorizationAnchor,
+  type ResourceAuthorizationContext,
+  type ResourceAuthorizationInput,
+} from './resource-authorization.ts';
+export {
   parentCreationAuthorization,
   type ParentAnchor,
   type ParentCreationContext,
