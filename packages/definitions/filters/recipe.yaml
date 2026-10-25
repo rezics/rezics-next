@@ -1,0 +1,53 @@
+all:
+  labels:
+    en: All recipes
+    zh-Hant: 全部食譜
+    zh-Hans: 所有食谱
+    ja: すべてのレシピ
+    ko: 모든 레시피
+    de: Alle Rezepte
+    fr: Toutes les recettes
+    es: Todas las recetas
+  filter:
+    type:
+      in:
+        - schema:Recipe
+quick:
+  labels:
+    en: Recipes ready in 30 minutes
+    zh-Hant: 30 分鐘內完成的食譜
+    zh-Hans: 30分钟内做好的食谱
+    ja: 30分以内で作れるレシピ
+    ko: 30분 안에 만드는 레시피
+    de: Rezepte mit bis zu 30 Minuten Kochzeit
+    fr: Recettes prêtes en 30 minutes
+    es: Recetas listas en 30 minutos
+  filter:
+    and:
+      - type:
+          in:
+            - schema:Recipe
+      - statement:
+          property: schema:cookTime
+          range:
+            lte: 30
+            unit: http://www.wikidata.org/entity/Q7727
+before-2000:
+  labels:
+    en: Recipes published before 2000
+    zh-Hant: 2000 年前發表的食譜
+    zh-Hans: 2000年以前发表的食谱
+    ja: 2000年より前に公開されたレシピ
+    ko: 2000년 이전에 공개된 레시피
+    de: Vor 2000 veröffentlichte Rezepte
+    fr: Recettes publiées avant 2000
+    es: Recetas publicadas antes de 2000
+  filter:
+    and:
+      - type:
+          in:
+            - schema:Recipe
+      - statement:
+          property: schema:datePublished
+          range:
+            lte: 1999

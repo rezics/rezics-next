@@ -1,0 +1,63 @@
+all:
+  labels:
+    en: All anime
+    zh-Hant: 全部動畫
+    zh-Hans: 所有动画
+    ja: すべてのアニメ
+    ko: 모든 애니메이션
+    de: Alle Anime
+    fr: Tous les anime
+    es: Todos los anime
+  filter:
+    type:
+      in:
+        - schema:Movie
+        - schema:TVSeries
+films:
+  labels:
+    en: All films
+    zh-Hant: 全部電影
+    zh-Hans: 所有电影
+    ja: すべての映画
+    ko: 모든 영화
+    de: Alle Filme
+    fr: Tous les films
+    es: Todas las películas
+  filter:
+    type:
+      in:
+        - schema:Movie
+series:
+  labels:
+    en: All television series
+    zh-Hant: 全部電視系列節目
+    zh-Hans: 所有电视系列节目
+    ja: すべてのテレビシリーズ
+    ko: 모든 텔레비전 시리즈
+    de: Alle Fernsehserien
+    fr: Toutes les séries télévisées
+    es: Todas las series de televisión
+  filter:
+    type:
+      in:
+        - schema:TVSeries
+before-2000:
+  labels:
+    en: Anime released before 2000
+    zh-Hant: 2000 年前推出的動畫
+    zh-Hans: 2000年以前推出的动画
+    ja: 2000年より前に公開されたアニメ
+    ko: 2000년 이전에 공개된 애니메이션
+    de: Vor 2000 erschienene Anime
+    fr: Anime sortis avant 2000
+    es: Anime estrenados antes de 2000
+  filter:
+    and:
+      - type:
+          in:
+            - schema:Movie
+            - schema:TVSeries
+      - statement:
+          property: schema:datePublished
+          range:
+            lte: 1999

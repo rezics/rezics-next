@@ -1,0 +1,147 @@
+{
+  "labels": {
+    "en": "Books",
+    "zh-Hant": "書籍",
+    "zh-Hans": "图书",
+    "ja": "書籍",
+    "ko": "도서",
+    "de": "Bücher",
+    "fr": "Livres",
+    "es": "Libros"
+  },
+  "pages": [
+    {
+      "route": "",
+      "document": {
+        "root": {
+          "props": {}
+        },
+        "content": [
+          {
+            "type": "Stack",
+            "props": {
+              "id": "page",
+              "gap": "md",
+              "children": [
+                {
+                  "type": "Heading",
+                  "props": {
+                    "id": "title",
+                    "text": "Books",
+                    "level": 2
+                  }
+                },
+                {
+                  "type": "Text",
+                  "props": {
+                    "id": "intro",
+                    "text": "A starting page for books. Editions have their own page."
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "hero",
+                    "name": "hero",
+                    "children": []
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "entity",
+                    "name": "entity",
+                    "children": []
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "aside",
+                    "name": "aside",
+                    "children": []
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "footer",
+                    "name": "footer",
+                    "children": []
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "route": "editions",
+      "document": {
+        "root": {
+          "props": {}
+        },
+        "content": [
+          {
+            "type": "Stack",
+            "props": {
+              "id": "page",
+              "gap": "md",
+              "children": [
+                {
+                  "type": "Heading",
+                  "props": {
+                    "id": "title",
+                    "text": "Editions",
+                    "level": 2
+                  }
+                },
+                {
+                  "type": "Text",
+                  "props": {
+                    "id": "intro",
+                    "text": "Published editions of book works, including translations and versions."
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "hero",
+                    "name": "hero",
+                    "children": []
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "entity",
+                    "name": "entity",
+                    "children": []
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "aside",
+                    "name": "aside",
+                    "children": []
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "footer",
+                    "name": "footer",
+                    "children": []
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "scope": ["book/all", "book/editions", "book/before-2000"]
+}

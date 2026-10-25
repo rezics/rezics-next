@@ -2565,5 +2565,343 @@
       },
       "targets": ["wd:Q689445"]
     }
+  },
+  "contexts": {
+    "anime": {
+      "labels": {
+        "de": "Anime-Gemeinschaft",
+        "en": "Anime community",
+        "es": "Comunidad de anime",
+        "fr": "Communauté des anime",
+        "ja": "アニメコミュニティ",
+        "ko": "애니메이션 커뮤니티",
+        "zh-Hans": "动画社区",
+        "zh-Hant": "動畫社群"
+      },
+      "defaults": {}
+    },
+    "book": {
+      "labels": {
+        "de": "Buchgemeinschaft",
+        "en": "Book community",
+        "es": "Comunidad de libros",
+        "fr": "Communauté des livres",
+        "ja": "書籍コミュニティ",
+        "ko": "도서 커뮤니티",
+        "zh-Hans": "图书社区",
+        "zh-Hant": "書籍社群"
+      },
+      "defaults": {}
+    },
+    "recipe": {
+      "labels": {
+        "de": "Rezeptgemeinschaft",
+        "en": "Recipe community",
+        "es": "Comunidad de recetas",
+        "fr": "Communauté des recettes",
+        "ja": "レシピコミュニティ",
+        "ko": "레시피 커뮤니티",
+        "zh-Hans": "食谱社区",
+        "zh-Hant": "食譜社群"
+      },
+      "defaults": {}
+    },
+    "visual-novel": {
+      "labels": {
+        "de": "Visual-Novel-Gemeinschaft",
+        "en": "Visual novel community",
+        "es": "Comunidad de novelas visuales",
+        "fr": "Communauté des visual novels",
+        "ja": "ビジュアルノベルコミュニティ",
+        "ko": "비주얼 노벨 커뮤니티",
+        "zh-Hans": "视觉小说社区",
+        "zh-Hant": "視覺小說社群"
+      },
+      "defaults": {}
+    }
+  },
+  "filters": {
+    "anime/all": {
+      "labels": {
+        "de": "Alle Anime",
+        "en": "All anime",
+        "es": "Todos los anime",
+        "fr": "Tous les anime",
+        "ja": "すべてのアニメ",
+        "ko": "모든 애니메이션",
+        "zh-Hans": "所有动画",
+        "zh-Hant": "全部動畫"
+      },
+      "filter": {
+        "type": {
+          "in": ["schema:Movie", "schema:TVSeries"]
+        }
+      }
+    },
+    "anime/before-2000": {
+      "labels": {
+        "de": "Vor 2000 erschienene Anime",
+        "en": "Anime released before 2000",
+        "es": "Anime estrenados antes de 2000",
+        "fr": "Anime sortis avant 2000",
+        "ja": "2000年より前に公開されたアニメ",
+        "ko": "2000년 이전에 공개된 애니메이션",
+        "zh-Hans": "2000年以前推出的动画",
+        "zh-Hant": "2000 年前推出的動畫"
+      },
+      "filter": {
+        "and": [
+          {
+            "type": {
+              "in": ["schema:Movie", "schema:TVSeries"]
+            }
+          },
+          {
+            "statement": {
+              "property": "schema:datePublished",
+              "range": {
+                "lte": 1999
+              }
+            }
+          }
+        ]
+      }
+    },
+    "anime/films": {
+      "labels": {
+        "de": "Alle Filme",
+        "en": "All films",
+        "es": "Todas las películas",
+        "fr": "Tous les films",
+        "ja": "すべての映画",
+        "ko": "모든 영화",
+        "zh-Hans": "所有电影",
+        "zh-Hant": "全部電影"
+      },
+      "filter": {
+        "type": {
+          "in": ["schema:Movie"]
+        }
+      }
+    },
+    "anime/series": {
+      "labels": {
+        "de": "Alle Fernsehserien",
+        "en": "All television series",
+        "es": "Todas las series de televisión",
+        "fr": "Toutes les séries télévisées",
+        "ja": "すべてのテレビシリーズ",
+        "ko": "모든 텔레비전 시리즈",
+        "zh-Hans": "所有电视系列节目",
+        "zh-Hant": "全部電視系列節目"
+      },
+      "filter": {
+        "type": {
+          "in": ["schema:TVSeries"]
+        }
+      }
+    },
+    "book/all": {
+      "labels": {
+        "de": "Alle Bücher",
+        "en": "All books",
+        "es": "Todos los libros",
+        "fr": "Tous les livres",
+        "ja": "すべての書籍",
+        "ko": "모든 도서",
+        "zh-Hans": "全部图书",
+        "zh-Hant": "全部書籍"
+      },
+      "filter": {
+        "type": {
+          "in": ["schema:Book"]
+        }
+      }
+    },
+    "book/before-2000": {
+      "labels": {
+        "de": "Vor 2000 erschienene Bücher",
+        "en": "Books published before 2000",
+        "es": "Libros publicados antes de 2000",
+        "fr": "Livres parus avant 2000",
+        "ja": "2000年より前に出版された書籍",
+        "ko": "2000년 이전에 출판된 도서",
+        "zh-Hans": "2000年以前出版的图书",
+        "zh-Hant": "2000 年前出版的書籍"
+      },
+      "filter": {
+        "and": [
+          {
+            "type": {
+              "in": ["schema:Book"]
+            }
+          },
+          {
+            "statement": {
+              "property": "schema:datePublished",
+              "range": {
+                "lte": 1999
+              }
+            }
+          }
+        ]
+      }
+    },
+    "book/editions": {
+      "labels": {
+        "de": "Alle Ausgaben",
+        "en": "All editions",
+        "es": "Todas las ediciones",
+        "fr": "Toutes les éditions",
+        "ja": "すべての版",
+        "ko": "모든 판",
+        "zh-Hans": "所有版本",
+        "zh-Hant": "全部版本"
+      },
+      "filter": {
+        "type": {
+          "in": ["bf:Instance"]
+        }
+      }
+    },
+    "recipe/all": {
+      "labels": {
+        "de": "Alle Rezepte",
+        "en": "All recipes",
+        "es": "Todas las recetas",
+        "fr": "Toutes les recettes",
+        "ja": "すべてのレシピ",
+        "ko": "모든 레시피",
+        "zh-Hans": "所有食谱",
+        "zh-Hant": "全部食譜"
+      },
+      "filter": {
+        "type": {
+          "in": ["schema:Recipe"]
+        }
+      }
+    },
+    "recipe/before-2000": {
+      "labels": {
+        "de": "Vor 2000 veröffentlichte Rezepte",
+        "en": "Recipes published before 2000",
+        "es": "Recetas publicadas antes de 2000",
+        "fr": "Recettes publiées avant 2000",
+        "ja": "2000年より前に公開されたレシピ",
+        "ko": "2000년 이전에 공개된 레시피",
+        "zh-Hans": "2000年以前发表的食谱",
+        "zh-Hant": "2000 年前發表的食譜"
+      },
+      "filter": {
+        "and": [
+          {
+            "type": {
+              "in": ["schema:Recipe"]
+            }
+          },
+          {
+            "statement": {
+              "property": "schema:datePublished",
+              "range": {
+                "lte": 1999
+              }
+            }
+          }
+        ]
+      }
+    },
+    "recipe/quick": {
+      "labels": {
+        "de": "Rezepte mit bis zu 30 Minuten Kochzeit",
+        "en": "Recipes ready in 30 minutes",
+        "es": "Recetas listas en 30 minutos",
+        "fr": "Recettes prêtes en 30 minutes",
+        "ja": "30分以内で作れるレシピ",
+        "ko": "30분 안에 만드는 레시피",
+        "zh-Hans": "30分钟内做好的食谱",
+        "zh-Hant": "30 分鐘內完成的食譜"
+      },
+      "filter": {
+        "and": [
+          {
+            "type": {
+              "in": ["schema:Recipe"]
+            }
+          },
+          {
+            "statement": {
+              "property": "schema:cookTime",
+              "range": {
+                "lte": 30,
+                "unit": "http://www.wikidata.org/entity/Q7727"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "visual-novel/all": {
+      "labels": {
+        "de": "Alle Visual Novels",
+        "en": "All visual novels",
+        "es": "Todas las novelas visuales",
+        "fr": "Tous les visual novels",
+        "ja": "すべてのビジュアルノベル",
+        "ko": "모든 비주얼 노벨",
+        "zh-Hans": "所有视觉小说",
+        "zh-Hant": "全部視覺小說"
+      },
+      "filter": {
+        "type": {
+          "in": ["wd:Q689445"]
+        }
+      }
+    },
+    "visual-novel/before-2000": {
+      "labels": {
+        "de": "Veröffentlichungen vor 2000",
+        "en": "Releases published before 2000",
+        "es": "Publicaciones anteriores a 2000",
+        "fr": "Parutions antérieures à 2000",
+        "ja": "2000年より前のリリース",
+        "ko": "2000년 이전에 나온 출시 버전",
+        "zh-Hans": "2000年以前的发行版",
+        "zh-Hant": "2000 年前的發行"
+      },
+      "filter": {
+        "and": [
+          {
+            "type": {
+              "in": ["wd:Q20631656"]
+            }
+          },
+          {
+            "statement": {
+              "property": "schema:datePublished",
+              "range": {
+                "lte": 1999
+              }
+            }
+          }
+        ]
+      }
+    },
+    "visual-novel/releases": {
+      "labels": {
+        "de": "Alle Visual-Novel-Veröffentlichungen",
+        "en": "All visual novel releases",
+        "es": "Todas las publicaciones de novelas visuales",
+        "fr": "Toutes les parutions de visual novels",
+        "ja": "すべてのビジュアルノベルのリリース",
+        "ko": "모든 비주얼 노벨 출시 버전",
+        "zh-Hans": "所有视觉小说发行版",
+        "zh-Hant": "全部視覺小說發行"
+      },
+      "filter": {
+        "type": {
+          "in": ["wd:Q20631656"]
+        }
+      }
+    }
   }
 }

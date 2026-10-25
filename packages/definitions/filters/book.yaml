@@ -1,0 +1,47 @@
+all:
+  labels:
+    en: All books
+    zh-Hant: 全部書籍
+    zh-Hans: 全部图书
+    ja: すべての書籍
+    ko: 모든 도서
+    de: Alle Bücher
+    fr: Tous les livres
+    es: Todos los libros
+  filter:
+    type:
+      in:
+        - schema:Book
+editions:
+  labels:
+    en: All editions
+    zh-Hant: 全部版本
+    zh-Hans: 所有版本
+    ja: すべての版
+    ko: 모든 판
+    de: Alle Ausgaben
+    fr: Toutes les éditions
+    es: Todas las ediciones
+  filter:
+    type:
+      in:
+        - bf:Instance
+before-2000:
+  labels:
+    en: Books published before 2000
+    zh-Hant: 2000 年前出版的書籍
+    zh-Hans: 2000年以前出版的图书
+    ja: 2000年より前に出版された書籍
+    ko: 2000년 이전에 출판된 도서
+    de: Vor 2000 erschienene Bücher
+    fr: Livres parus avant 2000
+    es: Libros publicados antes de 2000
+  filter:
+    and:
+      - type:
+          in:
+            - schema:Book
+      - statement:
+          property: schema:datePublished
+          range:
+            lte: 1999
