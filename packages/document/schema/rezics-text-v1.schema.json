@@ -1,0 +1,1407 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rezics.com/protocol/rezics-text-v1.schema.json",
+  "$comment": "Apache-2.0. Also enforce ProseMirror content expressions, one ID namespace and valid table spans; see README.",
+  "$defs": {
+    "text_Mark": {
+      "anyOf": [
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "bold"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "italic"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "underline"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "strike"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "code"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "spoiler"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "attrs"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "link"
+            },
+            "attrs": {
+              "type": "object",
+              "required": [
+                "href"
+              ],
+              "properties": {
+                "href": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "target": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "rel": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "class": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "title": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "attrs"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "textStyle"
+            },
+            "attrs": {
+              "type": "object",
+              "properties": {
+                "color": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^[^;{}\\u0000-\\u001f]*$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "backgroundColor": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^[^;{}\\u0000-\\u001f]*$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "attrs"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "textEmphasis"
+            },
+            "attrs": {
+              "type": "object",
+              "properties": {
+                "shape": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "dot"
+                    },
+                    {
+                      "type": "string",
+                      "const": "sesame"
+                    },
+                    {
+                      "type": "string",
+                      "const": "circle"
+                    },
+                    {
+                      "type": "string",
+                      "const": "double-circle"
+                    },
+                    {
+                      "type": "string",
+                      "const": "triangle"
+                    }
+                  ]
+                },
+                "fill": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "filled"
+                    },
+                    {
+                      "type": "string",
+                      "const": "open"
+                    }
+                  ]
+                },
+                "color": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^[^;{}\\u0000-\\u001f]*$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "position": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "over"
+                    },
+                    {
+                      "type": "string",
+                      "const": "under"
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "attrs"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "language"
+            },
+            "attrs": {
+              "type": "object",
+              "properties": {
+                "lang": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256,
+                      "pattern": "^[A-Za-z]{1,8}(-[A-Za-z0-9]{1,8})*$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "dir": {
+                  "anyOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "ltr"
+                        },
+                        {
+                          "type": "string",
+                          "const": "rtl"
+                        },
+                        {
+                          "type": "string",
+                          "const": "auto"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "text_Document": {
+      "type": "object",
+      "required": [
+        "version",
+        "profile",
+        "doc"
+      ],
+      "properties": {
+        "version": {
+          "type": "string",
+          "const": "rezics-document-v1"
+        },
+        "profile": {
+          "type": "string",
+          "const": "text"
+        },
+        "doc": {
+          "$ref": "#/$defs/text_Doc"
+        }
+      },
+      "additionalProperties": false
+    },
+    "text_Doc": {
+      "type": "object",
+      "required": [
+        "type",
+        "content"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "doc"
+        },
+        "content": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/text_paragraph"
+              },
+              {
+                "$ref": "#/$defs/text_heading"
+              },
+              {
+                "$ref": "#/$defs/text_blockquote"
+              },
+              {
+                "$ref": "#/$defs/text_bulletList"
+              },
+              {
+                "$ref": "#/$defs/text_orderedList"
+              },
+              {
+                "$ref": "#/$defs/text_taskList"
+              },
+              {
+                "$ref": "#/$defs/text_codeBlock"
+              },
+              {
+                "$ref": "#/$defs/text_horizontalRule"
+              }
+            ]
+          },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "text_paragraph": {
+      "type": "object",
+      "required": [
+        "type",
+        "attrs"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "paragraph"
+        },
+        "attrs": {
+          "type": "object",
+          "required": [
+            "id"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "lang": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256,
+                  "pattern": "^[A-Za-z]{1,8}(-[A-Za-z0-9]{1,8})*$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "dir": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "ltr"
+                    },
+                    {
+                      "type": "string",
+                      "const": "rtl"
+                    },
+                    {
+                      "type": "string",
+                      "const": "auto"
+                    }
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "textAlign": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "left"
+                    },
+                    {
+                      "type": "string",
+                      "const": "right"
+                    },
+                    {
+                      "type": "string",
+                      "const": "center"
+                    },
+                    {
+                      "type": "string",
+                      "const": "justify"
+                    }
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "content": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/text_text"
+              },
+              {
+                "$ref": "#/$defs/text_hardBreak"
+              },
+              {
+                "$ref": "#/$defs/text_ruby"
+              }
+            ]
+          },
+          "minItems": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "text_heading": {
+      "type": "object",
+      "required": [
+        "type",
+        "attrs"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "heading"
+        },
+        "attrs": {
+          "type": "object",
+          "required": [
+            "id"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "lang": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256,
+                  "pattern": "^[A-Za-z]{1,8}(-[A-Za-z0-9]{1,8})*$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "dir": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "ltr"
+                    },
+                    {
+                      "type": "string",
+                      "const": "rtl"
+                    },
+                    {
+                      "type": "string",
+                      "const": "auto"
+                    }
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "level": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 6
+            },
+            "textAlign": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "left"
+                    },
+                    {
+                      "type": "string",
+                      "const": "right"
+                    },
+                    {
+                      "type": "string",
+                      "const": "center"
+                    },
+                    {
+                      "type": "string",
+                      "const": "justify"
+                    }
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "content": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/text_text"
+              },
+              {
+                "$ref": "#/$defs/text_hardBreak"
+              },
+              {
+                "$ref": "#/$defs/text_ruby"
+              }
+            ]
+          },
+          "minItems": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "text_blockquote": {
+      "type": "object",
+      "required": [
+        "type",
+        "attrs"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "blockquote"
+        },
+        "attrs": {
+          "type": "object",
+          "required": [
+            "id"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "lang": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256,
+                  "pattern": "^[A-Za-z]{1,8}(-[A-Za-z0-9]{1,8})*$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "dir": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "ltr"
+                    },
+                    {
+                      "type": "string",
+                      "const": "rtl"
+                    },
+                    {
+                      "type": "string",
+                      "const": "auto"
+                    }
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "content": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/text_paragraph"
+              },
+              {
+                "$ref": "#/$defs/text_heading"
+              },
+              {
+                "$ref": "#/$defs/text_blockquote"
+              },
+              {
+                "$ref": "#/$defs/text_bulletList"
+              },
+              {
+                "$ref": "#/$defs/text_orderedList"
+              },
+              {
+                "$ref": "#/$defs/text_taskList"
+              },
+              {
+                "$ref": "#/$defs/text_codeBlock"
+              },
+              {
+                "$ref": "#/$defs/text_horizontalRule"
+              }
+            ]
+          },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "text_bulletList": {
+      "type": "object",
+      "required": [
+        "type",
+        "attrs"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "bulletList"
+        },
+        "attrs": {
+          "type": "object",
+          "required": [
+            "id"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "lang": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256,
+                  "pattern": "^[A-Za-z]{1,8}(-[A-Za-z0-9]{1,8})*$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "dir": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "ltr"
+                    },
+                    {
+                      "type": "string",
+                      "const": "rtl"
+                    },
+                    {
+                      "type": "string",
+                      "const": "auto"
+                    }
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "content": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/text_listItem"
+              }
+            ]
+          },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "text_orderedList": {
+      "type": "object",
+      "required": [
+        "type",
+        "attrs"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "orderedList"
+        },
+        "attrs": {
+          "type": "object",
+          "required": [
+            "id"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "lang": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256,
+                  "pattern": "^[A-Za-z]{1,8}(-[A-Za-z0-9]{1,8})*$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "dir": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "ltr"
+                    },
+                    {
+                      "type": "string",
+                      "const": "rtl"
+                    },
+                    {
+                      "type": "string",
+                      "const": "auto"
+                    }
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "start": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        "content": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/text_listItem"
+              }
+            ]
+          },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "text_listItem": {
+      "type": "object",
+      "required": [
+        "type",
+        "attrs"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "listItem"
+        },
+        "attrs": {
+          "type": "object",
+          "required": [
+            "id"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "lang": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256,
+                  "pattern": "^[A-Za-z]{1,8}(-[A-Za-z0-9]{1,8})*$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "dir": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "ltr"
+                    },
+                    {
+                      "type": "string",
+                      "const": "rtl"
+                    },
+                    {
+                      "type": "string",
+                      "const": "auto"
+                    }
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "content": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/text_paragraph"
+              },
+              {
+                "$ref": "#/$defs/text_heading"
+              },
+              {
+                "$ref": "#/$defs/text_blockquote"
+              },
+              {
+                "$ref": "#/$defs/text_bulletList"
+              },
+              {
+                "$ref": "#/$defs/text_orderedList"
+              },
+              {
+                "$ref": "#/$defs/text_taskList"
+              },
+              {
+                "$ref": "#/$defs/text_codeBlock"
+              },
+              {
+                "$ref": "#/$defs/text_horizontalRule"
+              }
+            ]
+          },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "text_taskList": {
+      "type": "object",
+      "required": [
+        "type",
+        "attrs"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "taskList"
+        },
+        "attrs": {
+          "type": "object",
+          "required": [
+            "id"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "lang": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256,
+                  "pattern": "^[A-Za-z]{1,8}(-[A-Za-z0-9]{1,8})*$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "dir": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "ltr"
+                    },
+                    {
+                      "type": "string",
+                      "const": "rtl"
+                    },
+                    {
+                      "type": "string",
+                      "const": "auto"
+                    }
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "content": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/text_taskItem"
+              }
+            ]
+          },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "text_taskItem": {
+      "type": "object",
+      "required": [
+        "type",
+        "attrs"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "taskItem"
+        },
+        "attrs": {
+          "type": "object",
+          "required": [
+            "id"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "lang": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256,
+                  "pattern": "^[A-Za-z]{1,8}(-[A-Za-z0-9]{1,8})*$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "dir": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "ltr"
+                    },
+                    {
+                      "type": "string",
+                      "const": "rtl"
+                    },
+                    {
+                      "type": "string",
+                      "const": "auto"
+                    }
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "checked": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "content": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/text_paragraph"
+              },
+              {
+                "$ref": "#/$defs/text_heading"
+              },
+              {
+                "$ref": "#/$defs/text_blockquote"
+              },
+              {
+                "$ref": "#/$defs/text_bulletList"
+              },
+              {
+                "$ref": "#/$defs/text_orderedList"
+              },
+              {
+                "$ref": "#/$defs/text_taskList"
+              },
+              {
+                "$ref": "#/$defs/text_codeBlock"
+              },
+              {
+                "$ref": "#/$defs/text_horizontalRule"
+              }
+            ]
+          },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "text_codeBlock": {
+      "type": "object",
+      "required": [
+        "type",
+        "attrs"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "codeBlock"
+        },
+        "attrs": {
+          "type": "object",
+          "required": [
+            "id"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "lang": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256,
+                  "pattern": "^[A-Za-z]{1,8}(-[A-Za-z0-9]{1,8})*$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "dir": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "ltr"
+                    },
+                    {
+                      "type": "string",
+                      "const": "rtl"
+                    },
+                    {
+                      "type": "string",
+                      "const": "auto"
+                    }
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "language": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "content": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/text_text"
+              }
+            ]
+          },
+          "minItems": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "text_horizontalRule": {
+      "type": "object",
+      "required": [
+        "type",
+        "attrs"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "horizontalRule"
+        },
+        "attrs": {
+          "type": "object",
+          "required": [
+            "id"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "lang": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256,
+                  "pattern": "^[A-Za-z]{1,8}(-[A-Za-z0-9]{1,8})*$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "dir": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "ltr"
+                    },
+                    {
+                      "type": "string",
+                      "const": "rtl"
+                    },
+                    {
+                      "type": "string",
+                      "const": "auto"
+                    }
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "text_hardBreak": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "hardBreak"
+        },
+        "marks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/text_Mark"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "text_ruby": {
+      "type": "object",
+      "required": [
+        "type",
+        "attrs"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "ruby"
+        },
+        "attrs": {
+          "type": "object",
+          "required": [
+            "rt"
+          ],
+          "properties": {
+            "rt": {
+              "type": "string"
+            },
+            "position": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "over"
+                },
+                {
+                  "type": "string",
+                  "const": "under"
+                },
+                {
+                  "type": "string",
+                  "const": "inter-character"
+                }
+              ]
+            },
+            "lang": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256,
+                  "pattern": "^[A-Za-z]{1,8}(-[A-Za-z0-9]{1,8})*$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "content": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/text_text"
+              }
+            ]
+          },
+          "minItems": 0
+        },
+        "marks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/text_Mark"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "text_text": {
+      "type": "object",
+      "required": [
+        "type",
+        "text"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "text"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "marks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/text_Mark"
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$ref": "#/$defs/text_Document"
+}

@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rezics.com/protocol/rezics-document-core-v1.schema.json",
+  "$comment": "Apache-2.0. Also enforce ProseMirror content expressions, one ID namespace and valid table spans; see README.",
+  "$defs": {
+    "CoreMark": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "attrs": {
+          "type": "object",
+          "patternProperties": {
+            "^.*$": {}
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "CoreNode": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "attrs": {
+          "type": "object",
+          "patternProperties": {
+            "^.*$": {}
+          }
+        },
+        "content": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CoreNode"
+          }
+        },
+        "text": {
+          "type": "string"
+        },
+        "marks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CoreMark"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "CoreDocument": {
+      "type": "object",
+      "required": [
+        "version",
+        "profile",
+        "doc"
+      ],
+      "properties": {
+        "version": {
+          "type": "string",
+          "const": "rezics-document-v1"
+        },
+        "profile": {
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "text"
+            },
+            {
+              "type": "string",
+              "const": "blocks"
+            }
+          ]
+        },
+        "doc": {
+          "type": "object",
+          "required": [
+            "type",
+            "content"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "doc"
+            },
+            "content": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CoreNode"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$ref": "#/$defs/CoreDocument"
+}
