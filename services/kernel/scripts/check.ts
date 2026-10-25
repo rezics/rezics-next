@@ -138,11 +138,28 @@ async function main(): Promise<void> {
       '-c',
       `CREATE DATABASE ${database} TEMPLATE rezics`,
     ]);
-    run('bun', ['test', `./${file}`], {
-      ...env,
-      DATABASE_URL: url.replace(/\/rezics(?=\?)/, `/${database}`),
-      OPENSEARCH_URL: searchUrl,
-    });
+    try {
+      run('bun', ['test', `./${file}`], {
+        ...env,
+        DATABASE_URL: url.replace(/\/rezics(?=\?)/, `/${database}`),
+        OPENSEARCH_URL: searchUrl,
+      });
+    } finally {
+      // The tmpfs holds one copy at a time; keeping every copy filled it once the suite passed 80 files.
+      docker([
+        'exec',
+        container,
+        'psql',
+        '-U',
+        'rezics',
+        '-d',
+        'postgres',
+        '-v',
+        'ON_ERROR_STOP=1',
+        '-c',
+        `DROP DATABASE IF EXISTS ${database} WITH (FORCE)`,
+      ]);
+    }
   }
 }
 
