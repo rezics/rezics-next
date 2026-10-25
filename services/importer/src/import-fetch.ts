@@ -1,11 +1,23 @@
-type Options = {
+export const MAX_IMPORT_BODY_BYTES = 2097152;
+export const MAX_IMPORT_RESPONSE_BYTES = 1048576;
+export const MAX_IMPORT_WAIT_MS = 30000;
+export const MAX_IMPORT_TOTAL_WAIT_MS = 60000;
+export const MAX_IMPORT_DEADLINE_MS = 120000;
+export const MAX_IMPORT_ATTEMPTS = 5;
+
+export type ImportHttpOptions = {
   origin: string;
   token: () => Promise<string>;
   fetch?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
+  schedule?: (callback: () => void, ms: number) => () => void;
   maxAttempts?: number;
   maxBodyBytes?: number;
+  maxResponseBytes?: number;
+  maxWaitMs?: number;
+  maxTotalWaitMs?: number;
+  deadlineMs?: number;
 };
 
 // Only the structured-field string identity is inspected here, never write semantics.
@@ -178,35 +190,87 @@ function backoff(attempt: number): number {
   return Math.min(1000 * 2 ** (attempt - 1), 30000);
 }
 
-function timerSleep(ms: number, signal: AbortSignal): Promise<void> {
+function nativeSchedule(callback: () => void, ms: number): () => void {
+  const timer = setTimeout(callback, ms);
+  return () => clearTimeout(timer);
+}
+
+function timerSleep(
+  ms: number,
+  signal: AbortSignal,
+  schedule: (callback: () => void, ms: number) => () => void,
+): Promise<void> {
   return new Promise((resolve, reject) => {
+    let clear = () => {};
+    let settled = false;
     const aborted = () => {
-      clearTimeout(timer);
+      settled = true;
+      signal.removeEventListener('abort', aborted);
+      clear();
       reject(signal.reason);
     };
-    const timer = setTimeout(() => {
-      signal.removeEventListener('abort', aborted);
-      resolve();
-    }, ms);
     signal.addEventListener('abort', aborted, { once: true });
-    if (signal.aborted) {
+    if (signal.aborted) return aborted();
+    try {
+      clear = schedule(() => {
+        settled = true;
+        signal.removeEventListener('abort', aborted);
+        clear();
+        resolve();
+      }, ms);
+      // An injected scheduler may complete or abort synchronously.
+      if (settled) clear();
+    } catch (error) {
       signal.removeEventListener('abort', aborted);
-      aborted();
+      reject(error);
     }
   });
 }
 
-async function defaultSleep(ms: number, signal: AbortSignal): Promise<void> {
-  // Native timers overflow above this interval and would otherwise retry early.
-  while (ms > 0) {
-    const interval = Math.min(ms, 2147483647);
-    await timerSleep(interval, signal);
-    ms -= interval;
+function boundedSetting(value: number | undefined, fallback: number, ceiling: number, minimum = 0): number {
+  const result = value === undefined ? fallback : value;
+  if (!Number.isSafeInteger(result) || result < minimum || result > ceiling)
+    throw new RangeError(`Import limit must be an integer from ${minimum} to ${ceiling}`);
+  return result;
+}
+
+async function boundedResponse(response: Response, limit: number, signal: AbortSignal): Promise<Response> {
+  if (response.body === null) return response;
+  const reader = response.body.getReader();
+  let bytes = new Uint8Array(0);
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await abortable(signal, () => reader.read());
+      if (done) break;
+      // Check the backing store before touching bytes: a tiny view may pin a huge buffer.
+      if (!(value instanceof Uint8Array)) throw new TypeError('Import response body must contain bytes');
+      if (value.buffer.byteLength > MAX_IMPORT_RESPONSE_BYTES || value.byteLength > limit - size)
+        throw new RangeError('Import response body exceeds maxResponseBytes');
+      if (size + value.byteLength > bytes.byteLength) {
+        const expanded = new Uint8Array(Math.min(limit, Math.max(size + value.byteLength, bytes.byteLength * 2)));
+        expanded.set(bytes);
+        bytes = expanded;
+      }
+      bytes.set(value, size);
+      size += value.byteLength;
+    }
+    signal.throwIfAborted();
+    return new Response(bytes.subarray(0, size), {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    });
+  } catch (error) {
+    void reader.cancel().catch(() => {});
+    throw error;
+  } finally {
+    reader.releaseLock();
   }
 }
 
 /** Transport for createKernelClient; session state and write validation remain with the client/server. */
-export function createImportFetch(options: Options): typeof fetch {
+export function createImportFetch(options: ImportHttpOptions): typeof fetch {
   const origin = new URL(options.origin);
   if (
     !['https:', 'http:'].includes(origin.protocol) ||
@@ -217,82 +281,108 @@ export function createImportFetch(options: Options): typeof fetch {
     origin.hash
   )
     throw new TypeError('Expected an API origin');
-  const maxAttempts = options.maxAttempts ?? 3;
-  const maxBodyBytes = options.maxBodyBytes ?? 2 * 1024 * 1024;
-  if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 5)
-    throw new RangeError('maxAttempts must be an integer from 1 to 5');
-  if (!Number.isSafeInteger(maxBodyBytes) || maxBodyBytes < 0)
-    throw new RangeError('maxBodyBytes must be a nonnegative safe integer');
+  const maxAttempts = boundedSetting(options.maxAttempts, 3, MAX_IMPORT_ATTEMPTS, 1);
+  const maxBodyBytes = boundedSetting(options.maxBodyBytes, MAX_IMPORT_BODY_BYTES, MAX_IMPORT_BODY_BYTES);
+  const maxResponseBytes = boundedSetting(
+    options.maxResponseBytes,
+    MAX_IMPORT_RESPONSE_BYTES,
+    MAX_IMPORT_RESPONSE_BYTES,
+  );
+  const maxWaitMs = boundedSetting(options.maxWaitMs, MAX_IMPORT_WAIT_MS, MAX_IMPORT_WAIT_MS);
+  const maxTotalWaitMs = boundedSetting(options.maxTotalWaitMs, MAX_IMPORT_TOTAL_WAIT_MS, MAX_IMPORT_TOTAL_WAIT_MS);
+  const deadlineMs = boundedSetting(options.deadlineMs, MAX_IMPORT_DEADLINE_MS, MAX_IMPORT_DEADLINE_MS, 1);
   const upstream = options.fetch ?? globalThis.fetch;
   const now = options.now ?? Date.now;
+  const schedule = options.schedule ?? nativeSchedule;
   const sleep = (ms: number, signal: AbortSignal) =>
-    abortable(signal, () => (options.sleep ? options.sleep(ms) : defaultSleep(ms, signal)));
+    abortable(signal, () => (options.sleep ? options.sleep(ms) : timerSleep(ms, signal, schedule)));
 
   return (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     if (url.origin !== origin.origin || !url.pathname.startsWith('/v1/') || url.username || url.password)
       throw new TypeError('Import requests must target the configured API origin under /v1/');
-    const signal = init?.signal === undefined ? (input instanceof Request ? input.signal : undefined) : init.signal;
-    signal?.throwIfAborted();
-    checkBodySize(init?.body, maxBodyBytes);
-    // Copy metadata without cloning/teeing a supplied Request's stream: teeing can
-    // prefetch past the cap and leaves an unread branch retaining the entire body.
-    const request =
-      input instanceof Request
-        ? new Request(url.href, {
-            ...init,
-            method: init?.method ?? input.method,
-            headers: init?.headers ?? input.headers,
-            cache: init?.cache ?? input.cache,
-            credentials: init?.credentials ?? input.credentials,
-            integrity: init?.integrity ?? input.integrity,
-            keepalive: init?.keepalive ?? input.keepalive,
-            mode: init?.mode ?? input.mode,
-            referrer: init?.referrer ?? input.referrer,
-            referrerPolicy: init?.referrerPolicy ?? input.referrerPolicy,
-            signal: init?.signal === undefined ? input.signal : init.signal,
-            redirect: 'manual',
-          })
-        : new Request(url.href, { ...init, redirect: 'manual' });
-    const source = input instanceof Request && init?.body == null ? input.body : request.body;
-    if (source !== null && (request.method === 'GET' || request.method === 'HEAD'))
-      throw new TypeError('GET/HEAD import requests cannot have a body');
-    if (input instanceof Request && init?.body == null && (input.bodyUsed || source?.locked))
-      throw new TypeError('Import request body has already been used');
-    const body = await readBody(request, maxBodyBytes, source);
-    request.signal.throwIfAborted();
-    const retryable = mayRetry(request, body);
-    const headers = new Headers(request.headers);
-    headers.set('authorization', `Bearer ${await abortable(request.signal, options.token)}`);
-    for (let attempt = 1; ; attempt++) {
+    const caller = init?.signal === undefined ? (input instanceof Request ? input.signal : undefined) : init.signal;
+    caller?.throwIfAborted();
+    const controller = new AbortController();
+    const signal = controller.signal;
+    const aborted = () => controller.abort(caller?.reason);
+    caller?.addEventListener('abort', aborted, { once: true });
+    let clearDeadline: (() => void) | undefined;
+    try {
+      clearDeadline = schedule(
+        () => controller.abort(new DOMException('Import request deadline exceeded', 'TimeoutError')),
+        deadlineMs,
+      );
+      signal.throwIfAborted();
+      checkBodySize(init?.body, maxBodyBytes);
+      // Copy metadata without cloning/teeing a supplied Request's stream: teeing can
+      // prefetch past the cap and leaves an unread branch retaining the entire body.
+      const request =
+        input instanceof Request
+          ? new Request(url.href, {
+              ...init,
+              method: init?.method ?? input.method,
+              headers: init?.headers ?? input.headers,
+              cache: init?.cache ?? input.cache,
+              credentials: init?.credentials ?? input.credentials,
+              integrity: init?.integrity ?? input.integrity,
+              keepalive: init?.keepalive ?? input.keepalive,
+              mode: init?.mode ?? input.mode,
+              referrer: init?.referrer ?? input.referrer,
+              referrerPolicy: init?.referrerPolicy ?? input.referrerPolicy,
+              signal,
+              redirect: 'manual',
+            })
+          : new Request(url.href, { ...init, signal, redirect: 'manual' });
+      const source = input instanceof Request && init?.body == null ? input.body : request.body;
+      if (source !== null && (request.method === 'GET' || request.method === 'HEAD'))
+        throw new TypeError('GET/HEAD import requests cannot have a body');
+      if (input instanceof Request && init?.body == null && (input.bodyUsed || source?.locked))
+        throw new TypeError('Import request body has already been used');
+      const body = await readBody(request, maxBodyBytes, source);
       request.signal.throwIfAborted();
-      const next = new Request(request, { headers, ...(body === null ? {} : { body }), redirect: 'manual' });
-      let response: Response;
-      try {
-        response = await abortable(request.signal, async () => {
-          const result = await upstream(next);
-          if (request.signal.aborted) {
-            void cancel(result.body);
-            request.signal.throwIfAborted();
-          }
-          return result;
-        });
-      } catch (error) {
+      const retryable = mayRetry(request, body);
+      const headers = new Headers(request.headers);
+      headers.set('authorization', `Bearer ${await abortable(request.signal, options.token)}`);
+      let scheduledWait = 0;
+      for (let attempt = 1; ; attempt++) {
         request.signal.throwIfAborted();
-        if (!retryable || attempt === maxAttempts) throw error;
-        await sleep(backoff(attempt), request.signal);
-        continue;
+        const next = new Request(request, { headers, ...(body === null ? {} : { body }), redirect: 'manual' });
+        let response: Response;
+        try {
+          response = await abortable(request.signal, async () => {
+            const result = await upstream(next);
+            if (request.signal.aborted) {
+              void cancel(result.body);
+              request.signal.throwIfAborted();
+            }
+            return result;
+          });
+        } catch (error) {
+          request.signal.throwIfAborted();
+          const delay = backoff(attempt);
+          if (!retryable || attempt === maxAttempts || delay > maxWaitMs || delay > maxTotalWaitMs - scheduledWait)
+            throw error;
+          scheduledWait += delay;
+          await sleep(delay, request.signal);
+          continue;
+        }
+        if (
+          !retryable ||
+          attempt === maxAttempts ||
+          !(response.status === 429 || (response.status >= 500 && response.status <= 599))
+        )
+          return await boundedResponse(response, maxResponseBytes, signal);
+        const delay = retryDelay(response, attempt, now);
+        if (delay === null || delay > maxWaitMs || delay > maxTotalWaitMs - scheduledWait)
+          return await boundedResponse(response, maxResponseBytes, signal);
+        scheduledWait += delay;
+        await abortable(request.signal, () => cancel(response.body));
+        await sleep(delay, request.signal);
       }
-      if (
-        !retryable ||
-        attempt === maxAttempts ||
-        !(response.status === 429 || (response.status >= 500 && response.status <= 599))
-      )
-        return response;
-      const delay = retryDelay(response, attempt, now);
-      if (delay === null) return response;
-      await abortable(request.signal, () => cancel(response.body));
-      await sleep(delay, request.signal);
+    } finally {
+      caller?.removeEventListener('abort', aborted);
+      clearDeadline?.();
     }
   }) as typeof fetch;
 }

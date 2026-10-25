@@ -54,7 +54,7 @@ test('HTTP-date Retry-After uses the injected clock and never shortens advertise
   const now = Date.parse('Wed, 21 Oct 2015 07:28:00 GMT');
   for (const [header, minimum] of [
     ['Wed, 21 Oct 2015 07:28:09 GMT', 9000],
-    ['3600', 3600000],
+    ['3600', null],
   ] as const) {
     let calls = 0;
     const waits: number[] = [];
@@ -70,10 +70,18 @@ test('HTTP-date Retry-After uses the injected clock and never shortens advertise
           ? new Response(null, { status: 429, headers: { 'retry-after': header } })
           : new Response()) as typeof fetch,
     });
-    await client(post());
-    expect(waits).toHaveLength(1);
-    expect(waits[0]).toBeGreaterThanOrEqual(minimum);
-    expect(calls).toBe(2);
+    const response = await client(post());
+    if (minimum === null) {
+      expect(response.status).toBe(429);
+      expect(response.headers.get('retry-after')).toBe(header);
+      expect(await response.text()).toBe('');
+      expect(waits).toEqual([]);
+      expect(calls).toBe(1);
+    } else {
+      expect(waits).toHaveLength(1);
+      expect(waits[0]).toBeGreaterThanOrEqual(minimum);
+      expect(calls).toBe(2);
+    }
   }
 });
 
@@ -200,8 +208,12 @@ test('redirects are returned untouched with manual redirect policy', async () =>
         return response;
       }) as typeof fetch,
     });
-    expect(await client(bulkUrl, { redirect: 'follow' })).toBe(response);
-    expect(await response.text()).toBe('redirect');
+    const result = await client(bulkUrl, { redirect: 'follow' });
+    expect(result.status).toBe(response.status);
+    expect(result.statusText).toBe(response.statusText);
+    expect([...result.headers]).toEqual([...response.headers]);
+    expect(await result.text()).toBe('redirect');
+    expect(response.bodyUsed).toBe(true);
     expect(calls).toBe(1);
   }
 });
@@ -287,24 +299,35 @@ test('repeated 429 is capped, cancels only retried bodies, and returns the actua
       fetch: (async (_input: RequestInfo | URL, _init?: RequestInit) => {
         calls++;
         const response = new Response(
-          new ReadableStream({
-            cancel() {
-              cancelled++;
+          new ReadableStream(
+            {
+              pull(controller) {
+                controller.enqueue(new TextEncoder().encode('rate limited'));
+                controller.close();
+              },
+              cancel() {
+                cancelled++;
+              },
             },
-          }),
-          { status: 429 },
+            { highWaterMark: 0 },
+          ),
+          { status: 429, statusText: 'Too Many Requests', headers: { 'x-final': 'retained' } },
         );
         responses.push(response);
         return response;
       }) as typeof fetch,
     });
     const result = await client(post());
-    expect(result).toBe(responses.at(-1)!);
+    expect(result.status).toBe(429);
+    expect(result.statusText).toBe(responses.at(-1)!.statusText);
+    expect([...result.headers]).toEqual([...responses.at(-1)!.headers]);
     expect(calls).toBe(attempts ?? 3);
     expect(waits).toHaveLength(calls - 1);
     expect(waits.every((ms) => Number.isFinite(ms) && ms >= 0 && ms <= 30000)).toBe(true);
     expect(cancelled).toBe(calls - 1);
     expect(result.bodyUsed).toBe(false);
+    expect(await result.text()).toBe('rate limited');
+    expect(responses.at(-1)!.bodyUsed).toBe(true);
   }
 });
 
@@ -363,7 +386,12 @@ test('GET and HEAD retry 5xx and transport failures, returning or throwing the a
       maxAttempts: 1,
       fetch: (async (_input: RequestInfo | URL, _init?: RequestInit) => response) as typeof fetch,
     });
-    expect(await last(bulkUrl, { method })).toBe(response);
+    const result = await last(bulkUrl, { method });
+    expect(result.status).toBe(response.status);
+    expect(result.statusText).toBe(response.statusText);
+    expect([...result.headers]).toEqual([...response.headers]);
+    expect(await result.text()).toBe('server failure');
+    expect(response.bodyUsed).toBe(true);
   }
 });
 
@@ -453,9 +481,13 @@ test('unkeyed unsafe writes return their first HTTP failure without retrying', a
         return response;
       }) as typeof fetch,
     });
-    expect(await client(origin + '/v1/media:importFromUrl', { method: 'POST', body: '{}' })).toBe(response);
+    const result = await client(origin + '/v1/media:importFromUrl', { method: 'POST', body: '{}' });
+    expect(result.status).toBe(response.status);
+    expect(result.statusText).toBe(response.statusText);
+    expect([...result.headers]).toEqual([...response.headers]);
     expect(calls).toBe(1);
-    expect(await response.text()).toBe('failure');
+    expect(await result.text()).toBe('failure');
+    expect(response.bodyUsed).toBe(true);
   }
 });
 
