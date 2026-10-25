@@ -2,7 +2,8 @@
  * Test-only binding: CONTENT_DISCLOSURE_DRIVER is an absolute path or file URL
  * exporting createContentDisclosureDriver(): Promise<ContentDisclosureDriver>.
  * Each factory creates an isolated namespace in migrated PostgreSQL. close()
- * removes fixtures, grants, receipts, reports and queued effects after failure;
+ * removes fixtures, grants, receipts, reports, queued effects and recorded wire
+ * requests after failure;
  * factory failure cleans its own partial setup. Unexpected adapter errors throw.
  *
  * Every API operation below uses actual createKernel(...).handle with real
@@ -92,11 +93,34 @@ export interface ContentDisclosureDriver {
     parent?: Content;
     author?: 'author' | 'unrelated';
     body: string;
+    /** Select the actual production Idempotency-Key header. */
+    key?: string;
     /** Equal instants exercise the immutable ID tie-break. */
     createdAt?: string;
     missingSemanticSubject?: boolean;
   }): Promise<Content>;
-  edit(target: Content, body: string): Promise<Revision>;
+  /** Optional key selects the actual production Idempotency-Key header. */
+  edit(target: Content, body: string, key?: string): Promise<Revision>;
+  /**
+   * Reissue the EXACT recorded serialized publish/edit HTTP request: method,
+   * URL, headers (including Idempotency-Key) and body, with the same still-valid
+   * account credentials through createKernel.handle. Record wire requests only;
+   * never regenerate document IDs, model a command result or cache a response.
+   * Map only the real response. Keep parent creation and owner read/edit grants
+   * valid for these scenarios; authorization and final disclosure are product work.
+   * runCommand receipts retain stable resource/revision IDs and non-authored
+   * metadata only, never document bytes, search text or authored title. HTTP
+   * hydrates exact storage and final-discloses on both fresh commands and replay.
+   */
+  replayCommand(key: string): Promise<Reply<Item>>;
+  /**
+   * Read actual persisted receipt response payloads and outbox event payloads
+   * for content commands in this target thread's scope, including delivered
+   * events. Arrays use stable row order and contain complete raw JSON payloads, with no redaction or
+   * reconstruction from adapter inputs/responses. Read-only DB observation;
+   * no policy emulation. close() removes these rows and recorded requests.
+   */
+  inspectCommandCopies(target: Target): Promise<{ receipts: unknown[]; events: unknown[] }>;
   /** Privileged fixture visibility command; changes domain visibility only, never roles/grants. */
   protect(target: Target): Promise<void>;
   /**

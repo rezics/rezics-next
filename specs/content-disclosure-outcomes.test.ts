@@ -553,3 +553,96 @@ test('authorized erasure nulls every authored revision and exact references rema
     await problem(await d().read('anonymous', thread, old.id), 'not_found');
   }
 });
+
+async function receiptFixture() {
+  const board = await d().board();
+  const createKey = randomUUID();
+  const editKey = randomUUID();
+  const originalBody = 'receipt-create-erasure-sentinel';
+  const editedBody = 'receipt-edit-erasure-sentinel';
+  const thread = await d().publish({ board, body: originalBody, key: createKey });
+  expect(thread.revision.body).toBe(originalBody);
+  const edited = await d().edit(thread, editedBody, editKey);
+  expect(edited.body).toBe(editedBody);
+  expect(edited.id).not.toBe(thread.revision.id);
+  await d().protect(thread);
+  await d().grantRead('author', thread);
+  // Keep the real parent creation and owner read/edit grants throughout erasure.
+  for (const revision of [thread.revision, edited]) {
+    expect(await ok(await d().read('author', thread, revision.id))).toEqual({ id: thread.id, revision });
+  }
+  return { board, thread, edited, createKey, editKey, bodies: [originalBody, editedBody] };
+}
+
+async function minimizedCopies(thread: Content, revisionIds: string[], bodies: string[]) {
+  const copies = await d().inspectCommandCopies(thread);
+  for (const payloads of [copies.receipts, copies.events]) {
+    expect(payloads.length).toBeGreaterThan(0);
+    const json = JSON.stringify(payloads);
+    // These sentinels are the complete authored documents and their search text.
+    for (const body of bodies) expect(json).not.toContain(body);
+    expect(json).toContain(thread.id);
+    for (const id of revisionIds) expect(json).toContain(id);
+  }
+}
+
+test('durable receipts and outbox do not retain authored text copies', async () => {
+  const { thread, edited, bodies } = await receiptFixture();
+  const revisions = [thread.revision.id, edited.id];
+  // Inspect while storage still has bytes: erasure must not be doing receipt cleanup.
+  await minimizedCopies(thread, revisions, bodies);
+  await ok(await d().erase('author', thread, 'author', 'erase-durable-copies'));
+  await minimizedCopies(thread, revisions, bodies);
+});
+
+test('authorized create and revision replay cannot recover erased bytes from receipts', async () => {
+  const { board, thread, edited, createKey, editKey, bodies } = await receiptFixture();
+  const commands = [
+    { key: createKey, revision: thread.revision },
+    { key: editKey, revision: edited },
+  ];
+  const beforeReplay = await d().observe(thread);
+  const originalCopies = await d().inspectCommandCopies(thread);
+  const statuses: number[] = [];
+  for (const { key, revision } of commands) {
+    const response = await d().replayCommand(key);
+    statuses.push(response.response.status);
+    expect(await ok(response)).toEqual({ id: thread.id, revision });
+    expect(await wire(response)).toContain(revision.body!);
+  }
+  expect(await d().observe(thread)).toEqual(beforeReplay);
+  expect(await d().inspectCommandCopies(thread)).toEqual(originalCopies);
+  await d().projection('drain');
+  expect((await ok(await d().search('author', 'receipt-'))).items.map((item) => item.id)).toContain(thread.id);
+  await ok(await d().erase('author', thread, 'author', 'erase-authorized-replay'));
+  const erased = await d().observe(thread);
+  const erasedCopies = await d().inspectCommandCopies(thread);
+  expect(erased.revisions).toHaveLength(beforeReplay.revisions.length);
+  expect(erased.effects.filter((effect) => effect.kind === 'erasure')).toHaveLength(1);
+  for (const [index, { key, revision }] of commands.entries()) {
+    const tombstone = { ...revision, body: null, availability: 'erased' as const };
+    expect(erased.revisions.find((row) => row.id === revision.id)).toEqual(tombstone);
+    const response = await d().replayCommand(key);
+    expect(response.response.status).toBe(statuses[index]!);
+    expect(await ok(response)).toEqual({ id: thread.id, revision: tombstone });
+    const exact = await d().read('author', thread, revision.id);
+    expect(await ok(exact)).toEqual({ id: thread.id, revision: tombstone });
+    for (const body of bodies) {
+      expect(await wire(response)).not.toContain(body);
+      expect(await wire(exact)).not.toContain(body);
+    }
+    expect(await d().observe(thread)).toEqual(erased);
+    expect(await d().inspectCommandCopies(thread)).toEqual(erasedCopies);
+  }
+  await minimizedCopies(thread, commands.map(({ revision }) => revision.id), bodies);
+  await d().projection('drain');
+  await d().projection('replay');
+  const search = await d().search('author', 'receipt-');
+  expect((await ok(search)).items).toEqual([]);
+  const page = await d().list('author', board, { limit: 10 });
+  await ok(page);
+  for (const body of bodies) {
+    expect(await wire(search)).not.toContain(body);
+    expect(await wire(page)).not.toContain(body);
+  }
+});
