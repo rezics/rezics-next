@@ -19,7 +19,10 @@ export type Session = {
   idToken: string;
   expiresAt: number;
 };
-type Credential = { status: 'active'; accessToken: string } | { status: 'absent' } | { status: 'unavailable' };
+type Credential =
+  | { status: 'active'; subject: string; accessToken: string }
+  | { status: 'absent' }
+  | { status: 'unavailable' };
 
 export class SessionStore extends DurableObject<SessionEnv> {
   private refreshing: Promise<Credential> | undefined;
@@ -42,9 +45,9 @@ export class SessionStore extends DurableObject<SessionEnv> {
   }
 
   // Pages need only the session's lifetime, never an access token or a refresh.
-  async signedIn(): Promise<boolean> {
+  async signedIn(): Promise<string | undefined> {
     const record = await this.ctx.storage.get<Login | Session>('record');
-    return !this.ending && record?.kind === 'session' && record.expiresAt > Date.now();
+    return !this.ending && record?.kind === 'session' && record.expiresAt > Date.now() ? record.subject : undefined;
   }
 
   // A storage input gate does not span the token endpoint fetch. All callers share
@@ -91,7 +94,9 @@ export class SessionStore extends DurableObject<SessionEnv> {
       await this.ctx.storage.deleteAlarm();
       return { status: 'absent' };
     }
-    return this.ending ? { status: 'absent' } : { status: 'active', accessToken: record.accessToken };
+    return this.ending
+      ? { status: 'absent' }
+      : { status: 'active', subject: record.subject, accessToken: record.accessToken };
   }
 
   async end(): Promise<string | undefined> {

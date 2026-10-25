@@ -356,6 +356,7 @@ async function open(path: string, value?: string): Promise<Page> {
   );
   const page = await context.newPage();
   await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+  await page.locator('html[data-hydrated]').waitFor();
   return page;
 }
 afterAll(async () => {
@@ -466,6 +467,7 @@ test.failing(
         expiresIn: 3600,
       });
       await page.goto(`${params.get('redirect_uri')}?code=${code}&state=${params.get('state')}`);
+      await page.locator('html[data-hydrated]').waitFor();
       expect(page.url()).toBe(`${await site()}${path}`);
       expect(await buy(page).count()).toBe(1);
       expect(starts()).toHaveLength(0);

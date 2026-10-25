@@ -3,6 +3,7 @@ import { configured, type SessionEnv } from './client.ts';
 import { cookie, SESSION_COOKIE, validId } from './cookies.ts';
 
 const credentials = new WeakMap<Request, string>();
+const subjects = new WeakMap<Request, string>();
 
 // Credential-using routes resolve before their first kernel call, outside any error
 // concealment. Page requests need no lookup. The boolean clears stale cookies.
@@ -14,7 +15,12 @@ export async function prepareSession(request: Request, env: Partial<SessionEnv>)
   if (result.status === 'unavailable') throw dependencyUnavailable();
   if (result.status === 'absent') return true;
   credentials.set(request, `Bearer ${result.accessToken}`);
+  subjects.set(request, result.subject);
   return false;
+}
+
+export function sessionSubject(request: Request): string | undefined {
+  return subjects.get(request);
 }
 
 export function viewerCredential(request: Request): string | null {

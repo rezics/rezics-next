@@ -3,9 +3,12 @@ import { authRequest } from './session/routes.ts';
 import { prepareSession } from './session/request.ts';
 import { cookie, clearCookie, SESSION_COOKIE } from './session/cookies.ts';
 import type { SessionEnv } from './session/client.ts';
+import { readSessionIdentity } from './session/state.ts';
+import { sessionSubject } from './session/request.ts';
 import { problem, problemResponse } from './media/kernel.ts';
 import { mediaRequest, type MediaEnv } from './media/index.ts';
 import { suggestSubjects } from './search/suggestions.ts';
+import { limitRead, readLimitKey, type ReadRateLimitEnv } from './rate-limit/read.ts';
 import { createStartHandler, defaultStreamHandler } from '@tanstack/react-start/server';
 import { paraglideMiddleware } from './paraglide/server.js';
 import {
@@ -40,6 +43,30 @@ export default {
       request.headers.get('origin') !== url.origin
     )
       return problemResponse(problem(403, 'forbidden', 'Forbidden'));
+
+    const isRead = request.method === 'GET' || request.method === 'HEAD';
+    const isMedia = url.pathname === '/media' || url.pathname.startsWith('/media/');
+    let clearSessionCookie = false;
+    let mediaSessionError: unknown;
+
+    if (isRead) {
+      let subject: string | undefined;
+      if (isMedia) {
+        try {
+          clearSessionCookie = await prepareSession(request, env as Partial<SessionEnv>);
+        } catch (error) {
+          mediaSessionError = error;
+        }
+        subject = sessionSubject(request);
+      } else if (!url.pathname.startsWith('/auth/') && url.pathname !== '/') {
+        subject = (await readSessionIdentity(request, env as Partial<SessionEnv>)).subject;
+      }
+
+      const refused = await limitRead(request, env as typeof env & ReadRateLimitEnv, readLimitKey(request, subject));
+      if (refused) return refused;
+      if (mediaSessionError !== undefined) return problemResponse(mediaSessionError);
+    }
+
     if (url.pathname.startsWith('/auth/')) return authRequest(request, env as Partial<SessionEnv>);
     if (url.pathname === '/api/search/suggestions') {
       if (request.method !== 'GET') return new Response(null, { status: 405, headers: { allow: 'GET' } });
@@ -60,9 +87,9 @@ export default {
     }
     if (url.pathname !== '/media' && !url.pathname.startsWith('/media/')) return siteRequest(request);
     try {
-      const clear = await prepareSession(request, env as Partial<SessionEnv>);
+      if (!isRead) clearSessionCookie = await prepareSession(request, env as Partial<SessionEnv>);
       const response = await mediaRequest(request, env as Partial<MediaEnv>);
-      if (!clear) return response;
+      if (!clearSessionCookie) return response;
       const headers = new Headers(response.headers);
       headers.append('set-cookie', clearCookie(SESSION_COOKIE));
       headers.set('cache-control', 'private, no-store');

@@ -5,6 +5,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
+import cloudflareConfig from '../cloudflare.config.ts';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
@@ -346,8 +347,7 @@ async function nextWindow(period: 10 | 60 = 10) {
   await Bun.sleep(milliseconds - (Date.now() % milliseconds) + 250);
 }
 
-// Enable when both configured read bindings guard pages and media before kernel calls.
-test.failing(
+test(
   "site reads beyond a window's limit answer 429 with Retry-After",
   async () => {
     await site();
@@ -375,20 +375,18 @@ test.failing(
 
     // Configuration is checked after behavior, so missing bindings do not mask
     // the missing 429 as a setup failure in this specification.
-    const config = Bun.JSONC.parse(await Bun.file(join(app, 'wrangler.jsonc')).text()) as { ratelimits: unknown[] };
-    expect(config.ratelimits).toHaveLength(2);
-    expect(config.ratelimits).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ name: 'READS_10S', simple: { period: 10, limit: 100 } }),
-        expect.objectContaining({ name: 'READS_60S', simple: { period: 60, limit: 300 } }),
-      ]),
+    const rateLimits = Object.entries(cloudflareConfig.worker.env).filter(
+      ([, binding]) => binding.type === 'rate-limit',
     );
+    expect(rateLimits).toEqual([
+      ['READS_10S', { type: 'rate-limit', namespace: '1001', simple: { limit: 100, period: 10 } }],
+      ['READS_60S', { type: 'rate-limit', namespace: '1002', simple: { limit: 300, period: 60 } }],
+    ]);
   },
   timeout,
 );
 
-// Enable when active sessions select account:<sub> instead of a per-session budget.
-test.failing(
+test(
   "a signed-in person's reads share one limit across their sessions",
   async () => {
     const sub = randomUUID();
@@ -408,8 +406,7 @@ test.failing(
   timeout,
 );
 
-// Enable when signed-out reads select session:<cookie id>, falling back to ip:<CF-Connecting-IP>.
-test.failing(
+test(
   "a signed-out visitor's reads are limited by their session cookie, or by IP without one",
   async () => {
     const origin = await site();
@@ -445,8 +442,7 @@ test.failing(
   timeout,
 );
 
-// Enable when unsafe methods bypass both read bindings while reads still exhaust them.
-test.failing(
+test(
   'unsafe requests are not counted against the read limits',
   async () => {
     await site();
