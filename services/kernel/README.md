@@ -49,3 +49,5 @@ runs, and left out of the schema dumps.
 A 16-bit route value maps to its partition by taking the top 12 bits.
 
 Every SQL statement is stored in one reylo-typed `.sql` file and run through `pg` from an adapter module (ADR-0026).
+Every statement the kernel sends is a `.sql` file under `src/`, typed by reylo and checked for partition binding.
+TypeScript sends only transaction control (`BEGIN ISOLATION LEVEL …`, `SET LOCAL …`, `COMMIT`, `ROLLBACK`).

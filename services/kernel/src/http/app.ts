@@ -9,6 +9,7 @@ import type { KeyRing } from '../tokens/seal.ts';
 import { Admission } from './admission.ts';
 import { ProblemError, problemResponse } from './problem.ts';
 import { actionCatalogue, actionForRequest, SESSION_HEADER } from './request.ts';
+import healthCheck from './health.sql';
 
 export const REQUEST_DEADLINE_MS = 2000;
 
@@ -104,7 +105,7 @@ export function createApp({
       try {
         await lanes.run('reserved', job, () =>
           withConnection(pool, async (client) => {
-            await client.query('SELECT 1');
+            await healthCheck.run(client, {});
           }),
         );
         return { status: 'ok' as const };

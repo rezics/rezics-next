@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import fenceStatement from './fence.sql';
+import readReceipt from './read-receipt.sql';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 
@@ -85,27 +86,21 @@ export async function runCommand<T>(
         await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
         try {
           if (options.receipt && receiptDigest) {
-            const stored = await client.query<{
-              request_digest: Buffer;
-              epoch: number;
-              position: string;
-              transaction_id: string;
-              response: T;
-            }>(
-              `SELECT request_digest, epoch, position, transaction_id, response FROM core.receipt
-               WHERE partition_no = $1 AND actor_account_id = $2 AND command_kind = $3 AND idempotency_key = $4`,
-              [partition, options.receipt.actorAccountId, options.receipt.kind, options.receipt.key],
-            );
-            const row = stored.rows[0];
+            const row = await readReceipt.run(client, {
+              partition_no: partition,
+              actor_account_id: options.receipt.actorAccountId,
+              command_kind: options.receipt.kind,
+              idempotency_key: options.receipt.key,
+            });
             if (row) {
-              if (!Buffer.from(row.request_digest).equals(receiptDigest)) throw new IdempotencyConflictError(partition);
+              if (!Buffer.from(row.requestDigest).equals(receiptDigest)) throw new IdempotencyConflictError(partition);
               await client.query('COMMIT');
               return {
-                value: row.response,
+                value: row.response as T,
                 partition,
                 epoch: row.epoch,
                 position: BigInt(row.position),
-                transactionId: row.transaction_id,
+                transactionId: row.transactionId,
                 replayed: true,
               };
             }
