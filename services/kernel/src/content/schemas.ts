@@ -115,7 +115,11 @@ export const ContentPageQuerySchema = t.Object(
 export const ThreadResponseSchema = t.Object({ thread: ThreadViewSchema }, closed);
 export const PostResponseSchema = t.Object({ post: ItemViewSchema }, closed);
 export const BoardResponseSchema = t.Object({ board: BoardViewSchema }, closed);
-export const ItemPageResponseSchema = t.Object(
-  { items: t.Array(ItemViewSchema, { maxItems: 100 }), next: t.Union([t.String(), t.Null()]) },
+export const PostPageResponseSchema = t.Object(
+  { posts: t.Array(ItemViewSchema, { maxItems: 100 }), next: t.Union([t.String(), t.Null()]) },
+  closed,
+);
+export const RevisionPageResponseSchema = t.Object(
+  { revisions: t.Array(ItemViewSchema, { maxItems: 100 }), next: t.Union([t.String(), t.Null()]) },
   closed,
 );

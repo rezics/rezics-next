@@ -29,7 +29,8 @@ import {
 import {
   BoardResponseSchema,
   ContentPageQuerySchema,
-  ItemPageResponseSchema,
+  PostPageResponseSchema,
+  RevisionPageResponseSchema,
   PostInputSchema,
   PostResponseSchema,
   RevisionInputSchema,
@@ -56,6 +57,15 @@ const readFailures = {
 const writeFailures = {
   ...readFailures,
   403: problemSchema('forbidden'),
+  429: problemSchema('rate_limited'),
+  503: problemSchema(
+    'overloaded',
+    'deadline_exceeded',
+    'partition_unavailable',
+    'transaction_retry_exhausted',
+    'dependency_unavailable',
+    'rate_limit_unavailable',
+  ),
   413: problemSchema('content_too_large'),
   422: problemSchema('idempotency_conflict', 'too_many_events'),
 };
@@ -70,7 +80,8 @@ const revisionInput = strictContentSchema(RevisionInputSchema);
 const threadResponse = strictContentSchema(ThreadResponseSchema);
 const postResponse = strictContentSchema(PostResponseSchema);
 const boardResponse = strictContentSchema(BoardResponseSchema);
-const itemPageResponse = strictContentSchema(ItemPageResponseSchema);
+const postPageResponse = strictContentSchema(PostPageResponseSchema);
+const revisionPageResponse = strictContentSchema(RevisionPageResponseSchema);
 
 /** Bound byte consumption before JSON parsing or entering a command. */
 async function parseContentBody(
@@ -285,7 +296,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       {
         params,
         query: ContentPageQuerySchema,
-        response: { 200: withHeaders(itemPageResponse, sessionHeader), ...readFailures },
+        response: { 200: withHeaders(postPageResponse, sessionHeader), ...readFailures },
         detail: { operationId: 'post.list', 'x-action': 'post:read', security: readSecurity },
       },
       async ({ params: { id }, query, actor, admission, job, session }) => {
@@ -300,7 +311,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
               query.limit ?? 20,
             );
             session.record(sessionComponent(page.anchor));
-            return { items: [...page.entries], next: page.nextCursor };
+            return { posts: [...page.entries], next: page.nextCursor };
           }),
         );
       },
@@ -364,7 +375,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       {
         params,
         query: ContentPageQuerySchema,
-        response: { 200: withHeaders(itemPageResponse, sessionHeader), ...readFailures },
+        response: { 200: withHeaders(revisionPageResponse, sessionHeader), ...readFailures },
         detail: { operationId: 'post.history', 'x-action': 'post:read', security: readSecurity },
       },
       async ({ params: { id }, query, actor, admission, job, session }) =>
@@ -377,7 +388,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             for (const revision of page.entries) posts.push(await exactPost(threadId, id, context, revision.id));
             session.record(sessionComponent(page.anchor));
             for (const post of posts) session.record(sessionComponent(post.anchor));
-            return { items: posts.map((post) => post.value), next: page.nextCursor };
+            return { revisions: posts.map((post) => post.value), next: page.nextCursor };
           }),
         ),
     )

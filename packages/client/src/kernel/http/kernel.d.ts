@@ -810,6 +810,20 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                             code: never;
                         }[];
                     };
+                    429: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
                     500: {
                         type: unknown;
                         title: unknown;
@@ -1059,6 +1073,20 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                     code: never;
                                 }[];
                             };
+                            429: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
                             500: {
                                 type: unknown;
                                 title: unknown;
@@ -1111,7 +1139,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                         headers: unknown;
                         response: {
                             200: {
-                                items: import("../content/model.ts").ItemView[];
+                                posts: import("../content/model.ts").ItemView[];
                                 next: string | null;
                             };
                             400: {
@@ -1401,6 +1429,20 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                     code: never;
                                 }[];
                             };
+                            429: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
                             500: {
                                 type: unknown;
                                 title: unknown;
@@ -1453,7 +1495,7 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                         headers: unknown;
                         response: {
                             200: {
-                                items: import("../content/model.ts").ItemView[];
+                                revisions: import("../content/model.ts").ItemView[];
                                 next: string | null;
                             };
                             400: {
