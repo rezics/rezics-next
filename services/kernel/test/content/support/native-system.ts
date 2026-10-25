@@ -128,6 +128,7 @@ export async function createNativeContentSystem(options: ContentSystemOptions): 
     const actions = actionCatalogue(kernel);
     const access = createAccess({
       actions,
+      clock,
       auth: {
         issuer,
         audience,
