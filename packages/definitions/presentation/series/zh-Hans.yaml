@@ -1,2 +1,6 @@
 types:
   wd:Q7725310: '系列创意作品'
+  schema:BookSeries: '丛书'
+properties:
+  wdt:P2635: '作品部分数量'
+  wdt:P1433: '发表于'

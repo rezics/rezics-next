@@ -1,2 +1,6 @@
 types:
   wd:Q7725310: 'series of creative works'
+  schema:BookSeries: 'book series'
+properties:
+  wdt:P2635: 'number of parts of this work'
+  wdt:P1433: 'published in'

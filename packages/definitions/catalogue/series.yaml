@@ -6,6 +6,7 @@ prefixes:
   linkml: https://w3id.org/linkml/
   schema: http://schema.org/
   wd: http://www.wikidata.org/entity/
+  wdt: http://www.wikidata.org/prop/direct/
 default_range: string
 imports:
   - linkml:types
@@ -14,4 +15,55 @@ classes:
   Series:
     is_a: CreativeWorkSeries
     class_uri: wd:Q7725310
-    description: A series of creative works.
+    description: >-
+      A series of creative works. Readers filter it by category, then tag, following Bangumi subject browse
+      (https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml)
+      and the VNDB tag filter (https://vndb.org/d11). A curated list is a collection, not a series.
+    annotations:
+      facets: genre keywords
+  BookSeries:
+    is_a: CreativeWorkSeries
+    class_uri: schema:BookSeries
+    description: >-
+      A series of books (https://schema.org/BookSeries, https://www.wikidata.org/wiki/Q277759). Members join by
+      the part-of-the-series statement on the member. Readers filter it by category, tag, then air date, following
+      Bangumi subject browse and search
+      (https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml)
+      and the VNDB tag filter (https://vndb.org/d11).
+    exact_mappings:
+      - wd:Q277759
+    slots:
+      - alternateName
+      - publisher
+      - publishedIn
+      - startDate
+      - endDate
+      - numberOfParts
+      - descriptiveLink
+    annotations:
+      facets: genre keywords startDate
+slots:
+  publishedIn:
+    slot_uri: wdt:P1433
+    description: >-
+      The larger work, such as a magazine, in which this series was published
+      (https://www.wikidata.org/wiki/Property:P1433).
+    range: CreativeWork
+    multivalued: true
+    exact_mappings:
+      - wd:P1433
+    annotations:
+      datatype: wikibase-item
+  numberOfParts:
+    slot_uri: wdt:P2635
+    description: >-
+      The stated number of parts of this series, counted in volumes (wd:Q1238720) or chapters (wd:Q1980247)
+      (https://www.wikidata.org/wiki/Property:P2635).
+    range: integer
+    minimum_value: 0
+    maximum_value: 10000000
+    exact_mappings:
+      - wd:P2635
+    annotations:
+      datatype: quantity
+      units: 'wd:Q1238720 wd:Q1980247'

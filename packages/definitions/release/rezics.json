@@ -548,6 +548,39 @@
       ],
       "facets": ["schema:author", "schema:keywords", "schema:datePublished", "schema:cookTime", "schema:recipeYield"]
     },
+    "schema:BookSeries": {
+      "iri": "http://schema.org/BookSeries",
+      "labels": {
+        "de": "Buchreihe",
+        "en": "book series",
+        "es": "serie de libros",
+        "fr": "série de livres",
+        "ja": "叢書",
+        "ko": "총서",
+        "zh-Hans": "丛书",
+        "zh-Hant": "叢書"
+      },
+      "mappings": ["wd:Q277759"],
+      "bases": ["schema:CreativeWorkSeries", "schema:CreativeWork", "schema:Thing"],
+      "properties": [
+        "schema:alternateName",
+        "schema:contributor",
+        "schema:endDate",
+        "schema:genre",
+        "schema:image",
+        "schema:keywords",
+        "schema:name",
+        "schema:publisher",
+        "schema:sameAs",
+        "schema:startDate",
+        "schema:url",
+        "wdt:P1433",
+        "wdt:P179",
+        "wdt:P2635",
+        "wdt:P973"
+      ],
+      "facets": ["schema:genre", "schema:keywords", "schema:startDate"]
+    },
     "wd:Q7725310": {
       "iri": "http://www.wikidata.org/entity/Q7725310",
       "labels": {
@@ -572,7 +605,7 @@
         "schema:url",
         "wdt:P179"
       ],
-      "facets": []
+      "facets": ["schema:genre", "schema:keywords"]
     },
     "wd:Q689445": {
       "iri": "http://www.wikidata.org/entity/Q689445",
@@ -2343,6 +2376,62 @@
       },
       "units": ["1"],
       "minimum": 1
+    },
+    "wdt:P2635": {
+      "iri": "http://www.wikidata.org/prop/direct/P2635",
+      "labels": {
+        "de": "Anzahl der Teile dieses Werks",
+        "en": "number of parts of this work",
+        "es": "número de partes de esta obra",
+        "fr": "nombre de parties de l'œuvre",
+        "ja": "作品中の区分の数",
+        "ko": "작품의 부수",
+        "zh-Hans": "作品部分数量",
+        "zh-Hant": "作品組成部分數量"
+      },
+      "mappings": ["wd:P2635"],
+      "datatype": "quantity",
+      "multivalued": false,
+      "qualifiers": [],
+      "value": {
+        "type": "object",
+        "required": ["amount", "unit"],
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "type": "string",
+            "pattern": "^[+-](?:0|[1-9][0-9]*)$"
+          },
+          "unit": {
+            "enum": ["http://www.wikidata.org/entity/Q1238720", "http://www.wikidata.org/entity/Q1980247"]
+          }
+        }
+      },
+      "units": ["http://www.wikidata.org/entity/Q1238720", "http://www.wikidata.org/entity/Q1980247"],
+      "minimum": 0,
+      "maximum": 10000000
+    },
+    "wdt:P1433": {
+      "iri": "http://www.wikidata.org/prop/direct/P1433",
+      "labels": {
+        "de": "veröffentlicht in",
+        "en": "published in",
+        "es": "publicado en",
+        "fr": "publié dans",
+        "ja": "この作品が含まれる作品",
+        "ko": "다음에 실림",
+        "zh-Hans": "发表于",
+        "zh-Hant": "發表於"
+      },
+      "mappings": ["wd:P1433"],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "targets": ["schema:CreativeWork"]
     },
     "wdt:P1889": {
       "iri": "http://www.wikidata.org/prop/direct/P1889",

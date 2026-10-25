@@ -1,2 +1,6 @@
 types:
   wd:Q7725310: '시리즈'
+  schema:BookSeries: '총서'
+properties:
+  wdt:P2635: '작품의 부수'
+  wdt:P1433: '다음에 실림'

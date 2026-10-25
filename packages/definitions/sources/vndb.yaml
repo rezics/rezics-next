@@ -930,10 +930,12 @@ enumerations:
       }
     - {
         value: ser,
-        term: 'wdt:P179',
-        mapping: 'wdt:P179',
+        term: 'wdt:P361',
+        mapping: 'wdt:P361',
         meaning: The works belong to the same series grouping.,
-        citations: ['https://www.wikidata.org/wiki/Property:P179'],
+        citations: *id008,
+        status: omitted,
+        reason: 'VNDB relates two visual novels without a referable series subject, so this is not a part-of-the-series statement.',
       }
     - {
         value: fan,

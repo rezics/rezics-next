@@ -90,7 +90,7 @@ vocabulary:
     licence:
       id: LicenseRef-Source-Image-Rights
       url: https://bgm.tv/about/copyright
-  - status: proposed
+  - status: existing
     term: schema:BookSeries
     'on': schema:BookSeries
     wikidata: wd:Q277759
@@ -98,11 +98,10 @@ vocabulary:
     sources: &id011
       - https://schema.org/BookSeries
       - https://www.wikidata.org/wiki/Q277759
-  - status: proposed
-    term: schema:CreativeWorkSeries
-    'on': schema:CreativeWorkSeries
-    wikidata: wd:Q7725310
-    meaning: A series of creative works, including an animation or game series.
+  - status: omitted
+    reason: >-
+      CreativeWorkSeries is an abstract anchor, not a referable profile. The concrete series of creative works is
+      wd:Q7725310, and a book series is the separate schema:BookSeries profile.
     sources:
       - https://schema.org/CreativeWorkSeries
       - https://www.wikidata.org/wiki/Q7725310
@@ -437,7 +436,7 @@ files:
         mapping: *id007
       - id: series
         mapping: &id074
-          status: proposed
+          status: existing
           term: schema:BookSeries
           'on': schema:BookSeries
           wikidata: wd:Q277759
@@ -1228,7 +1227,7 @@ infobox:
     fields:
       - id: 中文名
         mapping:
-          status: proposed
+          status: existing
           term: schema:name
           'on': schema:BookSeries
           wikidata: wd:P2561
@@ -1236,17 +1235,24 @@ infobox:
           sources: *id020
       - id: 别名
         mapping:
-          status: proposed
+          status: existing
           term: schema:alternateName
           'on': schema:BookSeries
           wikidata: wd:P2561
           meaning: An alternate name or alias, preserving language and source spelling.
           sources: *id033
           mappingRelation: close
-      - *id047
+      - id: 出版社
+        mapping:
+          status: existing
+          term: schema:publisher
+          'on': schema:BookSeries
+          wikidata: wd:P123
+          meaning: The publisher of this book series.
+          qualifiers: *id002
       - id: 连载杂志
         mapping:
-          status: proposed
+          status: existing
           term: wdt:P1433
           'on': schema:BookSeries
           wikidata: wd:P1433
@@ -1254,7 +1260,7 @@ infobox:
           sources: *id059
       - id: 开始
         mapping:
-          status: proposed
+          status: existing
           term: schema:startDate
           'on': schema:BookSeries
           wikidata: wd:P580
@@ -1264,7 +1270,7 @@ infobox:
             - https://www.wikidata.org/wiki/Property:P580
       - id: 结束
         mapping:
-          status: proposed
+          status: existing
           term: schema:endDate
           'on': schema:BookSeries
           wikidata: wd:P582
@@ -1272,7 +1278,7 @@ infobox:
           sources: *id036
       - id: 册数
         mapping:
-          status: proposed
+          status: existing
           term: wdt:P2635
           'on': schema:BookSeries
           wikidata: wd:P2635
@@ -1280,7 +1286,7 @@ infobox:
           sources: *id055
       - id: 话数
         mapping:
-          status: proposed
+          status: existing
           term: wdt:P2635
           'on': schema:BookSeries
           wikidata: wd:P2635
@@ -1289,7 +1295,7 @@ infobox:
       - *id061
       - id: 链接
         mapping:
-          status: proposed
+          status: existing
           term: wdt:P973
           'on': schema:BookSeries
           wikidata: wd:P973
@@ -5727,23 +5733,20 @@ enumerations:
       - id: 1002
         label: Series
         mapping:
-          status: proposed
-          term: schema:isPartOf
-          'on': schema:CreativeWork
-          wikidata: wd:P361
-          meaning: The related book series contains this source work.
-          sources: *id106
+          status: existing
+          term: wdt:P179
+          'on': schema:Book
+          wikidata: wd:P179
+          meaning: The related book series contains this source work, recorded as part of the series on the member.
+          sources:
+            - https://www.wikidata.org/wiki/Property:P179
       - id: 1003
         label: Offprint
         mapping:
-          status: proposed
-          term: schema:hasPart
-          'on': schema:CreativeWork
-          wikidata: wd:P527
-          meaning: The related standalone volume belongs to this book series.
-          sources: &id117
-            - https://schema.org/hasPart
-            - https://www.wikidata.org/wiki/Property:P527
+          status: omitted
+          reason: >-
+            The offprint belongs to the book series through the member's part-of-the-series statement; a hasPart list
+            on the series would duplicate that statement.
       - id: 1004
         label: Album
         mapping:
@@ -5918,7 +5921,9 @@ enumerations:
           'on': schema:CreativeWork
           wikidata: wd:P527
           meaning: The related game is contained in this collection.
-          sources: *id117
+          sources:
+            - https://schema.org/hasPart
+            - https://www.wikidata.org/wiki/Property:P527
       - id: 4099
         label: Other
         mapping: *id116
