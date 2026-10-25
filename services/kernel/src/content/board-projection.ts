@@ -125,6 +125,16 @@ export async function readBoardCandidates(
   boardId: BoardId,
   after: BoardCandidateKey | null,
   limit: number,
+): Promise<BoardCandidatePage> {
+  return pageBoardCandidates(pool, boardId, after, limit, 'desc');
+}
+
+/** Internal candidate traversal in either index direction, without disclosure authority. */
+export async function pageBoardCandidates(
+  pool: Pool,
+  boardId: BoardId,
+  after: BoardCandidateKey | null,
+  limit: number,
   direction: 'asc' | 'desc' = 'desc',
 ): Promise<BoardCandidatePage> {
   if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new RangeError('Candidate limit must be 1 to 200');

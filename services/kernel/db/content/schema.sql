@@ -239,6 +239,26 @@ CREATE TABLE content.board (
 
 
 --
+-- Name: board_thread; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.board_thread (
+    route integer NOT NULL,
+    board_id uuid NOT NULL,
+    thread_id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    source_epoch integer NOT NULL,
+    source_position bigint NOT NULL,
+    source_revision_id uuid,
+    CONSTRAINT board_thread_check CHECK ((route = ((get_byte(uuid_send(board_id), 10) * 256) + get_byte(uuid_send(board_id), 11)))),
+    CONSTRAINT board_thread_created_at_check CHECK (isfinite(created_at)),
+    CONSTRAINT board_thread_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT board_thread_source_epoch_check CHECK ((source_epoch > 0)),
+    CONSTRAINT board_thread_source_position_check CHECK ((source_position > 0))
+);
+
+
+--
 -- Name: imported_field; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -273,26 +293,6 @@ CREATE TABLE content.imported_field (
     CONSTRAINT imported_field_source_check2 CHECK (((source ? 'references'::text) AND (jsonb_typeof((source -> 'references'::text)) = 'array'::text) AND (jsonb_array_length((source -> 'references'::text)) <= 128)))
 );
 ALTER TABLE ONLY content.imported_field ALTER COLUMN body SET COMPRESSION lz4;
-
-
---
--- Name: board_thread; Type: TABLE; Schema: content; Owner: -
---
-
-CREATE TABLE content.board_thread (
-    route integer NOT NULL,
-    board_id uuid NOT NULL,
-    thread_id uuid NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    source_epoch integer NOT NULL,
-    source_position bigint NOT NULL,
-    source_revision_id uuid,
-    CONSTRAINT board_thread_check CHECK ((route = ((get_byte(uuid_send(board_id), 10) * 256) + get_byte(uuid_send(board_id), 11)))),
-    CONSTRAINT board_thread_created_at_check CHECK (isfinite(created_at)),
-    CONSTRAINT board_thread_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT board_thread_source_epoch_check CHECK ((source_epoch > 0)),
-    CONSTRAINT board_thread_source_position_check CHECK ((source_position > 0))
-);
 
 
 --
@@ -532,19 +532,19 @@ ALTER TABLE ONLY content.board
 
 
 --
--- Name: imported_field imported_field_pkey; Type: CONSTRAINT; Schema: content; Owner: -
---
-
-ALTER TABLE ONLY content.imported_field
-    ADD CONSTRAINT imported_field_pkey PRIMARY KEY (route, id);
-
-
---
 -- Name: board_thread board_thread_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
 ALTER TABLE ONLY content.board_thread
     ADD CONSTRAINT board_thread_pkey PRIMARY KEY (route, board_id, thread_id);
+
+
+--
+-- Name: imported_field imported_field_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.imported_field
+    ADD CONSTRAINT imported_field_pkey PRIMARY KEY (route, id);
 
 
 --
@@ -715,6 +715,13 @@ CREATE TRIGGER board_identity BEFORE UPDATE ON content.board FOR EACH ROW EXECUT
 
 
 --
+-- Name: board_thread board_thread_identity; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER board_thread_identity BEFORE UPDATE ON content.board_thread FOR EACH ROW EXECUTE FUNCTION content.guard_board_thread();
+
+
+--
 -- Name: imported_field imported_field_immutable; Type: TRIGGER; Schema: content; Owner: -
 --
 
@@ -726,13 +733,6 @@ CREATE TRIGGER imported_field_immutable BEFORE DELETE OR UPDATE ON content.impor
 --
 
 CREATE TRIGGER media_security_guard BEFORE UPDATE ON content.media FOR EACH ROW EXECUTE FUNCTION content.guard_media_security();
-
-
---
--- Name: board_thread board_thread_identity; Type: TRIGGER; Schema: content; Owner: -
---
-
-CREATE TRIGGER board_thread_identity BEFORE UPDATE ON content.board_thread FOR EACH ROW EXECUTE FUNCTION content.guard_board_thread();
 
 
 --
