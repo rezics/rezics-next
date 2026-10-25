@@ -51,10 +51,9 @@ test(
       for (const name of [...required, ...phone]) {
         const bytes = readFileSync(join(out, name));
         expect(bytes.length, `${name} is non-empty`).toBeGreaterThan(0);
-        expect(
-          bytes.subarray(0, 8),
-          `${name} has the PNG signature`,
-        ).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+        expect(bytes.subarray(0, 8), `${name} has the PNG signature`).toEqual(
+          Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+        );
       }
     } finally {
       if (child.pid && child.exitCode === null) {

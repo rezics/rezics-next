@@ -8,6 +8,7 @@
     "check": "oxfmt --check . && bun run generate && bun run generate:routes && tsc --noEmit -p tsconfig.json && bun run test && bun run build",
     "generate": "bun scripts/generate.ts",
     "generate:routes": "vite build --config vite.config.ts --mode development --emptyOutDir false",
+    "screenshots": "bun scripts/screenshots.ts",
     "test": "bun test"
   },
   "dependencies": {

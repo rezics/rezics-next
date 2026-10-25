@@ -89,6 +89,12 @@ supplies a navigation target. Passkey confirmation comes later.
 A wrong password, rate limit or outage uses `failureMessage` for 401, 429 and 503 and keeps the person
 on the page. Empty fields and a pending request prevent another submit.
 
+## Screenshots
+
+Run `bun run screenshots` to capture all eight page states in the eight launch locales and both themes. Desktop images
+use a 1280×900 viewport; login also has one 390×844 light-theme phone image per locale. By default, images are written
+to `.temp/screenshots/auth/` at the repository root. Pass `--out <directory>` to choose another destination.
+
 ## Development
 
 From this directory, run:
