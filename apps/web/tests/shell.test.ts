@@ -49,7 +49,7 @@ function site(): Promise<string> {
     for (;;) {
       if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
       try {
-        const response = await fetch(`${origin}/en/`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
+        const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
         if (response.status < 500) return origin;
       } catch {}
       if (Date.now() > deadline) throw new Error(`dev server did not serve /en/ in time:\n${output}`);
@@ -79,7 +79,7 @@ const any = (...locators: Locator[]) => locators.reduce((all, locator) => all.or
 test('the server-rendered shell has a skip link, one labelled navigation and one main landmark', async () => {
   const en = await messages('en');
   for (const viewport of [desktop, phone]) {
-    const page = await open('/en/', { javaScriptEnabled: false, viewport });
+    const page = await open('/en', { javaScriptEnabled: false, viewport });
     await page.keyboard.press('Tab');
     const skip = page.locator(':focus');
     expect((await skip.textContent())?.trim()).toBe(en.shell_skip_to_content);
@@ -103,7 +103,7 @@ test('every locale renders the shell in its own language', async () => {
       'shell_theme_system', 'shell_theme_light', 'shell_theme_dark', 'nav_home'])
       expect(own[key]?.trim(), `${locale} ${key}`).toBeTruthy();
     if (locale !== 'en') expect(own.shell_skip_to_content).not.toBe(english.shell_skip_to_content);
-    const page = await open(`/${locale}/`, { javaScriptEnabled: false });
+    const page = await open(`/${locale}`, { javaScriptEnabled: false });
     await page.keyboard.press('Tab');
     expect((await page.locator(':focus').textContent())?.trim()).toBe(own.shell_skip_to_content);
     const navigation = page.getByRole('navigation', { name: own.shell_navigation!, exact: true });
@@ -112,13 +112,16 @@ test('every locale renders the shell in its own language', async () => {
   }
 }, timeout);
 
-test('every page names its other locales for search engines', async () => {
+test('every page has one URL without a trailing slash and names its other locales for search engines', async () => {
   const origin = await site();
+  const slashed = await fetch(`${origin}/ja/`, { redirect: 'manual' });
+  expect([301, 307, 308]).toContain(slashed.status);
+  expect(new URL(slashed.headers.get('location')!, origin).pathname).toBe('/ja');
   for (const locale of ['en', 'ja']) {
-    const page = await open(`/${locale}/`, { javaScriptEnabled: false });
+    const page = await open(`/${locale}`, { javaScriptEnabled: false });
     const alternates = await page.locator('link[rel="alternate"][hreflang]').evaluateAll(links =>
       links.map(link => [link.getAttribute('hreflang')!, link.getAttribute('href')!]));
-    const expected = Object.fromEntries([...locales.map(other => [other, `${origin}/${other}/`]), ['x-default', `${origin}/`]]);
+    const expected = Object.fromEntries([...locales.map(other => [other, `${origin}/${other}`]), ['x-default', `${origin}/`]]);
     expect(Object.fromEntries(alternates)).toEqual(expected);
     await page.context().close();
   }
@@ -127,7 +130,7 @@ test('every page names its other locales for search engines', async () => {
 test('the theme choice renders on the first paint and persists', async () => {
   const origin = await site();
   const htmlClass = async (cookie?: string) => {
-    const html = await (await fetch(`${origin}/en/`, cookie ? { headers: { cookie } } : {})).text();
+    const html = await (await fetch(`${origin}/en`, cookie ? { headers: { cookie } } : {})).text();
     return (/<html[^>]*\sclass="([^"]*)"/.exec(html)?.[1] ?? '').split(/\s+/);
   };
   expect(await htmlClass('rezics_theme=dark')).toContain('dark');
@@ -139,7 +142,7 @@ test('the theme choice renders on the first paint and persists', async () => {
   }
 
   const en = await messages('en');
-  const page = await open('/en/');
+  const page = await open('/en');
   await page.getByRole('button', { name: en.shell_theme!, exact: true }).click();
   await any(page.getByRole('menuitemradio', { name: en.shell_theme_dark!, exact: true }),
     page.getByRole('radio', { name: en.shell_theme_dark!, exact: true })).click();
@@ -152,13 +155,13 @@ test('the theme choice renders on the first paint and persists', async () => {
 test('the language choice moves to the same page in that language and remembers it', async () => {
   const origin = await site();
   const en = await messages('en');
-  const page = await open('/en/');
+  const page = await open('/en');
   await any(page.getByRole('combobox', { name: en.shell_language!, exact: true }),
     page.getByRole('button', { name: en.shell_language!, exact: true })).click();
   await any(page.getByRole('option', { name: endonyms.ja, exact: true }),
     page.getByRole('menuitemradio', { name: endonyms.ja, exact: true }),
     page.getByRole('link', { name: endonyms.ja, exact: true })).click();
-  await page.waitForURL(`${origin}/ja/`);
+  await page.waitForURL(`${origin}/ja`);
   const cookie = (await page.context().cookies()).find(entry => entry.name === 'rezics_locale');
   expect(cookie?.value).toBe('ja');
   const redirect = await fetch(`${origin}/`, { headers: { cookie: 'rezics_locale=ja', 'accept-language': 'en' }, redirect: 'manual' });
@@ -173,7 +176,7 @@ test('a client-side navigation keeps the document and moves focus to the new pag
   await page.evaluate(() => { (window as unknown as { kept: boolean }).kept = true; });
   await page.getByRole('navigation', { name: de.shell_navigation!, exact: true })
     .getByRole('link', { name: de.nav_home!, exact: true }).click();
-  await page.waitForURL(`${origin}/de/`);
+  await page.waitForURL(`${origin}/de`);
   expect(await page.evaluate(() => (window as unknown as { kept?: boolean }).kept)).toBe(true);
   await page.waitForFunction(() => Boolean(document.activeElement?.closest('main')));
   expect(await focusedInMain(page)).toBe(true);
@@ -184,7 +187,7 @@ test('the shell has no accessibility violations in either theme at phone and des
   const found: string[] = [];
   for (const theme of ['light', 'dark'])
     for (const viewport of [phone, desktop])
-      for (const path of ['/en/', '/ja/', '/de/no-such-page']) {
+      for (const path of ['/en', '/ja', '/de/no-such-page']) {
         const origin = await site();
         const page = await open(path, { viewport, storageState: { cookies: [{
           name: 'rezics_theme', value: theme, domain: new URL(origin).hostname, path: '/',
