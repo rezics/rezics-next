@@ -362,6 +362,15 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 - **Bound:** 1 D, 2 K, 0 R and 0 A. The members read is one page of at most 100 entries. No per-member reads.
 - **Growth check:** `tests/library-collection-cost.test.ts`: `collection page stays within its bound as its member page grows`
 
+### My collections and following
+
+- **Touches:** Each page reads one signed-in session and one `GET /v1/collections?curatorAccountId=…&view=FULL` or
+  `GET /v1/follows?view=FULL`; unfollow sends one `DELETE /v1/follows/<targetId>` with an idempotency key. Labels are
+  embedded in the list response.
+- **Bound:** Each page uses 1 K, 1 D, 0 R and 0 A and returns at most 100 entries. Unfollow uses at most 1 K and 1 D;
+  no page does one read per collection or followed target.
+- **Growth check:** `tests/library-mine-cost.test.ts`: `my collections and following stay within their bound as list size grows`
+
 ### Start a thread
 
 - **Touches:** One `POST /v1/threads`/K after the session read; send the published thread draft and stable idempotency

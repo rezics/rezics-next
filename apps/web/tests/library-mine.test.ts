@@ -385,8 +385,16 @@ async function open(path: string, cookie: string): Promise<Page> {
     { name: session, value: cookie, domain: '127.0.0.1', path: '/', httpOnly: true, secure: true, sameSite: 'Lax' },
   ]);
   const page = await context.newPage();
-  await page.goto(`${await site()}${path}`, { waitUntil: 'networkidle' });
-  await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+  const url = `${await site()}${path}`;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await page.goto(url, { waitUntil: 'networkidle' });
+    try {
+      await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 15_000 });
+      return page;
+    } catch (error) {
+      if (attempt === 2) throw error;
+    }
+  }
   return page;
 }
 function main(html: string) {
@@ -407,7 +415,7 @@ afterAll(async () => {
     } catch {}
 });
 
-test.failing(
+test(
   'a signed-in person sees their own collections of every visibility, newest first, paged',
   async () => {
     reset();
@@ -446,7 +454,7 @@ test.failing(
   timeout,
 );
 
-test.failing(
+test(
   'a signed-in person sees what they follow (subjects, collections and spaces), and can unfollow',
   async () => {
     reset();
@@ -479,7 +487,7 @@ test.failing(
   timeout,
 );
 
-test.failing(
+test(
   'signed out, both pages offer sign-in',
   async () => {
     reset();
