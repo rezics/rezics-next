@@ -21,8 +21,11 @@ function writeWorkspace(
 ): void {
   const workspace = join(root, directory);
   mkdirSync(workspace, { recursive: true });
-  const manifest: { name: string; scripts?: { typecheck: string } } = { name };
-  if (typecheckScript !== undefined) manifest.scripts = { typecheck: typecheckScript };
+  const manifest: { name: string; scripts: { check?: string; typecheck?: string } } = {
+    name,
+    scripts: { check: 'true' },
+  };
+  if (typecheckScript !== undefined) manifest.scripts.typecheck = typecheckScript;
   writeFileSync(join(workspace, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   for (const [file, content] of Object.entries(files)) writeFileSync(join(workspace, file), content);
 }
@@ -262,3 +265,25 @@ ${guard}appendFileSync(${JSON.stringify(record)}, JSON.stringify({ cwd: process.
   );
   chmodSync(join(bin, 'tsc'), 0o755);
 }
+
+test('a workspace without a check script fails the run, because the root gate refuses it', async () => {
+  const { root, remove } = fixture();
+  try {
+    writeWorkspace(root, 'apps/scripted', '@fixture/scripted', 'bun pass.ts', { 'pass.ts': passScript });
+    writeWorkspace(root, 'packages/unchecked', '@fixture/unchecked', 'bun pass.ts', { 'pass.ts': passScript });
+    writeFileSync(
+      join(root, 'packages/unchecked/package.json'),
+      JSON.stringify({ name: '@fixture/unchecked', scripts: { typecheck: 'bun pass.ts' } }),
+    );
+    const output = collector();
+
+    const code = await typecheck({ root, startDatabase: unusedDatabase(), stdout: output.stdout });
+
+    expect(code).toBe(1);
+    expect(output.text()).toContain('Workspace @fixture/unchecked');
+    expect(output.text()).toContain('error: package.json has no check script');
+    expect(existsSync(join(root, 'apps/scripted/typechecked'))).toBe(true);
+  } finally {
+    remove();
+  }
+});

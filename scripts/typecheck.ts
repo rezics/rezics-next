@@ -16,7 +16,7 @@ export type TypecheckOptions = {
   stdout?: { write(chunk: string): unknown };
 };
 
-type Workspace = { name: string; directory: string; command: string[] };
+type Workspace = { name: string; directory: string; command: string[]; hasCheck: boolean };
 type WorkspaceResult = { block: string; code: number };
 
 function environmentWith(base: NodeJS.ProcessEnv, databaseUrl: string): Record<string, string> {
@@ -45,6 +45,7 @@ async function loadWorkspaces(root: string): Promise<Workspace[]> {
         typeof script === 'string' && script.trim() !== ''
           ? ['bun', 'run', 'typecheck']
           : [join(root, 'node_modules/.bin/tsc'), '--noEmit', '-p', 'tsconfig.json'],
+      hasCheck: typeof scripts?.check === 'string' && scripts.check.trim() !== '',
     });
   }
   return workspaces;
@@ -74,6 +75,9 @@ function blockFor(
 
 async function runWorkspace(root: string, workspace: Workspace, env: Record<string, string>): Promise<WorkspaceResult> {
   const startedAt = performance.now();
+  // The root gate refuses a workspace without a check script, so promotion could not gate any commit that has one.
+  if (!workspace.hasCheck)
+    return blockFor(root, workspace, 1, '', 'error: package.json has no check script, which the root gate requires', 0);
   try {
     const child = Bun.spawn(workspace.command, {
       cwd: workspace.directory,
