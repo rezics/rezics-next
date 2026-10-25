@@ -12,6 +12,7 @@ import { progressRoutes } from '../library/progress-routes.ts';
 import type { ContentBoardDependencies } from '../content/boards.ts';
 import { mediaRoutes } from '../content/media-routes.ts';
 import { contentRoutes } from '../content/routes.ts';
+import type { TurnstileVerifier } from '../content/turnstile.ts';
 import type { ContentRuntime } from '../content/runtime.ts';
 import { personalLibraryRoutes } from '../library/personal-routes.ts';
 import { profileRoutes } from '../presentation/http/profiles.ts';
@@ -32,6 +33,8 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
   commerce?: CommerceDependencies;
   content?: ContentRuntime & Pick<ContentBoardDependencies, 'cursorNow'>;
   search?: SearchService;
+  /** Trusted verifier binding; runtime secret/env composition belongs to the service. */
+  reports?: { anonymousVerifier?: TurnstileVerifier };
 };
 
 /** The route key must stay the same across restarts, or retries lose their receipts. */
@@ -89,9 +92,9 @@ export function createKernel(dependencies: KernelDependencies) {
     tokens,
     ...(dependencies.content?.fetchConfig === undefined ? {} : { fetchConfig: dependencies.content.fetchConfig }),
     ...(dependencies.content?.workflows === undefined ? {} : { workflows: dependencies.content.workflows }),
-    ...(dependencies.content?.anonymousVerifier === undefined
+    ...((dependencies.reports?.anonymousVerifier ?? dependencies.content?.anonymousVerifier) === undefined
       ? {}
-      : { anonymousVerifier: dependencies.content.anonymousVerifier }),
+      : { anonymousVerifier: dependencies.reports?.anonymousVerifier ?? dependencies.content?.anonymousVerifier }),
     get access() {
       return resolveAccess({ actions: actionCatalogue(content) });
     },

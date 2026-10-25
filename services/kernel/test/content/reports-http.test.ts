@@ -1,0 +1,540 @@
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { createAuthService } from '@rezics/auth';
+import { exportJWK, generateKeyPair } from 'jose';
+import { randomUUID } from 'node:crypto';
+import { Pool } from 'pg';
+import { createAccess } from '../../src/access/index.ts';
+import { readAccount } from '../../src/access/account-data.ts';
+import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
+import { applyReportEffect } from '../../src/content/report-effect.ts';
+import { createTurnstileVerifier } from '../../src/content/turnstile.ts';
+import type { CloudEvent } from '../../src/events/log.ts';
+import { createKernel } from '../../src/http/kernel.ts';
+import { isProblemSchema, openApiDocument } from '../../src/http/openapi.ts';
+import { ProblemError, problemResponse } from '../../src/http/problem.ts';
+import { actionCatalogue } from '../../src/http/request.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
+
+const routeKey = new Uint8Array(32).fill(47);
+const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(48)]]) };
+const secret = 'report-http-test-budget-secret-at-least-32-bytes';
+const reportEvent = 'com.rezics.content.report.created.v1';
+const paths = ['/v1/reports/{id}', ...['boards', 'threads', 'posts'].map((kind) => `/v1/${kind}/{id}/reports`)];
+
+// This emulates remote Siteverify transport. Only opaque, one-use provider tokens
+// succeed; JSON booleans never enter the trusted verifier contract.
+function provider() {
+  const issued = new Set<string>();
+  let calls = 0;
+  const verifier = createTurnstileVerifier({
+    secret: 'provider-test-secret',
+    hostname: 'kernel.test',
+    action: 'report',
+    fetch: async (url, init) => {
+      calls++;
+      expect(url).toBe('https://challenges.cloudflare.com/turnstile/v0/siteverify');
+      const form = new URLSearchParams(String(init?.body));
+      expect(form.get('secret')).toBe('provider-test-secret');
+      expect(init?.signal).toBeDefined();
+      const token = form.get('response')!;
+      if (token === 'provider-unavailable') return new Response('', { status: 503 });
+      return Response.json({ success: issued.delete(token), hostname: 'kernel.test', action: 'report' });
+    },
+  });
+  return {
+    verifier,
+    get calls() {
+      return calls;
+    },
+    mint() {
+      const token = randomUUID();
+      issued.add(token);
+      return token;
+    },
+  };
+}
+
+const contractPool = new Pool({ connectionString: 'postgres://kernel.invalid/reports-contract' });
+afterAll(() => contractPool.end());
+
+test('report routes publish closed schemas, shared report cost, actions and problem responses', () => {
+  const app = createKernel({ pool: contractPool, routeKey, tokens });
+  const document = openApiDocument(app);
+  const post = document.paths['/v1/reports']?.post;
+  expect(post).toBeDefined();
+  expect(post?.['x-action']).toBe('report:create');
+  expect(post?.['x-rate-limit']).toEqual({ family: 'report', units: 1 });
+  expect(post?.security).toEqual([{ bearerAuth: [] }, {}]);
+  expect(actionCatalogue(app).get('report:create')?.anonymous).toBe(true);
+  const body = post?.requestBody?.content?.['application/json']?.schema;
+  expect(body).toMatchObject({ additionalProperties: false });
+  expect(JSON.stringify(body)).toContain('botToken');
+  expect(JSON.stringify(body)).not.toContain('verified');
+  for (const code of [400, 401, 403, 404, 413, 422, 429, 500, 503])
+    expect(
+      isProblemSchema(
+        post?.responses?.[code]?.content?.['application/problem+json']?.schema,
+        document.components.schemas,
+      ),
+    ).toBe(true);
+  for (const path of paths) {
+    const get = document.paths[path]?.get;
+    expect(get).toBeDefined();
+    expect(get?.['x-action']).toBe('moderation:read_reports');
+    expect(get?.['x-rate-limit']).toBeUndefined();
+    expect(get?.security).toEqual([{ bearerAuth: [] }]);
+    expect(
+      isProblemSchema(
+        get?.responses?.[404]?.content?.['application/problem+json']?.schema,
+        document.components.schemas,
+      ),
+    ).toBe(true);
+  }
+});
+
+test('read_reports problems are read effects regardless of method', async () => {
+  for (const method of ['GET', 'POST']) {
+    const response = problemResponse(new ProblemError('not_found'), {
+      method,
+      id: randomUUID(),
+      action: 'moderation:read_reports',
+    });
+    expect(await response.json()).toMatchObject({ effect_status: 'not_applicable', code: 'not_found' });
+  }
+});
+
+describe('real migrated report HTTP and shared admission', () => {
+  let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
+  let authPool: Pool;
+  let auth: Awaited<ReturnType<typeof createAuthService>>;
+  let app: ReturnType<typeof createKernel>;
+  let noVerifier: ReturnType<typeof createKernel>;
+  const remote = provider();
+  const author = newId(0x1234);
+  const moderator = newId(0x2345);
+  const other = newId(0x3456);
+  const board = newId(0x4567);
+  const secondBoard = newId(0x789a);
+  const issuer = 'https://report-auth.test';
+  const audience = 'https://kernel.test';
+  const password = 'report fixture password for native issuance';
+  const actions = ['report:create', 'board:read', 'moderation:read_reports'];
+  const authDatabase = `reports_auth_${process.pid}`;
+  const approvals = new Set([author, moderator, other]);
+  const input = (targetId = board) => ({
+    target: { kind: 'board', id: targetId },
+    reason: 'Report reason',
+    evidence: 'Report evidence',
+  });
+
+  beforeAll(async () => {
+    db = await openGrowthDatabase();
+    await db.admin.query(`CREATE DATABASE ${authDatabase}`);
+    const authUrl = new URL(db.url);
+    authUrl.pathname = `/${authDatabase}`;
+    const { migrate } = await import(new URL('../../../auth/scripts/database.ts', import.meta.url).href);
+    migrate(authUrl.toString());
+    authPool = new Pool({ connectionString: authUrl.toString() });
+    const signingKey = {
+      ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
+      kid: 'report-http',
+      alg: 'ES256',
+    };
+    auth = await createAuthService({
+      database: authPool,
+      issuer,
+      audience,
+      secret: 'report-auth-test-secret-at-least-32-bytes',
+      signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
+      trustedAccess: {
+        async readAccount(id) {
+          const row = await readAccount(db.admin, routeOf(id)!, id);
+          return (
+            row && {
+              accountId: row.accountId,
+              kind: row.kind,
+              state: row.state,
+              authnEpoch: Number(row.minimumAuthnEpoch),
+              automated: false,
+            }
+          );
+        },
+        async authorizeProvisioning(reference) {
+          if (!approvals.delete(reference)) throw new Error('Missing fixture provisioning approval');
+          return { accountId: reference };
+        },
+      },
+    });
+    await auth.internal.registerClient({ clientId: 'web', firstParty: true, scopes: actions });
+    for (const id of [author, moderator, other]) {
+      await db.admin.query(
+        "INSERT INTO access.account (route,account_id,kind,state,transaction_id) VALUES ($1,$2,'actor','pending',$2)",
+        [routeOf(id), id],
+      );
+      await auth.internal.provisionPassword({ authorization: id, email: `${id}@example.test`, password });
+      await db.admin.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
+        routeOf(id),
+        id,
+      ]);
+    }
+    for (const id of [board, secondBoard])
+      await db.admin.query(
+        `INSERT INTO content.board (route,board_id,subject_id,title,visibility,security_revision,recorded_transaction_id)
+       VALUES ($1,$2,$3,'Report board','published',1,$4)`,
+        [routeOf(id), id, newId(0x5678), randomUUID()],
+      );
+    const access = (config: Parameters<typeof createAccess>[0]) =>
+      createAccess({
+        ...config,
+        resourceRoles: { roles: { 'report.moderator': ['moderation:read_reports'] }, types: {} },
+        auth: {
+          issuer,
+          audience,
+          jwksUrl: `${issuer}/.well-known/jwks.json`,
+          fetch: async (url, init) => auth.handler(new Request(url, init)),
+        },
+      });
+    const dependencies = {
+      pool: db.pool,
+      routeKey,
+      tokens,
+      access,
+      writeRate: createWriteRateLimiter({
+        secret,
+        overrides: JSON.stringify({ anonymous: { report: { maximum: 10000, seconds: 86400 } } }),
+      }),
+      ratePeer: () => '192.0.2.47',
+    };
+    app = createKernel({ ...dependencies, reports: { anonymousVerifier: remote.verifier } });
+    noVerifier = createKernel(dependencies);
+  });
+  afterAll(async () => {
+    await authPool?.end();
+    if (db) {
+      await db.admin.query(`DROP DATABASE IF EXISTS ${authDatabase} WITH (FORCE)`);
+      await db.close();
+    }
+  });
+
+  async function issue(id: string, scopes = actions) {
+    const signed = await auth.handler(
+      new Request(`${issuer}/signin`, {
+        method: 'POST',
+        headers: { origin: issuer, 'content-type': 'application/json' },
+        body: JSON.stringify({ email: `${id}@example.test`, password, client_id: 'web', scope: scopes }),
+      }),
+    );
+    expect(signed.status).toBe(200);
+    const cookie = signed.headers
+      .getSetCookie()
+      .map((value) => value.split(';')[0])
+      .join('; ');
+    const issued = await auth.handler(
+      new Request(`${issuer}/token`, {
+        method: 'POST',
+        headers: { origin: issuer, 'content-type': 'application/json', cookie },
+        body: '{}',
+      }),
+    );
+    expect(issued.status).toBe(200);
+    return ((await issued.json()) as { access_token: string }).access_token;
+  }
+  async function call(
+    method: string,
+    path: string,
+    body?: unknown,
+    options: { key?: string | null; bearer?: string; kernel?: typeof app } = {},
+  ) {
+    const response = await (options.kernel ?? app).handle(
+      new Request(`http://kernel.test${path}`, {
+        method,
+        headers: {
+          ...(options.bearer ? { authorization: `Bearer ${options.bearer}` } : {}),
+          ...(body === undefined
+            ? {}
+            : {
+                'content-type': 'application/json',
+                ...(options.key === null ? {} : { 'idempotency-key': JSON.stringify(options.key ?? randomUUID()) }),
+              }),
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      }),
+    );
+    return { response, body: await response.json() };
+  }
+  async function effects() {
+    // Administrative inspection is outside measured production operations.
+    return Promise.all(
+      ['core.receipt', 'core.outbox', 'content.board'].map(
+        async (table) =>
+          (await db.admin.query(`SELECT to_jsonb(r) AS row FROM ${table} r ORDER BY to_jsonb(r)::text`)).rows,
+      ),
+    );
+  }
+  async function create(targetId = board, key: string = randomUUID()) {
+    const proof = remote.mint();
+    const before = remote.calls;
+    const result = await call('POST', '/v1/reports', { ...input(targetId), botToken: proof }, { key });
+    expect(result.response.status).toBe(201);
+    expect(Object.keys(result.body)).toEqual(['reportId']);
+    expect(result.response.headers.get('location')).toBe(`/v1/reports/${result.body.reportId}`);
+    expect(remote.calls - before).toBe(1);
+    expect(JSON.stringify(await effects())).not.toContain(proof);
+    return result.body.reportId as string;
+  }
+  async function grant(id: string, action: string, target = board) {
+    await db.admin.query(
+      "INSERT INTO access.resource_grant (route,resource_id,subject_id,action,valid,transaction_id) VALUES ($1,$2,$3,$4,'(,)'::tstzrange,$3) ON CONFLICT DO NOTHING",
+      [routeOf(target), target, id, action],
+    );
+  }
+  async function moderation(enabled: boolean, target = board) {
+    await db.admin.query('DELETE FROM access.resource_role_grant WHERE route=$1 AND resource_id=$2 AND subject_id=$3', [
+      routeOf(target),
+      target,
+      moderator,
+    ]);
+    if (enabled)
+      await db.admin.query(
+        "INSERT INTO access.resource_role_grant (route,resource_id,subject_id,grant_role,valid,transaction_id) VALUES ($1,$2,$3,'report.moderator','(,)'::tstzrange,$3)",
+        [routeOf(target), target, moderator],
+      );
+  }
+  async function barrier(reportId: string) {
+    const rows = await db.admin.query(
+      "SELECT * FROM core.outbox WHERE partition_no=$1 AND type=$2 AND data->>'reportId'=$3 ORDER BY position,event_seq",
+      [partitionOf(routeOf(reportId)!), reportEvent, reportId],
+    );
+    expect(rows.rows).toHaveLength(1);
+    for (const row of rows.rows) {
+      const event: CloudEvent = {
+        specversion: '1.0',
+        id: row.id,
+        source: `urn:rezics:log:${row.partition_no}.${row.epoch}`,
+        type: reportEvent,
+        subject: row.subject,
+        time: row.recorded_at.toISOString(),
+        datacontenttype: 'application/json',
+        sequence: String(row.position).padStart(19, '0'),
+        data: row.data,
+      };
+      await applyReportEffect(db.pool, event);
+      await applyReportEffect(db.pool, event);
+    }
+  }
+
+  test('anonymous proof missing invalid unavailable and absent verifier fail closed before receipts', async () => {
+    const before = await effects();
+    const key = randomUUID();
+    for (const botToken of [undefined, 'invalid-proof', 'provider-unavailable']) {
+      const result = await call('POST', '/v1/reports', { ...input(), ...(botToken ? { botToken } : {}) }, { key });
+      expect([403, 404, 503]).toContain(result.response.status);
+      expect(result.body.effect_status).toBe('not_applied');
+      expect(result.body.reportId).toBeUndefined();
+      expect(await effects()).toEqual(before);
+    }
+    const absent = await call(
+      'POST',
+      '/v1/reports',
+      { ...input(), botToken: remote.mint() },
+      { key, kernel: noVerifier },
+    );
+    expect([403, 404, 503]).toContain(absent.response.status);
+    expect(await effects()).toEqual(before);
+    await create(board, key);
+  });
+
+  test('spoofed fields, oversized credentials, malformed targets and non-v4 anonymous keys reject without mutation', async () => {
+    const before = await effects();
+    for (const extra of [
+      { verified: true },
+      { actor: { kind: 'account', accountId: author } },
+      { action: 'report:create' },
+      { botToken: 'x'.repeat(2049) },
+      { target: { kind: 'account', id: author } },
+      { reason: '' },
+      { evidence: 'x'.repeat(8193) },
+    ]) {
+      const result = await call('POST', '/v1/reports', { ...input(), botToken: remote.mint(), ...extra });
+      expect(result.response.status).toBe(400);
+    }
+    for (const key of [null, 'bot-report', newId(0x1234)]) {
+      const result = await call('POST', '/v1/reports', { ...input(), botToken: remote.mint() }, { key });
+      expect(result.response.status).toBe(400);
+    }
+    expect(await effects()).toEqual(before);
+  });
+
+  test('fresh-proof case-normalized UUIDv4 replay has one record and effect; semantic changes conflict', async () => {
+    const key = randomUUID();
+    const id = await create(board, key.toUpperCase());
+    const before = await effects();
+    expect(await create(board, key)).toBe(id);
+    expect(await effects()).toEqual(before);
+    for (const change of [
+      { reason: 'Different reason' },
+      { evidence: 'Different evidence' },
+      { target: { kind: 'board', id: secondBoard } },
+    ]) {
+      const result = await call('POST', '/v1/reports', { ...input(), ...change, botToken: remote.mint() }, { key });
+      expect(result.response.status).toBe(422);
+      expect(result.body).toMatchObject({ code: 'idempotency_conflict', effect_status: 'not_applied' });
+      expect(JSON.stringify(result.body)).not.toContain(id);
+    }
+    expect(await effects()).toEqual(before);
+    await barrier(id);
+  });
+
+  test('revoked target public eligibility denies anonymous replay without stored report disclosure', async () => {
+    const key = randomUUID();
+    const id = await create(board, key);
+    await db.admin.query(
+      "UPDATE content.board SET visibility='protected',security_revision=security_revision+1 WHERE route=$1 AND board_id=$2",
+      [routeOf(board), board],
+    );
+    try {
+      const before = await effects();
+      const result = await call('POST', '/v1/reports', { ...input(), botToken: remote.mint() }, { key });
+      expect(result.response.status).toBe(404);
+      expect(result.body.code).toBe('not_found');
+      expect(JSON.stringify(result.body)).not.toContain(id);
+      expect(JSON.stringify(result.body)).not.toContain(input().evidence);
+      expect(await effects()).toEqual(before);
+    } finally {
+      await db.admin.query(
+        "UPDATE content.board SET visibility='published',security_revision=security_revision+1 WHERE route=$1 AND board_id=$2",
+        [routeOf(board), board],
+      );
+    }
+  });
+
+  test('account requires independent grant and scope without proof; invalid bearer never becomes anonymous', async () => {
+    const before = await effects();
+    const full = await issue(author);
+    const denied = await call('POST', '/v1/reports', input(), { bearer: full, key: 'ordinary-account-key' });
+    expect([403, 404]).toContain(denied.response.status);
+    await grant(author, 'report:create');
+    const noScope = await call('POST', '/v1/reports', input(), {
+      bearer: await issue(author, ['board:read']),
+      key: 'ordinary-account-key',
+    });
+    expect([403, 404]).toContain(noScope.response.status);
+    const invalid = await call(
+      'POST',
+      '/v1/reports',
+      { ...input(), botToken: remote.mint() },
+      { bearer: 'invalid-token' },
+    );
+    expect(invalid.response.status).toBe(401);
+    expect(invalid.body.code).toBe('invalid_credentials');
+    expect(await effects()).toEqual(before);
+    const calls = remote.calls;
+    const positive = await call('POST', '/v1/reports', input(), { bearer: full, key: 'ordinary-account-key' });
+    expect(positive.response.status).toBe(201);
+    expect(remote.calls).toBe(calls);
+  });
+
+  test('report family exhaustion returns shared 429 without a second charge or command effects', async () => {
+    const limited = createKernel({
+      pool: db.pool,
+      routeKey,
+      tokens,
+      reports: { anonymousVerifier: remote.verifier },
+      ratePeer: () => '198.51.100.147',
+      writeRate: createWriteRateLimiter({
+        secret,
+        overrides: JSON.stringify({
+          anonymous: { report: { maximum: 1, seconds: 86400 }, write: { maximum: 1, seconds: 86400 } },
+        }),
+      }),
+    });
+    const first = await call('POST', '/v1/reports', { ...input(), botToken: remote.mint() }, { kernel: limited });
+    expect(first.response.status).toBe(201);
+    const before = await effects();
+    const calls = remote.calls;
+    const second = await call('POST', '/v1/reports', { ...input(), botToken: remote.mint() }, { kernel: limited });
+    expect(second.response.status).toBe(429);
+    expect(second.response.headers.get('retry-after')).toMatch(/^[1-9][0-9]*$/);
+    expect(second.body).toMatchObject({ code: 'rate_limited', effect_status: 'not_applied' });
+    expect(await effects()).toEqual(before);
+    expect(remote.calls).toBe(calls);
+  });
+
+  test('private inspection uses current moderator role, independently anchored reverse fill, and signed bounded pages', async () => {
+    const id = await create();
+    const otherId = await create(secondBoard);
+    await barrier(id);
+    await barrier(otherId);
+    await moderation(true);
+    await moderation(true, secondBoard);
+    const bearer = await issue(moderator);
+    const read = await call('GET', `/v1/reports/${id}`, undefined, { bearer });
+    expect(read.response.status).toBe(200);
+    expect(read.body.report).toMatchObject({ id, target: input().target, reason: input().reason });
+    expect(partitionOf(routeOf(id)!)).not.toBe(partitionOf(routeOf(board)!));
+    const page = await call('GET', `/v1/boards/${board}/reports?limit=1`, undefined, { bearer });
+    expect(page.response.status).toBe(200);
+    expect(page.body.reports).toHaveLength(1);
+    expect(page.body.reports[0].target).toEqual(input().target);
+    expect(page.body.reports.map((report: { id: string }) => report.id)).not.toContain(otherId);
+    expect(page.body.next === null || typeof page.body.next === 'string').toBe(true);
+    const invalidCursor = await call(
+      'GET',
+      `/v1/boards/${board}/reports?cursor=${encodeURIComponent(JSON.stringify({ id }))}`,
+      undefined,
+      { bearer },
+    );
+    expect(invalidCursor.response.status).toBe(400);
+    expect((await call('GET', `/v1/boards/${board}/reports?limit=101`, undefined, { bearer })).response.status).toBe(
+      400,
+    );
+    await moderation(false);
+    for (const credential of [bearer, await issue(author), await issue(other), undefined]) {
+      for (const path of [`/v1/reports/${id}`, `/v1/reports/${newId(0xabcd)}`, `/v1/boards/${board}/reports`]) {
+        const denied = await call('GET', path, undefined, { ...(credential ? { bearer: credential } : {}) });
+        expect(denied.response.status).toBe(404);
+        expect(denied.body).toMatchObject({ code: 'not_found', effect_status: 'not_applicable' });
+        expect(JSON.stringify(denied.body)).not.toContain(input().evidence);
+        expect(JSON.stringify(denied.body)).not.toContain(id);
+      }
+    }
+  });
+
+  test('checkGrowth proves constant report HTTP work with unrelated and hot-partition growth at three scales', async () => {
+    const report = await checkGrowth(db, {
+      name: 'report HTTP admission and create',
+      scales: [32, 256, 2048],
+      bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+      async grow(database, scale, previous) {
+        // Setup is unmeasured. Half the rows share the real target's hot route.
+        for (let ordinal = previous; ordinal < scale; ordinal++) {
+          const route = ordinal % 2 ? routeOf(board)! : (ordinal * 31) % 65536;
+          const id = newId(route);
+          await database.admin.query(
+            `INSERT INTO content.board (route,board_id,subject_id,title,visibility,security_revision,recorded_transaction_id) VALUES ($1,$2,$3,'Distractor','published',1,$4)`,
+            [route, id, newId(0x5678), randomUUID()],
+          );
+          // Populate actual report records/receipts/effects, not synthetic counters.
+          await create(id);
+        }
+      },
+      async operation(database, _scale, repetition) {
+        expect(database.pool).toBe(db.pool);
+        const result = await call(
+          'POST',
+          '/v1/reports',
+          { ...input(), botToken: remote.mint() },
+          { key: `00000000-0000-4000-8000-${String(repetition + 1).padStart(12, '0')}` },
+        );
+        expect(result.response.status).toBe(201);
+      },
+    });
+    expect(report.samples).toHaveLength(3);
+    for (const sample of report.samples) {
+      expect(sample.cost.rows).toBeGreaterThan(0);
+      expect(sample.cost.statements).toBeGreaterThan(0);
+    }
+    console.info(JSON.stringify(report));
+  });
+});

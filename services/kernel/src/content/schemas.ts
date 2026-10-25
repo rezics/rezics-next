@@ -311,3 +311,11 @@ export const MediaDownloadResponseSchema = t.Object(
   },
   closed,
 );
+
+export const ReportPageResponseSchema = t.Object(
+  {
+    reports: t.Array(ReportResponseSchema.properties.report, { maxItems: 100 }),
+    next: t.Union([t.String(), t.Null()]),
+  },
+  closed,
+);

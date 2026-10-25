@@ -158,7 +158,7 @@ function safeFieldErrors(errors: readonly FieldError[] | undefined): FieldError[
 }
 
 function effectStatus(method: string, action?: string): 'not_applicable' | 'not_applied' {
-  if (action?.endsWith(':read')) return 'not_applicable';
+  if (action && /:read(?:_|$)/.test(action)) return 'not_applicable';
   return ['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase()) ? 'not_applicable' : 'not_applied';
 }
 
