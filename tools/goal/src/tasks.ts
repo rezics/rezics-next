@@ -101,6 +101,11 @@ export class WorkerTasks {
     }
   }
   private commitRetryLeftovers(task: Task, attempt: number): void {
+    // An attempt that stopped inside a conflicted rebase or merge leaves HEAD detached or half merged. The retry
+    // rebases from the branch tip again and hands the worker the conflicted files, so the old operation is dropped.
+    for (const [state, operation] of [['rebase-merge', 'rebase'], ['rebase-apply', 'rebase'], ['MERGE_HEAD', 'merge']] as const) {
+      if (existsSync(resolve(task.worktree, git(task.worktree, ['rev-parse', '--git-path', state])))) git(task.worktree, [operation, '--abort']);
+    }
     const branch = git(task.worktree, ['branch', '--show-current']);
     if (branch !== task.branch) throw new Error(`retry setup branch check failed: found ${branch || 'detached HEAD'}, expected ${task.branch}`);
     if (!git(task.worktree, ['status', '--porcelain', '--untracked-files=all'])) return;

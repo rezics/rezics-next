@@ -80,3 +80,31 @@ test('a retry setup failure reports an environment event to the owning manager',
     expect(events[0]!.summary).toContain('invalid branch name');
   } finally { h.dispose(); }
 });
+
+test('a retry aborts a conflicted rebase that the stopped attempt left in its worktree', async () => {
+  const h = harness(recordingCli);
+  try {
+    git(h.root, 'branch', 'dev', 'main');
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    const task = h.tasks.dispatch(h.briefFile);
+    await job.start(task.id); await job.drain();
+    await h.tasks.stop(task.id);
+
+    const worktree = h.store.task(task.id).worktree;
+    const otherTree = join(h.root, '.temp', 'other');
+    git(h.root, 'worktree', 'add', '-b', 'other', otherTree, 'main');
+    writeFileSync(join(otherTree, 'result.txt'), 'conflicting\n');
+    git(otherTree, 'add', 'result.txt'); git(otherTree, 'commit', '-m', 'Conflict with the task');
+    git(h.root, 'worktree', 'remove', '--force', otherTree);
+    expect(Bun.spawnSync(['git', 'rebase', 'other'], { cwd: worktree }).exitCode).not.toBe(0);
+    expect(git(worktree, 'branch', '--show-current')).toBe('');
+
+    await job.start(task.id); await job.drain();
+
+    const retried = h.store.task(task.id);
+    expect(retried.currentAttempt).toBe(2);
+    expect(h.store.attempt({ taskId: task.id, attempt: 2 }).failureKind ?? null).toBeNull();
+    expect(git(worktree, 'branch', '--show-current')).toBe(task.branch);
+    expect(git(worktree, 'show', 'HEAD:result.txt')).toBe('accepted');
+  } finally { h.dispose(); }
+});
