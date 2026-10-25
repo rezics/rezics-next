@@ -287,6 +287,8 @@ export function authorizePlatformGate(
 /** Standalone instance denies authorization until an app supplies its own catalogue. */
 export const access: Access = createAccess({ actions: new Map() });
 
+export { visibleOperations, type VisibleOperation } from './gates/visibility.ts';
+
 export { ACTIVE_ACCOUNTS, type GrantSubject } from './grant-subject.ts';
 export {
   captureDurableInitiator,

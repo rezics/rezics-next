@@ -41,3 +41,9 @@ already closed is a no-op catalogue change.
 - Touches: One point read and at most one write in `access.exposure_opening`, plus the native command receipt and event.
 - Bound: One catalogue row and at most one catalogue write; no scan.
 - Growth check: `catalogue.test.ts` exercises open, close, and their no-op cases through the native command routes.
+
+### visibleOperations and served OpenAPI
+
+- Touches: One read of the viewer's gate grants on the Global Context and one read of the open groups for the mounted group set.
+- Bound: Linear in the mounted route catalogue, a deployment constant.
+- Growth check: `growth-discovery.test.ts` grows unrelated accounts, their gate grants and other groups' opening rows at 1, 8, and 64.

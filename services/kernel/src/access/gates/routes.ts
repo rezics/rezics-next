@@ -10,6 +10,7 @@ import { IDEMPOTENCY_HEADER, idempotencyKeyOf } from '../../http/request.ts';
 import type { definitionRoutes } from '../../semantic/http/definitions.ts';
 import { PLATFORM_RESOURCE } from '../bootstrap-governance.ts';
 import { createExposureCommands } from './catalogue.ts';
+import { openApiRoutes } from './openapi-route.ts';
 
 const closed = { additionalProperties: false } as const;
 const paramsSchema = t.Object({ group: t.String({ pattern: '^(?!(?:any|open|close)$)[a-z][a-z_]{0,62}$' }) }, closed);
@@ -69,7 +70,7 @@ export function exposureRoutes(
     response: { 200: success, ...failures },
     detail: detail(operation),
   });
-  return app
+  const routed = app
     .post(
       customMethod('/v1/platform/exposure/:group', 'close'),
       options('close'),
@@ -106,4 +107,9 @@ export function exposureRoutes(
         return { exposure: outcome.value };
       },
     );
+  // The exposure chain is a later state of the same instance. The helper's parameter is the
+  // composition root type, so the cast keeps that helper callable and the intersection keeps
+  // both the exposure commands and the document route on the returned contract.
+  const documented = openApiRoutes(routed as unknown as ReturnType<typeof definitionRoutes>, dependencies);
+  return documented as typeof documented & typeof routed;
 }

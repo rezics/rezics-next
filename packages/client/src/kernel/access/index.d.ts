@@ -16,6 +16,7 @@ export declare function createAccess(config: AccessConfig): Access;
 export declare function authorizePlatformGate(access: Access, actor: Actor, actions: readonly string[], clientAction: string, resource: Resource, context: AccessContext, at: string): Promise<boolean>;
 /** Standalone instance denies authorization until an app supplies its own catalogue. */
 export declare const access: Access;
+export { visibleOperations, type VisibleOperation } from './gates/visibility.ts';
 export { ACTIVE_ACCOUNTS, type GrantSubject } from './grant-subject.ts';
 export { captureDurableInitiator, durableInitiatorCommitment, DurableInitiatorCaptureUnavailableError, } from './durable-initiator-capture.ts';
 export { MAX_CREATION_RESOURCES, createResourceCreationManifest, CreationManifestUnavailableError, type ResourceCreationEntry, type ResourceCreationManifest, } from './creation-manifest.ts';

@@ -191,7 +191,8 @@ export function formatDocument(document: OpenApiDocument): string {
 }
 
 export function openApiDocument(app: AnyElysia): OpenApiDocument {
-  const generated = toOpenAPISchema(app) as unknown as GeneratedDocument;
+  // GET /v1/openapi.json is an operation. The default static-file filter would drop it because the path ends in .json.
+  const generated = toOpenAPISchema(app, { staticFile: false }) as unknown as GeneratedDocument;
   const schemas = generated.components?.schemas ?? {};
   const document: OpenApiDocument = {
     openapi: '3.1.2',
