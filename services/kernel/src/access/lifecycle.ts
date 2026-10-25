@@ -207,6 +207,18 @@ async function locked(tx: AccessClient, accountId: string): Promise<TransactionA
   requireAllowed(account);
   return account;
 }
+/** Lock every account before any coordinated write. Route then id order matches
+ * suspension's single-account lock, so the transactions cannot deadlock.
+ */
+async function lockAccounts(tx: AccessClient, ids: readonly string[]): Promise<Map<string, TransactionAccount>> {
+  const ordered = [...new Set(ids)].sort((left, right) => {
+    const delta = accountRoute(left) - accountRoute(right);
+    return delta === 0 ? (left < right ? -1 : left > right ? 1 : 0) : delta;
+  });
+  const rows = new Map<string, TransactionAccount>();
+  for (const id of ordered) rows.set(id, await locked(tx, id));
+  return rows;
+}
 async function memberReservation(pool: Pool, accountId: string, organizationId: string, reservationId: string) {
   requireAllowed(accountRoute(reservationId) === accountRoute(accountId));
   return withConnection(pool, async (client) => {
@@ -979,7 +991,18 @@ export function createLifecycleInternals(
       return execute(
         { route, id: input.organizationId, kind: 'organization-created', key: input.key, input },
         async (tx, transactionId) => {
-          requireAllowed(reservation);
+          // The owner's coordination row is on the owner anchor. Observe it again
+          // under that row lock so a committed suspension fails closed.
+          const owner = await locked(tx, input.ownerAccountId);
+          requireAllowed(owner.state === 'active' && reservation);
+          requireAllowed(
+            await membershipEvidence.run(tx, {
+              route: accountRoute(input.ownerAccountId),
+              account_id: input.ownerAccountId,
+              group_id: input.organizationId,
+              reservation_id: input.ownerReservationId,
+            }),
+          );
           await accountCreate.run(tx, {
             route,
             account_id: input.organizationId,
@@ -1284,9 +1307,20 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
           authorization,
         },
         async (tx, transactionId) => {
-          const org = await locked(tx, input.organizationId);
+          const rows = await lockAccounts(tx, [input.organizationId, input.memberAccountId]);
+          const org = rows.get(input.organizationId);
+          const member = rows.get(input.memberAccountId);
           requireAllowed(await allowed(tx));
-          requireAllowed(org.kind === 'organization' && org.state === 'active' && !org.fenced && reservation);
+          requireAllowed(org?.kind === 'organization' && org.state === 'active' && !org.fenced && reservation);
+          requireAllowed(member?.state === 'active');
+          requireAllowed(
+            await membershipEvidence.run(tx, {
+              route: accountRoute(input.memberAccountId),
+              account_id: input.memberAccountId,
+              group_id: input.organizationId,
+              reservation_id: input.reservationId,
+            }),
+          );
           const owners = await ownersRead.run(tx, {
             route,
             organization_id: input.organizationId,
@@ -1334,7 +1368,7 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
         async (tx, transactionId) => {
           const account = await locked(tx, input.accountId);
           requireAllowed(await allowed(tx));
-          requireAllowed(account.state !== 'deleted');
+          requireAllowed(account.state === 'active');
           const holds = await holdsRead.run(tx, { route, account_id: input.accountId });
           requireAllowed(holds && !holds.held);
           if (account.kind === 'organization') {

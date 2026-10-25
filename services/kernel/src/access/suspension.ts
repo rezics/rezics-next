@@ -19,16 +19,17 @@ export type SuspensionValue = {
   receiptId: string;
 };
 
-/** Unheld accounts only. A durable coordinator must resolve existing lifecycle
- * responsibilities before this terminal transition; elapsed time grants no bypass.
+/** Active accounts only. A lifecycle coordination row, including an operator
+ * responsibility, does not block this safety transition.
  * Authorization uses the Global Context, then releases it before target checkout.
  * Every attempt, including receipt replay, admits the current actor and checks
  * the same action before reading the subject partition's receipt.
  *
  * Cost: one actor admission seek and the native Global Context formula cost
- * O((1 + K) log G), K <= 1000. The subject transaction uses one account PK,
- * one indexed holds EXISTS, and bounded fence/receipt/outbox writes, O(log R),
- * R = N + U*t + M. It never reads organization or responsibility history.
+ * O((1 + K) log G), K <= 1000. The subject transaction locks one account,
+ * advances its floor and fence, and inserts one fence receipt, O(log R),
+ * R = N + U*t + M. It does not probe coordination, organization, or
+ * responsibility history.
  */
 export function createSuspensionCommands(config: { pool: Pool; access: Access; clock: () => Date }) {
   return {

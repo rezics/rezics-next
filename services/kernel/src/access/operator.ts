@@ -166,6 +166,18 @@ async function locked(client: AccessClient, id: string) {
   requireAllowed(value);
   return value;
 }
+/** Route then id order is shared with lifecycle coordination so two steps that
+ * lock an operator and a subject cannot deadlock with suspension.
+ */
+async function lockOrdered(client: AccessClient, ids: readonly string[]): Promise<Map<string, AccountRow>> {
+  const ordered = [...new Set(ids)].sort((left, right) => {
+    const delta = route(left) - route(right);
+    return delta === 0 ? (left < right ? -1 : left > right ? 1 : 0) : delta;
+  });
+  const rows = new Map<string, AccountRow>();
+  for (const id of ordered) rows.set(id, await locked(client, id));
+  return rows;
+}
 function request(context: LifecycleRequest): LifecycleRequest {
   requireAllowed(context.actor.kind === 'account' && human(context.account, context.actor));
   requireAllowed(Number.isFinite(context.deadline) && Date.now() < context.deadline);
@@ -369,8 +381,24 @@ export function createOperatorCommands(config: OperatorConfig) {
         { anchor: input.subjectAccountId, kind: 'relation-recorded', key: input.key, input },
         async (tx, transactionId) => {
           live(deadline);
-          requireAllowed(held?.subjectAccountId === input.subjectAccountId && eligible(operator));
-          const subject = await locked(tx, input.subjectAccountId);
+          // The responsibility row is on the operator. Lock that account with the
+          // subject and require the operator to still be active before writing.
+          const rows = await lockOrdered(tx, [input.operatorAccountId, input.subjectAccountId]);
+          const currentOperator = rows.get(input.operatorAccountId);
+          const subject = rows.get(input.subjectAccountId);
+          const currentHeld = await reservationRead.run(tx, {
+            route: route(input.operatorAccountId),
+            operator_id: input.operatorAccountId,
+            reservation_id: input.reservationId,
+          });
+          requireAllowed(
+            held?.subjectAccountId === input.subjectAccountId &&
+              eligible(operator) &&
+              currentHeld?.subjectAccountId === input.subjectAccountId &&
+              eligible(currentOperator ?? null) &&
+              subject,
+          );
+          requireAllowed(subject);
           requireAllowed(
             subject.kind === 'actor' &&
               ['active', 'pending'].includes(subject.state) &&
@@ -471,7 +499,8 @@ export function createOperatorCommands(config: OperatorConfig) {
       return execute(
         { anchor: input.operatorAccountId, kind: 'responsibility-released', key: input.key, input },
         async (tx) => {
-          await locked(tx, input.operatorAccountId);
+          const operator = await locked(tx, input.operatorAccountId);
+          requireAllowed(operator.state === 'active');
           requireAllowed(slot?.terminal && slot.operatorAccountId === input.operatorAccountId);
           requireAllowed(
             (await release.run(tx, {
@@ -561,7 +590,7 @@ export function createOperatorCommands(config: OperatorConfig) {
           accountId,
           safe:
             !!current &&
-            current.state !== 'deleted' &&
+            current.state === 'active' &&
             !!safety &&
             !safety.held &&
             (current.kind !== 'organization' || !safety.owners),

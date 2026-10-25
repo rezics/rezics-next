@@ -23,6 +23,13 @@ including when consuming a previously approved opening.
 No organization exists in any deployment yet, so these creation defaults need no upgrade path.
 Organization creation writes two additional grant rows; request paths and their costs are unchanged.
 
+Suspension is never blocked by coordination. Platform governance can suspend an active account that operates
+automation or has a pending responsibility reservation or other lifecycle coordination row. Suspension locks that
+account, requires `state = 'active'`, and advances the authentication floor and fence. Responsibility reservation
+and transfer, deletion, and every other coordinated lifecycle step that reads `lifecycle_coordination` lock the same
+account row and require `state = 'active'` under that lock. Once the account is suspended, that step fails closed
+and writes nothing. An account that is already suspended or deleted is still refused.
+
 ## Operator responsibility pages
 
 `createOperatorCommands` remains an internal privileged application port; it has no public list route.

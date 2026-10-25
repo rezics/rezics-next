@@ -1,14 +1,11 @@
--- Lock the exact active subject before deriving its next floor and fence. The
--- indexed hold predicate and SERIALIZABLE transaction exclude a concurrent
--- responsibility reservation, whose native command locks this same account.
+-- Lock the exact active subject before deriving its next floor and fence.
+-- Coordination rows do not exclude suspension. A coordinated lifecycle step
+-- locks this same account and requires state = 'active', so it fails closed
+-- after this update commits.
 WITH target AS (
   SELECT a.ctid AS row_id, a.route, a.account_id, a.minimum_authn_epoch
   FROM access.account a
   WHERE a.route = :route::integer AND a.account_id = :account_id::uuid AND a.state = 'active'
-    AND NOT EXISTS (
-      SELECT 1 FROM access.lifecycle_coordination h
-      WHERE h.route = a.route AND h.account_id = a.account_id
-    )
   FOR UPDATE OF a
 ), fence AS (
   INSERT INTO access.lifecycle_fence_receipt
