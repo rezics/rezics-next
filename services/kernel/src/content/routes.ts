@@ -18,6 +18,7 @@ import {
 } from './commands.ts';
 import { DocumentTooLargeError, InvalidDocumentError, MAX_DOCUMENT_BYTES } from './document.ts';
 import type { AnchoredPosition, ReadContext } from './model.ts';
+import type { ContentRuntime } from './runtime.ts';
 import {
   ContentNotFoundError as ReadNotFoundError,
   listPostRevisions,
@@ -40,7 +41,7 @@ import {
   ThreadResponseSchema,
 } from './schemas.ts';
 
-type Dependencies = ContentCommandDependencies & ContentReadDependencies;
+export type Dependencies = ContentCommandDependencies & ContentReadDependencies & ContentRuntime;
 const params = t.Object({ id: t.String() }, { additionalProperties: false });
 const readFailures = {
   400: problemSchema('invalid_request'),
