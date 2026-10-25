@@ -5,9 +5,10 @@ const UUID = Type.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-
 export const MODERATION_EVENTS = {
   'com.rezics.content.moderation.takedown.v1': Type.Object(
     {
-      targetKind: Type.Union([Type.Literal('thread'), Type.Literal('post'), Type.Literal('media')]),
+      targetKind: Type.Union([Type.Literal('board'), Type.Literal('thread'), Type.Literal('post')]),
       targetId: UUID,
-      securityRevision: Type.Integer({ minimum: 1 }),
+      // Keep the database bigint value lossless across JSON and JavaScript.
+      securityRevision: Type.String({ pattern: '^[1-9][0-9]*$' }),
     },
     { additionalProperties: false },
   ),

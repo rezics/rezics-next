@@ -6,12 +6,7 @@ export const REPORT_EVENTS = {
   'com.rezics.content.report.created.v1': Type.Object(
     {
       reportId: UUID,
-      targetKind: Type.Union([
-        Type.Literal('thread'),
-        Type.Literal('post'),
-        Type.Literal('revision'),
-        Type.Literal('media'),
-      ]),
+      targetKind: Type.Union([Type.Literal('board'), Type.Literal('thread'), Type.Literal('post')]),
       targetId: UUID,
       revisionId: Type.Optional(UUID),
     },

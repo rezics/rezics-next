@@ -45,7 +45,7 @@ const valid: Record<keyof typeof CONTENT_EVENTS, unknown> = {
   'com.rezics.content.moderation.takedown.v1': {
     targetKind: 'post',
     targetId: ids.postId,
-    securityRevision: 3,
+    securityRevision: '3',
   },
   'com.rezics.content.moderation.erasure.v1': {
     threadId: ids.threadId,
@@ -54,8 +54,8 @@ const valid: Record<keyof typeof CONTENT_EVENTS, unknown> = {
   },
   'com.rezics.content.report.created.v1': {
     reportId: ids.reportId,
-    targetKind: 'revision',
-    targetId: ids.revisionId,
+    targetKind: 'post',
+    targetId: ids.postId,
     revisionId: ids.revisionId,
   },
 };
@@ -91,7 +91,24 @@ test('content event contracts are closed typed ID-only schemas and reject unknow
     Value.Check(CONTENT_EVENTS['com.rezics.content.moderation.takedown.v1'], {
       targetKind: 'account',
       targetId: ids.postId,
-      securityRevision: 3,
+      securityRevision: '3',
     }),
   ).toBe(false);
+
+  const takedown = CONTENT_EVENTS['com.rezics.content.moderation.takedown.v1'];
+  for (const securityRevision of ['1', '9223372036854775807', '999999999999999999999999999999999999']) {
+    expect(Value.Check(takedown, { targetKind: 'board', targetId: ids.containerId, securityRevision })).toBe(true);
+  }
+  for (const securityRevision of ['0', '01', '-1', '1.0', '', 1]) {
+    expect(Value.Check(takedown, { targetKind: 'post', targetId: ids.postId, securityRevision })).toBe(false);
+  }
+  expect(Value.Check(takedown, { targetKind: 'media', targetId: ids.mediaId, securityRevision: '1' })).toBe(false);
+
+  const report = CONTENT_EVENTS['com.rezics.content.report.created.v1'];
+  for (const targetKind of ['board', 'thread', 'post']) {
+    expect(Value.Check(report, { reportId: ids.reportId, targetKind, targetId: ids.itemId })).toBe(true);
+  }
+  for (const targetKind of ['revision', 'media', 'account']) {
+    expect(Value.Check(report, { reportId: ids.reportId, targetKind, targetId: ids.itemId })).toBe(false);
+  }
 });
