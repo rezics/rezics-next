@@ -1,6 +1,8 @@
 import type { Pool } from 'pg';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
+import { checkMediaImportRequest, MediaImportRequestSchema } from '@rezics/definitions/media-import';
+import { Value } from 'typebox/value';
 import {
   authoritativeTimeValue,
   currentCommand,
@@ -18,6 +20,7 @@ import reserveStatement from './reserve-media.sql';
 import completeStatement from './complete-media.sql';
 import readStatement from './read-media.sql';
 import claimStatement from './claim-media.sql';
+import { claimCoverMedia } from './cover-reference.ts';
 import type { Access, Actor } from '../request/access.ts';
 import type { ImportedSource, Rights } from './imported-contract.ts';
 import type { MediaId, PostId, ReadContext, RequestContext, RevisionId, ThreadId } from './model.ts';
@@ -111,7 +114,7 @@ export type ClaimMediaInput = ClaimMediaBase &
       }>
   );
 const imageTypes = new Set(['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp']);
-const digestPattern = /^[0-9a-f]{64}$/;
+const digestPattern = /^[0-9a-f]{64}(?![\s\S])/;
 function account(actor: Actor) {
   if (actor.kind !== 'account') throw new GrantDeniedError();
   return actor;
@@ -275,7 +278,7 @@ export async function reserveMedia(
       disclosure = [];
       for (const row of preparedChain) {
         disclosure.push(
-          row.visibility === 'public'
+          row.visibility === 'published'
             ? null
             : await accessCheck(
                 dependencies.access,
@@ -357,12 +360,14 @@ export async function completeMedia(
       const row = await read(tx, mediaId);
       if (
         !row ||
+        row.purpose !== 'post-image' ||
         row.uploader_id !== owner.accountId ||
         row.container_id !== body.containerId ||
         row.reservation_request_id !== body.reservationRequestId ||
         Number(row.byte_count) !== body.byteCount ||
         (row.declared_sha256 !== null && row.declared_sha256 !== body.sha256) ||
         row.erased ||
+        row.taken_down ||
         row.collection_pending
       )
         throw new GrantDeniedError();
@@ -412,27 +417,90 @@ export async function readReservation(
   );
   if (!(await check(dependencies.pool))) return null;
   const row = await read(dependencies.pool, mediaId);
-  if (!row || row.uploader_id !== context.actor.accountId || Date.now() >= context.deadline) return null;
-  return {
+  if (
+    !row ||
+    row.uploader_id !== context.actor.accountId ||
+    row.container_id === null ||
+    row.key === null ||
+    row.reservation_request_id === null ||
+    row.state === null ||
+    row.erased === null ||
+    row.taken_down === null ||
+    row.media_security_revision === null ||
+    row.collection_pending === null ||
+    row.created_at === null ||
+    Date.now() >= context.deadline
+  )
+    return null;
+  const variants: unknown = JSON.parse(row.variants_json);
+  if (!Array.isArray(variants) || !variants.every(isVariant)) return null;
+  const metadata: MediaMetadataBase = {
     id: mediaId,
     route: route(mediaId),
-    containerId: row.container_id!,
+    containerId: row.container_id,
     uploaderId: row.uploader_id,
-    key: row.key!,
-    purpose: row.purpose as MediaPurpose,
-    mediaType: row.media_type!,
-    byteCount: Number(row.byte_count),
-    reservationRequestId: row.reservation_request_id!,
+    key: row.key,
+    reservationRequestId: row.reservation_request_id,
     ...(row.declared_sha256 === null ? {} : { declaredSha256: row.declared_sha256 }),
     sha256: row.sha256,
-    state: row.state as MediaState,
+    state: row.state,
     claimedAt: row.claimed_at,
-    erased: row.erased!,
-    collectionPending: row.collection_pending!,
-    createdAt: row.created_at!,
+    erased: row.erased,
+    takenDown: row.taken_down,
+    securityRevision: row.media_security_revision,
+    collectionPending: row.collection_pending,
+    createdAt: row.created_at,
     decision: row.decision,
-    variants: JSON.parse(row.variants_json) as MediaVariant[],
+    variants,
   };
+  if (row.purpose === 'post-image' && row.media_type !== null && row.byte_count !== null)
+    return { ...metadata, purpose: row.purpose, mediaType: row.media_type, byteCount: Number(row.byte_count) };
+  if (row.purpose !== 'cover') return null;
+  const source = {
+    containerId: row.container_id,
+    sourceUrl: row.source_url,
+    credit: row.credit,
+    provenance: row.provenance,
+  };
+  if (!Value.Check(MediaImportRequestSchema, source) || checkMediaImportRequest(source).length > 0) return null;
+  return {
+    ...metadata,
+    purpose: 'cover',
+    mediaType: row.media_type,
+    byteCount: row.byte_count === null ? null : Number(row.byte_count),
+    rights: {
+      license: source.credit.license,
+      obligations: source.credit.obligations,
+      attribution: `(c) ${source.credit.rightsHolder}; via [${source.credit.via.name}](${source.credit.via.url})`,
+    },
+    source: source.provenance,
+  };
+}
+function isVariant(value: unknown): value is MediaVariant {
+  if (typeof value !== 'object' || value === null) return false;
+  return (
+    'format' in value &&
+    (value.format === 'webp' || value.format === 'avif') &&
+    'width' in value &&
+    typeof value.width === 'number' &&
+    Number.isSafeInteger(value.width) &&
+    value.width > 0 &&
+    'height' in value &&
+    typeof value.height === 'number' &&
+    Number.isSafeInteger(value.height) &&
+    value.height > 0 &&
+    'mediaType' in value &&
+    value.mediaType === `image/${value.format}` &&
+    'byteCount' in value &&
+    typeof value.byteCount === 'number' &&
+    Number.isSafeInteger(value.byteCount) &&
+    value.byteCount > 0 &&
+    'sha256' in value &&
+    typeof value.sha256 === 'string' &&
+    digestPattern.test(value.sha256) &&
+    'key' in value &&
+    typeof value.key === 'string'
+  );
 }
 export async function claimMedia(transaction: CommandTransaction, input: ClaimMediaInput): Promise<void> {
   const command = currentCommand(transaction);
@@ -444,10 +512,29 @@ export async function claimMedia(transaction: CommandTransaction, input: ClaimMe
     command.basis.clientId !== owner.clientId ||
     command.basis.requestedBy !== owner.requestedBy ||
     command.authorization?.mode !== 'execute' ||
-    (command.authorization.action !== 'post:create' && command.authorization.action !== 'post:revise') ||
-    route(input.itemId) !== r ||
-    route(input.revisionId) !== r ||
+    command.authorization.resource.route !== r ||
     input.mediaIds.length > 32
+  )
+    throw new GrantDeniedError();
+  if (input.reference?.kind === 'semantic_candidate') {
+    if (
+      input.itemId !== undefined ||
+      input.revisionId !== undefined ||
+      input.reference.subjectId !== input.containerId ||
+      routeOf(input.reference.subjectId) !== r ||
+      routeOf(input.reference.candidateId) !== r ||
+      command.authorization.resource.id !== input.containerId
+    )
+      throw new GrantDeniedError();
+    await claimCoverMedia(transaction, input);
+    return;
+  }
+  if (
+    input.reference !== undefined ||
+    (command.authorization.action !== 'post:create' && command.authorization.action !== 'post:revise') ||
+    (command.authorization.action === 'post:revise' && command.authorization.resource.id !== input.itemId) ||
+    routeOf(input.itemId) !== r ||
+    routeOf(input.revisionId) !== r
   )
     throw new GrantDeniedError();
   const ids = [...new Set(input.mediaIds)];
@@ -458,6 +545,9 @@ export async function claimMedia(transaction: CommandTransaction, input: ClaimMe
     media_ids: ids,
     container_id: input.containerId,
     uploader_id: owner.accountId,
+    item_id: input.itemId,
+    revision_id: input.revisionId,
+    authorization_resource_id: command.authorization.resource.id,
     at: authoritativeTimeValue(command.time),
   });
   if (rows.length !== ids.length) throw new GrantDeniedError();
@@ -472,7 +562,7 @@ export function decideDownload(
 }
 export async function readMediaState(pool: Pool, mediaId: MediaId): Promise<MediaState | null> {
   if (routeOf(mediaId) === null) return null;
-  return ((await read(pool, mediaId))?.state as MediaState | null) ?? null;
+  return (await read(pool, mediaId))?.state ?? null;
 }
 export async function readCollectionFence(pool: Pool, mediaId: MediaId): Promise<boolean | null> {
   if (routeOf(mediaId) === null) return null;

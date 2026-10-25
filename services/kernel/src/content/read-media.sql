@@ -6,7 +6,8 @@ WITH input AS NOT MATERIALIZED (
 SELECT m.media_id, m.route, m.container_id, m.uploader_id, m.reservation_request_id,
        m.purpose, m.media_type, m.byte_count, m.declared_sha256, m.sha256, m.state,
        m.claimed_at::text, m.created_at::text, m.transaction_id, m.key,
-       m.erased, m.collection_pending, m.decision,
+       m.erased, m.collection_pending, m.decision, m.taken_down,
+       m.security_revision::text AS media_security_revision, m.source_url, m.credit, m.provenance,
        m.xmin::text = pg_current_xact_id_if_assigned()::text AS inserted_here,
        COALESCE((
          SELECT jsonb_agg(jsonb_build_object(
@@ -29,7 +30,8 @@ LEFT JOIN LATERAL (
   WHERE i.kind IN ('container', 'thread') AND t.route = i.route AND t.thread_id = i.id
   UNION ALL
   SELECT 'post', p.post_id, p.reply_to_post_id, p.thread_id, NULL::uuid,
-         p.visibility, p.security_revision::text, r.availability
+         p.visibility, p.security_revision::text,
+         CASE WHEN p.availability = 'erased' THEN 'erased' ELSE r.availability END
   FROM content.post p
   JOIN content.revision r ON r.route = i.route AND r.thread_id = p.thread_id
     AND r.post_id = p.post_id AND r.revision_id = p.head_revision_id
