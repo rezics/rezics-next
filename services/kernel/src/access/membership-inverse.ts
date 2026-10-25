@@ -9,6 +9,7 @@ import reserve from './membership-inverse-20261025093747-reserve.sql';
 import release from './membership-inverse-20261025093747-release.sql';
 import terminal from './membership-inverse-20261025093747-terminal.sql';
 import change from './membership-inverse-20261025093747-bootstrap.sql';
+import reservationRead from './membership-inverse-20261025095033-reservation.sql';
 
 export const MEMBERSHIP_LIMIT = 1000;
 export type MembershipPrincipal = { kind: 'organization' | 'realm'; id: string };
@@ -83,6 +84,7 @@ export async function readMembershipInverse(
     if (row.kind === null && row.id === null) continue;
     requireAllowed((row.kind === 'organization' || row.kind === 'realm') && row.id !== null);
     route(row.id);
+    requireAllowed(row.id !== input.accountId);
     result.push({ kind: row.kind, id: row.id });
     requireAllowed(result.length <= MEMBERSHIP_LIMIT);
   }
@@ -129,6 +131,8 @@ export function createMembershipInverseCommands(config: {
   pool: Pool;
   clock?: () => Date;
   realmAuthority?: RealmMembershipAuthority;
+  /** Preserve the existing lifecycle coordinator's receipt/event contract. */
+  releaseCommandKind?: 'membership-coordination-released';
 }) {
   const execute = lifecycleExecutor(config.pool, config.clock);
   async function reserveOne(
@@ -136,6 +140,31 @@ export function createMembershipInverseCommands(config: {
     sourceTransactionId?: string,
     sourceProof?: { reservationId?: string | null } | null,
   ) {
+    // A terminal reservation may be superseded before its hold is released.
+    // Both preflight connections are released before the account command starts.
+    // The locked SQL compares this reservation again, so racing reservations
+    // share one successor and stale cleanup cannot remove the new inverse.
+    const previous =
+      !sourceTransactionId && input.principal.kind === 'organization'
+        ? await withConnection(config.pool, (client) =>
+            reservationRead.run(client, {
+              route: route(input.accountId),
+              account_id: input.accountId,
+              kind: input.principal.kind,
+              group_id: input.principal.id,
+            }),
+          )
+        : null;
+    const terminalProof = previous
+      ? await withConnection(config.pool, (client) =>
+          terminal.run(client, {
+            route: route(input.principal.id),
+            group_id: input.principal.id,
+            account_id: input.accountId,
+            reservation_id: previous.reservationId,
+          }),
+        )
+      : null;
     return execute(
       {
         route: route(input.accountId),
@@ -170,6 +199,8 @@ export function createMembershipInverseCommands(config: {
             priorReservationId ?? derivedId(NAMESPACE, `${transactionId}:membership`, route(input.accountId)),
           transaction_id: transactionId,
           source_transaction_id: sourceTransactionId ?? '',
+          previous_reservation_id: terminalProof ? previous!.reservationId : '',
+          proof_transaction_id: terminalProof?.transactionId ?? '',
         });
         if (!rows[0]) throw new MembershipLimitError();
         requireAllowed(rows[0].admitted <= MEMBERSHIP_LIMIT);
@@ -188,8 +219,11 @@ export function createMembershipInverseCommands(config: {
     },
     async release(input: MembershipRelease) {
       const identity = admission(input);
-      requireAllowed(route(input.reservationId) === route(identity.accountId));
+      const reservationRoute = route(input.reservationId);
       const reservationId = input.reservationId;
+      const coordination = config.releaseCommandKind
+        ? { organizationId: identity.principal.id, memberAccountId: identity.accountId, reservationId }
+        : null;
       const proof = await withConnection(config.pool, async (client) => {
         if (identity.principal.kind === 'organization') {
           return terminal.run(client, {
@@ -200,24 +234,29 @@ export function createMembershipInverseCommands(config: {
           });
         }
         const value = await config.realmAuthority?.readTerminal(client, { ...identity, reservationId });
-        requireAllowed(
-          value &&
-            value.accountId === identity.accountId &&
-            value.principal.kind === 'realm' &&
-            value.principal.id === identity.principal.id &&
-            value.reservationId === reservationId,
-        );
-        return value;
+        return value &&
+          value.accountId === identity.accountId &&
+          value.principal.kind === 'realm' &&
+          value.principal.id === identity.principal.id &&
+          value.reservationId === reservationId
+          ? value
+          : null;
       });
       return execute(
         {
           route: route(identity.accountId),
           id: identity.accountId,
-          kind: 'membership-inverse-released',
+          kind: config.releaseCommandKind ?? 'membership-inverse-released',
           key: identity.key,
-          input: { accountId: identity.accountId, principal: identity.principal, reservationId },
+          // Preserve existing durable workflow keys/digests across the upgrade.
+          input: coordination
+            ? { ...coordination, key: identity.key }
+            : { accountId: identity.accountId, principal: identity.principal, reservationId },
         },
         async (tx, transactionId) => {
+          // Receipt replay/conflict is decided before semantic denial, as with
+          // the existing lifecycle coordinator command.
+          requireAllowed(reservationRoute === route(identity.accountId));
           requireAllowed(proof && routeOf(proof.transactionId) !== null);
           requireAllowed(
             await accountRead.run(tx, { route: route(identity.accountId), account_id: identity.accountId }),
@@ -237,6 +276,7 @@ export function createMembershipInverseCommands(config: {
             principal: identity.principal,
             reservationId,
             proofTransactionId: proof.transactionId,
+            ...coordination,
           };
         },
       );

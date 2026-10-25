@@ -2,7 +2,7 @@ import { LifecycleDeniedError, lifecycleExecutor } from './lifecycle-20261025094
 export { LifecycleDeniedError } from './lifecycle-20261025094010-command.ts';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
-import { authoritativeTimeValue, currentCommand } from '../command/command.ts';
+import { authoritativeTimeValue, currentCommand, type CommandTransaction } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import {
   accessCommandAuthorization,
@@ -23,7 +23,6 @@ import grantsInsert from './lifecycle-default-grants.sql';
 import activateStatement from './lifecycle-activate.sql';
 import updateStatement from './lifecycle-update.sql';
 import coordinationInsert from './lifecycle-coordination.sql';
-import coordinationRead from './lifecycle-coordination-read.sql';
 import membershipEvidence from './membership-inverse-20261025093747-evidence.sql';
 import terminalizeMembership from './lifecycle-20261025093747-terminalize.sql';
 import { createMembershipInverseCommands } from './membership-inverse.ts';
@@ -338,7 +337,10 @@ export function createLifecycleInternals(
   const clock = config.clock ?? (() => new Date());
   const execute = lifecycleExecutor(pool, config.clock);
   const routeKey = new Uint8Array(config.routeKey);
-  const inverse = createMembershipInverseCommands(config);
+  const inverse = createMembershipInverseCommands({
+    ...config,
+    releaseCommandKind: 'membership-coordination-released',
+  });
   return {
     /** Stable route AND identity: the coordinator's durable registration key is
      * namespaced independently from handle spelling. Keep routeKey stable. */

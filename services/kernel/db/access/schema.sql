@@ -164,14 +164,19 @@ CREATE FUNCTION access.guard_membership_inverse() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
-  IF TG_OP = 'DELETE' AND EXISTS (
+  IF EXISTS (
     SELECT 1 FROM access.membership_inverse_terminal t
     WHERE t.route = OLD.route AND t.account_id = OLD.account_id
       AND t.kind = OLD.kind AND t.group_id = OLD.group_id
       AND t.reservation_id = OLD.reservation_id
       AND t.reservation_transaction_id = OLD.transaction_id
   ) THEN
-    RETURN OLD;
+    IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+    -- Rotation keeps the logical membership and cap slot, but retires only a
+    -- reservation whose immutable authoritative terminal proof was verified.
+    IF NEW.route = OLD.route AND NEW.account_id = OLD.account_id
+      AND NEW.kind = OLD.kind AND NEW.group_id = OLD.group_id
+      AND NEW.reservation_id <> OLD.reservation_id THEN RETURN NEW; END IF;
   END IF;
   RAISE EXCEPTION 'Membership inverse requires verified terminal compensation' USING ERRCODE = '23514';
 END;
@@ -236,8 +241,8 @@ CREATE TABLE access.account (
     fence_receipt_id uuid,
     operator_relation_version bigint DEFAULT 0 NOT NULL,
     operator_reservation_id uuid,
-    handle_operation_id text,
     membership_inverse_complete boolean DEFAULT false NOT NULL,
+    handle_operation_id text,
     CONSTRAINT account_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT account_check1 CHECK (((operator_account_id IS NULL) OR ((kind = 'actor'::text) AND (operator_account_id <> account_id)))),
     CONSTRAINT account_content_preferences_check CHECK ((jsonb_typeof(content_preferences) = 'object'::text)),
@@ -771,13 +776,6 @@ ALTER TABLE ONLY access.write_rate_counter
 
 
 --
--- Name: organization_member_owner_probe; Type: INDEX; Schema: access; Owner: -
---
-
-CREATE INDEX organization_member_owner_probe ON access.organization_member USING gist (route, organization_id, valid) WHERE (role = 'owner'::text);
-
-
---
 -- Name: write_rate_counter_expiry; Type: INDEX; Schema: access; Owner: -
 --
 
@@ -796,6 +794,13 @@ CREATE UNIQUE INDEX lifecycle_membership_live ON access.lifecycle_membership_slo
 --
 
 CREATE INDEX organization_member_change ON access.organization_member USING btree (route, organization_id, member_account_id, transaction_id);
+
+
+--
+-- Name: organization_member_owner_probe; Type: INDEX; Schema: access; Owner: -
+--
+
+CREATE INDEX organization_member_owner_probe ON access.organization_member USING gist (route, organization_id, valid) WHERE (role = 'owner'::text);
 
 
 --

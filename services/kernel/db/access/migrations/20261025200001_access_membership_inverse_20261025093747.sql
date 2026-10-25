@@ -50,14 +50,19 @@ CREATE TABLE access.membership_inverse_terminal (
 CREATE FUNCTION access.guard_membership_inverse() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
-  IF TG_OP = 'DELETE' AND EXISTS (
+  IF EXISTS (
     SELECT 1 FROM access.membership_inverse_terminal t
     WHERE t.route = OLD.route AND t.account_id = OLD.account_id
       AND t.kind = OLD.kind AND t.group_id = OLD.group_id
       AND t.reservation_id = OLD.reservation_id
       AND t.reservation_transaction_id = OLD.transaction_id
   ) THEN
-    RETURN OLD;
+    IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+    -- Rotation keeps the logical membership and cap slot, but retires only a
+    -- reservation whose immutable authoritative terminal proof was verified.
+    IF NEW.route = OLD.route AND NEW.account_id = OLD.account_id
+      AND NEW.kind = OLD.kind AND NEW.group_id = OLD.group_id
+      AND NEW.reservation_id <> OLD.reservation_id THEN RETURN NEW; END IF;
   END IF;
   RAISE EXCEPTION 'Membership inverse requires verified terminal compensation' USING ERRCODE = '23514';
 END;
