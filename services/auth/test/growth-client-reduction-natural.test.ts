@@ -208,7 +208,6 @@ test('three scale native growth remains within derived affected-owner bound', as
       const report = await checkGrowth(db, {
         name: `natural reduction against ${dimension}`,
         repetitions: 1,
-        warmups: 0,
         bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
         async grow(_, scale, previous) {
           if (dimension === 'accounts')
@@ -216,51 +215,59 @@ test('three scale native growth remains within derived affected-owner bound', as
           if (dimension === 'history')
             await seed(db, history, { from: Math.max(1024, previous * 1024), to: scale * 1024 });
           const clientId = `${dimension}-${scale}`;
+          const warmupId = `warmup-${clientId}`;
           await auth.internal.registerClient({ clientId, firstParty: true, scopes: ['read', 'write'] });
+          await auth.internal.registerClient({ clientId: warmupId, firstParty: true, scopes: ['read', 'write'] });
           await seed(db, owners(clientId, clientId, true), { from: 0, to: dimension === 'affected' ? scale * 16 : P });
+          await seed(db, owners(warmupId, warmupId, true), { from: 0, to: dimension === 'affected' ? scale * 16 : P });
           // Ordinary ANALYZE at every scale, including newly inserted target rows. No statistics overrides.
           await db.admin.query('ANALYZE');
           before = await unrelated();
         },
         async operation(_, scale) {
-          const clientId = `${dimension}-${scale}`;
-          const input = reduction(clientId);
-          await auth.internal.beginClientReduction(input);
-          const result = await page(auth, clientId);
-          if (dimension === 'affected') {
-            expect(result.next).toBe(idAt(clientId, P - 1));
-            await expect(auth.internal.finishClientReduction(input)).rejects.toThrow();
-          } else {
-            expect(result.next).toBeNull();
-            await auth.internal.finishClientReduction(input);
-            // Durable replay stays bounded and retains the committed terminal cursor.
-            await auth.internal.finishClientReduction(input);
-          }
-          expect(
-            (
-              await db.admin.query(
-                'SELECT count(*)::integer AS n FROM auth_effect_receipt WHERE receipt_id=ANY($1::text[])',
-                [result.items.map((id) => `floor:${id}`)],
-              )
-            ).rows[0].n,
-          ).toBe(P);
-          expect(
-            (
-              await db.admin.query('SELECT count(*)::integer AS n FROM session WHERE "userId"=ANY($1::text[])', [
-                result.items,
-              ])
-            ).rows[0].n,
-          ).toBe(0);
-          const saved = (
-            await db.admin.query(
-              'SELECT completed,after_account FROM auth_client_reduction_progress WHERE operation_id=$1',
-              [input.operationId],
-            )
-          ).rows[0];
-          expect(saved).toEqual({ completed: dimension !== 'affected', after_account: idAt(clientId, P - 1) });
-          expect(await unrelated()).toEqual(before);
+          await reduce(`${dimension}-${scale}`);
+        },
+        async warmup(_, scale) {
+          await reduce(`warmup-${dimension}-${scale}`);
         },
       });
+      async function reduce(clientId: string) {
+        const input = reduction(clientId);
+        await auth.internal.beginClientReduction(input);
+        const result = await page(auth, clientId);
+        if (dimension === 'affected') {
+          expect(result.next).toBe(idAt(clientId, P - 1));
+          await expect(auth.internal.finishClientReduction(input)).rejects.toThrow();
+        } else {
+          expect(result.next).toBeNull();
+          await auth.internal.finishClientReduction(input);
+          // Durable replay stays bounded and retains the committed terminal cursor.
+          await auth.internal.finishClientReduction(input);
+        }
+        expect(
+          (
+            await db.admin.query(
+              'SELECT count(*)::integer AS n FROM auth_effect_receipt WHERE receipt_id=ANY($1::text[])',
+              [result.items.map((id) => `floor:${id}`)],
+            )
+          ).rows[0].n,
+        ).toBe(P);
+        expect(
+          (
+            await db.admin.query('SELECT count(*)::integer AS n FROM session WHERE "userId"=ANY($1::text[])', [
+              result.items,
+            ])
+          ).rows[0].n,
+        ).toBe(0);
+        const saved = (
+          await db.admin.query(
+            'SELECT completed,after_account FROM auth_client_reduction_progress WHERE operation_id=$1',
+            [input.operationId],
+          )
+        ).rows[0];
+        expect(saved).toEqual({ completed: dimension !== 'affected', after_account: idAt(clientId, P - 1) });
+        expect(await unrelated()).toEqual(before);
+      }
       console.info('Natural dimension:', JSON.stringify(report));
       expect(report.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
       for (const { cost } of report.samples) {

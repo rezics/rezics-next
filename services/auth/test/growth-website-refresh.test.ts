@@ -22,6 +22,9 @@ const account: AccessAccount = { accountId: person, kind: 'actor', state: 'pendi
 let family = '';
 let session = '';
 let current = '';
+let warmupCurrent = '';
+let warmupReplayed = '';
+let warmupFamily = '';
 
 beforeAll(async () => {
   // This file owns its migrated database and issuer deployment.
@@ -60,47 +63,12 @@ beforeAll(async () => {
   await service.internal.registerClient({ clientId: 'login', firstParty: true, scopes: ['media:read'] });
   await service.internal.provisionPassword({ authorization: person, email: 'refresh@growth.test', password });
   account.state = 'active';
-  const login = await service.handler(
-    new Request(`${issuer}/signin`, {
-      method: 'POST',
-      headers: { origin: issuer, 'content-type': 'application/json' },
-      body: JSON.stringify({ email: 'refresh@growth.test', password, client_id: 'login', scope: ['media:read'] }),
-    }),
-  );
-  expect(login.status).toBe(200);
-  const cookie = login.headers
-    .getSetCookie()
-    .map((value) => value.split(';')[0])
-    .join('; ');
-  const verifier = randomBytes(48).toString('base64url');
-  const authorize = new URL(`${issuer}/authorize`);
-  authorize.search = new URLSearchParams({
-    client_id: WEBSITE_CLIENT_ID,
-    redirect_uri: redirectUri,
-    response_type: 'code',
-    scope: scopes.join(' '),
-    state: randomBytes(24).toString('base64url'),
-    code_challenge: createHash('sha256').update(verifier).digest('base64url'),
-    code_challenge_method: 'S256',
-    resource: audience,
-  }).toString();
-  const authorization = await service.handler(new Request(authorize, { headers: { cookie } }));
-  const code = new URL(authorization.headers.get('location')!).searchParams.get('code')!;
-  const exchange = await token({
-    grant_type: 'authorization_code',
-    code,
-    redirect_uri: redirectUri,
-    code_verifier: verifier,
-  });
-  expect(exchange.status).toBe(200);
-  current = (await exchange.json()).refresh_token;
-  const row = (
-    await db.admin.query('SELECT "authorizationCodeId","sessionId" FROM "oauthRefreshToken" WHERE token=$1', [
-      createHash('sha256').update(current).digest('base64url'),
-    ])
-  ).rows[0];
-  family = row.authorizationCodeId;
-  session = row.sessionId;
+  const primary = await issueRefreshToken(await signInCookie());
+  current = primary.token;
+  family = primary.family;
+  session = primary.session;
+  const spare = await issueRefreshToken(await signInCookie());
+  warmupCurrent = spare.token;
 }, 60000);
 
 afterAll(async () => {
@@ -132,6 +100,52 @@ async function token(fields: Record<string, string>) {
       }),
     }),
   );
+}
+
+async function signInCookie() {
+  const login = await service.handler(
+    new Request(`${issuer}/signin`, {
+      method: 'POST',
+      headers: { origin: issuer, 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'refresh@growth.test', password, client_id: 'login', scope: ['media:read'] }),
+    }),
+  );
+  expect(login.status).toBe(200);
+  return login.headers
+    .getSetCookie()
+    .map((value) => value.split(';')[0])
+    .join('; ');
+}
+
+async function issueRefreshToken(cookie: string) {
+  const verifier = randomBytes(48).toString('base64url');
+  const authorize = new URL(`${issuer}/authorize`);
+  authorize.search = new URLSearchParams({
+    client_id: WEBSITE_CLIENT_ID,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope: scopes.join(' '),
+    state: randomBytes(24).toString('base64url'),
+    code_challenge: createHash('sha256').update(verifier).digest('base64url'),
+    code_challenge_method: 'S256',
+    resource: audience,
+  }).toString();
+  const authorization = await service.handler(new Request(authorize, { headers: { cookie } }));
+  const code = new URL(authorization.headers.get('location')!).searchParams.get('code')!;
+  const exchange = await token({
+    grant_type: 'authorization_code',
+    code,
+    redirect_uri: redirectUri,
+    code_verifier: verifier,
+  });
+  expect(exchange.status).toBe(200);
+  const refresh = (await exchange.json()).refresh_token as string;
+  const row = (
+    await db.admin.query('SELECT "authorizationCodeId","sessionId" FROM "oauthRefreshToken" WHERE token=$1', [
+      createHash('sha256').update(refresh).digest('base64url'),
+    ])
+  ).rows[0];
+  return { token: refresh, family: row.authorizationCodeId as string, session: row.sessionId as string };
 }
 
 /**
@@ -187,6 +201,11 @@ test('checkGrowth keeps website refresh rotation constant as family history and 
       expect(response.status).toBe(200);
       current = (await response.json()).refresh_token;
     },
+    async warmup() {
+      const response = await token({ grant_type: 'refresh_token', refresh_token: warmupCurrent });
+      expect(response.status).toBe(200);
+      warmupCurrent = (await response.json()).refresh_token;
+    },
   });
   expect(report.samples.map((sample) => sample.scale)).toEqual([1, 8, 64]);
   for (const sample of report.samples) {
@@ -203,7 +222,6 @@ test('checkGrowth keeps website refresh replay revocation constant without walki
     name: 'website refresh replay',
     bounds,
     repetitions: 1,
-    warmups: 0,
     async grow(database, scale, previous) {
       // Each scale replays a parent of a fresh, active rotation: rotate once,
       // then reactivate the family and Access epoch through the seed pool only.
@@ -214,6 +232,12 @@ test('checkGrowth keeps website refresh replay revocation constant without walki
       const rotated = await token({ grant_type: 'refresh_token', refresh_token: replayed });
       expect(rotated.status).toBe(200);
       current = (await rotated.json()).refresh_token;
+      const warmup = await issueRefreshToken(await signInCookie());
+      warmupFamily = warmup.family;
+      warmupReplayed = warmup.token;
+      const warmupRotated = await token({ grant_type: 'refresh_token', refresh_token: warmupReplayed });
+      expect(warmupRotated.status).toBe(200);
+      warmupCurrent = (await warmupRotated.json()).refresh_token;
     },
     async operation() {
       const replay = await token({ grant_type: 'refresh_token', refresh_token: replayed });
@@ -221,6 +245,15 @@ test('checkGrowth keeps website refresh replay revocation constant without walki
       expect(
         (await db.admin.query('SELECT revoked FROM "oauthRefreshFamily" WHERE id=$1', [family])).rows[0].revoked,
       ).toBe(true);
+    },
+    async warmup() {
+      const replay = await token({ grant_type: 'refresh_token', refresh_token: warmupReplayed });
+      expect(replay.status).toBeGreaterThanOrEqual(400);
+      expect(
+        (await db.admin.query('SELECT revoked FROM "oauthRefreshFamily" WHERE id=$1', [warmupFamily])).rows[0].revoked,
+      ).toBe(true);
+      // The spare replay advances the account floor; keep the measured session current.
+      await db.admin.query('UPDATE session SET "authnEpoch"=$2 WHERE id=$1', [session, account.authnEpoch]);
     },
   });
   expect(report.samples.map((sample) => sample.scale)).toEqual([1, 8, 64]);

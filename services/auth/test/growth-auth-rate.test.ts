@@ -308,9 +308,6 @@ if (process.env.AUTH_RATE_GROWTH_CHILD !== '1') {
     const report = await checkGrowth(db, {
       name: 'actual native Auth attempt handlers',
       grow,
-      // Fresh native routers at each scale include BOTH replicas' schema
-      // introspection; warming them would conceal actual handler metadata SQL.
-      warmups: 0,
       repetitions: 1,
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
       // Permit an extra tree level across the cohort's bounded index visits;

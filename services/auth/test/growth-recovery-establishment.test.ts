@@ -70,6 +70,23 @@ async function grow(db: GrowthDatabase, scale: number, previous: number) {
     await db.admin.query(`VACUUM (ANALYZE) ${table}`);
 }
 
+async function seedCleanupSweepState(db: GrowthDatabase, scale: number) {
+  await db.admin.query(
+    `INSERT INTO auth_barrier_proof(reference,account_id,purpose,previous_epoch,operation_key,digest,evidence,created_at,expires_at)
+    SELECT md5('cleanup-warmup-'||$1||'-'||i)||md5('cleanup-warmup-'||$1||'-'||i),'hot','recovery',1,'cleanup-warmup-'||$1||'-'||i,
+      repeat('0',64),'[]',now()-interval '1 day 10 minutes',now()-interval '1 day 9 minutes'
+    FROM generate_series(1,1000) i`,
+    [scale],
+  );
+  await db.admin.query(
+    `INSERT INTO auth_barrier_proof(reference,account_id,purpose,previous_epoch,operation_key,digest,evidence,created_at,expires_at)
+    SELECT md5('cleanup-backlog-'||$1||'-'||i)||md5('cleanup-backlog-'||$1||'-'||i),'hot','recovery',1,'cleanup-backlog-'||$1||'-'||i,
+      repeat('0',64),'[]',now()-interval '2 minutes',now()-interval '1 minute'
+    FROM generate_series(1,1000) i`,
+    [scale],
+  );
+}
+
 for (const kind of ['complete', 'resolve', 'cleanup'] as const) {
   test(`native ${kind} remains bounded across same-account consumed history and unrelated owners`, async () => {
     const fixture = testDatabase();
@@ -77,11 +94,11 @@ for (const kind of ['complete', 'resolve', 'cleanup'] as const) {
     try {
       const issuer = 'https://growth.recovery.test';
       const password = 'sufficiently long native growth password';
-      let token = '';
+      const tokens = new Map<string, string>();
       let reference = '';
       const proofs = createBarrierProofVerifier({ database: db.pool });
       await db.admin.query(`CREATE TABLE test_access (id text PRIMARY KEY,epoch integer NOT NULL,state text NOT NULL);
-      INSERT INTO test_access VALUES ('hot',7,'pending')`);
+      INSERT INTO test_access VALUES ('hot',7,'pending'),('warmup',7,'pending')`);
       const readAccount = async (accountId: string) => {
         const row = (await db.pool.query('SELECT epoch,state FROM test_access WHERE id=$1', [accountId])).rows[0];
         return row
@@ -101,7 +118,9 @@ for (const kind of ['complete', 'resolve', 'cleanup'] as const) {
         trustedAccess: {
           readAccount,
           readRecoveryAccount: readAccount,
-          authorizeProvisioning: async () => ({ accountId: 'hot' }),
+          authorizeProvisioning: async (authorization) => ({
+            accountId: authorization === 'approved-warmup' ? 'warmup' : 'hot',
+          }),
           async authorizeRecovery(input) {
             reference = input.proofReference!;
             expect(
@@ -124,7 +143,7 @@ for (const kind of ['complete', 'resolve', 'cleanup'] as const) {
         },
         recoveryDelivery: {
           async deliver(value) {
-            token = value.token;
+            tokens.set(value.accountId, value.token);
           },
         },
       });
@@ -137,30 +156,54 @@ for (const kind of ['complete', 'resolve', 'cleanup'] as const) {
           }),
         );
       await service.internal.provisionPassword({ authorization: 'approved', email: 'hot@example.test', password });
-      await db.admin.query("UPDATE test_access SET state='active' WHERE id='hot'");
+      await service.internal.provisionPassword({
+        authorization: 'approved-warmup',
+        email: 'warmup@example.test',
+        password,
+      });
+      await db.admin.query("UPDATE test_access SET state='active'");
       await service.internal.registerClient({ clientId: 'web', firstParty: true, scopes: ['read'] });
-      const complete = () => request('/recovery/complete', { account_id: 'hot', token, new_password: password });
+      const complete = (accountId: string) =>
+        request('/recovery/complete', {
+          account_id: accountId,
+          token: tokens.get(accountId),
+          new_password: password,
+        });
       const report = await checkGrowth(db, {
         name: `native recovery establishment ${kind}`,
         repetitions: 1,
-        warmups: 0,
         bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
         async grow(_, scale, previous) {
           await grow(db, scale, previous);
           expect((await request('/recovery/start', { account_id: 'hot' })).status).toBe(200);
+          if (kind === 'complete')
+            expect((await request('/recovery/start', { account_id: 'warmup' })).status).toBe(200);
           // Exercise the real maximum stored session set, never an uncapped history.
           await db.admin.query(
             `INSERT INTO session (id,token,"userId","expiresAt","clientId","grantedScope","authnEpoch","authTime","authMethods","updatedAt")
           SELECT 'session-'||$1||'-'||i,'token-'||$1||'-'||i,'hot',now()+interval '1 day','web','read',7,1,'pwd',now() FROM generate_series(1,64) i`,
             [scale],
           );
-          if (kind !== 'complete') expect((await complete()).status).toBe(200);
+          if (kind === 'complete')
+            await db.admin.query(
+              `INSERT INTO session (id,token,"userId","expiresAt","clientId","grantedScope","authnEpoch","authTime","authMethods","updatedAt")
+          SELECT 'warm-session-'||$1||'-'||i,'warm-token-'||$1||'-'||i,'warmup',now()+interval '1 day','web','read',7,1,'pwd',now() FROM generate_series(1,64) i`,
+              [scale],
+            );
+          else expect((await complete('hot')).status).toBe(200);
+          if (kind === 'cleanup') await seedCleanupSweepState(db, scale);
         },
         async operation() {
-          if (kind === 'complete') expect((await complete()).status).toBe(200);
+          if (kind === 'complete') expect((await complete('hot')).status).toBe(200);
           else if (kind === 'resolve')
             expect(await service.internal.resolveRecoveryEstablishment(reference)).not.toBeNull();
           else expect(await proofs.sweep({ limit: 1000 })).toEqual({ removed: 1000, hasMore: true });
+        },
+        async warmup() {
+          if (kind === 'complete') expect((await complete('warmup')).status).toBe(200);
+          else if (kind === 'cleanup')
+            expect(await proofs.sweep({ limit: 1000 })).toEqual({ removed: 1000, hasMore: true });
+          else expect(await service.internal.resolveRecoveryEstablishment(reference)).not.toBeNull();
         },
       });
       console.info(`Native recovery ${kind} Cost:`, JSON.stringify(report.samples));

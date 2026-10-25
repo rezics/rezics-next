@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
 import { createAuthService, createBarrierProofVerifier, type BarrierProof } from '../src/index.ts';
+import { withAuthTransport } from '../src/rate-limit.ts';
 import {
   capture,
   checkGrowth,
@@ -57,6 +58,16 @@ async function grow(db: GrowthDatabase, scale: number, previous: number) {
     await db.admin.query(`VACUUM (ANALYZE) ${table}`);
 }
 
+async function seedSweepWarmup(db: GrowthDatabase, name: string, count: number) {
+  await db.admin.query(
+    `INSERT INTO auth_barrier_proof(reference,account_id,purpose,previous_epoch,operation_key,digest,evidence,created_at,expires_at)
+    SELECT md5($1||i)||md5($1||i),'hot','recovery',1,$1||i,repeat('0',64),'[]',
+      now()-interval '1 day 10 minutes',now()-interval '1 day 9 minutes'
+    FROM generate_series(1,$2::integer) i`,
+    [name, count],
+  );
+}
+
 for (const kind of ['consent', 'recovery', 'sweep'] as const) {
   test(`checkGrowth bounds actual ${kind} at 1x/8x/64x same-owner and unrelated history`, async () => {
     const fixture = testDatabase();
@@ -65,14 +76,16 @@ for (const kind of ['consent', 'recovery', 'sweep'] as const) {
       const verifier = createBarrierProofVerifier({ database: db.pool });
       const issuer = 'https://growth.barrier.test';
       const password = 'growth password sufficiently long';
-      let token = '';
+      const tokens = new Map<string, string>();
       let cookie = '';
+      let warmupCookie = '';
+      let warmupPeer = '';
       let latest: {
         reference: string;
         expected: Pick<BarrierProof, 'accountId' | 'purpose' | 'previousEpoch' | 'operationKey'>;
       };
       await db.admin.query(
-        "CREATE TABLE test_access(id text PRIMARY KEY,epoch integer NOT NULL,state text NOT NULL); INSERT INTO test_access VALUES ('hot',1,'pending')",
+        "CREATE TABLE test_access(id text PRIMARY KEY,epoch integer NOT NULL,state text NOT NULL); INSERT INTO test_access VALUES ('hot',1,'pending'),('warmup',1,'pending')",
       );
       const readAccount = async (accountId: string) => {
         const row = (await db.pool.query('SELECT epoch,state FROM test_access WHERE id=$1', [accountId])).rows[0];
@@ -124,36 +137,51 @@ for (const kind of ['consent', 'recovery', 'sweep'] as const) {
         trustedAccess: {
           readAccount,
           readRecoveryAccount: readAccount,
-          authorizeProvisioning: async () => ({ accountId: 'hot' }),
+          authorizeProvisioning: async (authorization) => ({
+            accountId: authorization === 'approved-warmup' ? 'warmup' : 'hot',
+          }),
           invalidateAccount: (v) =>
             barrier(v.accountId, 'consent-reduction', v.previousEpoch, v.proofReference, v.operationKey),
           authorizeRecovery: (v) => barrier(v.accountId, 'recovery', v.proofEpoch, v.proofReference, v.operationKey),
         },
         recoveryDelivery: {
           async deliver(v) {
-            token = v.token;
+            tokens.set(v.accountId, v.token);
           },
         },
       });
-      const request = (path: string, body: unknown) =>
-        auth.handler(
-          new Request(`${issuer}${path}`, {
-            method: 'POST',
-            headers: { origin: issuer, 'content-type': 'application/json', cookie },
-            body: JSON.stringify(body),
-          }),
-        );
+      const request = (path: string, body: unknown, requestCookie = cookie, peer?: string) => {
+        const invoke = () =>
+          auth.handler(
+            new Request(`${issuer}${path}`, {
+              method: 'POST',
+              headers: {
+                origin: issuer,
+                'content-type': 'application/json',
+                ...(requestCookie ? { cookie: requestCookie } : {}),
+              },
+              body: JSON.stringify(body),
+            }),
+          );
+        return peer ? withAuthTransport(peer, invoke) : invoke();
+      };
       await auth.internal.provisionPassword({ authorization: 'approved', email: 'hot@example.test', password });
+      if (kind === 'consent' || kind === 'recovery')
+        await auth.internal.provisionPassword({
+          authorization: 'approved-warmup',
+          email: 'warmup@example.test',
+          password,
+        });
       await db.admin.query("UPDATE test_access SET state='active'");
       await auth.internal.registerClient({ clientId: 'web', firstParty: true, scopes: ['read'] });
       await auth.internal.registerClient({ clientId: 'external', firstParty: false, scopes: ['read', 'write'] });
       const report = await checkGrowth(db, {
         name: `Auth barrier ${kind}`,
         repetitions: 1,
-        warmups: 0,
         bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
         async grow(_, scale, previous) {
           await grow(db, scale, previous);
+          if (kind === 'sweep') await seedSweepWarmup(db, `sweep-warmup-${scale}-`, 1000);
           if (kind === 'consent') {
             const signed = await request('/signin', { account_id: 'hot', password, client_id: 'web', scope: ['read'] });
             expect(signed.status).toBe(200);
@@ -162,8 +190,24 @@ for (const kind of ['consent', 'recovery', 'sweep'] as const) {
               .map((v) => v.split(';')[0])
               .join('; ');
             expect((await request('/consent', { client_id: 'external', scope: ['read', 'write'] })).status).toBe(200);
-          } else if (kind === 'recovery')
+            const warmupSigned = await request(
+              '/signin',
+              { account_id: 'warmup', password, client_id: 'web', scope: ['read'] },
+              '',
+            );
+            expect(warmupSigned.status).toBe(200);
+            warmupCookie = warmupSigned.headers
+              .getSetCookie()
+              .map((v) => v.split(';')[0])
+              .join('; ');
+            expect(
+              (await request('/consent', { client_id: 'external', scope: ['read', 'write'] }, warmupCookie)).status,
+            ).toBe(200);
+          } else if (kind === 'recovery') {
             expect((await request('/recovery/start', { account_id: 'hot' })).status).toBe(200);
+            warmupPeer = `192.0.2.${scale}`;
+            expect((await request('/recovery/start', { account_id: 'warmup' }, '', warmupPeer)).status).toBe(200);
+          }
         },
         async operation() {
           if (kind === 'sweep') expect(await verifier.sweep({ limit: 1000 })).toEqual({ removed: 1000, hasMore: true });
@@ -171,7 +215,27 @@ for (const kind of ['consent', 'recovery', 'sweep'] as const) {
             const result =
               kind === 'consent'
                 ? await request('/consent', { client_id: 'external', scope: ['read'] })
-                : await request('/recovery/complete', { account_id: 'hot', token, new_password: password });
+                : await request('/recovery/complete', {
+                    account_id: 'hot',
+                    token: tokens.get('hot'),
+                    new_password: password,
+                  });
+            expect(result.status).toBe(200);
+            expect(await verifier.verify(latest.reference, latest.expected)).toBeNull();
+          }
+        },
+        async warmup() {
+          if (kind === 'sweep') expect(await verifier.sweep({ limit: 1000 })).toEqual({ removed: 1000, hasMore: true });
+          else {
+            const result =
+              kind === 'consent'
+                ? await request('/consent', { client_id: 'external', scope: ['read'] }, warmupCookie)
+                : await request(
+                    '/recovery/complete',
+                    { account_id: 'warmup', token: tokens.get('warmup'), new_password: password },
+                    cookie,
+                    warmupPeer,
+                  );
             expect(result.status).toBe(200);
             expect(await verifier.verify(latest.reference, latest.expected)).toBeNull();
           }
@@ -190,12 +254,15 @@ for (const kind of ['consent', 'recovery', 'sweep'] as const) {
         const batches = await checkGrowth(db, {
           name: 'barrier cleanup follows admitted batch',
           repetitions: 1,
-          warmups: 0,
           bounds: { rows: 'linear', blocks: 'linear', statements: 'constant' },
-          async grow() {
+          async grow(_, scale) {
+            await seedSweepWarmup(db, `batch-warmup-${scale}-`, scale * 8);
             await db.admin.query('VACUUM (ANALYZE) auth_barrier_proof');
           },
           async operation(_, scale) {
+            expect((await verifier.sweep({ limit: scale * 8 })).removed).toBe(scale * 8);
+          },
+          async warmup(_, scale) {
             expect((await verifier.sweep({ limit: scale * 8 })).removed).toBe(scale * 8);
           },
         });

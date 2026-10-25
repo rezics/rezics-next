@@ -10,6 +10,10 @@ for (const series of ['old-effects', 'unrelated-owners'] as const)
       const db = await openGrowthDatabase(fixture.url);
       try {
         const f = await credentialFixture(db.pool);
+        const warmupSubject = 'robot-warmup';
+        await f.pool.query("INSERT INTO test_authority VALUES ('robot-warmup',1,true,'pending')");
+        await f.service.internal.provisionCredentialless({ authorization: warmupSubject });
+        await f.pool.query("UPDATE test_authority SET state='active' WHERE id=$1", [warmupSubject]);
         // Keep every selected relation large at 1x too, so the planner measures
         // indexed reads instead of scanning a growing handful of live rows.
         await db.admin.query(
@@ -25,7 +29,6 @@ for (const series of ['old-effects', 'unrelated-owners'] as const)
         const report = await checkGrowth(db, {
           name: `Auth credential effect ${series}, destructive=${destructive}`,
           repetitions: 1,
-          warmups: 0,
           bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
           async grow(_, scale, previous) {
             if (series === 'old-effects')
@@ -53,19 +56,34 @@ for (const series of ['old-effects', 'unrelated-owners'] as const)
                 `INSERT INTO session(id,token,"userId","expiresAt","clientId","grantedScope","authnEpoch","authTime","authMethods","updatedAt") SELECT 's-'||$1||'-'||i,'t-'||$1||'-'||i,'robot',now()+interval '1 hour','web','account:manage',(SELECT epoch FROM test_authority WHERE id='robot'),1,'private_key_jwt',now() FROM generate_series(1,64) i`,
                 [scale],
               );
+              const warmupKid = `warmup-key-${scale}`;
+              await db.admin.query('INSERT INTO auth_public_key VALUES ($1,$2,$3)', [
+                warmupSubject,
+                warmupKid,
+                { ...f.publicJwk, kid: warmupKid },
+              ]);
+              await db.admin.query(
+                `INSERT INTO session(id,token,"userId","expiresAt","clientId","grantedScope","authnEpoch","authTime","authMethods","updatedAt") SELECT 'warmup-s-'||$1||'-'||i,'warmup-t-'||$1||'-'||i,$2,now()+interval '1 hour','web','account:manage',(SELECT epoch FROM test_authority WHERE id=$2),1,'private_key_jwt',now() FROM generate_series(1,64) i`,
+                [scale, warmupSubject],
+              );
             }
             for (const table of ['auth_effect_receipt', 'auth_public_key', '"user"', 'account', 'session'])
               await db.admin.query(`VACUUM (ANALYZE) ${table}`);
           },
           async operation() {
-            const op = await f.stage(
-              destructive
-                ? { kind: 'key', kid: 'selected-key', remove: true }
-                : { kind: 'key', kid: 'selected-key', publicJwk: { ...f.publicJwk, kid: 'selected-key' } },
-            );
-            expect((await f.apply(op)).replayed).toBe(false);
+            await apply('selected-key', 'robot');
+          },
+          async warmup(_, scale) {
+            await apply(`warmup-key-${scale}`, warmupSubject);
           },
         });
+        async function apply(kid: string, subjectId: string) {
+          const op = await f.stage(
+            destructive ? { kind: 'key', kid, remove: true } : { kind: 'key', kid, publicJwk: { ...f.publicJwk, kid } },
+            subjectId,
+          );
+          expect((await f.apply({ ...op, subjectId })).replayed).toBe(false);
+        }
         console.info(`Auth credential ${series}, destructive=${destructive} cost:`, JSON.stringify(report.samples));
         expect(report.samples.map((s) => s.scale)).toEqual([1, 8, 64]);
         for (const { cost } of report.samples) {

@@ -68,7 +68,17 @@ test('checkGrowth measures actual path at three scales for unrelated A, affected
         },
       },
     });
-    for (const clientId of ['unrelated', 'page-a', 'page-c', 'total-1', 'total-8', 'total-64'])
+    for (const clientId of [
+      'unrelated',
+      'page-a',
+      'page-c',
+      'total-1',
+      'total-8',
+      'total-64',
+      'warmup-total-1',
+      'warmup-total-8',
+      'warmup-total-64',
+    ])
       await auth.internal.registerClient({ clientId, firstParty: false, scopes: ['read', 'write'] });
     const denied = async (): Promise<never> => {
       throw new Error('Unused');
@@ -121,7 +131,6 @@ test('checkGrowth measures actual path at three scales for unrelated A, affected
     const a = await checkGrowth(db, {
       name: 'unrelated accounts do not enter an admitted owner page',
       repetitions: 1,
-      warmups: 0,
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
       grow: async (_, scale, previous) => {
         await seed(db, population('accounts', 'unrelated', false), { from: previous * 128, to: scale * 128 });
@@ -140,7 +149,6 @@ test('checkGrowth measures actual path at three scales for unrelated A, affected
     const c = await checkGrowth(db, {
       name: 'affected consents do not enlarge an admitted owner page',
       repetitions: 1,
-      warmups: 0,
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
       grow: async (_, scale, previous) => {
         // Deployment fixture only: production admission refuses consent additions behind its barrier.
@@ -169,16 +177,28 @@ test('checkGrowth measures actual path at three scales for unrelated A, affected
     const total = await checkGrowth(db, {
       name: 'complete native DBOS fanout is linear in actual affected owners',
       repetitions: 1,
-      warmups: 0,
       bounds: { rows: 'linear', blocks: 'linear', statements: 'linear' },
       grow: async (_, scale) => {
         await seed(db, population(`total-${scale}`, `total-${scale}`, true), { from: 0, to: scale * 8 });
+        await seed(db, population(`warmup-total-${scale}`, `warmup-total-${scale}`, true), {
+          from: 0,
+          to: scale * 8,
+        });
       },
       operation: async (_, scale) => {
         await workflows!.reduceClientScopes({
           key: `total-${scale}`,
           authorization: 'approved',
           clientId: `total-${scale}`,
+          firstParty: false,
+          scopes: ['read'],
+        });
+      },
+      async warmup(_, scale) {
+        await workflows!.reduceClientScopes({
+          key: `warmup-total-${scale}`,
+          authorization: 'approved',
+          clientId: `warmup-total-${scale}`,
           firstParty: false,
           scopes: ['read'],
         });
