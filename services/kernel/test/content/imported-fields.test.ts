@@ -37,10 +37,20 @@ function input(): ImportedFieldInput {
       source: 'bangumi',
       external_id: '42',
       record_revision: 'unversioned',
-      digest: 'sha256:source-digest',
+      digest: 'a'.repeat(64),
       converter_revision: 'converter-v1',
       field_group: 'summary',
-      references: [{ url: 'https://bgm.tv/subject/42', title: 'Source summary' }],
+      references: [
+        {
+          parts: [
+            { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://bgm.tv/subject/42' } },
+            {
+              property: { id: 'schema:name' },
+              value: { type: 'value', content: { language: 'en', text: 'Source summary' } },
+            },
+          ],
+        },
+      ],
     },
     rights: {
       license: 'CC-BY-SA-3.0',
@@ -112,6 +122,7 @@ test('append uses the real authorized command and exact canonical document bytes
     availability: 'available',
     body: bytes,
   });
+  expect(stored?.source.references).toEqual(value.source.references);
   const native = await db.admin.query(
     "SELECT encode(sha256(body),'hex') AS digest FROM content.imported_field WHERE route=$1 AND id=$2",
     [route, result.value.id],
@@ -222,6 +233,7 @@ test('rejects malformed licences, evidence, language, groups, references and bod
       ...value,
       source: { ...value.source, references: Array.from({ length: 129 }, () => value.source.references[0]!) },
     },
+    // @ts-expect-error Deliberately malformed obsolete citation must remain rejected.
     { ...value, source: { ...value.source, references: [{ url: 'javascript:alert(1)' }] } },
   ];
   await command(async (tx) => {
