@@ -45,5 +45,6 @@
   "auth_security_sign_in_required": "Vous êtes déconnecté. Connectez-vous pour gérer les paramètres de sécurité du compte.",
   "auth_security_unknown_device": "Appareil inconnu",
   "auth_signup_heading": "Créer un compte",
+  "auth_step_up_explanation": "Votre session n’est pas assez récente pour cette demande, saisissez donc votre adresse e-mail et votre mot de passe pour continuer.",
   "auth_step_up_heading": "Vérifier votre identité"
 }

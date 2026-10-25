@@ -45,5 +45,6 @@
   "auth_security_sign_in_required": "Has cerrado sesión. Inicia sesión para gestionar la seguridad de tu cuenta.",
   "auth_security_unknown_device": "Dispositivo desconocido",
   "auth_signup_heading": "Crear una cuenta",
+  "auth_step_up_explanation": "Tu sesión no es lo bastante reciente para esta solicitud, así que introduce tu correo electrónico y tu contraseña para continuar.",
   "auth_step_up_heading": "Verificar tu identidad"
 }

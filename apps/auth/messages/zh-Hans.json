@@ -45,5 +45,6 @@
   "auth_security_sign_in_required": "你已退出登录。请登录以管理安全设置。",
   "auth_security_unknown_device": "未知设备",
   "auth_signup_heading": "创建账户",
+  "auth_step_up_explanation": "这次请求需要更新的登录状态，请输入电子邮箱和密码以继续。",
   "auth_step_up_heading": "验证身份"
 }

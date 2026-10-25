@@ -58,7 +58,19 @@ Passkeys are not shown until that feature is available.
 
 ## Step-up
 
-Not built yet.
+A signed-in browser whose session is not fresh enough for `prompt=login` or `max_age` arrives at
+`/step-up` with the authorization query, `sig` and `exp`. One sentence explains why confirmation is
+needed. The form asks for email (`autocomplete="username"`) and password
+(`autocomplete="current-password"`).
+
+`src/step-up.ts` reuses `signIn` and `signInTarget`. Confirmation is one browser `POST /signin` with
+the same `client_id` and `scope` as sign-in. On success, Auth replaces the previous session. The
+browser then resumes at `/authorize` with that query, removing every `sig`, `exp` and `prompt` and
+keeping `max_age`. With no authorization query left, it goes to `/security`. The response body never
+supplies a navigation target. Passkey confirmation comes later.
+
+A wrong password, rate limit or outage uses `failureMessage` for 401, 429 and 503 and keeps the person
+on the page. Empty fields and a pending request prevent another submit.
 
 ## Development
 
@@ -88,6 +100,7 @@ The static page frames make zero K, D, R and A calls. Development forwarding mak
 request, streams both bodies, and buffers nothing. Both costs are constant per request.
 The sign-in page makes no server reads. A sign-in adds one browser `POST /signin` and one navigation on success.
 Recovery makes no kernel reads and adds one Auth request per submit.
+Auth pages make no kernel reads. Step-up is one `POST /signin` per submit.
 
 ## Visual check
 

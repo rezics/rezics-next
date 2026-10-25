@@ -45,5 +45,6 @@
   "auth_security_sign_in_required": "ログアウトしています。セキュリティ設定を管理するにはログインしてください。",
   "auth_security_unknown_device": "不明なデバイス",
   "auth_signup_heading": "アカウントを作成",
+  "auth_step_up_explanation": "このリクエストにはより新しいセッションが必要なので、続けるにはメールアドレスとパスワードを入力してください。",
   "auth_step_up_heading": "本人確認"
 }

@@ -45,5 +45,6 @@
   "auth_security_sign_in_required": "로그아웃되었습니다. 보안 설정을 관리하려면 로그인하세요.",
   "auth_security_unknown_device": "알 수 없는 기기",
   "auth_signup_heading": "계정 만들기",
+  "auth_step_up_explanation": "이 요청에는 더 최근의 세션이 필요하므로 계속하려면 이메일과 비밀번호를 입력하세요.",
   "auth_step_up_heading": "본인 확인"
 }

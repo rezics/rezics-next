@@ -45,5 +45,6 @@
   "auth_security_sign_in_required": "Du bist abgemeldet. Melde dich an, um deine Sicherheitseinstellungen zu verwalten.",
   "auth_security_unknown_device": "Unbekanntes Gerät",
   "auth_signup_heading": "Konto erstellen",
+  "auth_step_up_explanation": "Deine Sitzung ist für diese Anfrage nicht aktuell genug, bitte gib deine E-Mail-Adresse und dein Passwort ein, um fortzufahren.",
   "auth_step_up_heading": "Identität bestätigen"
 }

@@ -45,5 +45,6 @@
   "auth_security_sign_in_required": "你已登出。請登入以管理安全設定。",
   "auth_security_unknown_device": "未知裝置",
   "auth_signup_heading": "建立帳戶",
+  "auth_step_up_explanation": "這次請求需要更新的登入狀態，請輸入電子郵件和密碼以繼續。",
   "auth_step_up_heading": "驗證身分"
 }
