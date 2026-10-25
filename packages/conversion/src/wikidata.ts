@@ -4,7 +4,7 @@ import type { PropertyDefinition } from '@rezics/definitions';
 import { ConversionError, type ConversionInput, type ConvertedRecord, type ConversionDiagnostic } from './index';
 import { commandKey, safeSourceUrl, sourceDigest, sourceEnvelope, type ConversionContext } from './support';
 
-export const converter_revision = 'wikidata-1';
+export const converter_revision = 'wikidata-2';
 export const wikidataLimits = Object.freeze({
   bytes: 128 * 1024,
   statements: 64,
@@ -522,8 +522,6 @@ export function convertWikidata(
       }),
     );
   } else {
-    const grouped = dictionary<BatchStatement[]>();
-    for (const statement of statements) (grouped[statement.property.id] ??= []).push(statement);
     const termValues = (terms: Record<string, Term>) =>
       Object.fromEntries(Object.entries(terms).map(([key, term]) => [key, term.value]));
     proposals.push({
@@ -537,7 +535,6 @@ export function convertWikidata(
           Object.entries(normalizedRecord.aliases).map(([key, terms]) => [key, terms.map((term) => term.value)]),
         ),
         descriptions: termValues(normalizedRecord.descriptions),
-        statements: grouped,
       },
     });
   }
