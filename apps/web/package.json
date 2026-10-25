@@ -1,0 +1,30 @@
+{
+  "name": "@rezics/web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --config vite.config.ts",
+    "build": "vite build --config vite.config.ts",
+    "check": "bun run generate && tsc --noEmit -p tsconfig.json && bun test && bun run build",
+    "generate": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide --strategy url cookie preferredLanguage baseLocale --emit-ts-declarations"
+  },
+  "dependencies": {
+    "@cloudflare/vite-plugin": "2.0.0-beta.v.4",
+    "@cloudflare/workers-types": "5.20261024.1",
+    "@inlang/paraglide-js": "2.29.1",
+    "@inlang/plugin-json": "5.1.63",
+    "@tailwindcss/vite": "4.3.3",
+    "@tanstack/react-router": "1.170.46",
+    "@tanstack/react-start": "1.169.4",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "tailwindcss": "4.3.3"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "typescript": "7.1.0-beta",
+    "vite": "8.3.5"
+  }
+}

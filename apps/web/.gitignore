@@ -1,0 +1,7 @@
+src/paraglide/
+src/routeTree.gen.ts
+.wrangler/
+.output/
+dist/
+
+.cloudflare/
