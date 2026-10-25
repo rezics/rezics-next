@@ -16,6 +16,7 @@ type CaptureState = { active: ActiveCapture | undefined; setupError?: Error; set
 
 const states = new WeakMap<GrowthDatabase, CaptureState>();
 
+// PostgreSQL 19 omits foreign-key existence probes; derivations account for their bounded unique-index lookups.
 const setupStatements = [
   "LOAD 'auto_explain'",
   'SET auto_explain.log_min_duration = 0',
