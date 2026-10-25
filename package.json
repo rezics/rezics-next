@@ -1,0 +1,14 @@
+{
+  "name": "rezics",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "workspaces": ["apps/*", "services/*", "packages/*"],
+  "scripts": {
+    "check": "bun scripts/gate.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.4",
+    "typescript": "7.1.0-beta"
+  }
+}

@@ -28,6 +28,6 @@
   },
   "gate": [
     "bun",
-    "tools/goal/scripts/gate.ts"
+    "scripts/gate.ts"
   ]
 }
