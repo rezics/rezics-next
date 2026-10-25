@@ -33,7 +33,12 @@ export interface Revision {
   body: string | null;
   availability: 'available' | 'erased';
 }
+export interface Board extends Target {
+  kind: 'board';
+  partition: number;
+}
 export interface Content extends Target {
+  kind: 'thread' | 'post';
   partition: number;
   revision: Revision;
 }
@@ -80,9 +85,9 @@ export interface ContentDisclosureDriver {
    * matching JWT scopes/client consent. Suspended has the same grants/scopes but
    * authoritative suspended account state. Author/unrelated lack moderation.
    */
-  board(): Promise<Content>;
+  board(): Promise<Board>;
   publish(input: {
-    board: Content;
+    board: Board;
     thread?: Content;
     parent?: Content;
     author?: 'author' | 'unrelated';

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, setDefaultTimeout, test } from 'bun:test';
 import { isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import type { Content, ContentDisclosureDriver, Persona, Reply, Target } from './content-disclosure-driver';
+import type { Board, Content, ContentDisclosureDriver, Persona, Reply, Target } from './content-disclosure-driver';
 
 setDefaultTimeout(30_000);
 let driver: ContentDisclosureDriver | undefined;
@@ -78,7 +78,7 @@ async function fixture(body = 'disclosure-public-text') {
 async function listed(persona: Persona, board: Target) {
   return ok(await d().list(persona, board, { limit: 10 }));
 }
-async function hidden(persona: Persona, target: Content) {
+async function hidden(persona: Persona, target: Board | Content) {
   const missing = d().missing(target.kind);
   expect(await problem(await d().read(persona, target), 'not_found')).toEqual(
     await problem(await d().read(persona, missing), 'not_found'),
