@@ -58,7 +58,18 @@
   "auth_security_sign_in": "登录",
   "auth_security_sign_in_required": "你已退出登录。请登录以管理安全设置。",
   "auth_security_unknown_device": "未知设备",
+  "auth_signup_conflict": "无法创建此账户。请登录或恢复访问。",
+  "auth_signup_denied": "请检查用户名、邮箱、密码和验证后再试。",
+  "auth_signup_email": "电子邮箱",
+  "auth_signup_handle": "用户名",
+  "auth_signup_handle_unavailable": "该用户名已被占用或保留。",
   "auth_signup_heading": "创建账户",
+  "auth_signup_hide_password": "隐藏密码",
+  "auth_signup_password": "密码",
+  "auth_signup_password_invalid": "密码长度必须为 8 至 128 个字符。",
+  "auth_signup_recovery": "恢复访问",
+  "auth_signup_show_password": "显示密码",
+  "auth_signup_sign_in": "登录",
   "auth_step_up_explanation": "这次请求需要更新的登录状态，请输入电子邮箱和密码以继续。",
   "auth_step_up_heading": "验证身份"
 }

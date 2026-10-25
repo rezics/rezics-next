@@ -34,7 +34,23 @@ ask the person to try again later.
 
 ## Sign-up
 
-Not built yet.
+The sign-up page keeps the query it was opened with. Its sign-in link keeps that same query. The form has a handle,
+email and password. Email uses `autocomplete="email"`. Password uses `autocomplete="new-password"` and a show/hide
+control. A field error is tied to its input with `aria-describedby`, and focus moves to the first one.
+
+The page creates one random key for the form and reuses it when a submit is retried after a network failure. It loads
+the Turnstile script once and renders the widget explicitly with the public `TURNSTILE_SITE_KEY`, `action: "signup"`
+and the page locale. In development, `TURNSTILE_SCRIPT_URL` replaces the script address. Submitting stays disabled
+until a token arrives, and every submit uses a new token. The widget resets after every submit that does not end in 201.
+
+`POST /signup` sends `{ key, handle, email, password, turnstile_token }` as JSON with same-origin credentials. In
+development that POST is forwarded to AUTH_ORIGIN; GET /signup remains this page. A 201 response is `{ accountId }`
+and sets no session. The page then signs in with `POST /signin` and resumes with `signInTarget`. Passwords shorter
+than 8 or longer than 128 characters are refused before a request. 400
+`registration_denied` reports bad input or a refused token. 409 `handle_unavailable` is shown on the handle field.
+Any other 409, including an email already in use, shows the same generic message with links to sign in and recovery,
+and does not say whether the address exists. 429 includes a valid `Retry-After` duration. 503 and network failures
+ask the person to try again later.
 
 ## Consent
 
@@ -124,6 +140,7 @@ request, streams both bodies, and buffers nothing. Both costs are constant per r
 The sign-in page makes no server reads. A sign-in adds one browser `POST /signin` and one navigation on success.
 Recovery makes no kernel reads and adds one Auth request per submit.
 Auth pages make no kernel reads. Step-up is one `POST /signin` per submit.
+Sign-up makes no kernel reads. A successful submit is one browser `POST /signup` and one browser `POST /signin`.
 
 ## Visual check
 

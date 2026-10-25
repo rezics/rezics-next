@@ -58,7 +58,18 @@
   "auth_security_sign_in": "Iniciar sesión",
   "auth_security_sign_in_required": "Has cerrado sesión. Inicia sesión para gestionar la seguridad de tu cuenta.",
   "auth_security_unknown_device": "Dispositivo desconocido",
+  "auth_signup_conflict": "No pudimos crear esta cuenta. Inicia sesión o recupera el acceso.",
+  "auth_signup_denied": "Revisa el nombre de usuario, el correo, la contraseña y la verificación, y vuelve a intentarlo.",
+  "auth_signup_email": "Correo electrónico",
+  "auth_signup_handle": "Nombre de usuario",
+  "auth_signup_handle_unavailable": "Ese nombre de usuario está ocupado o reservado.",
   "auth_signup_heading": "Crear una cuenta",
+  "auth_signup_hide_password": "Ocultar contraseña",
+  "auth_signup_password": "Contraseña",
+  "auth_signup_password_invalid": "La contraseña debe tener entre 8 y 128 caracteres.",
+  "auth_signup_recovery": "Recuperar el acceso",
+  "auth_signup_show_password": "Mostrar contraseña",
+  "auth_signup_sign_in": "Iniciar sesión",
   "auth_step_up_explanation": "Tu sesión no es lo bastante reciente para esta solicitud, así que introduce tu correo electrónico y tu contraseña para continuar.",
   "auth_step_up_heading": "Verificar tu identidad"
 }

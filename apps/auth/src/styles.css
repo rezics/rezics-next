@@ -135,9 +135,37 @@ body {
 }
 
 .auth-login-alert:focus,
-.auth-login-links a:focus-visible {
+.auth-login-links a:focus-visible,
+.auth-signup-toggle:focus-visible,
+.auth-signup-links a:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 4px;
+}
+
+.auth-signup-toggle {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.875rem;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+}
+
+.auth-signup-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  margin-top: 0.75rem;
+}
+
+.auth-signup-links a {
+  color: var(--foreground);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
 }
 
 @media (min-width: 640px) {

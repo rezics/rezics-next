@@ -58,7 +58,18 @@
   "auth_security_sign_in": "Sign in",
   "auth_security_sign_in_required": "You are signed out. Sign in to manage your security settings.",
   "auth_security_unknown_device": "Unknown device",
+  "auth_signup_conflict": "We could not create this account. Sign in or recover access.",
+  "auth_signup_denied": "Check the handle, email, password and verification, then try again.",
+  "auth_signup_email": "Email",
+  "auth_signup_handle": "Handle",
+  "auth_signup_handle_unavailable": "That handle is taken or reserved.",
   "auth_signup_heading": "Create an account",
+  "auth_signup_hide_password": "Hide password",
+  "auth_signup_password": "Password",
+  "auth_signup_password_invalid": "Password must be between 8 and 128 characters.",
+  "auth_signup_recovery": "Recover access",
+  "auth_signup_show_password": "Show password",
+  "auth_signup_sign_in": "Sign in",
   "auth_step_up_explanation": "Your session is not recent enough for this request, so enter your email and password to continue.",
   "auth_step_up_heading": "Verify your identity"
 }

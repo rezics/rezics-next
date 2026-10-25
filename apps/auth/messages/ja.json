@@ -58,7 +58,18 @@
   "auth_security_sign_in": "ログイン",
   "auth_security_sign_in_required": "ログアウトしています。セキュリティ設定を管理するにはログインしてください。",
   "auth_security_unknown_device": "不明なデバイス",
+  "auth_signup_conflict": "このアカウントを作成できませんでした。ログインするか、アクセスを復旧してください。",
+  "auth_signup_denied": "ハンドル、メールアドレス、パスワード、確認を見直して、もう一度お試しください。",
+  "auth_signup_email": "メールアドレス",
+  "auth_signup_handle": "ハンドル",
+  "auth_signup_handle_unavailable": "このハンドルは使用中か、予約されています。",
   "auth_signup_heading": "アカウントを作成",
+  "auth_signup_hide_password": "パスワードを隠す",
+  "auth_signup_password": "パスワード",
+  "auth_signup_password_invalid": "パスワードは 8 文字以上 128 文字以下で入力してください。",
+  "auth_signup_recovery": "アクセスを復旧",
+  "auth_signup_show_password": "パスワードを表示",
+  "auth_signup_sign_in": "ログイン",
   "auth_step_up_explanation": "このリクエストにはより新しいセッションが必要なので、続けるにはメールアドレスとパスワードを入力してください。",
   "auth_step_up_heading": "本人確認"
 }

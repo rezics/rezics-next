@@ -9,6 +9,11 @@ export default {
       basePath: '/auth-assets',
       notFoundHandling: 'none',
     },
+    env: {
+      TURNSTILE_SITE_KEY: { type: 'text', value: process.env.TURNSTILE_SITE_KEY ?? '' },
+      // Development can point the widget at a local script. Production ignores this value.
+      TURNSTILE_SCRIPT_URL: { type: 'text', value: process.env.TURNSTILE_SCRIPT_URL ?? '' },
+    },
     triggers: [
       ...pageRoutes.map((path) => ({ type: 'fetch' as const, pattern: 'auth.rezics.com' + path })),
       { type: 'fetch' as const, pattern: 'auth.rezics.com/auth-assets/*' },
