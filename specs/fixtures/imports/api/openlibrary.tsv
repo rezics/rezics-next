@@ -1,0 +1,2 @@
+/type/work	/works/OL1W	1	2020-01-01T00:00:00.000000	{"type":{"key":"/type/work"},"key":"/works/OL1W","revision":1,"title":"A Catalogue Journey","last_modified":{"type":"/type/datetime","value":"2020-01-01T00:00:00.000000"}}
+/type/work	/works/OL2W	1	2020-01-02T00:00:00.000000	{"type":{"key":"/type/work"},"key":"/works/OL2W","revision":1,"title":"A Second Journey","last_modified":{"type":"/type/datetime","value":"2020-01-02T00:00:00.000000"}}
