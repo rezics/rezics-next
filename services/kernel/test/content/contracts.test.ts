@@ -19,7 +19,7 @@ import type {
   MediaStorage,
   MediaVariant,
 } from '../../src/content/media.ts';
-import type { ModerationDependencies, TakedownTarget } from '../../src/content/moderation.ts';
+import type { ModerationDependencies, ModerationValue, TakedownTarget } from '../../src/content/moderation.ts';
 import type {
   ReportDependencies,
   ReportInput,
@@ -110,6 +110,7 @@ type PublishedContentContracts = readonly [
   MediaStorage,
   MediaVariant,
   ModerationDependencies,
+  ModerationValue,
   TakedownTarget,
   ReportDependencies,
   ReportInput,

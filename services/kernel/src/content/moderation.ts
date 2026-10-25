@@ -15,7 +15,7 @@ export type EraseAuthorScopeInput = Readonly<{
   reason: string;
 }>;
 export type EraseStandaloneMediaInput = Readonly<{ mediaId: MediaId; reason: string }>;
-export type ModerationValue = Readonly<{ targetId: string; securityRevision: string }>;
+export type ModerationValue = Readonly<{ targetId: string }>;
 export function takedown(
   _dependencies: ModerationDependencies,
   _actor: Actor,
