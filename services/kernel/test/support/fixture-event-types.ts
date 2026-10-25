@@ -5,6 +5,13 @@ import { registerEventTypes } from '../../src/events/catalogue.ts';
 const object = Type.Object({}, { additionalProperties: true });
 
 registerEventTypes({
+  'capture.created': object,
+  'durable-test.created': object,
+  'durable-test.step': object,
+  'erasure-provenance-test.restored': object,
+  // grantCommand derives these names from the fixture command kind and emits its return value.
+  'com.rezics.admission-grant.v1': Type.String(),
+  'com.rezics.growth.admission.v1': Type.String(),
   'com.rezics.library.follow.changed.v1': object,
   'com.rezics.community.realm.banned.v1': object,
   'com.rezics.access.time-probe.v1': object,

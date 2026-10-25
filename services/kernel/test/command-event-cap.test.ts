@@ -110,7 +110,9 @@ test('New command stays within its bound as k grows', async () => {
     name: 'New command stays within its bound as k grows',
     scales: [1, 8, 64],
     repetitions: 1,
-    warmups: 0,
+    // Warm the SQL loader's first-use schema check and relation/index setup after
+    // the resets so every scale measures the same steady command operation.
+    warmups: 1,
     bounds: { rows: 'linear', blocks: 'linear', statements: 'constant' },
     grow: async () => {},
     operation: async (db, count) =>

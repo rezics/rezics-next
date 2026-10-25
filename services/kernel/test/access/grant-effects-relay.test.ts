@@ -240,7 +240,12 @@ test('native grant mutations and assignment creation conform to the registry and
   };
   const created = await assignments.create(context, input);
   expect(Value.Check(EVENT_TYPES['com.rezics.access.assignment.create.v1'], created.value)).toBe(true);
-  expect(Value.Check(EVENT_TYPES['com.rezics.access.assignment.revoke.v1'], created.value)).toBe(true);
+  const revoked = await assignments.revoke(context, {
+    principalId: input.principalId,
+    requestId: input.requestId,
+    key: key(),
+  });
+  expect(Value.Check(EVENT_TYPES['com.rezics.access.assignment.revoke.v1'], revoked.value)).toBe(true);
   for (const partition of [0, partitionOf(routeOf(f.actor)!)]) {
     const envelopes: Envelope[] = [];
     await readBatch(f.pool, {
@@ -257,9 +262,7 @@ test('native grant mutations and assignment creation conform to the registry and
     expect(await checkpoint(partition)).toBe(envelopes.at(-1)!.position);
     await finishEffects(grants);
   }
-  expect(new Set(recorded.map((event) => event.type))).toEqual(
-    new Set(eventTypes.filter((type) => type !== 'com.rezics.access.assignment.revoke.v1')),
-  );
+  expect(new Set(recorded.map((event) => event.type))).toEqual(new Set(eventTypes));
 }, 30_000);
 
 test('production validation still stops on extra data, credentials, wrong payloads and unknown types', async () => {
@@ -281,7 +284,39 @@ test('production validation still stops on extra data, credentials, wrong payloa
   ];
   for (const [index, event] of badEvents.entries()) {
     const partition = 4000 + index;
-    await runCommand(f.pool, { partition }, async () => ({ value: null, events: [event] }));
+    const snapshot = async () =>
+      (
+        await f.reader.query(
+          `SELECT position,
+            (SELECT count(*) FROM core.receipt WHERE partition_no=$1) AS receipts,
+            (SELECT count(*) FROM core.outbox WHERE partition_no=$1) AS events
+          FROM core.partition WHERE partition_no=$1`,
+          [partition],
+        )
+      ).rows;
+    const before = await snapshot();
+    await expect(
+      runCommand(
+        f.pool,
+        {
+          partition,
+          basis: { actorAccountId: f.actor, clientId: 'grant-relay', requestedBy: null },
+          receipt: { actorAccountId: f.actor, kind: 'fixture.grant-relay', key: key(), digest: new Uint8Array(32) },
+        },
+        async () => ({ value: null, events: [event] }),
+      ),
+    ).rejects.toBeInstanceOf(TypeError);
+    expect(await snapshot()).toEqual(before);
+    // Simulate a historic or defective writer so the reader's defence is still exercised.
+    await f.reader.query(
+      `WITH fence AS (
+        UPDATE core.partition SET position=position+1 WHERE partition_no=$1
+        RETURNING partition_no, position, epoch
+      )
+      INSERT INTO core.outbox (partition_no, position, event_seq, event_count, epoch, id, type, data)
+      SELECT partition_no, position, 0, 1, epoch, $2, $3, $4::jsonb FROM fence`,
+      [partition, Bun.randomUUIDv7(), event.type, JSON.stringify(event.data)],
+    );
     const count = recorded.length;
     for (let replay = 0; replay < 2; replay++) {
       expect(await relayEffects(f.pool, effects, partition)).toEqual({
