@@ -355,6 +355,13 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
   size of the page), each body capped at 2 MiB (ADR-0036)
 - **Growth check:** `tests/request-cost.test.ts`: `thread page stays within its bound as s grows`
 
+### Collection page
+
+- **Touches:** One session read and, started together, `GET /v1/collections/<id>?view=FULL` plus
+  `GET /v1/collections/<id>/members?view=FULL` for one members page. FULL embeds the curator and each member's subject.
+- **Bound:** 1 D, 2 K, 0 R and 0 A. The members read is one page of at most 100 entries. No per-member reads.
+- **Growth check:** `tests/library-collection-cost.test.ts`: `collection page stays within its bound as its member page grows`
+
 ### Start a thread
 
 - **Touches:** One `POST /v1/threads`/K after the session read; send the published thread draft and stable idempotency
