@@ -52,6 +52,7 @@ test('book work, edition and recipe are profiles of the catalogue', () => {
     iri: 'http://id.loc.gov/ontologies/bibframe/Instance',
     mappings: ['wd:Q3331189'],
     properties: [
+      'schema:author',
       'schema:datePublished',
       'schema:exampleOfWork',
       'schema:image',

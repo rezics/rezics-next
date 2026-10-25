@@ -26,6 +26,7 @@
         "wd:Q3331189"
       ],
       "properties": [
+        "schema:author",
         "schema:datePublished",
         "schema:exampleOfWork",
         "schema:image",

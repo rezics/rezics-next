@@ -151,8 +151,10 @@ facts, summary and cover have separate provenance and fence identities.
 
 `facts` contains ordinary statements. Treat a source title or name as a
 `schema:name` candidate; changing it does not change the labels set at subject
-creation. Retract the old candidate when the source record changes. Convert an
-ISBN-10 to ISBN-13 under ISO 2108 by prefixing `978` and recomputing the check
+creation. Retract the old candidate when the source record changes. For books,
+propose an edition's authors on the edition as the source states them, and keep the
+work's authors on the work; a converter never copies authors between them. Convert
+an ISBN-10 to ISBN-13 under ISO 2108 by prefixing `978` and recomputing the check
 digit, and propose only the ISBN-13 under `schema:isbn`. For a month-only date,
 use Wikibase time precision 10 with day `00`, cite the source record, and omit
 the raw date string. An unresolved relation uses `somevalue` when the target is
