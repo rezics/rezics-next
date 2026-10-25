@@ -2,7 +2,7 @@ import { checkBatchWrite, type BatchCommand, type BatchReference, type BatchStat
 import { ConversionError, type ConversionInput, type ConvertedRecord, type ConversionDiagnostic } from './index.ts';
 import { commandKey, safeSourceUrl, sourceDigest, sourceEnvelope, type ConversionContext } from './support.ts';
 
-export const converter_revision = 'vndb@2';
+export const converter_revision = 'vndb@3';
 export const vndbLimits = Object.freeze({
   maxTitles: 64,
   maxTitleCandidates: 64,

@@ -78,33 +78,11 @@ export function bindVndbDriver(): VndbDriver {
         });
       };
       if (actual.op === 'create') {
-        const statements = actual.subject.statements ?? {};
-        const first = Object.entries(statements).find(([, entries]) => entries.length)!;
-        const firstPath: Path = ['subject', 'statements', first[0], 0];
-        const urlIndex = first[1][0]!.references[0]!.parts.findIndex((part) => part.property.id === 'schema:url');
-        facts.push({
-          kind: 'type',
-          value: actual.subject.type === 'wd:Q689445' ? 'visual-novel' : actual.subject.type,
-          valuePath: ['subject', 'type'],
-          fieldGroupPath: ['source', 'field_group'],
-          reference: {
-            source: ['source', 'source'],
-            externalId: ['source', 'external_id'],
-            revision: ['source', 'record_revision'],
-            url: [...firstPath, 'references', 0, 'parts', urlIndex, 'value', 'content'],
-          },
-        });
-        for (const [property, entries] of Object.entries(statements))
-          entries.forEach((entry, i) => observeStatement(entry, ['subject', 'statements', property, i]));
-        for (const [language, value] of Object.entries(actual.subject.descriptions ?? {}))
-          facts.push({
-            ...facts[0]!,
-            kind: 'description',
-            language,
-            value,
-            valuePath: ['subject', 'descriptions', language],
-          });
-      } else if (actual.op === 'propose') observeStatement(actual.statement, ['statement']);
+        if (Object.prototype.hasOwnProperty.call(actual.subject, 'statements'))
+          throw new Error('VNDB bootstrap must not include statements');
+        return facts;
+      }
+      if (actual.op === 'propose') observeStatement(actual.statement, ['statement']);
       return facts;
     },
   };
