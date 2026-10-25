@@ -23,13 +23,7 @@ import {
   type Space,
   type SpaceDependencies,
 } from './space.ts';
-import {
-  createRealm,
-  RealmConflictError,
-  RealmInputError,
-  updateRealm,
-  type RealmDependencies,
-} from './realm.ts';
+import { createRealm, RealmConflictError, RealmInputError, updateRealm, type RealmDependencies } from './realm.ts';
 import { readRealm, setBoardScheme, type Realm } from './board-scheme.ts';
 import {
   listPublications,
