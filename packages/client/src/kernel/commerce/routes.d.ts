@@ -1416,6 +1416,45 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             200: {
                                 candidates: {
                                     id: string;
+                                    source: {
+                                        source: string;
+                                        external_id: string;
+                                        record_revision: string;
+                                        digest: string;
+                                        converter_revision: string;
+                                        field_group: "cover" | "facts" | "summary";
+                                    } | null;
+                                    retracted: number | null;
+                                    retraction: {
+                                        source: {
+                                            source: string;
+                                            external_id: string;
+                                            record_revision: string;
+                                            digest: string;
+                                            converter_revision: string;
+                                            field_group: "cover" | "facts" | "summary";
+                                        };
+                                        references: {
+                                            parts: ({
+                                                property: {
+                                                    id: string;
+                                                };
+                                                value: {
+                                                    type: "value";
+                                                    content: unknown;
+                                                };
+                                            } | {
+                                                property: {
+                                                    id: string;
+                                                };
+                                                value: {
+                                                    type: "somevalue";
+                                                } | {
+                                                    type: "novalue";
+                                                };
+                                            })[];
+                                        }[];
+                                    } | null;
                                     statement: {
                                         id: string;
                                         rank: "deprecated" | "normal" | "preferred";
@@ -1574,6 +1613,14 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                     revision: number;
                                     kind: string;
                                     release: string;
+                                    source: {
+                                        source: string;
+                                        external_id: string;
+                                        record_revision: string;
+                                        digest: string;
+                                        converter_revision: string;
+                                        field_group: "cover" | "facts" | "summary";
+                                    } | null;
                                 }[];
                                 next: string | null;
                             };

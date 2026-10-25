@@ -10,6 +10,7 @@ import type { ContentBoardDependencies } from '../content/boards.ts';
 import { mediaRoutes } from '../content/media-routes.ts';
 import { contentRoutes } from '../content/routes.ts';
 import type { ContentRuntime } from '../content/runtime.ts';
+import { personalLibraryRoutes } from '../library/personal-routes.ts';
 import { profileRoutes } from '../presentation/http/profiles.ts';
 import type { Access, AccessConfig } from '../request/access.ts';
 import { searchRoutes, type SearchService } from '../search/http/routes.ts';
@@ -104,8 +105,14 @@ export function createKernel(dependencies: KernelDependencies) {
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(community) }),
   });
-  declareKernelWriteRates(community);
-  for (const route of community.routes) {
+  const personal = personalLibraryRoutes(community as unknown as ReturnType<typeof definitionRoutes>, {
+    pool: dependencies.pool,
+    tokens,
+    clock,
+    access: () => resolveAccess({ actions: actionCatalogue(personal) }),
+  });
+  declareKernelWriteRates(personal);
+  for (const route of personal.routes) {
     if (route.hooks.detail?.hide === true) continue;
     try {
       parseExposure(route.hooks.detail);
@@ -113,7 +120,8 @@ export function createKernel(dependencies: KernelDependencies) {
       throw new Error(`${route.method.toUpperCase()} ${route.path}: invalid x-exposure declaration`, { cause });
     }
   }
-  return community as typeof community &
+  return personal as typeof personal &
+    typeof community &
     typeof batched &
     typeof presentation &
     typeof granted &

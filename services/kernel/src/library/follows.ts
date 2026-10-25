@@ -3,8 +3,9 @@ import { readAccount } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { authoritativeTimeValue, type CommandEvent, type CommandOutcome } from '../command/command.ts';
 import type { KernelClock } from '../clock.ts';
+import { readSpace, spaceReadEligibility } from '../community/space.ts';
 import { withConnection } from '../database/pool.ts';
-import type { Access, AccountActor, Actor } from '../request/access.ts';
+import { accessCheck, type Access, type AccountActor, type Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { readCollection } from './collection-store.ts';
 import { createLibraryCommandRunner, LibraryNotFoundError } from './command-support.ts';
@@ -84,28 +85,44 @@ export function createFollowCommands(config: FollowDeps) {
     return account;
   }
 
-  // One anchored read of the target, then the follower command upserts. A Space has no read here yet.
-  async function assertReadable(actor: AccountActor, target: FollowTarget): Promise<void> {
+  async function readable(actor: AccountActor, target: FollowTarget): Promise<boolean> {
+    const route = routeOf(target.targetId);
+    if (route === null) return false;
     if (target.targetType === 'space') {
-      // Explicit space follows wait until the community module provides a space read.
-      throw new LibraryNotFoundError();
+      const identity = { route, id: target.targetId };
+      const check = await accessCheck(
+        access,
+        actor,
+        'space:read',
+        {
+          ...identity,
+          eligibility: spaceReadEligibility(identity),
+        },
+        { pool, deadline: Date.now() + 5000 },
+      );
+      return withConnection(pool, async (client) => {
+        if (!(await check(client))) return false;
+        return (await readSpace(client, target.targetId, new Date().toISOString())) !== null;
+      });
     }
     if (target.targetType === 'subject') {
-      // Wall time bounds the access check. The command clock belongs to the follow row.
-      const resolved = await resolveSubject({ pool, access }, actor, target.targetId);
-      if (!resolved) throw new LibraryNotFoundError();
-      return;
+      return (await resolveSubject({ pool, access }, actor, target.targetId)) !== null;
     }
-    if (target.targetType === 'collection') {
-      const route = routeOf(target.targetId);
-      if (route === null) throw new LibraryNotFoundError();
-      const collection = await withConnection(pool, (client) => readCollection(client, route, target.targetId));
-      const active = collection?.state === 'active';
-      const visible = collection?.visibility === 'public' || collection?.visibility === 'unlisted';
-      const curator = collection?.curatorAccountId === actor.accountId;
-      if (!active || (!visible && !curator)) throw new LibraryNotFoundError();
-      return;
-    }
+    const collection = await withConnection(pool, (client) => readCollection(client, route, target.targetId));
+    return (
+      collection?.state === 'active' &&
+      (collection.visibility === 'public' ||
+        collection.visibility === 'unlisted' ||
+        collection.curatorAccountId === actor.accountId)
+    );
+  }
+
+  async function resolveTarget(actor: AccountActor, input: FollowTarget | string): Promise<FollowTarget> {
+    const candidates: FollowTarget[] =
+      typeof input === 'string'
+        ? (['collection', 'subject', 'space'] as const).map((targetType) => ({ targetId: input, targetType }))
+        : [asTarget(input)];
+    for (const target of candidates) if (await readable(actor, target)) return target;
     throw new LibraryNotFoundError();
   }
 
@@ -163,17 +180,24 @@ export function createFollowCommands(config: FollowDeps) {
     );
   }
 
-  async function follow(actor: Actor, input: FollowTarget, requestKey: string): Promise<FollowWrite> {
+  async function follow(actor: Actor, input: FollowTarget | string, requestKey: string): Promise<FollowWrite> {
     const account = await admit(actor, 'follow:create');
-    const target = asTarget(input);
-    await assertReadable(account, target);
+    const target = await resolveTarget(account, input);
     return write(account, target, requestKey, 'follow');
   }
 
-  async function unfollow(actor: Actor, input: FollowTarget, requestKey: string): Promise<FollowWrite> {
+  async function unfollow(actor: Actor, input: FollowTarget | string, requestKey: string): Promise<FollowWrite> {
     const account = await admit(actor, 'follow:delete');
-    const target = asTarget(input);
-    await assertReadable(account, target);
+    const existing = typeof input === 'string' ? await load(account.accountId, input) : null;
+    const target = await resolveTarget(
+      account,
+      existing
+        ? {
+            targetId: existing.targetId,
+            targetType: existing.targetType,
+          }
+        : input,
+    );
     return write(account, target, requestKey, 'unfollow');
   }
 

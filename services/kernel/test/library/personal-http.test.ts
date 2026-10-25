@@ -3,12 +3,13 @@ import { createHash, randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createAccess } from '../../src/access/index.ts';
+import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import * as collections from '../../src/library/collection-store.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import { bootstrapRelease } from '../../src/semantic/definitions.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
 import { measure, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 
@@ -34,6 +35,7 @@ const scopes = [
   'follow:list',
   'subject:read',
   'space:read',
+  'space:create',
 ];
 const owner: AccountActor = {
   kind: 'account',
@@ -44,7 +46,7 @@ const owner: AccountActor = {
   authnEpoch: 1,
 };
 let now = Date.now();
-const clock = () => new Date((now += 1000));
+const clock = () => new Date((now = Math.max(now + 1, Date.now())));
 function request(
   method: string,
   path: string,
@@ -74,7 +76,9 @@ async function problem(response: Response, status: number, code?: string) {
   const body = await json(response, status);
   expect(body).toMatchObject({ status, ...(code ? { code } : {}) });
   expect(body.type).toBe(`https://rezics.com/problems/${body.code}`);
-  return body;
+  const { request_id: requestId, ...stable } = body;
+  expect(requestId).toEqual(expect.any(String));
+  return stable;
 }
 async function subject() {
   const key = randomUUID();
@@ -111,6 +115,11 @@ beforeAll(async () => {
   const jwk = { ...(await exportJWK(signing.publicKey)), kid: 'personal', alg: 'ES256' };
   app = createKernel({
     pool: db.pool,
+    writeRate: createWriteRateLimiter({
+      secret: 'personal-http-write-rate-secret-32-bytes',
+      overrides: JSON.stringify({ 'new-account': { write: { maximum: 10000, seconds: 60 } } }),
+    }),
+    ratePeer: () => '127.0.0.1',
     routeKey,
     clock,
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(17)]]) },
@@ -145,7 +154,7 @@ beforeAll(async () => {
         .setAudience('https://api.rezics.test')
         .setSubject(id)
         .setIssuedAt()
-        .setExpirationTime('1h')
+        .setExpirationTime('5m')
         .sign(signing.privateKey),
     );
   }
@@ -383,3 +392,64 @@ test('HTTP entry puts and follows pages use equal statements at three scales', a
   expect(counts[1]).toEqual(counts[0]);
   expect(counts[2]).toEqual(counts[0]);
 }, 120_000);
+
+test('Space inference uses community reads and conceals a denied target like an unknown one', async () => {
+  await db.admin.query(
+    `INSERT INTO access.resource_grant(route, resource_id, subject_id, action, valid, transaction_id)
+    VALUES (0, $1, $2, 'space:create', '(,)', $3)`,
+    [GLOBAL_CONTEXT, accounts.owner, randomUUID()],
+  );
+  const space = (await json(await request('POST', '/v1/spaces', { title: 'Followable Space' }), 201)).space;
+  const followed = await json(await request('PUT', `/v1/follows/${space.spaceId}`));
+  expect(followed.follow).toMatchObject({ targetId: space.spaceId, targetType: 'space', state: 'following' });
+  await json(await request('DELETE', `/v1/follows/${space.spaceId}`));
+  await db.admin.query(
+    `INSERT INTO access.resource_denial(route, resource_id, subject_id, subject_role, action, reason, valid, transaction_id)
+    VALUES ($1, $2, $3, '', 'space:read', 'resource', '(,)', $4)`,
+    [routeOf(space.spaceId), space.spaceId, accounts.owner, randomUUID()],
+  );
+  const before = await snapshot();
+  for (const method of ['PUT', 'DELETE']) {
+    const denied = await problem(await request(method, `/v1/follows/${space.spaceId}`), 404, 'not_found');
+    expect(await problem(await request(method, `/v1/follows/${newId(0x2200)}`), 404, 'not_found')).toEqual(denied);
+  }
+  expect(await snapshot()).toEqual(before);
+});
+
+test('HTTP write receipts replay entries and copies and reject a reused key with changed input', async () => {
+  const id = await subject();
+  for (const [method, path, body, changed, status] of [
+    ['PUT', `/v1/libraryEntries/${id}`, { state: 'planned' }, { state: 'paused' }, 200],
+    ['POST', '/v1/copies', { subjectId: id, status: 'owned' }, { subjectId: id, status: 'lent' }, 201],
+  ] as const) {
+    const key = randomUUID();
+    const first = await json(await request(method, path, body, 'owner', key), status);
+    const before = await snapshot();
+    expect(await json(await request(method, path, body, 'owner', key), status)).toEqual(first);
+    await problem(await request(method, path, changed, 'owner', key), 422, 'idempotency_conflict');
+    expect(await snapshot()).toEqual(before);
+  }
+});
+
+test('following pages keep their order and bind cursors to the account', async () => {
+  const all = await json(await request('GET', '/v1/follows?limit=100'));
+  expect(all.next).toBeNull();
+  expect(all.follows.length).toBeGreaterThan(20);
+  expect((await json(await request('GET', '/v1/follows'))).follows).toEqual(all.follows.slice(0, 20));
+  const first = await json(await request('GET', '/v1/follows?limit=7'));
+  expect(first.next).toEqual(expect.any(String));
+  await problem(
+    await request('GET', `/v1/follows?cursor=${encodeURIComponent(first.next)}`, undefined, 'other'),
+    400,
+    'invalid_cursor',
+  );
+  const rows = [...first.follows];
+  let cursor = first.next;
+  while (cursor !== null) {
+    const page = await json(await request('GET', `/v1/follows?limit=7&cursor=${encodeURIComponent(cursor)}`));
+    rows.push(...page.follows);
+    cursor = page.next;
+  }
+  expect(rows).toEqual(all.follows);
+  expect(rows.every((row) => row.state === 'following')).toBe(true);
+});
