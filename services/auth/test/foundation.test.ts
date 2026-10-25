@@ -246,18 +246,20 @@ test('Better Auth revocation persists across service and database connection res
 });
 
 test('registered clients and explicit consent persist; token input cannot change session-bound client or scope', async () => {
-  await denied(await signin('person', { client_id: 'unknown' }));
-  await denied(await signin('person', { client_id: 'external' }));
-  const web = await login('person');
+  await provision('consent-person');
+  accounts.get('consent-person')!.state = 'active';
+  await denied(await signin('consent-person', { client_id: 'unknown' }));
+  await denied(await signin('consent-person', { client_id: 'external' }));
+  const web = await login('consent-person');
   expect(decodeJwt(await token(web)).scope).toBe('read');
   expect((await request('/consent', { client_id: 'external', scope: ['read'] }, web)).status).toBe(200);
   const reloaded = await createAuthService(options);
-  const external = await login('person', { client_id: 'external' }, reloaded);
+  const external = await login('consent-person', { client_id: 'external' }, reloaded);
   const proof = decodeJwt(await token(external, reloaded));
   expect(proof.client_id).toBe('external');
   expect(proof.scope).toBe('read');
-  await denied(await signin('person', { client_id: 'external', scope: ['read', 'write'] }));
-  await denied(await signin('person', { scope: ['unregistered'] }));
+  await denied(await signin('consent-person', { client_id: 'external', scope: ['read', 'write'] }));
+  await denied(await signin('consent-person', { scope: ['unregistered'] }));
   for (const injection of [
     { scope: ['write'] },
     { client_id: 'web' },
