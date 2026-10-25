@@ -1,12 +1,16 @@
 import type { Pool } from 'pg';
+import { discardConnection } from '../database/pool.ts';
 import { createSubjectIndex, subjectAlias, subjectGenerations, subjectIndexName } from './indices.ts';
 import type { OpenSearch } from './opensearch.ts';
 import { readFreshness } from './freshness.ts';
 import reconcile from './reconcile.sql';
+import lockRebuild from './rebuild-lock.sql';
+import unlockRebuild from './rebuild-unlock.sql';
 import type { SubjectSource } from './source.ts';
 import { subjectConsumer } from './runner.ts';
 
-export type RebuildReason = 'timeout' | 'mismatch' | 'busy';
+export const MAX_SUBJECT_GENERATIONS = 3;
+export type RebuildReason = 'timeout' | 'mismatch' | 'busy' | 'running' | 'limit';
 export type PartitionCount = { partition: number; indexed: number; source: number };
 
 export class RebuildError extends Error {
@@ -28,7 +32,6 @@ type AggregationResponse = {
   aggregations?: { partitions?: { buckets?: { key: number; doc_count: number }[] } };
 };
 
-const activeRebuilds = new Set<string>();
 const sleep = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 const numeric = (value: string | bigint): bigint => BigInt(value);
 
@@ -81,16 +84,30 @@ export async function rebuildSubjects(options: {
     throw new RangeError('timeoutMs must be a non-negative finite number');
 
   const lock = subjectAlias(options.prefix);
-  if (activeRebuilds.has(lock)) {
-    const state = await subjectGenerations(options.search, options.prefix);
-    throw new RebuildError('busy', state.generations.at(-1) ?? 1);
+  const client = await options.pool.connect();
+  let locked = false;
+  let discard: Error | undefined;
+  try {
+    const row = (await lockRebuild.run(client, { alias: lock })) as { locked: boolean | null };
+    locked = row.locked === true;
+  } catch (error) {
+    discard = error instanceof Error ? error : new Error(String(error));
+    discardConnection(client, discard);
+    client.release(discard);
+    throw error;
   }
-  activeRebuilds.add(lock);
+  if (!locked) {
+    client.release();
+    const state = await subjectGenerations(options.search, options.prefix);
+    throw new RebuildError('running', state.generations.at(-1) ?? 1);
+  }
   try {
     const state = await subjectGenerations(options.search, options.prefix);
     const previous = state.active;
     const highest = state.generations.at(-1) ?? 0;
     const generation = highest > (previous ?? 0) ? highest : highest + 1;
+    if (generation > highest && state.generations.length >= MAX_SUBJECT_GENERATIONS)
+      throw new RebuildError('limit', generation);
     await createSubjectIndex(options.search, options.prefix, generation);
     await options.runner.refresh();
 
@@ -177,6 +194,14 @@ export async function rebuildSubjects(options: {
     await options.search.request('POST', '/_aliases', { actions });
     return { generation, previous };
   } finally {
-    activeRebuilds.delete(lock);
+    try {
+      const row = (await unlockRebuild.run(client, { alias: lock })) as { unlocked: boolean | null };
+      if (row.unlocked !== true) throw new Error('Search rebuild advisory lock was not held');
+    } catch (error) {
+      discard = error instanceof Error ? error : new Error(String(error));
+    } finally {
+      if (discard) discardConnection(client, discard);
+      client.release(discard);
+    }
   }
 }
