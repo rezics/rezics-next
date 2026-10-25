@@ -545,7 +545,6 @@ test.serial(
       scales: [256, 2048, 16384],
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       repetitions: 1,
-      warmups: 0,
       async grow(database, scale, previous) {
         await seed(database, population, { from: previous, to: scale });
       },

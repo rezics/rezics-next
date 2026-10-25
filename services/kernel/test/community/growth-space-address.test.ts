@@ -345,12 +345,19 @@ afterAll(async () => {
 });
 
 test('address claim, change and resolve stay bounded as addresses, Spaces and handles grow', async () => {
-  const probes = new Map<number, { claim: ProbeSpace; change: ProbeSpace; resolve: ProbeSpace }>();
+  type AddressProbes = { claim: ProbeSpace; change: ProbeSpace; resolve: ProbeSpace };
+  const probes = new Map<number, AddressProbes>();
+  const warmupProbes = new Map<number, AddressProbes>();
   for (const scale of scales) {
     probes.set(scale, {
       claim: await createProbe(),
       change: await createProbe(addressInHotPartition(`change-start-${scale}`)),
       resolve: await createProbe(addressInHotPartition(`resolve-start-${scale}`)),
+    });
+    warmupProbes.set(scale, {
+      claim: await createProbe(),
+      change: await createProbe(addressInHotPartition(`warmup-change-start-${scale}`)),
+      resolve: await createProbe(addressInHotPartition(`warmup-resolve-start-${scale}`)),
     });
   }
   const warmProbe = probes.get(scales[0])!.change;
@@ -374,38 +381,42 @@ test('address claim, change and resolve stay bounded as addresses, Spaces and ha
       .position,
   );
   const data = population(`space-address-growth-${randomUUID()}`, positionBase);
+  async function exercise(probe: AddressProbes, scale: number) {
+    const claimAddress = addressInHotPartition(`claim-${scale}-${randomUUID().replaceAll('-', '').slice(0, 12)}`);
+    const claimed = await call('PUT', `/v1/spaces/${probe.claim.spaceId}/address`, {
+      bearer: actor.bearer,
+      key: randomUUID(),
+      etag: probe.claim.etag,
+      body: { address: claimAddress },
+    });
+    expect(claimed.response.status).toBe(200);
+
+    const changedAddress = addressInHotPartition(`change-${scale}-${randomUUID().replaceAll('-', '').slice(0, 12)}`);
+    const changed = await call('PUT', `/v1/spaces/${probe.change.spaceId}/address`, {
+      bearer: actor.bearer,
+      key: randomUUID(),
+      etag: probe.change.etag,
+      body: { address: changedAddress },
+    });
+    expect(changed.response.status).toBe(200);
+
+    const resolved = await call('GET', `/v1/spaceAddresses/${probe.resolve.address}`);
+    expect(resolved.response.status).toBe(200);
+    expect(resolved.value).toEqual({ spaceId: probe.resolve.spaceId });
+  }
   const report = await checkGrowth(db, {
     name: 'community space address claim change resolve',
     scales,
     repetitions: 1,
-    warmups: 0,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     async grow(database, scale, previous) {
       await seed({ pool: database.pool, admin: database.admin }, data, { from: previous, to: scale });
     },
+    async warmup(_database, scale) {
+      await exercise(warmupProbes.get(scale)!, scale);
+    },
     async operation(_database, scale) {
-      const probe = probes.get(scale)!;
-      const claimAddress = addressInHotPartition(`claim-${scale}-${randomUUID().replaceAll('-', '').slice(0, 12)}`);
-      const claimed = await call('PUT', `/v1/spaces/${probe.claim.spaceId}/address`, {
-        bearer: actor.bearer,
-        key: randomUUID(),
-        etag: probe.claim.etag,
-        body: { address: claimAddress },
-      });
-      expect(claimed.response.status).toBe(200);
-
-      const changedAddress = addressInHotPartition(`change-${scale}-${randomUUID().replaceAll('-', '').slice(0, 12)}`);
-      const changed = await call('PUT', `/v1/spaces/${probe.change.spaceId}/address`, {
-        bearer: actor.bearer,
-        key: randomUUID(),
-        etag: probe.change.etag,
-        body: { address: changedAddress },
-      });
-      expect(changed.response.status).toBe(200);
-
-      const resolved = await call('GET', `/v1/spaceAddresses/${probe.resolve.address}`);
-      expect(resolved.response.status).toBe(200);
-      expect(resolved.value).toEqual({ spaceId: probe.resolve.spaceId });
+      await exercise(probes.get(scale)!, scale);
     },
   });
   expect(report.samples.map((sample) => sample.scale)).toEqual(scales);

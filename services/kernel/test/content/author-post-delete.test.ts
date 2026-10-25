@@ -474,6 +474,7 @@ test('delete is one bounded tombstone and cleanup runs in bounded pages as posts
     },
   };
   let probe: Awaited<ReturnType<typeof fixture>>;
+  let warmupProbe: Awaited<ReturnType<typeof fixture>>;
   const pages: GrowthSample[] = [];
   const bounds = { rows: 'constant', statements: 'constant', blocks: 'logarithmic' } as const;
   const report = await checkGrowth(db, {
@@ -481,16 +482,19 @@ test('delete is one bounded tombstone and cleanup runs in bounded pages as posts
     scales: [2048, 8192, 32768],
     bounds,
     repetitions: 1,
-    warmups: 0,
     async grow(_database, scale, previous) {
       await seed(db, population, { from: previous, to: scale });
       probe = await fixture(author, 205);
+      warmupProbe = await fixture(author, 205);
       const erased = await fixture(author, 205);
       expect((await request(`/posts/${erased.post}`, 'DELETE', author)).status).toBe(204);
       await db.admin.query('VACUUM (ANALYZE) content.post, content.revision');
       const page = await capture(db, () => cleanup(erased.post));
       expect(page.value).toHaveLength(100);
       pages.push({ scale, cost: costOf(page.capture) });
+    },
+    async warmup() {
+      expect((await request(`/posts/${warmupProbe.post}`, 'DELETE', author)).status).toBe(204);
     },
     async operation() {
       const start = observer.records.length;

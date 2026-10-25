@@ -332,7 +332,6 @@ test('intentional changed-document and input-byte growth is linear', async () =>
       name: 'imported changed documents',
       scales: [1, 8, 64],
       repetitions: 1,
-      warmups: 0,
       bounds: { rows: 'linear', statements: 'linear', blocks: 'linear' },
       async grow() {},
       async operation(_target, scale) {

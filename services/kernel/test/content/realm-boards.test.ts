@@ -490,7 +490,6 @@ test.serial(
       name: 'Realm board listing',
       scales: [2048, 8192, 32768],
       repetitions: 3,
-      warmups: 0,
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
       async grow(database, scale, previous) {
         await seed({ pool: database.pool, admin: database.admin }, population, { from: previous, to: scale });

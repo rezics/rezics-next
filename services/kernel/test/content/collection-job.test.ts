@@ -539,7 +539,8 @@ test('checkGrowth measures three scales of unrelated and same-partition rows thr
       },
       { from: previous, to: scale },
     );
-    // Two measured runs consume one fresh object each; new IDs give new command receipts.
+    // One warm-up and two measured runs consume one fresh object each; new IDs give new command receipts.
+    await media('reserved');
     await media('reserved');
     await media('reserved');
     await db.admin.query('VACUUM (ANALYZE) content.media');
@@ -561,9 +562,11 @@ test('checkGrowth measures three scales of unrelated and same-partition rows thr
       name: 'partition media collection',
       scales: [256, 2048, 16384],
       repetitions: 2,
-      warmups: 0,
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       grow,
+      async warmup(database) {
+        expect(await job(database.pool).collectPartition(partition, 1)).toMatchObject({ collected: 1 });
+      },
       operation: async (db) => {
         expect(await job(db.pool).collectPartition(partition, 1)).toMatchObject({ collected: 1 });
       },
