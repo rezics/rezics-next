@@ -151,16 +151,21 @@ export interface ContentDisclosureDriver {
   /**
    * Use actual kernel HTTP/Auth/Access/shared receipts and trusted verification.
    * Receipt identity includes principal_kind (account | anonymous) and
-   * principal_id; anonymous uses nil UUID as a kind marker, never an account.
+   * principal_id; anonymous uses 00000000-0000-0000-0000-000000000000 as a kind
+   * marker, never an account.
    * Do not provision a dummy account or an alternate content receipt engine.
    * Anonymous keys are client-generated UUIDv4 (122-bit possession proof).
+   * Missing, malformed or non-v4 keys return invalid_request (400), with no
+   * anchored report or effect, even when trusted bot verification succeeds.
    * Turnstile and rate limits stay in front; the anonymous floor must authorize
    * at authoritative T before receipt lookup or stored response disclosure.
    * Missing trusted public eligibility never falls back to a catalogue flag.
    * Replay requires the same semantic digest of target/revision/evidence;
    * changed payload returns idempotency_conflict (422), without stored response.
    * Ephemeral Turnstile proof, like bearer proof, is authentication evidence and
-   * excluded from that digest. Each attempt needs a fresh valid bot proof.
+   * excluded from that digest. Successful submissions, replays and digest
+   * conflicts each require a fresh valid bot proof; invalid-proof tests must
+   * still traverse and fail the real verification boundary.
    */
   report(
     persona: Persona,
