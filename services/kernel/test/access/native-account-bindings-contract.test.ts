@@ -1,12 +1,14 @@
 import { expect, expectTypeOf, test } from 'bun:test';
+import type { AccountWorkflowOptions } from '@rezics/auth';
 import type {
-  AccountWorkflowOptions,
   AccountWorkflowPorts,
-  AuthService,
+  AuthSessionPort,
+  AuthCredentialPort,
+  AuthRecoveryPort,
+  BarrierProofPort,
+  ProvisioningEvidencePort,
   TrustedAccessPorts,
-  createBarrierProofVerifier,
-  createProvisioningEvidenceVerifier,
-} from '@rezics/auth';
+} from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 import {
   createNativeAccountBindings,
@@ -35,8 +37,8 @@ test('ordinary durable composition requires actual native factories and Auth-hos
     provisioningEvidence(input: { accountId: string; reservationId: string }): Promise<unknown>;
   }>();
   expectTypeOf<NativeAccountBindingProofs>().toEqualTypeOf<{
-    provisioning: ReturnType<typeof createProvisioningEvidenceVerifier>;
-    barriers: ReturnType<typeof createBarrierProofVerifier>;
+    provisioning: ProvisioningEvidencePort;
+    barriers: BarrierProofPort;
     workflow: NativeWorkflowProofPorts;
     recoveryEvidence?: (reference: unknown) => Promise<RecoveryEvidence | null>;
   }>();
@@ -47,7 +49,7 @@ test('ordinary durable composition requires actual native factories and Auth-hos
     routeKey: Uint8Array;
     clock?: () => Date;
     referenceKeys: KeyRing;
-    auth: () => AuthService;
+    auth: () => AuthSessionPort & AuthCredentialPort & AuthRecoveryPort;
     proofs: NativeAccountBindingProofs;
   }>();
   expectTypeOf<NativeAccountBindings>().toEqualTypeOf<{
