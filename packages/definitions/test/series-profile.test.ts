@@ -58,9 +58,7 @@ test('series are catalogue profiles that members join by an ordered statement', 
     mappings: ['wd:Q277759'],
     bases: ['schema:CreativeWorkSeries', 'schema:CreativeWork', 'schema:Thing'],
   });
-  expect(bookSeries!.facets).toEqual(
-    expect.arrayContaining(['schema:genre', 'schema:keywords', 'schema:startDate']),
-  );
+  expect(bookSeries!.facets).toEqual(expect.arrayContaining(['schema:genre', 'schema:keywords', 'schema:startDate']));
   expect(bookSeries!.facets.length).toBeLessThanOrEqual(16);
   expect(bookSeries!.bases).not.toContain('wd:Q7725310');
   expect(types['wd:Q196600']).toBeUndefined();

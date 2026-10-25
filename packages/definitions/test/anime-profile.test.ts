@@ -55,28 +55,29 @@ test('an anime work, its seasons, episodes and releases are catalogue profiles',
     expect(types[type]!.properties).toContain('wdt:P5732');
     expect(types[type]!.properties).toEqual(expect.arrayContaining(['schema:genre', 'schema:keywords', 'wdt:P179']));
   }
-  expect(types['schema:TVSeries']!.facets).toEqual(expect.arrayContaining([
-    'wdt:P7937',
-    'schema:genre',
-    'schema:keywords',
-    'schema:datePublished',
-    'schema:numberOfEpisodes',
-  ]));
+  expect(types['schema:TVSeries']!.facets).toEqual(
+    expect.arrayContaining([
+      'wdt:P7937',
+      'schema:genre',
+      'schema:keywords',
+      'schema:datePublished',
+      'schema:numberOfEpisodes',
+    ]),
+  );
   expect(types['schema:TVSeries']!.facets.length).toBeLessThanOrEqual(16);
-  expect(types['schema:Movie']!.facets).toEqual(expect.arrayContaining([
-    'wdt:P7937',
-    'schema:genre',
-    'schema:keywords',
-    'schema:datePublished',
-  ]));
+  expect(types['schema:Movie']!.facets).toEqual(
+    expect.arrayContaining(['wdt:P7937', 'schema:genre', 'schema:keywords', 'schema:datePublished']),
+  );
   expect(types['schema:Movie']!.facets.length).toBeLessThanOrEqual(16);
-  expect(types['schema:TVSeason']!.facets).toEqual(expect.arrayContaining([
-    'wdt:P7937',
-    'schema:genre',
-    'schema:keywords',
-    'schema:datePublished',
-    'schema:numberOfEpisodes',
-  ]));
+  expect(types['schema:TVSeason']!.facets).toEqual(
+    expect.arrayContaining([
+      'wdt:P7937',
+      'schema:genre',
+      'schema:keywords',
+      'schema:datePublished',
+      'schema:numberOfEpisodes',
+    ]),
+  );
   expect(types['schema:TVSeason']!.facets.length).toBeLessThanOrEqual(16);
   expect(types['schema:Episode']!.properties).toEqual(
     expect.arrayContaining(['schema:url', 'schema:name', 'schema:datePublished', 'schema:episodeNumber']),
