@@ -151,7 +151,7 @@ test('GET and HEAD still render page paths without reaching Auth', async () => {
       expect(response.headers.get('x-frame-options')).toBe('DENY');
       const body = await response.text();
       if (method === 'HEAD') expect(body).toBe('');
-      else expect(body).toContain(path === '/consent' ? 'Review permissions' : 'Create account');
+      else expect(body).toContain(path === '/consent' ? 'Review permissions' : 'Create an account');
       expect(forwarded).toHaveLength(before);
     }
   }
