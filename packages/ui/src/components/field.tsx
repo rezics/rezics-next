@@ -2,6 +2,7 @@
 import { ark } from '@ark-ui/react/factory';
 import { Field as ArkField, useFieldContext as useArkFieldContext } from '@ark-ui/react/field';
 import { Fieldset as ArkFieldset } from '@ark-ui/react/fieldset';
+import { cloneElement } from 'react';
 import type React from 'react';
 import { tv, type VariantProps } from 'tailwind-variants';
 import { cn } from '../utils.ts';
@@ -63,6 +64,18 @@ export const Field = (props: FieldProps) => {
       {...rest}
     />
   );
+};
+
+interface FieldControlProps {
+  children: React.ReactElement<{ 'aria-errormessage'?: string }>;
+}
+
+export const FieldControl = ({ children }: FieldControlProps) => {
+  const field = useArkFieldContext();
+
+  return cloneElement(children, {
+    'aria-errormessage': field?.invalid ? field.ids.errorText : undefined,
+  });
 };
 
 export const FieldSet = (props: React.ComponentProps<typeof ArkFieldset.Root>) => {
