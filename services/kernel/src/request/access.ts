@@ -32,8 +32,20 @@ export type Resource = {
 
 export type ActionCatalogue = ReadonlyMap<string, { anonymous: boolean; replay?: 'self-account-read' }>;
 
+/** Server-owned Realm membership proofs. The permission formula calls this on the
+ * released Realm anchor; a missing reader denies Realm group matches.
+ */
+export type AccessRealmRoleReader = (
+  client: AccessClient,
+  input: { realmId: string; accountId: string; at: string },
+) => Promise<readonly { role: 'owner' | 'member'; member: boolean; valid: string }[] | null>;
+
 /** Actions available to an access implementation for one application. */
-export type AccessConfig = { actions: ActionCatalogue; resourceRoles?: ResourceRoleCatalogue };
+export type AccessConfig = {
+  actions: ActionCatalogue;
+  resourceRoles?: ResourceRoleCatalogue;
+  realmRoleReader?: AccessRealmRoleReader;
+};
 
 /** Builds an access implementation from an application's configuration. */
 export type AccessFactory = (config: AccessConfig) => Access;

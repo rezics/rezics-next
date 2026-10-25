@@ -53,6 +53,8 @@ export type MembershipAuthorization = (reference: string, input: MembershipWorkI
 /** Installed by the owning Realm module. Following a Realm has no operation here. */
 export type RealmMembershipCommands = {
   authority: RealmMembershipAuthority;
+  /** Enqueue check and later step resolution for a Realm principal. */
+  authorize(reference: string, input: MembershipWorkInput): Promise<LifecycleRequest>;
   publish(
     context: LifecycleRequest,
     input: Extract<MembershipWorkInput, { kind: 'membership' }>,
@@ -121,24 +123,26 @@ function membershipWorkPorts(
     return options.realm;
   }
   return {
-    authorize:
-      options.authorize ??
-      (async (reference, input) => {
-        if (input.kind !== 'membership' || input.principal.kind !== 'organization')
-          throw new MembershipAuthorizationUnavailableError();
-        return native().approvals.resolve(
-          reference,
-          {
-            kind: 'membership',
-            organizationId: input.principal.id,
-            memberAccountId: input.memberAccountId,
-            role: input.role,
-            ...(input.reservationId === undefined ? {} : { reservationId: input.reservationId }),
-            authorization: reference,
-          },
-          { pool: context.pool, deadline: Date.now() + 30_000 },
-        );
-      }),
+    async authorize(reference, input) {
+      // Realm enqueue and publication both resolve through the installed port.
+      // Organization creation and membership keep their existing resolver.
+      if (input.kind === 'membership' && input.principal.kind === 'realm') return realm().authorize(reference, input);
+      if (options.authorize) return options.authorize(reference, input);
+      if (input.kind !== 'membership' || input.principal.kind !== 'organization')
+        throw new MembershipAuthorizationUnavailableError();
+      return native().approvals.resolve(
+        reference,
+        {
+          kind: 'membership',
+          organizationId: input.principal.id,
+          memberAccountId: input.memberAccountId,
+          role: input.role,
+          ...(input.reservationId === undefined ? {} : { reservationId: input.reservationId }),
+          authorization: reference,
+        },
+        { pool: context.pool, deadline: Date.now() + 30_000 },
+      );
+    },
     actorAccountId: (request) => request.actor.accountId,
     reserve(input) {
       if (input.principal.kind === 'realm') realm();

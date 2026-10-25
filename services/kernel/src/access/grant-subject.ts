@@ -5,7 +5,8 @@ export const ACTIVE_ACCOUNTS = Object.freeze({ kind: 'active_accounts' } as cons
 export type GrantSubject =
   | typeof ACTIVE_ACCOUNTS
   | Readonly<{ kind: 'account'; id: string }>
-  | Readonly<{ kind: 'organization'; id: string; role: 'owner' | 'member' }>;
+  | Readonly<{ kind: 'organization'; id: string; role: 'owner' | 'member' }>
+  | Readonly<{ kind: 'realm'; id: string; role: 'owner' | 'member' }>;
 
 // Native temporal primary keys require non-null components. This sentinel has
 // meaning only with the explicit builtin discriminant; it is never an identity
@@ -19,7 +20,7 @@ export function grantSubject(subject: GrantSubject): StoredGrantSubject | null {
   if (subject.kind === 'account' && routeOf(subject.id) !== null && Object.keys(subject).length === 2)
     return { kind: 'identity', id: subject.id, role: '' };
   if (
-    subject.kind === 'organization' &&
+    (subject.kind === 'organization' || subject.kind === 'realm') &&
     routeOf(subject.id) !== null &&
     ['owner', 'member'].includes(subject.role) &&
     Object.keys(subject).length === 3

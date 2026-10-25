@@ -1,16 +1,22 @@
 import { afterAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { DBOS } from '@dbos-inc/dbos-sdk';
-import { createPool } from '../../src/database/pool.ts';
-import { createLifecycleInternals } from '../../src/access/lifecycle.ts';
-import { createWorkClient } from '../../src/work/client.ts';
-import { authenticated } from './membership-work-fixture.ts';
-import { createMembershipInverseCommands } from '../../src/access/membership-inverse.ts';
-import { WORK_QUEUES } from '../../src/work/queues.ts';
-import { createMembershipWorkPorts, enqueueMembership } from '../../src/access/membership-work.ts';
+import type { LifecycleRequest } from '../../src/access/lifecycle.ts';
+import type { RealmMembershipCommands } from '../../src/access/membership-work.ts';
 import type { MembershipWorkInput } from '@rezics/auth/membership-workflows';
-import { newId, routeOf } from '../../src/route/route.ts';
-import { KERNEL_WORK_MODULES } from '../../src/work/modules.ts';
+
+// Root bun test does not load services/kernel/bunfig.toml. Register Reylo before
+// any SQL-bearing module; a static import would link before the plugin runs.
+await import('reylo/register');
+const { createPool } = await import('../../src/database/pool.ts');
+const { createLifecycleInternals } = await import('../../src/access/lifecycle.ts');
+const { createWorkClient } = await import('../../src/work/client.ts');
+const { authenticated } = await import('./membership-work-fixture.ts');
+const { createMembershipInverseCommands } = await import('../../src/access/membership-inverse.ts');
+const { WORK_QUEUES } = await import('../../src/work/queues.ts');
+const { createMembershipWorkPorts, enqueueMembership } = await import('../../src/access/membership-work.ts');
+const { newId, routeOf } = await import('../../src/route/route.ts');
+const { KERNEL_WORK_MODULES } = await import('../../src/work/modules.ts');
 
 const pool = createPool(process.env.DATABASE_URL!);
 const client = await createWorkClient(process.env.DATABASE_URL!);
@@ -42,6 +48,8 @@ async function person() {
 }
 function worker(actor: string, stop = '', fail = false, registry = false) {
   const child = Bun.spawn([process.execPath, `${import.meta.dir}/membership-work-fixture.ts`], {
+    // The fixture's static SQL imports need the kernel Bun preload.
+    cwd: `${import.meta.dir}/../..`,
     env: {
       ...process.env,
       MEMBERSHIP_ACTOR: actor,
@@ -325,7 +333,7 @@ test('missing authorization and Realm capabilities fail closed, and secret or fo
     authorization: 'unresolved-reference',
   };
   await expect(ports.authorize(input.authorization, input)).rejects.toMatchObject({
-    code: 'membership_authorization_unavailable',
+    code: 'realm_membership_unavailable',
   });
   expect(() => ports.reserve({ accountId: actor, principal: input.principal, key: key() })).toThrow(
     'Realm membership command adapter is unavailable',
@@ -404,3 +412,120 @@ test('concurrent joins, role changes and leave retain the superset and last-owne
     await runtime.stop();
   }
 }, 60000);
+
+test('realm membership work authorizes through the installed realm authorize port and organizations are unchanged', async () => {
+  const actor = await person();
+  const realmId = newId(0x3790);
+  const organizationId = newId(0x3791);
+  const request = await authenticated(pool, actor);
+  const calls: string[] = [];
+  const realm: RealmMembershipCommands = {
+    authority: {
+      async readTerminal() {
+        calls.push('terminal-read');
+        return null;
+      },
+      async readChange() {
+        calls.push('change-read');
+        return null;
+      },
+    },
+    async authorize(reference, input) {
+      calls.push(`authorize:${reference}`);
+      if (input.kind !== 'membership' || input.principal.kind !== 'realm' || input.principal.id !== realmId)
+        throw new Error('unexpected realm authorization');
+      return request;
+    },
+    async publish(context, input) {
+      calls.push(context === request ? 'publish:request' : 'publish:other');
+      if (input.kind !== 'membership' || input.principal.id !== realmId)
+        throw new Error('unexpected realm publication');
+      return { published: true };
+    },
+    async terminalize() {
+      calls.push('terminalize');
+      return { terminal: true };
+    },
+  };
+  let organizations = 0;
+  const ports = createMembershipWorkPorts(workContext, {
+    realm,
+    async authorize(_reference, input) {
+      organizations += 1;
+      if (input.kind === 'membership' && input.principal.kind === 'realm')
+        throw new Error('organization authorizer received a realm');
+      return request;
+    },
+  });
+  const organization: MembershipWorkInput = {
+    kind: 'membership',
+    principal: { kind: 'organization', id: organizationId },
+    memberAccountId: actor,
+    role: 'member',
+    authorization: 'authenticated-fixture',
+  };
+  const realmInput: MembershipWorkInput = {
+    kind: 'membership',
+    principal: { kind: 'realm', id: realmId },
+    memberAccountId: actor,
+    role: 'member',
+    authorization: 'realm-approval',
+  };
+  expect(await ports.authorize(organization.authorization, organization)).toBe(request);
+  const organizationHeld = (await ports.reserve({ accountId: actor, principal: organization.principal, key: key() }))
+    .value;
+  expect(organizationHeld.principal).toEqual({ kind: 'organization', id: organizationId });
+  expect(calls).toEqual([]);
+  expect(organizations).toBe(1);
+  expect((await inverseRows(actor)).some((row) => row.group_id === organizationId)).toBe(true);
+  expect(await authority(organizationId, actor)).toEqual([]);
+
+  // Enqueue check, then the same port again when the publication step resolves.
+  expect(await ports.authorize(realmInput.authorization, realmInput)).toBe(request);
+  const held = (await ports.reserve({ accountId: actor, principal: realmInput.principal, key: key() })).value;
+  const resolved: LifecycleRequest = await ports.authorize(realmInput.authorization, realmInput);
+  expect(await ports.publish(resolved, realmInput, held, key())).toEqual({ published: true });
+  expect(calls).toEqual(['authorize:realm-approval', 'authorize:realm-approval', 'publish:request']);
+  expect(organizations).toBe(1);
+  expect((await inverseRows(actor)).some((row) => row.group_id === realmId)).toBe(true);
+});
+
+test('a missing realm port denies realm membership work and changes nothing', async () => {
+  const actor = await person();
+  const realmId = newId(0x3792);
+  const ports = createMembershipWorkPorts(workContext);
+  const input: MembershipWorkInput = {
+    kind: 'membership',
+    principal: { kind: 'realm', id: realmId },
+    memberAccountId: actor,
+    role: 'member',
+    authorization: 'realm-approval',
+  };
+  const held = { accountId: actor, principal: input.principal, reservationId: newId(routeOf(actor)!) };
+  async function realmRows() {
+    const inverse = await pool.query(
+      `SELECT group_id::text FROM access.membership_inverse
+       WHERE route=$1 AND account_id=$2 AND kind='realm' AND group_id=$3`,
+      [routeOf(actor), actor, realmId],
+    );
+    const coordination = await pool.query(
+      `SELECT reservation_id::text FROM access.lifecycle_coordination
+       WHERE route=$1 AND account_id=$2 AND related_account_id=$3`,
+      [routeOf(actor), actor, realmId],
+    );
+    return { inverse: inverse.rows, coordination: coordination.rows };
+  }
+  const before = await realmRows();
+  await expect(ports.authorize(input.authorization, input)).rejects.toMatchObject({
+    code: 'realm_membership_unavailable',
+  });
+  expect(() => ports.reserve({ accountId: actor, principal: input.principal, key: key() })).toThrow(
+    'Realm membership command adapter is unavailable',
+  );
+  await expect(ports.publish(await authenticated(pool, actor), input, held, key())).rejects.toMatchObject({
+    code: 'realm_membership_unavailable',
+  });
+  await expect(ports.terminalize(held, key())).rejects.toMatchObject({ code: 'realm_membership_unavailable' });
+  expect(await realmRows()).toEqual(before);
+  expect(before).toEqual({ inverse: [], coordination: [] });
+});

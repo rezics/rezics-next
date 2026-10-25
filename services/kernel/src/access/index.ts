@@ -50,6 +50,7 @@ export function createAccess(config: AccessConfig): Access {
     actions,
     resourceRoles: config.resourceRoles,
     accountEvidence: (actor) => authentication.identity(actor)?.account,
+    ...(config.realmRoleReader ? { realmRoleReader: config.realmRoleReader } : {}),
   });
   const access: Access = {
     authenticate: authentication.authenticate,
@@ -178,6 +179,8 @@ export {
   type ResourceCreationPort,
 } from './parent-creation.ts';
 export { initializeResourceGrants } from './resource-initialization.ts';
+export { endResourceDenial, recordResourceDenial } from './resource-denials.ts';
+export { grantGroupRole } from './resource-group-grant.ts';
 export { installStandingParentGrant } from './standing-parent.ts';
 export type { ResourceRoleCatalogue } from './resource-roles.ts';
 
