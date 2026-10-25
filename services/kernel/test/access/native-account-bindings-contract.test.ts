@@ -26,6 +26,7 @@ import type { createGrantCommands } from '../../src/access/grant-commands.ts';
 import type { createDelegationCommands } from '../../src/access/delegation-commands.ts';
 import type { Access, ActionCatalogue } from '../../src/request/access.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
+import { systemClock } from '../../src/clock.ts';
 
 test('ordinary durable composition requires actual native factories and Auth-host proof capabilities', () => {
   expectTypeOf<NativeWorkflowProofPorts>().toEqualTypeOf<{
@@ -44,6 +45,7 @@ test('ordinary durable composition requires actual native factories and Auth-hos
     access: Access;
     actions: ActionCatalogue;
     routeKey: Uint8Array;
+    clock?: () => Date;
     referenceKeys: KeyRing;
     auth: () => AuthService;
     proofs: NativeAccountBindingProofs;
@@ -75,6 +77,7 @@ test('pure construction never invokes Auth, proof capabilities or database I/O',
   );
   const config: NativeAccountBindingsConfig = {
     pool: untouched as Pool,
+    clock: systemClock,
     access: untouched as Access,
     actions: new Map([['account:manage', { anonymous: false }]]),
     routeKey: new Uint8Array(32).fill(3),

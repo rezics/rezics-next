@@ -6,12 +6,13 @@ import {
   authoritativeTimeValue,
   runCommand,
   type CommandAttempt,
+  type CommandBasis,
   type CommandAuthorization,
 } from '../../src/command/command.ts';
 import { resourceAuthorization, type ResourceAuthorizationInput } from '../../src/access/resource-authorization.ts';
 import { parentCreationAuthorization, creationCapability } from '../../src/access/parent-creation.ts';
 import { initializeResourceGrants } from '../../src/access/resource-initialization.ts';
-import { CreationManifestUnavailableError, type ResourceCreationManifest } from '../../src/access/creation-manifest.ts';
+import type { ResourceCreationManifest } from '../../src/access/creation-manifest.ts';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createAccess } from '../../src/access/permission.ts';
@@ -100,7 +101,7 @@ function execute(
   input: ResourceAuthorizationInput,
   options: {
     authorization?: CommandAuthorization;
-    basis?: NonNullable<CommandAttempt['basis']>;
+    basis?: CommandBasis;
     partition?: number;
     key?: string;
     body?: Parameters<typeof runCommand>[2];
@@ -506,7 +507,7 @@ test('parent creation alone mints a single-use exact child INSERT capability and
       parent: input.anchor,
       context: { ...context, manifest: {} as ResourceCreationManifest },
     }),
-  ).toThrow(CreationManifestUnavailableError);
+  ).toThrow(TypeError);
   expect(() =>
     parentCreationAuthorization({
       ...input,
@@ -514,19 +515,25 @@ test('parent creation alone mints a single-use exact child INSERT capability and
       context: { ...context, creation: {} as typeof creation },
     }),
   ).toThrow(GrantDeniedError);
-  for (const mode of ['new', 'existing', 'wrong-id', 'wrong-creator', 'wrong-partition'] as const) {
+  for (const mode of ['new', 'reused', 'existing', 'wrong-id', 'wrong-creator', 'wrong-partition'] as const) {
+    const child = { route: 0x9876, id: newId(0x9876) };
     if (mode === 'existing')
       await admin.query('INSERT INTO public.authorization_resource(route,id) VALUES ($1,$2)', [child.route, child.id]);
-    const authorization = parentCreationAuthorization({ ...input, parent: input.anchor, context });
+    const authorization = parentCreationAuthorization({
+      ...input,
+      parent: input.anchor,
+      context: { ...context, resource: child },
+    });
     const promise = execute(input, {
       authorization,
       partition: mode === 'wrong-partition' ? targetPartition + 1 : targetPartition,
       body: async (tx) => {
         if (mode !== 'existing')
           await tx.query('INSERT INTO public.authorization_resource(route,id) VALUES ($1,$2)', [child.route, child.id]);
-        if (mode === 'new') {
+        if (mode === 'new' || mode === 'reused') {
           await initializeResourceGrants(tx, { resource: child, creator: f.actorId, type: 'fixture.owned' });
-          await expect(creationCapability(tx, child, f.actorId)).rejects.toBeInstanceOf(GrantDeniedError);
+          if (mode === 'reused')
+            await expect(creationCapability(tx, child, f.actorId)).rejects.toBeInstanceOf(GrantDeniedError);
         } else
           await creationCapability(
             tx,

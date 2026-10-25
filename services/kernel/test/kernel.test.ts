@@ -1,9 +1,14 @@
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { createPool } from '../src/database/pool.ts';
 import { createKernel, type Kernel } from '../src/http/kernel.ts';
 import { openApiDocument } from '../src/http/openapi.ts';
+import { bootstrapRelease } from '../src/semantic/definitions.ts';
 
-const pool = createPool('postgres://kernel.invalid/routes');
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
+const pool = createPool(databaseUrl);
+beforeAll(() => bootstrapRelease(pool, bundledRelease));
 afterAll(() => pool.end());
 
 type Method = 'get' | 'post' | 'put' | 'patch' | 'delete';
@@ -110,6 +115,27 @@ const typed = [
   'POST /v1/roleGrants',
   'POST /v1/roleGrants/$change',
   'POST /v1/roleGrants/$revoke',
+  'POST /v1/realms/:realmId/boards',
+  'GET /v1/realms/:realmId/boards',
+  'PUT /v1/threads/:threadId/reaction',
+  'DELETE /v1/threads/:threadId/reaction',
+  'PUT /v1/posts/:postId/reaction',
+  'DELETE /v1/posts/:postId/reaction',
+  'PUT /v1/spaces/:spaceId/address',
+  'GET /v1/spaceAddresses/:address',
+  'GET /v1/libraryEntries',
+  'GET /v1/libraryEntries/:subjectId',
+  'PUT /v1/libraryEntries/:subjectId',
+  'DELETE /v1/libraryEntries/:subjectId',
+  'POST /v1/copies',
+  'GET /v1/copies',
+  'GET /v1/copies/:copyId',
+  'PATCH /v1/copies/:copyId',
+  'DELETE /v1/copies/:copyId',
+  'PUT /v1/follows/:targetId',
+  'DELETE /v1/follows/:targetId',
+  'GET /v1/follows/:targetId',
+  'GET /v1/follows',
 ] as const satisfies readonly Routes[];
 type Missing = Exclude<Routes, (typeof typed)[number]>;
 const complete: [Missing] extends [never] ? true : Missing = true;

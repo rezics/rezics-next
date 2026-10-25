@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import {
   resourceAuthorization,
   ResourceAuthorizationUnavailableError,
+  type AnonymousResourceAuthorizationInput,
   type AuthorizationAnchor,
   type ResourceAuthorizationContext,
   type ResourceAuthorizationInput,
@@ -17,7 +18,7 @@ function fixture() {
   const pool = new Proxy({} as Pool, {
     get(_target, key) {
       calls.push(`pool.${String(key)}`);
-      throw new Error('The unavailable contract must not access the pool');
+      throw new Error('Construction must not access the pool');
     },
   });
   const access: Access = {
@@ -66,9 +67,10 @@ test('action-general authorization contract accepts a stable target partition wi
     anchor: AuthorizationAnchor;
     context: ResourceAuthorizationContext;
   }>();
-  expectTypeOf<typeof resourceAuthorization>().toEqualTypeOf<
-    (input: ResourceAuthorizationInput) => CommandAuthorization
-  >();
+  expectTypeOf<typeof resourceAuthorization>().toEqualTypeOf<{
+    (input: AnonymousResourceAuthorizationInput): CommandAuthorization;
+    (input: ResourceAuthorizationInput): CommandAuthorization;
+  }>();
   expectTypeOf<accessExports.AuthorizationAnchor>().toEqualTypeOf<AuthorizationAnchor>();
   expectTypeOf<accessExports.ResourceAuthorizationContext>().toEqualTypeOf<ResourceAuthorizationContext>();
   expectTypeOf<accessExports.ResourceAuthorizationInput>().toEqualTypeOf<ResourceAuthorizationInput>();
@@ -80,11 +82,14 @@ test('action-general authorization contract accepts a stable target partition wi
   const { input, calls } = fixture();
   // The stable tuple/upsert target has no new resource UUID or creation port.
   expect(input.context.partition).not.toBe(input.anchor.resource.route >>> 4);
-  expect(() => resourceAuthorization(input)).toThrow(ResourceAuthorizationUnavailableError);
+  const authorization = resourceAuthorization(input);
+  expect(authorization.action).toBe(input.action);
+  expect(authorization.resource).toEqual(input.anchor.resource);
+  expect(Object.isFrozen(authorization)).toBe(true);
   expect(calls).toEqual([]);
 });
 
-test('unavailable stub throws before I/O', () => {
+test('construction binds every action and actor without I/O', () => {
   const { input, calls } = fixture();
   for (const action of [
     'subject:create',
@@ -104,17 +109,22 @@ test('unavailable stub throws before I/O', () => {
         authnEpoch: 1,
       } satisfies Actor,
     ]) {
-      expect(() => resourceAuthorization({ ...input, action, actor })).toThrow(ResourceAuthorizationUnavailableError);
+      const authorization = resourceAuthorization({ ...input, action, actor });
+      expect(authorization.action).toBe(action);
+      expect(authorization.resource).toEqual(input.anchor.resource);
     }
   }
-  // Even inspecting input would run caller code; unavailability is unconditional.
-  const unreadable = new Proxy(input, {
-    get(_target, key) {
-      calls.push(`input.${String(key)}`);
-      throw new Error('Input must not be inspected');
+  const authorization = resourceAuthorization(input);
+  const resource = input.anchor.resource;
+  input.anchor = {
+    resource: { route: 1, id: '00000000-0000-8000-8000-000100000001' },
+    async validate() {
+      throw new Error('Replacement anchor must not be used');
     },
-  });
-  expect(() => resourceAuthorization(unreadable)).toThrow(ResourceAuthorizationUnavailableError);
+  };
+  expect(authorization.resource).toEqual(resource);
+  expect(authorization.resource).not.toBe(resource);
+  expect(Object.isFrozen(authorization.resource)).toBe(true);
   expect(calls).toEqual([]);
   const error = new ResourceAuthorizationUnavailableError();
   expect(error).toBeInstanceOf(Error);
@@ -126,15 +136,10 @@ test('creation capability is not minted by generic authorization', () => {
   expectTypeOf<ParentCreationContext['creation']>().toEqualTypeOf<ResourceCreationPort>();
   expectTypeOf<{}>().not.toExtend<Pick<ParentCreationContext, 'creation'>>();
   const { input, calls } = fixture();
-  let initialized = false;
-  const create = () => {
-    const authorization = resourceAuthorization({ ...input, action: 'subject:create' });
-    // Unavailability must stop consumers before any command or initialization.
-    initialized = true;
-    return authorization;
-  };
-  expect(create).toThrow(ResourceAuthorizationUnavailableError);
-  expect(initialized).toBe(false);
+  const authorization = resourceAuthorization({ ...input, action: 'subject:create' });
+  expectTypeOf<Extract<'creation' | 'creationCapability', keyof CommandAuthorization>>().toEqualTypeOf<never>();
+  expect(authorization).not.toHaveProperty('creation');
+  expect(authorization).not.toHaveProperty('creationCapability');
   expect(calls).toEqual([]);
   expectTypeOf<Extract<'creationCapability', keyof typeof accessExports>>().toEqualTypeOf<never>();
 });

@@ -75,11 +75,13 @@ function rangeOf(index: number, range: string): string {
 function schemaYaml(index: number): string {
   const slots = PROPERTIES.map(([key]) => slotName(index, key));
   const slotList = slots.map((name) => `      - ${name}`).join('\n');
-  const classes = [
-    ['Work', 'CreativeWork'],
-    ['Edition', 'CreativeWork'],
-    ['Agent', 'Thing'],
-  ]
+  const classes = (
+    [
+      ['Work', 'CreativeWork'],
+      ['Edition', 'CreativeWork'],
+      ['Agent', 'Thing'],
+    ] as const
+  )
     .map(([suffix, parent]) => {
       const facets =
         suffix === 'Agent'

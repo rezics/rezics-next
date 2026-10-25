@@ -5,6 +5,7 @@ import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import type { AccountOperation } from '@rezics/auth';
 import type { MembershipWorkInput, MembershipWorkResult } from '@rezics/auth/membership-workflows';
 import { createPool } from '../../src/database/pool.ts';
+import { systemClock } from '../../src/clock.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createLifecycleInternals, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { createWorkflowApprovals, workflowApprovalBinding } from '../../src/access/workflow-approvals.ts';
@@ -36,7 +37,7 @@ const env = {
   AUTH_AUDIENCE: 'https://api.membership.test',
   AUTH_JWKS_URL: `${issuer}/jwks`,
 };
-const context = { pool, client, queues: WORK_QUEUES, env, addEffects() {} };
+const context = { pool, client, queues: WORK_QUEUES, env, clock: systemClock, addEffects() {} };
 const boundary = () => ({ pool, deadline: Date.now() + 10000 });
 const caller = createAccess({
   actions: LIFECYCLE_ACTIONS,
@@ -337,7 +338,7 @@ test('enqueue accepts bounded opaque native locators and rejects bearer, raw con
     { ...input, principal: { kind: 'realm' as const, id: f.group } },
   ])
     await expect(createMembershipWorkPorts(context).authorize(value.authorization, value)).rejects.toMatchObject({
-      code: 'membership_authorization_unavailable',
+      code: value.kind === 'membership' ? 'realm_membership_unavailable' : 'membership_authorization_unavailable',
     });
 });
 
