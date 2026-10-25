@@ -1,13 +1,13 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { DBOS } from '@dbos-inc/dbos-sdk';
 import { randomBytes } from 'node:crypto';
 import pg from 'pg';
 import { createPool } from '../src/database/pool.ts';
 import {
   EFFECTS_CONSUMER,
+  effectWorkflowId,
   effectsRelay,
-  launchWork,
   registerEffects,
-  shutdownWork,
   type Effect,
 } from '../src/events/effects.ts';
 import type { CloudEvent } from '../src/events/log.ts';
@@ -87,9 +87,12 @@ test('the server relays a committed event to its effect without a caller naming 
   const emptyPartition = freshPartition();
   const server = startServer(config, { effects: [effect] });
   try {
-    const { position, subject } = await append(partition);
+    const { epoch, position, subject } = await append(partition);
     await until(async () => (await checkpoint(partition)) === String(position));
     await until(() => recorded.some((event) => event.subject === subject));
+    await DBOS.retrieveWorkflow(
+      effectWorkflowId({ partition, epoch, position, events: [] }, 0, 'relay_record'),
+    ).getResult();
     expect(recorded.filter((event) => event.subject === subject)).toHaveLength(1);
     expect(await checkpoint(emptyPartition)).toBeUndefined();
   } finally {
@@ -101,14 +104,13 @@ test('effects relay discovery stays within its bound as outbox history grows', a
   const growth = await openGrowthDatabase(databaseUrl);
   const start = 4096 - 96 - Math.floor(Math.random() * 64);
   const hot = start;
-  const consumer = registerEffects([]);
+  const consumer = { enqueue: async () => {} } as ReturnType<typeof registerEffects>;
   const relay = effectsRelay(growth.pool, consumer);
   const basePositions = new Map<number, string>();
   const initialPositions = new Map<number, string>();
   const insertedIds: string[] = [];
 
   try {
-    await launchWork({ databaseUrl });
     await growth.admin.query(
       'DELETE FROM core.consumer_checkpoint WHERE consumer = $1 AND partition_no BETWEEN $2 AND $3',
       [EFFECTS_CONSUMER, start, start + 63],
@@ -171,6 +173,7 @@ test('effects relay discovery stays within its bound as outbox history grows', a
           [hot],
         );
         const position = rows[0]!.position;
+        basePositions.set(hot, position);
         const id = Bun.randomUUIDv7();
         insertedIds.push(id);
         await db.admin.query(
@@ -192,7 +195,6 @@ test('effects relay discovery stays within its bound as outbox history grows', a
       warmups: 0,
     });
   } finally {
-    await shutdownWork();
     await growth.admin.query(
       'DELETE FROM core.consumer_checkpoint WHERE consumer = $1 AND partition_no BETWEEN $2 AND $3',
       [EFFECTS_CONSUMER, start, start + 63],

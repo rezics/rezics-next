@@ -64,9 +64,10 @@ export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
 export function startServer(config: ServerConfig, options: { effects?: Effect[] } = {}) {
   const pool = createPool(config.databaseUrl);
   const app = createKernel({ pool, routeKey: config.routeKey, tokens: config.tokens });
+  const registeredEffects = registerEffects(options.effects ?? []);
   let relays: ReturnType<typeof startRelays> | undefined;
   const work = launchWork({ databaseUrl: config.databaseUrl }).then(() => {
-    relays = startRelays(pool, [effectsRelay(pool, registerEffects(options.effects ?? []))]);
+    relays = startRelays(pool, [effectsRelay(pool, registeredEffects)]);
   });
   const server = Bun.serve({
     hostname: config.hostname,
