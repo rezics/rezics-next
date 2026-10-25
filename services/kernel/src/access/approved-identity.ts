@@ -73,7 +73,8 @@ export async function readApprovedIdentity(
   // approve must have committed this exact row and reference through core.
   const receipt = await receiptRead.run(context.pool, {
     partition_no: partitionOf(row.route),
-    actor_account_id: row.actorId,
+    principal_kind: 'account',
+    principal_id: row.actorId,
     command_kind: 'access.workflow-approval.create',
     idempotency_key: `${row.route}:${row.approvalId}`,
   });
