@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { homedir } from 'node:os';
 import { StdioAppServer, type Notification } from './app-server.ts';
 import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
@@ -153,6 +154,13 @@ test('Claude manager opens the requested CLI and counts turns through hooks', as
     const argv = s.windows[0]!.argv;
     expect(argv).toContain('claude-opus-5-5'); expect(argv).toContain('--autocompact'); expect(argv).toContain('300000');
     expect(argv.at(-1)).toContain('inbox wait manager'); expect(argv).toContain('--settings');
+    expect(argv.slice(argv.indexOf('--permission-mode'), argv.indexOf('--permission-mode') + 2)).toEqual(['--permission-mode', 'auto']);
+    expect(argv.some(arg => arg.startsWith('CLAUDE_CONFIG_DIR='))).toBe(true);
+    const defaults = await setup();
+    try {
+      await defaults.managers.start({ ...defaults.spec, engine: 'claude', pool: { ...defaults.spec.pool, codexHome: join(homedir(), '.claude') } });
+      expect(defaults.windows[0]!.argv.some(arg => arg.startsWith('CLAUDE_CONFIG_DIR='))).toBe(false);
+    } finally { await defaults.close(); }
     expect(s.connections).toBe(0);
     await s.managers.claudeTurn(manager.id, true); await s.managers.noteCommand(manager.id); await s.managers.claudeTurn(manager.id, false);
     expect(s.managers.get(manager.id).turns).toBe(1); expect(s.managers.get(manager.id).turnsWithoutDecision).toBe(0);

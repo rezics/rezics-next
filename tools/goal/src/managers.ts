@@ -1,6 +1,8 @@
 import type { Database } from 'bun:sqlite';
 import { randomUUID } from 'node:crypto';
 import { watch, type FSWatcher } from 'node:fs';
+import { homedir } from 'node:os';
+import { join, resolve } from 'node:path';
 import type { AppServer, CodexPool, Notification } from './app-server.ts';
 import { connectPool, textInput } from './app-server.ts';
 import { migrate } from './db.ts';
@@ -146,7 +148,11 @@ export class ManagerSessions {
             UserPromptSubmit: [{ hooks: [{ type: 'command', command: hook('turn-start') }] }],
             Stop: [{ hooks: [{ type: 'command', command: hook('turn-end') }] }],
           } };
-          this.services.windows.register(spec.id, ['env', `GOAL_MANAGER=${spec.id}`, `CLAUDE_CONFIG_DIR=${spec.pool.codexHome}`, spec.pool.executable ?? 'claude', '--model', 'claude-opus-5-5',
+          // Claude keeps its account state in ~/.claude.json, not in its default configuration directory; pointing
+          // CLAUDE_CONFIG_DIR at that directory would start an unauthenticated, untrusted session.
+          const configDirectory = resolve(spec.pool.codexHome) === join(homedir(), '.claude') ? [] : [`CLAUDE_CONFIG_DIR=${spec.pool.codexHome}`];
+          this.services.windows.register(spec.id, ['env', `GOAL_MANAGER=${spec.id}`, ...configDirectory, spec.pool.executable ?? 'claude', '--model', 'claude-opus-5-5',
+            '--permission-mode', 'auto', '--name', `${spec.goal} manager`,
             '--autocompact', String(spec.compactTokens ?? 300000), '--settings', JSON.stringify(settings), this.opening(spec)], spec.cwd);
           state.status = 'running';
         }
