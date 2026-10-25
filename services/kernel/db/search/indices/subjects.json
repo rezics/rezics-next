@@ -1,0 +1,94 @@
+{
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0,
+    "refresh_interval": "1s",
+    "analysis": {
+      "char_filter": {
+        "nfkc_cf": {
+          "type": "icu_normalizer",
+          "name": "nfkc_cf"
+        }
+      },
+      "filter": {
+        "han_kana_fold": {
+          "type": "icu_transform",
+          "id": "Traditional-Simplified; Hiragana-Katakana"
+        },
+        "cjk_bigrams": {
+          "type": "cjk_bigram"
+        },
+        "cjk_stopwords": {
+          "type": "stop",
+          "stopwords": "_cjk_"
+        }
+      },
+      "analyzer": {
+        "cjk_bigram_v2": {
+          "type": "custom",
+          "char_filter": ["nfkc_cf"],
+          "tokenizer": "standard",
+          "filter": ["han_kana_fold", "cjk_bigrams", "cjk_stopwords"]
+        },
+        "name_prefix": {
+          "type": "custom",
+          "char_filter": ["nfkc_cf"],
+          "tokenizer": "standard",
+          "filter": ["han_kana_fold"]
+        }
+      },
+      "normalizer": {
+        "name_key": {
+          "type": "custom",
+          "char_filter": ["nfkc_cf"]
+        }
+      }
+    }
+  },
+  "mappings": {
+    "dynamic": "strict",
+    "properties": {
+      "partition": {
+        "type": "integer"
+      },
+      "type": {
+        "type": "keyword"
+      },
+      "security_revision": {
+        "type": "long"
+      },
+      "names": {
+        "type": "text",
+        "analyzer": "cjk_bigram_v2",
+        "copy_to": "search_text",
+        "fields": {
+          "exact": {
+            "type": "keyword",
+            "normalizer": "name_key"
+          },
+          "typeahead": {
+            "type": "search_as_you_type",
+            "analyzer": "name_prefix",
+            "max_shingle_size": 3
+          }
+        }
+      },
+      "descriptions": {
+        "type": "text",
+        "analyzer": "cjk_bigram_v2",
+        "copy_to": "search_text"
+      },
+      "search_text": {
+        "type": "text",
+        "analyzer": "cjk_bigram_v2"
+      },
+      "name_sort": {
+        "type": "keyword",
+        "normalizer": "name_key"
+      },
+      "statements": {
+        "type": "keyword"
+      }
+    }
+  }
+}
