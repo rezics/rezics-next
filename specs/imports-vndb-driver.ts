@@ -8,6 +8,16 @@
  * source rewriting, product behavior, SQL, network or storage belongs here.
  * converter_revision is that module's real explicit export, not a test constant.
  *
+ * Without subjectId, conversion emits exactly one create containing only type,
+ * labels and optional descriptions/aliases, plus its normal key and full Source
+ * envelope (facts). No subject.statements, generated subject IDs or summary/cover
+ * creates. Creation metadata is immutable; it has no BatchReference field.
+ * Every source statement, including identity and titles, is a later propose to
+ * the supplied actual subjectId, with its full citations and applicable rights.
+ * Candidate IDs come from actual proposal results for refresh/retraction; this
+ * pure binding neither fabricates them nor extends bulk results. Enumerate the
+ * whole actual output; never filter commands or synthesize bootstrap references.
+ *
  * Source titles are schema:name propose statements with monolingualtext content,
  * separate from creation labels. Refresh can retract old source candidates while
  * leaving those initial labels set; pure conversion does not perform persistence.
@@ -47,6 +57,7 @@ export interface VndbDriver {
     sourceRights: { databaseLicense: Path; contentsLicense: Path; attribution: Path };
   };
   parseProposal(proposal: unknown): CommandProposal;
+  /** Bootstrap has no statement observations; resolved proposals expose every fact. */
   observe(proposal: unknown): FactObservation[];
 }
 

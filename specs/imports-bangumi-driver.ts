@@ -5,6 +5,16 @@
  * convert forwards the supplied record and revision without doing conversion here.
  * No SQL, provider/grain/slot protocol, network lookup or adapter product model.
  *
+ * Without subjectId, conversion emits exactly one create containing only type,
+ * labels and optional descriptions/aliases, plus its normal key and full Source
+ * envelope (facts). No subject.statements, generated subject IDs or summary/cover
+ * creates. Creation metadata is immutable; it has no BatchReference field.
+ * Every source statement, including identity and titles, is a later propose to
+ * the supplied actual subjectId, with its full citations and applicable rights.
+ * Candidate IDs come from actual proposal results for refresh/retraction; this
+ * pure binding neither fabricates them nor extends bulk results. Enumerate the
+ * whole actual output; never filter commands or synthesize bootstrap references.
+ *
  * Source titles are schema:name propose statements with monolingualtext content,
  * separate from creation labels. Refresh can retract old source candidates while
  * leaving those initial labels set; pure conversion does not perform persistence.
@@ -20,7 +30,7 @@
  * execute commands. Enumerate every actual command, including unsupported emissions.
  * Forward context unchanged to production; never generate IDs or media behavior.
  * Cover intents/asset metadata remain outside commands; rights pointers may point
- * there, while field groups and references must resolve inside actual commands.
+ * there, while field groups and resolved references must resolve inside actual commands.
  * This binding uses the portable command type without declaring another schema. A hand-written adapter validator is
  * not acceptable. close removes only instrumentation/resources owned by the binding.
  */
@@ -54,6 +64,7 @@ export interface ProposedField {
   fieldGroup: string;
   value: string;
   /** Pointers to URL values in real command reference objects. */
+  /** Empty for creation metadata; full actual citations for resolved statements. */
   references: string[];
   rights?: RightsPointers;
 }

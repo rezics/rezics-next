@@ -58,9 +58,18 @@ async function scenario(run: (driver: BangumiDriver) => void | Promise<void>) {
     if (!supplied) expect(commands).toHaveLength(1);
     for (const command of commands) {
       expect(command.source.digest).toMatch(/^[0-9a-f]{64}$/);
+      expect(command.source).toMatchObject({
+        source: 'bangumi',
+        external_id: request.externalId,
+        record_revision: request.recordRevision,
+        converter_revision: text(output, driver.inspect(output).converterRevision),
+      });
       if (!supplied) {
         expect(command.op).toBe('create');
         expect(command.subject).not.toHaveProperty('id');
+        expect(command.subject).not.toHaveProperty('statements');
+        for (const key of Object.keys(command.subject))
+          expect(['type', 'labels', 'descriptions', 'aliases']).toContain(key);
         expect(command.source.field_group).toBe('facts');
         expect(command).not.toHaveProperty('rights');
       } else {
@@ -110,8 +119,16 @@ function field(
   expect(found.value.startsWith(`${found.command}/`)).toBe(true);
   expect(found.fieldGroup.startsWith(`${found.command}/`)).toBe(true);
   expect(text(output, found.fieldGroup)).toBe(role === 'summary' ? 'summary' : role === 'cover' ? 'cover' : 'facts');
-  expect(found.references.length).toBeGreaterThan(0);
-  expect(found.references.map((pointer) => at(output, pointer))).toContain(source);
+  if (phase === 'bootstrap') {
+    expect(found.references).toEqual([]);
+    expect((at(output, found.command) as CommandProposal).op).toBe('create');
+    expect(found.value.startsWith(`${found.command}/subject/${role === 'type' ? 'type' : 'labels'}`)).toBe(true);
+  } else {
+    expect(found.references.length).toBeGreaterThan(0);
+    for (const pointer of found.references)
+      expect(pointer.startsWith(`${found.command}/statement/references/`)).toBe(true);
+    expect(found.references.map((pointer) => at(output, pointer))).toContain(source);
+  }
   at(output, found.value);
   if (phase === 'resolved' && (role === 'title' || role === 'chinese-label')) {
     const command = at(output, found.command) as CommandProposal;
@@ -512,7 +529,7 @@ test('the semantic bulk consumer structurally accepts actual proposals and prese
     }
   }));
 
-test('unresolved Bangumi bootstrap carries only one facts subject with creation labels and provenance', () =>
+test('unresolved Bangumi bootstrap carries only creation metadata and source provenance', () =>
   scenario((driver) => {
     const output = driver.convert(input());
     const commands: CommandProposal[] = [];
@@ -529,6 +546,8 @@ test('unresolved Bangumi bootstrap carries only one facts subject with creation 
     if (command.op !== 'create') throw new Error('Expected bootstrap create');
     expect(classMeaning(command.subject.type)).toBe('http://schema.org/TVSeries');
     expect(Object.values(command.subject.labels)).toContain(fixture.name);
+    // The licensed summary stays in the resolved schema:abstract proposal.
+    expect(Object.values(command.subject.descriptions ?? {})).not.toContain(fixture.summary);
     expect(
       Object.entries(command.subject.labels)
         .filter(([language]) => /^zh(?:-|$)/.test(language))
@@ -545,9 +564,7 @@ test('unresolved Bangumi bootstrap carries only one facts subject with creation 
       expect(actual.command).toBe(driver.inspect(output).commands[0]!);
     }
     expect(driver.inspect(output).fields.filter((f) => f.role === 'summary' || f.role === 'cover')).toEqual([]);
-    expect(
-      Object.values(command.subject.statements ?? {})
-        .flat()
-        .some((s) => ['schema:abstract', 'schema:image'].includes(s.property.id)),
-    ).toBe(false);
+    expect(command.subject).not.toHaveProperty('statements');
+    for (const key of Object.keys(command.subject))
+      expect(['type', 'labels', 'descriptions', 'aliases']).toContain(key);
   }));

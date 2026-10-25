@@ -49,6 +49,9 @@ function consume(driver: VndbDriver, output: unknown, phase: 'bootstrap' | 'reso
     if (phase === 'bootstrap') {
       expect(accepted.op).toBe('create');
       expect(accepted.subject).not.toHaveProperty('id');
+      expect(accepted.subject).not.toHaveProperty('statements');
+      for (const key of Object.keys(accepted.subject))
+        expect(['type', 'labels', 'descriptions', 'aliases']).toContain(key);
     } else {
       expect(accepted.op).toBe('propose');
       expect(accepted.subject).toBe(SUBJECT);
@@ -57,46 +60,34 @@ function consume(driver: VndbDriver, output: unknown, phase: 'bootstrap' | 'reso
     expect(accepted.source.field_group).toBe('facts');
     expect(accepted).not.toHaveProperty('rights');
     expect(accepted.source.digest).toMatch(/^[0-9a-f]{64}$/);
+    expect(accepted.source.converter_revision).toBe(driver.converter_revision);
     const facts = driver.observe(accepted);
-    expect(facts.length).toBeGreaterThan(0);
+    if (phase === 'bootstrap') expect(facts).toEqual([]);
+    else expect(facts.length).toBeGreaterThan(0);
     return { proposal: accepted, facts };
   });
 }
 
-function assertMetadata(
-  driver: VndbDriver,
-  output: unknown,
-  id = 'v123',
-  revision = 7,
-  title = 'Sentinel Harbor',
-  phase: 'bootstrap' | 'resolved' = 'resolved',
-) {
-  const commands = consume(driver, output, phase);
+function assertMetadata(driver: VndbDriver, output: unknown, id = 'v123', revision = 7, title = 'Sentinel Harbor') {
+  const commands = consume(driver, output);
   const facts = commands.flatMap((command) => command.facts);
   expect(facts).toEqual(
     expect.arrayContaining([
       expect.objectContaining({ kind: 'title', language: 'en', value: title }),
       expect.objectContaining({ kind: 'external-id', value: id }),
-      ...(phase === 'bootstrap' ? [expect.objectContaining({ kind: 'type', value: 'visual-novel' })] : []),
     ]),
   );
   expect(facts.filter((fact) => fact.kind === 'external-id').map((fact) => fact.value)).toEqual([id]);
-  expect(facts.filter((fact) => fact.kind === 'type').map((fact) => fact.value)).toEqual(
-    phase === 'bootstrap' ? ['visual-novel'] : [],
-  );
+  expect(facts.filter((fact) => fact.kind === 'type')).toEqual([]);
   for (const { proposal, facts } of commands) {
+    expect(proposal.source).toMatchObject({ source: 'vndb', external_id: id, record_revision: String(revision) });
     for (const fact of facts) {
       expect(['description', 'cover', 'user-content']).not.toContain(fact.kind);
-      // The type observation resolves the real production definition term.
       const rawValue = at(proposal, fact.valuePath);
       expect(rawValue).toBeDefined();
       expect(rawValue).not.toBeNull();
-      if (fact.kind === 'type')
-        expect(String(rawValue).replace(/^wd:/, 'http://www.wikidata.org/entity/')).toBe(
-          'http://www.wikidata.org/entity/Q689445',
-        );
-      if (fact.kind !== 'type') expect(rawValue).toEqual(fact.value);
-      if (fact.kind === 'title' && phase === 'resolved') {
+      expect(rawValue).toEqual(fact.value);
+      if (fact.kind === 'title') {
         expect(proposal.op).toBe('propose');
         if (proposal.op !== 'propose') throw new Error('Titles must be source candidates');
         expect(proposal.statement).toMatchObject({
@@ -288,18 +279,16 @@ test('VNDB hostile source URLs reject without fetching or returning partial prop
   }
 });
 
-test('VNDB unresolved bootstrap is one facts-only subject with creation labels and real provenance', async () => {
+test('VNDB unresolved bootstrap is one subject with creation metadata and real provenance', async () => {
   const driver = await loadVndbDriver();
   const output = driver.convert(fixture());
-  assertMetadata(driver, output, 'v123', 7, 'Sentinel Harbor', 'bootstrap');
+  // Identity/title facts and exact revision citations are checked by the resolved metadata scenario.
   const { proposal } = consume(driver, output, 'bootstrap')[0]!;
   if (proposal.op !== 'create') throw new Error('Expected bootstrap create');
   expect(proposal.subject.labels).toEqual({ en: 'Sentinel Harbor', de: 'Harbor German Edition' });
-  expect(
-    Object.values(proposal.subject.statements ?? {})
-      .flat()
-      .some((s) => ['schema:abstract', 'schema:image'].includes(s.property.id)),
-  ).toBe(false);
+  expect(proposal.subject.descriptions ?? {}).toEqual({});
+  expect(proposal.subject).not.toHaveProperty('statements');
+  for (const key of Object.keys(proposal.subject)) expect(['type', 'labels', 'descriptions', 'aliases']).toContain(key);
   expect(String(proposal.subject.type).replace(/^wd:/, 'http://www.wikidata.org/entity/')).toBe(
     'http://www.wikidata.org/entity/Q689445',
   );

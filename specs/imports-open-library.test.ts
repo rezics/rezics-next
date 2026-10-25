@@ -83,6 +83,9 @@ function converted(driver: OpenLibraryDriver, record: RecordPayload, supplied: C
       expect(command.op).toBe('create');
       expect(command.source.field_group).toBe('facts');
       expect(command.subject).not.toHaveProperty('id');
+      expect(command.subject).not.toHaveProperty('statements');
+      for (const key of Object.keys(command.subject))
+        expect(['type', 'labels', 'descriptions', 'aliases']).toContain(key);
     } else {
       expect(command.op).toBe('propose');
       expect(command.subject).toBe(supplied.subjectId);
@@ -91,12 +94,7 @@ function converted(driver: OpenLibraryDriver, record: RecordPayload, supplied: C
     expect(command.source.source).toBe('open-library');
     expect<unknown>(command.source.external_id).toBe(record.key);
     expect(command.source.record_revision).toBe(String(record.revision));
-    const statements =
-      command.op === 'propose'
-        ? [command.statement]
-        : command.op === 'create'
-          ? Object.values(command.subject.statements ?? {}).flat()
-          : [];
+    const statements = command.op === 'propose' ? [command.statement] : [];
     for (const statement of statements) {
       expect(['schema:identifier', 'schema:version', 'schema:dateModified']).not.toContain(statement.property.id);
       expect(statement.qualifiers?.some((part) => part.property.id === 'schema:identifier') ?? false).toBe(false);
@@ -104,6 +102,7 @@ function converted(driver: OpenLibraryDriver, record: RecordPayload, supplied: C
       recordCitation(statement.references[0]!, record);
     }
     expect(command.source.digest).toMatch(/^[0-9a-f]{64}$/);
+    expect(command.source.converter_revision).toBe(driver.converter_revision);
     if (command.source.field_group === 'facts') expect(command).not.toHaveProperty('rights');
   }
   const metadata = driver.inspectMetadata(result);
@@ -111,7 +110,8 @@ function converted(driver: OpenLibraryDriver, record: RecordPayload, supplied: C
   const consumed = driver.consume(result.proposals);
   expect(result.proposals).toEqual(proposed);
   expect(consumed.accepted).toEqual(proposed);
-  expect(consumed.fields.length).toBeGreaterThan(0);
+  if (supplied === null) expect(consumed.fields).toEqual([]);
+  else expect(consumed.fields.length).toBeGreaterThan(0);
   for (const field of consumed.fields) {
     const command = consumed.accepted[field.command];
     expect(Number.isInteger(field.command) && field.command >= 0).toBe(true);
@@ -123,11 +123,8 @@ function converted(driver: OpenLibraryDriver, record: RecordPayload, supplied: C
     );
     const ref = field.reference;
     const reference = pointer(command, ref.path) as BatchReference;
-    expect(ref.path).toMatch(
-      command.op === 'create'
-        ? /^\/subject\/statements\/[^/]+\/\d+\/references\/\d+$/
-        : /^\/statement\/references\/\d+$/,
-    );
+    expect(command.op).toBe('propose');
+    expect(ref.path).toMatch(/^\/statement\/references\/\d+$/);
     recordCitation(reference, record);
     for (const [path, property] of [
       [ref.keyPath, 'wdt:P648'],
@@ -153,7 +150,7 @@ function converted(driver: OpenLibraryDriver, record: RecordPayload, supplied: C
           (field.statementPath !== undefined && field.sourceValuePath.startsWith(`${field.statementPath}/qualifiers/`)),
       ).toBe(true);
     }
-    if (supplied !== null && (field.kind === 'title' || field.kind === 'isbn13' || field.kind === 'publishDate')) {
+    if (field.kind === 'title' || field.kind === 'isbn13' || field.kind === 'publishDate') {
       expect(command.op).toBe('propose');
       if (command.op !== 'propose') throw new Error('Mapped facts must be source candidates');
       expect(command.statement.property.id).toBe(
@@ -616,7 +613,7 @@ test('absent author and work identifiers produce no relationship proposals', asy
   );
 });
 
-test('Open Library bootstrap distinguishes Work Book and Edition Instance with labels and source claims', async () => {
+test('Open Library bootstrap distinguishes Work Book and Edition Instance with creation metadata and source claims', async () => {
   const driver = await loadOpenLibraryDriver();
   const claims: string[] = [];
   for (const [name, expectedType] of [
@@ -635,6 +632,8 @@ test('Open Library bootstrap distinguishes Work Book and Edition Instance with l
         .replace(/^bf:/, 'http://id.loc.gov/ontologies/bibframe/'),
     ).toBe(expectedType);
     expect<unknown>(Object.values(command.subject.labels)).toContain(record.title);
+    // Unknown-licensed source prose cannot become a creation description.
+    expect(command.subject.descriptions ?? {}).toEqual({});
     expect(command.source).toMatchObject({
       source: 'open-library',
       external_id: record.key,
@@ -642,13 +641,10 @@ test('Open Library bootstrap distinguishes Work Book and Edition Instance with l
       field_group: 'facts',
     });
     expect(output.fields.filter((f) => f.kind === 'cover' || f.kind === 'description')).toEqual([]);
-    expect(
-      Object.values(command.subject.statements ?? {})
-        .flat()
-        .some((s) => ['schema:abstract', 'schema:image'].includes(s.property.id)),
-    ).toBe(false);
-    expect(values(output, 'identity')).toEqual([record.key]);
-    expect(values(output, 'title')).toEqual([record.title]);
+    expect(command.subject).not.toHaveProperty('statements');
+    for (const key of Object.keys(command.subject))
+      expect(['type', 'labels', 'descriptions', 'aliases']).toContain(key);
+    // Identity/title statements and full citations are checked by the resolved work/edition scenarios.
     claims.push(`${command.source.source}:${command.source.external_id}`);
   }
   expect(claims).toEqual(['open-library:/works/OL900000001W', 'open-library:/books/OL900000002M']);

@@ -62,16 +62,17 @@ function checked(
     expect(command).not.toHaveProperty('rights');
     expect(command.source.digest).toMatch(/^[0-9a-f]{64}$/);
     expect(command.source.record_revision).toBe(revision);
+    expect(command.source).toMatchObject({
+      source: 'wikidata',
+      external_id: 'Q571',
+      converter_revision: driver.converter_revision,
+    });
     if (phase === 'bootstrap') {
       expect(command.op).toBe('create');
       expect(command.subject).not.toHaveProperty('id');
-      if (command.op === 'create') {
-        expect(
-          Object.values(command.subject.statements ?? {})
-            .flat()
-            .some((s) => ['schema:abstract', 'schema:image'].includes(s.property.id)),
-        ).toBe(false);
-      }
+      expect(command.subject).not.toHaveProperty('statements');
+      for (const key of Object.keys(command.subject))
+        expect(['type', 'labels', 'descriptions', 'aliases']).toContain(key);
     } else {
       expect(command.op).toBe('propose');
       expect(command.subject).toBe(SUBJECT);
@@ -86,7 +87,13 @@ function checked(
       inside(proposal.command, pointer);
       expect(at(raw, pointer)).toBe('facts');
     }
-    expect(proposal.citations.length).toBeGreaterThan(0);
+    if (phase === 'bootstrap') {
+      expect(proposal.citations).toEqual([]);
+      expect(proposal.statements).toEqual([]);
+    } else {
+      expect(proposal.citations.length).toBeGreaterThan(0);
+      expect(proposal.statements).toEqual([`${proposal.command}/statement`]);
+    }
     for (const cite of proposal.citations) {
       for (const [name, pointer] of Object.entries(cite)) {
         at(raw, pointer);
@@ -116,13 +123,11 @@ function checked(
       if (pointer !== undefined) inside(proposal.command, pointer);
     for (const pointer of proposal.statements) {
       const statement = at<BatchStatement>(raw, pointer);
-      if (phase === 'resolved' && statement.property.id === 'schema:name') {
-        const actual = at<BatchCommand>(raw, proposal.command);
-        expect(actual.op).toBe('propose');
-        if (actual.op !== 'propose') throw new Error('Titles must be source candidates');
-        expect(pointer).toBe(`${proposal.command}/statement`);
-        expect(actual.statement).toEqual(statement);
-      }
+      const actual = at<BatchCommand>(raw, proposal.command);
+      expect(actual.op).toBe('propose');
+      if (actual.op !== 'propose') throw new Error('Every source statement must be a resolved proposal');
+      expect(pointer).toBe(`${proposal.command}/statement`);
+      expect(actual.statement).toEqual(statement);
     }
     // Structural acceptance must consume the very proposals inspected above.
     const accepted = driver.accept(command);

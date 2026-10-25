@@ -5,6 +5,16 @@
  * synchronous and pure; it receives the JSON payload, never a TSV row or filename.
  * No product behavior, generated facts, rights decisions or references in adapters.
  *
+ * Without subjectId, conversion emits exactly one create containing only type,
+ * labels and optional descriptions/aliases, plus its normal key and full Source
+ * envelope (facts). No subject.statements, generated subject IDs or summary/cover
+ * creates. Creation metadata is immutable; it has no BatchReference field.
+ * Every source statement, including identity and titles, is a later propose to
+ * the supplied actual subjectId, with its full citations and applicable rights.
+ * Candidate IDs come from actual proposal results for refresh/retraction; this
+ * pure binding neither fabricates them nor extends bulk results. Enumerate the
+ * whole actual output; never filter commands or synthesize bootstrap references.
+ *
  * Source titles are schema:name propose statements with monolingualtext content,
  * separate from creation labels. Refresh can retract old source candidates while
  * leaving those initial labels set; pure conversion does not perform persistence.
@@ -108,6 +118,7 @@ export interface OpenLibraryDriver {
   /** Throw on structural rejection; accepted contains the actual parsed commands. */
   consume(proposals: readonly unknown[]): {
     accepted: CommandProposal[];
+    /** No statement fields for a metadata-only create; enumerate all resolved fields. */
     fields: FieldObservation[];
   };
 }
