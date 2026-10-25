@@ -1,9 +1,13 @@
 import { type CommerceDependencies } from '../commerce/routes.ts';
+import type { ContentRuntime } from '../content/runtime.ts';
 import { type SearchService } from '../search/http/routes.ts';
 import { createApp } from './app.ts';
 export type KernelDependencies = Parameters<typeof createApp>[0] & {
     routeKey: Uint8Array;
+    /** Trusted domain time only; authentication and request budgets retain real time. */
+    clock?: () => Date;
     commerce?: CommerceDependencies;
+    content?: ContentRuntime;
     search?: SearchService;
 };
 /** The route key must stay the same across restarts, or retries lose their receipts. */
