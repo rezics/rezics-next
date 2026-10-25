@@ -111,7 +111,11 @@ export interface ContentDisclosureDriver {
   /** Actual read and exact-history grants, including authorized erased tombstones. */
   grantRead(persona: Persona, target: Target): Promise<void>;
   setModeration(persona: 'moderator', target: Target, mode: 'allow' | 'deny' | 'revoke'): Promise<void>;
-  /** Fail the actual authoritative container/evidence read, not the evaluator. */
+  /**
+   * Fail the actual authoritative container/evidence read, not the evaluator.
+   * Preserve catalogue anonymous flags so missing trusted public eligibility
+   * cannot be concealed by changing the catalogue's anonymous allowance.
+   */
   failContainer(target: Target, failure: 'missing' | 'unavailable'): Promise<void>;
   /** drain resumes delivery to a bounded barrier; replay redelivers prior effects. */
   projection(mode: 'pause' | 'drain' | 'replay'): Promise<void>;

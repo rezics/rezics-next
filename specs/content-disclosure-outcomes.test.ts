@@ -481,9 +481,14 @@ test('revoked public eligibility denies replay before stored report disclosure',
     };
     const receipt = await ok(await d().report('anonymous', { ...input, botToken: await d().verifiedBotToken() }));
     const once = await d().observe(thread);
+    expect(once.visibility).toBe('public');
+    expect(once.reports).toHaveLength(1);
+    expect(once.reports[0]).toMatchObject({ id: receipt.reportId, evidence: input.evidence });
+    expect(once.effects.filter((e) => e.kind === 'report')).toHaveLength(1);
     if (eligibility === 'protected') await d().protect(thread);
     else await d().failContainer(board, 'missing');
     const revoked = await d().observe(thread);
+    expect(revoked.visibility).toBe(eligibility === 'protected' ? 'protected' : 'public');
     expect(revoked.reports).toEqual(once.reports);
     expect(revoked.effects).toEqual(once.effects);
     const replay = await d().report('anonymous', { ...input, botToken: await d().verifiedBotToken() });
