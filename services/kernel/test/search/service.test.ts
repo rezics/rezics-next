@@ -1,0 +1,300 @@
+import { afterAll, expect, test } from 'bun:test';
+import { createPool } from '../../src/database/pool.ts';
+import { ProblemError } from '../../src/http/problem.ts';
+import { bulkLines, documentActions } from '../../src/search/document.ts';
+import { createSubjectIndex, subjectAlias, subjectGenerations, subjectIndexName } from '../../src/search/indices.ts';
+import { createOpenSearch, type OpenSearch } from '../../src/search/opensearch.ts';
+import { SEARCH_TEMPLATE, SUGGEST_TEMPLATE } from '../../src/search/query.ts';
+import { createSearchService } from '../../src/search/service.ts';
+import { subjectPartition, type IndexedSubject, type SubjectSource } from '../../src/search/source.ts';
+import type { KeyRing } from '../../src/tokens/seal.ts';
+import { createFakeSource } from './support/fake-source.ts';
+
+const databaseUrl = process.env.DATABASE_URL;
+const searchUrl = process.env.OPENSEARCH_URL;
+if (!databaseUrl || !searchUrl)
+  throw new Error('DATABASE_URL and OPENSEARCH_URL must name the check database and node');
+const pool = createPool(databaseUrl);
+const client = createOpenSearch(searchUrl);
+const cursors: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(5)]]) };
+const account = 'account:019a1b2c-3d4e-7f00-8a00-5ab1ec700001';
+const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
+const prefixes: string[] = [];
+
+afterAll(async () => {
+  for (const prefix of prefixes) {
+    const { generations } = await subjectGenerations(client, prefix);
+    for (const generation of generations) await client.request('DELETE', `/${subjectIndexName(prefix, generation)}`);
+    for (const name of [SEARCH_TEMPLATE, SUGGEST_TEMPLATE]) {
+      await client.request('DELETE', `/_scripts/${prefix}${name}`).catch(() => undefined);
+    }
+  }
+  await pool.end();
+});
+
+function freshPrefix(): string {
+  const prefix = `test-${crypto.randomUUID().slice(0, 8)}-`;
+  prefixes.push(prefix);
+  return prefix;
+}
+
+const route = (partition: number) => (partition * 16).toString(16).padStart(4, '0');
+const subject = (n: number, label: string, partition = 10, patch: Partial<IndexedSubject> = {}): IndexedSubject => ({
+  id: `018f0000-0000-7000-8000-${route(partition)}${String(n).padStart(8, '0')}`,
+  type: 'schema:Book',
+  visibility: 'visible',
+  redirect: null,
+  securityRevision: 1,
+  labels: [{ language: 'en', value: label }],
+  aliases: [],
+  descriptions: [],
+  statements: [],
+  ...patch,
+});
+const kokoro = subject(1, 'Kokoro');
+const kanata = subject(2, 'Kokoro no Kanata');
+const connect = subject(3, 'Kokoro Connect', 18);
+const miso = subject(4, 'Miso soup', 10, { type: 'schema:Recipe' });
+type Fake = ReturnType<typeof createFakeSource>;
+
+/** Indexes the source's current state of `subjects` as generation `generation` and points the alias at it. */
+async function publish(prefix: string, fake: Fake, subjects: readonly IndexedSubject[], generation: number) {
+  await createSubjectIndex(client, prefix, generation);
+  const index = subjectIndexName(prefix, generation);
+  const partitions = new Map<number, string[]>();
+  for (const entry of subjects) {
+    const partition = subjectPartition(entry.id);
+    partitions.set(partition, [...(partitions.get(partition) ?? []), entry.id]);
+  }
+  for (const [partition, ids] of partitions) {
+    const snapshot = await fake.read(partition, ids);
+    await client.bulk(bulkLines(index, documentActions(snapshot, ids)), { query: { refresh: 'wait_for' } });
+  }
+  const { active } = await subjectGenerations(client, prefix);
+  const alias = subjectAlias(prefix);
+  const actions: object[] = [{ add: { index, alias } }];
+  if (active !== null && active !== generation) {
+    actions.unshift({ remove: { index: subjectIndexName(prefix, active), alias } });
+  }
+  await client.request('POST', '/_aliases', { actions });
+}
+
+async function deployment(
+  subjects: readonly IndexedSubject[],
+  options: { source?: (fake: Fake) => SubjectSource; client?: OpenSearch } = {},
+) {
+  const prefix = freshPrefix();
+  const fake = createFakeSource();
+  for (const entry of subjects) fake.put(entry);
+  await publish(prefix, fake, subjects, 1);
+  const source = options.source ? options.source(fake) : fake;
+  const service = createSearchService({ pool, client: options.client ?? client, prefix, source, cursors });
+  return { prefix, fake, service };
+}
+
+async function problem(
+  promise: Promise<unknown>,
+  code: string,
+  errors?: { pointer: string; code: string }[],
+): Promise<ProblemError> {
+  const error = await promise.then(
+    () => undefined,
+    (caught: unknown) => caught,
+  );
+  expect(error).toBeInstanceOf(ProblemError);
+  expect((error as ProblemError).code as string).toBe(code);
+  if (errors) expect((error as ProblemError).errors as unknown).toEqual(errors);
+  return error as ProblemError;
+}
+
+const tamper = (token: string) => `${token.slice(0, 10)}${token[10] === 'A' ? 'B' : 'A'}${token.slice(11)}`;
+const ids = (page: { results: { id: string }[] }) => page.results.map((result) => result.id);
+
+test('results come from the current subject state with total and as_of', async () => {
+  const { fake, service } = await deployment([kokoro, kanata, connect, miso]);
+  fake.put({
+    ...kanata,
+    labels: [
+      { language: 'en', value: 'Kokoro no Kanata' },
+      { language: 'ja', value: 'ココロのカナタ' },
+    ],
+  });
+  const before = Date.now();
+  const response = await service.search('anonymous', { text: 'kokoro' });
+  expect(response.results[0]!.id).toBe(kokoro.id);
+  expect(ids(response).sort()).toEqual([kokoro.id, kanata.id, connect.id].sort());
+  expect(response.results.find((result) => result.id === kanata.id)).toEqual({
+    id: kanata.id,
+    type: 'schema:Book',
+    labels: { en: 'Kokoro no Kanata', ja: 'ココロのカナタ' },
+  });
+  expect(response.total).toEqual({ value: 3, relation: 'exact' });
+  expect(response.next_page_token).toBeNull();
+  expect(response.as_of).toMatch(RFC3339);
+  expect(Date.parse(response.as_of)).toBeGreaterThan(before - 60_000);
+  expect(Date.parse(response.as_of)).toBeLessThanOrEqual(Date.now() + 1000);
+  expect((await service.search(account, { text: 'kokoro' })).results).toEqual(response.results);
+});
+
+test('hits the final check refuses are dropped and the page fills from the next candidates', async () => {
+  const books = [1, 2, 3, 4, 5, 6].map((n) => subject(n, `Natsume ${n}`));
+  const { fake, service } = await deployment(books);
+  fake.put({ ...books[0]!, visibility: 'taken_down', securityRevision: 2 });
+  fake.put({ ...books[1]!, visibility: 'hidden', securityRevision: 2 });
+  fake.put({ ...books[2]!, securityRevision: 2 });
+  const request = { text: 'natsume', sort: 'name' as const, page_size: 2 };
+  const page = await service.search('anonymous', request);
+  expect(ids(page)).toEqual([books[3]!.id, books[4]!.id]);
+  expect(page.next_page_token).not.toBeNull();
+  const next = await service.search('anonymous', { ...request, page_token: page.next_page_token! });
+  expect(ids(next)).toEqual([books[5]!.id]);
+  expect(next.next_page_token).toBeNull();
+});
+
+test('pages continue through signed tokens bound to the request and the principal', async () => {
+  const books = [1, 2, 3, 4, 5].map((n) => subject(n, `Soseki ${n}`));
+  const { service } = await deployment(books);
+  const request = { text: 'soseki', sort: 'name' as const, page_size: 2 };
+  const first = await service.search('anonymous', request);
+  const second = await service.search('anonymous', { ...request, page_token: first.next_page_token! });
+  const third = await service.search('anonymous', { ...request, page_token: second.next_page_token! });
+  expect([first, second, third].flatMap(ids)).toEqual(books.map((book) => book.id));
+  expect(third.next_page_token).toBeNull();
+  expect(first.total).toEqual({ value: 5, relation: 'exact' });
+  const token = first.next_page_token!;
+  const invalid = [{ pointer: '/page_token', code: 'invalid_format' }];
+  await problem(
+    service.search('anonymous', { ...request, text: 'natsume', page_token: token }),
+    'invalid_request',
+    invalid,
+  );
+  await problem(
+    service.search('anonymous', { ...request, page_size: 3, page_token: token }),
+    'invalid_request',
+    invalid,
+  );
+  await problem(service.search(account, { ...request, page_token: token }), 'invalid_request', invalid);
+  await problem(service.search('anonymous', { ...request, page_token: tamper(token) }), 'invalid_request', invalid);
+});
+
+test('an expired token or one from another generation needs a restart', async () => {
+  const books = [1, 2, 3].map((n) => subject(n, `Ogai ${n}`));
+  const { prefix, fake, service } = await deployment(books);
+  const request = { text: 'ogai', sort: 'name' as const, page_size: 1 };
+  const issued = Date.now();
+  const first = await service.search('anonymous', request, issued);
+  const token = first.next_page_token!;
+  await problem(
+    service.search('anonymous', { ...request, page_token: token }, issued + 15 * 60_000 + 1),
+    'search_restart_required',
+  );
+  expect(ids(await service.search('anonymous', { ...request, page_token: token }, issued + 1000))).toEqual([
+    books[1]!.id,
+  ]);
+  await publish(prefix, fake, books, 2);
+  await problem(service.search('anonymous', { ...request, page_token: token }), 'search_restart_required');
+  expect(ids(await service.search('anonymous', request))).toEqual([books[0]!.id]);
+});
+
+test('text, filter, sort and paging errors are typed problems with pointers', async () => {
+  const { service } = await deployment([kokoro]);
+  const book = { type: { in: ['schema:Book'] } };
+  const cases: [Parameters<typeof service.search>[1], string, { pointer: string; code: string }[]][] = [
+    [{ text: '"unclosed' }, 'unsupported_query', [{ pointer: '/text', code: 'unsupported' }]],
+    [{ text: 'a'.repeat(513) }, 'unsupported_query', [{ pointer: '/text', code: 'out_of_range' }]],
+    [{ text: '-kokoro' }, 'unsupported_query', [{ pointer: '/text', code: 'unsupported' }]],
+    [{ filter: { not: book } }, 'unsupported_query', [{ pointer: '/filter', code: 'unsupported' }]],
+    [
+      { filter: { colour: { in: ['red'] } } },
+      'invalid_request',
+      [{ pointer: '/filter/colour', code: 'unknown_field' }],
+    ],
+    [
+      { filter: { or: Array.from({ length: 17 }, () => book) } },
+      'unsupported_query',
+      [{ pointer: '/filter/or', code: 'out_of_range' }],
+    ],
+    [{ sort: 'relevance' }, 'unsupported_query', [{ pointer: '/sort', code: 'unsupported' }]],
+    [{ page_size: 51 }, 'invalid_request', [{ pointer: '/page_size', code: 'out_of_range' }]],
+    [{ page_size: 0 }, 'invalid_request', [{ pointer: '/page_size', code: 'out_of_range' }]],
+    [{ page_token: 'not-a-token' }, 'invalid_request', [{ pointer: '/page_token', code: 'invalid_format' }]],
+  ];
+  for (const [request, code, errors] of cases) await problem(service.search('anonymous', request), code, errors);
+  expect((await service.search('anonymous', { text: '-kokoro', filter: book })).results).toEqual([]);
+  expect(ids(await service.search('anonymous', { text: 'kokoro -connect', filter: book }))).toEqual([kokoro.id]);
+  expect(ids(await service.search('anonymous', {}))).toEqual([kokoro.id]);
+});
+
+test('typeahead suggests only subjects that pass the final check', async () => {
+  const { fake, service } = await deployment([kokoro, kanata, connect, miso]);
+  fake.put({ ...kanata, visibility: 'taken_down', securityRevision: 2 });
+  const response = await service.suggest('Koko');
+  expect(ids(response).sort()).toEqual([kokoro.id, connect.id].sort());
+  expect(response.as_of).toMatch(RFC3339);
+  expect((await service.suggest('Koko', 1)).results).toHaveLength(1);
+  expect((await service.suggest('miso')).results).toEqual([
+    { id: miso.id, type: 'schema:Recipe', labels: { en: 'Miso soup' } },
+  ]);
+  const range = (pointer: string) => [{ pointer, code: 'out_of_range' }];
+  await problem(service.suggest(''), 'invalid_request', range('/q'));
+  await problem(service.suggest('字'.repeat(65)), 'invalid_request', range('/q'));
+  await problem(service.suggest('Koko', 11), 'invalid_request', range('/limit'));
+  await problem(service.suggest('Koko', 0), 'invalid_request', range('/limit'));
+});
+
+test('an unreachable node, a missing alias or a missing template is index_not_ready', async () => {
+  const unreachable = createSearchService({
+    pool,
+    client: createOpenSearch('http://127.0.0.1:9', { timeoutMs: 2000 }),
+    prefix: freshPrefix(),
+    source: createFakeSource(),
+    cursors,
+  });
+  const down = await problem(unreachable.search('anonymous', { text: 'kokoro' }), 'index_not_ready');
+  expect(down.headers?.['retry-after']).toMatch(/^\d+$/);
+  await problem(unreachable.suggest('Koko'), 'index_not_ready');
+  const missing = createSearchService({ pool, client, prefix: freshPrefix(), source: createFakeSource(), cursors });
+  await problem(missing.search('anonymous', { text: 'kokoro' }), 'index_not_ready');
+  const { prefix, service } = await deployment([kokoro]);
+  expect(ids(await service.search('anonymous', { text: 'kokoro' }))).toEqual([kokoro.id]);
+  await client.request('DELETE', `/_scripts/${prefix}${SEARCH_TEMPLATE}`);
+  await problem(service.search('anonymous', { text: 'kokoro' }), 'index_not_ready');
+  expect(ids(await service.search('anonymous', { text: 'kokoro' }))).toEqual([kokoro.id]);
+});
+
+test('each request makes at most three index requests and reads only the partitions of examined hits', async () => {
+  const subjects = Array.from({ length: 120 }, (_, index) =>
+    subject(index + 1, `Growth ${index + 1}`, 1 + (index % 4)),
+  );
+  let searches = 0;
+  const reads: string[][] = [];
+  const counting: OpenSearch = {
+    request: ((...args: Parameters<OpenSearch['request']>) => {
+      if (args[1].endsWith('/_search/template')) searches += 1;
+      return client.request(...args);
+    }) as OpenSearch['request'],
+    bulk: ((...args: Parameters<OpenSearch['bulk']>) => client.bulk(...args)) as OpenSearch['bulk'],
+  };
+  const { fake, service } = await deployment(subjects, {
+    client: counting,
+    source: (inner) => ({
+      read: (partition, list) => {
+        reads.push([...list]);
+        return inner.read(partition, list);
+      },
+      count: (partition) => inner.count(partition),
+    }),
+  });
+  subjects.forEach((entry, index) => {
+    if (index % 3 === 0) fake.put({ ...entry, visibility: 'taken_down', securityRevision: 2 });
+  });
+  for (const pageSize of [1, 10, 50]) {
+    searches = 0;
+    reads.length = 0;
+    const page = await service.search('anonymous', { text: 'growth', sort: 'name', page_size: pageSize });
+    expect({ pageSize, results: page.results.length }).toEqual({ pageSize, results: pageSize });
+    expect(searches).toBeLessThanOrEqual(3);
+    expect(reads.length).toBeLessThanOrEqual(3 * 4);
+    for (const read of reads) expect(read.length).toBeLessThanOrEqual(2 * pageSize + 1);
+  }
+});
