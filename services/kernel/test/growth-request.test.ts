@@ -6,11 +6,13 @@ import { createKernel } from '../src/http/kernel.ts';
 import { IDEMPOTENCY_HEADER, SESSION_HEADER } from '../src/http/request.ts';
 import { itemFacts } from '../src/semantic/item.ts';
 import { pageSubjects } from '../src/semantic/page.ts';
+import { bootstrapRelease } from '../src/semantic/definitions.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../src/route/route.ts';
 import { AuthenticationError, type Access, type AccessFactory, type AccountActor } from '../src/request/access.ts';
 import { encodeSession, type SessionComponent } from '../src/tokens/session.ts';
 import type { KeyRing } from '../src/tokens/seal.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from './support/growth.ts';
+import { bundledRelease } from '@rezics/definitions/bundled';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -37,6 +39,7 @@ const dispatchedActions = new Set<string>();
 
 type FixtureState = {
   readonly subjectIds: Set<string>;
+  readonly immutableSubjectIds: Set<string>;
   readonly accountIds: Set<string>;
   readonly resourceIds: Set<string>;
   readonly receiptKeys: Set<string>;
@@ -53,6 +56,7 @@ let privateKey: CryptoKey;
 function fixtureState(): FixtureState {
   const state: FixtureState = {
     subjectIds: new Set(),
+    immutableSubjectIds: new Set(),
     accountIds: new Set(),
     resourceIds: new Set(),
     receiptKeys: new Set(),
@@ -110,7 +114,8 @@ function requestPopulation(state: FixtureState, name: string, hotPartition: numb
         'core.receipt': [
           {
             partition_no: hotPartition,
-            actor_account_id: accountId,
+            principal_id: accountId,
+            principal_kind: 'account',
             command_kind: 'subject.create',
             idempotency_key: idempotencyKey,
             request_digest: seedDigest,
@@ -133,7 +138,8 @@ function requestPopulation(state: FixtureState, name: string, hotPartition: numb
             transaction_id: transaction,
             epoch: 1,
             position,
-            actor_account_id: accountId,
+            principal_id: accountId,
+            principal_kind: 'account',
             client_id: seedClient,
             requested_by: null,
           },
@@ -238,7 +244,17 @@ async function createAnchor(state: FixtureState, label: string, partition: numbe
       return true;
     },
   };
-  const writerKernel = createKernel({ pool: db.pool, access: writer, routeKey, tokens });
+  const writerKernel = createKernel({
+    pool: db.pool,
+    access: writer,
+    routeKey,
+    tokens,
+    writeRate: {
+      async spend() {
+        return { allowed: true };
+      },
+    },
+  });
   const response = await writerKernel.handle(
     new Request('http://kernel.test/v1/subjects', {
       method: 'POST',
@@ -247,7 +263,7 @@ async function createAnchor(state: FixtureState, label: string, partition: numbe
         [IDEMPOTENCY_HEADER]: `"${idempotencyKey}"`,
         'content-type': 'application/json',
       },
-      body: JSON.stringify({ labels: { en: label } }),
+      body: JSON.stringify({ type: 'schema:Book', labels: { en: label } }),
     }),
   );
   expect(response.status).toBe(201);
@@ -257,6 +273,7 @@ async function createAnchor(state: FixtureState, label: string, partition: numbe
   if (route === null) throw new Error('The production subject route was not encoded in its id');
   const anchor = { id, route, partition: partitionOf(route) };
   state.subjectIds.add(id);
+  state.immutableSubjectIds.add(id);
   state.anchorPartitions.add(anchor.partition);
   return anchor;
 }
@@ -342,6 +359,7 @@ function sessionInput(anchor: Anchor, count: number): string {
 
 async function cleanup(state: FixtureState): Promise<void> {
   const subjects = values(state.subjectIds);
+  const removableSubjects = subjects.filter((id) => !state.immutableSubjectIds.has(id));
   const accounts = values(state.accountIds);
   const resources = values(state.resourceIds);
   const keys = values(state.receiptKeys);
@@ -354,12 +372,13 @@ async function cleanup(state: FixtureState): Promise<void> {
   }
   if (subjects.length) {
     await db.admin.query('DELETE FROM semantic.fact WHERE subject_id = ANY($1::uuid[])', [subjects]);
-    await db.admin.query('DELETE FROM semantic.subject WHERE subject_id = ANY($1::uuid[])', [subjects]);
     await db.admin.query(
       "DELETE FROM core.outbox WHERE type = 'com.rezics.subject.created.v1' AND subject = ANY($1::text[])",
       [subjects],
     );
   }
+  if (removableSubjects.length)
+    await db.admin.query('DELETE FROM semantic.subject WHERE subject_id = ANY($1::uuid[])', [removableSubjects]);
   if (keys.length) await db.admin.query('DELETE FROM core.receipt WHERE idempotency_key = ANY($1::text[])', [keys]);
   if (clients.length)
     await db.admin.query('DELETE FROM editorial.write_basis WHERE client_id = ANY($1::text[])', [clients]);
@@ -376,6 +395,7 @@ async function cleanup(state: FixtureState): Promise<void> {
 
 beforeAll(async () => {
   db = await openGrowthDatabase(databaseUrl);
+  await bootstrapRelease(db.pool, bundledRelease);
   const pair = await generateKeyPair('ES256', { extractable: true });
   privateKey = pair.privateKey;
   publicJwk = { ...(await exportJWK(pair.publicKey)), kid: 'growth-request-key', alg: 'ES256' };
