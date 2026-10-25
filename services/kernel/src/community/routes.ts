@@ -6,6 +6,7 @@ import type { Static, TSchema } from 'typebox';
 import { Compile } from 'typebox/compile';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { withConnection } from '../database/pool.ts';
+import { customMethod } from '../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
@@ -31,6 +32,18 @@ import {
   type Realm,
   type RealmDependencies,
 } from './realm.ts';
+import {
+  listPublications,
+  publish,
+  PublicationConflictError,
+  PublicationCursorError,
+  PublicationInputError,
+  readPublication,
+  reject,
+  withdraw,
+  type PublicationHead,
+  type PublicationResult,
+} from './publication.ts';
 
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
@@ -72,6 +85,31 @@ const realm = t.Object(
   closed,
 );
 const realmResponse = t.Object({ realm }, closed);
+const publicationFields = {
+  realmId: id,
+  subjectId: id,
+  publicationId: id,
+  subjectRevisionId: t.Null(),
+  publishedAt: instant,
+};
+const publication = t.Object({ ...publicationFields, verdict: t.Literal('adopt') }, closed);
+const publicationResponse = t.Object({ publication }, closed);
+const decisionResponse = t.Object(
+  {
+    publication: t.Object(
+      {
+        ...publicationFields,
+        verdict: t.Union([t.Literal('withdraw'), t.Literal('reject')]),
+        predecessor: t.Union([id, t.Null()]),
+      },
+      closed,
+    ),
+  },
+  closed,
+);
+const publicationPage = t.Object({ items: t.Array(publication), next: t.Union([t.String(), t.Null()]) }, closed);
+const publicationParams = t.Object({ realmId: t.String(), subjectId: t.String() }, closed);
+
 const createInput = t.Object({ title, summary: t.Optional(summary) }, closed);
 const updateInput = t.Object({ title: t.Optional(title), summary: t.Optional(summary) }, closed);
 const createRealmInput = t.Object(
@@ -161,7 +199,11 @@ export type CommunityRouteDependencies = {
 
 function communityProblem(error: unknown): never {
   if (error instanceof SpaceInputError) throw new ProblemError('invalid_request');
-  if (error instanceof RealmInputError) throw new ProblemError('invalid_request');
+  if (error instanceof RealmInputError || error instanceof PublicationInputError)
+    throw new ProblemError('invalid_request');
+  if (error instanceof PublicationCursorError)
+    throw new ProblemError(error.reason === 'stale' ? 'stale_cursor' : 'invalid_cursor');
+  if (error instanceof PublicationConflictError) throw new ProblemError('not_found');
   // A changed head is the same closed not_found as content post edit's failed compare-and-set.
   if (error instanceof SpaceConflictError || error instanceof RealmConflictError) throw new ProblemError('not_found');
   if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
@@ -211,6 +253,17 @@ function publishedRealm(value: Realm) {
     summary: value.summary,
     revisionCreatedAt: value.revisionCreatedAt,
     author: value.author,
+  };
+}
+
+function publishedPublication(value: PublicationHead | PublicationResult) {
+  return {
+    realmId: value.realmId,
+    subjectId: value.subjectId,
+    publicationId: value.publicationId,
+    verdict: 'adopt' as const,
+    subjectRevisionId: null,
+    publishedAt: new Date(value.publishedAt).toISOString(),
   };
 }
 
@@ -465,6 +518,197 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
             session.record(result);
             set.headers.etag = JSON.stringify(representation.headRevisionId);
             return { realm: representation };
+          });
+        } catch (error) {
+          communityProblem(error);
+        }
+      },
+    )
+    .post(
+      '/v1/realms/:realmId/publications',
+      {
+        params: realmParams,
+        headers: commandHeaders,
+        body: strict(t.Object({ subjectId: id }, closed)),
+        response: {
+          201: withHeaders(strict(publicationResponse), { ...sessionHeader, location: t.String(), etag: t.String() }),
+          ...writeFailures,
+        },
+        detail: {
+          operationId: 'publication.publish',
+          'x-action': 'realm:publish',
+          'x-rate-limit': writeRate,
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { realmId }, body, headers, actor, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        try {
+          return await admission.run('normal', job, async () => {
+            const result = await publish(
+              realmDependencies(),
+              actor,
+              { realmId, subjectId: body.subjectId },
+              { idempotencyKey: key, deadline: job.deadline },
+            );
+            session.record(result);
+            set.status = 201;
+            set.headers.location = `/v1/realms/${realmId}/publications/${body.subjectId}`;
+            set.headers.etag = JSON.stringify(result.value.publicationId);
+            return { publication: publishedPublication(result.value) };
+          });
+        } catch (error) {
+          communityProblem(error);
+        }
+      },
+    )
+    .get(
+      '/v1/realms/:realmId/publications',
+      {
+        params: realmParams,
+        query: t.Object(
+          {
+            cursor: t.Optional(t.String()),
+            limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1 })),
+          },
+          closed,
+        ),
+        response: {
+          200: strict(publicationPage),
+          ...readFailures,
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+          409: problemSchema('stale_cursor'),
+        },
+        detail: {
+          operationId: 'publication.list',
+          'x-action': 'realm:read',
+          security: readSecurity,
+        },
+      },
+      async ({ params: { realmId }, query, actor, admission, job }) => {
+        try {
+          const page = await admission.run('normal', job, () =>
+            listPublications(
+              realmDependencies(),
+              realmId,
+              { actor, deadline: job.deadline },
+              {
+                ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+                ...(query.limit === undefined ? {} : { limit: query.limit }),
+              },
+            ),
+          );
+          if (!page) throw new ProblemError('not_found');
+          return { items: page.items.map(publishedPublication), next: page.next };
+        } catch (error) {
+          communityProblem(error);
+        }
+      },
+    )
+    .get(
+      '/v1/realms/:realmId/publications/:subjectId',
+      {
+        params: publicationParams,
+        response: {
+          200: withHeaders(strict(publicationResponse), { etag: t.String() }),
+          ...readFailures,
+        },
+        detail: {
+          operationId: 'publication.get',
+          'x-action': 'realm:read',
+          security: readSecurity,
+        },
+      },
+      async ({ params: { realmId, subjectId }, actor, admission, job, set }) => {
+        const current = await admission.run('normal', job, () =>
+          readPublication(realmDependencies(), realmId, subjectId, { actor, deadline: job.deadline }),
+        );
+        if (!current) throw new ProblemError('not_found');
+        set.headers.etag = JSON.stringify(current.publicationId);
+        return { publication: publishedPublication(current) };
+      },
+    )
+    .post(
+      customMethod('/v1/realms/:realmId/publications/:subjectId', 'withdraw'),
+      {
+        params: publicationParams,
+        headers: updateHeaders,
+        response: {
+          200: withHeaders(strict(decisionResponse), { ...sessionHeader, etag: t.String() }),
+          ...writeFailures,
+        },
+        detail: {
+          operationId: 'publication.withdraw',
+          'x-action': 'realm:publish',
+          'x-rate-limit': writeRate,
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { realmId, subjectId }, headers, actor, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const expectedHead = matchHead(headers['if-match']);
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        try {
+          return await admission.run('normal', job, async () => {
+            const result = await withdraw(
+              realmDependencies(),
+              actor,
+              { realmId, subjectId, expectedHead },
+              { idempotencyKey: key, deadline: job.deadline },
+            );
+            session.record(result);
+            set.headers.etag = JSON.stringify(result.value.publicationId);
+            return {
+              publication: {
+                ...result.value,
+                verdict: 'withdraw' as const,
+                publishedAt: new Date(result.value.publishedAt).toISOString(),
+              },
+            };
+          });
+        } catch (error) {
+          communityProblem(error);
+        }
+      },
+    )
+    .post(
+      customMethod('/v1/realms/:realmId/publications/:subjectId', 'reject'),
+      {
+        params: publicationParams,
+        headers: updateHeaders,
+        response: {
+          200: withHeaders(strict(decisionResponse), { ...sessionHeader, etag: t.String() }),
+          ...writeFailures,
+        },
+        detail: {
+          operationId: 'publication.reject',
+          'x-action': 'realm:publish',
+          'x-rate-limit': writeRate,
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { realmId, subjectId }, headers, actor, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const expectedHead = matchHead(headers['if-match']);
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        try {
+          return await admission.run('normal', job, async () => {
+            const result = await reject(
+              realmDependencies(),
+              actor,
+              { realmId, subjectId, expectedHead },
+              { idempotencyKey: key, deadline: job.deadline },
+            );
+            session.record(result);
+            set.headers.etag = JSON.stringify(result.value.publicationId);
+            return {
+              publication: {
+                ...result.value,
+                verdict: 'reject' as const,
+                publishedAt: new Date(result.value.publishedAt).toISOString(),
+              },
+            };
           });
         } catch (error) {
           communityProblem(error);
