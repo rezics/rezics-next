@@ -95,7 +95,10 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
   const seedAccounts = [account(0x3300), account(0x6610)];
   const people = [...Object.values(accounts), seller, governor, ...seedAccounts];
   const approvals = new Set(people.map(({ id }) => id));
-  const issuer = 'https://auth.example.test';
+  // All registered work modules share the real fixture issuer, including the
+  // executor process, which cannot use the HTTP process's in-process transport.
+  const authServer = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: (request) => auth.handler(request) });
+  const issuer = `http://127.0.0.1:${authServer.port}`;
   const audience = 'https://api.rezics.test';
   const password = 'commerce fixture password with enough entropy';
   const signingKey = {
@@ -283,6 +286,10 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
         ...process.env,
         DATABASE_URL: databaseUrl,
         KERNEL_ROUTE_KEY: Buffer.alloc(32, 7).toString('base64url'),
+        KERNEL_SESSION_KEYS: `1:${Buffer.alloc(32, 8).toString('base64url')}`,
+        AUTH_ISSUER: issuer,
+        AUTH_AUDIENCE: audience,
+        AUTH_JWKS_URL: `${issuer}/.well-known/jwks.json`,
         STRIPE_SECRET_KEY: 'sk_test_commerce',
         STRIPE_MANAGED_PAYMENTS: String(managedPayments),
         STRIPE_API_HOST: `http://127.0.0.1:${fake.port}`,
@@ -578,6 +585,7 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
     },
     async close() {
       await stopWorker();
+      await authServer.stop(true);
       fake.stop();
       tokens.clear();
       approvals.clear();
