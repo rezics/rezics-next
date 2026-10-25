@@ -117,7 +117,7 @@ async function grant(accountId: string, actions: string[]) {
   expect(result.value).toEqual({ grant: body });
 }
 
-async function createSpace(holder: Person, title: string, key = crypto.randomUUID()) {
+async function createSpace(holder: Person, title: string, key: string = crypto.randomUUID()) {
   const result = await call('POST', '/v1/spaces', {
     bearer: holder.bearer,
     key,
