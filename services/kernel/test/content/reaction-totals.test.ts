@@ -17,6 +17,7 @@ afterAll(() => db.close());
 
 const changed = 'com.rezics.content.reaction.changed.v1';
 const kinds = ['upvote', 'downvote', 'like', 'love', 'laugh', 'insightful', 'sad'] as const;
+type CountRow = { kind: (typeof kinds)[number]; count: number };
 
 function consumer(): string {
   return `reaction_totals_${randomUUID().replaceAll('-', '')}`;
@@ -82,11 +83,11 @@ async function readCounts(targetId: string): Promise<ReactionCounts> {
 }
 
 async function totalAndContributionRows(targetId: string) {
-  const totals = await db.admin.query<{ kind: string; count: number }>(
+  const totals = await db.admin.query<CountRow>(
     `SELECT kind, count FROM content.reaction_total WHERE target_id = $1::uuid ORDER BY kind`,
     [targetId],
   );
-  const contributions = await db.admin.query<{ kind: string; count: number }>(
+  const contributions = await db.admin.query<CountRow>(
     `SELECT kind, sum(count)::integer AS count
      FROM content.reaction_count WHERE target_id = $1::uuid GROUP BY kind ORDER BY kind`,
     [targetId],
