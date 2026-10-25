@@ -2163,12 +2163,10 @@ tables:
         status: omitted
         reason: Release key anchoring the supersession statement.
       - name: rid
-        status: existing
-        term: wdt:P155
-        'on': wd:Q20631656
-        mapping: wdt:P155
-        meaning: Release that this release follows or supersedes.
-        citations: *id030
+        status: omitted
+        reason: >-
+          This value links to another release, while the shared follows term targets creative works; the profile does not
+          represent this release-to-release relation.
   - name: releases_titles
     type: schema:name
     columns:

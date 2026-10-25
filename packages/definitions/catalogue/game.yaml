@@ -23,7 +23,6 @@ classes:
     slots:
       - alternateName
   VideoGameRelease:
-    is_a: Thing
     class_uri: wd:Q20631656
     description: >-
       A distinct software release that may represent one or more works. Class source:
@@ -36,9 +35,12 @@ classes:
       - exampleOfWork
       - gamePlatform
       - gtin
+      - image
+      - name
+      - sameAs
+      - url
       - inLanguage
       - publisher
-      - follows
       - ageRating
       - releaseType
       - distributionFormat
@@ -53,14 +55,6 @@ classes:
     slots:
       - bangumiSubjectId
 slots:
-  alternateName:
-    slot_uri: schema:alternateName
-    description: An alternative name or romanized title for this thing.
-    multivalued: true
-    exact_mappings:
-      - wd:P2561
-    annotations:
-      datatype: monolingualtext
   gamePlatform:
     slot_uri: schema:gamePlatform
     description: A platform on which the release can run.

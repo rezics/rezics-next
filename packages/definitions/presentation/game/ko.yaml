@@ -2,7 +2,6 @@ types:
   schema:VideoGame: 비디오 게임
   wd:Q20631656: 출시 버전
 properties:
-  schema:alternateName: 대체 이름
   schema:gamePlatform: 게임 플랫폼
   schema:gtin: GTIN
   wdt:P2899: 이용할 수 있는 최소 연령

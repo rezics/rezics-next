@@ -148,6 +148,7 @@ slots:
     slot_uri: schema:inLanguage
     description: The language used for the resource.
     pattern: '^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$'
+    multivalued: true
     annotations:
       datatype: string
   abstract:

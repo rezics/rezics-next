@@ -2,7 +2,6 @@ types:
   schema:VideoGame: jeu vidéo
   wd:Q20631656: publication de logiciels
 properties:
-  schema:alternateName: nom alternatif
   schema:gamePlatform: plateforme de jeu
   schema:gtin: GTIN
   wdt:P2899: âge minimal
