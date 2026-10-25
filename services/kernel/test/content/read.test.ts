@@ -339,8 +339,15 @@ test('missing trusted eligibility fails closed despite an anonymous action catal
 });
 
 test('readBoard returns current public metadata with an authoritative partition head', async () => {
-  const result = await readBoard({ pool: database.pool, access, tokens }, board.id, { actor, ...context() });
-  expect(result.value).toMatchObject({ id: board.id, route, title: 'Public board', securityRevision: '1' });
+  const freshBoardId = newId(route);
+  await database.admin.query(
+    `INSERT INTO content.board
+     (route, board_id, subject_id, title, visibility, security_revision, recorded_transaction_id)
+     VALUES ($1, $2, $3, 'Public board', 'published', 1, $2)`,
+    [route, freshBoardId, subject],
+  );
+  const result = await readBoard({ pool: database.pool, access, tokens }, freshBoardId, { actor, ...context() });
+  expect(result.value).toMatchObject({ id: freshBoardId, route, title: 'Public board', securityRevision: '1' });
   const partition = await readPartition(database.admin, partitionOf(route));
   expect(partition).not.toBeNull();
   expect(result.anchor).toEqual({ partition: partition!, epoch: partition!.epoch, position: partition!.position });
