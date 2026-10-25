@@ -26,6 +26,11 @@ export const EVENT_TYPES = {
     { digest, head: Type.Integer({ minimum: 1 }) },
     { additionalProperties: false },
   ),
+  'com.rezics.presentation.profile.published.v1': Type.Object({ digest }, { additionalProperties: false }),
+  'com.rezics.presentation.profile.activated.v1': Type.Object(
+    { digest, head: Type.Integer({ minimum: 1 }) },
+    { additionalProperties: false },
+  ),
   'com.rezics.subject.created.v1': Type.Object({ id: Type.String({ pattern: UUID }) }, { additionalProperties: false }),
   'com.rezics.subject.visibility_changed.v1': Type.Object(
     {
