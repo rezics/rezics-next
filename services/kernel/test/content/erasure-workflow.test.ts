@@ -169,6 +169,79 @@ test('native initiation commits the provenance receipt required by durable initi
   expect(receipt.rows[0]!.response.durableInitiator).toMatch(/^[0-9a-f]{64}$/);
 });
 
+test('the content initiator reader accepts only the committed operation source and creation receipt', async () => {
+  const { readErasureInitiator } = await import('../../src/content/erasure-initiator.ts');
+  const { durableInitiatorCommitment } = await import('../../src/access/durable-initiator-capture.ts');
+  const selected = await scope(1);
+  const request = context();
+  const created = await beginAuthorErasure(
+    {
+      pool: fixture.pool,
+      access: fixture.access,
+      clock: () => new Date(),
+      workflows: {
+        async enqueue() {
+          throw new Error('Only the durable relay may enqueue');
+        },
+        async status() {
+          throw new Error('No status read during initiation');
+        },
+      },
+    },
+    selected.actor,
+    { threadId: selected.threadId, authorId: selected.actor.accountId },
+    request,
+  );
+  const operation = {
+    route,
+    id: created.value.operationId,
+    kind: 'content.author-erasure',
+    sourceId: created.value.operationId,
+  };
+  const observed = await runCommand(fixture.pool, { partition }, async (tx, { time }) => {
+    const record = await readErasureInitiator(tx, operation, time);
+    expect(await readErasureInitiator(tx, { ...operation, sourceId: newId(route) }, time)).toBeNull();
+    expect(await readErasureInitiator(tx, { ...operation, kind: 'content.other' }, time)).toBeNull();
+    return { value: record, events: [] };
+  });
+  expect(observed.value).toMatchObject({
+    operation,
+    initiatorAccountId: selected.actor.accountId,
+    actor: selected.actor,
+    recordedTransactionId: created.transactionId,
+    originalAccount: { minimumAuthnEpoch: '1', operatorAccountId: null },
+    originalDelegation: null,
+    creation: {
+      commandKind: operation.kind,
+      idempotencyKey: request.idempotencyKey,
+      target: { route, id: selected.ids[0]! },
+    },
+  });
+  const receipt = await fixture.reader.query(
+    `SELECT response FROM core.receipt
+     WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2
+       AND command_kind='content.author-erasure' AND idempotency_key=$3`,
+    [partition, selected.actor.accountId, request.idempotencyKey],
+  );
+  expect(durableInitiatorCommitment(observed.value!)).toBe(receipt.rows[0].response.durableInitiator);
+  const copiedId = newId(route);
+  await fixture.reader.query(
+    `INSERT INTO content.operation
+     (route,operation_id,initiator_account_id,author_account_id,thread_id,actor_kind,actor_account_id,
+      actor_client_id,actor_scopes,actor_requested_by,actor_authn_epoch,empty_scope,upper_created_at,
+      upper_post_id,requested_at,recorded_transaction_id)
+     SELECT route,$3,initiator_account_id,author_account_id,thread_id,actor_kind,actor_account_id,
+       actor_client_id,actor_scopes,actor_requested_by,actor_authn_epoch,empty_scope,upper_created_at,
+       upper_post_id,requested_at,recorded_transaction_id
+     FROM content.operation WHERE route=$1 AND operation_id=$2`,
+    [route, operation.id, copiedId],
+  );
+  await runCommand(fixture.pool, { partition }, async (tx, { time }) => {
+    expect(await readErasureInitiator(tx, { ...operation, id: copiedId, sourceId: copiedId }, time)).toBeNull();
+    return { value: copiedId, events: [] };
+  });
+});
+
 test('native workflow resolves persisted initiating identity and physically completes more than two post pages', async () => {
   const selected = await scope(201, 3);
   const operationId = newId(route);
