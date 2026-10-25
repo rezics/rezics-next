@@ -12,7 +12,7 @@ import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
 import { accessCheck, type Resource, type AccessClient } from '../../src/request/access.ts';
 
 /** Real Auth issuance and production Access; SQL below is privileged fixture setup. */
-export async function standingFixture() {
+export async function standingFixture(extraActions: readonly string[] = []) {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL must name the migrated test database');
   const pool = createPool(url);
@@ -39,27 +39,30 @@ export async function standingFixture() {
   const resource = { route: 0x6789, id: newId(0x6789) };
   const otherResource = { route: 0x789a, id: newId(0x789a) };
   const actions = [
-    'subject:read',
-    'subject:update',
-    'subject:create',
-    'access:grant',
-    'account:delegate',
-    'board:read',
-    'board:manage',
-    'thread:create',
-    'thread:read',
-    'post:create',
-    'media:create',
-    'post:read',
-    'post:revise',
-    'post:erase',
-    'media:read_reservation',
-    'media:read',
-    'media:complete',
-    'media:erase',
-    'report:create',
-    'moderation:takedown',
-    'fixture:own',
+    ...new Set([
+      'subject:read',
+      'subject:update',
+      'subject:create',
+      'access:grant',
+      'account:delegate',
+      'board:read',
+      'board:manage',
+      'thread:create',
+      'thread:read',
+      'post:create',
+      'media:create',
+      'post:read',
+      'post:revise',
+      'post:erase',
+      'media:read_reservation',
+      'media:read',
+      'media:complete',
+      'media:erase',
+      'report:create',
+      'moderation:takedown',
+      'fixture:own',
+      ...extraActions,
+    ]),
   ];
   const ordinaryClientScopes = actions.filter((action) => action !== 'media:complete');
   const approvals = new Set([actor, principal, recipient]);

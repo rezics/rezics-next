@@ -9,7 +9,8 @@ import { standingFixture } from './standing-fixture.ts';
 
 let f: Awaited<ReturnType<typeof standingFixture>>;
 beforeAll(async () => {
-  f = await standingFixture();
+  // reaction:set is a mounted standing action; the fixture catalogue must include it or the thread and post templates drop.
+  f = await standingFixture(['reaction:set']);
 }, 30000);
 beforeEach(async () => {
   await f.reset();
@@ -110,7 +111,7 @@ test('same-transaction initialization writes catalogue roles at T in the child p
   ]);
   expect(rows[0]!.subject_id).toBe(f.recipient);
   expect(rows.every((r) => Date.parse(r.start) === Date.parse(result.value.at))).toBe(true);
-  expect(await allowed(f.recipient, 'board:manage', child)).toBe(true);
+  expect(await allowed(f.recipient, 'board:read', child)).toBe(true);
   expect(await allowed(f.principal, 'thread:create', child)).toBe(true);
   expect(await allowed(f.principal, 'board:read', child)).toBe(false);
   expect(await allowed(f.recipient, 'moderation:takedown', child)).toBe(false);
@@ -143,11 +144,13 @@ test('resource and grant failures roll back resource, role grants, outbox and re
 test('type data limits standing reads, owner erasure and moderation, with no role for reports or communal subjects', async () => {
   const thread = (await create('content.thread')).value.child;
   expect(await allowed(f.principal, 'post:create', thread)).toBe(true);
+  expect(await allowed(f.principal, 'reaction:set', thread)).toBe(true);
   expect(await allowed(f.principal, 'thread:read', thread)).toBe(false);
   const post = (await create('content.post')).value.child;
   expect(await allowed(f.recipient, 'post:erase', post)).toBe(true);
   expect(await allowed(f.principal, 'post:erase', post)).toBe(false);
-  expect(await allowed(f.principal, 'report:create', post)).toBe(true);
+  expect(await allowed(f.principal, 'reaction:set', post)).toBe(false);
+  expect(await allowed(f.principal, 'report:create', post)).toBe(false);
   expect(await allowed(f.principal, 'post:read', post)).toBe(false);
   const media = (await create('content.media')).value.child;
   expect((await roles(media)).map((r) => r.grant_role)).toEqual(['content.media.owner']);

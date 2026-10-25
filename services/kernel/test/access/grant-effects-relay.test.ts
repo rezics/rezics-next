@@ -53,7 +53,8 @@ beforeAll(async () => {
   // migrated kernel database, without inheriting any partition-zero history.
   process.env.DATABASE_URL = url.toString();
   try {
-    f = await grantFixture();
+    // platform.governance now expands to gate:any, so the grantor token must carry that scope.
+    f = await grantFixture(['gate:any']);
   } finally {
     process.env.DATABASE_URL = source;
   }

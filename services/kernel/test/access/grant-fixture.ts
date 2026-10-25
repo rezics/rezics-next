@@ -8,7 +8,7 @@ import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
 import { accessCheck } from '../../src/request/access.ts';
 
 /** Real Auth issuance and production Access; SQL below is privileged fixture setup. */
-export async function grantFixture() {
+export async function grantFixture(extraActions: readonly string[] = []) {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL must name the migrated test database');
   const pool = createPool(url);
@@ -34,7 +34,7 @@ export async function grantFixture() {
   const recipient = newId(0x3456);
   const resource = { route: 0x6789, id: newId(0x6789) };
   const otherResource = { route: 0x789a, id: newId(0x789a) };
-  const actions = ['subject:read', 'subject:update', 'access:grant', 'account:delegate'];
+  const actions = [...new Set(['subject:read', 'subject:update', 'access:grant', 'account:delegate', ...extraActions])];
   const approvals = new Set([actor, principal, recipient]);
   const auth = await createAuthService({
     database: authPool,

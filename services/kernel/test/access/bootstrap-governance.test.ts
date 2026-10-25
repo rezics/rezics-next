@@ -180,7 +180,12 @@ beforeAll(async () => {
       },
     },
   });
-  await auth.internal.registerClient({ clientId: 'operator-test', firstParty: true, scopes: actions });
+  // gate:any is an internal governance action, absent from the route catalogue but required to administer the role.
+  await auth.internal.registerClient({
+    clientId: 'operator-test',
+    firstParty: true,
+    scopes: [...actions, 'gate:any'],
+  });
   async function human(handle: string) {
     const key = `bootstrap-${handle}`;
     const accountId = lifecycle.registrationTarget(key);
@@ -261,8 +266,9 @@ test('exact root CLI installs one durable normal Global role and one registered 
 });
 
 test('Auth-issued scopes and installed formula govern delegation, revocation and unrelated resources', async () => {
+  const semanticActions = actionCatalogue(createKernel({ pool, routeKey: new Uint8Array(32) }));
   const semantic = createAccess({
-    actions: actionCatalogue(createKernel({ pool, routeKey: new Uint8Array(32) })),
+    actions: semanticActions,
     auth: {
       issuer: 'https://auth.example.test',
       audience: 'https://api.rezics.test',
@@ -276,9 +282,17 @@ test('Auth-issued scopes and installed formula govern delegation, revocation and
       await accessCheck(semantic, semanticContext.actor, 'subject:create', PLATFORM_RESOURCE, semanticContext)
     )(pool),
   ).toBe(true);
+  // Mounted governance actions are conferred; gate:any stays off the route catalogue.
+  expect(semanticActions.has('media:import_from_url')).toBe(true);
+  expect(semanticActions.has('gate:any')).toBe(false);
   expect(
     await (
       await accessCheck(semantic, semanticContext.actor, 'media:import_from_url', PLATFORM_RESOURCE, semanticContext)
+    )(pool),
+  ).toBe(true);
+  expect(
+    await (
+      await accessCheck(semantic, semanticContext.actor, 'gate:any', PLATFORM_RESOURCE, semanticContext)
     )(pool),
   ).toBe(false);
   expect(await allowed(person, 'subject:create')).toBe(true);
@@ -317,7 +331,7 @@ test('Auth-issued scopes and installed formula govern delegation, revocation and
     ).rows,
   ).toHaveLength(0);
   for (const action of imports) expect(await allowed(automated, action)).toBe(false);
-  await grants.revokeRole(await context(person), {
+  await grants.revokeRole(await context(person, [...actions, 'gate:any']), {
     resource: PLATFORM_RESOURCE,
     subject: { kind: 'account', id: person },
     role: PLATFORM_GOVERNANCE_ROLE,
@@ -342,8 +356,12 @@ test('reserved governance expansion intersects mounted actions while arbitrary r
   expect(resolved.roles.get(PLATFORM_GOVERNANCE_ROLE)).toEqual(['subject:create']);
   expect(resolved.roles.has('custom.invalid')).toBe(false);
   const semantic = actionCatalogue(createKernel({ pool, routeKey: new Uint8Array(32) }));
-  expect(semantic.has('media:import_from_url')).toBe(false);
-  expect(resolveResourceRoles(semantic).roles.get(PLATFORM_GOVERNANCE_ROLE)).toContain('subject:create');
+  const governance = resolveResourceRoles(semantic).roles.get(PLATFORM_GOVERNANCE_ROLE);
+  expect(semantic.has('media:import_from_url')).toBe(true);
+  expect(semantic.has('gate:any')).toBe(false);
+  expect(governance).toContain('subject:create');
+  expect(governance).toContain('media:import_from_url');
+  expect(governance).not.toContain('gate:any');
   expect(() =>
     resolveResourceRoles(catalogue, { roles: { [PLATFORM_GOVERNANCE_ROLE]: ['access:grant'] }, types: {} }),
   ).toThrow();

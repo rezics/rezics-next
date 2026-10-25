@@ -22,6 +22,8 @@ import { openGrowthDatabase } from '../support/growth.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { SESSION_HEADER, actionCatalogue } from '../../src/http/request.ts';
 import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
+import { bundledRelease } from '@rezics/definitions/bundled';
+import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 
 const pool = new Pool({ connectionString: 'postgres://kernel.invalid/routes' });
 afterAll(() => pool.end());
@@ -166,6 +168,8 @@ const effects = async () =>
 beforeAll(async () => {
   db = await openGrowthDatabase();
   db.pool.options.max = 1;
+  // Context creation reads the active definition release before its grant check.
+  await bootstrapRelease(db.pool, bundledRelease);
   const limiter = createWriteRateLimiter({
     secret: 'grant-routes-private-write-rate-secret-32bytes',
     overrides: JSON.stringify({ 'new-account': { write: { maximum: 100000, seconds: 86400 } } }),
@@ -187,7 +191,9 @@ beforeAll(async () => {
     },
   });
   const actions = actionCatalogue(kernel);
-  scopes = [...actions.keys()];
+  // media:complete is reserved to the confidential website client. gate:any is
+  // internal to Access and is required to delegate platform.governance.
+  scopes = [...new Set([...actions.keys()].filter((scope) => scope !== 'media:complete').concat('gate:any'))];
   authDatabase = testDatabase();
   authPool = new Pool({ connectionString: authDatabase.url });
   signingKey = {

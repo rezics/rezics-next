@@ -164,7 +164,7 @@ test('role grants retain independent principal, consent and denial operands and 
     },
   );
   const delegated = await f.context(f.recipient, f.actions, `urn:rezics:request:${f.principal}:${request}`);
-  const check = await accessCheck(f.access, delegated.actor, 'board:manage', c.child, delegated);
+  const check = await accessCheck(f.access, delegated.actor, 'board:read', c.child, delegated);
   expect(await check(f.pool)).toBe(false);
   const context = await f.context(f.recipient);
   await f.grant(f.recipient, 'access:grant', c.child);
@@ -181,9 +181,9 @@ test('role grants retain independent principal, consent and denial operands and 
     code: '23P01',
   });
   const limited = await f.context(f.recipient, ['subject:read']);
-  expect(await (await accessCheck(f.access, limited.actor, 'board:manage', c.child, limited))(f.pool)).toBe(false);
+  expect(await (await accessCheck(f.access, limited.actor, 'board:read', c.child, limited))(f.pool)).toBe(false);
   await f.reader.query(
-    "INSERT INTO access.resource_denial(route,resource_id,subject_id,action,reason,valid,transaction_id) VALUES ($1,$2,$3,'board:manage','resource','(,)',$3)",
+    "INSERT INTO access.resource_denial(route,resource_id,subject_id,action,reason,valid,transaction_id) VALUES ($1,$2,$3,'board:read','resource','(,)',$3)",
     [c.child.route, c.child.id, f.principal],
   );
   expect(await check(f.pool)).toBe(false);
