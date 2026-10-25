@@ -22,4 +22,5 @@ export {
 export { curie, href, localizedText, pickText, plainText } from './strings.ts';
 export { compositionSchema } from './schema.ts';
 export { validateComposition } from './validate.ts';
+export { MAX_ZONE_PAGES, MAX_ZONE_SCOPE, UI_LOCALES, validateZoneStarter, type ZoneStarter } from './zone.ts';
 export { MAX_PAGE_COST, MAX_PAGE_READS, planReads, readCost, shownProperties, type PageReadPlan } from './reads.ts';

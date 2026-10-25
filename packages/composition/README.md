@@ -19,6 +19,38 @@ come from a registry built with `defineRegistry`. Each component's props are a c
 and never declare `id`. A slot is a prop that holds an array of child nodes; its name cannot
 also be a data prop. Every declared slot is present as an array.
 
+## Zone starters
+
+A Zone starter is inert presentation data that a later Zone feature can copy to instantiate a
+Zone. A starter file lives at
+`packages/definitions/presentation/<vertical>/zone.json` and has this shape:
+
+```json
+{
+  "labels": {
+    "en": "Books",
+    "zh-Hant": "Books",
+    "zh-Hans": "Books",
+    "ja": "Books",
+    "ko": "Books",
+    "de": "Books",
+    "fr": "Books",
+    "es": "Books"
+  },
+  "pages": [{ "route": "", "document": { "root": { "props": {} }, "content": [] } }],
+  "scope": ["books/fiction"]
+}
+```
+
+Labels have exactly the eight UI locale keys (`en`, `zh-Hant`, `zh-Hans`, `ja`, `ko`, `de`,
+`fr` and `es`). Each label is non-empty safe plain text of at most 80 characters. A starter
+has at most 16 pages; each page has a unique, strictly increasing relative route and a
+composition document. The empty route identifies the Zone home page and is required. A route
+is at most 255 characters and contains lowercase path segments made from letters, digits and
+single hyphens. The scope contains at most 16 distinct saved-filter IDs defined by the same
+definition release. `validateZoneStarter` checks this envelope and validates each page with
+`validateComposition`.
+
 ## Limits
 
 `validateComposition` is pure, does not mutate its input, and does not throw on parsed JSON.
