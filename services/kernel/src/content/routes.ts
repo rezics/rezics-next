@@ -2,6 +2,7 @@ import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import { withConnection } from '../database/pool.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
+import { customMethod } from '../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
@@ -185,6 +186,16 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
     if (!result.value) throw new ProblemError('not_found');
     return { value: result.value, anchor: result.anchor };
   }
+
+  // Protected preflight rejects anonymous callers before validating tuple inputs.
+  app.onTransform(({ request }) => {
+    if (
+      !request.headers.has('authorization') &&
+      request.method === 'GET' &&
+      new URL(request.url).pathname === customMethod('/v1/sourceFences', 'check')
+    )
+      throw new AuthenticationError(401, 'Bearer');
+  });
 
   return sourceFenceGovernanceRoutes(sourceFenceRoutes(app, dependencies), dependencies)
     .post(
