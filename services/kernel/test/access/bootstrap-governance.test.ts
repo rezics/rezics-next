@@ -38,6 +38,8 @@ const actions = [
   'definitions:publish',
   'definitions:activate',
   'context:create',
+  'offer:create',
+  'payout_statement:mark_paid',
 ];
 const imports = ['subject:batch_write', 'source_fence:read', 'source_fence:takedown', 'media:import_from_url'];
 const catalogue = new Map(actions.map((action) => [action, { anonymous: false }]));

@@ -9,6 +9,8 @@
     "media:import_from_url",
     "definitions:publish",
     "definitions:activate",
-    "context:create"
+    "context:create",
+    "offer:create",
+    "payout_statement:mark_paid"
   ]
 }
