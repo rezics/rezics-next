@@ -22,15 +22,27 @@ type CredentialInput = Omit<SessionInput, 'purpose'> & {
   operationKey: string;
   effectReference: string;
 };
+type LegacyCredentialInput = Omit<SessionInput, 'purpose'> & {
+  purpose: CredentialPurpose;
+  operationKey?: undefined;
+  effectReference?: undefined;
+};
 
 test('credential consume input is a closed union that leaves the session variant unchanged', () => {
   expectTypeOf<Extract<ConsumeInput, { purpose: 'session' }>>().toEqualTypeOf<SessionInput>();
   expectTypeOf<ConsumeInput['purpose']>().toEqualTypeOf<'session' | CredentialPurpose>();
-  expectTypeOf<Exclude<ConsumeInput, { purpose: 'session' }>>().toMatchTypeOf<CredentialInput>();
-  expectTypeOf<Extract<ConsumeInput, { purpose: 'set-password' }>>().toMatchTypeOf<CredentialInput>();
-  expectTypeOf<Extract<ConsumeInput, { purpose: 'remove-password' }>>().toMatchTypeOf<CredentialInput>();
-  expectTypeOf<Extract<ConsumeInput, { purpose: 'add-key' }>>().toMatchTypeOf<CredentialInput>();
-  expectTypeOf<Extract<ConsumeInput, { purpose: 'remove-key' }>>().toMatchTypeOf<CredentialInput>();
+  type ExactCredentialInput = Extract<ConsumeInput, { operationKey: string }>;
+  type LegacyInput = Extract<ConsumeInput, { operationKey?: undefined; purpose: CredentialPurpose }>;
+  expectTypeOf<ExactCredentialInput>().toMatchTypeOf<CredentialInput>();
+  expectTypeOf<LegacyInput>().toEqualTypeOf<LegacyCredentialInput>();
+  expectTypeOf<Exclude<ConsumeInput, SessionInput | ExactCredentialInput | LegacyInput>>().toEqualTypeOf<never>();
+  expectTypeOf<Extract<ExactCredentialInput, { purpose: 'set-password' }>>().not.toEqualTypeOf<never>();
+  expectTypeOf<Extract<ExactCredentialInput, { purpose: 'remove-password' }>>().not.toEqualTypeOf<never>();
+  expectTypeOf<Extract<ExactCredentialInput, { purpose: 'add-key' }>>().not.toEqualTypeOf<never>();
+  expectTypeOf<Extract<ExactCredentialInput, { purpose: 'remove-key' }>>().not.toEqualTypeOf<never>();
+  expectTypeOf<CredentialInput>().toMatchTypeOf<ConsumeInput>();
+  expectTypeOf<LegacyInput['operationKey']>().toEqualTypeOf<undefined>();
+  expectTypeOf<LegacyInput['effectReference']>().toEqualTypeOf<undefined>();
   expectTypeOf<Omit<CredentialInput, 'operationKey'>>().not.toMatchTypeOf<ConsumeInput>();
   expectTypeOf<Omit<CredentialInput, 'effectReference'>>().not.toMatchTypeOf<ConsumeInput>();
   expectTypeOf<SessionInput & { purpose: 'device' }>().toEqualTypeOf<never>();
