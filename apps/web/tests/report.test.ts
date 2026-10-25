@@ -369,7 +369,10 @@ function site(): Promise<string> {
     for (;;) {
       if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
       try {
-        const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
+        const response = await fetch(`${origin}${threadPath()}`, {
+          redirect: 'manual',
+          signal: AbortSignal.timeout(60_000),
+        });
         if (response.status < 500) return origin;
       } catch {}
       if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${output}`);

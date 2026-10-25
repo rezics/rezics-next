@@ -2,6 +2,7 @@ import { DocumentBody } from '@rezics/ui/document-body';
 import { createFileRoute, Link, useLoaderData, useLocation } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
+import { PostActions } from '../../report/content-actions';
 import { readThreadPage } from '../../threads/reads';
 import { replyToThread, type CreatedPost } from '../../threads/actions';
 import { csrfHeaders, draftFetch, PostComposer, SignInPrompt } from '../../threads/composer';
@@ -16,7 +17,7 @@ export const Route = createFileRoute('/threads/$id')({
 });
 
 function ThreadPage() {
-  const { thread, posts: loadedPosts, idempotencyKey } = Route.useLoaderData();
+  const { thread, posts: loadedPosts, idempotencyKey, viewerId, verification } = Route.useLoaderData();
   const [posts, setPosts] = useState(loadedPosts);
   const { session } = useLoaderData({ from: '__root__' });
   const location = useLocation();
@@ -36,7 +37,23 @@ function ThreadPage() {
         {posts.posts.length ? (
           <ol className="divide-y divide-border/60 border-y border-border/60">
             {posts.posts.map((post) => (
-              <li key={post.id} className="py-6">
+              <li
+                key={post.id}
+                id={post.id === thread.firstPost.id ? `thread-${thread.id}` : `post-${post.id}`}
+                className="py-6"
+              >
+                <div className="mb-2 flex justify-end">
+                  <PostActions
+                    target={
+                      post.id === thread.firstPost.id
+                        ? { kind: 'thread', id: thread.id }
+                        : { kind: 'post', id: post.id }
+                    }
+                    {...(post.revisionId ? { revisionId: post.revisionId } : {})}
+                    ownsContent={Boolean(viewerId && viewerId === post.authorId)}
+                    verification={verification}
+                  />
+                </div>
                 {post.availability === 'erased' ? (
                   <p className="text-muted-foreground" role="note">
                     {m.thread_post_erased()}

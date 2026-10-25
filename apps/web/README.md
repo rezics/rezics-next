@@ -8,6 +8,12 @@ Tests needing the host network, such as a container's published port, are named 
 
 The Cloudflare Vite plugin deploys with `cf deploy` (not run here).
 
+Set the `TURNSTILE_SITE_KEY` text binding to the public Turnstile site key for the site's hostname.
+Thread and post reports work for signed-in and anonymous readers. The explicit Turnstile script loads once per
+page, only after a report dialog opens; every report includes a one-use proof and a UUIDv4 idempotency key.
+In development only, `TURNSTILE_SCRIPT_URL` can point to a locally served test script; production always uses
+Cloudflare's Turnstile script. Rights-holder notices will use a separate, later form.
+
 Every launch locale, including English, has a URL prefix.
 Locale selection uses URL, `rezics_locale` cookie, `Accept-Language`, then English; language tags match exact locale, Chinese script or region, then base language.
 
@@ -364,6 +370,15 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 - **Bound:** ≤1 K write, ≤1 D; work is linear in the draft, which the kernel caps at 2 MiB
 - **Growth check:** `tests/posting.test.ts`: `a signed-in member replies to a thread and sees the reply` records the
   single write
+
+### Report
+
+- **Touches:** The report server function reads the session credential, then sends one `POST /v1/reports`/K with
+  the target, optional revision and evidence, reason, bot token and stable `Idempotency-Key`
+- **Bound:** ≤1 K, ≤1 D; 0 R/A with a fresh credential (token refresh follows its separate bound). Constant in the
+  number of stored reports and sessions; details are capped at 4096 characters. The browser loads the Turnstile
+  script once per page and only after opening a dialog
+- **Growth check:** `tests/report-cost.test.ts`: `report submission keeps K/D/R/A fixed as stored reports and sessions grow`
 
 ### Reply image
 

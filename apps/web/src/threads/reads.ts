@@ -1,7 +1,11 @@
 import type { KernelClient } from '@rezics/client';
 import { createServerFn } from '@tanstack/react-start';
 import { notFound } from '@tanstack/react-router';
-import { setResponseHeader } from '@tanstack/react-start/server';
+import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
+import { env } from 'cloudflare:workers';
+import type { SessionEnv } from '../session/client';
+import { readSessionIdentity } from '../session/state';
+import type { VerificationConfig } from '../report/turnstile';
 import { kernelClient } from '../kernel/client';
 
 type BoardResource = ReturnType<KernelClient['boards']>;
@@ -65,16 +69,39 @@ export const readNewThreadPage = createServerFn({ method: 'GET' })
 
 export const readThreadPage = createServerFn({ method: 'GET' })
   .validator(validatePageInput)
-  .handler(async ({ data }): Promise<{ thread: Thread['thread']; posts: PostPage; idempotencyKey: string }> => {
-    setResponseHeader('cache-control', 'private, no-store');
-    const client = kernelClient();
-    const query = data.cursor ? { query: { cursor: data.cursor } } : {};
-    const [threadResult, postsResult] = await Promise.all([
-      client.threads({ id: data.id }).get(),
-      client.threads({ id: data.id }).posts.get(query),
-    ]);
-    const thread = checkRead<Thread>(threadResult, 'thread');
-    const posts = checkRead<PostPage>(postsResult, 'thread posts');
-    if (thread.thread.id !== data.id) throw notFound();
-    return { thread: thread.thread, posts, idempotencyKey: crypto.randomUUID() };
-  });
+  .handler(
+    async ({
+      data,
+    }): Promise<{
+      thread: Thread['thread'];
+      posts: PostPage;
+      idempotencyKey: string;
+      viewerId?: string;
+      verification: VerificationConfig;
+    }> => {
+      setResponseHeader('cache-control', 'private, no-store');
+      const client = kernelClient();
+      const query = data.cursor ? { query: { cursor: data.cursor } } : {};
+      const [threadResult, postsResult] = await Promise.all([
+        client.threads({ id: data.id }).get(),
+        client.threads({ id: data.id }).posts.get(query),
+      ]);
+      const thread = checkRead<Thread>(threadResult, 'thread');
+      const posts = checkRead<PostPage>(postsResult, 'thread posts');
+      if (thread.thread.id !== data.id) throw notFound();
+      const identity = await readSessionIdentity(getRequest(), env as Partial<SessionEnv>);
+      const config = env as { TURNSTILE_SITE_KEY?: string; TURNSTILE_SCRIPT_URL?: string };
+      return {
+        thread: thread.thread,
+        posts,
+        idempotencyKey: crypto.randomUUID(),
+        ...(identity.subject ? { viewerId: identity.subject } : {}),
+        verification: {
+          sitekey: config.TURNSTILE_SITE_KEY ?? '',
+          scriptUrl:
+            (import.meta.env.DEV && config.TURNSTILE_SCRIPT_URL) ||
+            'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit',
+        },
+      };
+    },
+  );
