@@ -16,7 +16,13 @@ import { CommandUnavailableError } from '../../command/command.ts';
 import { checkMediaObject } from '../../content/cover-reference.ts';
 import { discardConnection, withConnection } from '../../database/pool.ts';
 import { customMethod } from '../../http/custom-method.ts';
-import { PROBLEM_TYPE_BASE, ProblemError, problemResponse, problemSchema, type FieldError } from '../../http/problem.ts';
+import {
+  PROBLEM_TYPE_BASE,
+  ProblemError,
+  problemResponse,
+  problemSchema,
+  type FieldError,
+} from '../../http/problem.ts';
 import { defineRateLimit } from '../../http/rate-limit.ts';
 import { SESSION_HEADER } from '../../http/request.ts';
 import { readPartition } from '../../partition/partition.ts';
@@ -194,7 +200,11 @@ export function bulkRoutes(
         [...covers].map(async ([partition, list]) => {
           let available: Map<string, boolean>;
           try {
-            available = await probeCovers(pool, partition, list.map((item) => item.id));
+            available = await probeCovers(
+              pool,
+              partition,
+              list.map((item) => item.id),
+            );
           } catch (error) {
             for (const item of list) fatal.set(item.index, error);
             return;

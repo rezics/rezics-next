@@ -244,7 +244,11 @@ export async function candidateSources(
        ORDER BY f.log_seq DESC
        LIMIT 1
      ) recorded ON true`,
-    [entries.map((entry) => entry.route), entries.map((entry) => entry.subject_id), entries.map((entry) => entry.candidate_id)],
+    [
+      entries.map((entry) => entry.route),
+      entries.map((entry) => entry.subject_id),
+      entries.map((entry) => entry.candidate_id),
+    ],
   );
   for (const row of result.rows) sources.set(`${row.subject_id}\n${row.id}`, row.source);
   return sources;

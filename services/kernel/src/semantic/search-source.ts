@@ -265,8 +265,7 @@ export function subjectSource(pool: Pool, routeKey?: Uint8Array): SubjectSource 
           }
         }
 
-        const visible =
-          routeKey && entries.length ? await withoutFencedEntries(client, routeKey, entries) : entries;
+        const visible = routeKey && entries.length ? await withoutFencedEntries(client, routeKey, entries) : entries;
         const statements = visible.length
           ? ((await readStatements.run(client, { entries: visible })) as StatementRow[])
           : [];
