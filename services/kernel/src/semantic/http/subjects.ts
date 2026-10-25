@@ -1,3 +1,4 @@
+import { mergeSubjects, SubjectRedirectError } from '../merges.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import type { KeyRing } from '../../tokens/seal.ts';
@@ -14,7 +15,7 @@ import { PageCursorError } from '../page.ts';
 import type { Pool } from 'pg';
 import { withConnection } from '../../database/pool.ts';
 import { SubjectInputError, type Item, type Snak } from '../item.ts';
-import { createSubject, readLabels, readSubject, SubjectAccessDeniedError, subjectTarget } from '../subject.ts';
+import { createSubject, readRelated, readSubject, SubjectAccessDeniedError, subjectTarget } from '../subject.ts';
 import { DATA_TYPES, type DataType } from '@rezics/definitions';
 import { GrantDeniedError } from '../../access/grant-commands.ts';
 import { activeRelease, GLOBAL_CONTEXT, readRelease, StaleEditorialHeadError } from '../definitions.ts';
@@ -109,7 +110,19 @@ const listingErrors = {
   404: problemSchema('not_found'),
   503: problemSchema('semantic_not_ready', 'overloaded', 'deadline_exceeded'),
 };
-const LabelsSchema = t.Object({ labels: t.Record(t.String(), t.String()) }, { additionalProperties: false });
+const LabelsSchema = t.Object(
+  { labels: t.Record(t.String(), t.String()), redirect: t.Optional(t.String({ format: 'uuid' })) },
+  { additionalProperties: false },
+);
+const redirectResponse = t.Object(
+  {
+    redirect: t.Object(
+      { from: t.String({ format: 'uuid' }), to: t.String({ format: 'uuid' }) },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false },
+);
 const itemResponse = t.Object({ subject: ItemSchema }, { additionalProperties: false });
 const readResponse = t.Object(
   { subject: ItemSchema, related: t.Record(t.String(), LabelsSchema) },
@@ -314,6 +327,74 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
         }
       },
     )
+    .post(
+      customMethod('/v1/subjects', 'merge'),
+      {
+        headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
+        body: t.Object(
+          { subjects: t.Array(t.String({ format: 'uuid' }), { minItems: 2, maxItems: 2 }) },
+          { additionalProperties: false },
+        ),
+        response: {
+          200: withHeaders(
+            t.Object(
+              {
+                survivor: t.String({ format: 'uuid' }),
+                redirected: t.String({ format: 'uuid' }),
+                revision: t.Integer({ minimum: 2 }),
+              },
+              { additionalProperties: false },
+            ),
+            { [SESSION_HEADER]: t.String() },
+          ),
+          400: problemSchema('invalid_request'),
+          401: unauthorized,
+          403: problemSchema('forbidden'),
+          404: problemSchema('not_found'),
+          409: problemSchema('conflict'),
+          422: problemSchema('idempotency_conflict'),
+          503: problemSchema(
+            'semantic_not_ready',
+            'overloaded',
+            'partition_unavailable',
+            'transaction_retry_exhausted',
+            'deadline_exceeded',
+          ),
+        },
+        detail: {
+          operationId: 'subject.merge',
+          'x-action': 'subject:merge',
+          'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ body, headers, actor, authorizeCommand, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const active = await activeRelease(pool);
+        if (!active) throw new ProblemError('semantic_not_ready');
+        const authorization = await authorizeCommand(
+          { route: 0, id: GLOBAL_CONTEXT },
+          () => new SubjectAccessDeniedError(),
+        );
+        try {
+          const { component, ...result } = await admission.run('normal', job, () =>
+            mergeSubjects(pool, {
+              subjects: body.subjects,
+              actor,
+              idempotencyKey: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+              digest: requestDigest('subject.merge', actor, body),
+              release: active,
+              authorization,
+              deadline: job.deadline,
+            }),
+          );
+          session.record(component);
+          return result;
+        } catch (error) {
+          return candidateError(error);
+        }
+      },
+    )
     .get(
       '/v1/subjects/:id',
       {
@@ -321,6 +402,7 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
         query: t.Object({ context: t.Optional(EditorialBodyContext) }),
         response: {
           200: withHeaders(readResponse, { [SESSION_HEADER]: t.String(), etag: t.String() }),
+          308: withHeaders(redirectResponse, { location: t.String() }),
           401: unauthorized,
           404: problemSchema('not_found'),
           503: problemSchema('overloaded', 'deadline_exceeded'),
@@ -332,20 +414,28 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
           security: [{ bearerAuth: [] }, {}],
         },
       },
-      async ({ params, query, authorize, admission, job, session, set }) => {
+      async ({ params, query, authorize, admission, job, session, set, request }) => {
         const route = routeOf(params.id);
         if (route === null) throw new ProblemError('not_found');
         const resource = { route, id: params.id };
         const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
         const result = await admission.run('normal', job, () =>
-          readSubject(pool, params.id, check, query.context ?? GLOBAL_CONTEXT),
+          readSubject(pool, params.id, check, query.context ?? GLOBAL_CONTEXT).catch((error: unknown) => {
+            if (error instanceof SubjectRedirectError) return error;
+            throw error;
+          }),
         );
         if (!result) throw new ProblemError('not_found');
+        if (result instanceof SubjectRedirectError) {
+          set.status = 308;
+          set.headers.location = `/v1/subjects/${result.to}${new URL(request.url).search}`;
+          return { redirect: { from: result.from, to: result.to } };
+        }
 
         const release = await readRelease(pool, result.subject.release);
         if (!release) throw new Error('Subject revision release is missing');
         const { propertyIds, subjectIds } = relatedIds(result.subject);
-        const related: Record<string, { labels: Record<string, string> }> = {};
+        const related: Record<string, { labels: Record<string, string>; redirect?: string }> = {};
         for (const property of propertyIds) {
           const definition = release.properties[property];
           if (definition) related[property] = { labels: definition.labels };
@@ -365,13 +455,13 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
             });
           }),
         );
-        const labels = await admission.run('normal', job, () =>
-          readLabels(
+        const references = await admission.run('normal', job, () =>
+          readRelated(
             pool,
             readableIds.filter((id): id is string => id !== null),
           ),
         );
-        for (const [id, value] of labels) related[id] = { labels: value };
+        Object.assign(related, references);
 
         session.record(result.component);
         set.headers.etag = `"${result.subject.revision}"`;
@@ -938,6 +1028,7 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
             },
             { additionalProperties: false },
           ),
+          308: withHeaders(redirectResponse, { location: t.String() }),
           ...listingErrors,
         },
         detail: {
@@ -947,7 +1038,7 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
           security: [{ bearerAuth: [] }, {}],
         },
       },
-      async ({ params, query, authorize, admission, job, session }) => {
+      async ({ params, query, authorize, admission, job, session, set, request }) => {
         const route = routeOf(params.id);
         if (route === null) throw new ProblemError('not_found');
         const active = await activeRelease(pool);
@@ -970,6 +1061,11 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
           session.record(component);
           return result;
         } catch (error) {
+          if (error instanceof SubjectRedirectError) {
+            set.status = 308;
+            set.headers.location = `/v1/subjects/${error.to}/links${new URL(request.url).search}`;
+            return { redirect: { from: error.from, to: error.to } };
+          }
           return candidateError(error);
         }
       },

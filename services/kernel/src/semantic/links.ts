@@ -9,7 +9,9 @@ import { decodeCursor, encodeCursor, type CursorKey } from '../tokens/cursor.ts'
 import type { KeyRing } from '../tokens/seal.ts';
 import type { SessionComponent } from '../tokens/session.ts';
 import { SubjectNotFoundError } from './candidates.ts';
-import { LINKS_CHANGED, LINKS_PROJECTED } from './events.ts';
+import { moveMergePage } from './merge-moves.ts';
+import { redirectOf, SubjectRedirectError } from './merges.ts';
+import { LINKS_MOVING, SUBJECT_MERGED, LINKS_CHANGED, LINKS_PROJECTED } from './events.ts';
 import listInboundLinksByProperty from './list-inbound-links-by-property.sql';
 import listInboundLinks from './list-inbound-links.sql';
 import { PageCursorError } from './page.ts';
@@ -49,8 +51,7 @@ function covers(
   return epoch > component.epoch || (epoch === component.epoch && position >= component.position);
 }
 
-async function linksCaughtUp(pool: Pool, seen: readonly SessionComponent[]): Promise<boolean> {
-  if (seen.length === 0) return true;
+async function linksCaughtUp(pool: Pool, seen: readonly SessionComponent[], subject: string): Promise<boolean> {
   const deadline = performance.now() + FRESHNESS_WAIT_MS;
   for (;;) {
     const covered = await withConnection(pool, async (client) => {
@@ -61,7 +62,11 @@ async function linksCaughtUp(pool: Pool, seen: readonly SessionComponent[]): Pro
         });
         if (!covers(row, component)) return false;
       }
-      return true;
+      const pending = await client.query(
+        "SELECT member_id FROM semantic.merge_member WHERE route = $1 AND subject_id = $2 AND phase <> 'done' LIMIT 1",
+        [routeOf(subject), subject],
+      );
+      return pending.rowCount === 0;
     });
     if (covered) return true;
     if (performance.now() + FRESHNESS_POLL_MS > deadline) return false;
@@ -110,26 +115,85 @@ function newestChanges(envelopes: readonly Envelope[]): Map<number, StoredChange
   return grouped;
 }
 
+async function applyChanges(pool: Pool, changes: StoredChange[]): Promise<void> {
+  const newest = new Map<string, StoredChange>();
+  for (const change of changes) {
+    const key = JSON.stringify([change.subjectId, change.property, change.sourceSubjectId, change.statementId]);
+    const current = newest.get(key);
+    if (
+      !current ||
+      change.sourceRevision > current.sourceRevision ||
+      (change.sourceRevision === current.sourceRevision && change.position >= current.position)
+    )
+      newest.set(key, change);
+  }
+  changes = [...newest.values()];
+  // A command checks each target under the same partition fence as its upserts.
+  for (let offset = 0; offset < changes.length; offset += 100) {
+    const page = changes.slice(offset, offset + 100);
+    const partition = partitionOf(page[0]!.route);
+    const command = await runCommand(pool, { partition }, async (tx, { transactionId }) => {
+      const forwarded: StoredChange[] = [];
+      const local: StoredChange[] = [];
+      for (const change of page) {
+        const redirect = await redirectOf(tx, change.subjectId);
+        if (redirect) forwarded.push({ ...change, subjectId: redirect, route: routeOf(redirect)! });
+        else local.push(change);
+      }
+      if (local.length)
+        await upsertInboundLinks.run(tx, {
+          transaction_id: transactionId,
+          changes: local.map((change) => ({
+            route: change.route,
+            subject_id: change.subjectId,
+            property: change.property,
+            source_subject_id: change.sourceSubjectId,
+            statement_id: change.statementId,
+            source_revision: change.sourceRevision,
+            present: change.present,
+          })),
+        });
+      return {
+        value: forwarded,
+        events: local.length
+          ? [
+              {
+                type: LINKS_PROJECTED,
+                data: { subjects: [...new Set(local.map((change) => change.subjectId))].sort() },
+              },
+            ]
+          : [{ type: LINKS_PROJECTED, data: { subjects: [...new Set(page.map((change) => change.subjectId))] } }],
+      };
+    });
+    const groups = new Map<number, StoredChange[]>();
+    for (const change of command.value) {
+      const partition = partitionOf(change.route);
+      const group = groups.get(partition) ?? [];
+      group.push(change);
+      groups.set(partition, group);
+    }
+    for (const group of groups.values()) await applyChanges(pool, group);
+  }
+}
+
 async function applyLinkBatch(pool: Pool, envelopes: readonly Envelope[]): Promise<void> {
   const grouped = newestChanges(envelopes);
-  for (const partition of [...grouped.keys()].sort((left, right) => left - right)) {
-    const changes = grouped.get(partition)!;
-    const subjects = [...new Set(changes.map((change) => change.subjectId))].sort();
-    await runCommand(pool, { partition }, async (tx, { transactionId }) => {
-      await upsertInboundLinks.run(tx, {
-        transaction_id: transactionId,
-        changes: changes.map((change) => ({
-          route: change.route,
-          subject_id: change.subjectId,
-          property: change.property,
-          source_subject_id: change.sourceSubjectId,
-          statement_id: change.statementId,
-          source_revision: change.sourceRevision,
-          present: change.present,
-        })),
-      });
-      return { value: null, events: [{ type: LINKS_PROJECTED, data: { subjects } }] };
-    });
+  for (const partition of [...grouped.keys()].sort((a, b) => a - b)) {
+    await applyChanges(pool, grouped.get(partition)!);
+  }
+  const moved = new Set<string>();
+  for (const envelope of envelopes) {
+    for (const event of envelope.events) {
+      if (event.type === SUBJECT_MERGED) {
+        const data = event.data as { id: string; survivor: string };
+        if (moved.has(data.id)) continue;
+        if (await moveMergePage(pool, data.id, data.survivor)) moved.add(data.id);
+      } else if (event.type === LINKS_MOVING) {
+        const data = event.data as { id: string; survivor: string; cursor: string[] };
+        if (moved.has(data.id)) continue;
+        if (await moveMergePage(pool, data.id, data.survivor, data.cursor)) moved.add(data.id);
+      }
+    }
   }
 }
 
@@ -187,7 +251,7 @@ export async function listSubjectLinks(
     if (!validAfter(decoded.after, options.property)) throw new PageCursorError('invalid');
     cursor = decoded;
   }
-  const caughtUp = await linksCaughtUp(pool, options.seen);
+  const caughtUp = await linksCaughtUp(pool, options.seen, options.subject);
   return withConnection(pool, async (client) => {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     try {
@@ -195,6 +259,8 @@ export async function listSubjectLinks(
       const partition = await readPartition(client, partitionOf(route));
       const exists = await subjectExists.run(client, { route, subject_id: options.subject });
       if (!partition || exists === null || !(await options.authorize(client))) throw new SubjectNotFoundError();
+      const redirect = await redirectOf(client, options.subject);
+      if (redirect) throw new SubjectRedirectError(options.subject, redirect);
       if (cursor && cursor.epoch !== partition.epoch) throw new PageCursorError('stale');
       const afterSource = typeof cursor?.after[1] === 'string' ? cursor.after[1] : NIL_UUID;
       const afterStatement = typeof cursor?.after[2] === 'string' ? cursor.after[2] : NIL_UUID;

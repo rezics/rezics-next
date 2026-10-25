@@ -1,0 +1,194 @@
+import { afterAll, expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
+import { createPool } from '../../src/database/pool.ts';
+import { runCommand } from '../../src/command/command.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { LINKS_CHANGED, SUBJECT_MERGED } from '../../src/semantic/events.ts';
+import { linkProjection, listSubjectLinks } from '../../src/semantic/links.ts';
+import { redirectOf } from '../../src/semantic/merges.ts';
+import type { KeyRing } from '../../src/tokens/seal.ts';
+
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
+const pool = createPool(databaseUrl);
+const projection = linkProjection(pool);
+const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(5)]]) };
+afterAll(() => pool.end());
+let nextRoute = (2000 + Math.floor(Math.random() * 1000)) * 16;
+const partition = (id: string) => partitionOf(routeOf(id)!);
+
+async function subjects(count: number) {
+  const ids: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const route = nextRoute;
+    nextRoute += 16;
+    const id = newId(route);
+    await runCommand(pool, { partition: partitionOf(route) }, async (tx, { transactionId }) => {
+      await tx.query(
+        "INSERT INTO semantic.subject (route, subject_id, type, recorded_transaction_id) VALUES ($1, $2, 'schema:Person', $3)",
+        [route, id, transactionId],
+      );
+      return { value: null, events: [{ type: 'com.rezics.subject.created.v1', subject: id, data: { id } }] };
+    });
+    ids.push(id);
+  }
+  return ids.sort();
+}
+
+async function merge(id: string, survivor: string) {
+  return runCommand(pool, { partition: partition(id) }, async (tx, { transactionId }) => {
+    await tx.query(
+      'INSERT INTO semantic.redirect (route, subject_id, sequence, target, recorded_transaction_id) VALUES ($1, $2, 1, $3, $4)',
+      [routeOf(id), id, survivor, transactionId],
+    );
+    return { value: null, events: [{ type: SUBJECT_MERGED, subject: id, data: { id, survivor } }] };
+  });
+}
+
+async function seedLinks(id: string, count: number) {
+  const rows = Array.from({ length: count }, () => ({
+    source: newId(nextRoute),
+    statement: randomUUID(),
+  }));
+  await runCommand(pool, { partition: partition(id) }, async (tx, { transactionId }) => {
+    await tx.query(
+      `INSERT INTO semantic.inbound_link
+       (route, subject_id, property, source_subject_id, statement_id, source_revision, present, recorded_transaction_id)
+       SELECT $1, $2, 'schema:author', r.source, r.statement, 1, true, $3
+       FROM jsonb_to_recordset($4::jsonb) r(source uuid, statement uuid)`,
+      [routeOf(id), id, transactionId, JSON.stringify(rows)],
+    );
+    return { value: null, events: [{ type: 'com.rezics.subject.created.v1', subject: id, data: { id } }] };
+  });
+  return rows;
+}
+
+const links = (id: string, seen: Parameters<typeof listSubjectLinks>[2]['seen'] = [], cursor?: string) =>
+  listSubjectLinks(pool, tokens, {
+    subject: id,
+    property: null,
+    limit: 100,
+    authorize: async () => true,
+    seen,
+    ...(cursor === undefined ? {} : { cursor }),
+  });
+
+test('a merge moves more than one page and remains behind until its last page', async () => {
+  const [survivor, id] = (await subjects(2)) as [string, string];
+  const seeded = await seedLinks(id, 205);
+  const merged = await merge(id, survivor);
+  const seen = [{ partition: merged.partition, epoch: merged.epoch, position: merged.position }];
+  await projection.run(partition(id));
+  const first = await links(survivor, seen);
+  expect(first.links).toHaveLength(100);
+  expect(first.freshness.caught_up).toBe(false);
+  await projection.run(partition(survivor));
+  expect((await links(survivor, seen)).freshness.caught_up).toBe(false);
+  await projection.run(partition(survivor));
+  const final = await links(survivor, seen);
+  expect(final.freshness.caught_up).toBe(true);
+  const all = [...final.links];
+  let cursor = final.next;
+  while (cursor) {
+    const page = await links(survivor, seen, cursor);
+    all.push(...page.links);
+    cursor = page.next;
+  }
+  expect(all.map((link) => link.statement).sort()).toEqual(seeded.map((link) => link.statement).sort());
+
+  // Replay every merge envelope without rewriting a completed move or its redirect.
+  const before = await pool.query('SELECT * FROM semantic.redirect WHERE route = $1 AND subject_id = $2', [
+    routeOf(id),
+    id,
+  ]);
+  await pool.query(
+    'UPDATE core.consumer_checkpoint SET epoch = NULL, position = 0 WHERE consumer = $1 AND partition_no = $2',
+    ['semantic_links', partition(id)],
+  );
+  await projection.run(partition(id));
+  expect((await links(survivor, seen)).freshness.caught_up).toBe(true);
+  expect(
+    (await pool.query('SELECT * FROM semantic.redirect WHERE route = $1 AND subject_id = $2', [routeOf(id), id])).rows,
+  ).toEqual(before.rows);
+}, 15_000);
+
+test('a survivor merged while its event is in flight forwards the move and repoints all members', async () => {
+  const [smallest, middle, largest, member] = (await subjects(4)) as [string, string, string, string];
+  const seeded = await seedLinks(member, 1);
+  await merge(member, largest);
+  await projection.run(partition(member));
+  await merge(largest, middle);
+  await merge(middle, smallest);
+  // The largest subject's event has not yet reached the middle survivor.
+  await projection.run(partition(largest));
+  await projection.run(partition(middle));
+  for (let i = 0; i < 4; i++) await projection.run(partition(smallest));
+  expect((await links(smallest)).links.map((link) => link.statement)).toEqual([seeded[0]!.statement]);
+  for (const id of [middle, largest, member]) expect(await redirectOf(pool, id)).toBe(smallest);
+});
+
+test('link changes reaching a redirected target are forwarded and a newer removal wins over a copied link', async () => {
+  const [survivor, id, source] = (await subjects(3)) as [string, string, string];
+  const [seeded] = await seedLinks(id, 1);
+  await merge(id, survivor);
+  const statement = randomUUID();
+  await runCommand(pool, { partition: partition(source) }, async () => ({
+    value: null,
+    events: [
+      {
+        type: LINKS_CHANGED,
+        subject: source,
+        data: {
+          subject: source,
+          revision: 2,
+          changes: [{ target: id, property: 'schema:author', statement, present: true }],
+        },
+      },
+      {
+        type: LINKS_CHANGED,
+        subject: seeded!.source,
+        data: {
+          subject: seeded!.source,
+          revision: 2,
+          changes: [{ target: id, property: 'schema:author', statement: seeded!.statement, present: false }],
+        },
+      },
+    ],
+  }));
+  await projection.run(partition(source));
+  // Copying revision 1 after the forwarded revision 2 removal must keep the tombstone.
+  await projection.run(partition(id));
+  expect((await links(survivor)).links).toEqual([{ subject: source, property: 'schema:author', statement }]);
+  expect(
+    (
+      await pool.query(
+        'SELECT source_revision, present FROM semantic.inbound_link WHERE route = $1 AND subject_id = $2 AND property = $3 AND source_subject_id = $4 AND statement_id = $5',
+        [routeOf(survivor), survivor, 'schema:author', seeded!.source, seeded!.statement],
+      )
+    ).rows,
+  ).toEqual([{ source_revision: 2, present: false }]);
+});
+
+test('an unfinished move follows a survivor merged after its first link page', async () => {
+  const [smallest, middle, largest] = (await subjects(3)) as [string, string, string];
+  const seeded = await seedLinks(largest, 205);
+  await merge(largest, middle);
+  await projection.run(partition(largest));
+  expect((await links(middle)).freshness.caught_up).toBe(false);
+  const merged = await merge(middle, smallest);
+  await projection.run(partition(middle));
+  const seen = [{ partition: merged.partition, epoch: merged.epoch, position: merged.position }];
+  expect((await links(smallest, seen)).freshness.caught_up).toBe(false);
+  for (let i = 0; i < 5; i++) await projection.run(partition(smallest));
+  const first = await links(smallest, seen);
+  expect(first.freshness.caught_up).toBe(true);
+  const all = [...first.links];
+  let cursor = first.next;
+  while (cursor) {
+    const page = await links(smallest, seen, cursor);
+    all.push(...page.links);
+    cursor = page.next;
+  }
+  expect(all.map((link) => link.statement).sort()).toEqual(seeded.map((link) => link.statement).sort());
+  expect(await redirectOf(pool, largest)).toBe(smallest);
+}, 15_000);

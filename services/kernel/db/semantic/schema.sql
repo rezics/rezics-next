@@ -250,6 +250,21 @@ CREATE TABLE semantic.inbound_link (
 
 
 --
+-- Name: merge_member; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.merge_member (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    member_id uuid NOT NULL,
+    phase text DEFAULT 'links'::text NOT NULL,
+    cursor jsonb DEFAULT '[]'::jsonb NOT NULL,
+    CONSTRAINT merge_member_check CHECK ((subject_id < member_id)),
+    CONSTRAINT merge_member_phase_check CHECK ((phase = ANY (ARRAY['links'::text, 'members'::text, 'done'::text])))
+);
+
+
+--
 -- Name: moderation; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -268,6 +283,20 @@ CREATE TABLE semantic.moderation (
     CONSTRAINT moderation_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT moderation_security_revision_check CHECK ((security_revision > 0)),
     CONSTRAINT moderation_visibility_check CHECK ((visibility = ANY (ARRAY['visible'::text, 'hidden'::text, 'taken_down'::text])))
+);
+
+
+--
+-- Name: redirect; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.redirect (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    sequence integer NOT NULL,
+    target uuid NOT NULL,
+    recorded_transaction_id uuid NOT NULL,
+    CONSTRAINT redirect_check CHECK ((target < subject_id))
 );
 
 
@@ -382,11 +411,27 @@ ALTER TABLE ONLY semantic.inbound_link
 
 
 --
+-- Name: merge_member merge_member_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.merge_member
+    ADD CONSTRAINT merge_member_pkey PRIMARY KEY (route, subject_id, member_id);
+
+
+--
 -- Name: moderation moderation_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
 ALTER TABLE ONLY semantic.moderation
     ADD CONSTRAINT moderation_pkey PRIMARY KEY (route, subject_id, security_revision);
+
+
+--
+-- Name: redirect redirect_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.redirect
+    ADD CONSTRAINT redirect_pkey PRIMARY KEY (route, subject_id, sequence);
 
 
 --
@@ -438,6 +483,13 @@ CREATE INDEX fact_terms ON semantic.fact USING btree (route, subject_id, slot_id
 --
 
 CREATE INDEX inbound_link_present ON semantic.inbound_link USING btree (route, subject_id, property, source_subject_id, statement_id) WHERE present;
+
+
+--
+-- Name: merge_member_pending; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX merge_member_pending ON semantic.merge_member USING btree (route, subject_id, member_id) WHERE (phase <> 'done'::text);
 
 
 --
@@ -515,6 +567,13 @@ CREATE TRIGGER moderation_immutable BEFORE DELETE OR UPDATE ON semantic.moderati
 --
 
 CREATE TRIGGER moderation_immutable_truncate BEFORE TRUNCATE ON semantic.moderation FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_moderation_mutation();
+
+
+--
+-- Name: redirect redirect_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER redirect_immutable BEFORE DELETE OR UPDATE ON semantic.redirect FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
 
 
 --
@@ -635,11 +694,27 @@ ALTER TABLE ONLY semantic.fact
 
 
 --
+-- Name: merge_member merge_member_route_subject_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.merge_member
+    ADD CONSTRAINT merge_member_route_subject_id_fkey FOREIGN KEY (route, subject_id) REFERENCES semantic.subject(route, subject_id);
+
+
+--
 -- Name: moderation moderation_route_subject_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
 --
 
 ALTER TABLE ONLY semantic.moderation
     ADD CONSTRAINT moderation_route_subject_id_fkey FOREIGN KEY (route, subject_id) REFERENCES semantic.subject(route, subject_id);
+
+
+--
+-- Name: redirect redirect_route_subject_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.redirect
+    ADD CONSTRAINT redirect_route_subject_id_fkey FOREIGN KEY (route, subject_id) REFERENCES semantic.subject(route, subject_id);
 
 
 --

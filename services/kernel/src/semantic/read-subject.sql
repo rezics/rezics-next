@@ -1,8 +1,12 @@
-SELECT s.subject_id::text AS id, s.type, latest.revision, latest.release,
+SELECT s.subject_id::text AS id, s.type, redirect.target::text AS redirect, latest.revision, latest.release,
        r.revision AS fact_revision, r.release AS fact_release,
        f.slot_id::text AS slot_id, f.log_seq, f.operation, f.kind,
        f.language, f.property, f.statement_id::text AS statement_id, f.body
 FROM semantic.subject AS s
+LEFT JOIN LATERAL (
+  SELECT target FROM semantic.redirect WHERE route = s.route AND subject_id = s.subject_id
+  ORDER BY sequence DESC LIMIT 1
+) AS redirect ON true
 LEFT JOIN LATERAL (
   SELECT revision, release FROM semantic.revision
   WHERE route = s.route AND subject_id = s.subject_id

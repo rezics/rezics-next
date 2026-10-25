@@ -8,6 +8,7 @@ import type { AccountActor } from '../request/access.ts';
 import { derivedId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding, type CursorKey } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import { redirectOf } from './merges.ts';
 import { GLOBAL_CONTEXT, readRelease } from './definitions.ts';
 import { LINKS_CHANGED } from './events.ts';
 import { factDataTypes, itemFacts, resolveItem, SubjectInputError, type Violation } from './item.ts';
@@ -100,6 +101,7 @@ export async function proposeStatement(
         [route, options.subject],
       );
       if (!subject.rows[0]) throw new SubjectNotFoundError();
+      if (await redirectOf(tx, options.subject)) throw new EditorialConflictError();
       const input = validatedStatement(options.subject, subject.rows[0].type, options.release, options.statement);
       const grouped = new Map<number, Set<string>>();
       for (const item of input.items) {
@@ -280,6 +282,7 @@ export async function decideCandidate(
         candidate = compact.rows[0];
       }
       if (!candidate) throw new SubjectNotFoundError();
+      if (await redirectOf(tx, options.subject)) throw new EditorialConflictError();
 
       await expandSlot(tx, options.subject, candidate.property, transactionId);
       if (options.decision === 'reject') {
@@ -382,6 +385,7 @@ export async function adoptCandidates(
         [route, options.subject],
       );
       if (!subject.rows[0]) throw new SubjectNotFoundError();
+      if (await redirectOf(tx, options.subject)) throw new EditorialConflictError();
       const type = options.release.release.types[subject.rows[0].type];
 
       if (options.context === GLOBAL_CONTEXT && options.mode !== 'replace')

@@ -1,3 +1,4 @@
+import { SubjectRedirectError } from './merges.ts';
 import { checkSubjectInput } from '@rezics/definitions/validate';
 import type { Release } from '@rezics/definitions';
 import type { Pool, PoolClient } from 'pg';
@@ -163,6 +164,7 @@ export async function createSubject(
 
 type SubjectReadRow = {
   id: string;
+  redirect: string | null;
   type: string;
   revision: number;
   release: string;
@@ -234,6 +236,7 @@ export async function readSubject(
         return null;
       }
       const allowed = await authorize(client);
+      if (allowed && rows[0]!.redirect) throw new SubjectRedirectError(id, rows[0]!.redirect);
       const release = await getRelease(client, rows[0]!.release);
       if (!release) throw new Error('Subject revision release is missing');
       const statementFacts: FactRow[] = [];
@@ -294,4 +297,39 @@ export async function readLabels(pool: Pool, ids: readonly string[]): Promise<Ma
     }),
   );
   return labels;
+}
+
+/** Resolve reference anchors with one redirect batch and one label batch per partition. */
+export async function readRelated(pool: Pool, ids: readonly string[]) {
+  const groups = new Map<number, string[]>();
+  for (const id of ids) {
+    const route = routeOf(id);
+    if (route === null) continue;
+    const partition = partitionOf(route);
+    const group = groups.get(partition) ?? [];
+    group.push(id);
+    groups.set(partition, group);
+  }
+  const redirects = new Map<string, string>();
+  await Promise.all(
+    [...groups.values()].map(async (group) => {
+      const { rows } = await pool.query<{ id: string; target: string | null }>(
+        `SELECT input.id::text, r.target::text FROM unnest($1::integer[], $2::uuid[]) input(route, id)
+       JOIN LATERAL (SELECT subject_id FROM semantic.subject WHERE route = input.route AND subject_id = input.id
+         AND visibility = 'visible' LIMIT 1) s ON true
+       LEFT JOIN LATERAL (SELECT target FROM semantic.redirect WHERE route = input.route AND subject_id = input.id
+         ORDER BY sequence DESC LIMIT 1) r ON true`,
+        [group.map((id) => routeOf(id)), group],
+      );
+      for (const row of rows) if (row.target) redirects.set(row.id, row.target);
+    }),
+  );
+  const labels = await readLabels(pool, [...new Set(ids.map((id) => redirects.get(id) ?? id))]);
+  const related: Record<string, { labels: Item['labels']; redirect?: string }> = {};
+  for (const id of ids) {
+    const target = redirects.get(id);
+    const value = labels.get(target ?? id);
+    if (value) related[id] = { ...(target ? { redirect: target } : {}), labels: value };
+  }
+  return related;
 }

@@ -269,6 +269,129 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
 } & {
     v1: {
         subjects: {
+            $merge: {
+                post: {
+                    body: {
+                        subjects: string[];
+                    };
+                    params: {};
+                    query: unknown;
+                    headers: {
+                        "idempotency-key": string;
+                    };
+                    response: {
+                        200: {
+                            survivor: string;
+                            redirected: string;
+                            revision: number;
+                        };
+                        400: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        401: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        403: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        404: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        409: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        422: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        503: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                    };
+                    error: never;
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        subjects: {
             ":id": {
                 get: {
                     body: unknown;
@@ -345,7 +468,14 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                             };
                             related: Record<string, {
                                 labels: Record<string, string>;
+                                redirect?: string;
                             }>;
+                        };
+                        308: {
+                            redirect: {
+                                from: string;
+                                to: string;
+                            };
                         };
                         401: {
                             type: unknown;
@@ -1677,6 +1807,16 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
             }>;
             next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
         }>;
+        308: import("typebox").TObject<{
+            redirect: import("typebox").TObject<{
+                from: import("typebox").TString;
+                to: import("typebox").TString;
+            }>;
+        }> & {
+            headers: {
+                readonly location: import("typebox").TString;
+            };
+        };
     };
     detail: {
         operationId: string;
@@ -1687,7 +1827,7 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
             bearerAuth?: never;
         })[];
     };
-}, {}, "/v1/subjects/:id/links">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params, query, authorize, admission, job, session }: {
+}, {}, "/v1/subjects/:id/links">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params, query, authorize, admission, job, session, set, request }: {
     server: import("elysia").Server | null;
     redirect: import("elysia").redirect;
     set: {
@@ -1766,6 +1906,12 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
             };
             next: string | null;
         };
+        308: {
+            redirect: {
+                from: string;
+                to: string;
+            };
+        };
     }>;
     problem: import("elysia").SelectiveProblem<{
         400: {
@@ -1836,6 +1982,12 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                 caught_up: boolean;
             };
             next: string | null;
+        };
+        308: {
+            redirect: {
+                from: string;
+                to: string;
+            };
         };
     }>;
     defer: (fn: import("elysia/types").AfterResponseHandler<NoInfer<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
@@ -1917,6 +2069,16 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                 }>;
                 next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
             }>;
+            308: import("typebox").TObject<{
+                redirect: import("typebox").TObject<{
+                    from: import("typebox").TString;
+                    to: import("typebox").TString;
+                }>;
+            }> & {
+                headers: {
+                    readonly location: import("typebox").TString;
+                };
+            };
         };
         detail: {
             operationId: string;
@@ -1979,6 +2141,11 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
         caught_up: boolean;
     };
     next: string | null;
+} | {
+    redirect: {
+        from: string;
+        to: string;
+    };
 }>, {
     params: import("typebox").TObject<{
         id: import("typebox").TString;
@@ -2058,6 +2225,16 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
             }>;
             next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
         }>;
+        308: import("typebox").TObject<{
+            redirect: import("typebox").TObject<{
+                from: import("typebox").TString;
+                to: import("typebox").TString;
+            }>;
+        }> & {
+            headers: {
+                readonly location: import("typebox").TString;
+            };
+        };
     };
     detail: {
         operationId: string;

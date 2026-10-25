@@ -38,6 +38,7 @@ const typed = [
   'GET /v1/entitlements',
   'GET /v1/entitlements/:entitlementId',
   'POST /v1/subjects',
+  'POST /v1/subjects/$merge',
   'GET /v1/subjects/:id',
   'POST /v1/subjects/:id/$hide',
   'POST /v1/subjects/:id/$takedown',
