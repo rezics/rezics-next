@@ -365,8 +365,9 @@ test(
 
       const account = accountMenuButton(page, en);
       expect(await account.count()).toBe(1);
-      await account.click();
       const menu = page.getByRole('group', { name: en.account_menu!, exact: true });
+      expect(await menu.isVisible()).toBe(false);
+      await account.click();
       expect(await menu.isVisible()).toBe(true);
       expect(await menu.evaluate((element) => element.contains(document.activeElement))).toBe(true);
 
@@ -382,7 +383,17 @@ test(
         '/auth/sign-out',
       );
 
+      await page.keyboard.press('Escape');
+      expect(await menu.isVisible()).toBe(false);
+      expect(await account.evaluate((element) => element === document.activeElement)).toBe(true);
+
+      await account.click();
+      expect(await menu.isVisible()).toBe(true);
+      await page.locator('body').click({ position: { x: 10, y: 500 } });
+      expect(await menu.isVisible()).toBe(false);
+
       if (!javaScriptEnabled) {
+        await account.click();
         await Promise.all([
           page.waitForResponse((response) => response.url().startsWith(`${fake.url.origin}/auth/logout`)),
           signOut.click(),
