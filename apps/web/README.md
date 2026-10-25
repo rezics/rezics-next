@@ -157,10 +157,14 @@ subject reads.
 
 Run `bun run storybook` from this directory to browse the page stories. The browser stories replay the committed
 kernel responses and run as part of `bun run check`. To refresh those responses, run `bun run record`. It needs Bun,
-Docker access to start a disposable PostgreSQL container, and permission to run the kernel. The recorder migrates the
-disposable database, creates a recording account with governance authority, signs a short-lived test token, creates
-the launch subject through `POST /v1/subjects`, and records reads of that subject and a missing ID. It stops the kernel
-and removes its container on success and failure; it does not use a development kernel or shared database.
+Docker access to start a disposable PostgreSQL container and a disposable OpenSearch container, and permission to run
+the kernel. The recorder migrates the disposable database, creates a recording account with governance authority,
+signs a short-lived test token, and creates the launch subject through `POST /v1/subjects`. It then inserts a published
+board and a published thread with three posts, and records the board, its first thread page, the thread, and its first
+post page. The kernel server does not mount subject search, so the recorder indexes that subject in its OpenSearch
+node and records `POST /v1/subjects:search` through an in-process kernel: one query that matches the subject and one
+that matches nothing. It also records the subject read and a missing ID. It stops the kernel and removes the containers
+it started on success and failure; it does not use a development kernel, the shared search node, or a shared database.
 
 Run `bun run screenshots` to capture every story in all eight locales and both themes for review by eye.
 The command builds Storybook once into a temporary directory, serves that build on a free port, and writes a
@@ -256,33 +260,218 @@ The development-only fixture kernel scans fixture arrays; it is not evidence for
 Follow-ups below are proposed tests in `tests/request-cost.test.ts`, counting calls through the fake kernel and session
 at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests cited cover only the stated call assertion.
 
-| Operation                                               | Touches                                                                                                                                                                                         | Bound                                                                                                                                                                                                                                                              | Growth check                                                                                                                                                                                                                                                                |
-| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Page security headers                                   | Request-local nonce → SSR and response headers                                                                                                                                                  | 0 added K/D/R/A; one 16-byte random draw and a fixed-size header string per response; no production body buffering                                                                                                                                                 | No growth check applies                                                                                                                                                                                                                                                     |
-| Curator editor style policy                             | URL pathname → constant `inlineStyleExceptionPaths` list                                                                                                                                        | 0 reads and 0 added K/D/R/A; one path match against eight constant paths per response                                                                                                                                                                              | No growth check applies                                                                                                                                                                                                                                                     |
-| Read rate limits (GET/HEAD)                             | Two local Cloudflare rate-limit bindings before route handling, keyed by active account, valid session/login cookie, or client IP                                                               | 2 `limit()` calls; 0 added K/D/R/A; the request's existing session read supplies the signed-in key; refusals stop before K                                                                                                                                         | constant per request; request-cost counts unchanged                                                                                                                                                                                                                         |
-| Locale resolution (`/`)                                 | URL, locale cookie, then weighted `Accept-Language`, then English; redirect before page loaders                                                                                                 | K/D/R/A = 0; no body buffered; header parsing/sorting depends on header length, not database size                                                                                                                                                                  | `tests/request-cost.test.ts`: `locale resolution stays within its bound as s grows`                                                                                                                                                                                         |
-| Search page (`/<locale>/search`)                        | In parallel: one `POST /v1/subjects:search` and one `POST /v1/subjects:facets`; active definitions digest cached for 60 s and release cached by digest without expiry                           | 2 K and 0 D per search; result page is at most 100 entries and facet work is bounded to 8 properties × 10 values; 0 R/A                                                                                                                                            | `tests/search-facets.test.ts`: `searches read the definitions release once per digest and make two kernel reads each`                                                                                                                                                       |
-| Suggestions (shell typeahead)                           | One site GET route calls `subjects:suggest` with a constant cap; browser waits 200 ms after typing pauses and cancels stale requests                                                            | 1 K per request with a constant result cap, 0 D, 0 R and 0 A. The browser sends at most one request per pause                                                                                                                                                      | `tests/request-cost.test.ts`: `suggestions stay within their bound as s grows`                                                                                                                                                                                              |
-| Home page (`/<locale>`)                                 | Root preferences → D `signedIn` with a valid configured session cookie; static heading                                                                                                          | ≤1 D, 0 K/R/A; O(t) record bytes, constant page output; no result, label or media calls per item                                                                                                                                                                   | `tests/session-controls.test.ts`: `pages read the signed-in state without contacting Auth or refreshing tokens` asserts zero A; `tests/request-cost.test.ts`: `home page stays within its bound as s grows` for D/K                                                         |
-| Board page (`/<locale>/boards/<id>`)                    | Root preferences/D and public board plus thread-page K reads; preserve kernel thread order and pass `next` as the paging cursor                                                                 | ≤2 K (board and one page of at most s ≤ 100 threads), ≤1 D, 0 R/A; work and buffered JSON are O(s)                                                                                                                                                                 | `tests/request-cost.test.ts`: `board page stays within its bound as s grows`                                                                                                                                                                                                |
-| New-thread page (`/<locale>/boards/<id>/new`)           | Root preferences/D and one public board K read; no thread list is loaded                                                                                                                        | ≤1 K, ≤1 D, 0 R/A; constant                                                                                                                                                                                                                                        | `tests/posting.test.ts`: `a signed-in member starts a thread from its board and lands on it` records the page and write kernel calls                                                                                                                                        |
-| Thread page (`/<locale>/threads/<id>`)                  | Root preferences/D and thread plus post-page K reads started together; render each page body locally with `DocumentBody`                                                                        | ≤2 K started together (thread and one page of at most s ≤ 100 posts), ≤1 D, 0 R/A; work is O(total body size of the page), each body capped at 2 MiB (ADR-0036)                                                                                                    | `tests/request-cost.test.ts`: `thread page stays within its bound as s grows`                                                                                                                                                                                               |
-| Start a thread                                          | One `POST /v1/threads`/K after the session read; send the published thread draft and stable idempotency key                                                                                     | ≤1 K write, ≤1 D; work is linear in the draft, which the kernel caps at 2 MiB                                                                                                                                                                                      | `tests/posting.test.ts`: `a signed-in member starts a thread from its board and lands on it` records the single write                                                                                                                                                       |
-| Reply                                                   | One `POST /v1/threads/<id>/posts`/K after the session read; render the post returned by the kernel without rereading the thread                                                                 | ≤1 K write, ≤1 D; work is linear in the draft, which the kernel caps at 2 MiB                                                                                                                                                                                      | `tests/posting.test.ts`: `a signed-in member replies to a thread and sees the reply` records the single write                                                                                                                                                               |
-| Subject page (`/<locale>/subjects/<id>`)                | Root preferences/D and subject loader are independent; one public K `GET /v1/subjects/<id>` supplies subject and related labels; local rendering follows; merged ID redirects without another K | ≤1 K + ≤1 D; 0 R/A; O(s) parsing/rendering and buffered JSON plus O(t) session bytes; **exceeds the criterion** for a bounded neighbourhood because the full subject payload has no s cap; no N+1 for results, labels or media                                     | Follow-up: `subject page stays within its bound as s grows`                                                                                                                                                                                                                 |
-| Credential resolution (media prelude)                   | Explicit Authorization bypasses D; otherwise valid configured cookie → D `credential` → media handler                                                                                           | ≤1 D per request, including malformed media paths; O(t) record/token bytes; no extra K/R; fresh access token means 0 A; add the refresh row when due                                                                                                               | `tests/request-cost.test.ts`: `credential resolution stays within its bound as s grows`                                                                                                                                                                                     |
-| Token refresh                                           | Within D: read record → A token grant when access expiry is less than 60 seconds away → replace tokens; concurrent callers share one promise                                                    | No additional D/K/R; ≤1 refresh grant per shared attempt plus cold discovery/JWKS work; O(t) bytes, no accumulated tokens; only `invalid_grant` deletes the record; any other failure keeps it and returns unavailable                                             | `tests/session.test.ts`: `the session refreshes its tokens once under concurrent requests, and ends when refresh fails` asserts one refresh for five concurrent calls and none after deletion                                                                               |
-| Sign-in (`GET /auth/sign-in`)                           | Auth configuration/discovery → D login `create` → browser authorization redirect                                                                                                                | 1 D, no token grant; cold discovery only in Worker, then one browser authorization request; constant record/body size relative to s/M/t (return path length is input-dependent)                                                                                    | `tests/request-cost.test.ts`: `sign-in stays within its bound as s grows`                                                                                                                                                                                                   |
-| Callback (`GET /auth/callback`)                         | D `takeLogin` consumes transaction → A code exchange/ID-token validation → D session `create` → redirect                                                                                        | ≤2 D; ≤1 token grant plus cold discovery/JWKS work; O(t) token/record bytes; mismatched state or declined authorization stops before exchange                                                                                                                      | `tests/session.test.ts`: `a callback that does not match the sign-in it answers is refused` asserts no token request for forged/missing state or declined authorization; `tests/request-cost.test.ts`: `callback stays within its bound as s grows`                         |
-| CSRF validation (unsafe requests with a session)        | Exact `SITE_ORIGINS` check and constant-time token comparison before dispatch; token is carried by the existing `signedIn`, `credential` and `end` reads                                        | No new Durable Object method or write; one existing session read for unsafe Start requests; fixed-size token work                                                                                                                                                  | Existing `tests/request-cost.test.ts` bounds remain unchanged                                                                                                                                                                                                               |
-| Sign-out (`POST /auth/sign-out`)                        | D `end` waits for in-flight refresh, deletes record/alarm → A refresh-token revocation → Worker builds browser logout redirect                                                                  | ≤1 D; ≤1 revocation plus cold discovery in D and Worker contexts; any already-running refresh has the bound above; ≤1 browser logout request; O(t) bytes, no scan of other sessions                                                                                | `tests/request-cost.test.ts`: `sign-out stays within its bound as s grows`                                                                                                                                                                                                  |
-| Reserve (`POST /media`)                                 | Credential prelude → K reserve on the named container                                                                                                                                           | ≤1 D by unguessable session id, exactly 1 K for a valid reservation; 0 R; body bounded at 4 KiB; constant in N media objects and U × t uploads over time, no lists or scans; add credential A; kernel work follows content's reserve bound                         | `tests/media-reserve.test.ts`: `a signed-in uploader reserves through the site and uploads to the address it returns` records the reserve call; shared performance harness growth check pending                                                                             |
-| Reservation state (`GET /media/<id>`)                   | Credential prelude → K read of the named reservation                                                                                                                                            | ≤1 D by unguessable session id, exactly 1 K; 0 R; constant in N media objects and U × t uploads over time, no lists or scans; add credential A; kernel work follows content's read bound                                                                           | `tests/media-reserve.test.ts`: `reservations are read through the site by their uploader only` records every read call; shared performance harness growth check pending                                                                                                     |
-| Upload (`PUT /media/<id>`)                              | Credential prelude → K reservation read/permission → count/hash stream → R `put` → K `:complete`; failure after write begins → R `delete`                                                       | ≤2 K, ≤1 put + ≤1 cleanup delete; add credential D/A; constant buffering per stage, independent of M; O(M) bytes streamed and hashed once, bounded by reserved byteCount                                                                                           | `tests/upload-memory.test.ts`: `an upload holds a bounded number of bytes ahead of storage as the file grows` bounds read-ahead at 1 MiB for 1, 8 and 64 MiB uploads                                                                                                        |
-| Download (`GET`/`HEAD /media/<id>/<variant>`)           | Credential prelude → K `:authorizeDownload` every request, including conditional → R `head` → R `get` for GET only → stream body directly                                                       | ≤1 K; ≤1 head + ≤1 get; add credential D/A; 304/denial uses 0 R, HEAD/416 uses no get; constant media buffering, ≤M bytes streamed (0 for HEAD/304), no arrayBuffer/blob read                                                                                      | `tests/media.test.ts`: `a download asks the kernel on every request and serves ranges, validators and the decided cache policy` asserts one decision for 304 and zero for invalid variant; `tests/request-cost.test.ts`: `download stays within its bound as s grows` for R |
-| Storybook (`bun run storybook`)                         | Static story modules replay committed kernel responses through `createRecordedKernelFetch`; page and shell browser checks use local Chromium                                                    | No request-path work; development tooling only; each recording is one kernel request per listed entry                                                                                                                                                              | `tests/page-stories.test.ts`: browser accessibility and replay checks run through the root gate                                                                                                                                                                             |
-| Recording (`bun run record`)                            | Start disposable PostgreSQL and kernel; create the account and subject, then record the subject and missing-subject reads as status and JSON body in `src/kernel/recorded/`                     | One subject create and two listed reads through the kernel; development tooling only; disposable database removed after recording                                                                                                                                  | `scripts/record.ts`: fixed request list; prerequisites documented above                                                                                                                                                                                                     |
-| Presentation curation (`/<locale>/curate/presentation`) | Credential prelude → K active pointer → K immutable profile; publish → K profile write → K activation at expected head                                                                          | Opening: 2 K reads (immutable profile cacheable forever); publishing: 2 K writes; add credential D/A. Listing and editing are linear in the profile, bounded by `MAX_PROFILE_TEMPLATES` (128 keyed templates) and `MAX_PROFILE_BYTES` (1 MiB); no public-page work | `tests/curate-presentation.test.ts`: template listing, immutable edits, publish/activate order and refusal handling                                                                                                                                                         |
+### Page security headers
+
+- **Touches:** Request-local nonce → SSR and response headers
+- **Bound:** 0 added K/D/R/A; one 16-byte random draw and a fixed-size header string per response; no production body
+  buffering
+- **Growth check:** No growth check applies
+
+### Curator editor style policy
+
+- **Touches:** URL pathname → constant `inlineStyleExceptionPaths` list
+- **Bound:** 0 reads and 0 added K/D/R/A; one path match against eight constant paths per response
+- **Growth check:** No growth check applies
+
+### Read rate limits (GET/HEAD)
+
+- **Touches:** Two local Cloudflare rate-limit bindings before route handling, keyed by active account, valid
+  session/login cookie, or client IP
+- **Bound:** 2 `limit()` calls; 0 added K/D/R/A; the request's existing session read supplies the signed-in key;
+  refusals stop before K
+- **Growth check:** constant per request; request-cost counts unchanged
+
+### Locale resolution (`/`)
+
+- **Touches:** URL, locale cookie, then weighted `Accept-Language`, then English; redirect before page loaders
+- **Bound:** K/D/R/A = 0; no body buffered; header parsing/sorting depends on header length, not database size
+- **Growth check:** `tests/request-cost.test.ts`: `locale resolution stays within its bound as s grows`
+
+### Search page (`/<locale>/search`)
+
+- **Touches:** In parallel: one `POST /v1/subjects:search` and one `POST /v1/subjects:facets`; active definitions digest
+  cached for 60 s and release cached by digest without expiry
+- **Bound:** 2 K and 0 D per search; result page is at most 100 entries and facet work is bounded to 8 properties × 10
+  values; 0 R/A
+- **Growth check:** `tests/search-facets.test.ts`:
+  `searches read the definitions release once per digest and make two kernel reads each`
+
+### Suggestions (shell typeahead)
+
+- **Touches:** One site GET route calls `subjects:suggest` with a constant cap; browser waits 200 ms after typing pauses
+  and cancels stale requests
+- **Bound:** 1 K per request with a constant result cap, 0 D, 0 R and 0 A. The browser sends at most one request per
+  pause
+- **Growth check:** `tests/request-cost.test.ts`: `suggestions stay within their bound as s grows`
+
+### Home page (`/<locale>`)
+
+- **Touches:** Root preferences → D `signedIn` with a valid configured session cookie; static heading
+- **Bound:** ≤1 D, 0 K/R/A; O(t) record bytes, constant page output; no result, label or media calls per item
+- **Growth check:** `tests/session-controls.test.ts`:
+  `pages read the signed-in state without contacting Auth or refreshing tokens` asserts zero A;
+  `tests/request-cost.test.ts`: `home page stays within its bound as s grows` for D/K
+
+### Board page (`/<locale>/boards/<id>`)
+
+- **Touches:** Root preferences/D and public board plus thread-page K reads; preserve kernel thread order and pass
+  `next` as the paging cursor
+- **Bound:** ≤2 K (board and one page of at most s ≤ 100 threads), ≤1 D, 0 R/A; work and buffered JSON are O(s)
+- **Growth check:** `tests/request-cost.test.ts`: `board page stays within its bound as s grows`
+
+### New-thread page (`/<locale>/boards/<id>/new`)
+
+- **Touches:** Root preferences/D and one public board K read; no thread list is loaded
+- **Bound:** ≤1 K, ≤1 D, 0 R/A; constant
+- **Growth check:** `tests/posting.test.ts`: `a signed-in member starts a thread from its board and lands on it` records
+  the page and write kernel calls
+
+### Thread page (`/<locale>/threads/<id>`)
+
+- **Touches:** Root preferences/D and thread plus post-page K reads started together; render each page body locally with
+  `DocumentBody`
+- **Bound:** ≤2 K started together (thread and one page of at most s ≤ 100 posts), ≤1 D, 0 R/A; work is O(total body
+  size of the page), each body capped at 2 MiB (ADR-0036)
+- **Growth check:** `tests/request-cost.test.ts`: `thread page stays within its bound as s grows`
+
+### Start a thread
+
+- **Touches:** One `POST /v1/threads`/K after the session read; send the published thread draft and stable idempotency
+  key
+- **Bound:** ≤1 K write, ≤1 D; work is linear in the draft, which the kernel caps at 2 MiB
+- **Growth check:** `tests/posting.test.ts`: `a signed-in member starts a thread from its board and lands on it` records
+  the single write
+
+### Reply
+
+- **Touches:** One `POST /v1/threads/<id>/posts`/K after the session read; render the post returned by the kernel
+  without rereading the thread
+- **Bound:** ≤1 K write, ≤1 D; work is linear in the draft, which the kernel caps at 2 MiB
+- **Growth check:** `tests/posting.test.ts`: `a signed-in member replies to a thread and sees the reply` records the
+  single write
+
+### Subject page (`/<locale>/subjects/<id>`)
+
+- **Touches:** Root preferences/D and subject loader are independent; one public K `GET /v1/subjects/<id>` supplies
+  subject and related labels; local rendering follows; merged ID redirects without another K
+- **Bound:** ≤1 K + ≤1 D; 0 R/A; O(s) parsing/rendering and buffered JSON plus O(t) session bytes; **exceeds the
+  criterion** for a bounded neighbourhood because the full subject payload has no s cap; no N+1 for results, labels or
+  media
+- **Growth check:** Follow-up: `subject page stays within its bound as s grows`
+
+### Credential resolution (media prelude)
+
+- **Touches:** Explicit Authorization bypasses D; otherwise valid configured cookie → D `credential` → media handler
+- **Bound:** ≤1 D per request, including malformed media paths; O(t) record/token bytes; no extra K/R; fresh access
+  token means 0 A; add the refresh row when due
+- **Growth check:** `tests/request-cost.test.ts`: `credential resolution stays within its bound as s grows`
+
+### Token refresh
+
+- **Touches:** Within D: read record → A token grant when access expiry is less than 60 seconds away → replace tokens;
+  concurrent callers share one promise
+- **Bound:** No additional D/K/R; ≤1 refresh grant per shared attempt plus cold discovery/JWKS work; O(t) bytes, no
+  accumulated tokens; only `invalid_grant` deletes the record; any other failure keeps it and returns unavailable
+- **Growth check:** `tests/session.test.ts`:
+  `the session refreshes its tokens once under concurrent requests, and ends when refresh fails` asserts one refresh for
+  five concurrent calls and none after deletion
+
+### Sign-in (`GET /auth/sign-in`)
+
+- **Touches:** Auth configuration/discovery → D login `create` → browser authorization redirect
+- **Bound:** 1 D, no token grant; cold discovery only in Worker, then one browser authorization request; constant
+  record/body size relative to s/M/t (return path length is input-dependent)
+- **Growth check:** `tests/request-cost.test.ts`: `sign-in stays within its bound as s grows`
+
+### Callback (`GET /auth/callback`)
+
+- **Touches:** D `takeLogin` consumes transaction → A code exchange/ID-token validation → D session `create` → redirect
+- **Bound:** ≤2 D; ≤1 token grant plus cold discovery/JWKS work; O(t) token/record bytes; mismatched state or declined
+  authorization stops before exchange
+- **Growth check:** `tests/session.test.ts`: `a callback that does not match the sign-in it answers is refused` asserts
+  no token request for forged/missing state or declined authorization; `tests/request-cost.test.ts`:
+  `callback stays within its bound as s grows`
+
+### CSRF validation (unsafe requests with a session)
+
+- **Touches:** Exact `SITE_ORIGINS` check and constant-time token comparison before dispatch; token is carried by the
+  existing `signedIn`, `credential` and `end` reads
+- **Bound:** No new Durable Object method or write; one existing session read for unsafe Start requests; fixed-size
+  token work
+- **Growth check:** Existing `tests/request-cost.test.ts` bounds remain unchanged
+
+### Sign-out (`POST /auth/sign-out`)
+
+- **Touches:** D `end` waits for in-flight refresh, deletes record/alarm → A refresh-token revocation → Worker builds
+  browser logout redirect
+- **Bound:** ≤1 D; ≤1 revocation plus cold discovery in D and Worker contexts; any already-running refresh has the bound
+  above; ≤1 browser logout request; O(t) bytes, no scan of other sessions
+- **Growth check:** `tests/request-cost.test.ts`: `sign-out stays within its bound as s grows`
+
+### Reserve (`POST /media`)
+
+- **Touches:** Credential prelude → K reserve on the named container
+- **Bound:** ≤1 D by unguessable session id, exactly 1 K for a valid reservation; 0 R; body bounded at 4 KiB; constant
+  in N media objects and U × t uploads over time, no lists or scans; add credential A; kernel work follows content's
+  reserve bound
+- **Growth check:** `tests/media-reserve.test.ts`:
+  `a signed-in uploader reserves through the site and uploads to the address it returns` records the reserve call;
+  shared performance harness growth check pending
+
+### Reservation state (`GET /media/<id>`)
+
+- **Touches:** Credential prelude → K read of the named reservation
+- **Bound:** ≤1 D by unguessable session id, exactly 1 K; 0 R; constant in N media objects and U × t uploads over time,
+  no lists or scans; add credential A; kernel work follows content's read bound
+- **Growth check:** `tests/media-reserve.test.ts`: `reservations are read through the site by their uploader only`
+  records every read call; shared performance harness growth check pending
+
+### Upload (`PUT /media/<id>`)
+
+- **Touches:** Credential prelude → K reservation read/permission → count/hash stream → R `put` → K `:complete`; failure
+  after write begins → R `delete`
+- **Bound:** ≤2 K, ≤1 put + ≤1 cleanup delete; add credential D/A; constant buffering per stage, independent of M; O(M)
+  bytes streamed and hashed once, bounded by reserved byteCount
+- **Growth check:** `tests/upload-memory.test.ts`:
+  `an upload holds a bounded number of bytes ahead of storage as the file grows` bounds read-ahead at 1 MiB for 1, 8 and
+  64 MiB uploads
+
+### Download (`GET`/`HEAD /media/<id>/<variant>`)
+
+- **Touches:** Credential prelude → K `:authorizeDownload` every request, including conditional → R `head` → R `get` for
+  GET only → stream body directly
+- **Bound:** ≤1 K; ≤1 head + ≤1 get; add credential D/A; 304/denial uses 0 R, HEAD/416 uses no get; constant media
+  buffering, ≤M bytes streamed (0 for HEAD/304), no arrayBuffer/blob read
+- **Growth check:** `tests/media.test.ts`:
+  `a download asks the kernel on every request and serves ranges, validators and the decided cache policy` asserts one
+  decision for 304 and zero for invalid variant; `tests/request-cost.test.ts`:
+  `download stays within its bound as s grows` for R
+
+### Storybook (`bun run storybook`)
+
+- **Touches:** Static story modules replay committed kernel responses, including the board, thread page, post page,
+  matching search and empty search, through `createRecordedKernelFetch`; page and shell browser checks use local
+  Chromium
+- **Bound:** No request-path work; development tooling only; each recording is one kernel request per listed entry
+- **Growth check:** `tests/page-stories.test.ts`: browser accessibility and replay checks run through the root gate
+
+### Recording (`bun run record`)
+
+- **Touches:** Start disposable PostgreSQL, OpenSearch and the kernel; create the account, subject, board and thread,
+  then record the subject, missing subject, board, thread page, thread, post page, matching search and empty search as
+  status and JSON in `src/kernel/recorded/`
+- **Bound:** Subject create, the listed reads, and one in-process search kernel for the two search responses;
+  development tooling only; disposable database and search node removed after recording
+- **Growth check:** `scripts/record.ts`: fixed request list; prerequisites documented above
+
+### Presentation curation (`/<locale>/curate/presentation`)
+
+- **Touches:** Credential prelude → K active pointer → K immutable profile; publish → K profile write → K activation at
+  expected head
+- **Bound:** Opening: 2 K reads (immutable profile cacheable forever); publishing: 2 K writes; add credential D/A.
+  Listing and editing are linear in the profile, bounded by `MAX_PROFILE_TEMPLATES` (128 keyed templates) and
+  `MAX_PROFILE_BYTES` (1 MiB); no public-page work
+- **Growth check:** `tests/curate-presentation.test.ts`: template listing, immutable edits, publish/activate order and
+  refusal handling
 
 The subject JSON body and rendered data grow with uncapped s, even though related labels arrive in the same response and there are no per-item server calls.

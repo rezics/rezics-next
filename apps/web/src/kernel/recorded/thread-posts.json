@@ -1,0 +1,133 @@
+{
+  "posts": [
+    {
+      "id": "01a1743c-fd8c-7522-a3b6-1234bc7172e5",
+      "threadId": "01a1743c-fd8c-7521-8f70-1234009d9380",
+      "route": 4660,
+      "authorId": "01a1743c-b35b-7654-934c-46be251d3048",
+      "parentId": null,
+      "licence": "MIT",
+      "subjectIds": [],
+      "boardId": "01a1743c-fd8a-73ab-9681-432124b3ec3f",
+      "visibility": "published",
+      "securityRevision": "1",
+      "createdAt": "2026-10-24T00:00:00.000Z",
+      "sha256": "a0daf7f4fb39a27271cc0e51b31991d84b27c9f1ca013aa15f3d08feb1b6dadb",
+      "mediaIds": [],
+      "revisionId": "01a1743c-fd8c-7523-ba0a-12345f96d9ce",
+      "body": {
+        "doc": {
+          "content": [
+            {
+              "attrs": { "dir": null, "id": "flight-notes", "lang": null, "level": 2, "textAlign": null },
+              "content": [{ "text": "Flight notes", "type": "text" }],
+              "type": "heading"
+            },
+            {
+              "attrs": { "dir": null, "id": "watch-list", "lang": null },
+              "content": [
+                {
+                  "attrs": { "dir": null, "id": "baobabs", "lang": null },
+                  "content": [
+                    {
+                      "attrs": { "dir": null, "id": "baobabs-text", "lang": null, "textAlign": null },
+                      "content": [{ "text": "Watch the baobabs", "type": "text" }],
+                      "type": "paragraph"
+                    }
+                  ],
+                  "type": "listItem"
+                }
+              ],
+              "type": "bulletList"
+            }
+          ],
+          "type": "doc"
+        },
+        "profile": "blocks",
+        "version": "rezics-document-v1"
+      },
+      "availability": "available"
+    },
+    {
+      "id": "01a1743c-fd8c-7524-b12d-1234d2c714a5",
+      "threadId": "01a1743c-fd8c-7521-8f70-1234009d9380",
+      "route": 4660,
+      "authorId": "01a1743c-b35b-7654-934c-46be251d3048",
+      "parentId": null,
+      "licence": "MIT",
+      "subjectIds": [],
+      "boardId": "01a1743c-fd8a-73ab-9681-432124b3ec3f",
+      "visibility": "published",
+      "securityRevision": "1",
+      "createdAt": "2026-10-24T00:01:00.000Z",
+      "sha256": "be64b69c2759d410de92d909f9abad72c0bb0b579325b7ece15dd3ec65dcb254",
+      "mediaIds": [],
+      "revisionId": "01a1743c-fd8c-7525-b25d-1234b1c19f6b",
+      "body": {
+        "doc": {
+          "content": [
+            {
+              "attrs": { "dir": null, "id": "asteroid", "lang": null, "textAlign": null },
+              "content": [
+                {
+                  "marks": [
+                    {
+                      "attrs": {
+                        "class": null,
+                        "href": "https://example.com/b612",
+                        "rel": null,
+                        "target": null,
+                        "title": null
+                      },
+                      "type": "link"
+                    }
+                  ],
+                  "text": "The asteroid",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "profile": "blocks",
+        "version": "rezics-document-v1"
+      },
+      "availability": "available"
+    },
+    {
+      "id": "01a1743c-fd8c-7526-b23b-1234e5014f62",
+      "threadId": "01a1743c-fd8c-7521-8f70-1234009d9380",
+      "route": 4660,
+      "authorId": "01a1743c-b35b-7654-934c-46be251d3048",
+      "parentId": "01a1743c-fd8c-7522-a3b6-1234bc7172e5",
+      "licence": "MIT",
+      "subjectIds": [],
+      "boardId": "01a1743c-fd8a-73ab-9681-432124b3ec3f",
+      "visibility": "published",
+      "securityRevision": "1",
+      "createdAt": "2026-10-24T00:02:00.000Z",
+      "sha256": "b123a7858d21a207b89999f880ab7969173284b2ba6c1860784343bc81505922",
+      "mediaIds": [],
+      "revisionId": "01a1743c-fd8c-7527-a453-12348df3761b",
+      "body": {
+        "doc": {
+          "content": [
+            {
+              "attrs": { "dir": null, "id": "rose", "lang": null, "textAlign": null },
+              "content": [{ "marks": [{ "type": "spoiler" }], "text": "The rose was unique", "type": "text" }],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "profile": "blocks",
+        "version": "rezics-document-v1"
+      },
+      "availability": "available"
+    }
+  ],
+  "next": null,
+  "status": 200
+}

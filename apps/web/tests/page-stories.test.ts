@@ -10,7 +10,7 @@ const app = join(import.meta.dir, '..');
 const root = resolve(app, '../..');
 const ui = join(root, 'packages/ui');
 const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'];
-const pages = ['home', 'subject', 'missing-subject', 'shell'];
+const pages = ['home', 'subject', 'missing-subject', 'shell', 'board', 'thread', 'search', 'search-empty'];
 const visitors = ['Signed In', 'Signed Out'];
 const recorded = join(app, 'src/kernel/recorded');
 mkdirSync(join(root, '.temp'), { recursive: true });
@@ -211,20 +211,40 @@ test(
     const files = recordings();
     const module = join(temporary, 'recordings.ts');
     const source = [
-      "import type { KernelClient } from '@rezics/client';",
+      "import type { Kernel, KernelClient } from '@rezics/client';",
       'type Mutable<T> = { -readonly [K in keyof T]: Mutable<T[K]> };',
       "type Read = Awaited<ReturnType<ReturnType<KernelClient['subjects']>['get']>>;",
       "type SubjectResponse = NonNullable<Read['data']>;",
       "type MissingResponse = Extract<NonNullable<Read['error']>, { status: 404 | '404' }>['value'];",
+      "type BoardResource = ReturnType<KernelClient['boards']>;",
+      "type BoardResponse = NonNullable<Awaited<ReturnType<BoardResource['get']>>['data']>;",
+      "type BoardThreadsResponse = NonNullable<Awaited<ReturnType<BoardResource['threads']['get']>>['data']>;",
+      // Eden merges threads/:id with threads/:threadId, so ReturnType of threads() has no get or posts.
+      "type Routes = Kernel extends { '~Routes': infer Schema } ? Schema : never;",
+      'type ThreadRoutes = Routes extends { v1: { threads: infer Threads } } ? Threads : never;',
+      "type ThreadNode = ThreadRoutes extends { ':id': infer Node } ? Node : never;",
+      'type ThreadResponse = ThreadNode extends { get: { response: { 200: infer Body } } } ? Body : never;',
+      'type PostsResponse = ThreadNode extends { posts: { get: { response: { 200: infer Body } } } } ? Body : never;',
+      "type SearchResponse = NonNullable<Awaited<ReturnType<KernelClient['subjects']['$search']['post']>>['data']>;",
     ];
+    const responseType: Record<string, string> = {
+      'missing-subject.json': 'MissingResponse',
+      'subject.json': 'SubjectResponse',
+      'board.json': 'BoardResponse',
+      'board-threads.json': 'BoardThreadsResponse',
+      'thread.json': 'ThreadResponse',
+      'thread-posts.json': 'PostsResponse',
+      'search.json': 'SearchResponse',
+      'search-empty.json': 'SearchResponse',
+    };
     files.forEach((file, index) => {
       const path = join(recorded, file);
-      const json = readFileSync(path, 'utf8');
+      const json = readFileSync(path, 'utf8').trim();
       source.push(`import recording${index} from ${JSON.stringify(path)};`);
       // JSON imports widen discriminants to string. Restore only the exact literal shape read from that same file.
       source.push(`const literal${index} = ${json} as const;`);
       source.push(
-        `(recording${index} as Mutable<typeof literal${index}>) satisfies ${basename(file) === 'missing-subject.json' ? 'MissingResponse' : 'SubjectResponse'};`,
+        `(recording${index} as Mutable<typeof literal${index}>) satisfies ${responseType[basename(file)] ?? 'SubjectResponse'};`,
       );
     });
     writeFileSync(module, `${source.join('\n')}\n`);
@@ -243,8 +263,17 @@ test(
     );
     const run = await command([join(root, 'node_modules/.bin/tsc'), '--noEmit', '-p', config]);
     expect(run.code, run.output).toBe(0);
-    expect(files, 'a successful empty compilation does not cover the subject and missing-subject responses').toEqual(
-      expect.arrayContaining(['subject.json', 'missing-subject.json']),
+    expect(files, 'a successful empty compilation does not cover the recorded page responses').toEqual(
+      expect.arrayContaining([
+        'subject.json',
+        'missing-subject.json',
+        'board.json',
+        'board-threads.json',
+        'thread.json',
+        'thread-posts.json',
+        'search.json',
+        'search-empty.json',
+      ]),
     );
   },
   timeout,

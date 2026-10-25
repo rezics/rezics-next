@@ -1,0 +1,23 @@
+{
+  "subjects": [
+    {
+      "id": "01a1743c-fc71-763c-bfa7-0bd05fdead80",
+      "type": "schema:Book",
+      "labels": {
+        "en": "The Little Prince",
+        "es": "El Principito",
+        "ja": "星の王子さま",
+        "ko": "어린 왕자",
+        "zh-Hant": "小王子",
+        "fr": "Le Petit Prince",
+        "de": "Der kleine Prinz",
+        "zh-Hans": "小王子"
+      }
+    }
+  ],
+  "total": { "value": 1, "relation": "exact" },
+  "next": null,
+  "as_of": "2026-10-25T18:05:08.144Z",
+  "status": 200,
+  "query": "Prince"
+}

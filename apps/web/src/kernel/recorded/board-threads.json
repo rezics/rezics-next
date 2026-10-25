@@ -1,0 +1,67 @@
+{
+  "threads": [
+    {
+      "id": "01a1743c-fd8c-7521-8f70-1234009d9380",
+      "route": 4660,
+      "authorId": "01a1743c-b35b-7654-934c-46be251d3048",
+      "title": "Letters from B-612",
+      "licence": "MIT",
+      "subjectIds": [],
+      "boardId": "01a1743c-fd8a-73ab-9681-432124b3ec3f",
+      "visibility": "published",
+      "securityRevision": "1",
+      "availability": "available",
+      "createdAt": "2026-10-24T00:00:00.000Z",
+      "firstPost": {
+        "id": "01a1743c-fd8c-7522-a3b6-1234bc7172e5",
+        "threadId": "01a1743c-fd8c-7521-8f70-1234009d9380",
+        "route": 4660,
+        "authorId": "01a1743c-b35b-7654-934c-46be251d3048",
+        "parentId": null,
+        "licence": "MIT",
+        "subjectIds": [],
+        "boardId": "01a1743c-fd8a-73ab-9681-432124b3ec3f",
+        "visibility": "published",
+        "securityRevision": "1",
+        "createdAt": "2026-10-24T00:00:00.000Z",
+        "sha256": "a0daf7f4fb39a27271cc0e51b31991d84b27c9f1ca013aa15f3d08feb1b6dadb",
+        "mediaIds": [],
+        "revisionId": "01a1743c-fd8c-7523-ba0a-12345f96d9ce",
+        "body": {
+          "doc": {
+            "content": [
+              {
+                "attrs": { "dir": null, "id": "flight-notes", "lang": null, "level": 2, "textAlign": null },
+                "content": [{ "text": "Flight notes", "type": "text" }],
+                "type": "heading"
+              },
+              {
+                "attrs": { "dir": null, "id": "watch-list", "lang": null },
+                "content": [
+                  {
+                    "attrs": { "dir": null, "id": "baobabs", "lang": null },
+                    "content": [
+                      {
+                        "attrs": { "dir": null, "id": "baobabs-text", "lang": null, "textAlign": null },
+                        "content": [{ "text": "Watch the baobabs", "type": "text" }],
+                        "type": "paragraph"
+                      }
+                    ],
+                    "type": "listItem"
+                  }
+                ],
+                "type": "bulletList"
+              }
+            ],
+            "type": "doc"
+          },
+          "profile": "blocks",
+          "version": "rezics-document-v1"
+        },
+        "availability": "available"
+      }
+    }
+  ],
+  "next": null,
+  "status": 200
+}
