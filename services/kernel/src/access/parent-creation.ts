@@ -13,6 +13,7 @@ import { deadlineClient, within } from './authenticate.ts';
 import { validResource } from './grant-command.ts';
 import { GrantDeniedError } from './grant-commands.ts';
 import { permissionEvidenceDeadline } from './permission.ts';
+import { CreationManifestUnavailableError, type ResourceCreationManifest } from './creation-manifest.ts';
 
 /** The owning module supplies this port in service code after binding the actual
  * parent storage/identity. validate reads only that parent anchor, and must check
@@ -37,7 +38,12 @@ export type ResourceCreationPort = Readonly<{
  * inserts its unique resource row before initializeResourceGrants and supplies
  * its trusted creation port here. Both writes use the same command transaction.
  */
-export type ParentCreationContext = AccessContext & { resource: Readonly<Resource>; creation: ResourceCreationPort };
+export type ParentCreationContext = AccessContext & {
+  resource: Readonly<Resource>;
+  creation: ResourceCreationPort;
+  /** Bounded server declaration; initialization is unavailable at this contract stage. */
+  manifest?: ResourceCreationManifest;
+};
 type Creation = {
   access: Access;
   actorId: string;
@@ -96,6 +102,9 @@ export function parentCreationAuthorization(input: {
   parent: ParentAnchor;
   context: ParentCreationContext;
 }): CommandAuthorization {
+  // Never fall through to single-resource initialization for a manifest-bearing
+  // command. This guard mints no proof, including for copied or serialized tokens.
+  if (input.context.manifest !== undefined) throw new CreationManifestUnavailableError();
   const { access, actor, action } = input;
   const parent = Object.freeze({ ...input.parent.resource });
   const resource = Object.freeze({ ...input.context.resource });
