@@ -1,6 +1,6 @@
 import type { DigestStream } from '@cloudflare/workers-types';
 import { viewerCredential } from '../session/request.ts';
-import { completeReservation, dependencyUnavailable, problem, readReservation } from './kernel.ts';
+import { completeReservation, dependencyUnavailable, mediaClient, problem, readReservation } from './kernel.ts';
 import type { MediaEnv } from './index.ts';
 
 const invalidRequest = () => problem(400, 'invalid_request', 'Invalid Request');
@@ -8,7 +8,8 @@ const tooLarge = () => problem(413, 'invalid_request', 'Invalid Request');
 
 export async function upload(request: Request, id: string, env: MediaEnv): Promise<Response> {
   const credential = viewerCredential(request);
-  const media = await readReservation(env.KERNEL_ORIGIN, id, credential);
+  const client = mediaClient(env.KERNEL_ORIGIN);
+  const media = await readReservation(client, id, credential);
   if (media.state !== 'reserved') throw problem(409, 'invalid_request', 'Invalid Request');
   const type = request.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase();
   if (type !== media.mediaType) throw problem(415, 'invalid_request', 'Invalid Request');
@@ -68,7 +69,7 @@ export async function upload(request: Request, id: string, env: MediaEnv): Promi
     const sha256 = Array.from(new Uint8Array(hashed.value[1]), (byte) => byte.toString(16).padStart(2, '0')).join('');
     if (media.sha256 !== null && sha256 !== media.sha256) throw invalidRequest();
     if (written.status === 'rejected' || written.value === null) throw dependencyUnavailable();
-    const completion = await completeReservation(env.KERNEL_ORIGIN, id, credential, {
+    const completion = await completeReservation(client, id, credential, {
       containerId: media.containerId,
       reservationRequestId: media.reservationRequestId,
       byteCount: measured,

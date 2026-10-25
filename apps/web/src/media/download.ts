@@ -1,5 +1,5 @@
 import { viewerCredential } from '../session/request.ts';
-import { authorizeDownload, notFound, problem, problemResponse } from './kernel.ts';
+import { authorizeDownload, mediaClient, notFound, problem, problemResponse } from './kernel.ts';
 import type { MediaEnv } from './index.ts';
 
 export const validVariant = (variant: string) =>
@@ -54,7 +54,7 @@ function extension(type: string): string {
 }
 
 export async function download(request: Request, id: string, variant: string, env: MediaEnv): Promise<Response> {
-  const decision = await authorizeDownload(env.KERNEL_ORIGIN, id, variant, viewerCredential(request));
+  const decision = await authorizeDownload(mediaClient(env.KERNEL_ORIGIN), id, variant, viewerCredential(request));
   if (decision.allowed !== true) throw notFound();
   const etag = `"${decision.sha256}"`;
   const headers = new Headers({ etag, 'cache-control': decision.cacheControl });

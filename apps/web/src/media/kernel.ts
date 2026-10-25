@@ -1,26 +1,14 @@
-// The content contract lives here until @rezics/client exports these calls.
-export type Media = {
-  id: string;
-  state: 'reserved' | 'uploaded' | 'available' | 'rejected' | 'erased';
-  byteCount: number;
-  mediaType: string;
-  sha256: string | null;
-  containerId: string;
-  uploaderId: string;
-  key: string;
-  reservationRequestId: string;
-};
-export type DownloadDecision = {
-  allowed: true;
-  key: string;
-  sha256: string;
-  mediaType: string;
-  byteCount: number;
-  publicCache: false;
-  cacheControl: string;
-};
-export type Completion = { media: { id: string; state: 'uploaded' } };
-export type CompletionInput = Pick<Media, 'containerId' | 'reservationRequestId' | 'byteCount'> & { sha256: string };
+import { createKernelClient, type KernelClient } from '@rezics/client';
+
+type MediaRoutes = ReturnType<KernelClient['media']>;
+type ReadResponse = Awaited<ReturnType<MediaRoutes['get']>>;
+type CompletionCall = MediaRoutes['$complete']['post'];
+type CompletionResponse = Awaited<ReturnType<CompletionCall>>;
+type DownloadResponse = Awaited<ReturnType<MediaRoutes['$authorizeDownload']['get']>>;
+export type Media = NonNullable<ReadResponse['data']>['media'];
+export type DownloadDecision = NonNullable<DownloadResponse['data']>;
+export type Completion = NonNullable<CompletionResponse['data']>;
+export type CompletionInput = Parameters<CompletionCall>[0];
 
 type ProblemBody = { type: string; title: string; status: number; code: string };
 export class MediaProblem extends Error {
@@ -48,55 +36,57 @@ export function problemResponse(error: unknown, headers?: HeadersInit): Response
   });
 }
 
-function viewerHeaders(credential: string | null): Headers {
-  const headers = new Headers();
-  if (credential !== null) headers.set('authorization', credential);
-  return headers;
+export function mediaClient(origin: string): KernelClient {
+  const kernelFetch: typeof fetch = globalThis.fetch;
+  return createKernelClient(origin, {
+    fetch: ((input, init) => kernelFetch(input, { ...init, redirect: 'manual' })) as typeof fetch,
+  });
 }
 
-async function call<T>(url: string, init: RequestInit): Promise<T> {
-  const response = await fetch(url, { ...init, redirect: 'manual' });
-  if (response.status !== 200) {
-    const body = (await response.json()) as Partial<ProblemBody>;
-    if (typeof body.type === 'string' && typeof body.title === 'string' && typeof body.code === 'string')
-      throw new MediaProblem({ type: body.type, title: body.title, code: body.code, status: response.status });
-    throw dependencyUnavailable();
-  }
-  return response.json() as Promise<T>;
+const viewerHeaders = (credential: string | null) => (credential === null ? {} : { authorization: credential });
+
+function throwClientError(error: { value: unknown; status: number }): never {
+  const body = error.value as Partial<ProblemBody> | null;
+  if (body && typeof body.type === 'string' && typeof body.title === 'string' && typeof body.code === 'string')
+    throw new MediaProblem({ type: body.type, title: body.title, code: body.code, status: error.status });
+  throw dependencyUnavailable();
 }
 
-const mediaUrl = (origin: string, id: string) => `${origin.replace(/\/$/, '')}/v1/media/${encodeURIComponent(id)}`;
-
-export async function readReservation(origin: string, id: string, credential: string | null): Promise<Media> {
-  return (await call<{ media: Media }>(mediaUrl(origin, id), { headers: viewerHeaders(credential) })).media;
+export async function readReservation(client: KernelClient, id: string, credential: string | null): Promise<Media> {
+  const { data, error } = await client.media({ id }).get({ headers: viewerHeaders(credential) });
+  if (error) throwClientError(error);
+  return data.media;
 }
 
-export function completeReservation(
-  origin: string,
+export async function completeReservation(
+  client: KernelClient,
   id: string,
   credential: string | null,
   input: CompletionInput,
 ): Promise<Completion> {
-  const headers = viewerHeaders(credential);
-  headers.set('content-type', 'application/json');
-  headers.set('idempotency-key', JSON.stringify(`complete-${id}-${input.sha256}`));
-  return call(`${mediaUrl(origin, id)}:complete`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(input),
+  const { data, error } = await client.media({ id }).$complete.post(input, {
+    headers: {
+      ...viewerHeaders(credential),
+      'idempotency-key': JSON.stringify(`complete-${id}-${input.sha256}`),
+    },
   });
+  if (error) throwClientError(error);
+  return data;
 }
 
 export async function authorizeDownload(
-  origin: string,
+  client: KernelClient,
   id: string,
   variant: string,
   credential: string | null,
 ): Promise<DownloadDecision> {
   try {
-    return await call(`${mediaUrl(origin, id)}:authorizeDownload?variant=${encodeURIComponent(variant)}`, {
+    const { data, error } = await client.media({ id }).$authorizeDownload.get({
+      query: { variant },
       headers: viewerHeaders(credential),
     });
+    if (error) throwClientError(error);
+    return data;
   } catch {
     // All failed decisions conceal the object, including upstream failures.
     throw notFound();
