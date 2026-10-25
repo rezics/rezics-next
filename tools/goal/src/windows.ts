@@ -12,6 +12,10 @@ const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 export interface ManagerWindows {
   register(manager: string, argv: string[], cwd: string): string;
   unregister(manager: string): void;
+  /** False when the manager's window is gone or its process has exited. */
+  alive?(manager: string): boolean;
+  /** Run argv in the manager's window again, replacing whatever it holds. */
+  respawn?(manager: string, argv: string[], cwd: string): void;
 }
 
 /** Resolve termspaces' stable session option; do not inspect or kill unrelated windows. */
@@ -43,6 +47,17 @@ export class TermspacesWindows implements ManagerWindows {
   private find(session: string, manager: string): string | undefined {
     return this.tmux(['list-windows', '-t', session, '-F', '#{window_id}\t#{@goal-manager}'])
       .split('\n').map(line => line.split('\t')).find(([, owner]) => owner === manager)?.[0];
+  }
+  alive(manager: string): boolean {
+    const session = this.lookupSession();
+    if (!session) return false;
+    return this.tmux(['list-windows', '-t', session, '-F', '#{@goal-manager}\t#{pane_dead}'])
+      .split('\n').map(line => line.split('\t')).some(([owner, dead]) => owner === manager && dead === '0');
+  }
+  respawn(manager: string, argv: string[], cwd: string): void {
+    const id = this.find(this.session(), manager);
+    if (!id) { this.register(manager, argv, cwd); return; }
+    this.tmux(['respawn-pane', '-k', '-t', id, '-c', cwd, argv.map(quote).join(' ')]);
   }
   unregister(manager: string): void {
     const session = this.lookupSession();
