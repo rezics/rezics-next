@@ -229,7 +229,7 @@ test('Anchored subject read stays within its bound as N grows', async () => {
 }, 90_000);
 
 // It reads every fact of its partition until the page query is fixed.
-test.skip('Partition keyset page stays within its bound as d grows', async () => {
+test('Partition keyset page stays within its bound as d grows', async () => {
   const report = await checkGrowth(db, {
     name: 'Partition keyset page stays within its bound as d grows',
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
