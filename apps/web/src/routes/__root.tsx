@@ -1,6 +1,7 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, getRequestHeader } from '@tanstack/react-start/server';
+import { useLayoutEffect } from 'react';
 import { env } from 'cloudflare:workers';
 import type { SessionEnv } from '../session/client.ts';
 import { readSessionState } from '../session/state.ts';
@@ -26,5 +27,8 @@ export const Route = createRootRoute({
 });
 function Root() {
   const { theme, collapsed, session } = Route.useLoaderData();
+  useLayoutEffect(() => {
+    document.documentElement.dataset.hydrated = '';
+  }, []);
   return <html lang={getLocale()} className={theme === 'system' ? undefined : theme}><head><HeadContent /></head><body><AppShell theme={theme} collapsed={collapsed} session={session}><Outlet /></AppShell><Scripts /></body></html>;
 }

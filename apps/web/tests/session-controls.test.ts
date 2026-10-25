@@ -166,6 +166,7 @@ async function open(path: string, options: BrowserContextOptions = {}): Promise<
   const context = await browser.newContext({ viewport: desktop, reducedMotion: 'reduce', ...options });
   const page = await context.newPage();
   await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+  if (options.javaScriptEnabled !== false) await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
   return page;
 }
 
@@ -181,7 +182,7 @@ const homeLink = (page: Page, own: Messages) => page.getByRole('navigation', { n
   .getByRole('link', { name: own.nav_home!, exact: true });
 
 // Follows the page's sign-in link through Auth and back to the page it was opened from.
-async function signIn(page: Page, own: Messages) {
+async function signIn(page: Page, own: Messages, javaScriptEnabled = true) {
   const origin = await site();
   const from = page.url();
   await Promise.all([
@@ -190,6 +191,8 @@ async function signIn(page: Page, own: Messages) {
   ]);
   await page.waitForURL(from);
   await page.waitForLoadState('networkidle');
+  if (javaScriptEnabled)
+    await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
 }
 
 async function eventually(read: () => Promise<string | null>, expected: string): Promise<void> {
@@ -237,7 +240,7 @@ test('signing in returns to the same page signed in, and signing out revokes the
   const ja = await messages('ja');
   // Without JavaScript: the link and the form work as plain HTML.
   const page = await open('/ja/no-such-page', { javaScriptEnabled: false, locale: 'ja' });
-  await signIn(page, ja);
+  await signIn(page, ja, false);
   const refreshToken = signInRefreshTokens.at(-1)!;
   const idToken = idTokens.at(-1)!;
   expect(new URL(page.url()).pathname).toBe('/ja/no-such-page');
@@ -289,6 +292,7 @@ test('pages read the signed-in state without contacting Auth or refreshing token
   stalled = true;
   try {
     await page.goto(`${origin}/en/no-such-page`, { waitUntil: 'networkidle', timeout: 20_000 });
+    await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
     expect(await signOutButton(page, en).count()).toBe(1);
     await homeLink(page, en).click();
     await page.waitForURL(`${origin}/en`, { timeout: 20_000 });

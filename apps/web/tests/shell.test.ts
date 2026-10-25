@@ -65,6 +65,7 @@ async function open(path: string, options: BrowserContextOptions = {}): Promise<
   const context = await browser.newContext({ viewport: desktop, reducedMotion: 'reduce', ...options });
   const page = await context.newPage();
   await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+  if (options.javaScriptEnabled !== false) await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
   return page;
 }
 
