@@ -7,7 +7,7 @@ import { migrate, run, schemaDump, testDatabase } from './database.ts';
 const database = testDatabase();
 try {
   migrate(database.url);
-  if (schemaDump(database.url) !== (await Bun.file('db/schema.sql').text())) {
+  if (schemaDump(database.url, database) !== (await Bun.file('db/schema.sql').text())) {
     throw new Error('Auth schema dump differs; run db dump against a freshly migrated separate database');
   }
   const pool = new Pool({ connectionString: database.url });

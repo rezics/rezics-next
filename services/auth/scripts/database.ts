@@ -5,8 +5,10 @@ import { fileURLToPath } from 'node:url';
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const POSTGRES_IMAGE = 'postgres:19rc1@sha256:7c70c2455c1f22cf4fbf90b16345aa4e5f4e3efd68d68f7cd6d014f529a69108';
 
+type TestDatabase = { readonly url: string; readonly container: string; close: () => void };
+
 export function run(program: string, args: string[], env: NodeJS.ProcessEnv = process.env): string {
-  const result = spawnSync(program, args, { cwd: directory, env, encoding: 'utf8' });
+  const result = spawnSync(program, args, { cwd: directory, env, encoding: 'utf8', timeout: 30_000 });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`${program} ${args.join(' ')} failed:\n${result.stdout}${result.stderr}`);
   return result.stdout.trim();
@@ -26,19 +28,19 @@ export function migrate(url: string): void {
   ]);
 }
 
-export function schemaDump(url: string): string {
-  const dump = run('docker', [
-    'run',
-    '--rm',
-    '--network',
-    'host',
-    POSTGRES_IMAGE,
-    'pg_dump',
-    '--schema-only',
-    '--no-owner',
-    '--no-privileges',
-    url,
-  ]);
+export function schemaDump(url: string, fixture?: TestDatabase): string {
+  if (fixture && fixture.url !== url) throw new Error('Schema dump URL does not belong to this Auth fixture');
+  const dumpArgs = ['pg_dump', '--schema-only', '--no-owner', '--no-privileges'];
+  let args: string[];
+  if (fixture) {
+    const database = new URL(url);
+    database.hostname = '127.0.0.1';
+    database.port = '5432';
+    args = ['exec', fixture.container, ...dumpArgs, database.href];
+  } else {
+    args = ['run', '--rm', '--network', 'host', POSTGRES_IMAGE, ...dumpArgs, url];
+  }
+  const dump = run('docker', args);
   return (
     dump
       .split('\n')
@@ -47,7 +49,7 @@ export function schemaDump(url: string): string {
   );
 }
 
-export function testDatabase(): { url: string; close: () => void } {
+export function testDatabase(): TestDatabase {
   const label = 'rezics.auth.check.pid';
   for (const id of run('docker', ['ps', '-aq', '--filter', `label=${label}`])
     .split('\n')
@@ -101,7 +103,7 @@ export function testDatabase(): { url: string; close: () => void } {
     if (!port) throw new Error('Cannot determine Auth test database port');
     const url = `postgres://rezics:rezics@127.0.0.1:${port}/rezics_auth_test?sslmode=disable`;
     migrate(url);
-    return { url, close };
+    return { url, container, close };
   } catch (error) {
     close();
     throw error;
