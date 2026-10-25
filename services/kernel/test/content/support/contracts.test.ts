@@ -3,7 +3,7 @@ import type { Pool } from 'pg';
 import type { ContentThreadDriver, Persona, WriteOptions } from '../../../../../specs/content-thread-driver';
 import type { ContentDisclosureDriver } from '../../../../../specs/content-disclosure-driver';
 import type { ContentMediaDriver } from '../../../../../specs/content-media-driver';
-import type { Access, AccountActor, ActionCatalogue } from '../../../src/request/access.ts';
+import type { Access, AccountActor, ActionCatalogue, Actor } from '../../../src/request/access.ts';
 import type { Kernel } from '../../../src/http/kernel.ts';
 import type { KeyRing } from '../../../src/tokens/seal.ts';
 import { createContentSystem } from './system.ts';
@@ -25,6 +25,10 @@ function fixtureContracts(): void {
   same<Equal<typeof createContentSystem, (options: ContentSystemOptions) => Promise<ContentSystem>>>();
   same<Equal<ContentSystemOptions, { readonly databaseUrl: string }>>();
   same<Equal<ContentCredential, { readonly bearer: string; readonly actor: AccountActor }>>();
+  same<Equal<Actor, AccountActor | { kind: 'anonymous' }>>();
+  same<
+    Equal<Access['authenticate'], (token: string, context: { pool: Pool; deadline: number }) => Promise<AccountActor>>
+  >();
   same<
     Equal<
       ContentActors,

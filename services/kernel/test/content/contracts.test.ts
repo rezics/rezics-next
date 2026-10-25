@@ -265,6 +265,21 @@ function publishedSignatures(): void {
 }
 
 function publishedModels(): void {
+  // Comparing ports with CommandOutcome alone would miss changes to the shared
+  // envelope itself, including loss of native position or receipt metadata.
+  same<
+    Equal<
+      CommandOutcome<Ids>,
+      {
+        value: Ids;
+        partition: number;
+        epoch: number;
+        position: bigint;
+        transactionId: string;
+        replayed: boolean;
+      }
+    >
+  >();
   same<
     Equal<
       commands.ContentCommandDependencies,
