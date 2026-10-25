@@ -49,4 +49,12 @@ WITH input AS NOT MATERIALIZED (
   SELECT i.route, i.account_id, c.reservation_id, i.group_id, 'membership', c.transaction_id FROM chosen c, input i
   ON CONFLICT (route, account_id, reservation_id) DO NOTHING
 )
-SELECT reservation_id AS "reservationId", (SELECT count(*)::integer FROM admission) AS admitted FROM chosen;
+-- A duplicate key cannot bless a hold from another operation. The snapshot sees
+-- pre-existing holds; a newly inserted hold is bound by held's SELECT above.
+SELECT c.reservation_id AS "reservationId", (SELECT count(*)::integer FROM admission) AS admitted,
+  NOT EXISTS (
+    SELECT 1 FROM access.lifecycle_coordination h, input i
+    WHERE h.route = i.route AND h.account_id = i.account_id AND h.reservation_id = c.reservation_id
+      AND (h.related_account_id <> i.group_id OR h.purpose <> 'membership' OR h.transaction_id <> c.transaction_id)
+  ) AS "provenanceValid"
+FROM chosen c;

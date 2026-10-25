@@ -203,6 +203,7 @@ export function createMembershipInverseCommands(config: {
           proof_transaction_id: terminalProof?.transactionId ?? '',
         });
         if (!rows[0]) throw new MembershipLimitError();
+        requireAllowed(rows[0].provenanceValid);
         requireAllowed(rows[0].admitted <= MEMBERSHIP_LIMIT);
         return {
           accountId: input.accountId,
