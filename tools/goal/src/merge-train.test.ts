@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openDb } from './db.ts';
 import type { AttemptFence, GateOutcome } from './contracts.ts';
@@ -233,4 +234,17 @@ test('main baseline is cached durably per main commit and gate command', async (
     s.queue.enqueue({ ...s.branch('delta', 'd'), gate: ['another-command'] });
     await new MergeTrain({ ...s.options, runGate }).run(); expect(baselines).toBe(3);
   } finally { s.close(); }
+});
+
+test('a gate does not inherit the identity of the process that drives the train', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'goal-gate-env-'));
+  const saved = { manager: process.env.GOAL_MANAGER, thread: process.env.CODEX_THREAD_ID };
+  process.env.GOAL_MANAGER = 'kernel'; process.env.CODEX_THREAD_ID = 'thread';
+  try {
+    const result = await gateRunner(10_000)(['sh', '-c', 'test -z "$GOAL_MANAGER" && test -z "$CODEX_THREAD_ID" && test -n "$PATH"'], directory, join(directory, 'gate.log'));
+    expect(result.passed).toBe(true);
+  } finally {
+    if (saved.manager === undefined) delete process.env.GOAL_MANAGER; else process.env.GOAL_MANAGER = saved.manager;
+    if (saved.thread === undefined) delete process.env.CODEX_THREAD_ID; else process.env.CODEX_THREAD_ID = saved.thread;
+  }
 });

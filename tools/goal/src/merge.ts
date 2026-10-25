@@ -9,6 +9,12 @@ export function git(cwd: string, ...args: string[]): string {
   return result.stdout.trim();
 }
 
+/** A gate runs as nobody in particular: whichever process drives the train, its manager, task and session identity must
+ * not reach the gate, or the gate's own tests act on that identity. */
+export function gateEnvironment(parent: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  return Object.fromEntries(Object.entries(parent).filter(([name]) => !name.startsWith('GOAL_') && name !== 'CODEX_THREAD_ID'));
+}
+
 export type GateResult = { passed: boolean; output: string; timedOut: boolean };
 export type GateRunner = (argv: readonly string[], cwd: string, logPath: string) => Promise<GateResult>;
 
@@ -18,7 +24,7 @@ export function gateRunner(timeoutMs = 600_000): GateRunner {
     // A separate process group allows the timeout to stop grandchildren as well as the shell.
     const { spawn } = await import('node:child_process');
     return await new Promise<GateResult>((resolve, reject) => {
-      const child = spawn(argv[0]!, argv.slice(1), { cwd, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+      const child = spawn(argv[0]!, argv.slice(1), { cwd, env: gateEnvironment(), detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
       let output = '';
       let timedOut = false;
       const collect = (chunk: Buffer) => { const text = chunk.toString(); output += text; appendFileSync(logPath, text); };
