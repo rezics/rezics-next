@@ -1,6 +1,5 @@
 -- migrate:up
 CREATE SCHEMA access;
-CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA access;
 
 CREATE TABLE access.account (
   route integer NOT NULL CHECK (route BETWEEN 0 AND 65535),
