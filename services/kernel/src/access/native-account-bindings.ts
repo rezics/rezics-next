@@ -234,6 +234,8 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
       },
     }),
     ...barriers.trustedAccess,
+    approveCredentialEffect: (input) => credentialCapability().approveCredentialEffect(input),
+    revalidateCredentialEffect: (input) => credentialCapability().revalidateCredentialEffect(input),
     advanceCredentialFloor: (input) => credentialCapability().advanceCredentialFloor(input),
     readAssignment: (requestedBy, assignedActorId) => readAssignment(pool, requestedBy, assignedActorId),
   };

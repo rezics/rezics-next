@@ -1,4 +1,6 @@
 import { commandAccessContext } from './command-admission.ts';
+import type { CommandAttempt } from '../command/command.ts';
+import credentialFloorRead from './auth-barriers-credential-read.sql';
 import canonicalize from 'canonicalize';
 import { routeOf } from '../route/route.ts';
 import { seal, unseal } from '../tokens/seal.ts';
@@ -16,6 +18,8 @@ import type {
   CredentialEffectBinding,
   CredentialEffectVerifier,
   CredentialFloorPort,
+  CredentialFloorReceipt,
+  TrustedAccessPorts,
 } from '@rezics/auth';
 import type { Pool } from 'pg';
 import type { Access, AccessContext, AccountActor, Resource } from '../request/access.ts';
@@ -55,7 +59,9 @@ export type CredentialCapabilityConfig = {
   verifyCredentialEffect: CredentialEffectVerifier;
 };
 
-export type CredentialCapability = {
+export type CredentialCapability = Required<
+  Pick<TrustedAccessPorts, 'approveCredentialEffect' | 'revalidateCredentialEffect'>
+> & {
   /** Seal only a verified native exact opening locator; no caller approval minting.
    */
   createOpeningReference(opening: CredentialOpeningLocator): string;
@@ -141,7 +147,7 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
     current: ring.current,
     keys: new Map([...ring.keys].map(([id, key]) => [id, new Uint8Array(key)])),
   };
-  async function stage(reference: CredentialOpeningLocator, actor: AccountActor): Promise<CredentialEffectBinding> {
+  async function stage(reference: ReturnType<typeof pick>, actor: AccountActor): Promise<CredentialEffectBinding> {
     const expected = {
       operationKey: reference.operationKey,
       subjectAccountId: reference.subjectAccountId,
@@ -170,161 +176,284 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
     );
     return structuredClone(result);
   }
-  const advanceCredentialFloor = createCredentialFloorHook({
-    pool,
-    async validate(input, prior, attempt) {
-      const { stage: binding, consumedOpening: opening, expectedPreviousFloor: previous } = input;
-      allowed(
-        opening &&
-          binding &&
-          binding.subjectAccountId === opening.subjectAccountId &&
-          binding.operationKey === opening.operationKey &&
-          binding.effectReference === opening.effectReference &&
-          binding.effectDigest === opening.effectDigest &&
-          binding.purpose === opening.purpose &&
-          binding.actingHumanId === opening.actingHumanId &&
-          binding.clientId === opening.clientId &&
-          same(binding.scopes, opening.scopes) &&
-          opening.subjectEpoch === previous,
-      );
-      const reference = locator({
-        ...pick(binding),
-        ...(opening.operatorAccountId === null
-          ? { kind: 'workflow-approval', reference: 'floor' }
-          : { kind: 'operator-opening', operatorAccountId: opening.operatorAccountId, receiptId: opening.receiptId }),
-      });
-      // Native rows, not the caller's consumedOpening object, establish provenance.
-      const row =
-        opening.operatorAccountId === null
-          ? await consumedWorkflow.run(pool, { route: routeOf(opening.receiptId)!, receipt_id: opening.receiptId })
-          : await consumedOperator.run(pool, {
-              route: routeOf(opening.operatorAccountId)!,
-              operator_id: opening.operatorAccountId,
-              receipt_id: opening.receiptId,
-            });
-      allowed(row && row.data && typeof row.data === 'object');
-      const native = row.data as unknown as NativeConsumed;
-      const own = opening.operatorAccountId === null;
-      const nativeBinding = own
-        ? native.operation
-        : {
-            operationKey: native.credential_operation_key,
-            effectReference: native.credential_effect_reference,
-            effectDigest: native.credential_effect_digest,
-            purpose: native.credential_purpose,
-            subjectAccountId: native.subject_account_id,
-          };
-      allowed(
-        nativeBinding &&
-          same(pick(nativeBinding), pick(binding)) &&
-          native.client_id === opening.clientId &&
-          same(native.scopes, opening.scopes) &&
-          native.requested_by === null &&
-          (own ? native.actor_id : native.acting_human_id) === opening.actingHumanId &&
-          Number(own ? native.authn_epoch : native.human_authn_epoch) === opening.humanEpoch &&
-          Date.parse(native.expires_at) === Date.parse(opening.expiresAt) &&
-          Date.parse(native.expires_at) > Date.now() &&
-          Number(own ? native.operation?.subjectEpoch : native.subject_epoch_floor) === previous,
-      );
-      if (prior)
-        allowed(
-          prior.accountId === binding.subjectAccountId &&
-            prior.openingReceiptId === opening.receiptId &&
-            prior.operationKey === binding.operationKey &&
-            prior.purpose === binding.purpose &&
-            prior.effectReference === binding.effectReference &&
-            prior.effectDigest === binding.effectDigest &&
-            prior.previousFloor === previous &&
-            prior.minimumAuthnEpoch === previous + 1,
-        );
-      const subject = await operatorAccount.run(pool, {
-        route: routeOf(binding.subjectAccountId)!,
-        account_id: binding.subjectAccountId,
-      });
-      allowed(
-        subject &&
-          subject.kind === 'actor' &&
-          subject.state === 'active' &&
-          !subject.fenced &&
-          subject.operatorAccountId === opening.operatorAccountId &&
-          Number(subject.minimumAuthnEpoch) === (prior ? previous + 1 : previous) &&
-          (!prior || subject.fenced === prior.fenced),
-      );
-      const human = await readAccount(pool, routeOf(opening.actingHumanId)!, opening.actingHumanId);
-      allowed(
-        human &&
-          human.kind === 'actor' &&
-          human.state === 'active' &&
-          !human.fenced &&
-          human.operatorAccountId === null,
-      );
-      // Only the exact committed own-human barrier permits this in-flight floor
-      // continuation to use its next floor; it grants no consume or session authority.
-      const continuation = own && prior !== null;
-      allowed(
-        BigInt(opening.humanEpoch) >= human.minimumAuthnEpoch ||
-          (continuation && human.minimumAuthnEpoch === BigInt(previous + 1)),
-      );
-      const actor: AccountActor = Object.freeze({
-        kind: 'account',
-        accountId: opening.actingHumanId,
-        clientId: opening.clientId,
-        scopes: Object.freeze([...opening.scopes]),
-        requestedBy: null,
-        authnEpoch: continuation ? previous + 1 : opening.humanEpoch,
-      });
-      const verified = await stage(reference, actor);
-      allowed(same(verified, binding));
-      let resource: Resource = { route: routeOf(subject.accountId)!, id: subject.accountId };
-      if (!own) {
-        allowed(
-          native.purpose === 'credential-management' &&
-            native.action === 'account:manage' &&
-            subject.version === String(native.relation_version) &&
-            subject.reservationId === native.reservation_id &&
-            human.minimumAuthnEpoch === BigInt(native.human_epoch_floor),
-        );
-        const operator = await operatorAccount.run(pool, {
-          route: routeOf(opening.operatorAccountId!)!,
-          account_id: opening.operatorAccountId!,
-        });
-        allowed(
-          operator &&
-            operator.state === 'active' &&
-            !operator.fenced &&
-            operator.operatorAccountId === null &&
-            operator.minimumAuthnEpoch === String(native.operator_epoch_floor),
-        );
-        const held = await reservationRead.run(pool, {
-          route: routeOf(operator.accountId)!,
-          operator_id: operator.accountId,
-          reservation_id: subject.reservationId!,
-        });
-        allowed(held?.subjectAccountId === subject.accountId);
-        if (operator.kind === 'organization') {
-          const membership = await memberRead.run(pool, {
-            route: routeOf(operator.accountId)!,
-            organization_id: operator.accountId,
-            human_id: human.accountId,
+  async function validateNative(
+    input: Parameters<CredentialFloorPort>[0],
+    prior: CredentialFloorReceipt | null,
+    attempt?: CommandAttempt,
+    selected?: NativeConsumed,
+  ) {
+    const { stage: binding, consumedOpening: opening, expectedPreviousFloor: previous } = input;
+    allowed(
+      opening &&
+        binding &&
+        binding.subjectAccountId === opening.subjectAccountId &&
+        binding.operationKey === opening.operationKey &&
+        binding.effectReference === opening.effectReference &&
+        binding.effectDigest === opening.effectDigest &&
+        binding.purpose === opening.purpose &&
+        binding.actingHumanId === opening.actingHumanId &&
+        binding.clientId === opening.clientId &&
+        same(binding.scopes, opening.scopes) &&
+        opening.subjectEpoch === previous,
+    );
+    const reference = locator({
+      ...pick(binding),
+      ...(opening.operatorAccountId === null
+        ? { kind: 'workflow-approval', reference: 'floor' }
+        : { kind: 'operator-opening', operatorAccountId: opening.operatorAccountId, receiptId: opening.receiptId }),
+    });
+    // Native rows, not the caller's consumedOpening object, establish provenance.
+    const row = selected
+      ? { data: selected }
+      : opening.operatorAccountId === null
+        ? await consumedWorkflow.run(pool, { route: routeOf(opening.receiptId)!, receipt_id: opening.receiptId })
+        : await consumedOperator.run(pool, {
+            route: routeOf(opening.operatorAccountId)!,
+            operator_id: opening.operatorAccountId,
+            receipt_id: opening.receiptId,
           });
-          allowed(membership.length === 1);
-        } else allowed(operator.kind === 'actor' && operator.accountId === human.accountId);
-        resource = { route: routeOf(operator.accountId)!, id: operator.accountId };
-      } else allowed(subject.accountId === human.accountId);
-      const context = commandAccessContext(
-        { pool, deadline: Math.min(Date.now() + 1000, Date.parse(opening.expiresAt)) },
-        attempt,
+    allowed(row && row.data && typeof row.data === 'object');
+    const native = row.data as unknown as NativeConsumed;
+    const own = opening.operatorAccountId === null;
+    const nativeBinding = own
+      ? native.operation
+      : {
+          operationKey: native.credential_operation_key,
+          effectReference: native.credential_effect_reference,
+          effectDigest: native.credential_effect_digest,
+          purpose: native.credential_purpose,
+          subjectAccountId: native.subject_account_id,
+        };
+    allowed(
+      nativeBinding &&
+        same(pick(nativeBinding), pick(binding)) &&
+        native.client_id === opening.clientId &&
+        same(native.scopes, opening.scopes) &&
+        native.requested_by === null &&
+        (own ? native.actor_id : native.acting_human_id) === opening.actingHumanId &&
+        Number(own ? native.authn_epoch : native.human_authn_epoch) === opening.humanEpoch &&
+        Date.parse(native.expires_at) === Date.parse(opening.expiresAt) &&
+        Date.parse(native.expires_at) > Date.now() &&
+        Number(own ? native.operation?.subjectEpoch : native.subject_epoch_floor) === previous,
+    );
+    if (prior)
+      allowed(
+        prior.accountId === binding.subjectAccountId &&
+          prior.openingReceiptId === opening.receiptId &&
+          prior.operationKey === binding.operationKey &&
+          prior.purpose === binding.purpose &&
+          prior.effectReference === binding.effectReference &&
+          prior.effectDigest === binding.effectDigest &&
+          prior.previousFloor === previous &&
+          prior.minimumAuthnEpoch === previous + 1,
       );
-      const proof = Object.freeze({}) as CredentialFloorIdentity;
-      floorIdentities.set(proof, { actor, account: human, pool });
-      try {
-        allowed(await floorBridges.get(access)?.(proof, resource, context));
-      } finally {
-        floorIdentities.delete(proof);
-      }
-    },
-  });
+    const subject = await operatorAccount.run(pool, {
+      route: routeOf(binding.subjectAccountId)!,
+      account_id: binding.subjectAccountId,
+    });
+    allowed(
+      subject &&
+        subject.kind === 'actor' &&
+        subject.state === 'active' &&
+        !subject.fenced &&
+        subject.operatorAccountId === opening.operatorAccountId &&
+        Number(subject.minimumAuthnEpoch) === (prior ? previous + 1 : previous) &&
+        (!prior || subject.fenced === prior.fenced),
+    );
+    const human = await readAccount(pool, routeOf(opening.actingHumanId)!, opening.actingHumanId);
+    allowed(
+      human && human.kind === 'actor' && human.state === 'active' && !human.fenced && human.operatorAccountId === null,
+    );
+    // Only the exact committed own-human barrier permits this in-flight floor
+    // continuation to use its next floor; it grants no consume or session authority.
+    const continuation = own && prior !== null;
+    allowed(
+      BigInt(opening.humanEpoch) >= human.minimumAuthnEpoch ||
+        (continuation && human.minimumAuthnEpoch === BigInt(previous + 1)),
+    );
+    const actor: AccountActor = Object.freeze({
+      kind: 'account',
+      accountId: opening.actingHumanId,
+      clientId: opening.clientId,
+      scopes: Object.freeze([...opening.scopes]),
+      requestedBy: null,
+      authnEpoch: continuation ? previous + 1 : opening.humanEpoch,
+    });
+    const verified = await stage(reference, actor);
+    allowed(same(verified, binding));
+    let resource: Resource = { route: routeOf(subject.accountId)!, id: subject.accountId };
+    if (!own) {
+      allowed(
+        native.purpose === 'credential-management' &&
+          native.action === 'account:manage' &&
+          subject.version === String(native.relation_version) &&
+          subject.reservationId === native.reservation_id &&
+          human.minimumAuthnEpoch === BigInt(native.human_epoch_floor),
+      );
+      const operator = await operatorAccount.run(pool, {
+        route: routeOf(opening.operatorAccountId!)!,
+        account_id: opening.operatorAccountId!,
+      });
+      allowed(
+        operator &&
+          operator.state === 'active' &&
+          !operator.fenced &&
+          operator.operatorAccountId === null &&
+          operator.minimumAuthnEpoch === String(native.operator_epoch_floor),
+      );
+      const held = await reservationRead.run(pool, {
+        route: routeOf(operator.accountId)!,
+        operator_id: operator.accountId,
+        reservation_id: subject.reservationId!,
+      });
+      allowed(held?.subjectAccountId === subject.accountId);
+      if (operator.kind === 'organization') {
+        const membership = await memberRead.run(pool, {
+          route: routeOf(operator.accountId)!,
+          organization_id: operator.accountId,
+          human_id: human.accountId,
+        });
+        allowed(membership.length === 1);
+      } else allowed(operator.kind === 'actor' && operator.accountId === human.accountId);
+      resource = { route: routeOf(operator.accountId)!, id: operator.accountId };
+    } else allowed(subject.accountId === human.accountId);
+    const boundary = { pool, deadline: Math.min(Date.now() + 1000, Date.parse(opening.expiresAt)) };
+    const context = attempt ? commandAccessContext(boundary, attempt) : boundary;
+    const proof = Object.freeze({}) as CredentialFloorIdentity;
+    floorIdentities.set(proof, { actor, account: human, pool });
+    try {
+      allowed(await floorBridges.get(access)?.(proof, resource, context));
+    } finally {
+      floorIdentities.delete(proof);
+    }
+  }
+  const advanceCredentialFloor = createCredentialFloorHook({ pool, validate: validateNative });
+  async function authenticate(human: Parameters<CredentialCapability['approveCredentialEffect']>[0]['human']) {
+    const actor = await access.authenticate(await accessTokenForProof(human), { pool, deadline: Date.now() + 3000 });
+    allowed(
+      actor.accountId === human.account_id &&
+        actor.clientId === human.client_id &&
+        actor.authnEpoch === human.authn_epoch &&
+        actor.requestedBy === null &&
+        same(actor.scopes, human.scope),
+    );
+    return actor;
+  }
   return {
+    async approveCredentialEffect({ stage: binding, human }) {
+      const actor = await authenticate(human);
+      allowed(same(await stage(binding, actor), binding));
+      const subject = await readAccount(pool, routeOf(binding.subjectAccountId)!, binding.subjectAccountId);
+      allowed(subject && subject.kind === 'actor' && subject.state === 'active' && !subject.fenced);
+      const context = { pool, deadline: Date.now() + 3000 };
+      let opening: CredentialOpeningLocator;
+      let expiresAt: string;
+      if (subject.operatorAccountId === null) {
+        allowed(subject.accountId === actor.accountId);
+        const approved = await credentialWorkflowApprovals(workflowApprovals).approveCredentialForActor(
+          actor,
+          binding,
+          context,
+        );
+        opening = { ...pick(binding), kind: 'workflow-approval', reference: approved.reference };
+        expiresAt = approved.expiresAt;
+      } else {
+        const account = await readAccount(pool, routeOf(actor.accountId)!, actor.accountId);
+        const approved = await operators.authorizeOpening(
+          { actor, account, deadline: context.deadline },
+          {
+            operatorAccountId: subject.operatorAccountId,
+            subjectAccountId: subject.accountId,
+            purpose: 'credential-management',
+            credential: binding,
+            key: `credential:${crypto.randomUUID()}`,
+          },
+        );
+        opening = {
+          ...pick(binding),
+          kind: 'operator-opening',
+          operatorAccountId: subject.operatorAccountId,
+          receiptId: approved.value.receiptId,
+        };
+        expiresAt = approved.value.expiresAt;
+      }
+      return { reference: seal(referenceKeys, SCOPE, locator(opening)), expiresAt };
+    },
+    async revalidateCredentialEffect(input) {
+      const reference = locator(unseal(referenceKeys, SCOPE, input.authorization));
+      allowed(same(pick(reference), pick(input.stage)));
+      const own = reference.kind === 'workflow-approval';
+      const row =
+        reference.kind === 'workflow-approval'
+          ? await credentialWorkflowApprovals(workflowApprovals).readConsumedCredential(reference.reference, {
+              pool,
+              deadline: Date.now() + 3000,
+            })
+          : await consumedOperator.run(pool, {
+              route: routeOf(reference.operatorAccountId)!,
+              operator_id: reference.operatorAccountId,
+              receipt_id: reference.receiptId,
+            });
+      allowed(row?.data);
+      const native = row.data as unknown as NativeConsumed;
+      const receiptId = reference.kind === 'workflow-approval' ? native.approval_id : reference.receiptId;
+      const opening: CredentialEffectAuthorization = {
+        ...pick(input.stage),
+        receiptId,
+        operatorAccountId: reference.kind === 'workflow-approval' ? null : reference.operatorAccountId,
+        actingHumanId: own ? native.actor_id : native.acting_human_id,
+        clientId: native.client_id,
+        scopes: native.scopes,
+        humanEpoch: Number(own ? native.authn_epoch : native.human_authn_epoch),
+        subjectEpoch: Number(own ? native.operation?.subjectEpoch : native.subject_epoch_floor),
+        expiresAt: new Date(native.expires_at).toISOString(),
+      };
+      allowed(
+        input.human.account_id === opening.actingHumanId &&
+          input.human.client_id === opening.clientId &&
+          same(input.human.scope, opening.scopes) &&
+          input.human.authn_epoch === opening.humanEpoch,
+      );
+      if (input.replay) allowed(!input.consumedOpening && !input.floorReceipt);
+      else allowed(input.consumedOpening && same(input.consumedOpening, opening));
+      let prior: CredentialFloorReceipt | null = null;
+      if (input.floorReceipt) {
+        allowed(
+          !input.replay &&
+            (input.stage.purpose === 'remove-password' ||
+              input.stage.purpose === 'remove-key' ||
+              (input.stage.purpose === 'set-password' && input.stage.credentialRowId !== null)),
+        );
+        const committed = await credentialFloorRead.run(pool, {
+          route: routeOf(opening.subjectAccountId)!,
+          account_id: opening.subjectAccountId,
+          opening_receipt_id: receiptId,
+        });
+        allowed(committed);
+        prior = {
+          ...committed,
+          purpose: committed.purpose as CredentialFloorReceipt['purpose'],
+          previousFloor: Number(committed.previousFloor),
+          minimumAuthnEpoch: Number(committed.minimumAuthnEpoch),
+        };
+        allowed(same(prior, input.floorReceipt));
+      }
+      // After an own-human barrier Auth's source session is revoked. Only the
+      // exact committed native receipt can continue this one in-flight callback.
+      if (!(own && prior)) await authenticate(input.human);
+      await validateNative(
+        {
+          stage: input.stage,
+          consumedOpening: opening,
+          expectedPreviousFloor: opening.subjectEpoch,
+          key: input.stage.operationKey,
+          purpose: input.stage.purpose,
+        },
+        prior,
+        undefined,
+        native,
+      );
+    },
     createOpeningReference(opening) {
       return seal(referenceKeys, SCOPE, locator(opening));
     },
@@ -430,7 +559,7 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
           scopes: [...actor.scopes],
           humanEpoch: actor.authnEpoch,
           subjectEpoch: Number(subject.minimumAuthnEpoch),
-          expiresAt,
+          expiresAt: new Date(expiresAt).toISOString(),
         },
       };
     },
@@ -494,6 +623,7 @@ function locator(value: unknown): CredentialOpeningLocator {
   return structuredClone(row);
 }
 type NativeConsumed = {
+  approval_id: string;
   operation?: Pick<
     CredentialEffectBinding,
     'operationKey' | 'effectReference' | 'effectDigest' | 'subjectAccountId' | 'purpose'

@@ -5,7 +5,7 @@ import canonicalize from 'canonicalize';
 import type { AccountOperation, NativeWorkflowProofPorts } from '@rezics/auth';
 import type { Pool } from 'pg';
 import type { Access, AccessContext, AccountActor, ActionCatalogue } from '../request/access.ts';
-import { seal, type KeyRing } from '../tokens/seal.ts';
+import { seal, unseal, type KeyRing } from '../tokens/seal.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { authoritativeTimeValue, runCommand, type CommandAuthorization } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
@@ -20,6 +20,7 @@ import {
 import { resourceAuthorization } from './resource-authorization.ts';
 import { permissionEvidenceDeadline } from './permission.ts';
 import type { LifecycleRequest } from './lifecycle.ts';
+import credentialRead from './auth-credential-capability-workflow-read.sql';
 import approvalInsert from './workflow-approvals-insert.sql';
 import approvalSweep from './workflow-approvals-sweep.sql';
 
@@ -193,6 +194,12 @@ function anchor(descriptor: Descriptor) {
 }
 
 type CredentialWorkflowPorts = {
+  approveCredentialForActor(
+    actor: AccountActor,
+    binding: CredentialEffectBinding,
+    context: AccessContext,
+  ): Promise<WorkflowApproval>;
+  readConsumedCredential(reference: string, context: AccessContext): ReturnType<typeof credentialRead.run>;
   approveCredential(token: string, binding: CredentialEffectBinding, context: AccessContext): Promise<WorkflowApproval>;
   consumeCredential(
     reference: string,
@@ -314,7 +321,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
     return request;
   }
   async function approve(
-    token: string,
+    token: string | AccountActor,
     input: { operationKey: string; operation: NativeOperation },
     context: AccessContext,
   ): Promise<WorkflowApproval> {
@@ -326,7 +333,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
       requireAllowed(
         operation.kind !== 'automated' || (operation.registrationId === '' && operation.operationKey === operationKey),
       );
-      const actor = await config.access.authenticate(token, bounded);
+      const actor = typeof token === 'string' ? await config.access.authenticate(token, bounded) : token;
       if (operation.kind === 'credential')
         requireAllowed(actor.accountId === operation.subjectAccountId && actor.requestedBy === null);
       const expires = verifiedBearerExpiry(config.access, actor, bounded);
@@ -441,10 +448,25 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
       throw denied();
     }
   }
-  const native = {
-    async approveCredential(token: string, binding: CredentialEffectBinding, context: AccessContext) {
+  const native: CredentialWorkflowPorts = {
+    async readConsumedCredential(reference, context) {
       const bounded = boundary(context);
-      const actor = await config.access.authenticate(token, bounded);
+      const located = unseal(config.referenceKeys, APPROVAL_REFERENCE_PURPOSE, reference) as
+        | { route: number; id: string; binding: string }
+        | undefined;
+      requireAllowed(located && routeOf(located.id) === located.route);
+      const row = await credentialRead.run(bounded.pool, { route: located.route, receipt_id: located.id });
+      requireAllowed(row);
+      const { data: _native, ...immutable } = row;
+      requireAllowed(approvalRowDigest(immutable) === located.binding);
+      return row;
+    },
+    async approveCredential(token, binding, context) {
+      const bounded = boundary(context);
+      return native.approveCredentialForActor(await config.access.authenticate(token, bounded), binding, bounded);
+    },
+    async approveCredentialForActor(actor, binding, context) {
+      const bounded = boundary(context);
       requireAllowed(
         actor.accountId === binding.actingHumanId &&
           actor.accountId === binding.subjectAccountId &&
@@ -461,7 +483,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
           !subject.fenced,
       );
       return approve(
-        token,
+        actor,
         {
           operationKey: binding.operationKey,
           operation: {

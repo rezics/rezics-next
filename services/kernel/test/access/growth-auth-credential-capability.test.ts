@@ -1,5 +1,5 @@
 import { createCredentialCapability } from '../../src/access/auth-credential-capability.ts';
-import { credentialWorkflowApprovals, createWorkflowApprovals } from '../../src/access/workflow-approvals.ts';
+import { createWorkflowApprovals } from '../../src/access/workflow-approvals.ts';
 import {
   createAuthService,
   type AuthService,
@@ -53,9 +53,12 @@ async function fixture(pool: Pool, authPool: Pool, url: string) {
     accessTokenForProof: (proof) => service.internal.accessTokenForProof(proof),
   });
   const approvals = createWorkflowApprovals({ pool, access, actions, referenceKeys });
-  let verified: CredentialEffectBinding;
+  let approvalStage: CredentialEffectBinding;
   let pending: Omit<CredentialAuthorizationInput, 'human'>;
   let result: { authorization: CredentialEffectAuthorization };
+  let mode: 'approve' | 'consume' | 'revalidate' = 'consume';
+  let approved: { reference: string; expiresAt: string };
+  let revalidation: Omit<Parameters<typeof capability.revalidateCredentialEffect>[0], 'human'>;
   const capability = createCredentialCapability({
     pool,
     access,
@@ -63,8 +66,7 @@ async function fixture(pool: Pool, authPool: Pool, url: string) {
     workflowApprovals: approvals,
     referenceKeys,
     accessTokenForProof: (proof) => service.internal.accessTokenForProof(proof),
-    // Trusted host closure for a single staged effect. No caller digest establishes provenance.
-    verifyCredentialEffect: async () => structuredClone(verified),
+    verifyCredentialEffect: (reference, expected) => service.internal.verifyCredentialEffect(reference, expected),
   });
   const registration = createRegistrationProofBindings({ pool, referenceKeys });
   const internal = createLifecycleInternals({
@@ -74,6 +76,7 @@ async function fixture(pool: Pool, authPool: Pool, url: string) {
     recoveryEvidence: async () => null,
   });
   const pair = await generateKeyPair('ES256', { extractable: true });
+  const publicJwk = { ...(await exportJWK(pair.publicKey)), alg: 'ES256', kid: 'growth-removable-key' };
   service = await createAuthService({
     database: authPool,
     issuer,
@@ -86,7 +89,11 @@ async function fixture(pool: Pool, authPool: Pool, url: string) {
     trustedAccess: {
       ...createAuthBindings({ pool, ...registration }),
       async consumeAuthorization(input) {
-        result = await capability.consumeAuthAuthorization({ ...pending, human: input.human });
+        if (mode === 'approve')
+          approved = await capability.approveCredentialEffect({ stage: approvalStage, human: input.human });
+        else if (mode === 'revalidate')
+          await capability.revalidateCredentialEffect({ ...revalidation, human: input.human });
+        else result = await capability.consumeAuthAuthorization({ ...pending, human: input.human });
         // Stop before the legacy Auth mutation: these tests prove kernel checks only.
         throw new Error('kernel-test-complete');
       },
@@ -121,6 +128,11 @@ async function fixture(pool: Pool, authPool: Pool, url: string) {
     // Trusted fixture activation only; all opening authorization and consumption is native.
     await authPool.query("UPDATE access.account SET state='active' WHERE account_id=$1", [id]);
     await operators.provisionManagementDefaults({ operatorAccountId: id, key: key() });
+    await authPool.query('INSERT INTO auth_public_key(account_id,kid,public_jwk) VALUES ($1,$2,$3)', [
+      id,
+      publicJwk.kid,
+      publicJwk,
+    ]);
     return id;
   }
   const login = async (id: string, scope = ['account:manage'], client_id = 'operator-web') => {
@@ -164,68 +176,61 @@ async function fixture(pool: Pool, authPool: Pool, url: string) {
   const open = (authorization: string, subjectAccountId: string, headers: Headers) =>
     service.internal.openAutomatedSession({ authorization, subjectAccountId, headers });
   return {
-    stage(subjectAccountId: string, actingHumanId: string, purpose: CredentialEffectBinding['purpose'] = 'add-key') {
-      verified = {
-        operationKey: key(),
-        effectReference: key(),
-        effectDigest: 'a'.repeat(64),
+    async stage(subjectAccountId: string, actingHumanId: string, purpose: 'add-key' | 'remove-key', headers: Headers) {
+      const kid = purpose === 'remove-key' ? publicJwk.kid : key();
+      const staged = await service.internal.stageCredentialEffect({
+        key: key(),
+        subjectAccountId,
+        headers,
+        credential:
+          purpose === 'remove-key'
+            ? { kind: 'key', kid, remove: true }
+            : { kind: 'key', kid, publicJwk: { ...publicJwk, kid } },
+      });
+      const binding = await service.internal.verifyCredentialEffect(staged.effectRef, {
+        operationKey: staged.key,
         subjectAccountId,
         purpose,
         actingHumanId,
         clientId: 'operator-web',
         scopes: ['account:manage'],
-        credentialRowId: purpose === 'add-key' ? null : 'selected-row',
-        credentialRowVersion: purpose === 'add-key' ? null : '1',
-      };
-      return structuredClone(verified);
-    },
-    verifyAs(binding: CredentialEffectBinding) {
-      verified = structuredClone(binding);
+        effectDigest: staged.digest,
+      });
+      expect(binding).not.toBeNull();
+      return binding!;
     },
     async approve(headers: Headers, binding: CredentialEffectBinding) {
-      const ctx = await context(headers);
-      const current = await readAccount(pool, routeOf(binding.subjectAccountId)!, binding.subjectAccountId);
-      if (current!.operatorAccountId) {
-        const outcome = await operators.authorizeOpening(ctx, {
-          operatorAccountId: current!.operatorAccountId,
+      approvalStage = structuredClone(binding);
+      mode = 'approve';
+      try {
+        await service.internal.setCredential({
+          authorization: 'live-proof-callback',
           subjectAccountId: binding.subjectAccountId,
-          purpose: 'credential-management',
-          key: key(),
-          credential: binding,
+          headers,
+          credential: { kind: 'key', kid: 'staged-test-key', remove: true },
         });
-        return {
-          reference: capability.createOpeningReference({
-            kind: 'operator-opening',
-            operationKey: binding.operationKey,
-            effectReference: binding.effectReference,
-            effectDigest: binding.effectDigest,
-            subjectAccountId: binding.subjectAccountId,
-            purpose: binding.purpose,
-            operatorAccountId: current!.operatorAccountId,
-            receiptId: outcome.value.receiptId,
-          }),
-          expiresAt: outcome.value.expiresAt,
-          receiptId: outcome.value.receiptId,
-        };
+      } catch (error) {
+        if (!(error instanceof Error) || error.message !== 'kernel-test-complete') throw error;
+      } finally {
+        mode = 'consume';
       }
-      const token = (await (await request('/token', {}, headers)).json()) as { access_token: string };
-      const approval = await credentialWorkflowApprovals(approvals).approveCredential(token.access_token, binding, {
-        pool,
-        deadline: Date.now() + 3000,
-      });
-      return {
-        reference: capability.createOpeningReference({
-          kind: 'workflow-approval',
-          operationKey: binding.operationKey,
-          effectReference: binding.effectReference,
-          effectDigest: binding.effectDigest,
-          subjectAccountId: binding.subjectAccountId,
-          purpose: binding.purpose,
-          reference: approval.reference,
-        }),
-        expiresAt: approval.expiresAt,
-        receiptId: '',
-      };
+      return approved;
+    },
+    async revalidate(input: typeof revalidation, headers: Headers) {
+      mode = 'revalidate';
+      revalidation = input;
+      try {
+        await service.internal.setCredential({
+          authorization: input.authorization,
+          subjectAccountId: input.stage.subjectAccountId,
+          headers,
+          credential: { kind: 'key', kid: 'staged-test-key', remove: true },
+        });
+      } catch (error) {
+        if (!(error instanceof Error) || error.message !== 'kernel-test-complete') throw error;
+      } finally {
+        mode = 'consume';
+      }
     },
     async consume(reference: string, binding: CredentialEffectBinding, headers: Headers) {
       pending = {
@@ -284,10 +289,9 @@ beforeAll(async () => {
 afterAll(async () => db?.close());
 
 test('credential capability growth stays fixed at 1x/8x/64x', async () => {
-  const initial = f.stage(subject, human);
+  const initial = await f.stage(subject, human, 'add-key', headers);
   const opening = await f.approve(headers, initial);
-  await f.consume(opening.reference, initial, headers);
-  const template = opening.receiptId;
+  const template = (await f.consume(opening.reference, initial, headers)).authorization.receiptId;
   // Keep every measured point read beyond the small-table planner crossover.
   const baseline = Array.from({ length: 4096 }, () => newId(routeOf(human)!));
   await db.admin.query(
@@ -310,6 +314,17 @@ test('credential capability growth stays fixed at 1x/8x/64x', async () => {
     `INSERT INTO access.credential_floor_receipt(route,account_id,opening_receipt_id,receipt_id,operation_key,effect_reference,effect_digest,purpose,previous_floor,minimum_authn_epoch,fenced,transaction_id) SELECT $1,id,id,id,id::text,id::text,repeat('0',64),'remove-key',1,2,false,id FROM unnest($2::uuid[]) id`,
     [routeOf(human)!, baseline],
   );
+
+  async function oldEffects(database: GrowthDatabase, ids: string[]) {
+    await database.admin.query(
+      `INSERT INTO auth_effect_receipt
+       SELECT (jsonb_populate_record(NULL::auth_effect_receipt, to_jsonb(r) ||
+         jsonb_build_object('receipt_id',id::text,'operation_key',id::text,'effect_reference',id::text))).*
+       FROM auth_effect_receipt r CROSS JOIN unnest($2::uuid[]) id WHERE r.effect_reference=$1`,
+      [initial.effectReference, ids],
+    );
+  }
+  await oldEffects(db, baseline);
 
   // Independently grow each history dimension; the selected subject, human,
   // permission neighbourhood and exact fresh opening/approval remain fixed.
@@ -337,11 +352,7 @@ test('credential capability growth stays fixed at 1x/8x/64x', async () => {
           SELECT $1,id,id,'old','{}',1,id::text,'{}',$3,clock_timestamp()-interval '1 day',clock_timestamp()-interval '1 day'+interval '60 seconds',clock_timestamp()+interval '1 day',id FROM unnest($2::uuid[]) id`,
             [routeOf(human)!, ids, 'a'.repeat(64)],
           );
-        if (dimension === 'old-auth-effects')
-          await database.admin.query(
-            `INSERT INTO auth_effect_receipt(receipt_id,account_id,purpose,minimum_authn_epoch) SELECT id,$1,'add-key',1 FROM unnest($2::text[]) id`,
-            [subject, ids],
-          );
+        if (dimension === 'old-auth-effects') await oldEffects(database, ids);
         if (dimension === 'unrelated-owners') {
           await database.admin.query(
             `INSERT INTO access.account(route,account_id,kind,state,transaction_id) SELECT $1,id,'actor','active',id FROM unnest($2::uuid[]) id`,
@@ -364,10 +375,14 @@ test('credential capability growth stays fixed at 1x/8x/64x', async () => {
           await database.admin.query(`VACUUM (ANALYZE) ${table}`);
       },
       operation: async () => {
-        const binding = f.stage(subject, human, 'remove-key');
+        const binding = await f.stage(subject, human, 'remove-key', headers);
         const approval = await f.approve(headers, binding);
         const { authorization } = await f.consume(approval.reference, binding, headers);
         expect(authorization.operationKey).toBe(binding.operationKey);
+        await f.revalidate(
+          { stage: binding, authorization: approval.reference, consumedOpening: authorization, replay: false },
+          headers,
+        );
         await expect(f.consume(approval.reference, binding, headers)).rejects.toThrow();
         const floor = await f.capability.advanceCredentialFloor({
           stage: binding,
@@ -377,9 +392,24 @@ test('credential capability growth stays fixed at 1x/8x/64x', async () => {
           purpose: binding.purpose,
         });
         expect(floor.minimumAuthnEpoch).toBe(authorization.subjectEpoch + 1);
-        const own = f.stage(human, human);
+        await f.revalidate(
+          {
+            stage: binding,
+            authorization: approval.reference,
+            consumedOpening: authorization,
+            floorReceipt: floor,
+            replay: false,
+          },
+          headers,
+        );
+        const own = await f.stage(human, human, 'add-key', headers);
         const approved = await f.approve(headers, own);
-        expect((await f.consume(approved.reference, own, headers)).authorization.operatorAccountId).toBeNull();
+        const ownOpening = (await f.consume(approved.reference, own, headers)).authorization;
+        expect(ownOpening.operatorAccountId).toBeNull();
+        await f.revalidate(
+          { stage: own, authorization: approved.reference, consumedOpening: ownOpening, replay: false },
+          headers,
+        );
         await expect(f.consume(approved.reference, own, headers)).rejects.toThrow();
       },
     });
