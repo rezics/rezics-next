@@ -6,6 +6,9 @@ import { attemptStatement, pruneAuthAttempts } from '../src/rate-limit.ts';
 type Statement = { text: string; values: unknown[] };
 type Plan = {
   'Actual Rows': number;
+  'Actual Loops': number;
+  'Rows Removed by Filter'?: number;
+  'Rows Removed by Index Recheck'?: number;
   'Shared Hit Blocks': number;
   'Shared Read Blocks': number;
   'Node Type': string;
@@ -14,6 +17,30 @@ type Plan = {
 };
 function nodes(plan: Plan): Plan[] {
   return [plan, ...(plan.Plans ?? []).flatMap(nodes)];
+}
+
+function examinedRows(node: Plan): number {
+  return (
+    (node['Actual Rows'] + (node['Rows Removed by Filter'] ?? 0) + (node['Rows Removed by Index Recheck'] ?? 0)) *
+    node['Actual Loops']
+  );
+}
+
+function boundedWork(plan: Plan): { blocks: number; rows: number } {
+  const all = nodes(plan);
+  for (const node of all) {
+    expect(node['Actual Loops']).toBeLessThanOrEqual(32);
+    if (node['Node Type'] === 'Seq Scan') {
+      // PostgreSQL may scan an empty reduction table. Only truly empty work
+      // is free: filtered rows and repeated loops must not hide a growing scan.
+      expect(examinedRows(node)).toBe(0);
+      expect(node['Actual Loops']).toBeLessThanOrEqual(1);
+      expect(node['Shared Hit Blocks'] + node['Shared Read Blocks']).toBe(0);
+    }
+  }
+  const rows = all.reduce((sum, node) => sum + examinedRows(node), 0);
+  expect(rows).toBeLessThanOrEqual(32);
+  return { blocks: plan['Shared Hit Blocks'] + plan['Shared Read Blocks'], rows };
 }
 
 if (process.env.AUTH_ATTEMPT_TEST_CHILD === '1') {
@@ -47,7 +74,10 @@ if (process.env.AUTH_ATTEMPT_TEST_CHILD === '1') {
       counterBlocks: number;
       rows: number;
       handlerBlocks: number;
+      handlerRows: number;
       successStatements: number;
+      successBlocks: number;
+      successRows: number;
     }> = [];
     let seeded = 0;
     try {
@@ -79,6 +109,24 @@ if (process.env.AUTH_ATTEMPT_TEST_CHILD === '1') {
             'cost-client-'||i, 'read', 1, 1, 'pwd' FROM generate_series($1::integer, $2::integer) i`,
           [seeded + 1, size],
         );
+        // Grow history for the actual subject/client too, so an accidental
+        // history scan cannot pass using only unrelated owners' sessions.
+        await query(
+          `INSERT INTO session (id, token, "userId", "createdAt", "updatedAt", "expiresAt",
+          "clientId", "grantedScope", "authnEpoch", "authTime", "authMethods")
+          SELECT 'cost-history-'||i, 'cost-history-token-'||i, $3, now(), now(), now()-interval '1 day',
+            'attempt-web', 'read', 1, 1, 'pwd' FROM generate_series($1::integer, $2::integer) i`,
+          [seeded + 1, size, fixture.account.accountId],
+        );
+        // Exercise the empty-table plan at 1x, then growing nonempty reductions.
+        if (scale > 1) {
+          await query(
+            `INSERT INTO auth_client_reduction
+            SELECT 'cost-client-'||i, 'cost-reduction-'||i, ARRAY['read'], true
+            FROM generate_series($1::integer, $2::integer) i`,
+            [seeded + 1, size],
+          );
+        }
         const keys: string[] = [];
         for (let i = seeded + 1; i <= size; i++) {
           fixture.setPeer(`10.${Math.floor(i / 65536)}.${Math.floor(i / 256) % 256}.${i % 256}`);
@@ -105,14 +153,16 @@ if (process.env.AUTH_ATTEMPT_TEST_CHILD === '1') {
         // Explain exactly the statements emitted by the actual handler/adapter,
         // including native credential and registered-client reads.
         let handlerBlocks = 0;
+        let handlerRows = 0;
         let counterBlocks = 0;
         let rows = 0;
         for (const statement of captured) {
           const result = await query(`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${statement.text}`, statement.values);
           const plan = result.rows[0]['QUERY PLAN'][0].Plan as Plan;
-          const blocks = plan['Shared Hit Blocks'] + plan['Shared Read Blocks'];
+          const work = boundedWork(plan);
+          const blocks = work.blocks;
           handlerBlocks += blocks;
-          expect(nodes(plan).filter((node) => node['Node Type'] === 'Seq Scan')).toEqual([]);
+          handlerRows += work.rows;
           if (statement.text === attemptStatement) {
             counterBlocks = blocks;
             rows = plan['Actual Rows'];
@@ -132,7 +182,46 @@ if (process.env.AUTH_ATTEMPT_TEST_CHILD === '1') {
         expect(records.filter((record) => record.text === attemptStatement)).toHaveLength(1);
         expect(successStatements).toBeGreaterThan(captured.length);
         expect(successStatements).toBeLessThanOrEqual(15);
-        samples.push({ statements: captured.length, counterBlocks, rows, handlerBlocks, successStatements });
+        // Replay the exact successful statements in a rolled-back transaction.
+        // Remove only the just-created session by its native INSERT id so its
+        // original INSERT can run again without a primary-key conflict.
+        const success = [...records];
+        let successBlocks = 0;
+        let successRows = 0;
+        const connection = await pool.connect();
+        try {
+          await connection.query('BEGIN');
+          for (const statement of success) {
+            const columns = /^insert into "session" \(([^)]+)\)/i.exec(statement.text)?.[1];
+            if (columns) {
+              const idIndex = columns.split(',').findIndex((column) => column.trim() === '"id"');
+              expect(idIndex).toBeGreaterThanOrEqual(0);
+              await connection.query('DELETE FROM session WHERE id=$1', [statement.values[idIndex]]);
+            }
+          }
+          for (const statement of success) {
+            const result = await connection.query(
+              `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${statement.text}`,
+              statement.values,
+            );
+            const work = boundedWork(result.rows[0]['QUERY PLAN'][0].Plan as Plan);
+            successBlocks += work.blocks;
+            successRows += work.rows;
+          }
+        } finally {
+          await connection.query('ROLLBACK');
+          connection.release();
+        }
+        samples.push({
+          statements: captured.length,
+          counterBlocks,
+          rows,
+          handlerBlocks,
+          handlerRows,
+          successStatements,
+          successBlocks,
+          successRows,
+        });
         fixture.setPeer(`198.51.100.${scale}`);
         // Rejected admission does no credential/client/session query at all.
         records.length = 0;
@@ -148,6 +237,9 @@ if (process.env.AUTH_ATTEMPT_TEST_CHILD === '1') {
         // Generous B-tree height envelope, independent of wall-clock timing.
         expect(sample.counterBlocks).toBeLessThanOrEqual(samples[0]!.counterBlocks + 12 * index + 16);
         expect(sample.handlerBlocks).toBeLessThanOrEqual(samples[0]!.handlerBlocks + 20 * index + 24);
+        expect(sample.handlerRows).toBeLessThanOrEqual(samples[0]!.handlerRows);
+        expect(sample.successBlocks).toBeLessThanOrEqual(samples[0]!.successBlocks + 40 * index + 48);
+        expect(sample.successRows).toBeLessThanOrEqual(samples[0]!.successRows);
       }
       console.info('Auth attempt cost (1x/8x/64x):', JSON.stringify(samples));
       // Maintenance has an indexed cutoff and a hard batch bound; no handler sweep.
