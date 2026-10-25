@@ -406,6 +406,71 @@ export class RunStore<Projection = BatchStatement[]> {
       return run;
     });
   }
+  activeRun(source: string): Run | null {
+    sourceId(source);
+    const active = this.get<{ lease_run: string; id: string; lease: string }>(
+      `SELECT s.lease_run,g.id,g.lease FROM run_sources AS s
+      JOIN run_generations AS g ON g.source=s.source AND g.id=s.lease_run
+      WHERE s.source=? AND s.lease_run IS NOT NULL
+      AND g.status IN ('staging','ready','finalizing')`,
+      source,
+    );
+    return active ? { source, id: active.id, lease: active.lease } : null;
+  }
+  pageStaged(run: Run, options: { after?: string; limit: number }): Staged<Projection>[] {
+    exact(options, ['limit'], ['after']);
+    pageLimit(options.limit);
+    if (options.after !== undefined) keyId(options.after);
+    validateRun(run);
+    const sealed = this.get<{ id: string }>(
+      `SELECT g.id FROM run_sources AS s
+      JOIN run_generations AS g ON g.source=s.source AND g.id=s.lease_run
+      WHERE s.source=? AND s.lease_run=? AND g.id=? AND g.lease=? AND g.status='ready'`,
+      run.source,
+      run.id,
+      run.id,
+      run.lease,
+    );
+    if (!sealed) throw new Error('Run is stale, unsealed, failed, or no longer current');
+    const rows =
+      options.after === undefined
+        ? this.all<{ row_json: string; projection_json: string }>(
+            `SELECT row_json,projection_json FROM run_entries
+          WHERE source=? AND run_id=? ORDER BY record_key LIMIT ?`,
+            run.source,
+            run.id,
+            options.limit,
+          )
+        : this.all<{ row_json: string; projection_json: string }>(
+            `SELECT row_json,projection_json FROM run_entries
+          WHERE source=? AND run_id=? AND record_key>? ORDER BY record_key LIMIT ?`,
+            run.source,
+            run.id,
+            options.after,
+            options.limit,
+          );
+    return rows.map((entry) => ({ row: JSON.parse(entry.row_json), projection: JSON.parse(entry.projection_json) }));
+  }
+  pageAcknowledged(source: string, options: { after?: string; limit: number }): RecordRow[] {
+    sourceId(source);
+    exact(options, ['limit'], ['after']);
+    pageLimit(options.limit);
+    if (options.after !== undefined) keyId(options.after);
+    const rows =
+      options.after === undefined
+        ? this.all<{ row_json: string }>(
+            `SELECT row_json FROM run_acknowledged WHERE source=? ORDER BY record_key LIMIT ?`,
+            source,
+            options.limit,
+          )
+        : this.all<{ row_json: string }>(
+            `SELECT row_json FROM run_acknowledged WHERE source=? AND record_key>? ORDER BY record_key LIMIT ?`,
+            source,
+            options.after,
+            options.limit,
+          );
+    return rows.map((entry) => JSON.parse(entry.row_json));
+  }
   reopen(run: Run): Run {
     return this.transaction(() => {
       this.generation(run);
