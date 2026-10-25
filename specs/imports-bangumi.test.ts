@@ -19,7 +19,9 @@ const context = { subjectId: SUBJECT, mediaIds: { [fixture.images.large]: MEDIA 
 // Explicit catalogue prefix expansion; unknown aliases are never accepted.
 function classMeaning(value: unknown) {
   expect(typeof value).toBe('string');
-  return (value as string).replace(/^schema:/, 'http://schema.org/').replace(/^https:\/\/schema\.org\//, 'http://schema.org/');
+  return (value as string)
+    .replace(/^schema:/, 'http://schema.org/')
+    .replace(/^https:\/\/schema\.org\//, 'http://schema.org/');
 }
 function summaryText(value: unknown) {
   const content = value as { language: string; document: unknown };
@@ -84,6 +86,24 @@ function field(driver: BangumiDriver, output: unknown, role: ProposedField['role
   expect(found.references.length).toBeGreaterThan(0);
   expect(found.references.map((pointer) => at(output, pointer))).toContain(source);
   at(output, found.value);
+  if (role === 'title' || role === 'chinese-label') {
+    const command = at(output, found.command) as CommandProposal;
+    expect(checkBatchWrite({ commands: [command] })).toEqual([]);
+    expect(command.op).toBe('propose');
+    if (command.op !== 'propose') throw new Error('Titles must be source candidates');
+    expect(command.statement.property.id).toBe('schema:name');
+    expect(command.statement.value).toEqual({
+      type: 'value',
+      content: {
+        text: at(output, found.value),
+        language: expect.any(String),
+      },
+    });
+    if (role === 'chinese-label' && command.statement.value.type === 'value') {
+      expect((command.statement.value.content as { language: string }).language).toMatch(/^zh(?:-|$)/);
+    }
+    expect(found.value).toBe(`${found.command}/statement/value/content/text`);
+  }
   return found;
 }
 function reject(driver: BangumiDriver, request: ConversionInput) {
@@ -128,10 +148,12 @@ test('source identity and record revision accompany a nonempty converter_revisio
     expect(text(changed, next.externalId)).toBe('424243');
     expect(text(changed, next.recordRevision)).toBe('archive:2024-04-03:record-18');
     expect(text(changed, next.converterRevision)).toBe(revision);
-    const digests = (raw: unknown) => driver.inspect(raw).commands.map(p => (at(raw, p) as CommandProposal).source.digest);
+    const digests = (raw: unknown) =>
+      driver.inspect(raw).commands.map((p) => (at(raw, p) as CommandProposal).source.digest);
     expect(digests(changed)).not.toEqual(digests(output));
     const edited = driver.convert(input({ ...structuredClone(fixture), name: 'Changed title only' }));
     expect(digests(edited)).not.toEqual(digests(output));
+    expect(at(edited, field(driver, edited, 'title').value)).toBe('Changed title only');
     for (const [role, value] of [
       ['title', record.name],
       ['chinese-label', record.name_cn],
@@ -229,7 +251,10 @@ test('the full summary retains separate CC-BY-SA-3.0 attribution and ShareAlike 
     const output = driver.convert(input());
     const summary = field(driver, output, 'summary');
     expect(summaryText(at(output, summary.value))).toBe(fixture.summary);
-    expect((at(output, summary.command) as CommandProposal & { statement: { property: { id: string } } }).statement.property.id).toBe('schema:abstract');
+    expect(
+      (at(output, summary.command) as CommandProposal & { statement: { property: { id: string } } }).statement.property
+        .id,
+    ).toBe('schema:abstract');
     const rights = summary.rights;
     expect(rights).toBeDefined();
     expect(rights!.envelope).toBe(`${summary.command}/rights`);
@@ -252,8 +277,11 @@ test('covers retain original links rights-holder credit and independent takedown
     const cover = field(driver, output, 'cover');
     expect(at(output, cover.value)).toBe(MEDIA);
     const command = at(output, cover.command) as CommandProposal;
-    expect(command).toMatchObject({ op: 'propose', subject: SUBJECT,
-      statement: { property: { id: 'schema:image' }, value: { type: 'value', content: MEDIA } } });
+    expect(command).toMatchObject({
+      op: 'propose',
+      subject: SUBJECT,
+      statement: { property: { id: 'schema:image' }, value: { type: 'value', content: MEDIA } },
+    });
     expect(command).not.toHaveProperty('rights');
     const pending = driver.convert(input(), { subjectId: SUBJECT });
     const intent = driver.inspect(pending).coverIntent;
@@ -264,10 +292,12 @@ test('covers retain original links rights-holder credit and independent takedown
     expect(JSON.stringify(at(pending, intent.provenance))).toContain(JSON.stringify(SOURCE));
     expect(at(pending, intent.role)).toBe('cover');
     expect(at(pending, intent.takedownEligible)).toBe(true);
-    expect(new Set<unknown>([null, 'NOASSERTION', 'unknown']).has(at(pending, intent.license)) ||
-      /^LicenseRef-/.test(String(at(pending, intent.license)))).toBe(true);
-    expect(driver.inspect(pending).fields.filter(f => f.role === 'cover')).toEqual([]);
-    const pendingCommands = driver.inspect(pending).commands.map(p => at(pending, p));
+    expect(
+      new Set<unknown>([null, 'NOASSERTION', 'unknown']).has(at(pending, intent.license)) ||
+        /^LicenseRef-/.test(String(at(pending, intent.license))),
+    ).toBe(true);
+    expect(driver.inspect(pending).fields.filter((f) => f.role === 'cover')).toEqual([]);
+    const pendingCommands = driver.inspect(pending).commands.map((p) => at(pending, p));
     expect(checkBatchWrite({ commands: pendingCommands })).toEqual([]);
     expect(command.op).toBe('propose');
     if (command.op !== 'propose') throw new Error('Expected cover proposal');
@@ -278,7 +308,10 @@ test('covers retain original links rights-holder credit and independent takedown
     expect(at(output, rights.envelope)).toBeObject();
     const license = at(output, rights.license);
     expect(
-      license === null || license === 'NOASSERTION' || license === 'unknown' || (typeof license === 'string' && /^LicenseRef-.+/.test(license)),
+      license === null ||
+        license === 'NOASSERTION' ||
+        license === 'unknown' ||
+        (typeof license === 'string' && /^LicenseRef-.+/.test(license)),
     ).toBe(true);
     expect(text(output, rights.credit)).toMatch(/\(c\)|copyright|©|rights[ -]?holder/i);
     expect(text(output, rights.credit)).toMatch(/rights[ -]?holder/i);
@@ -411,7 +444,7 @@ test('the semantic bulk consumer structurally accepts actual proposals and prese
     });
     expect<unknown>(received).toEqual(view.commands.map((pointer) => at(output, pointer)));
     expect(checkBatchWrite({ commands: received })).toEqual([]);
-    expect(received.filter(c => c.op === 'create').length).toBeLessThanOrEqual(1);
+    expect(received.filter((c) => c.op === 'create').length).toBeLessThanOrEqual(1);
     for (const command of received) {
       if (command.op !== 'create') expect(command.subject).toBe(SUBJECT);
       if (command.source.field_group === 'facts') expect(command).not.toHaveProperty('rights');

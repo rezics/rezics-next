@@ -7,7 +7,13 @@ import * as http from 'node:http';
 import * as https from 'node:https';
 import * as net from 'node:net';
 import { loadOpenLibraryDriver } from './imports-open-library-driver';
-import type { Conversion, FieldObservation, OpenLibraryDriver, RecordPayload, ConversionContext } from './imports-open-library-driver';
+import type {
+  Conversion,
+  FieldObservation,
+  OpenLibraryDriver,
+  RecordPayload,
+  ConversionContext,
+} from './imports-open-library-driver';
 
 const SUBJECT = '00000000-0000-4000-8000-000000000001';
 const AUTHOR = '00000000-0000-4000-8000-000000000002';
@@ -20,12 +26,15 @@ async function fixture(name: string): Promise<RecordPayload> {
 }
 function pointer(root: unknown, path: string): unknown {
   expect(path.startsWith('/')).toBe(true);
-  return path.slice(1).split('/').reduce<unknown>((node, token) => {
-    const key = token.replaceAll('~1', '/').replaceAll('~0', '~');
-    expect(node !== null && typeof node === 'object').toBe(true);
-    expect(Object.hasOwn(node as object, key)).toBe(true);
-    return (node as Record<string, unknown>)[key];
-  }, root);
+  return path
+    .slice(1)
+    .split('/')
+    .reduce<unknown>((node, token) => {
+      const key = token.replaceAll('~1', '/').replaceAll('~0', '~');
+      expect(node !== null && typeof node === 'object').toBe(true);
+      expect(Object.hasOwn(node as object, key)).toBe(true);
+      return (node as Record<string, unknown>)[key];
+    }, root);
 }
 function nonempty(value: unknown) {
   expect(typeof value).toBe('string');
@@ -46,7 +55,7 @@ function converted(driver: OpenLibraryDriver, record: RecordPayload, supplied: C
   expect(result.proposals.length).toBeGreaterThan(0);
   const proposed = structuredClone(result.proposals);
   expect(checkBatchWrite({ commands: proposed })).toEqual([]);
-  expect(proposed.filter(c => c.op === 'create').length).toBeLessThanOrEqual(1);
+  expect(proposed.filter((c) => c.op === 'create').length).toBeLessThanOrEqual(1);
   for (const command of proposed) {
     if (command.op !== 'create') expect(command.subject).toBe(supplied.subjectId);
     expect(command.source.digest).toMatch(/^[0-9a-f]{64}$/);
@@ -62,8 +71,11 @@ function converted(driver: OpenLibraryDriver, record: RecordPayload, supplied: C
     const command = consumed.accepted[field.command];
     expect(Number.isInteger(field.command) && field.command >= 0).toBe(true);
     expect(command !== null && typeof command === 'object').toBe(true);
+    if (!command) throw new Error('Field must locate an actual command');
     expect(pointer(command, field.valuePath)).toBeDefined();
-    expect(pointer(command, field.groupPath)).toBe(field.kind === 'cover' ? 'cover' : field.kind === 'description' ? 'summary' : 'facts');
+    expect(pointer(command, field.groupPath)).toBe(
+      field.kind === 'cover' ? 'cover' : field.kind === 'description' ? 'summary' : 'facts',
+    );
     const ref = field.reference;
     expect(pointer(command, ref.path)).toBeTruthy();
     for (const path of [ref.keyPath, ref.urlPath, ref.revisionPath, ref.lastModifiedPath]) {
@@ -75,27 +87,54 @@ function converted(driver: OpenLibraryDriver, record: RecordPayload, supplied: C
     expect(pointer(command, ref.lastModifiedPath)).toBe((record.last_modified as { value: string }).value);
     if (field.sourceValuePath !== undefined) {
       pointer(command, field.sourceValuePath);
-      expect(field.sourceValuePath.startsWith(`${ref.path}/`) ||
-        (field.statementPath !== undefined && field.sourceValuePath.startsWith(`${field.statementPath}/qualifiers/`))).toBe(true);
+      expect(
+        field.sourceValuePath.startsWith(`${ref.path}/`) ||
+          (field.statementPath !== undefined && field.sourceValuePath.startsWith(`${field.statementPath}/qualifiers/`)),
+      ).toBe(true);
+    }
+    if (field.kind === 'title' || field.kind === 'isbn13' || field.kind === 'publishDate') {
+      expect(command.op).toBe('propose');
+      if (command.op !== 'propose') throw new Error('Mapped facts must be source candidates');
+      expect(command.statement.property.id).toBe(
+        field.kind === 'title' ? 'schema:name' : field.kind === 'isbn13' ? 'schema:isbn' : 'schema:datePublished',
+      );
+      expect(command.statement.value.type).toBe('value');
+      if (field.kind === 'title') {
+        expect(field.valuePath).toBe('/statement/value/content/text');
+        expect(command.statement.value).toEqual({
+          type: 'value',
+          content: {
+            language: expect.any(String),
+            text: pointer(command, field.valuePath),
+          },
+        });
+      }
     }
     if (field.kind === 'author' || field.kind === 'work') {
       nonempty(field.statementPath);
       nonempty(field.sourceValuePath);
       const statement = pointer(command, field.statementPath!) as import('@rezics/definitions/bulk').BatchStatement;
       expect(pointer(command, field.valuePath)).toEqual(statement.value);
-      expect(statement.qualifiers).toEqual(expect.arrayContaining([
-        expect.objectContaining({ property: { id: 'wdt:P648' }, value: {
-          type: 'value', content: pointer(command, field.sourceValuePath!),
-        } }),
-      ]));
+      expect(statement.qualifiers).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            property: { id: 'wdt:P648' },
+            value: {
+              type: 'value',
+              content: pointer(command, field.sourceValuePath!),
+            },
+          }),
+        ]),
+      );
     }
   }
   return { result, ...consumed };
 }
 type Accepted = ReturnType<typeof converted>;
 function values(output: Accepted, kind: FieldObservation['kind']) {
-  return output.fields.filter(field => field.kind === kind)
-    .map(field => pointer(output.accepted[field.command], field.valuePath));
+  return output.fields
+    .filter((field) => field.kind === kind)
+    .map((field) => pointer(output.accepted[field.command], field.valuePath));
 }
 function noProposals(result: Conversion) {
   expect(['skipped', 'rejected']).toContain(result.outcome);
@@ -114,7 +153,11 @@ test('work identity title and author carry exact source key revision timestamp a
   expect(values(output, 'identity')).toEqual(['/works/OL900000001W']);
   expect(values(output, 'title')).toEqual(['The Glass Atlas']);
   expect(values(output, 'author')).toEqual([{ type: 'somevalue' }]);
-  expect(output.fields.filter(f => f.kind === 'author').map(f => pointer(output.accepted[f.command], f.sourceValuePath!))).toEqual(['/authors/OL900000001A']);
+  expect(
+    output.fields
+      .filter((f) => f.kind === 'author')
+      .map((f) => pointer(output.accepted[f.command], f.sourceValuePath!)),
+  ).toEqual(['/authors/OL900000001A']);
   expect(values(output, 'isbn10')).toEqual([]);
   expect(values(output, 'isbn13')).toEqual([]);
   expect(values(output, 'publishDate')).toEqual([]);
@@ -125,16 +168,25 @@ test('edition remains distinct from work and preserves ISBN authors and source d
   const output = converted(driver, await fixture('edition'));
   expect(values(output, 'identity')).toEqual(['/books/OL900000002M']);
   expect(values(output, 'work')).toEqual([{ type: 'somevalue' }]);
-  expect(output.fields.filter(f => f.kind === 'work').map(f => pointer(output.accepted[f.command], f.sourceValuePath!))).toEqual(['/works/OL900000001W']);
+  expect(
+    output.fields.filter((f) => f.kind === 'work').map((f) => pointer(output.accepted[f.command], f.sourceValuePath!)),
+  ).toEqual(['/works/OL900000001W']);
   expect(values(output, 'title')).toEqual(['The Glass Atlas: Pocket Edition']);
   expect(values(output, 'author')).toEqual([{ type: 'somevalue' }]);
-  expect(output.fields.filter(f => f.kind === 'author').map(f => pointer(output.accepted[f.command], f.sourceValuePath!))).toEqual(['/authors/OL900000001A']);
-  expect(values(output, 'isbn10')).toEqual(['0306406152']);
+  expect(
+    output.fields
+      .filter((f) => f.kind === 'author')
+      .map((f) => pointer(output.accepted[f.command], f.sourceValuePath!)),
+  ).toEqual(['/authors/OL900000001A']);
+  // Both source ISBN forms identify the same ISBN-13 candidate.
+  expect(values(output, 'isbn10')).toEqual([]);
   expect(values(output, 'isbn13')).toEqual(['9780306406157']);
-  expect(values(output, 'publishDate')).toEqual([{ time: '+1980-05-00T00:00:00Z', precision: 10,
-    calendarmodel: 'http://www.wikidata.org/entity/Q1985727' }]);
-  const date = output.fields.find(f => f.kind === 'publishDate')!;
-  expect(pointer(output.accepted[date.command], date.sourceValuePath!)).toBe('May 1980');
+  expect(values(output, 'publishDate')).toEqual([
+    { time: '+1980-05-00T00:00:00Z', precision: 10, calendarmodel: 'http://www.wikidata.org/entity/Q1985727' },
+  ]);
+  const date = output.fields.find((f) => f.kind === 'publishDate')!;
+  expect(pointer(output.accepted[date.command], date.reference.keyPath)).toBe('/books/OL900000002M');
+  expect(JSON.stringify(output.accepted)).not.toContain('May 1980');
 });
 
 test('bibliographic facts and verbatim descriptions and covers have separate rights and field groups', async () => {
@@ -144,10 +196,10 @@ test('bibliographic facts and verbatim descriptions and covers have separate rig
   // An unknown licence cannot authorize a summary command. Preserve the source
   // description as non-command metadata without assigning catalogue database rights.
   expect(values(output, 'description')).toEqual([]);
-  expect(output.result.proposals.some(c => c.source.field_group === 'summary')).toBe(false);
+  expect(output.result.proposals.some((c) => c.source.field_group === 'summary')).toBe(false);
   const metadata = driver.inspectMetadata(output.result);
-  const description = metadata.assets.filter(a => a.kind === 'description');
-  const covers = metadata.assets.filter(a => a.kind === 'cover');
+  const description = metadata.assets.filter((a) => a.kind === 'description');
+  const covers = metadata.assets.filter((a) => a.kind === 'cover');
   expect(description).toHaveLength(1);
   expect(covers).toHaveLength(1);
   expect(pointer(output.result, description[0]!.value)).toBe((record.description as { value: string }).value);
@@ -162,7 +214,7 @@ test('bibliographic facts and verbatim descriptions and covers have separate rig
   expect(pointer(output.result, cover.role!)).toBe('cover');
   expect(pointer(output.result, cover.takedownEligible!)).toBe(true);
   expect(values(output, 'cover')).toEqual([]);
-  const title = output.fields.find(f => f.kind === 'title')!;
+  const title = output.fields.find((f) => f.kind === 'title')!;
   const factGroup = pointer(output.accepted[title.command], title.groupPath);
   expect(pointer(output.result, description[0]!.group)).toBe('summary');
   expect(pointer(output.result, cover.group)).toBe('cover');
@@ -171,15 +223,18 @@ test('bibliographic facts and verbatim descriptions and covers have separate rig
   expect(pointer(output.result, cover.group)).not.toEqual(pointer(output.result, description[0]!.group));
   const final = converted(driver, record, { subjectId: SUBJECT, mediaIds: { [sourceUrl]: MEDIA } });
   expect(values(final, 'cover')).toEqual([MEDIA]);
-  const finalCover = driver.inspectMetadata(final.result).assets.find(a => a.kind === 'cover')!;
+  const finalCover = driver.inspectMetadata(final.result).assets.find((a) => a.kind === 'cover')!;
   for (const key of ['license', 'credit', 'provenance', 'role', 'takedownEligible'] as const) {
     expect(pointer(final.result, finalCover[key]!)).toEqual(pointer(output.result, cover[key]!));
   }
-  expect(final.result.proposals.some(c => c.source.field_group === 'summary')).toBe(false);
-  const field = final.fields.find(f => f.kind === 'cover')!;
-  expect(final.accepted[field.command]).toMatchObject({ op: 'propose', subject: SUBJECT,
-    source: { field_group: 'cover' }, statement: { property: { id: 'schema:image' },
-      value: { type: 'value', content: MEDIA } } });
+  expect(final.result.proposals.some((c) => c.source.field_group === 'summary')).toBe(false);
+  const field = final.fields.find((f) => f.kind === 'cover')!;
+  expect(final.accepted[field.command]).toMatchObject({
+    op: 'propose',
+    subject: SUBJECT,
+    source: { field_group: 'cover' },
+    statement: { property: { id: 'schema:image' }, value: { type: 'value', content: MEDIA } },
+  });
   expect(final.accepted[field.command]).not.toHaveProperty('rights');
   const command = final.accepted[field.command]!;
   if (command.op !== 'propose') throw new Error('Expected cover proposal');
@@ -190,7 +245,8 @@ test('bibliographic facts and verbatim descriptions and covers have separate rig
 test('missing optional data creates no authors ISBN dates descriptions or covers', async () => {
   const driver = await loadOpenLibraryDriver();
   const record = await fixture('edition');
-  for (const key of ['authors', 'isbn_10', 'isbn_13', 'publish_date', 'publishers', 'works', 'notes']) delete record[key];
+  for (const key of ['authors', 'isbn_10', 'isbn_13', 'publish_date', 'publishers', 'works', 'notes'])
+    delete record[key];
   const output = converted(driver, record);
   expect(values(output, 'identity')).toEqual([record.key]);
   expect(values(output, 'title')).toEqual([record.title]);
@@ -203,8 +259,12 @@ test('lists accounts authors redirects and other non-book records emit no propos
   const driver = await loadOpenLibraryDriver();
   const records = await Bun.file(new URL('./fixtures/imports/open-library/excluded.json', import.meta.url)).json();
   for (const record of records) noProposals(driver.convert(record));
-  for (const [type, key] of [['/type/author', '/authors/OL900000001A'], ['/type/redirect', '/books/OL900000002M'], ['/type/post', '/people/example/posts/1']]) {
-    noProposals(driver.convert({ ...await fixture('work'), type: { key: type }, key }));
+  for (const [type, key] of [
+    ['/type/author', '/authors/OL900000001A'],
+    ['/type/redirect', '/books/OL900000002M'],
+    ['/type/post', '/people/example/posts/1'],
+  ]) {
+    noProposals(driver.convert({ ...(await fixture('work')), type: { key: type }, key }));
   }
 });
 
@@ -216,8 +276,12 @@ test('book records never disclose unknown private user post or account fields', 
     for (const key of ['private_notes', 'user_posts', 'account', 'notes']) delete clean[key];
     const output = converted(driver, record);
     expect(output.result).toEqual(converted(driver, clean).result);
-    expect(converted(driver, { ...clean, future_extension: { text: 'UNKNOWN_PRIVATE_SENTINEL',
-      license: 'CC0-1.0', converter_revision: 'forged' } }).result).toEqual(output.result);
+    expect(
+      converted(driver, {
+        ...clean,
+        future_extension: { text: 'UNKNOWN_PRIVATE_SENTINEL', license: 'CC0-1.0', converter_revision: 'forged' },
+      }).result,
+    ).toEqual(output.result);
     expect(JSON.stringify(output)).not.toMatch(/PRIVATE_TEXT_SENTINEL|USER_POST_SENTINEL|ACCOUNT_SENTINEL/);
   }
 });
@@ -225,17 +289,32 @@ test('book records never disclose unknown private user post or account fields', 
 test('malformed keys type-key mismatches and unsafe relationship identifiers reject without proposals', async () => {
   const driver = await loadOpenLibraryDriver();
   const record = await fixture('work');
-  for (const key of ['/works/OLoopsW', '/works/OL123M', '/books/OL123M', '/works/OL1W/../people/private', 'https://evil.example/works/OL1W', '/works/OL1W?private=1']) {
+  for (const key of [
+    '/works/OLoopsW',
+    '/works/OL123M',
+    '/books/OL123M',
+    '/works/OL1W/../people/private',
+    'https://evil.example/works/OL1W',
+    '/works/OL1W?private=1',
+  ]) {
     rejected(driver.convert({ ...record, key }));
   }
   rejected(driver.convert({ ...record, authors: [{ author: { key: 'javascript:alert(1)' } }] }));
-  rejected(driver.convert({ ...await fixture('edition'), works: [{ key: '//evil.example/works/OL1W' }] }));
+  rejected(driver.convert({ ...(await fixture('edition')), works: [{ key: '//evil.example/works/OL1W' }] }));
 });
 
 test('unsafe URLs are rejected without fetching or emitting partial proposals', async () => {
   const driver = await loadOpenLibraryDriver();
   const record = await fixture('work');
-  for (const url of ['javascript:alert(1)', 'data:text/html,private', 'file:///etc/passwd', 'http://127.0.0.1/private', 'http://169.254.169.254/latest/meta-data/', 'https://user:secret@openlibrary.org/works/OL1W', '//evil.example/private']) {
+  for (const url of [
+    'javascript:alert(1)',
+    'data:text/html,private',
+    'file:///etc/passwd',
+    'http://127.0.0.1/private',
+    'http://169.254.169.254/latest/meta-data/',
+    'https://user:secret@openlibrary.org/works/OL1W',
+    '//evil.example/private',
+  ]) {
     const result = driver.convert({ ...record, links: [{ title: 'Unsafe', url }] });
     rejected(result);
   }
@@ -249,7 +328,12 @@ test('missing or malformed required source metadata and title reject rather than
     delete input[key];
     rejected(driver.convert(input, context));
   }
-  for (const patch of [{ title: '' }, { revision: -1 }, { revision: '7' }, { last_modified: { value: 'not-a-date' } }]) {
+  for (const patch of [
+    { title: '' },
+    { revision: -1 },
+    { revision: '7' },
+    { last_modified: { value: 'not-a-date' } },
+  ]) {
     rejected(driver.convert({ ...record, ...patch }));
   }
 });
@@ -267,14 +351,22 @@ test('converter revision and proposals are deterministic while changed source va
     random.mockReturnValue(0.875);
     expect(driver.convert(structuredClone(record), context)).toEqual(earlier);
     expect(earlier).toEqual(first.result);
-  } finally { clock.mockRestore(); random.mockRestore(); }
-  const changed = { ...record, title: 'The Copper Atlas', revision: 8,
-    last_modified: { type: '/type/datetime', value: '2025-04-05T06:07:08.123456' } };
+  } finally {
+    clock.mockRestore();
+    random.mockRestore();
+  }
+  const changed = {
+    ...record,
+    title: 'The Copper Atlas',
+    revision: 8,
+    last_modified: { type: '/type/datetime', value: '2025-04-05T06:07:08.123456' },
+  };
   const second = converted(driver, changed);
-  const digests = (commands: BatchCommand[]) => commands.map(c => c.source.digest);
+  const digests = (commands: BatchCommand[]) => commands.map((c) => c.source.digest);
   expect(digests(second.result.proposals)).not.toEqual(digests(first.result.proposals));
   const edited = converted(driver, { ...record, title: 'Changed title only' });
   expect(digests(edited.result.proposals)).not.toEqual(digests(first.result.proposals));
+  expect(values(edited, 'title')).toEqual(['Changed title only']);
   expect(values(second, 'title')).toEqual(['The Copper Atlas']);
   expect(second.result.proposals).not.toEqual(first.result.proposals);
   expect(second.result.converter_revision).toBe(first.result.converter_revision);
@@ -283,30 +375,50 @@ test('converter revision and proposals are deterministic while changed source va
 test('conversion is synchronous leaves frozen input intact and performs no network filesystem or process I/O', async () => {
   const driver = await loadOpenLibraryDriver();
   const work = await fixture('work');
-  const inputs = [work, await fixture('edition'), { ...work, key: '/works/OLbadW' },
-    { ...work, links: [{ url: 'http://127.0.0.1/private' }] }];
+  const inputs = [
+    work,
+    await fixture('edition'),
+    { ...work, key: '/works/OLbadW' },
+    { ...work, links: [{ url: 'http://127.0.0.1/private' }] },
+  ];
   const before = structuredClone(inputs);
   inputs.forEach(freeze);
   const attempts: string[] = [];
   const guards: { mockRestore(): void }[] = [];
   function guard<T extends object>(target: T, key: keyof T) {
-    guards.push(spyOn(target, key as never).mockImplementation((() => {
-      attempts.push(String(key));
-      throw new Error(`Unexpected converter I/O: ${String(key)}`);
-    }) as never));
+    guards.push(
+      spyOn(target, key as never).mockImplementation((() => {
+        attempts.push(String(key));
+        throw new Error(`Unexpected converter I/O: ${String(key)}`);
+      }) as never),
+    );
   }
   let results: Conversion[] = [];
   try {
     guard(globalThis, 'fetch');
     for (const key of ['file', 'write', 'spawn', 'spawnSync', 'connect', 'listen'] as const) guard(Bun, key);
-    for (const key of ['readFileSync', 'writeFileSync', 'openSync', 'createReadStream', 'createWriteStream', 'readFile', 'writeFile', 'open'] as const) guard(fs, key);
+    for (const key of [
+      'readFileSync',
+      'writeFileSync',
+      'openSync',
+      'createReadStream',
+      'createWriteStream',
+      'readFile',
+      'writeFile',
+      'open',
+    ] as const)
+      guard(fs, key);
     for (const key of ['readFile', 'writeFile', 'open'] as const) guard(fsPromises, key);
-    for (const key of ['spawn', 'spawnSync', 'exec', 'execSync', 'execFile', 'execFileSync', 'fork'] as const) guard(childProcess, key);
-    for (const key of ['request', 'get'] as const) { guard(http, key); guard(https, key); }
+    for (const key of ['spawn', 'spawnSync', 'exec', 'execSync', 'execFile', 'execFileSync', 'fork'] as const)
+      guard(childProcess, key);
+    for (const key of ['request', 'get'] as const) {
+      guard(http, key);
+      guard(https, key);
+    }
     for (const key of ['connect', 'createConnection'] as const) guard(net, key);
-    results = inputs.map(input => driver.convert(input, context));
+    results = inputs.map((input) => driver.convert(input, context));
   } finally {
-    guards.reverse().forEach(mock => mock.mockRestore());
+    guards.reverse().forEach((mock) => mock.mockRestore());
   }
   expect(attempts).toEqual([]);
   for (const result of results) expect(result).not.toBeInstanceOf(Promise);
@@ -320,24 +432,86 @@ test('conversion is synchronous leaves frozen input intact and performs no netwo
 
 test('bulk consumer structurally rejects arbitrary objects and accepts converter output with unchanged citations', async () => {
   const driver = await loadOpenLibraryDriver();
-  for (const invalid of [[{}], [{ sql: 'INSERT INTO subjects VALUES (1)' }], [{ title: 'fabricated', source: 'open-library' }]]) {
+  for (const invalid of [
+    [{}],
+    [{ sql: 'INSERT INTO subjects VALUES (1)' }],
+    [{ title: 'fabricated', source: 'open-library' }],
+  ]) {
     expect(() => driver.consume(invalid)).toThrow();
   }
   converted(driver, await fixture('work'));
   converted(driver, await fixture('edition'));
 });
 
-
 test('only supplied native resolutions turn author and work external keys into item relations', async () => {
   const driver = await loadOpenLibraryDriver();
   const record = await fixture('edition');
-  const output = converted(driver, record, { subjectId: SUBJECT, resolvedReferences: {
-    '/authors/OL900000001A': AUTHOR, '/works/OL900000001W': WORK,
-  } });
+  const output = converted(driver, record, {
+    subjectId: SUBJECT,
+    resolvedReferences: {
+      '/authors/OL900000001A': AUTHOR,
+      '/works/OL900000001W': WORK,
+    },
+  });
   expect(values(output, 'author')).toEqual([{ type: 'value', content: AUTHOR }]);
   expect(values(output, 'work')).toEqual([{ type: 'value', content: WORK }]);
-  for (const [kind, key] of [['author', '/authors/OL900000001A'], ['work', '/works/OL900000001W']] as const) {
-    const field = output.fields.find(f => f.kind === kind)!;
+  for (const [kind, key] of [
+    ['author', '/authors/OL900000001A'],
+    ['work', '/works/OL900000001W'],
+  ] as const) {
+    const field = output.fields.find((f) => f.kind === kind)!;
     expect(pointer(output.accepted[field.command], field.sourceValuePath!)).toBe(key);
   }
+});
+
+test('valid ISBN-10 including X converts with 978 and a recomputed ISBN-13 check digit', async () => {
+  const driver = await loadOpenLibraryDriver();
+  const edition = await fixture('edition');
+  for (const [isbn10, isbn13] of [
+    ['0306406152', '9780306406157'],
+    ['080442957X', '9780804429573'],
+  ]) {
+    const output = converted(driver, { ...edition, isbn_10: [isbn10], isbn_13: [] });
+    expect(values(output, 'isbn10')).toEqual([]);
+    expect(values(output, 'isbn13')).toEqual([isbn13]);
+    const statements = output.accepted.flatMap((c) =>
+      c.op === 'propose' ? [c.statement] : c.op === 'create' ? Object.values(c.subject.statements ?? {}).flat() : [],
+    );
+    expect(statements.filter((s) => s.property.id === 'schema:isbn').map((s) => s.value)).toEqual([
+      { type: 'value', content: isbn13 },
+    ]);
+    expect(statements.some((s) => s.property.id === 'wdt:P957')).toBe(false);
+  }
+});
+
+test('invalid ISBN-10 check digits never become identifier candidates', async () => {
+  const driver = await loadOpenLibraryDriver();
+  const edition = await fixture('edition');
+  for (const isbn of ['0306406153', '0804429570']) {
+    const result = driver.convert({ ...edition, isbn_10: [isbn], isbn_13: [] }, context);
+    if (result.outcome !== 'converted') noProposals(result);
+    else {
+      expect(checkBatchWrite({ commands: result.proposals })).toEqual([]);
+      const statements = result.proposals.flatMap((c) =>
+        c.op === 'propose' ? [c.statement] : c.op === 'create' ? Object.values(c.subject.statements ?? {}).flat() : [],
+      );
+      expect(statements.filter((s) => ['schema:isbn', 'wdt:P957'].includes(s.property.id))).toEqual([]);
+    }
+  }
+});
+
+test('absent author and work identifiers produce no relationship proposals', async () => {
+  const driver = await loadOpenLibraryDriver();
+  const record = await fixture('edition');
+  delete record.authors;
+  delete record.works;
+  const output = converted(driver, record);
+  expect(values(output, 'author')).toEqual([]);
+  expect(values(output, 'work')).toEqual([]);
+  expect(output.accepted.flatMap((c) => (c.op === 'propose' ? [c.statement.property.id] : []))).not.toContain(
+    'schema:author',
+  );
+  expect(output.accepted.flatMap((c) => (c.op === 'propose' ? [c.statement.property.id] : []))).not.toContain(
+    'schema:exampleOfWork',
+  );
 });

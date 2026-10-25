@@ -8,6 +8,9 @@ import { pathToFileURL } from 'node:url';
  * bundled definitions' mappings. JSON-lines parsing belongs elsewhere.
  * converter_revision must be the source module's explicit revision export.
  *
+ * Source titles are schema:name propose statements with monolingualtext content,
+ * separate from creation labels. Refresh can retract old source candidates while
+ * leaving those initial labels set; pure conversion does not perform persistence.
  * convert calls that module synchronously with the supplied entity and immutable
  * external-entity resolution map. No fetching, persistence, generated relation
  * IDs, SQL, importer state, authorization or product behavior in this binding.

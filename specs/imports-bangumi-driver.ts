@@ -5,6 +5,9 @@
  * convert forwards the supplied record and revision without doing conversion here.
  * No SQL, provider/grain/slot protocol, network lookup or adapter product model.
  *
+ * Source titles are schema:name propose statements with monolingualtext content,
+ * separate from creation labels. Refresh can retract old source candidates while
+ * leaving those initial labels set; pure conversion does not perform persistence.
  * inspect returns JSON pointers into the unchanged real converter output. Map
  * roles using the actual command definitions, not inferred string matches. Every
  * field identifies its underlying command proposal, field group, references and

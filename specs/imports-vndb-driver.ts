@@ -5,6 +5,9 @@
  * source rewriting, product behavior, SQL, network or storage belongs here.
  * converter_revision is that module's real explicit export, not a test constant.
  *
+ * Source titles are schema:name propose statements with monolingualtext content,
+ * separate from creation labels. Refresh can retract old source candidates while
+ * leaving those initial labels set; pure conversion does not perform persistence.
  * Bulk command shape/validator belong to @rezics/definitions/bulk.
  * parseProposal calls checkBatchWrite on the actual command; it throws for structurally invalid proposals. The
  * suite's fake consumer calls it on every emitted proposal without writing data.

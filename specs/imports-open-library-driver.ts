@@ -5,6 +5,9 @@
  * synchronous and pure; it receives the JSON payload, never a TSV row or filename.
  * No product behavior, generated facts, rights decisions or references in adapters.
  *
+ * Source titles are schema:name propose statements with monolingualtext content,
+ * separate from creation labels. Refresh can retract old source candidates while
+ * leaving those initial labels set; pure conversion does not perform persistence.
  * consume is a narrow typed fake bulk consumer: use the actual BatchCommand
  * type AND @rezics/definitions/bulk checkBatchWrite, then collect proposals without
  * executing them. Do not define another bulk API, accept arbitrary objects, write
@@ -42,6 +45,7 @@ export type Conversion = {
   reason?: string;
 };
 export interface FieldObservation {
+  /** isbn10 is rejection vocabulary only: valid ISBN-10 emits isbn13 under schema:isbn. */
   kind: 'identity' | 'title' | 'author' | 'work' | 'isbn10' | 'isbn13' | 'publishDate' | 'description' | 'cover';
   command: number;
   valuePath: string;
@@ -53,7 +57,7 @@ export interface FieldObservation {
     revisionPath: string;
     lastModifiedPath: string;
   };
-  /** Statement path for relations; original key/date is a real citation/qualifier leaf. */
+  /** Statement path for relations; original relation key is a real citation/qualifier leaf. */
   statementPath?: string;
   sourceValuePath?: string;
 }

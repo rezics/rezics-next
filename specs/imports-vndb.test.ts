@@ -30,10 +30,10 @@ function consume(driver: VndbDriver, output: unknown) {
   expect(driver.converter_revision.trim().length).toBeGreaterThan(0);
   expect(at(output, located.converterRevision)).toBe(driver.converter_revision);
   expect(located.proposals.length).toBeGreaterThan(0);
-  const actual = located.proposals.map(path => at(output, path));
+  const actual = located.proposals.map((path) => at(output, path));
   expect(checkBatchWrite({ commands: actual })).toEqual([]);
-  expect(actual.filter(c => (c as { op: string }).op === 'create').length).toBeLessThanOrEqual(1);
-  expect(new Set(located.proposals.map(p => JSON.stringify(p))).size).toBe(actual.length);
+  expect(actual.filter((c) => (c as { op: string }).op === 'create').length).toBeLessThanOrEqual(1);
+  expect(new Set(located.proposals.map((p) => JSON.stringify(p))).size).toBe(actual.length);
   const rights = located.sourceRights;
   expect(at(output, rights.databaseLicense)).toBe('ODbL-1.0');
   expect(at(output, rights.contentsLicense)).toBe('LicenseRef-DbCL-1.0');
@@ -72,8 +72,20 @@ function assertMetadata(driver: VndbDriver, output: unknown, id = 'v123', revisi
       const rawValue = at(proposal, fact.valuePath);
       expect(rawValue).toBeDefined();
       expect(rawValue).not.toBeNull();
-      if (fact.kind === 'type') expect(String(rawValue).replace(/^wd:/, 'http://www.wikidata.org/entity/')).toBe('http://www.wikidata.org/entity/Q689445');
+      if (fact.kind === 'type')
+        expect(String(rawValue).replace(/^wd:/, 'http://www.wikidata.org/entity/')).toBe(
+          'http://www.wikidata.org/entity/Q689445',
+        );
       if (fact.kind !== 'type') expect(rawValue).toEqual(fact.value);
+      if (fact.kind === 'title') {
+        expect(proposal.op).toBe('propose');
+        if (proposal.op !== 'propose') throw new Error('Titles must be source candidates');
+        expect(proposal.statement).toMatchObject({
+          property: { id: 'schema:name' },
+          value: { type: 'value', content: { language: fact.language, text: fact.value } },
+        });
+        expect(fact.valuePath).toEqual(['statement', 'value', 'content', 'text']);
+      }
       expect(at(proposal, fact.fieldGroupPath)).toBe('facts');
       expect(at(proposal, fact.reference.source)).toBe('vndb');
       expect(at(proposal, fact.reference.externalId)).toBe(id);
@@ -116,12 +128,19 @@ test('VNDB changed source values and revisions change real proposals without inv
   const original = driver.convert(fixture());
   const changed = driver.convert(input);
   expect(changed).not.toEqual(original);
-  const digests = (raw: unknown) => driver.locate(raw).proposals.map(p => (at(raw, p) as import('@rezics/definitions/bulk').BatchCommand).source.digest);
+  const digests = (raw: unknown) =>
+    driver
+      .locate(raw)
+      .proposals.map((p) => (at(raw, p) as import('@rezics/definitions/bulk').BatchCommand).source.digest);
   expect(digests(changed)).not.toEqual(digests(original));
   const edited = fixture();
   edited.vn_titles[0].title = 'Changed title only';
-  expect(digests(driver.convert(edited))).not.toEqual(digests(original));
-  expect(at(changed, driver.locate(changed).converterRevision)).toBe(at(original, driver.locate(original).converterRevision));
+  const titleOnly = driver.convert(edited);
+  expect(digests(titleOnly)).not.toEqual(digests(original));
+  assertMetadata(driver, titleOnly, 'v123', 7, 'Changed title only');
+  expect(at(changed, driver.locate(changed).converterRevision)).toBe(
+    at(original, driver.locate(original).converterRevision),
+  );
   assertMetadata(driver, changed, 'v124', 8, 'Another Harbor');
 });
 
@@ -181,8 +200,16 @@ test('VNDB descriptions covers posts reviews accounts and private lists never re
   const output = driver.convert(dirty);
   assertMetadata(driver, output);
   expect(output).toEqual(driver.convert(clean));
-  expect(driver.convert({ ...dirty, future_extension: { text: 'UNKNOWN_PRIVATE_SENTINEL',
-    rights: { license: 'CC0-1.0' }, converter_revision: 'forged' } })).toEqual(output);
+  expect(
+    driver.convert({
+      ...dirty,
+      future_extension: {
+        text: 'UNKNOWN_PRIVATE_SENTINEL',
+        rights: { license: 'CC0-1.0' },
+        converter_revision: 'forged',
+      },
+    }),
+  ).toEqual(output);
   // Inspect the complete output as well as observations; adapters cannot hide leaks.
   const serialized = JSON.stringify(output);
   for (const marker of [
