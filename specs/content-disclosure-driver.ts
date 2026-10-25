@@ -92,8 +92,17 @@ export interface ContentDisclosureDriver {
     missingSemanticSubject?: boolean;
   }): Promise<Content>;
   edit(target: Content, body: string): Promise<Revision>;
-  /** Privileged fixture visibility command, not a substitute disclosure rule. */
+  /** Privileged fixture visibility command; changes domain visibility only, never roles/grants. */
   protect(target: Target): Promise<void>;
+  /**
+   * Remove the creator's actual read-authorizing roles/grants on this target via
+   * real Access rows/commands, never adapter policy. Creation installs type owner
+   * and standing roles from catalogue data; their read authority is explicit.
+   * May revoke an indivisible owner role in full; this scenario has no later edit.
+   * Preserve identity, account state, scopes and all other resources. Install no
+   * overriding denial: a subsequent grantRead must still authorize protected read.
+   */
+  revokeCreatorReadAuthority(target: Target): Promise<void>;
   /** Actual read and exact-history grants, including authorized erased tombstones. */
   grantRead(persona: Persona, target: Target): Promise<void>;
   setModeration(persona: 'moderator', target: Target, mode: 'allow' | 'deny' | 'revoke'): Promise<void>;

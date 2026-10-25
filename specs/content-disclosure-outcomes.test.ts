@@ -146,6 +146,7 @@ test('stale board candidates obey current protected thread Access and missing se
   await d().grantRead('moderator', thread);
   expect((await listed('moderator', board)).items.map((t) => t.id)).toContain(thread.id);
   expect((await ok(await d().read('moderator', thread))).id).toBe(thread.id);
+  await d().revokeCreatorReadAuthority(thread);
   // Authorship alone cannot replace a protected read grant.
   await hidden('author', thread);
   await d().grantRead('author', thread);
