@@ -84,10 +84,21 @@ export const GuidedReading: Story = {
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Show reading guide' }));
     await waitFor(() => expect(page.getByRole('alertdialog')).toBeVisible());
     await waitFor(() => expect(page.getByRole('heading', { name: 'Start a personal shelf' })).toBeVisible());
-    await userEvent.click(page.getByRole('button', { name: 'next step' }));
+    await userEvent.click(page.getByRole('button', { name: 'Next step' }));
     await waitFor(() => expect(page.getByRole('heading', { name: 'Join a Realm conversation' })).toBeVisible());
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(page.getByRole('alertdialog')).toHaveAttribute('data-state', 'closed'));
+  },
+};
+
+export const SecondStep: Story = {
+  render: () => <ReadingTour />,
+  async play({ canvasElement }) {
+    const page = within(canvasElement.ownerDocument.body);
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Show reading guide' }));
+    await waitFor(() => expect(page.getByRole('heading', { name: 'Start a personal shelf' })).toBeVisible());
+    await userEvent.click(page.getByRole('button', { name: 'Next step' }));
+    await waitFor(() => expect(page.getByRole('heading', { name: 'Join a Realm conversation' })).toBeVisible());
   },
 };
 

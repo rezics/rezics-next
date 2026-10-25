@@ -91,7 +91,7 @@ export const TourTrigger = (props: TourTriggerProps) => {
 };
 
 export const TourActionTrigger = (props: React.ComponentProps<typeof ArkTour.ActionTrigger>) => (
-  <ArkTour.ActionTrigger data-slot="tour-action-trigger" {...props} />
+  <ArkTour.ActionTrigger aria-label={props.action.label} data-slot="tour-action-trigger" {...props} />
 );
 
 export const TourOverlay = (props: React.ComponentProps<typeof DialogOverlay>) => {
