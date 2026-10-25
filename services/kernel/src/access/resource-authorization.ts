@@ -1,4 +1,5 @@
 import {
+  ANONYMOUS_PRINCIPAL_ID,
   authoritativeTimeValue,
   commandTime,
   type AuthoritativeTime,
@@ -35,7 +36,7 @@ export type ResourceAuthorizationInput = {
   context: ResourceAuthorizationContext;
 };
 
-/** Anonymous command contract; execution remains unavailable until implemented. */
+/** Anonymous commands require exact principal attribution and opaque domain eligibility. */
 export type AnonymousResourceAuthorizationInput = Omit<ResourceAuthorizationInput, 'actor' | 'anchor'> & {
   actor: Extract<Actor, { kind: 'anonymous' }>;
   anchor: AuthorizationAnchor & {
@@ -60,11 +61,13 @@ export class ResourceAuthorizationUnavailableError extends Error {
  * never mints creationCapability; parentCreationAuthorization adds that proof.
  * Protected platform commands supply the seeded Global Context anchor (route 0,
  * id 00000000-0000-8000-8000-000000000000) and require real account grants/scopes.
- * Neither anonymous eligibility nor receipt-only replay grants authority here.
+ * Anonymous admission requires action-bound domain eligibility and the installed
+ * catalogue, checked by that same formula. Receipt replay supplies no authority.
  *
  * Cost includes the owning module's exact existence/revision validation seek:
  * bounded actor inverses and matched group anchors, then one authority anchor,
- * O((1 + K) log G + L log R), K <= 1000 per account. No target read or ACL scan.
+ * O((1 + K) log G + L log R), K <= 1000 per account. Anonymous K=0 adds
+ * bounded O(H) container evidence and one domain seek. No target read or ACL scan.
  */
 export function resourceAuthorization(input: AnonymousResourceAuthorizationInput): CommandAuthorization;
 export function resourceAuthorization(input: ResourceAuthorizationInput): CommandAuthorization;
@@ -77,6 +80,7 @@ export function resourceAuthorization(input: ResourceAuthorizationInput): Comman
   const authorize = access.authorize.bind(access);
   // Keep the verified actor object: production Access binds identity by reference.
   const identity = JSON.stringify(actor);
+  const anonymous = actor.kind === 'anonymous';
   const basis =
     actor.kind === 'account'
       ? { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy }
@@ -90,11 +94,24 @@ export function resourceAuthorization(input: ResourceAuthorizationInput): Comman
       return false;
     }
     return (
-      basis !== null &&
       JSON.stringify(actor) === identity &&
-      attempt.basis?.actorAccountId === basis.actorAccountId &&
-      attempt.basis.clientId === basis.clientId &&
-      attempt.basis.requestedBy === basis.requestedBy &&
+      (anonymous
+        ? !!attempt.basis &&
+          'principal' in attempt.basis &&
+          attempt.basis.principal?.kind === 'anonymous' &&
+          attempt.basis.principal.id === ANONYMOUS_PRINCIPAL_ID &&
+          attempt.basis.actorAccountId === null &&
+          attempt.basis.clientId === null &&
+          attempt.basis.requestedBy === null &&
+          resource.eligibility !== undefined &&
+          (resource.anonymousEligibility === undefined || resource.anonymousEligibility === resource.eligibility)
+        : basis !== null &&
+          basis.actorAccountId !== ANONYMOUS_PRINCIPAL_ID &&
+          !!attempt.basis &&
+          !('principal' in attempt.basis) &&
+          attempt.basis.actorAccountId === basis.actorAccountId &&
+          attempt.basis.clientId === basis.clientId &&
+          attempt.basis.requestedBy === basis.requestedBy) &&
       validResource(resource) &&
       Number.isInteger(partition) &&
       partition >= 0 &&
@@ -110,29 +127,37 @@ export function resourceAuthorization(input: ResourceAuthorizationInput): Comman
     denied,
     async prepare(attempt) {
       if (!bound(attempt) || !prepare) throw denied();
-      const evidence = await within(deadline, () => prepare(actor, action, resource, { pool, deadline }));
-      const proofDeadline = Math.min(deadline, permissionEvidenceDeadline(evidence) ?? -Infinity);
-      if (Date.now() >= proofDeadline) throw denied();
-      await within(proofDeadline, () =>
-        withConnection(pool, async (client) => {
-          const bounded = deadlineClient(client, proofDeadline);
-          if (
-            !(await validate(bounded, attempt.time)) ||
-            !(await authorize(bounded, actor, action, resource, evidence, attempt.time))
-          )
-            throw denied();
-        }),
-      );
-      if (!bound(attempt) || Date.now() >= proofDeadline) throw denied();
-      const proof = Object.freeze({});
-      proofs.set(proof, { attempt, deadline: proofDeadline });
-      return proof;
+      try {
+        const evidence = await within(deadline, () => prepare(actor, action, resource, { pool, deadline }));
+        const proofDeadline = Math.min(deadline, permissionEvidenceDeadline(evidence) ?? -Infinity);
+        if (Date.now() >= proofDeadline) throw denied();
+        await within(proofDeadline, () =>
+          withConnection(pool, async (client) => {
+            const bounded = deadlineClient(client, proofDeadline);
+            if (
+              !(await validate(bounded, attempt.time)) ||
+              !(await authorize(bounded, actor, action, resource, evidence, attempt.time))
+            )
+              throw denied();
+          }),
+        );
+        if (!bound(attempt) || Date.now() >= proofDeadline) throw denied();
+        const proof = Object.freeze({});
+        proofs.set(proof, { attempt, deadline: proofDeadline });
+        return proof;
+      } catch (error) {
+        // Domain unavailability must not expose a receipt or reach target checkout.
+        if (anonymous) throw denied();
+        throw error;
+      }
     },
     async authorize(tx, attempt, proof) {
       const prepared = typeof proof === 'object' && proof !== null ? proofs.get(proof) : undefined;
+      if (prepared) proofs.delete(proof as object);
       if (
         !bound(attempt) ||
         !prepared ||
+        prepared.attempt !== attempt ||
         commandTime(tx) !== attempt.time ||
         prepared.attempt.time !== attempt.time ||
         prepared.attempt.basis !== attempt.basis ||
@@ -140,7 +165,6 @@ export function resourceAuthorization(input: ResourceAuthorizationInput): Comman
         Date.now() >= prepared.deadline
       )
         throw denied();
-      proofs.delete(proof as object);
       return 'execute';
     },
   });

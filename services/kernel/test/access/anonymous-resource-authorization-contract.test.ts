@@ -1,5 +1,6 @@
 import { afterAll, expect, expectTypeOf, test } from 'bun:test';
 import {
+  createAccess,
   createResourceAnonymousEligibility,
   resourceAuthorization,
   type AnonymousResourceAuthorizationInput,
@@ -112,8 +113,11 @@ test('anonymous contract requires opaque eligibility and rejects structural or d
   expectTypeOf<Extract<'creationCapability', keyof CommandAuthorization>>().toEqualTypeOf<never>();
 });
 
-test('real anonymous command attempts remain unavailable before receipts, body or domain callbacks', async () => {
-  const genuine = input();
+test('hostile anonymous command attempts deny before receipts, body or domain callbacks', async () => {
+  const genuine = {
+    ...input(),
+    access: createAccess({ actions: new Map([[action, { anonymous: true }]]) }),
+  };
   const token = genuine.anchor.resource.eligibility;
   const targets: Resource[] = [
     genuine.anchor.resource,
@@ -127,6 +131,7 @@ test('real anonymous command attempts remain unavailable before receipts, body o
   let bodies = 0;
   for (const target of targets) {
     for (const selected of [action, 'unknown:create', 'private:create', 'takedown']) {
+      if (target === genuine.anchor.resource && selected === action) continue;
       const authorization = resourceAuthorization({
         ...genuine,
         action: selected,
@@ -162,7 +167,7 @@ test('real anonymous command attempts remain unavailable before receipts, body o
       ).rejects.toBeInstanceOf(GrantDeniedError);
     }
   }
-  expect(attempts).toBe(targets.length * 4);
+  expect(attempts).toBe(targets.length * 4 - 1);
   expect(bodies).toBe(0);
   expect(calls).toEqual([]);
   expect(
@@ -176,4 +181,22 @@ test('real anonymous command attempts remain unavailable before receipts, body o
       )
     ).rows,
   ).toEqual([{ position: '0', receipts: 0, events: 0 }]);
+});
+
+test('real anonymous command succeeds through the same installed formula with opaque eligibility', async () => {
+  const genuine = input();
+  const access = createAccess({ actions: new Map([[action, { anonymous: true }]]) });
+  const result = await runCommand(
+    pool,
+    {
+      ...principalCommandIdentity(actor),
+      partition: genuine.context.partition,
+      authorization: resourceAuthorization({ ...genuine, access }),
+      receipt: { kind: 'report.create', key: 'EA6EB068-708D-4B11-A207-568C31303D60', digest: Buffer.alloc(32) },
+    },
+    async () => ({ value: { accepted: true }, events: [{ type: 'com.rezics.test.report.v1', data: {} }] }),
+  );
+  expect(result.value).toEqual({ accepted: true });
+  expect(result.replayed).toBe(false);
+  expect(calls).toEqual(['eligibility.prepare', 'validate', 'eligibility.verify']);
 });
