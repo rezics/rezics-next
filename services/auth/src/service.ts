@@ -8,6 +8,7 @@ import { betterAuthOptions, credentialOwnerSchema } from './better-auth.ts';
 import { createSigner } from './signing.ts';
 import { issuerOrigin } from './issuer.ts';
 import { nativeAttemptRequest } from './rate-limit.ts';
+import { nativeSessionLimits, pruneExpiredSessions, trimSessionHistory, sessionUpgradePage } from './session-limits.ts';
 import { nativeVerificationPlugin, pruneExpiredVerifications } from './verification-maintenance.ts';
 import { clientAuthority } from './account-workflows.ts';
 import type {
@@ -181,6 +182,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       plugins: [
         credentialOwnerSchema,
         nativeVerificationPlugin,
+        nativeSessionLimits(database),
         {
           id: 'trusted-establishment',
           async onRequest() {
@@ -447,6 +449,9 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     },
     internal: {
       pruneExpiredVerifications: () => pruneExpiredVerifications(database),
+      pruneExpiredSessions: (batch) => pruneExpiredSessions(database, batch),
+      trimSessionHistory: (accountId, batch) => trimSessionHistory(database, accountId, batch),
+      sessionUpgradePage: (after, limit) => sessionUpgradePage(database, after, limit),
       signing: signer.control,
       async provisionPassword(input) {
         // Authorization resolves an approved Access command; HTTP cannot supply this result.

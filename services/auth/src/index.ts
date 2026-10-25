@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import { buildAuthService } from './service.ts';
 import type { JWK } from 'jose';
+import type { SessionTrim } from './session-limits.ts';
 export { SigningRotationPending } from './signing.ts';
 export { createAccountWorkflows } from './workflows.ts';
 export type {
@@ -154,6 +155,10 @@ export interface AuthService {
   internal: {
     /** One native expiry batch, at most 1000 rows; schedule through the shared worker. */
     pruneExpiredVerifications(): Promise<number>;
+    /** Bounded maintenance; the host registers and schedules these ports. */
+    pruneExpiredSessions(batch?: number): Promise<number>;
+    trimSessionHistory(accountId: string, batch?: number): Promise<SessionTrim>;
+    sessionUpgradePage(after: string, limit?: number): Promise<string[]>;
     signing: SigningControl;
     provisionPassword(input: {
       authorization: string;
