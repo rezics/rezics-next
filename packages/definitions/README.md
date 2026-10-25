@@ -104,3 +104,40 @@ sorted by file and RFC 6901 pointer and capped at 64. Label files are named
 `unsafe_pattern`, `linkml`, `duplicate`, and `missing_label`. The final release is
 checked with `validateRelease`; a failure at that point throws a plain `Error`
 because it indicates a compiler defect.
+
+## Bulk subject writes
+
+`@rezics/definitions/bulk` exports the portable TypeBox request and response contract for
+`POST /v1/subjects:batchWrite`, together with static types and structural validators.
+A request contains 1 to 100 commands. Each command has a printable ASCII idempotency
+key, a source identity and exactly one operation: create a subject, propose a statement,
+or retract a candidate. `checkBatchWrite` validates shapes, field names, limits, enums,
+and duplicate keys, returning RFC 6901 pointers and one of `required`, `unknown_field`,
+`invalid_type`, `invalid_format`, `out_of_range`, or `unsupported`. Passing a release
+currently throws because release dependent checks are not implemented. Results preserve
+one result per command and its request order; each result contains either a value or an
+RFC 9457 problem.
+
+The endpoint requires `subject:batch_write` on the Global Context through an explicit
+grant with no standing grant, checked once per request. Before reading a receipt, every
+command is authorized as its single-command equivalent: create uses `subject:create`
+through parent authorization on the Global Context; propose and retract use
+`statement:propose`. This authorization also runs on every replay.
+
+Each command runs alone in its subject's partition and uses its own receipt, keyed by
+principal and command key, exactly as the corresponding single endpoint does. A batch is
+not atomic: commands may run concurrently, and results retain request order. Before any
+command runs, the request spends one unit per command from the caller's import rate
+budget. If the budget is exceeded, the endpoint returns 429 with `Retry-After` and runs
+nothing.
+
+A command failure is returned as its result: 400 `invalid_request` with errors pointing
+into the request, 403, 404 `not_found`, 409 `conflict` (with `redirect: { from, to }`
+for a redirected subject), 409 `fenced` when that source `(source, external_id,
+field_group)` is fenced on the subject, or 503 as for a single request. Fencing is
+checked inside the command. Retry a lost response or 5xx result with the same key: the
+receipt replays the first outcome, so a command is never lost or applied twice. A
+proposal or retraction never changes what a Context adopted; editors decide it.
+
+The contract has no runtime path. `checkBatchWrite` is linear in request size, bounded by
+`BATCH_LIMIT` and the statement limits.
