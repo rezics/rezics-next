@@ -313,6 +313,12 @@ export async function promote(options: PromotionOptions): Promise<void> {
       const main = head(settings.mainCheckout, settings.mainBranch);
       let dev: string;
       try { dev = head(settings.mainCheckout, settings.integrationBranch); } catch { return; }
+      if (run?.phase === 'blocked' && run.blockedOn) {
+        const culprit = store.task(run.blockedOn.taskId);
+        const moved = culprit.currentAttempt > run.blockedOn.attempt && ['integrated', 'merged'].includes(culprit.state);
+        if (!moved && culprit.state !== 'cancelled') return;
+        store.clearPromotion(); run = undefined;
+      }
       if (run?.phase === 'report-environment') {
         if (main === run.mainBase && dev === run.devHead) { reportEnvironment(options, run); return; }
         store.clearPromotion(); run = undefined;
@@ -342,7 +348,19 @@ export async function promote(options: PromotionOptions): Promise<void> {
             if (!isAncestor(settings.mainCheckout, run.revertBase!, currentDev)) throw new Error('Integration branch moved before culprit reversion');
             run.revertBase = currentDev; delete run.revertCommit; store.savePromotion(run);
           }
-          if (!run.revertCommit) { run.revertCommit = await buildRevert(options, run); store.savePromotion(run); }
+          if (!run.revertCommit) {
+            try { run.revertCommit = await buildRevert(options, run); }
+            catch {
+              // Later tasks build on the culprit's change, so it cannot be reverted cleanly: fix it forward instead,
+              // and spend no gate until its next attempt integrates.
+              prepareCulpritOutcome(options, run);
+              job.resumePendingRetries();
+              run.blockedOn = { taskId: run.culpritTaskId!, attempt: run.culpritAttempt ?? store.task(run.culpritTaskId!).currentAttempt };
+              run.phase = 'blocked'; store.savePromotion(run);
+              return;
+            }
+            store.savePromotion(run);
+          }
           if (head(settings.mainCheckout, settings.integrationBranch) === run.revertBase)
             git(settings.mainCheckout, 'update-ref', ref(settings.integrationBranch), run.revertCommit, run.revertBase!);
           run.phase = 'revert-published'; store.savePromotion(run);

@@ -167,3 +167,26 @@ test('a prefix that does not contain main is not published and promotion still c
     expect(git(h.root, 'merge-base', '--is-ancestor', git(h.root, 'rev-parse', 'main'), 'dev') === '').toBe(true);
   } finally { h.dispose(); }
 });
+
+test('a culprit whose revert conflicts with later work is fixed forward and promotion waits for its next attempt', async () => {
+  const h = integrationHarness();
+  try {
+    await h.seed('alpha');
+    const bad = await h.seed('bad');
+    // Later work builds on the culprit's file, so reverting the culprit alone conflicts.
+    const tree = `${h.root}-later`;
+    git(h.root, 'worktree', 'add', '--detach', tree, 'dev');
+    writeFileSync(`${tree}/bad`, 'bad, extended by later work\n');
+    git(tree, 'add', 'bad'); git(tree, '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'Build on bad');
+    git(h.root, 'update-ref', 'refs/heads/dev', git(tree, 'rev-parse', 'HEAD'));
+    git(h.root, 'worktree', 'remove', '--force', tree);
+    await h.seed('omega');
+    const devBefore = h.head();
+    await h.promote(async (_command, cwd) => existsSync(`${cwd}/bad`) ? failure : success);
+    const run = h.store.promotion();
+    expect(run?.phase).toBe('blocked');
+    expect(run?.blockedOn?.taskId).toBe(bad.id);
+    expect(h.store.task(bad.id).currentAttempt).toBe(2);
+    expect(h.head()).toBe(devBefore);
+  } finally { h.dispose(); }
+});
