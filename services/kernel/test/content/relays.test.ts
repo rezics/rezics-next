@@ -1,13 +1,9 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { DBOSClient } from '@dbos-inc/dbos-sdk';
-import { fromPlainText } from '@rezics/document';
+import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
+import { DBOS } from '@dbos-inc/dbos-sdk';
 import pg from 'pg';
 import { runCommand, type CommandEvent } from '../../src/command/command.ts';
 import { readBoardCandidates } from '../../src/content/board-projection.ts';
-import { createThread } from '../../src/content/commands.ts';
-import { CONTENT_EVENTS } from '../../src/content/events.ts';
-import { contentRelays } from '../../src/content/relays.ts';
-import { createReport, listTargetReports } from '../../src/content/reports.ts';
+import { contentEffects } from '../../src/content/relays.ts';
 import {
   CONTENT_QUEUES,
   CONTENT_WORKFLOWS,
@@ -15,79 +11,110 @@ import {
   contentWorkWorkflowId,
 } from '../../src/content/work-contract.ts';
 import { createPool } from '../../src/database/pool.ts';
-import { EVENT_TYPES, projectBatch, type Envelope } from '../../src/events/log.ts';
-import { startRelays, type Relay } from '../../src/events/relays.ts';
-import { newId, partitionOf } from '../../src/route/route.ts';
-import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
-import { createContentSystem } from './support/system.ts';
+import { effectWorkflowId, type Effect } from '../../src/events/effects.ts';
+import { readBatch, type CloudEvent, type Envelope } from '../../src/events/log.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { startWorker } from '../../src/worker.ts';
+import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
+import { WORK_QUEUES } from '../../src/work/queues.ts';
+import type { WorkModule } from '../../src/work/registry.ts';
+import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(url);
 const admin = new pg.Pool({ connectionString: url, max: 2 });
-let client: DBOSClient;
+let client: WorkClient;
+let workerTemplateUrl = process.env.CONTENT_EFFECT_TEMPLATE;
+let templateAdmin: pg.Pool | undefined;
+let templateName: string | undefined;
 beforeAll(async () => {
-  client = await DBOSClient.create({
-    systemDatabaseUrl: url,
-    systemDatabaseSchemaName: 'dbos',
-    applicationName: 'rezics-kernel',
-    systemDatabasePoolSize: 2,
-  });
-  await client.registerQueue(CONTENT_QUEUES.image, { partitionConcurrency: 1 });
-  await client.registerQueue(CONTENT_QUEUES.purge, { workerConcurrency: 2 });
+  if (!workerTemplateUrl) {
+    const source = new URL(url);
+    const template = decodeURIComponent(source.pathname.slice(1)).replaceAll('"', '""');
+    source.pathname = '/postgres';
+    templateAdmin = new pg.Pool({ connectionString: source.href });
+    templateName = `content_effect_template_${crypto.randomUUID().replaceAll('-', '')}`;
+    await templateAdmin.query(`CREATE DATABASE ${templateName} TEMPLATE "${template}"`);
+    source.pathname = `/${templateName}`;
+    workerTemplateUrl = source.href;
+  }
+  client = await createWorkClient(url);
+  for (const [name, options] of Object.entries(WORK_QUEUES)) await client.registerQueue(name, options);
 });
 afterAll(async () => {
-  await client?.destroy();
+  await client?.close();
   await Promise.all([pool.end(), admin.end()]);
+  if (templateAdmin) {
+    await templateAdmin.query(`DROP DATABASE ${templateName}`);
+    await templateAdmin.end();
+  }
 });
 
 let nextPartition = 2500;
 const freshPartition = () => nextPartition++;
-const request = () => ({
-  idempotencyKey: crypto.randomUUID(),
-  requestId: crypto.randomUUID(),
-  deadline: Date.now() + 30_000,
+const uploaded = (partition: number) => ({
+  mediaId: newId(partition * 16),
+  containerId: newId(partition * 16),
+  actorId: newId(16),
 });
-const mediaRelay = (db = pool, work = client) => {
-  const relay = contentRelays(db, work).find((relay) => relay.consumer === 'content_media');
-  if (!relay) throw new Error('Missing content_media relay');
-  return relay;
-};
 
-async function checkpoint(consumer: string, partition: number) {
-  const result = await admin.query<{ position: string }>(
-    'SELECT position::text FROM core.consumer_checkpoint WHERE consumer=$1 AND partition_no=$2',
-    [consumer, partition],
-  );
-  return BigInt(result.rows[0]?.position ?? '0');
-}
-
-async function append(partition: number, events: CommandEvent[], db = pool) {
+async function append(partition: number, events: CommandEvent[], db = pool): Promise<Envelope> {
   const result = await runCommand(db, { partition }, async () => ({ value: null, events }));
-  const seen: Envelope[] = [];
-  await projectBatch(db, {
-    consumer: `capture_${crypto.randomUUID().replaceAll('-', '')}`,
+  const consumer = `capture_${crypto.randomUUID().replaceAll('-', '')}`;
+  await db.query('INSERT INTO core.consumer_checkpoint (partition_no,consumer,epoch,position) VALUES ($1,$2,$3,$4)', [
     partition,
-    apply: async (batch) => void seen.push(...batch),
+    consumer,
+    result.position === 1n ? null : result.epoch,
+    result.position - 1n,
+  ]);
+  let envelope: Envelope | undefined;
+  await readBatch(db, {
+    consumer,
+    partition,
+    envelopes: 1,
+    apply: async (batch) => {
+      envelope = batch[0];
+    },
   });
-  const envelope = seen.find((envelope) => envelope.position === result.position);
-  if (!envelope) throw new Error('Command envelope was not read');
+  if (!envelope) throw new Error('Native command envelope was not read');
   return envelope;
 }
 
-function uploaded(partition: number) {
-  return { mediaId: newId(partition * 16), containerId: newId(partition * 16), actorId: newId(16) };
+function effectFor(event: CloudEvent, db = pool, work = client): Effect {
+  const matches = contentEffects(db, work).filter((effect) => effect.types.includes(event.type));
+  expect(matches).toHaveLength(1);
+  return matches[0]!;
 }
 
-async function seedUploaded(data: ReturnType<typeof uploaded>, db = admin) {
-  const route = Number.parseInt(data.mediaId.replaceAll('-', '').slice(20, 24), 16);
+async function row(id: string, db = admin) {
+  const stored = (
+    await db.query(
+      `SELECT ws.*, wi.inputs AS durable_inputs FROM dbos.workflow_status ws
+     LEFT JOIN dbos.workflow_input wi USING (workflow_uuid) WHERE ws.workflow_uuid=$1`,
+      [id],
+    )
+  ).rows[0];
+  if (stored) stored.inputs = JSON.stringify(JSON.parse(stored.durable_inputs ?? stored.inputs).json);
+  return stored;
+}
+
+async function until(condition: () => Promise<boolean>) {
+  const deadline = Date.now() + 15_000;
+  while (!(await condition())) {
+    if (Date.now() > deadline) throw new Error('Native worker did not catch up');
+    await Bun.sleep(10);
+  }
+}
+
+async function seedMedia(data: ReturnType<typeof uploaded>, db = admin) {
   await db.query(
     `INSERT INTO content.media
      (route,media_id,container_id,uploader_id,reservation_request_id,purpose,media_type,
       byte_count,actual_byte_count,sha256,state,key,transaction_id)
      VALUES ($1,$2,$3,$4,$5,'post-image','image/jpeg',12,12,$6,'uploaded',$7,$8)`,
     [
-      route,
+      routeOf(data.mediaId),
       data.mediaId,
       data.containerId,
       data.actorId,
@@ -99,351 +126,404 @@ async function seedUploaded(data: ReturnType<typeof uploaded>, db = admin) {
   );
 }
 
-async function until(condition: () => Promise<boolean> | boolean) {
-  const deadline = Date.now() + 10_000;
-  while (!(await condition())) {
-    if (Date.now() > deadline) throw new Error('Relay did not catch up');
-    await Bun.sleep(10);
-  }
-}
-
-test('shared production relays apply board and report projections outside source checkout', async () => {
-  const system = await createContentSystem({ databaseUrl: url });
-  const db = system.database.pool;
-  const single = createPool(db.options.connectionString!, { max: 1 });
-  const dependencies = { pool: db, access: system.access, routeKey: system.routeKey };
-  const boardId = newId(0x7130);
-  const relays = contentRelays(db, client);
-  expect(relays.map((relay) => relay.consumer)).toEqual(['content_board', 'content_reports', 'content_media']);
-  const runner = startRelays(db, relays, { concurrency: 1, intervalMs: 10 });
-  try {
-    await runner.pause();
-    await system.database.admin.query(
-      `INSERT INTO content.board
-       (route,board_id,subject_id,title,visibility,security_revision,recorded_transaction_id)
-       VALUES ($1,$2,$3,'Board','published',1,$4)`,
-      [0x7130, boardId, newId(0x7130), crypto.randomUUID()],
-    );
-    const thread = await createThread(
-      dependencies,
-      system.actors.author.actor,
-      {
-        title: 'Private authored title',
-        body: fromPlainText('Private authored body'),
-        licence: 'CC-BY-4.0',
-        subjectIds: [],
-        boardId,
-        visibility: 'published',
-      },
-      request(),
-    );
-    const target = { kind: 'thread' as const, id: thread.value.threadId };
-    const report = await createReport(
-      dependencies,
-      system.actors.other.actor,
-      { target, reason: 'Private reason' },
-      request(),
-    );
-    const candidates = () => readBoardCandidates(db, boardId, null, 100);
-    const reports = () =>
-      listTargetReports(
-        dependencies,
-        target,
-        {
-          actor: system.actors.moderator.actor,
-          deadline: Date.now() + 30_000,
-        },
-        undefined,
-        100,
-      );
-    expect((await candidates()).candidates).toEqual([]);
-    expect((await reports()).entries).toEqual([]);
-    runner.resume();
-    await until(async () => (await candidates()).candidates.some((row) => row.id === thread.value.threadId));
-    await until(async () => (await reports()).entries.some((row) => row.id === report.value.reportId));
-    await runner.pause();
-    const before = await candidates();
-    const beforeReports = await reports();
-    // Replay the original envelopes, even after receipt deletion. Projection keys and positions own idempotency.
-    await system.database.admin.query('DELETE FROM core.command_receipt WHERE partition_no = ANY($1::int[])', [
-      [thread.partition, report.partition],
-    ]);
-    await system.database.admin.query(
-      `UPDATE core.consumer_checkpoint SET position=0,epoch=NULL
-       WHERE consumer IN ('content_board','content_reports') AND partition_no = ANY($1::int[])`,
-      [[thread.partition, report.partition]],
-    );
-    for (const relay of contentRelays(single, client).slice(0, 2)) {
-      for (const partition of new Set([thread.partition, report.partition])) await relay.run(partition);
-    }
-    expect((await candidates()).candidates).toEqual(before.candidates);
-    expect((await reports()).entries).toEqual(beforeReports.entries);
-    expect(single.waitingCount).toBe(0);
-    expect(single.totalCount - single.idleCount).toBe(0);
-  } finally {
-    await runner.stop();
-    await single.end();
-    await system.close();
-  }
-});
-
-test('uploaded and erased media enqueue deterministic durable DBOS work without executing it in the API process', async () => {
+test('native durable media and URL import use actual event sequence and partitioned deterministic IDs without an executor', async () => {
   const partition = freshPartition();
-  const data = uploaded(partition);
-  await seedUploaded(data);
+  const first = uploaded(partition);
+  await seedMedia(first);
+  const second = uploaded(partition);
   const erased = uploaded(partition);
   const rejected = uploaded(partition);
+  const imported = uploaded(partition);
   const envelope = await append(partition, [
-    { type: 'com.rezics.content.media.uploaded.v1', data },
+    { type: 'com.rezics.subject.created.v1', data: { id: newId(16) } },
+    { type: 'com.rezics.content.media.uploaded.v1', data: first },
+    { type: 'com.rezics.content.media.uploaded.v1', data: second },
     { type: 'com.rezics.content.media.erased.v1', data: { mediaId: erased.mediaId, containerId: erased.containerId } },
     {
       type: 'com.rezics.content.media.rejected.v1',
-      data: {
-        mediaId: rejected.mediaId,
-        containerId: rejected.containerId,
-        decisionId: crypto.randomUUID(),
-      },
+      data: { mediaId: rejected.mediaId, containerId: rejected.containerId, decisionId: newId(16) },
     },
+    { type: 'com.rezics.content.media.import-requested.v1', data: { mediaId: imported.mediaId } },
   ]);
-  const relay = mediaRelay();
-  expect(await relay.run(partition)).toMatchObject({ status: 'read', envelopes: 1, position: envelope.position });
+  expect(DBOS.isInitialized()).toBe(false);
   for (const [index, kind, mediaId] of [
-    [0, 'image', data.mediaId],
-    [1, 'purge', erased.mediaId],
-    [2, 'purge', rejected.mediaId],
+    [1, 'image', first.mediaId],
+    [2, 'image', second.mediaId],
+    [3, 'purge', erased.mediaId],
+    [4, 'purge', rejected.mediaId],
+    [5, 'importFromUrl', imported.mediaId],
   ] as const) {
-    const id = contentWorkWorkflowId(envelope, index, kind, kind === 'purge' ? mediaId : undefined);
-    expect(await client.getWorkflow(id)).toMatchObject({
+    const event = envelope.events[index]!;
+    const effect = effectFor(event);
+    await effect.run(event);
+    await effect.run(event);
+    const id = contentWorkWorkflowId(envelope, index, kind, kind === 'image' ? undefined : mediaId);
+    expect(await row(id)).toMatchObject({
       status: 'ENQUEUED',
-      workflowName: CONTENT_WORKFLOWS[kind],
-      queueName: CONTENT_QUEUES[kind],
-      applicationName: 'rezics-kernel',
-      ...(kind === 'image' ? { queuePartitionKey: String(partition) } : {}),
-      input: [{ mediaId, source: contentWorkSource(envelope, index) }],
+      name: CONTENT_WORKFLOWS[kind],
+      queue_name: CONTENT_QUEUES[kind],
+      inputs: JSON.stringify([{ mediaId, source: contentWorkSource(envelope, index) }]),
+      ...(kind === 'image' || kind === 'importFromUrl' ? { queue_partition_key: String(partition) } : {}),
     });
-    expect(
-      (await admin.query('SELECT workflow_uuid FROM dbos.workflow_status WHERE workflow_uuid=$1', [id])).rows,
-    ).toHaveLength(1);
+    expect((await admin.query('SELECT 1 FROM dbos.workflow_status WHERE workflow_uuid=$1', [id])).rows).toHaveLength(1);
   }
   expect(
     (
       await admin.query('SELECT state FROM content.media WHERE route=$1 AND media_id=$2', [
-        partition * 16,
-        data.mediaId,
+        routeOf(first.mediaId),
+        first.mediaId,
       ])
     ).rows,
   ).toEqual([{ state: 'uploaded' }]);
-  await admin.query('UPDATE core.consumer_checkpoint SET position=0,epoch=NULL WHERE consumer=$1 AND partition_no=$2', [
-    relay.consumer,
-    partition,
-  ]);
-  await relay.run(partition);
   expect(
     (
-      await client.listWorkflows({
-        workflowIDs: envelope.events.map((_, index) =>
-          contentWorkWorkflowId(
-            envelope,
-            index,
-            index === 0 ? 'image' : 'purge',
-            index === 0 ? undefined : index === 1 ? erased.mediaId : rejected.mediaId,
-          ),
-        ),
-      })
-    ).length,
-  ).toBe(3);
+      await admin.query("SELECT 1 FROM core.consumer_checkpoint WHERE consumer LIKE 'content_%' AND partition_no=$1", [
+        partition,
+      ])
+    ).rows,
+  ).toEqual([]);
 });
 
-test('failed enqueue cannot advance checkpoint', async () => {
+test('failed native enqueue retries with the same identity and no lost or duplicate work', async () => {
   const partition = freshPartition();
   const envelope = await append(partition, [
     { type: 'com.rezics.content.media.uploaded.v1', data: uploaded(partition) },
   ]);
-  const failing = await DBOSClient.create({
-    systemDatabaseUrl: url,
-    systemDatabaseSchemaName: 'missing_content_dbos',
-    applicationName: 'rezics-kernel',
-    systemDatabasePoolSize: 2,
-  });
-  try {
-    await expect(mediaRelay(pool, failing).run(partition)).rejects.toThrow();
-    expect(await checkpoint('content_media', partition)).toBe(0n);
-    expect(await client.getWorkflow(contentWorkWorkflowId(envelope, 0, 'image'))).toBeNull();
-    await mediaRelay().run(partition);
-    expect(await checkpoint('content_media', partition)).toBe(envelope.position);
-    expect(await client.getWorkflow(contentWorkWorkflowId(envelope, 0, 'image'))).toMatchObject({ status: 'ENQUEUED' });
-  } finally {
-    await failing.destroy();
-  }
+  const event = envelope.events[0]!;
+  const failing = await createWorkClient(url);
+  await failing.close();
+  const id = contentWorkWorkflowId(envelope, 0, 'image');
+  await expect(effectFor(event, pool, failing).run(event)).rejects.toThrow();
+  expect(await row(id)).toBeUndefined();
+  await effectFor(event).run(event);
+  await effectFor(event).run(event);
+  expect(await row(id)).toMatchObject({ status: 'ENQUEUED', queue_partition_key: String(partition) });
+  expect((await admin.query('SELECT 1 FROM dbos.workflow_status WHERE workflow_uuid=$1', [id])).rows).toHaveLength(1);
 });
 
-test('enqueue committed before failed acknowledgment replays the same durable work', async () => {
+test('malformed, unanchored, wrong and unknown closed events are rejected without guessing a position or event index', async () => {
   const partition = freshPartition();
   const envelope = await append(partition, [
     { type: 'com.rezics.content.media.uploaded.v1', data: uploaded(partition) },
   ]);
-  const connection = await admin.connect();
-  try {
-    await connection.query(`CREATE FUNCTION pg_temp.reject_content_ack() RETURNS trigger LANGUAGE plpgsql AS $$
-      BEGIN RAISE EXCEPTION 'forced checkpoint acknowledgment failure'; END $$`);
-    await connection.query(`CREATE TRIGGER reject_content_ack BEFORE UPDATE ON core.consumer_checkpoint
-      FOR EACH ROW WHEN (NEW.consumer='content_media' AND NEW.partition_no=${partition} AND NEW.position>OLD.position)
-      EXECUTE FUNCTION pg_temp.reject_content_ack()`);
-    await expect(mediaRelay().run(partition)).rejects.toThrow('forced checkpoint acknowledgment failure');
-    expect(await checkpoint('content_media', partition)).toBe(0n);
-    const id = contentWorkWorkflowId(envelope, 0, 'image');
-    expect(await client.getWorkflow(id)).toMatchObject({ status: 'ENQUEUED' });
-    await connection.query('DROP TRIGGER reject_content_ack ON core.consumer_checkpoint');
-    await mediaRelay().run(partition);
-    expect(await checkpoint('content_media', partition)).toBe(envelope.position);
-    expect(
-      (await admin.query('SELECT workflow_uuid FROM dbos.workflow_status WHERE workflow_uuid=$1', [id])).rows,
-    ).toHaveLength(1);
-  } finally {
-    await connection.query('DROP TRIGGER IF EXISTS reject_content_ack ON core.consumer_checkpoint');
-    connection.release();
-  }
-});
-
-test('shared pause waits for in-flight work, resume catches up, and stop releases work', async () => {
-  const partition = freshPartition();
-  const relay = mediaRelay();
-  let release!: () => void;
-  const gate = new Promise<void>((resolve) => (release = resolve));
-  let reached = false;
-  const wrapped: Relay = {
-    consumer: relay.consumer,
-    async run(current) {
-      const result = await relay.run(current);
-      if (current === partition && result.status === 'read' && result.envelopes > 0) {
-        reached = true;
-        await gate;
-      }
-      return result;
-    },
-  };
-  const first = await append(partition, [{ type: 'com.rezics.content.media.uploaded.v1', data: uploaded(partition) }]);
-  const runner = startRelays(pool, [wrapped], { intervalMs: 10, concurrency: 1 });
-  try {
-    await until(() => reached);
-    let paused = false;
-    const pausing = runner.pause().then(() => {
-      paused = true;
-    });
-    await Bun.sleep(30);
-    expect(paused).toBe(false);
-    expect(await client.getWorkflow(contentWorkWorkflowId(first, 0, 'image'))).toMatchObject({ status: 'ENQUEUED' });
-    release();
-    await pausing;
-    const second = await append(partition, [
-      { type: 'com.rezics.content.media.uploaded.v1', data: uploaded(partition) },
-    ]);
-    await Bun.sleep(30);
-    expect(await client.getWorkflow(contentWorkWorkflowId(second, 0, 'image'))).toBeNull();
-    runner.resume();
-    await until(async () => (await checkpoint(relay.consumer, partition)) === second.position);
-    await runner.stop();
-    const third = await append(partition, [
-      { type: 'com.rezics.content.media.uploaded.v1', data: uploaded(partition) },
-    ]);
-    await Bun.sleep(30);
-    expect(await client.getWorkflow(contentWorkWorkflowId(third, 0, 'image'))).toBeNull();
-    expect(pool.waitingCount).toBe(0);
-  } finally {
-    release();
-    await runner.stop();
-  }
-});
-
-test('unrelated closed events retain their own consumers and kernel poison rules', async () => {
-  for (const type of Object.keys(CONTENT_EVENTS)) expect(Object.hasOwn(EVENT_TYPES, type)).toBe(true);
-  const partition = freshPartition();
-  const event = { type: 'com.rezics.subject.created.v1', data: { id: newId(16) } };
-  const envelope = await append(partition, [event]);
-  await mediaRelay().run(partition);
-  expect(await checkpoint('content_media', partition)).toBe(envelope.position);
-  expect(await checkpoint('effects', partition)).toBe(0n);
-  expect(await checkpoint('content_board', partition)).toBe(0n);
-  for (const [poison, reason] of [
-    [{ type: 'com.rezics.content.unknown.v1', data: {} }, 'unknown_type'],
-    [
-      { type: 'com.rezics.content.media.uploaded.v1', data: { ...uploaded(partition), body: 'private' } },
-      'invalid_data',
-    ],
+  const event = envelope.events[0]!;
+  const effect = effectFor(event);
+  for (const change of [
+    { source: 'urn:rezics:log:02500.1' },
+    { source: `urn:rezics:log:${partition}.0` },
+    { source: 'urn:rezics:log:4096.1' },
+    { source: `urn:rezics:log:${partition}.2147483648` },
+    { sequence: '1' },
+    { sequence: '0000000000000000000' },
+    { sequence: '9223372036854775808' },
+    { id: 'invalid' },
+    { id: crypto.randomUUID() },
+    { sequence: '0000000000000000002' },
+    { source: `urn:rezics:log:${partition + 1}.1` },
+    { type: 'com.rezics.content.unknown.v1' },
+    { data: { ...(event.data as object), body: 'private authored bytes' } },
+    { type: 'com.rezics.subject.created.v1', data: { id: newId(16) } },
+  ])
+    await expect(effect.run({ ...event, ...change } as CloudEvent)).rejects.toThrow();
+  expect(await row(contentWorkWorkflowId(envelope, 0, 'image'))).toBeUndefined();
+  for (const [type, data, reason] of [
+    ['com.rezics.content.unknown.v1', {}, 'unknown_type'],
+    ['com.rezics.content.media.uploaded.v1', { ...uploaded(partition), body: 'private' }, 'invalid_data'],
   ] as const) {
     const broken = freshPartition();
-    await runCommand(pool, { partition: broken }, async () => ({ value: null, events: [poison] }));
-    expect(await mediaRelay().run(broken)).toEqual({ status: 'stopped', reason, envelopes: 0, position: 0n });
-    expect(await checkpoint('content_media', broken)).toBe(0n);
+    await runCommand(pool, { partition: broken }, async () => ({ value: null, events: [{ type, data }] }));
+    expect(
+      await readBatch(pool, {
+        consumer: 'effects',
+        partition: broken,
+        apply: async () => {
+          throw new Error('Poison delivered');
+        },
+      }),
+    ).toEqual({ status: 'stopped', reason, envelopes: 0, position: 0n });
   }
 });
 
-test('checkGrowth proves the declared three-scale machine-independent bound', async () => {
-  const db = await openGrowthDatabase(url);
-  const work = await DBOSClient.create({
-    systemDatabaseUrl: url,
-    systemDatabaseSchemaName: 'dbos',
-    applicationName: 'rezics-kernel',
-    systemDatabasePool: db.openPool({ max: 2 }),
-  });
+test('author erasure binds the validated native requested event before enqueue and survives enqueue failure', async () => {
   const partition = freshPartition();
-  const relay = mediaRelay(db.pool, work);
-  const actor = newId(16);
-  // Setup is outside measurement: unrelated media, native work and same-partition log history grow together.
-  async function grow(database: GrowthDatabase, scale: number, previous: number) {
-    for (let ordinal = previous; ordinal < scale; ordinal++) {
-      const current = ordinal % 2 === 0 ? partition : partition + 1;
-      const data = uploaded(current);
-      await seedUploaded(data, database.admin);
-      await runCommand(database.pool, { partition: current }, async () => ({
-        value: null,
-        events: [{ type: 'com.rezics.content.media.uploaded.v1', data }],
-      }));
+  const route = partition * 16;
+  const operationId = newId(route);
+  const threadId = newId(route + 1);
+  const authorId = newId(16);
+  await admin.query(
+    `INSERT INTO content.operation
+      (route,operation_id,initiator_account_id,author_account_id,thread_id,actor_kind,actor_account_id,
+       actor_client_id,actor_scopes,actor_authn_epoch,empty_scope,requested_at,recorded_transaction_id)
+     VALUES ($1,$2,$3,$3,$4,'account',$3,'rezics-web',ARRAY['content:write'],1,true,now(),$5)`,
+    [route, operationId, authorId, threadId, crypto.randomUUID()],
+  );
+  const envelope = await append(partition, [
+    { type: 'com.rezics.subject.created.v1', data: { id: newId(16) } },
+    { type: 'com.rezics.content.author-erasure.requested.v1', data: { operationId, threadId, authorId } },
+  ]);
+  const event = envelope.events[1]!;
+  const id = contentWorkWorkflowId(envelope, 1, 'authorErase', operationId);
+  const failing = await createWorkClient(url);
+  await failing.close();
+  await expect(effectFor(event, pool, failing).run(event)).rejects.toThrow();
+  expect(
+    (
+      await admin.query(
+        'SELECT native_workflow_id,source_event_index FROM content.operation WHERE route=$1 AND operation_id=$2',
+        [route, operationId],
+      )
+    ).rows,
+  ).toEqual([{ native_workflow_id: id, source_event_index: 1 }]);
+  expect(await row(id)).toBeUndefined();
+  await effectFor(event).run(event);
+  await effectFor(event).run(event);
+  expect(await row(id)).toMatchObject({
+    status: 'ENQUEUED',
+    name: CONTENT_WORKFLOWS.authorErase,
+    inputs: JSON.stringify([{ operationId, source: contentWorkSource(envelope, 1) }]),
+  });
+  const wrong = await append(partition, [
+    { type: event.type, data: { operationId, threadId: newId(route), authorId } },
+  ]);
+  await expect(effectFor(wrong.events[0]!).run(wrong.events[0]!)).rejects.toThrow();
+  expect(await row(contentWorkWorkflowId(wrong, 0, 'authorErase', operationId))).toBeUndefined();
+});
+
+const workerTest =
+  'module effects register through WorkContext.addEffects once in the sole worker and native retries project the correct partitions';
+test(
+  workerTest,
+  async () => {
+    if (process.env.CONTENT_EFFECT_CHILD !== '1') {
+      const child = Bun.spawn([process.execPath, 'test', import.meta.path, '--test-name-pattern', `^${workerTest}$`], {
+        env: { ...process.env, CONTENT_EFFECT_CHILD: '1', CONTENT_EFFECT_TEMPLATE: workerTemplateUrl },
+        stdout: 'pipe',
+        stderr: 'pipe',
+      });
+      const [code, output, errors] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      expect(code, `${output}\n${errors}`).toBe(0);
+      return;
     }
-    for (const current of [partition, partition + 1]) {
-      for (;;) {
-        const batch = await relay.run(current);
-        if (batch.status !== 'read') throw new Error(`Seed relay ${batch.status}`);
-        if (batch.envelopes === 0) break;
-      }
-    }
-    await database.admin.query('ANALYZE core.outbox');
-    await database.admin.query('ANALYZE core.consumer_checkpoint');
-    await database.admin.query('ANALYZE content.media');
-    await database.admin.query('ANALYZE dbos.workflow_status');
-  }
-  try {
-    const report = await checkGrowth(db, {
-      name: 'content media relay fixed changed set',
-      scales: [32, 256, 2048],
-      grow,
-      bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
-      async operation(database, _scale, repetition) {
-        // Fresh receipts ensure every measured call really writes and enqueues one changed object.
-        const result = await runCommand(
-          database.pool,
-          {
-            partition,
-            receipt: {
-              actorAccountId: actor,
-              kind: 'relay_probe',
-              key: `probe-${repetition}`,
-              digest: new Uint8Array(32),
-            },
-          },
-          async () => ({
-            value: null,
-            events: [{ type: 'com.rezics.content.media.uploaded.v1', data: uploaded(partition) }],
-          }),
+    const databaseUrl = workerTemplateUrl!;
+    const db = createPool(databaseUrl);
+    const dbAdmin = new pg.Pool({ connectionString: databaseUrl });
+    const workClient = await createWorkClient(databaseUrl);
+    const register = spyOn(DBOS, 'registerWorkflow');
+    let additions = 0;
+    let effects: Effect[] = [];
+    const module: WorkModule = {
+      name: 'content_effect_fixture',
+      register(context) {
+        expect(DBOS.isInitialized()).toBe(false);
+        effects = contentEffects(context.pool, context.client);
+        // The minimal fixture has no media executor. Stop further native queue
+        // dispatch only after this shared effect has started, leaving its retry
+        // active while the resulting media work remains durably queued.
+        const image = effects.find((effect) => effect.types.includes('com.rezics.content.media.uploaded.v1'))!;
+        const runImage = image.run;
+        image.run = async (event) => {
+          const queue = (await context.client.retrieveQueue('effects'))!;
+          await queue.setWorkerConcurrency(0);
+          // Native queue discovery refreshes database configuration once a second.
+          await Bun.sleep(1200);
+          await runImage(event);
+        };
+        context.addEffects(effects);
+        additions++;
+      },
+    };
+    let worker: Awaited<ReturnType<typeof startWorker>> | undefined;
+    try {
+      // This sequence advances outside transaction rollback: the first real durable insert fails once.
+      await dbAdmin.query('CREATE SEQUENCE public.content_enqueue_attempt');
+      await dbAdmin.query(`CREATE FUNCTION public.fail_content_enqueue() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN IF NEW.name='content.image' AND nextval('public.content_enqueue_attempt')=1 THEN
+        RAISE EXCEPTION 'native content enqueue retry'; END IF; RETURN NEW; END $$`);
+      await dbAdmin.query(`CREATE TRIGGER content_enqueue_retry BEFORE INSERT ON dbos.workflow_status
+      FOR EACH ROW EXECUTE FUNCTION public.fail_content_enqueue()`);
+      worker = await startWorker({ databaseUrl, poolSize: 10, executorId: 'content-effects-fixture' }, [module]);
+      expect(additions).toBe(1);
+      expect(register.mock.calls.filter((call) => call[1]?.name === 'effect')).toHaveLength(1);
+      expect(register.mock.calls.map((call) => call[1]?.name)).toEqual(['effect']);
+      expect(new Set(effects.map((effect) => effect.name)).size).toBe(effects.length);
+      const boardId = newId(0x7130);
+      await dbAdmin.query(
+        `INSERT INTO content.board
+      (route,board_id,subject_id,title,visibility,security_revision,recorded_transaction_id)
+      VALUES ($1,$2,$3,'Board','published',1,$4)`,
+        [0x7130, boardId, newId(0x7130), crypto.randomUUID()],
+      );
+      // Seed immutable source facts through native command/outbox fences. This
+      // fixture composes only content effects; Auth owns a separate DBOS runtime.
+      const threadId = newId(0x1234);
+      const itemId = newId(0x1234);
+      const revisionId = newId(0x1234);
+      const actorId = newId(16);
+      const thread = await runCommand(db, { partition: partitionOf(0x1234) }, async (tx, context) => {
+        await tx.query(
+          `INSERT INTO content.thread
+          (route,thread_id,author_account_id,board_id,title,visibility,security_revision,recorded_transaction_id)
+          VALUES ($1,$2,$3,$4,'Private title','published',1,$5)`,
+          [0x1234, threadId, actorId, boardId, context.transactionId],
         );
-        expect(await relay.run(partition)).toMatchObject({ status: 'read', envelopes: 1, position: result.position });
+        return {
+          value: { threadId },
+          events: [
+            {
+              type: 'com.rezics.content.thread.created.v1',
+              subject: threadId,
+              data: { threadId, itemId, revisionId, actorId },
+            },
+          ],
+        };
+      });
+      const target = { kind: 'thread' as const, id: threadId };
+      const reportId = newId(0x5678);
+      const report = await runCommand(db, { partition: partitionOf(0x5678) }, async (tx, context) => {
+        await tx.query(
+          `INSERT INTO content.report
+          (route,report_id,target_kind,target_id,reason,evidence,reporter_account_id,created_at,recorded_transaction_id)
+          VALUES ($1,$2,'thread',$3,'spam','Private evidence',$4,now(),$5)`,
+          [0x5678, reportId, threadId, actorId, context.transactionId],
+        );
+        return {
+          value: { reportId },
+          events: [
+            {
+              type: 'com.rezics.content.report.created.v1',
+              subject: reportId,
+              data: { reportId, targetKind: target.kind, targetId: target.id },
+            },
+          ],
+        };
+      });
+      const candidates = () => readBoardCandidates(db, boardId, null, 100);
+      const reports = async () => ({
+        entries: (
+          await db.query<{ id: string }>(
+            `SELECT report_id AS id FROM content.report_target
+         WHERE route=$1 AND target_kind=$2 AND target_id=$3 ORDER BY report_id`,
+            [routeOf(target.id), target.kind, target.id],
+          )
+        ).rows,
+      });
+      await until(async () =>
+        (await candidates()).candidates.some((candidate) => candidate.id === thread.value.threadId),
+      );
+      await until(async () => (await reports()).entries.some((entry) => entry.id === report.value.reportId));
+      expect(partitionOf(routeOf(boardId)!)).not.toBe(thread.partition);
+      expect(report.partition).not.toBe(thread.partition);
+      const partition = 2700;
+      const envelope = await append(
+        partition,
+        [{ type: 'com.rezics.content.media.uploaded.v1', data: uploaded(partition) }],
+        db,
+      );
+      const event = envelope.events[0]!;
+      const enqueueEffect = effects.find((effect) => effect.types.includes(event.type))!;
+      const effectId = effectWorkflowId(envelope, 0, enqueueEffect.name);
+      await DBOS.retrieveWorkflow(effectId).getResult();
+      const id = contentWorkWorkflowId(envelope, 0, 'image');
+      expect(await row(id, dbAdmin)).toMatchObject({
+        status: 'ENQUEUED',
+        queue_partition_key: String(partition),
+        inputs: JSON.stringify([
+          { mediaId: (event.data as { mediaId: string }).mediaId, source: contentWorkSource(envelope, 0) },
+        ]),
+      });
+      expect((await dbAdmin.query('SELECT last_value FROM public.content_enqueue_attempt')).rows[0].last_value).toBe(
+        '2',
+      );
+      expect(
+        (await dbAdmin.query('SELECT 1 FROM dbos.workflow_status WHERE workflow_uuid=$1', [id])).rows,
+      ).toHaveLength(1);
+      const before = await candidates();
+      const beforeReports = await reports();
+      for (const effect of effects.slice(0, 2)) {
+        const { rows } = await dbAdmin.query(
+          `SELECT wi.inputs FROM dbos.workflow_status ws JOIN dbos.workflow_input wi USING (workflow_uuid)
+         WHERE ws.name=$1 AND wi.inputs::jsonb->'json'->>0=$2`,
+          ['effect', effect.name],
+        );
+        for (const stored of rows) await effect.run(JSON.parse(stored.inputs).json[1]);
+      }
+      expect((await candidates()).candidates).toEqual(before.candidates);
+      expect((await reports()).entries).toEqual(beforeReports.entries);
+      expect(
+        (await dbAdmin.query("SELECT DISTINCT consumer FROM core.consumer_checkpoint WHERE consumer LIKE 'content_%'"))
+          .rows,
+      ).toEqual([]);
+      expect(await workClient.getWorkflow(effectId)).toMatchObject({
+        status: 'SUCCESS',
+        queuePartitionKey: String(partition),
+      });
+    } finally {
+      register.mockRestore();
+      await worker?.stop();
+      await workClient.close();
+      await dbAdmin.end();
+      await db.end();
+    }
+  },
+  60_000,
+);
+
+test('checkGrowth measures actual deterministic native enqueue against same-partition media history and work', async () => {
+  const db = await openGrowthDatabase(url);
+  const work = await createWorkClient(url, db.openPool({ max: 2 }));
+  const partition = freshPartition();
+  const envelope = await append(
+    partition,
+    [{ type: 'com.rezics.content.media.uploaded.v1', data: uploaded(partition) }],
+    db.pool,
+  );
+  const event = envelope.events[0]!;
+  const effect = effectFor(event, db.pool, work);
+  try {
+    // Native table sizes are informative before the smallest measured scale.
+    // Checkpoints span many partitions/consumers without touching the target.
+    await db.admin.query(`INSERT INTO core.consumer_checkpoint (partition_no,consumer,epoch,position)
+      SELECT 3000 + n % 500, 'growth_' || (n / 500)::text, NULL, 0 FROM generate_series(0,999) AS n`);
+    for (let index = 0; index < 512; index++) {
+      const data = uploaded(partition + 1);
+      const source = await append(partition + 1, [{ type: event.type, data }], db.pool);
+      await effect.run(source.events[0]!);
+    }
+    const report = await checkGrowth(db, {
+      name: 'content native enqueue fixed source and changed set',
+      scales: [32, 256, 2048],
+      bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+      async grow(_database, scale, previous) {
+        for (let index = previous; index < scale; index++) {
+          const data = uploaded(partition);
+          await seedMedia(data, db.admin);
+          const source = await append(partition, [{ type: event.type, data }], db.pool);
+          await effect.run(source.events[0]!);
+        }
+        for (const relation of [
+          'core.outbox',
+          'core.consumer_checkpoint',
+          'content.media',
+          'dbos.workflow_status',
+          'dbos.workflow_input',
+        ])
+          await db.admin.query(`VACUUM (ANALYZE) ${relation}`);
+      },
+      async operation() {
+        await effect.run(event);
       },
     });
     expect(report.samples.map((sample) => sample.scale)).toEqual([32, 256, 2048]);
     expect(report.samples.every((sample) => sample.cost.rows > 0 && sample.cost.statements > 0)).toBe(true);
+    expect(report.samples.at(-1)!.cost.relations?.['core.outbox']?.sequentialScans).toBe(0);
+    expect(await row(contentWorkWorkflowId(envelope, 0, 'image'))).toMatchObject({ status: 'ENQUEUED' });
     console.info(JSON.stringify(report));
   } finally {
-    await work.destroy();
+    await work.close();
     await db.close();
   }
-});
+}, 90_000);
