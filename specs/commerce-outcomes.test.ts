@@ -38,7 +38,7 @@ async function order(id: string, as: Persona = 'buyer') {
   return (await body<{ order: OrderView }>(await get(as, `/v1/orders/${id}`))).order;
 }
 async function listing(as: Persona = 'buyer') {
-  return body<{ items: EntitlementView[]; next: string | null }>(await get(as, '/v1/entitlements'));
+  return body<{ entitlements: EntitlementView[]; next: string | null }>(await get(as, '/v1/entitlements'));
 }
 async function checkout(as: Persona = 'buyer', offer?: OfferFixture) {
   const selected = offer ?? await driver.provisionOffer();
@@ -115,7 +115,7 @@ test('anonymous reads an offer but cannot create orders list entitlements or dis
     expect(absent).toMatchObject({ code: 'not_found' });
     expect(hidden).toEqual(absent);
   }
-  expect((await listing()).items).toEqual([fixture.entitlement]);
+  expect((await listing()).entitlements).toEqual([fixture.entitlement]);
 });
 
 test('buyer checkout snapshots the offer at T in the buyer partition and sends inline Stripe prices', async () => {
@@ -172,8 +172,8 @@ test('signed paid completion grants once and other sees only the same 404 as an 
     route: driver.accounts.buyer.route, partition: driver.accounts.buyer.partition,
   })]);
   expect(await events('entitlement.granted')).toHaveLength(1);
-  expect(await listing()).toEqual({ items: [fixture.entitlement], next: null });
-  expect(await listing('other')).toEqual({ items: [], next: null });
+  expect(await listing()).toEqual({ entitlements: [fixture.entitlement], next: null });
+  expect(await listing('other')).toEqual({ entitlements: [], next: null });
   for (const [kind, id, unknown] of [
     ['orders', fixture.order.id, driver.unknown.orderId],
     ['entitlements', fixture.entitlement.id, driver.unknown.entitlementId],
@@ -194,7 +194,7 @@ test('async unpaid completion stays pending until async payment succeeds', async
   await driver.stripe.asyncPay(fixture.sessionId);
   await notify(fixture.sessionId, 'checkout.session.async_payment_succeeded');
   expect((await order(fixture.order.id)).settlement).toBe('paid');
-  expect((await listing()).items).toEqual([expect.objectContaining({ orderId: fixture.order.id, active: true })]);
+  expect((await listing()).entitlements).toEqual([expect.objectContaining({ orderId: fixture.order.id, active: true })]);
   expect(await events('entitlement.granted')).toHaveLength(1);
 });
 
@@ -259,7 +259,7 @@ test('wrong secret tampered bytes missing header and stale timestamp reject with
   expect(await body(await deliver(message.bytes))).toEqual({ received: true });
   await driver.settle();
   expect((await order(fixture.order.id)).settlement).toBe('paid');
-  expect((await listing()).items[0]!.active).toBe(true);
+  expect((await listing()).entitlements[0]!.active).toBe(true);
 });
 
 test('forged completed for an unpaid session grants nothing while a real paid completion grants', async () => {
@@ -271,7 +271,7 @@ test('forged completed for an unpaid session grants nothing while a real paid co
   await noGrant(fixture.order.id, 'pending');
   await driver.stripe.pay(fixture.sessionId);
   await notify(fixture.sessionId);
-  expect((await listing()).items).toEqual([expect.objectContaining({ orderId: fixture.order.id, active: true })]);
+  expect((await listing()).entitlements).toEqual([expect.objectContaining({ orderId: fixture.order.id, active: true })]);
 });
 
 test('validly signed payload claiming paid cannot override an unpaid current Stripe session', async () => {
@@ -283,7 +283,7 @@ test('validly signed payload claiming paid cannot override an unpaid current Str
   await noGrant(fixture.order.id, 'pending');
   await driver.stripe.asyncPay(fixture.sessionId);
   await notify(fixture.sessionId, 'checkout.session.async_payment_succeeded');
-  expect((await listing()).items[0]!.active).toBe(true);
+  expect((await listing()).entitlements[0]!.active).toBe(true);
 });
 
 test('refunded buyer keeps a listed inactive entitlement after a full Stripe-originated refund', async () => {
@@ -293,10 +293,10 @@ test('refunded buyer keeps a listed inactive entitlement after a full Stripe-ori
   const revoked = await entitlement(fixture.entitlement.id, 'refunded');
   expect(revoked).toMatchObject({ active: false, revokeReason: 'refund' });
   expect(Number.isFinite(Date.parse(revoked.revokedAt!))).toBe(true);
-  expect((await listing('refunded')).items).toEqual([revoked]);
+  expect((await listing('refunded')).entitlements).toEqual([revoked]);
   expect((await order(fixture.order.id, 'refunded')).settlement).toBe('paid');
   expect(await events('entitlement.revoked')).toHaveLength(1);
-  expect(await listing('other')).toEqual({ items: [], next: null });
+  expect(await listing('other')).toEqual({ entitlements: [], next: null });
 });
 
 test('partial refund preserves the entitlement and a subsequent full refund revokes it', async () => {
@@ -323,7 +323,7 @@ test('refund events arriving before checkout completion never grant an entitleme
   expect((await driver.inspect()).entitlements).toEqual([]);
   expect(await events('entitlement.granted')).toEqual([]);
   const control = await paid();
-  expect((await listing()).items).toEqual([control.entitlement]);
+  expect((await listing()).entitlements).toEqual([control.entitlement]);
 });
 
 async function dispute(status: 'won' | 'lost') {
@@ -364,7 +364,7 @@ test('delisting prevents new checkout but preserves an existing entitlement', as
   await driver.reviseOffer(fixture.offer.id, { state: 'delisted' });
   expect(await body(await create('buyer', fixture.offer.id), 409)).toMatchObject({ code: 'offer_unavailable' });
   expect(await entitlement(fixture.entitlement.id)).toEqual(fixture.entitlement);
-  expect((await listing()).items).toEqual([fixture.entitlement]);
+  expect((await listing()).entitlements).toEqual([fixture.entitlement]);
   expect((await driver.inspect()).orders).toHaveLength(1);
   expect(await driver.stripe.sessions()).toHaveLength(1);
   expect((await create('buyer', driver.unknown.offerId)).status).toBe(404);
@@ -427,7 +427,7 @@ test('create order webhook delivery and entitlement listing use equal statement 
     const webhook = await driver.measure(() => deliver(message.bytes));
     expect(await body(webhook.value)).toEqual({ received: true });
     const listed = await driver.measure(() => get('buyer', '/v1/entitlements'));
-    expect(await body(listed.value)).toEqual({ items: [control.entitlement], next: null });
+    expect(await body(listed.value)).toEqual({ entitlements: [control.entitlement], next: null });
     for (const measurement of [created, webhook, listed]) {
       expect(Number.isInteger(measurement.statements)).toBe(true);
       expect(measurement.statements).toBeGreaterThan(0);
@@ -439,5 +439,5 @@ test('create order webhook delivery and entitlement listing use equal statement 
   expect(counts[1]).toEqual(counts[0]);
   expect(counts[2]).toEqual(counts[0]);
   await driver.settle();
-  expect((await listing()).items.filter(item => item.active)).toHaveLength(4);
+  expect((await listing()).entitlements.filter(item => item.active)).toHaveLength(4);
 });
