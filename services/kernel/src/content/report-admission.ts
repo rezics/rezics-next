@@ -1,8 +1,12 @@
+import { deadlineClient, within } from '../access/authenticate.ts';
+import { discardConnection, withConnection } from '../database/pool.ts';
+import { readPartition } from '../partition/partition.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
 import { ANONYMOUS_PRINCIPAL_ID } from '../command/command.ts';
 import { ProblemError } from '../http/problem.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf } from '../http/request.ts';
-import type { Actor } from '../request/access.ts';
-import type { ReportRequestContext } from './reports.ts';
+import { accessCheck, type Actor } from '../request/access.ts';
+import type { ReportDependencies, ReportRequestContext } from './reports.ts';
 
 /** The shared request stage has already charged report/1 before this runs.
  * Proof stays ephemeral: only createReport's front phase may verify the token.
@@ -59,4 +63,43 @@ export async function parseReportBody(
     offset += chunk.byteLength;
   }
   return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) as unknown;
+}
+
+/** The page adapter uses an empty internal page for denied reads. HTTP must
+ * distinguish admission from an authorized empty page without inspecting any
+ * report references. Use the shared Access formula on the target's own anchor.
+ */
+export async function requireReportInspection(
+  dependencies: ReportDependencies,
+  targetId: string,
+  context: { actor: Actor; deadline: number },
+): Promise<void> {
+  const route = routeOf(targetId);
+  if (route === null || context.actor.kind !== 'account') throw new ProblemError('not_found');
+  const check = await accessCheck(
+    dependencies.access,
+    context.actor,
+    'moderation:read_reports',
+    { route, id: targetId },
+    { pool: dependencies.pool, deadline: context.deadline },
+  );
+  await within(context.deadline, () =>
+    withConnection(dependencies.pool, async (connection) => {
+      const client = deadlineClient(connection, context.deadline);
+      try {
+        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+        const partition = await readPartition(client, partitionOf(route));
+        if (!partition || partition.writeState === 'moved' || !(await check(client)))
+          throw new ProblemError('not_found');
+        await client.query('COMMIT');
+      } catch (error) {
+        try {
+          await connection.query('ROLLBACK');
+        } catch (rollbackError) {
+          discardConnection(connection, rollbackError as Error);
+        }
+        throw error;
+      }
+    }),
+  );
 }

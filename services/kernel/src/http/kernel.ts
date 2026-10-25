@@ -84,6 +84,7 @@ export function createKernel(dependencies: KernelDependencies) {
     access: () => resolveAccess({ actions: actionCatalogue(contextual) }),
   });
   const searched = searchRoutes(contextual, dependencies);
+  const anonymousVerifier = dependencies.reports?.anonymousVerifier ?? dependencies.content?.anonymousVerifier;
   const content = contentRoutes(searched as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
@@ -92,9 +93,7 @@ export function createKernel(dependencies: KernelDependencies) {
     tokens,
     ...(dependencies.content?.fetchConfig === undefined ? {} : { fetchConfig: dependencies.content.fetchConfig }),
     ...(dependencies.content?.workflows === undefined ? {} : { workflows: dependencies.content.workflows }),
-    ...((dependencies.reports?.anonymousVerifier ?? dependencies.content?.anonymousVerifier) === undefined
-      ? {}
-      : { anonymousVerifier: dependencies.reports?.anonymousVerifier ?? dependencies.content?.anonymousVerifier }),
+    ...(anonymousVerifier === undefined ? {} : { anonymousVerifier }),
     get access() {
       return resolveAccess({ actions: actionCatalogue(content) });
     },

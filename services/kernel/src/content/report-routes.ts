@@ -5,11 +5,11 @@ import { ProblemError, problemSchema } from '../http/problem.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, SESSION_HEADER } from '../http/request.ts';
 import { routeOf } from '../route/route.ts';
-import type { definitionRoutes } from '../semantic/http/definitions.ts';
+import type { documentRoutes } from './document-routes.ts';
 import { ContentForbiddenError, ContentNotFoundError as CommandNotFoundError } from './commands.ts';
 import type { AnchoredPosition } from './model.ts';
 import { ContentNotFoundError as ReadNotFoundError } from './reads.ts';
-import { parseReportBody, reportRequestContext } from './report-admission.ts';
+import { parseReportBody, reportRequestContext, requireReportInspection } from './report-admission.ts';
 import {
   createReport,
   listTargetReports,
@@ -29,7 +29,7 @@ import {
 
 export type ReportRouteDependencies = ReportDependencies;
 const params = t.Object({ id: t.String() }, { additionalProperties: false });
-const sessionHeader = { [SESSION_HEADER]: t.String() };
+const privateHeaders = { [SESSION_HEADER]: t.String(), 'cache-control': t.String() };
 const readFailures = {
   400: problemSchema('invalid_request', 'invalid_cursor'),
   401: problemSchema('authentication_required', 'invalid_credentials'),
@@ -80,7 +80,7 @@ async function reportOperation<T>(operation: () => Promise<T>, inspection = fals
  * real report adapter. The shared request stage alone owns network attribution
  * and budget charging. No handler may spend again or verify a one-use proof.
  */
-export function reportRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: ReportRouteDependencies) {
+export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencies: ReportRouteDependencies) {
   const oversized = new WeakSet<Request>();
   const created = app
     .post(
@@ -93,7 +93,7 @@ export function reportRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
         headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true }),
         body: strictContentSchema(ReportInputSchema),
         response: {
-          201: withHeaders(strictContentSchema(ReportReceiptSchema), { ...sessionHeader, location: t.String() }),
+          201: withHeaders(strictContentSchema(ReportReceiptSchema), { ...privateHeaders, location: t.String() }),
           ...writeFailures,
         },
         detail: {
@@ -110,13 +110,15 @@ export function reportRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
         set.headers['cache-control'] = 'private, no-store';
         const { botToken, ...input } = body;
         const context = reportRequestContext(actor, request, job.deadline, botToken);
-        return reportOperation(() =>
-          admission.run('normal', job, async () => {
-            const result = await createReport(dependencies, actor, input, context);
-            session.record(result);
-            set.headers.location = `/v1/reports/${result.value.reportId}`;
-            return status(201, { reportId: result.value.reportId });
-          }),
+        return reportOperation(
+          () =>
+            admission.run('normal', job, async () => {
+              const result = await createReport(dependencies, actor, input, context);
+              session.record(result);
+              set.headers.location = `/v1/reports/${result.value.reportId}`;
+              return status(201, { reportId: result.value.reportId });
+            }),
+          actor.kind === 'anonymous',
         );
       },
     )
@@ -124,7 +126,7 @@ export function reportRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
       '/v1/reports/:id',
       {
         params,
-        response: { 200: withHeaders(strictContentSchema(ReportResponseSchema), sessionHeader), ...readFailures },
+        response: { 200: withHeaders(strictContentSchema(ReportResponseSchema), privateHeaders), ...readFailures },
         detail: {
           operationId: 'report.get',
           'x-exposure': 'public',
@@ -153,7 +155,7 @@ export function reportRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
   const listOptions = {
     params,
     query: ContentPageQuerySchema,
-    response: { 200: withHeaders(strictContentSchema(ReportPageResponseSchema), sessionHeader), ...readFailures },
+    response: { 200: withHeaders(strictContentSchema(ReportPageResponseSchema), privateHeaders), ...readFailures },
   };
   const board = created.get(
     '/v1/boards/:id/reports',
@@ -233,7 +235,15 @@ export function reportRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
     return reportOperation(
       () =>
         admit(async () => {
-          const page = await listTargetReports(dependencies, target, context, query.cursor, query.limit ?? 20);
+          await requireReportInspection(dependencies, target.id, context);
+          let page;
+          try {
+            page = await listTargetReports(dependencies, target, context, query.cursor, query.limit ?? 20);
+          } catch (error) {
+            if (query.cursor !== undefined && error instanceof TypeError) throw new ProblemError('invalid_cursor');
+            throw error;
+          }
+          await requireReportInspection(dependencies, target.id, context);
           session.record(component(page.anchor));
           return { reports: [...page.entries], next: page.nextCursor };
         }),

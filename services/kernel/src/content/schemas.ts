@@ -62,32 +62,34 @@ const reportTarget = t.Object(
   { kind: t.Union([t.Literal('board'), t.Literal('thread'), t.Literal('post')]), id: ContentIdSchema },
   closed,
 );
-const reportReason = t.Union(
-  ['off_topic', 'inappropriate', 'spam', 'illegal', 'other'].map((value) => t.Literal(value)),
-);
+const reportReason = t.Union([
+  t.Literal('off_topic'),
+  t.Literal('inappropriate'),
+  t.Literal('spam'),
+  t.Literal('illegal'),
+  t.Literal('other'),
+]);
 const reportInput = {
   target: reportTarget,
   revisionId: t.Optional(ContentIdSchema),
   botToken: t.Optional(t.String({ minLength: 1, maxLength: 2048 })),
 };
-export const ReportInputSchema = t.Union([
-  t.Object(
-    {
-      ...reportInput,
-      reason: t.Union([t.Literal('off_topic'), t.Literal('inappropriate'), t.Literal('spam')]),
-      evidence: t.Optional(t.String({ maxLength: 4096 })),
-    },
-    closed,
-  ),
-  t.Object(
-    {
-      ...reportInput,
-      reason: t.Union([t.Literal('illegal'), t.Literal('other')]),
-      evidence: t.String({ minLength: 1, maxLength: 4096 }),
-    },
-    closed,
-  ),
-]);
+export const ReportInputSchema = t.Object(
+  {
+    ...reportInput,
+    reason: reportReason,
+    evidence: t.Optional(t.String({ maxLength: 4096 })),
+  },
+  {
+    ...closed,
+    allOf: [
+      {
+        if: { properties: { reason: { enum: ['illegal', 'other'] } }, required: ['reason'] },
+        then: { required: ['evidence'], properties: { evidence: { type: 'string', minLength: 1 } } },
+      },
+    ],
+  },
+);
 export const ReportReceiptSchema = t.Object({ reportId: ContentIdSchema }, closed);
 export const ReportResponseSchema = t.Object(
   {

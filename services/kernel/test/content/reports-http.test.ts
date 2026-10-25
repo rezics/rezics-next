@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { createAuthService } from '@rezics/auth';
 import { exportJWK, generateKeyPair } from 'jose';
 import { randomUUID } from 'node:crypto';
@@ -111,20 +111,23 @@ describe('real migrated report HTTP and shared admission', () => {
   let app: ReturnType<typeof createKernel>;
   let noVerifier: ReturnType<typeof createKernel>;
   const remote = provider();
-  const author = newId(0x1234);
-  const moderator = newId(0x2345);
-  const other = newId(0x3456);
-  const board = newId(0x4567);
-  const secondBoard = newId(0x789a);
+  let author = newId(0x1234);
+  let moderator = newId(0x2345);
+  let other = newId(0x3456);
+  let board = newId(0x4567);
+  let secondBoard = newId(0x789a);
+  let grantor = newId(0x3467);
+  let peer = 0;
+  const roleRanges = new Map<string, string>();
   const issuer = 'https://report-auth.test';
   const audience = 'https://kernel.test';
   const password = 'report fixture password for native issuance';
-  const actions = ['report:create', 'board:read', 'moderation:read_reports'];
+  const actions = ['report:create', 'board:read', 'moderation:read_reports', 'access:grant'];
   const authDatabase = `reports_auth_${process.pid}`;
-  const approvals = new Set([author, moderator, other]);
+  const approvals = new Set<string>();
   const input = (targetId = board) => ({
     target: { kind: 'board', id: targetId },
-    reason: 'Report reason',
+    reason: 'spam',
     evidence: 'Report evidence',
   });
 
@@ -167,23 +170,6 @@ describe('real migrated report HTTP and shared admission', () => {
       },
     });
     await auth.internal.registerClient({ clientId: 'web', firstParty: true, scopes: actions });
-    for (const id of [author, moderator, other]) {
-      await db.admin.query(
-        "INSERT INTO access.account (route,account_id,kind,state,transaction_id) VALUES ($1,$2,'actor','pending',$2)",
-        [routeOf(id), id],
-      );
-      await auth.internal.provisionPassword({ authorization: id, email: `${id}@example.test`, password });
-      await db.admin.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
-        routeOf(id),
-        id,
-      ]);
-    }
-    for (const id of [board, secondBoard])
-      await db.admin.query(
-        `INSERT INTO content.board (route,board_id,subject_id,title,visibility,security_revision,recorded_transaction_id)
-       VALUES ($1,$2,$3,'Report board','published',1,$4)`,
-        [routeOf(id), id, newId(0x5678), randomUUID()],
-      );
     const access = (config: Parameters<typeof createAccess>[0]) =>
       createAccess({
         ...config,
@@ -200,14 +186,50 @@ describe('real migrated report HTTP and shared admission', () => {
       routeKey,
       tokens,
       access,
-      writeRate: createWriteRateLimiter({
-        secret,
-        overrides: JSON.stringify({ anonymous: { report: { maximum: 10000, seconds: 86400 } } }),
-      }),
-      ratePeer: () => '192.0.2.47',
+      writeRate: createWriteRateLimiter({ secret }),
+      // Distinct trusted network fixtures keep unrelated scenarios and seed
+      // requests within native budgets without changing product limits.
+      ratePeer: () => `2001:db8:${(++peer).toString(16)}::1`,
     };
     app = createKernel({ ...dependencies, reports: { anonymousVerifier: remote.verifier } });
     noVerifier = createKernel(dependencies);
+  });
+  beforeEach(async () => {
+    author = newId(0x1234);
+    moderator = newId(0x2345);
+    other = newId(0x3456);
+    grantor = newId(0x3467);
+    board = newId(0x4567);
+    secondBoard = newId(0x789a);
+    roleRanges.clear();
+    for (const id of [author, moderator, other, grantor]) {
+      approvals.add(id);
+      await db.admin.query(
+        "INSERT INTO access.account (route,account_id,kind,state,transaction_id) VALUES ($1,$2,'actor','pending',$2)",
+        [routeOf(id), id],
+      );
+      await auth.internal.provisionPassword({ authorization: id, email: `${id}@example.test`, password });
+      await db.admin.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
+        routeOf(id),
+        id,
+      ]);
+    }
+    for (const id of [board, secondBoard]) {
+      await db.admin.query(
+        `INSERT INTO content.board (route,board_id,subject_id,title,visibility,security_revision,recorded_transaction_id)
+       VALUES ($1,$2,$3,'Report board','published',1,$4)`,
+        [routeOf(id), id, newId(0x5678), randomUUID()],
+      );
+      // Only privileged setup rows grant the fixture grantor standing. Later
+      // grants and revocations go through the mounted production routes.
+      await db.admin.query(
+        `INSERT INTO access.resource_grant
+           (route,resource_id,subject_kind,subject_id,subject_role,action,valid,transaction_id)
+         SELECT $1,$2,'identity',$3,'',action,'(,)'::tstzrange,$4
+         FROM unnest($5::text[]) AS action`,
+        [routeOf(id), id, grantor, randomUUID(), ['access:grant', 'report:create', 'moderation:read_reports']],
+      );
+    }
   });
   afterAll(async () => {
     await authPool?.end();
@@ -222,7 +244,7 @@ describe('real migrated report HTTP and shared admission', () => {
       new Request(`${issuer}/signin`, {
         method: 'POST',
         headers: { origin: issuer, 'content-type': 'application/json' },
-        body: JSON.stringify({ email: `${id}@example.test`, password, client_id: 'web', scope: scopes }),
+        body: JSON.stringify({ account_id: id, password, client_id: 'web', scope: scopes }),
       }),
     );
     expect(signed.status).toBe(200);
@@ -265,10 +287,17 @@ describe('real migrated report HTTP and shared admission', () => {
   }
   async function effects() {
     // Administrative inspection is outside measured production operations.
+    // Mounted fixture grants have their own receipts/effects. This snapshot
+    // follows the report operation, including the actual private record table.
     return Promise.all(
-      ['core.receipt', 'core.outbox', 'content.board'].map(
-        async (table) =>
-          (await db.admin.query(`SELECT to_jsonb(r) AS row FROM ${table} r ORDER BY to_jsonb(r)::text`)).rows,
+      [
+        { table: 'core.receipt', where: "WHERE command_kind='content.report.create'" },
+        { table: 'core.outbox', where: `WHERE type='${reportEvent}'` },
+        { table: 'content.report', where: '' },
+        { table: 'content.board', where: '' },
+      ].map(
+        async ({ table, where }) =>
+          (await db.admin.query(`SELECT to_jsonb(r) AS row FROM ${table} r ${where} ORDER BY to_jsonb(r)::text`)).rows,
       ),
     );
   }
@@ -283,23 +312,30 @@ describe('real migrated report HTTP and shared admission', () => {
     expect(JSON.stringify(await effects())).not.toContain(proof);
     return result.body.reportId as string;
   }
+  async function permission(path: string, body: unknown) {
+    const result = await call('POST', path, body, { bearer: await issue(grantor) });
+    if (!result.response.ok)
+      throw new Error(`Fixture permission ${path}: ${result.response.status} ${JSON.stringify(result.body)}`);
+    return result.body as { grant: { valid: string } };
+  }
   async function grant(id: string, action: string, target = board) {
-    await db.admin.query(
-      "INSERT INTO access.resource_grant (route,resource_id,subject_id,action,valid,transaction_id) VALUES ($1,$2,$3,$4,'(,)'::tstzrange,$3) ON CONFLICT DO NOTHING",
-      [routeOf(target), target, id, action],
-    );
+    await permission('/v1/grants', {
+      resource: { route: routeOf(target), id: target },
+      subject: { kind: 'account', id },
+      actions: [action],
+      valid: '(,)',
+    });
   }
   async function moderation(enabled: boolean, target = board) {
-    await db.admin.query('DELETE FROM access.resource_role_grant WHERE route=$1 AND resource_id=$2 AND subject_id=$3', [
-      routeOf(target),
-      target,
-      moderator,
-    ]);
-    if (enabled)
-      await db.admin.query(
-        "INSERT INTO access.resource_role_grant (route,resource_id,subject_id,grant_role,valid,transaction_id) VALUES ($1,$2,$3,'report.moderator','(,)'::tstzrange,$3)",
-        [routeOf(target), target, moderator],
-      );
+    if (!enabled && !roleRanges.has(target)) return;
+    const result = await permission(enabled ? '/v1/roleGrants' : '/v1/roleGrants:revoke', {
+      resource: { route: routeOf(target), id: target },
+      subject: { kind: 'account', id: moderator },
+      role: 'report.moderator',
+      valid: enabled ? '(,)' : roleRanges.get(target),
+    });
+    if (enabled) roleRanges.set(target, result.grant.valid);
+    else roleRanges.delete(target);
   }
   async function barrier(reportId: string) {
     const rows = await db.admin.query(
@@ -373,7 +409,7 @@ describe('real migrated report HTTP and shared admission', () => {
     expect(await create(board, key)).toBe(id);
     expect(await effects()).toEqual(before);
     for (const change of [
-      { reason: 'Different reason' },
+      { reason: 'other' },
       { evidence: 'Different evidence' },
       { target: { kind: 'board', id: secondBoard } },
     ]) {
@@ -536,5 +572,5 @@ describe('real migrated report HTTP and shared admission', () => {
       expect(sample.cost.statements).toBeGreaterThan(0);
     }
     console.info(JSON.stringify(report));
-  });
+  }, 180_000);
 });
