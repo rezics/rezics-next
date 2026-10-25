@@ -38,7 +38,7 @@ CREATE TABLE public.account (
     password text,
     "createdAt" timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     "updatedAt" timestamp with time zone NOT NULL,
-    CONSTRAINT password_owner CHECK ((("providerId" = 'credential'::text) AND ("accountId" = "userId") AND (password IS NOT NULL)))
+    CONSTRAINT password_owner CHECK ((("providerId" = 'credential'::text) AND ("accountId" = "userId")))
 );
 
 
@@ -61,6 +61,69 @@ CREATE TABLE public.auth_consent (
     account_id text NOT NULL,
     client_id text NOT NULL,
     scopes text[] NOT NULL
+);
+
+
+--
+-- Name: auth_effect_receipt; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_effect_receipt (
+    receipt_id text NOT NULL,
+    account_id text NOT NULL,
+    purpose text NOT NULL,
+    minimum_authn_epoch integer NOT NULL,
+    CONSTRAINT auth_effect_receipt_minimum_authn_epoch_check CHECK ((minimum_authn_epoch >= 0))
+);
+
+
+--
+-- Name: auth_key_assertion; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_key_assertion (
+    account_id text NOT NULL,
+    jti text NOT NULL,
+    expires_at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: auth_public_key; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_public_key (
+    account_id text NOT NULL,
+    kid text NOT NULL,
+    public_jwk jsonb NOT NULL,
+    CONSTRAINT auth_public_key_public_jwk_check CHECK ((((public_jwk ->> 'alg'::text) = 'ES256'::text) AND (NOT (public_jwk ? 'd'::text)) AND (NOT (public_jwk ? 'k'::text))))
+);
+
+
+--
+-- Name: auth_recovery; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_recovery (
+    proof_hash text NOT NULL,
+    account_id text NOT NULL,
+    authn_epoch integer NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    CONSTRAINT auth_recovery_authn_epoch_check CHECK ((authn_epoch >= 0))
+);
+
+
+--
+-- Name: auth_session_opening; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_session_opening (
+    session_id text NOT NULL,
+    subject_account_id text NOT NULL,
+    acting_human_id text NOT NULL,
+    operator_account_id text NOT NULL,
+    receipt_id text NOT NULL,
+    opened_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
 
@@ -103,7 +166,7 @@ CREATE TABLE public.session (
     "authnEpoch" integer NOT NULL,
     "authTime" integer NOT NULL,
     "authMethods" text NOT NULL,
-    CONSTRAINT session_authentication CHECK ((("authnEpoch" >= 0) AND ("authTime" >= 0) AND ("authMethods" = 'pwd'::text)))
+    CONSTRAINT session_authentication CHECK ((("authnEpoch" >= 0) AND ("authTime" >= 0) AND ("authMethods" = ANY (ARRAY['pwd'::text, 'private_key_jwt'::text, 'operator'::text]))))
 );
 
 
@@ -114,7 +177,7 @@ CREATE TABLE public.session (
 CREATE TABLE public."user" (
     id text NOT NULL,
     name text NOT NULL,
-    email text NOT NULL,
+    email text,
     "emailVerified" boolean NOT NULL,
     image text,
     "createdAt" timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
@@ -159,6 +222,54 @@ ALTER TABLE ONLY public.auth_client
 
 ALTER TABLE ONLY public.auth_consent
     ADD CONSTRAINT auth_consent_pkey PRIMARY KEY (account_id, client_id);
+
+
+--
+-- Name: auth_effect_receipt auth_effect_receipt_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_effect_receipt
+    ADD CONSTRAINT auth_effect_receipt_pkey PRIMARY KEY (receipt_id);
+
+
+--
+-- Name: auth_key_assertion auth_key_assertion_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_key_assertion
+    ADD CONSTRAINT auth_key_assertion_pkey PRIMARY KEY (account_id, jti);
+
+
+--
+-- Name: auth_public_key auth_public_key_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_public_key
+    ADD CONSTRAINT auth_public_key_pkey PRIMARY KEY (account_id, kid);
+
+
+--
+-- Name: auth_recovery auth_recovery_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_recovery
+    ADD CONSTRAINT auth_recovery_pkey PRIMARY KEY (proof_hash);
+
+
+--
+-- Name: auth_session_opening auth_session_opening_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_session_opening
+    ADD CONSTRAINT auth_session_opening_pkey PRIMARY KEY (session_id);
+
+
+--
+-- Name: auth_session_opening auth_session_opening_receipt_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_session_opening
+    ADD CONSTRAINT auth_session_opening_receipt_id_key UNIQUE (receipt_id);
 
 
 --
@@ -268,6 +379,38 @@ ALTER TABLE ONLY public.auth_consent
 
 ALTER TABLE ONLY public.auth_consent
     ADD CONSTRAINT auth_consent_client_id_fkey FOREIGN KEY (client_id) REFERENCES public.auth_client(client_id) ON DELETE CASCADE;
+
+
+--
+-- Name: auth_key_assertion auth_key_assertion_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_key_assertion
+    ADD CONSTRAINT auth_key_assertion_account_id_fkey FOREIGN KEY (account_id) REFERENCES public."user"(id) ON DELETE CASCADE;
+
+
+--
+-- Name: auth_public_key auth_public_key_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_public_key
+    ADD CONSTRAINT auth_public_key_account_id_fkey FOREIGN KEY (account_id) REFERENCES public."user"(id) ON DELETE CASCADE;
+
+
+--
+-- Name: auth_recovery auth_recovery_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_recovery
+    ADD CONSTRAINT auth_recovery_account_id_fkey FOREIGN KEY (account_id) REFERENCES public."user"(id) ON DELETE CASCADE;
+
+
+--
+-- Name: auth_session_opening auth_session_opening_subject_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_session_opening
+    ADD CONSTRAINT auth_session_opening_subject_account_id_fkey FOREIGN KEY (subject_account_id) REFERENCES public."user"(id) ON DELETE CASCADE;
 
 
 --

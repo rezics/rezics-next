@@ -1,4 +1,4 @@
-# Auth foundation
+# Auth account effects
 
 `@rezics/auth` is a separate workspace and PostgreSQL store. It owns password
 credentials, Better Auth sessions, registered clients, consent and signing keys.
@@ -7,8 +7,9 @@ operator relationships and resource authorization. Auth neither reads kernel
 account tables nor stores account profiles, handles, controllers, birth dates,
 organization authority or grants.
 
-This foundation supplies application ports for the future registration workflow.
-It does not implement DBOS registration, operator session opening, recovery,
+Auth supplies guarded account effects through Better Auth, including operator
+session opening, actor-owned password and public-key credentials, human recovery
+and Access-first consent reduction. It does not implement DBOS registration,
 OIDC authorization, token exchange, CIBA or device authorization. Unverified
 `requested_by` and all caller-supplied `act` values are rejected.
 
@@ -75,7 +76,8 @@ Required production configuration:
 
 `trustedAccess.readAccount(accountId)` must perform an authoritative current
 read and return the matching ID, structural kind, state and integer epoch floor.
-It must reject unavailable evidence. The `automated` fixture field is transient;
+It must reject unavailable or fenced evidence, normally by returning null;
+explicit `fenced: true` also denies establishment and ordinary session reads. The `automated` fixture field is transient;
 Auth persists no operator or automation copy. Reads, sessions and token issue
 fail closed on missing/inactive accounts, organizations or dependency failures.
 
@@ -97,7 +99,9 @@ Only trusted application code may call the internal effects:
   must already have succeeded as Access commands before this effect is called.
 - `internal.registerClient({ clientId, firstParty, scopes })` persists trusted
   client configuration. Only trusted deployment/application code decides which
-  clients are first party. Removing scopes also restricts existing sessions.
+  clients are first party. Scope growth does not change existing sessions.
+  Removing scopes or changing a first-party client to third party is refused:
+  successful reduction requires a future durable multi-account coordinator.
 
 These are in-process methods, with no internal HTTP authorization endpoint.
 Registration command durability, retries and Access activation remain the
@@ -111,12 +115,119 @@ rows to prove those IDs and the persisted password hash. `name` is always the
 mandatory empty placeholder and `image` is null. Password verification, signed
 cookies, session persistence, expiry and revocation are Better Auth operations.
 
+## Trusted account effects
+
+The new `TrustedAccessPorts` effects are optional at construction. An absent port
+denies its feature; unrelated password, session and verifier consumers still
+construct normally. The host must bind these ports to durable Access commands,
+never to request booleans or a second permission engine in Auth.
+
+- `consumeAuthorization({ authorization, subjectAccountId, purpose, human })`
+  consumes an Access receipt exactly once. `human` is the verified Better Auth
+  `SessionProof` derived from the provided session headers, never a caller's
+  identity claim. Access rechecks current relationship, operator management,
+  human/subject epochs, verified client/scopes and expiry. Its
+  `EffectAuthorization` binds receipt ID, purpose, subject, actual human,
+  operator, client, scopes, human epoch and subject epoch. For a person's
+  credentials the operator is null and the person manages their own account.
+  For an automated actor Access decides the operator approval. Session receipts
+  and the exact credential purposes (`set-password`, `remove-password`,
+  `add-key`, `remove-key`) cannot be interchanged. Auth also journals receipt IDs
+  durably to prevent duplicate local issuance across instances.
+- `invalidateAccount({ accountId, previousEpoch, reason })` atomically checks the
+  old floor and commits an increased account floor before returning an
+  `InvalidationReceipt`. Its receipt ID, account and higher minimum epoch are
+  mandatory. This port must never clear a fence. Auth uses it for
+  `consent-reduction` before any reducing Auth write or session deletion.
+- `readRecoveryAccount(accountId)` is an authoritative recovery-only read of an
+  active human, including the current floor while fenced. Ordinary
+  `readAccount` continues to deny that fence. No recovery read can establish a
+  session or issue a token.
+- `authorizeRecovery({ accountId, proofEpoch })` atomically rejects a stale
+  recovery epoch and commits a higher floor with a durable receipt before any
+  native password reset. It must retain any existing fence.
+
+`internal.openAutomatedSession({ authorization, subjectAccountId, headers })`
+requires a current human session and a current automated target. It consumes a
+`session` receipt before creating any session. Better Auth's creation hook
+rechecks current target, human, epochs, registered client and target consent.
+The returned `Response` contains a `SessionProof` and Better Auth's signed
+session cookie. Both session owner and token `sub` are the automated account.
+`auth_session_opening` privately retains subject, opening human, operator and
+consumed receipt ID after session revocation. Neither the approval reference nor
+private opening attribution is placed in a token, public JWKS or HTTP error.
+`act` remains reserved for token exchange.
+
+`internal.setCredential({ authorization, subjectAccountId, headers, credential })`
+consumes the exact purpose approved by Access. `credential` is either
+`{ kind: "password", password }` (null removes the password),
+`{ kind: "key", kid, publicJwk }`, or `{ kind: "key", kid, remove: true }`.
+Password replacement and credential removal require an invalidation receipt
+with a higher floor from the consumed Access command, before the native effect.
+These effects currently require a readable active subject after that floor
+increase; a fenced subject denies them. Human recovery uses its separate fenced
+read. Destructive effects revoke the subject's native sessions. Failed effects
+may spend the approval or leave the Access barrier raised; retry with a new
+approved command rather than replaying its receipt.
+
+A first operator opening or key installation creates a native credential owner
+with `user.id = account_id` and a `credential` account row. A passwordless owner
+has null password. The schema plugin makes the native email column optional;
+an owner without an email has null email, with no synthetic recoverable address.
+A supplied provisioning email remains private and never enables automated email
+recovery. Organization subjects are denied before credential-owner creation.
+Adding/removing independent credentials changes neither kind nor public ID.
+Passwords are hashed/verified through Better Auth; its adapter and hooks own
+credential rows, sessions, cookies and revocation.
+
+Public keys are owned by account ID, indexed by `(account_id, kid)`, and limited
+to registered ES256/P-256 public verification material. Private or symmetric key
+material is rejected. JOSE validates each signin assertion with that registered
+key and algorithm: exact owner `iss` and `sub`, exact scalar
+`aud = <issuer>/token`, required `iat`, `exp`, `jti`, no future issue time, and a
+maximum lifetime/age of 60 seconds. The durable account-wide JTI uniqueness
+constraint arbitrates concurrent replay across service instances, including
+key replacement. JTI rows are retained with the account. An assertion proves a
+credential; it does not create another session store or a long-term bearer
+credential. Key signin still passes all native session hooks, consent and epoch
+checks. Credential keys never join Auth's public signing JWKS.
+
+## Guarded human recovery
+
+Hosts configure `recoveryDelivery.deliver({ accountId, email, token, expiresAt })`
+as a private delivery port. Only the native Better Auth reset facility generates
+and verifies tokens. Auth adds a SHA-256 proof binding to the exact account and
+issuance epoch with a five-minute expiry. The delivery port receives the proof;
+HTTP never returns it. Start and completion both deny automation and
+organizations, missing evidence, inactive accounts and Access outages.
+
+Completion durably consumes Auth's proof binding before requesting the Access
+barrier, so concurrent attempts cannot both proceed. Access must compare the
+proof epoch atomically against its current floor. After its durable receipt,
+Better Auth atomically consumes its own verification token, revokes sessions
+and writes the password hash. An outage can spend a proof without resetting the
+password: request a fresh proof. Old proofs cannot undo a newer fence or floor.
+Successful reset retains a fence. Only a later trusted Access lifecycle workflow
+may clear it using fresh recovery/establishment evidence at the exact new epoch;
+Auth exposes no fence-clearing effect and never upgrades an old session.
+
+The operator, recovery and invalidation fixtures establish the Auth boundary
+using real Better Auth, PostgreSQL and JOSE. They are not final Goal proof.
+Binding actual Access operator consumption/lifecycle commands, durable retries
+and cleanup after cross-service failure, recovery fence clearing, registered
+client reduction across multiple accounts, and the full cross-service account
+lifecycle/permission outcome suites remain integration/workflow work. There is
+no unjournaled multi-account revocation loop in Auth.
+
 ## Public HTTP contract
 
 Expose only `service.handler`. Do not mount a raw Better Auth instance. The
 wrapper does not forward arbitrary paths. Better Auth email signup is also
 disabled, and its session creation hook requires a private per-request context
-that the wrapper installs only around password signin.
+that the wrapper installs only after password proof, key proof or a consumed
+Access authorization. The private Better Auth plugin endpoint uses
+`internalAdapter.createSession` and `setSessionCookie`; mounting it directly still
+cannot establish a session without this private context.
 
 All POST requests require JSON, the configured issuer `Origin`, and a body of
 at most 16 KiB. Unknown fields and query parameters are rejected. Better Auth's
@@ -124,34 +235,45 @@ secure, HttpOnly, SameSite cookies remain on the issuer origin. The reverse prox
 must preserve that origin and sanitize forwarded client-IP headers used by
 Better Auth. Host consent UI must show the selected client and scopes explicitly.
 
-| Method and path              | Input / result                                                                                                                                         |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `POST /signin`               | `{ email, password, client_id, scope: string[] }`; returns `SessionProof` and the Better Auth session cookie after password, Access and consent checks |
-| `GET /session`               | Cookie; returns only `SessionProof`, with a database session read and current Access/consent validation                                                |
-| `POST /token`                | Cookie and `{}`; returns `{ access_token, token_type: "Bearer", expires_in: 300 }`                                                                     |
-| `POST /consent`              | Cookie and `{ client_id, scope: string[] }`; explicitly replaces this actor's third-party consent and returns those fields                             |
-| `POST /signout`              | Cookie and `{}`; Better Auth deletes the session and clears its cookie                                                                                 |
-| `GET /.well-known/jwks.json` | Public `PublicJwks`, containing only ES256 verification material                                                                                       |
+| Method and path              | Input / result                                                                                                                                                                                                   |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /signin`               | `{ email, password, client_id, scope: string[] }` or `{ account_id, password, client_id, scope: string[] }`; returns `SessionProof` and the Better Auth session cookie after password, Access and consent checks |
+| `POST /signin/key`           | `{ account_id, assertion, client_id, scope: string[] }`; verifies an owned `private_key_jwt` and returns a native session                                                                                        |
+| `POST /recovery/start`       | `{ account_id }`; delivers a native short-lived proof only for a current active human                                                                                                                            |
+| `POST /recovery/complete`    | `{ account_id, token, new_password }`; consumes the epoch-bound proof and invalidates through Access before native reset                                                                                         |
+| `GET /session`               | Cookie; returns only `SessionProof`, with a database session read and current Access/consent validation                                                                                                          |
+| `POST /token`                | Cookie and `{}`; returns `{ access_token, token_type: "Bearer", expires_in: 300 }`                                                                                                                               |
+| `POST /consent`              | Cookie and `{ client_id, scope: string[] }`; explicitly replaces this actor's third-party consent and returns those fields                                                                                       |
+| `POST /signout`              | Cookie and `{}`; Better Auth deletes the session and clears its cookie                                                                                                                                           |
+| `GET /.well-known/jwks.json` | Public `PublicJwks`, containing only ES256 verification material                                                                                                                                                 |
 
-Unrecognized routes, including `/api/auth/*`, signup and password recovery, are
-unavailable. No automated recovery-email route exists. Failure responses expose
+Unrecognized routes, including `/api/auth/*`, signup and raw password recovery,
+are unavailable. No automated recovery-email route exists. Failure responses expose
 only `authentication_denied`, never credential or Access details.
 
 First-party clients are preconsented for their registered scopes. Third-party
 clients require persisted explicit consent. A person can consent from an existing
 first-party session, then sign in for the third-party client. Signin binds the
 requested subset to the new session; it cannot expand consent. Consent changes do
-not expand existing sessions, and consent reductions immediately constrain reads
-and issuance. `/token` accepts no client, scope, epoch, principal or delegation
+not expand existing sessions. A reduction first awaits a durable Access floor
+increase, records its receipt, commits the narrower consent, then deletes all
+of that actor's Better Auth sessions. Already signed JWTs carry the old epoch
+and fail kernel's next account-floor check even with cached JWKS. Without the
+invalidation port, reduction fails closed; consent growth needs no invalidation.
+An Access outage before its receipt leaves consent unchanged. A failure after
+Access commits can leave a raised floor with the old Auth consent; it cannot
+restore old token authority. Cross-service retries must retain this barrier. `/token` accepts no client, scope, epoch, principal or delegation
 input. Session cookie caching is disabled, including on subsequent database reads.
 
 ## Kernel claim and verification contract
 
 `SessionProof` contains only `account_id`, `client_id`, `scope: string[]`,
 `authn_epoch`, `auth_time` and `amr`. Successful password verification installs
-the epoch, authentication time (Unix seconds) and `amr: ["pwd"]`. Reading a newer
-Access floor never upgrades a stale session; fresh password authentication is
-required. Tokens preserve the authenticated actor as their subject, including
+the epoch, authentication time (Unix seconds) and `amr: ["pwd"]`. Own-key
+verification installs `amr: ["private_key_jwt"]`. Operator establishment uses
+`amr: ["operator"]` and the opening human's original authentication time, with
+private attribution to that human and operator. Reading a newer Access floor
+never upgrades a stale session; fresh verified establishment is required. Tokens preserve the authenticated actor as their subject, including
 when that actor is automated.
 
 Access tokens have `typ: "at+jwt"`, `alg: "ES256"` and an identified `kid`.

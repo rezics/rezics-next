@@ -8,12 +8,60 @@ export interface AccessAccount {
   state: 'pending' | 'active' | 'suspended' | 'deleted';
   authnEpoch: number;
   automated: boolean;
+  fenced?: boolean;
 }
+
+export interface InvalidationReceipt {
+  receiptId: string;
+  accountId: string;
+  minimumAuthnEpoch: number;
+}
+
+export type EffectPurpose = 'session' | 'set-password' | 'remove-password' | 'add-key' | 'remove-key';
+
+/** A consumed durable Access authorization, never a caller-supplied approval. */
+export interface EffectAuthorization {
+  receiptId: string;
+  subjectAccountId: string;
+  actingHumanId: string;
+  operatorAccountId: string | null;
+  purpose: EffectPurpose;
+  clientId: string;
+  scopes: string[];
+  humanEpoch: number;
+  subjectEpoch: number;
+  expiresAt: string;
+  invalidation?: InvalidationReceipt;
+}
+
+export type CredentialEffect =
+  | { kind: 'password'; password: string | null }
+  | { kind: 'key'; kid: string; publicJwk: JWK; remove?: false }
+  | { kind: 'key'; kid: string; remove: true };
 
 /** Internal application ports. Never construct these results from HTTP fields. */
 export interface TrustedAccessPorts {
   readAccount(accountId: string): Promise<AccessAccount | null>;
   authorizeProvisioning(commandReference: string): Promise<{ accountId: string }>;
+  /** Consume once while rechecking operator relationship, permission, epochs and client evidence. */
+  consumeAuthorization?(input: {
+    authorization: string;
+    subjectAccountId: string;
+    purpose: EffectPurpose;
+    human: SessionProof;
+  }): Promise<EffectAuthorization>;
+  /** Commit a durable floor increase before returning; never clear an existing fence. */
+  invalidateAccount?:
+    | ((input: {
+        accountId: string;
+        previousEpoch: number;
+        reason: 'consent-reduction';
+      }) => Promise<InvalidationReceipt>)
+    | undefined;
+  /** Recovery-only authoritative read may expose a fenced active human's current floor. */
+  readRecoveryAccount?(accountId: string): Promise<AccessAccount | null>;
+  /** Reject a stale proof; commit an invalidation barrier without clearing any fence. */
+  authorizeRecovery?(input: { accountId: string; proofEpoch: number }): Promise<InvalidationReceipt>;
 }
 
 export interface AuthServiceOptions {
@@ -23,6 +71,9 @@ export interface AuthServiceOptions {
   secret: string;
   signing: { activeKid: string; privateKeys: JWK[] };
   trustedAccess: TrustedAccessPorts;
+  recoveryDelivery?: {
+    deliver(input: { accountId: string; email: string; token: string; expiresAt: Date }): Promise<void>;
+  };
 }
 
 export interface SessionProof {
@@ -78,6 +129,17 @@ export interface AuthService {
       email: string;
       password: string;
     }): Promise<{ accountId: string }>;
+    openAutomatedSession(input: {
+      authorization: string;
+      subjectAccountId: string;
+      headers: Headers;
+    }): Promise<Response>;
+    setCredential(input: {
+      authorization: string;
+      subjectAccountId: string;
+      headers: Headers;
+      credential: CredentialEffect;
+    }): Promise<void>;
     revokeSessions(accountId: string): Promise<void>;
     registerClient(input: { clientId: string; firstParty: boolean; scopes: string[] }): Promise<void>;
   };

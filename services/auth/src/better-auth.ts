@@ -1,5 +1,16 @@
-import type { BetterAuthOptions } from 'better-auth';
+import type { BetterAuthOptions, BetterAuthPlugin } from 'better-auth';
 import type { Pool } from 'pg';
+
+export const credentialOwnerSchema = {
+  id: 'credential-owner-schema',
+  schema: {
+    user: {
+      fields: {
+        email: { type: 'string', required: false, unique: true, sortable: true },
+      },
+    },
+  },
+} satisfies BetterAuthPlugin;
 
 /** Shared with the official Better Auth migration generator. */
 export function betterAuthOptions(database: Pool, issuer: string, secret: string) {
@@ -8,6 +19,7 @@ export function betterAuthOptions(database: Pool, issuer: string, secret: string
     baseURL: issuer,
     basePath: '/api/auth',
     secret,
+    plugins: [credentialOwnerSchema],
     emailAndPassword: { enabled: true, disableSignUp: true },
     session: {
       cookieCache: { enabled: false },

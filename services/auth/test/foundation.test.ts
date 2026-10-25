@@ -32,6 +32,17 @@ beforeAll(async () => {
         if (unavailable) throw new Error('Access unavailable');
         return accounts.get(id) ?? null;
       },
+      async invalidateAccount({ accountId, previousEpoch }) {
+        if (unavailable) throw new Error('Access unavailable');
+        const account = accounts.get(accountId);
+        if (!account || account.authnEpoch !== previousEpoch) throw new Error('Stale Access evidence');
+        account.authnEpoch++;
+        return {
+          receiptId: `foundation-floor-${accountId}-${account.authnEpoch}`,
+          accountId,
+          minimumAuthnEpoch: account.authnEpoch,
+        };
+      },
       async authorizeProvisioning(reference) {
         const accountId = approvals.get(reference);
         if (!accountId) throw new Error('No approved Access command');
