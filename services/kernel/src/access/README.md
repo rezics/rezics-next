@@ -2,6 +2,8 @@
 
 Access owns account state and lifecycle, bearer identity evidence, resource permission evaluation, grants, principal assignments and creation authority.
 
+Every access event type has a schema in `events.ts`, and the catalogue test proves it with real data.
+
 ## Grant rule
 
 A grantor needs `access:grant` and never grants an action they do not hold. Grant, change and revoke use that same check for every new and previous action.
