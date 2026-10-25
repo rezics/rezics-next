@@ -20,14 +20,16 @@ and pattern checks.
 A property may name at most 1,024 targets. Compilation allows at most 256 schema files.
 
 The launch grain is three types and twelve properties in one schema file. The bundled
-catalogue has 13 types, 45 properties and 12 schema files. One hundred such verticals
-add 300 types, 1,200 properties and 100 schema files: 313 types, 1,245 properties and
-112 schema files, 853,011 canonical bytes. `foaf:focus` ranges over Thing, so the new
-concrete classes are targets too (313). `schema:exampleOfWork` gains the creative-work
-descendants (207). The previous caps (256 types, 1,024 properties, 1 MiB, 64 schema
-files, 16 targets) do not fit that grain. The new caps are those limits times four,
-except targets: every target is a type, so the target cap equals the type cap. That is
-about three times the measured grain. Per-type caps stay 64 properties and 16 facets,
+catalogue has 17 types, 68 properties and 12 schema files. One hundred such verticals
+add 300 types, 1,200 properties and 100 schema files: 317 types, 1,268 properties and
+112 schema files, 874,688 canonical bytes. `foaf:focus` ranges over Thing, so the new
+concrete classes are targets too (316). `schema:exampleOfWork` gains the creative-work
+descendants (210). The previous caps of 256 types, 1,024 properties, 64 schema files
+and 16 targets do not fit that grain. The measured body is 874,688 bytes, so the
+previous 1 MiB cap still holds it. The new caps multiply those limits by four: 1,024
+types, 4,096 properties, 256 schema files and 4 MiB. Targets are the exception: every
+target is a type, so the target cap equals the type cap. That is about three times the
+measured type and property counts. Per-type caps stay 64 properties and 16 facets,
 because a request touches one type.
 
 A release is validated once per digest per process. Later requests read the subject's

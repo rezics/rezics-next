@@ -182,7 +182,7 @@ test('patterns must be safe and releases are bounded', () => {
     'unsafe_pattern /properties/schema:position/value/pattern',
   ]);
   const crowded = edit((draft) => {
-    for (let index = 0; index < 257; index++)
+    for (let index = 0; index < 1025; index++)
       draft.types[`schema:T${index}`] = {
         iri: `http://schema.org/T${index}`,
         labels: { en: 't' },

@@ -99,7 +99,7 @@ test('profile diagnostics escape pointers, sort, cap results, and precede labels
   expect(errors).toHaveLength(64);
   expect(errors[0]!.pointer).toBe('/a~1b~0c');
   expect(errors.every((e) => e.file === 'main.yaml' && e.code === 'unsupported')).toBe(true);
-  const tooMany = { ...input, schemas: Object.fromEntries(Array.from({ length: 65 }, (_, i) => [`${i}.yaml`, '{}'])) };
+  const tooMany = { ...input, schemas: Object.fromEntries(Array.from({ length: 257 }, (_, i) => [`${i}.yaml`, '{}'])) };
   expect((await violations(tooMany)).some((e) => e.code === 'limit' && e.pointer === '')).toBe(true);
 });
 

@@ -158,6 +158,8 @@ test("a catalogue compiles to a release through LinkML's derived schema", async 
     types: {
       'schema:MusicComposition': {
         ...term('schema:MusicComposition', { en: 'musical composition' }, ['wd:Q207628']),
+        bases: [],
+        facets: [],
         properties: [
           'schema:alternativeHeadline',
           'schema:composer',
@@ -167,7 +169,12 @@ test("a catalogue compiles to a release through LinkML's derived schema", async 
           'schema:url',
         ],
       },
-      'schema:Person': { ...term('schema:Person', { en: 'person', ja: '人物' }, ['wd:Q5']), properties: ['schema:url'] },
+      'schema:Person': {
+        ...term('schema:Person', { en: 'person', ja: '人物' }, ['wd:Q5']),
+        bases: [],
+        facets: [],
+        properties: ['schema:url'],
+      },
     },
     properties: {
       'schema:alternativeHeadline': {
@@ -248,15 +255,17 @@ test('features outside the restricted profile are refused', async () => {
     'music.yaml /slots/duration/equals_expression unsupported',
     'music.yaml /slots/iswc/required unsupported',
   ]);
-  expect(await violations({ music: replace(music, '      datatype: external-id\n', '      datatype: external-id\n      facet: "true"\n') })).toEqual([
-    'music.yaml /slots/iswc/annotations/facet unsupported',
-  ]);
+  expect(
+    await violations({
+      music: replace(music, '      datatype: external-id\n', '      datatype: external-id\n      facet: "true"\n'),
+    }),
+  ).toEqual(['music.yaml /slots/iswc/annotations/facet unsupported']);
 });
 
 test('a slot must agree with its data type, mappings, qualifiers and labels', async () => {
-  expect(await violations({ music: replace(music, 'datatype: external-id', 'datatype: quantity\n      units: "1"') })).toEqual([
-    'music.yaml /slots/iswc/annotations/datatype invalid',
-  ]);
+  expect(
+    await violations({ music: replace(music, 'datatype: external-id', 'datatype: quantity\n      units: "1"') }),
+  ).toEqual(['music.yaml /slots/iswc/annotations/datatype invalid']);
   expect(await violations({ music: replace(music, '      - wd:P1827\n', '      - wd:Q1827\n') })).toEqual([
     'music.yaml /slots/iswc/exact_mappings invalid',
   ]);
