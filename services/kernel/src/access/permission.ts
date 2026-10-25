@@ -366,7 +366,9 @@ export function createAccess(config: PermissionConfig): Access {
         }
         // Short-lived account/assignment/membership observations never survive the
         // request deadline. The final SQL also checks their actual validity ranges.
-        const databaseDeadline = new Date(Date.parse(time.at) + Math.max(0, deadline - Date.now())).toISOString();
+        // The SQL compares its deadline with `at`, so both values must use the
+        // same command/database timeline. The wall-clock check above stays local.
+        const databaseDeadline = new Date(Date.parse(at) + Math.max(0, deadline - Date.now())).toISOString();
         if (binding !== bind(actor, action, resource) || Date.now() >= deadline) return evidence;
         prepared.set(evidence, {
           binding,
