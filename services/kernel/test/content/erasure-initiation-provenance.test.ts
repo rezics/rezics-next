@@ -359,6 +359,7 @@ async function delegatedActor() {
   const principal = await verified(otherId);
   await grant(otherId, 'account:delegate', otherId);
   await grant(postId, 'post:erase', otherId);
+  await grant(authorId, 'account:read', otherId);
   const requestedBy = (
     await createDelegationCommands({ pool: db.pool, access, action: 'account:delegate' }).create(
       { pool: db.pool, deadline: Date.now() + 10000, actor: principal },
@@ -673,6 +674,20 @@ test('initiation keeps its wire, admission and one-attempt cost; the growth chec
     hotPartition: partitionOf(route),
     hotShare: 1,
     rows: ({ ordinal }) => ({
+      'core.receipt': [
+        {
+          partition_no: partitionOf(route),
+          principal_kind: 'account',
+          principal_id: id(`receipt-principal-${ordinal}`),
+          command_kind: kind,
+          idempotency_key: `history-${ordinal}`,
+          request_digest: Buffer.alloc(32, 1),
+          epoch: 1,
+          position: ordinal + 1,
+          transaction_id: id(`receipt-transaction-${ordinal}`),
+          response: {},
+        },
+      ],
       'access.resource_grant': [
         {
           route,
@@ -758,6 +773,8 @@ test('initiation keeps its wire, admission and one-attempt cost; the growth chec
   expect(report.samples.map((s) => s.scale)).toEqual([256, 2048, 16384]);
   for (const { cost } of report.samples) {
     expect(cost.relations!['content.post']?.rows).toBe(2);
+    expect(cost.relations!['core.receipt']?.rows).toBe(1);
+    expect(cost.relations!['core.receipt']?.sequentialScans).toBe(0);
     for (const [name, relation] of Object.entries(cost.relations!))
       if (name.startsWith('content.')) expect(relation.sequentialScans).toBe(0);
   }
