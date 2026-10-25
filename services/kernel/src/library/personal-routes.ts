@@ -176,16 +176,18 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         params: t.Object({ subjectId: id }),
         headers,
         body: t.Object({ state, revision: t.Optional(revision) }, closed),
-        response: { 200: entryResponse, ...failures },
+        response: { 200: entryResponse, 201: entryResponse, ...failures },
         detail: detail('library_entry.put', 'library_entry:update', true),
       },
-      async ({ actor, params, body, headers, admission, job, session }) => {
+      async ({ actor, params, body, headers, admission, job, session, set }) => {
         account(actor);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
           command(() => entries().putEntry(actor, params.subjectId, body, key)),
         );
         session.record(result);
+        // The receipt stores created. A replay answers that status and does not recompute it.
+        if (result.value.created) set.status = 201;
         return { libraryEntry: entryView(result.value.entry) };
       },
     )

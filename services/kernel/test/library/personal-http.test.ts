@@ -95,8 +95,12 @@ async function subject() {
   ).subject.id;
 }
 async function entry(id: string, state = 'planned', revision?: number) {
-  return (await json(await request('PUT', `/v1/libraryEntries/${id}`, { state, ...(revision ? { revision } : {}) })))
-    .libraryEntry;
+  return (
+    await json(
+      await request('PUT', `/v1/libraryEntries/${id}`, { state, ...(revision ? { revision } : {}) }),
+      revision ? 200 : 201,
+    )
+  ).libraryEntry;
 }
 async function copy(id: string) {
   return (await json(await request('POST', '/v1/copies', { subjectId: id, status: 'owned', note: 'Shelf' }), 201)).copy;
@@ -158,6 +162,11 @@ beforeAll(async () => {
         .sign(signing.privateKey),
     );
   }
+  await db.admin.query(
+    `INSERT INTO access.exposure_opening ("group", valid, transaction_id)
+     VALUES ('personal_library', tstzrange('2020-01-01T00:00:00Z', NULL, '[)'), $1)`,
+    [randomUUID()],
+  );
 });
 afterAll(async () => {
   await db?.close();
@@ -419,7 +428,7 @@ test('Space inference uses community reads and conceals a denied target like an 
 test('HTTP write receipts replay entries and copies and reject a reused key with changed input', async () => {
   const id = await subject();
   for (const [method, path, body, changed, status] of [
-    ['PUT', `/v1/libraryEntries/${id}`, { state: 'planned' }, { state: 'paused' }, 200],
+    ['PUT', `/v1/libraryEntries/${id}`, { state: 'planned' }, { state: 'paused' }, 201],
     ['POST', '/v1/copies', { subjectId: id, status: 'owned' }, { subjectId: id, status: 'lent' }, 201],
   ] as const) {
     const key = randomUUID();
@@ -429,6 +438,42 @@ test('HTTP write receipts replay entries and copies and reject a reused key with
     await problem(await request(method, path, changed, 'owner', key), 422, 'idempotency_conflict');
     expect(await snapshot()).toEqual(before);
   }
+});
+
+test('a library entry put that creates the entry answers 201 and one that updates it answers 200', async () => {
+  const id = await subject();
+  const created = await json(await request('PUT', `/v1/libraryEntries/${id}`, { state: 'planned' }), 201);
+  expect(created.libraryEntry).toEqual({
+    subjectId: id,
+    state: 'planned',
+    revision: 1,
+    createdAt: expect.any(String),
+    updatedAt: expect.any(String),
+  });
+  const updated = await json(
+    await request('PUT', `/v1/libraryEntries/${id}`, { state: 'in_progress', revision: 1 }),
+    200,
+  );
+  expect(updated.libraryEntry).toMatchObject({
+    subjectId: id,
+    state: 'in_progress',
+    revision: 2,
+    createdAt: created.libraryEntry.createdAt,
+  });
+});
+
+test('a replayed creating put with the same idempotency key answers 201 with the same body and writes nothing', async () => {
+  const id = await subject();
+  const key = randomUUID();
+  const first = await request('PUT', `/v1/libraryEntries/${id}`, { state: 'planned' }, 'owner', key);
+  const created = await json(first, 201);
+  const before = await snapshot();
+  const replay = await request('PUT', `/v1/libraryEntries/${id}`, { state: 'planned' }, 'owner', key);
+  expect(replay.status).toBe(first.status);
+  expect(replay.status).toBe(201);
+  expect(await json(replay, 201)).toEqual(created);
+  expect(await snapshot()).toEqual(before);
+  expect((await json(await request('GET', `/v1/libraryEntries/${id}`))).libraryEntry.revision).toBe(1);
 });
 
 test('following pages keep their order and bind cursors to the account', async () => {

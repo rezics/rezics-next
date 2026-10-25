@@ -90,7 +90,7 @@ async function fixture() {
   ).collection;
   const member = (await json(await request('POST', `/v1/collections/${collection.id}/members`, { subjectId }), 201))
     .member;
-  const entry = (await json(await request('PUT', `/v1/libraryEntries/${subjectId}`, { state: 'planned' })))
+  const entry = (await json(await request('PUT', `/v1/libraryEntries/${subjectId}`, { state: 'planned' }), 201))
     .libraryEntry;
   const copy = (await json(await request('POST', '/v1/copies', { subjectId, status: 'owned' }), 201)).copy;
   const session = (

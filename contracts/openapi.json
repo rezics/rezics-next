@@ -29225,6 +29225,59 @@
             },
             "description": "Response for status 200"
           },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "libraryEntry": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "revision": {
+                          "maximum": 2147483646,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "state": {
+                          "enum": [
+                            "planned",
+                            "in_progress",
+                            "completed",
+                            "paused",
+                            "dropped"
+                          ],
+                          "type": "string"
+                        },
+                        "subjectId": {
+                          "type": "string"
+                        },
+                        "updatedAt": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "subjectId",
+                        "state",
+                        "revision",
+                        "createdAt",
+                        "updatedAt"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "libraryEntry"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 201"
+          },
           "400": {
             "content": {
               "application/problem+json": {

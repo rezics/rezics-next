@@ -245,6 +245,7 @@ test('a write naming a merged subject lands on its survivor and an entry records
 
   const entry = await json<{ libraryEntry: { subjectId: string; revision: number } }>(
     await request('PUT', `/v1/libraryEntries/${redirected}`, { state: 'planned' }),
+    201,
   );
   expect(entry.libraryEntry.subjectId).toBe(survivor);
   const entryRows = await db.admin.query<{ subject_id: string; requested_subject_id: string | null }>(
@@ -393,6 +394,7 @@ test('an entry remains addressed by its creation id and can be read, updated and
   const { survivor, redirected } = await subjectPair('entry address');
   const created = await json<{ libraryEntry: { subjectId: string; revision: number; state: string } }>(
     await request('PUT', `/v1/libraryEntries/${redirected}`, { state: 'planned' }),
+    201,
   );
   expect(created.libraryEntry).toMatchObject({ subjectId: redirected, revision: 1, state: 'planned' });
   await mergeOnly([survivor, redirected]);
@@ -485,7 +487,7 @@ test('redirect reads add one anchored read while writes and member pages stay co
     const entryWrite = await capture(db, () =>
       request('PUT', `/v1/libraryEntries/${target.redirected}`, { state: 'planned' }),
     );
-    expect((await json<{ libraryEntry: { subjectId: string } }>(entryWrite.value)).libraryEntry.subjectId).toBe(
+    expect((await json<{ libraryEntry: { subjectId: string } }>(entryWrite.value, 201)).libraryEntry.subjectId).toBe(
       target.survivor,
     );
     const entryRead = await capture(db, () => request('GET', `/v1/libraryEntries/${target.redirected}`));

@@ -7460,6 +7460,15 @@ export declare function createKernel(dependencies: KernelDependencies): import("
                                 updatedAt: string;
                             };
                         };
+                        201: {
+                            libraryEntry: {
+                                subjectId: string;
+                                state: "completed" | "dropped" | "in_progress" | "paused" | "planned";
+                                revision: number;
+                                createdAt: string;
+                                updatedAt: string;
+                            };
+                        };
                         400: {
                             type: unknown;
                             title: unknown;
