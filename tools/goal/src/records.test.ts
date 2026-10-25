@@ -15,6 +15,16 @@ test('resumed rollout records increments within the attempt window, ignoring rep
   expect(measureLog(exec, { baseline: { input: 1000, cached: 0, output: 0 } }).tokens.input).toBe(300);
   expect(classifyStep('wait', '')).toBe('wait'); expect(classifyStep('reasoning', '')).toBe('decision');
 });
+test('reasoning items are not steps', () => {
+  const lines = [{ type: 'thread.started', thread_id: 'session' },
+    ...[1, 2, 3].map(n => ({ type: 'item.completed', item: { id: `r${n}`, type: 'reasoning', text: 'thinking' } })),
+    { type: 'item.completed', item: { id: 'c1', type: 'command_execution', command: 'ls' } },
+    { type: 'item.completed', item: { id: 'c2', type: 'command_execution', command: 'bun test' } },
+    { type: 'turn.completed', usage: { input_tokens: 1, cached_input_tokens: 0, output_tokens: 1 } }];
+  const measured = measureLog(lines.map(line => JSON.stringify(line)).join('\n'));
+  expect(Object.values(measured.steps).reduce((a, b) => a + b, 0)).toBe(2);
+});
+
 test('import creates a complete measurement record without launching a worker', async () => {
   const h = harness();
   try {

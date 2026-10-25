@@ -62,7 +62,8 @@ export function measureLog(text: string, options: { startedAt?: string; endedAt?
     if (!inside) continue;
     const item = event.item ?? payload;
     const type = item.type;
-    if (['command_execution', 'file_change', 'mcp_tool_call', 'web_search', 'function_call', 'custom_tool_call', 'reasoning'].includes(type)
+    // Steps are actions. Reasoning items are not: counting them stopped a progressing Sol worker at about 100 actions.
+    if (['command_execution', 'file_change', 'mcp_tool_call', 'web_search', 'function_call', 'custom_tool_call'].includes(type)
       && (event.type !== 'item.started')) {
       const key = item.call_id ?? item.id;
       if (key && seen.has(key)) continue;
