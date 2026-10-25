@@ -283,7 +283,7 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
   session/login cookie, or client IP
 - **Bound:** 2 `limit()` calls; 0 added K/D/R/A; the request's existing session read supplies the signed-in key;
   refusals stop before K
-- **Growth check:** constant per request; request-cost counts unchanged
+- **Growth check:** `tests/checkout-cost.test.ts`: `read rate limits stay within their bound as s grows`
 
 ### Locale resolution (`/`)
 
@@ -468,19 +468,19 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 
 - **Touches:** Root preferences → D `signedIn`; one anonymous K `GET /v1/offers/<id>`; the price is formatted locally from `unitAmountMinor` and the currency's minor-unit digits. The page renders one idempotency key and reuses it for retries
 - **Bound:** 1 K, ≤1 D, 0 R and 0 A. Constant offer; no list
-- **Growth check:** constant: no list or page size
+- **Growth check:** `tests/checkout-cost.test.ts`: `offer page stays within its bound as s grows`
 
 ### Checkout start (`POST /checkout`)
 
 - **Touches:** CSRF origin and token checks, then D `credential` → one K `POST /v1/orders` with `{ offerId }` and the page's `Idempotency-Key`
 - **Bound:** ≤1 D (credential, with any refresh's A) → 1 K. Constant body; no list
-- **Growth check:** constant: no list or page size
+- **Growth check:** `tests/checkout-cost.test.ts`: `checkout start stays within its bound as s grows`
 
 ### Order return (`/<locale>/orders/<id>`)
 
 - **Touches:** `/orders/<id>` redirects with the same locale rules as `/` and keeps the query. The buyer read is D `credential` → K `GET /v1/orders/<id>`. Pending settlement rechecks every 2 s for at most 30 s
 - **Bound:** ≤1 D → 1 K per read, and at most 16 reads per return visit because of the pending rechecks. Constant order; no list
-- **Growth check:** constant: no list or page size
+- **Growth check:** `tests/checkout-cost.test.ts`: `order status read stays within its bound as s grows`. The 16-read visit limit is derived from the page's polling constants.
 
 ### Storybook (`bun run storybook`)
 
