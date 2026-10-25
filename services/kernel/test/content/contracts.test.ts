@@ -12,6 +12,15 @@ import * as reads from '../../src/content/reads.ts';
 import * as board from '../../src/content/board-projection.ts';
 import * as media from '../../src/content/media.ts';
 import * as moderation from '../../src/content/moderation.ts';
+import * as operations from '../../src/content/operations.ts';
+import * as erasePost from '../../src/content/erase-post.ts';
+import type {
+  AuthorErasureDependencies,
+  AuthorErasureInput,
+  BeginAuthorErasure,
+  CommandRequestContext,
+  ReadOperation,
+} from '../../src/content/operation-contract.ts';
 import * as reports from '../../src/content/reports.ts';
 import * as reportEffect from '../../src/content/report-effect.ts';
 import * as imageJob from '../../src/content/image-job.ts';
@@ -20,6 +29,7 @@ import * as erasureJob from '../../src/content/erasure-job.ts';
 import type { MediaStorage } from '../../src/content/media-storage.ts';
 import type { TurnstileVerifier } from '../../src/content/turnstile.ts';
 import type * as model from '../../src/content/model.ts';
+import type { ImportedSource, Rights } from '../../src/content/imported-contract.ts';
 
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 function same<T extends true>(..._proof: T[]): void {}
@@ -166,10 +176,13 @@ function publishedSignatures(): void {
   same<
     Equal<typeof moderation.takedown, Command<moderation.TakedownInput, TargetId, moderation.ModerationDependencies>>
   >();
+  // Initiation must retain receipt/request metadata, even before native work is wired.
+  same<Equal<typeof operations.beginAuthorErasure, BeginAuthorErasure>>();
+  same<Equal<typeof operations.readOperation, ReadOperation>>();
   same<
     Equal<
-      typeof moderation.eraseAuthorScope,
-      Command<moderation.EraseAuthorScopeInput, TargetId, moderation.ModerationDependencies>
+      typeof erasePost.erasePostLogical,
+      Command<erasePost.ErasePostInput, { postId: string; securityRevision: string }, erasePost.ErasePostDependencies>
     >
   >();
   same<
@@ -469,7 +482,20 @@ function publishedModels(): void {
   same<
     Equal<
       media.ClaimMediaInput,
-      Readonly<{ mediaIds: readonly string[]; containerId: string; author: Actor; itemId: string; revisionId: string }>
+      Readonly<{ mediaIds: readonly string[]; containerId: string; author: Actor }> &
+        (
+          | Readonly<{ itemId: string; revisionId: string; reference?: never }>
+          | Readonly<{
+              reference: Readonly<{
+                kind: 'semantic_candidate';
+                subjectId: string;
+                candidateId: string;
+                revision: number;
+              }>;
+              itemId?: never;
+              revisionId?: never;
+            }>
+        )
     >
   >();
   same<Equal<media.DownloadVariant, 'original' | `webp-${number}` | `avif-${number}`>>();
@@ -502,29 +528,37 @@ function publishedModels(): void {
       }>
     >
   >();
+  type MediaMetadataBase = Readonly<{
+    id: string;
+    key: string;
+    containerId: string;
+    uploaderId: string;
+    route: number;
+    reservationRequestId: string;
+    declaredSha256?: string;
+    sha256: string | null;
+    state: 'reserved' | 'uploaded' | 'available' | 'rejected';
+    claimedAt: string | null;
+    erased: boolean;
+    takenDown: boolean;
+    securityRevision: string;
+    collectionPending: boolean;
+    createdAt: string;
+    decision: string | null;
+    variants: readonly media.MediaVariant[];
+  }>;
   same<
     Equal<
       media.MediaMetadata,
-      Readonly<{
-        id: string;
-        key: string;
-        containerId: string;
-        uploaderId: string;
-        route: number;
-        purpose: 'post-image';
-        mediaType: string;
-        byteCount: number;
-        reservationRequestId: string;
-        declaredSha256?: string;
-        sha256: string | null;
-        state: 'reserved' | 'uploaded' | 'available' | 'rejected';
-        claimedAt: string | null;
-        erased: boolean;
-        collectionPending: boolean;
-        createdAt: string;
-        decision: string | null;
-        variants: readonly media.MediaVariant[];
-      }>
+      | (MediaMetadataBase & Readonly<{ purpose: 'post-image'; mediaType: string; byteCount: number }>)
+      | (MediaMetadataBase &
+          Readonly<{
+            purpose: 'cover';
+            mediaType: string | null;
+            byteCount: number | null;
+            rights: Rights;
+            source: ImportedSource;
+          }>)
     >
   >();
   same<Equal<media.MediaStorage, MediaStorage>>();
@@ -577,12 +611,20 @@ function publishedModels(): void {
   same<Equal<moderation.ModerationDependencies, commands.ContentCommandDependencies>>();
   same<Equal<moderation.TakedownTarget, reports.ReportTarget>>();
   same<Equal<moderation.TakedownInput, Readonly<{ target: moderation.TakedownTarget; reason: string }>>>();
+  same<Equal<AuthorErasureInput, Readonly<{ threadId: string; authorId: string }>>>();
   same<
     Equal<
-      moderation.EraseAuthorScopeInput,
-      Readonly<{ scope: Readonly<{ kind: 'thread'; id: string }>; reason: string }>
+      CommandRequestContext,
+      Readonly<{ deadline: number }> & Readonly<{ idempotencyKey: string; requestId: string }>
     >
   >();
+  same<
+    Equal<Parameters<BeginAuthorErasure>, [AuthorErasureDependencies, Actor, AuthorErasureInput, CommandRequestContext]>
+  >();
+  same<Equal<ReturnType<BeginAuthorErasure>, Promise<CommandOutcome<{ operationId: string }>>>>();
+  same<Equal<erasePost.ErasePostInput, Readonly<{ postId: string; reason: string }>>>();
+  same<Equal<erasePost.ErasePostContext, model.RequestContext>>();
+  same<Equal<erasePost.ErasePostDependencies, commands.ContentCommandDependencies>>();
   same<Equal<moderation.EraseStandaloneMediaInput, Readonly<{ mediaId: string; reason: string }>>>();
   same<Equal<reports.ReportRequestContext, model.RequestContext & Readonly<{ botToken?: string }>>>();
 }
@@ -611,7 +653,9 @@ test('named content ports are exported', () => {
     media.readMediaState,
     media.readCollectionFence,
     moderation.takedown,
-    moderation.eraseAuthorScope,
+    operations.beginAuthorErasure,
+    operations.readOperation,
+    erasePost.erasePostLogical,
     moderation.eraseStandaloneMedia,
     reports.createReport,
     reports.readReport,

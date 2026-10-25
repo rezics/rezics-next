@@ -91,7 +91,14 @@ function fixtureContracts(): void {
       }
     >
   >();
+  same<Equal<Persona, { id: string; bearer: string }>>();
   same<Equal<WriteOptions, { actor: Persona | null; key: string; session?: string }>>();
+  same<
+    Equal<
+      ContentThreadDriver['session'],
+      (response: Response, actor: Persona) => Promise<{ token: string; partitions: number[] }>
+    >
+  >();
 }
 
 function observerContracts(): void {
@@ -167,6 +174,9 @@ async function driverConsumers(
   });
   const evidence: Awaited<ReturnType<ContentMediaDriver['authenticationEvidence']>> =
     await media.authenticationEvidence('worker', requestId);
+  const refreshed: ContentCredential = await system.auth.refresh({ refreshToken: requestId });
+  await system.clock.setCommandTime('2026-01-01T00:00:00Z');
+  await system.clock.setCursorVerificationTime('2026-01-01T00:00:00Z');
   const scopes: readonly string[] = credential.actor.scopes;
   await disclosure.read('moderator', { kind: 'post', id: postId }, revisionId);
   const barrier: SqlBarrier = observer.hold({ statement: 'COMMIT', occurrence: 1 }, 'before');
@@ -174,7 +184,7 @@ async function driverConsumers(
   observer.armFault({ match: { statement: entered.statement }, boundary: 'after', error: new Error('query fault') });
   barrier.release();
   const records: readonly SqlExecution[] = observer.records;
-  void [responses, evidence, records, scopes];
+  void [responses, evidence, records, scopes, refreshed];
   await observer.close();
   await system.close();
 }
