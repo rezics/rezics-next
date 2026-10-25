@@ -21,7 +21,8 @@ export type AssignmentInput = {
   key: string;
 };
 export type AssignmentRevokeInput = Pick<AssignmentInput, 'principalId' | 'requestId' | 'key'>;
-const referencePattern = /^urn:rezics:request:([0-9a-f-]{36}):([0-9a-f-]{36})$/;
+const uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
+const referencePattern = new RegExp(`^urn:rezics:request:(${uuid}):(${uuid})$`);
 export type AssignmentEvidence =
   | { kind: 'none' }
   | { kind: 'unresolved' }
@@ -37,8 +38,7 @@ export async function readAssignment(
 ): Promise<AssignmentEvidence> {
   if (requestedBy === null) return { kind: 'none' };
   const match = typeof requestedBy === 'string' ? referencePattern.exec(requestedBy) : null;
-  if (!match || routeOf(match[1]!) === null || routeOf(match[2]!) === null || routeOf(assignedActorId) === null)
-    return { kind: 'unresolved' };
+  if (!match || match[0] !== requestedBy || routeOf(assignedActorId) === null) return { kind: 'unresolved' };
   try {
     const row = await readStatement.run(client, {
       route: routeOf(match[1]!)!,

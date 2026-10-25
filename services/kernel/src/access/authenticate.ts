@@ -9,8 +9,7 @@ import {
   type AccountActor,
 } from '../request/access.ts';
 import { readAccount, type Account } from './account-data.ts';
-import assignmentRead from './permission-assignment.sql';
-import timeRead from './permission-time.sql';
+import { readAssignment } from './delegation-commands.ts';
 
 export type AuthenticationConfig = {
   issuer: string;
@@ -204,17 +203,8 @@ export function createAuthenticator(configuration?: AuthenticationConfig) {
       if (Object.hasOwn(payload, 'requested_by')) {
         const request = typeof payload.requested_by === 'string' ? requestedByPattern.exec(payload.requested_by) : null;
         if (!request || request[0] !== payload.requested_by) throw invalid();
-        const time = await timeRead.run(client);
-        if (!time) throw invalid();
-        const assignment = await assignmentRead.run(client, {
-          route: routeOf(request[1]!),
-          principal_id: request[1]!,
-          request_id: request[2]!,
-          actor_id: accountId,
-          at: time.at,
-        });
-        if (!assignment || assignment.kind !== 'actor' || assignment.state !== 'active' || assignment.fenced !== false)
-          throw invalid();
+        const assignment = await readAssignment(client, payload.requested_by as string, accountId);
+        if (assignment.kind !== 'resolved') throw invalid();
         requestedBy = payload.requested_by as string;
       }
       const expires = payload.exp! * 1000;

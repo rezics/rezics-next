@@ -244,7 +244,7 @@ Better Auth. Host consent UI must show the selected client and scopes explicitly
 | `POST /recovery/start`       | `{ account_id }`; delivers a native short-lived proof only for a current active human                                                                                                                            |
 | `POST /recovery/complete`    | `{ account_id, token, new_password }`; consumes the epoch-bound proof and invalidates through Access before native reset                                                                                         |
 | `GET /session`               | Cookie; returns only `SessionProof`, with a database session read and current Access/consent validation                                                                                                          |
-| `POST /token`                | Cookie and `{}`; returns `{ access_token, token_type: "Bearer", expires_in: 300 }`                                                                                                                               |
+| `POST /token`                | Cookie and `{ requested_by?: string }`; returns `{ access_token, token_type: "Bearer", expires_in: 300 }`                                                                                                        |
 | `POST /consent`              | Cookie and `{ client_id, scope: string[] }`; explicitly replaces this actor's third-party consent and returns those fields                                                                                       |
 | `POST /signout`              | Cookie and `{}`; Better Auth deletes the session and clears its cookie                                                                                                                                           |
 | `GET /.well-known/jwks.json` | Public `PublicJwks`, containing only ES256 verification material                                                                                                                                                 |
@@ -264,8 +264,8 @@ and fail kernel's next account-floor check even with cached JWKS. Without the
 invalidation port, reduction fails closed; consent growth needs no invalidation.
 An Access outage before its receipt leaves consent unchanged. A failure after
 Access commits can leave a raised floor with the old Auth consent; it cannot
-restore old token authority. Cross-service retries must retain this barrier. `/token` accepts no client, scope, epoch, principal or delegation
-input. Session cookie caching is disabled, including on subsequent database reads.
+restore old token authority. Cross-service retries must retain this barrier. `/token` accepts no client, scope, epoch or principal identity input. Its optional
+`requested_by` field is an untrusted assignment reference. Session cookie caching is disabled, including on subsequent database reads.
 
 ## Kernel claim and verification contract
 
@@ -300,8 +300,12 @@ Access tokens have `typ: "at+jwt"`, `alg: "ES256"` and an identified `kid`.
 The exact claims are `iss`, `aud`, `sub = account_id`, `client_id`, space-separated
 `scope`, `authn_epoch`, `iat`, `exp`, `auth_time` and `amr`. `exp - iat` is exactly
 300 seconds. No profile, email, password or session bearer secret is included.
-`AccessTokenClaims.requested_by` reserves the approved optional claim shape for
-future principal-created assignment proof integration; it is never issued here.
+`AccessTokenClaims.requested_by` is present only after current Access assignment
+proof. It is the canonical string
+`urn:rezics:request:<principal-uuid>:<request-uuid>`, using lowercase routed UUIDs.
+The assignment changes neither the authenticated actor's `sub` nor the session's
+client, scopes, epoch, authentication time or methods. Ordinary delegation never
+issues `act`; RFC 8693 token exchange remains unsupported.
 
 `service.verifier` supplies the configured `issuer`, `audience`, `jwksUrl`
 (`${issuer}/.well-known/jwks.json`), `algorithms: ["ES256"]` and
@@ -482,6 +486,56 @@ The forward Auth migration records only the issuance gate. DBOS manages its
 system schema separately. Migration versions use actual UTC creation time and
 apply without fabricated global ordering; previously committed filenames remain
 unchanged.
+
+## Principal assignment composition
+
+The application binds `trustedAccess.readAssignment(requestedBy, assignedActorId)`
+to `readAssignment(accessReader, requestedBy, assignedActorId)`, exported from
+`services/kernel/src/access/delegation-commands.ts`. The reader returns the
+structural `AssignmentProof`: `resolved` evidence with principal, actor, request
+and validity, or `none`/`unresolved`. It checks the actual principal-created row,
+assigned actor, current database time, revocation, and principal state/fence.
+The principal creates that row through `createDelegationCommands(...).create`
+using an actor returned by the real Access authenticator. Bootstrap rows without
+creator provenance cannot support delegation tokens.
+
+Auth rejects a malformed reference before calling the port, verifies every
+returned identity against the reference and cookie subject, and uses
+`trustedAccess.readAccount(principalId)` for a further active actor/fence check.
+The account adapter maps Access `minimumAuthnEpoch` to `authnEpoch`, preserves
+`fenced`, and derives `automated` from `operatorAccountId`. Missing ports,
+unresolved proofs and dependency failures deny issuance. Auth owns its separate
+database and signer; it imports no kernel pool or permission SQL. No assignment
+proof or principal identity is persisted in the Better Auth session.
+
+For verification, compose `createAccess` from `services/kernel/src/access/index.ts`
+with the route action catalogue and `auth: { issuer, audience, jwksUrl }` from
+`service.verifier`. Its public JWKS transport may use the ordinary HTTPS endpoint;
+the integration fixture binds `fetch` to `service.handler`. Each authentication
+re-reads the assignment through the same Access reader before returning the
+unchanged `requestedBy: string | null`. A present malformed, unsupported, missing,
+revoked, mismatched or unproven claim raises `AuthenticationError` with status 401
+and challenge `Bearer error="invalid_token"`. Principal and organization evidence
+is prepared before resource checkout. The existing resource formula checks actor
+grants, token scopes and principal grants, including denials and time validity,
+on the resource transaction. Commands retain client and assignment in their
+receipt basis and digest.
+
+Native OAuth and workflow adapters must retain these claims and proof ports.
+An assignment reference grants no registered-client identity, client credential
+proof or extra scope. Website integration must retain its exclusive
+`media:complete` scope, confidential `private_key_jwt` issuance, PKCE, refresh,
+revocation and person-as-sub contracts. These requirements remain the client
+adapter's responsibility; delegation uses the existing registry, consent and
+signer rather than introducing another issuance path.
+
+`test/access/delegated-auth.test.ts` in kernel exercises the composition with
+separately migrated Auth storage, native Better Auth credentials/sessions,
+production principal assignment commands, public JWKS verification and real
+resource commands. It covers independent actor/scope/principal denial, current
+assignment and principal invalidation, direct automation credentials, and receipt
+binding. Auth's existing boundary suites retain their independent issuer storage
+and signing rotation checks.
 
 ## Cost
 

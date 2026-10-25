@@ -41,6 +41,8 @@ interface Client {
   scopes: string[];
 }
 const scopePattern = /^[\x21\x23-\x5b\x5d-\x7e]+$/;
+const assignmentUuid = '[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
+const assignmentReference = new RegExp(`^urn:rezics:request:(${assignmentUuid}):(${assignmentUuid})$`);
 function scopes(value: unknown): string[] {
   if (
     !Array.isArray(value) ||
@@ -895,7 +897,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           });
         }
         if (url.pathname === '/token') {
-          fields(body, []);
+          fields(body, ['requested_by']);
           const native = await getAuth().api.getSession({
             headers: request.headers,
             query: { disableCookieCache: true, disableRefresh: true },
@@ -905,6 +907,24 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             const proof = await sessionProof(request.headers);
             const client = await clientFor(proof.client_id);
             await materialize(proof.account_id, proof.client_id, client.scopes, client.first_party);
+            let requestedBy: string | undefined;
+            if (Object.hasOwn(body, 'requested_by')) {
+              const reference = body.requested_by;
+              const match = typeof reference === 'string' ? assignmentReference.exec(reference) : null;
+              if (!match || match[0] !== reference || !trustedAccess.readAssignment) throw new Denied();
+              // The cookie supplies actor/client/scopes. The body supplies only an
+              // untrusted reference, resolved by the separately anchored Access reader.
+              const assignment = await trustedAccess.readAssignment(reference as string, proof.account_id);
+              if (
+                assignment.kind !== 'resolved' ||
+                assignment.principalId !== match[1] ||
+                assignment.requestId !== match[2] ||
+                assignment.assignedActorId !== proof.account_id
+              )
+                throw new Denied();
+              await activeActor(assignment.principalId);
+              requestedBy = `urn:rezics:request:${assignment.principalId}:${assignment.requestId}`;
+            }
             const now = Math.floor(Date.now() / 1000);
             const accessToken = await signer.sign({
               iss: options.issuer,
@@ -917,6 +937,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               exp: now + 300,
               auth_time: proof.auth_time,
               amr: proof.amr,
+              ...(requestedBy === undefined ? {} : { requested_by: requestedBy }),
             });
             return json({ access_token: accessToken, token_type: 'Bearer', expires_in: 300 });
           });

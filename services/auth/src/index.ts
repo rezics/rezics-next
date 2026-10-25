@@ -53,9 +53,16 @@ export type CredentialEffect =
   | { kind: 'key'; kid: string; publicJwk: JWK; remove?: false }
   | { kind: 'key'; kid: string; remove: true };
 
+/** Current, principal-created assignment evidence from the Access owner. */
+export type AssignmentProof =
+  | { kind: 'none' | 'unresolved' }
+  | { kind: 'resolved'; principalId: string; assignedActorId: string; requestId: string; valid: string };
+
 /** Internal application ports. Never construct these results from HTTP fields. */
 export interface TrustedAccessPorts {
   readAccount(accountId: string): Promise<AccessAccount | null>;
+  /** Bind Access readAssignment: checks provenance, actor, validity, revocation and principal state/fence. */
+  readAssignment?(requestedBy: string, assignedActorId: string): Promise<AssignmentProof>;
   authorizeProvisioning(commandReference: string): Promise<{ accountId: string }>;
   /** Consume once while rechecking operator relationship, permission, epochs and client evidence. */
   consumeAuthorization?(input: {
