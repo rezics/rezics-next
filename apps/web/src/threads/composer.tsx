@@ -32,6 +32,8 @@ export function draftFetch(body: DocumentSnapshot): typeof fetch {
 
 export function refusalText(failure: WriteFailure): string {
   switch (failure.reason) {
+    case 'closed':
+      return m.thread_write_closed();
     case 'forbidden':
       return m.thread_write_forbidden();
     case 'invalid':
@@ -45,6 +47,8 @@ export function refusalText(failure: WriteFailure): string {
 
 function uploadRefusalText(refusal: UploadRefusal): string {
   switch (refusal.reason) {
+    case 'closed':
+      return m.editor_upload_closed();
     case 'type':
       return m.editor_upload_type();
     case 'too-large':

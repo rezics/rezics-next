@@ -220,7 +220,12 @@ const fake = Bun.serve({
     }
     if (!url.pathname.startsWith('/v1/')) return new Response(null, { status: 404 });
     const body = request.method === 'POST' ? await request.json() : null;
-    calls.push({ method: request.method, path: url.pathname, body, authorization: request.headers.get('authorization') });
+    calls.push({
+      method: request.method,
+      path: url.pathname,
+      body,
+      authorization: request.headers.get('authorization'),
+    });
 
     if (url.pathname === '/v1/definitions/active') return json({ digest: 'platform-closed-test' });
     if (url.pathname === '/v1/definitions/releases/platform-closed-test')
@@ -284,8 +289,13 @@ const fake = Bun.serve({
         ? problemResponse('platform_closed')
         : json({ subjects: [], next: null, as_of: new Date().toISOString() });
     if (request.method === 'POST' && url.pathname === '/v1/subjects:facets')
-      return closedReads ? problemResponse('platform_closed') : json({ facets: [], total: { value: 0, relation: 'exact' } });
-    if (request.method === 'POST' && (url.pathname === '/v1/threads' || url.pathname === `/v1/threads/${threadId}/posts`)) {
+      return closedReads
+        ? problemResponse('platform_closed')
+        : json({ facets: [], total: { value: 0, relation: 'exact' } });
+    if (
+      request.method === 'POST' &&
+      (url.pathname === '/v1/threads' || url.pathname === `/v1/threads/${threadId}/posts`)
+    ) {
       if (writeRefusal) return problemResponse(writeRefusal);
       return json({ error: 'Unexpected open write' }, 500);
     }
@@ -411,110 +421,137 @@ const closedText = {
 
 async function expectClosedPage(path: string, locale: keyof typeof closedText = 'en') {
   const response = await fetch(`${await site()}${path}`);
+  const responseHtml = await response.clone().text();
   expect(response.status, path).toBe(403);
-  const html = await response.text();
-  expect(html).toContain(closedText[locale].heading);
-  expect(html).toContain(closedText[locale].message);
+  expect(responseHtml).toContain(closedText[locale].heading);
+  expect(responseHtml).toContain(closedText[locale].message);
 }
 
 // The shared closed page and localized copy are added by the implementation.
-test.failing('a closed read renders the localized page in English and Japanese with status 403', async () => {
-  reset();
-  closedReads = true;
-  await expectClosedPage(`/en/boards/${boardId}`);
-  await expectClosedPage(`/ja/boards/${boardId}`, 'ja');
-}, timeout);
+test(
+  'a closed read renders the localized page in English and Japanese with status 403',
+  async () => {
+    reset();
+    closedReads = true;
+    await expectClosedPage(`/en/boards/${boardId}`);
+    await expectClosedPage(`/ja/boards/${boardId}`, 'ja');
+  },
+  timeout,
+);
 
 // Every page loader must expose the same closed state, including optional search facets.
-test.failing('subject, board, thread, search and offer pages share the closed read page', async () => {
-  reset();
-  closedReads = true;
-  for (const path of [
-    `/en/subjects/${subjectId}`,
-    `/en/boards/${boardId}`,
-    `/en/threads/${threadId}`,
-    '/en/search?q=stars',
-    `/en/offers/${offerId}`,
-  ])
-    await expectClosedPage(path);
-}, timeout);
+test(
+  'subject, board, thread, search and offer pages share the closed read page',
+  async () => {
+    reset();
+    closedReads = true;
+    for (const path of [
+      `/en/subjects/${subjectId}`,
+      `/en/boards/${boardId}`,
+      `/en/threads/${threadId}`,
+      '/en/search?q=stars',
+      `/en/offers/${offerId}`,
+    ])
+      await expectClosedPage(path);
+  },
+  timeout,
+);
 
 // Both write composers keep the browser draft and idempotency key after a platform refusal.
-test.failing('a closed thread start or reply keeps its draft and says it is not open yet', async () => {
-  for (const startThread of [true, false]) {
+test(
+  'a closed thread start or reply keeps its draft and says it is not open yet',
+  async () => {
+    for (const startThread of [true, false]) {
+      reset();
+      writeRefusal = 'platform_closed';
+      const path = startThread ? `/en/boards/${boardId}/new` : `/en/threads/${threadId}`;
+      const page = await open(path);
+      try {
+        await editor(page).waitFor({ state: 'visible' });
+        if (startThread) await title(page).fill('Keep this title');
+        await editor(page).fill('Keep this argument');
+        const key = await page.locator('input[name="idempotency_key"]').inputValue();
+        await send(page).click();
+        const alert = page.locator('main').getByRole('alert');
+        await alert.waitFor();
+        expect(await alert.innerText()).toMatch(/not open yet/i);
+        expect(await editor(page).innerText()).toBe('Keep this argument');
+        if (startThread) expect(await title(page).inputValue()).toBe('Keep this title');
+        expect(await page.locator('input[name="idempotency_key"]').inputValue()).toBe(key);
+        expect(calls.filter((call) => call.method === 'POST' && call.path.startsWith('/v1/threads'))).toHaveLength(1);
+      } finally {
+        await page.context().close();
+      }
+    }
+  },
+  timeout,
+);
+
+// Reserve an image from the real editor flow and start checkout from the real offer page.
+test(
+  'a closed media reservation or checkout start says it is not open yet',
+  async () => {
     reset();
-    writeRefusal = 'platform_closed';
-    const path = startThread ? `/en/boards/${boardId}/new` : `/en/threads/${threadId}`;
-    const page = await open(path);
+    mediaClosed = true;
+    const mediaPage = await open(`/en/threads/${threadId}`);
     try {
-      await editor(page).waitFor({ state: 'visible' });
-      if (startThread) await title(page).fill('Keep this title');
+      const png = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lS8AAAAASUVORK5CYII=',
+        'base64',
+      );
+      await editor(mediaPage).fill('Keep this sentence');
+      await mediaPage.locator('main').getByRole('button', { name: 'Image', exact: true }).click();
+      const dialog = mediaPage.getByRole('dialog', { name: 'Image' });
+      await dialog
+        .getByLabel('Choose image file')
+        .setInputFiles({ name: 'chart.png', mimeType: 'image/png', buffer: png });
+      await dialog.getByLabel('Alt text').fill('A chart');
+      await dialog.getByRole('button', { name: 'Insert image' }).click();
+      const mediaAlert = mediaPage
+        .locator('main')
+        .getByRole('alert')
+        .filter({ hasText: /not open yet/i });
+      await mediaAlert.waitFor();
+      expect(await mediaAlert.innerText()).toMatch(/not open yet/i);
+      expect(calls.some((call) => call.path === '/v1/media')).toBe(true);
+      expect(await editor(mediaPage).innerText()).toContain('Keep this sentence');
+    } finally {
+      await mediaPage.context().close();
+    }
+
+    reset();
+    checkoutClosed = true;
+    const checkoutPage = await open(`/en/offers/${offerId}`);
+    try {
+      await checkoutPage.getByRole('button', { name: /^buy$/i }).click();
+      const alert = checkoutPage.locator('main').getByRole('status');
+      await alert.waitFor();
+      expect(await alert.innerText()).toMatch(/not open yet/i);
+      expect(calls.some((call) => call.path === '/v1/orders')).toBe(true);
+    } finally {
+      await checkoutPage.context().close();
+    }
+  },
+  timeout,
+);
+
+// A normal permission denial remains the existing, distinct message.
+test(
+  'an ordinary forbidden reply keeps its existing message',
+  async () => {
+    reset();
+    writeRefusal = 'forbidden';
+    const page = await open(`/en/threads/${threadId}`);
+    try {
       await editor(page).fill('Keep this argument');
-      const key = await page.locator('input[name="idempotency_key"]').inputValue();
       await send(page).click();
       const alert = page.locator('main').getByRole('alert');
       await alert.waitFor();
-      expect(await alert.innerText()).toMatch(/not open yet/i);
-      expect(await editor(page).innerText()).toBe('Keep this argument');
-      if (startThread) expect(await title(page).inputValue()).toBe('Keep this title');
-      expect(await page.locator('input[name="idempotency_key"]').inputValue()).toBe(key);
-      expect(calls.filter((call) => call.method === 'POST' && call.path.startsWith('/v1/threads'))).toHaveLength(1);
+      expect(await alert.innerText()).toContain('You do not have permission to publish this contribution.');
+      expect(await alert.innerText()).not.toMatch(/not open yet/i);
     } finally {
       await page.context().close();
     }
-  }
-}, timeout);
-
-// Reserve an image from the real editor flow and start checkout from the real offer page.
-test.failing('a closed media reservation or checkout start says it is not open yet', async () => {
-  reset();
-  mediaClosed = true;
-  const mediaPage = await open(`/en/threads/${threadId}`);
-  try {
-    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lS8AAAAASUVORK5CYII=', 'base64');
-    await editor(mediaPage).fill('Keep this sentence');
-    await mediaPage.locator('main').getByRole('button', { name: 'Image', exact: true }).click();
-    const dialog = mediaPage.getByRole('dialog', { name: 'Image' });
-    await dialog.getByLabel('Choose image file').setInputFiles({ name: 'chart.png', mimeType: 'image/png', buffer: png });
-    await dialog.getByLabel('Alt text').fill('A chart');
-    await dialog.getByRole('button', { name: 'Insert image' }).click();
-    const mediaAlert = mediaPage.locator('main').getByRole('alert');
-    await mediaAlert.waitFor();
-    expect(await mediaAlert.innerText()).toMatch(/not open yet/i);
-    expect(calls.some((call) => call.path === '/v1/media')).toBe(true);
-    expect(await editor(mediaPage).innerText()).toContain('Keep this sentence');
-  } finally {
-    await mediaPage.context().close();
-  }
-
-  reset();
-  checkoutClosed = true;
-  const checkoutPage = await open(`/en/offers/${offerId}`);
-  try {
-    await checkoutPage.getByRole('button', { name: /^buy$/i }).click();
-    const alert = checkoutPage.locator('main').getByRole('status');
-    await alert.waitFor();
-    expect(await alert.innerText()).toMatch(/not open yet/i);
-    expect(calls.some((call) => call.path === '/v1/orders')).toBe(true);
-  } finally {
-    await checkoutPage.context().close();
-  }
-}, timeout);
-
-// A normal permission denial remains the existing, distinct message.
-test('an ordinary forbidden reply keeps its existing message', async () => {
-  reset();
-  writeRefusal = 'forbidden';
-  const page = await open(`/en/threads/${threadId}`);
-  try {
-    await editor(page).fill('Keep this argument');
-    await send(page).click();
-    const alert = page.locator('main').getByRole('alert');
-    await alert.waitFor();
-    expect(await alert.innerText()).toContain('You do not have permission to publish this contribution.');
-    expect(await alert.innerText()).not.toMatch(/not open yet/i);
-  } finally {
-    await page.context().close();
-  }
-}, timeout);
-
+  },
+  timeout,
+);

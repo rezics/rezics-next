@@ -285,6 +285,15 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
   refusals stop before K
 - **Growth check:** `tests/checkout-cost.test.ts`: `read rate limits stay within their bound as s grows`
 
+### Platform gates
+
+- **Touches:** Shared kernel-client recognition checks the problem body from an existing gated read; the root error
+  component renders the localized closed page. Media reservation and checkout start keep the kernel's 403 problem.
+- **Bound:** One single-read page request uses exactly 1 existing K and at most 1 existing D for signed-in root session
+  state; 0 R/A. Board and thread pages use at most 2 existing K. Recognition adds 0 K/D/R/A and inspects one bounded
+  problem body, with no work per catalog entry.
+- **Growth check:** `tests/platform-closed-cost.test.ts`: `closed page reads keep K/D/R/A fixed as existing page data grows`
+
 ### Locale resolution (`/`)
 
 - **Touches:** URL, locale cookie, then weighted `Accept-Language`, then English; redirect before page loaders

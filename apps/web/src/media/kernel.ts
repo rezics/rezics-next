@@ -1,4 +1,5 @@
 import { createKernelClient, type KernelClient } from '@rezics/client';
+import { isPlatformClosedProblem } from '../kernel/platform-closed.ts';
 
 type MediaRoutes = ReturnType<KernelClient['media']>;
 type ReadResponse = Awaited<ReturnType<MediaRoutes['get']>>;
@@ -65,6 +66,11 @@ function throwClientError(
 ): never {
   const body = error.value as Partial<ProblemBody> | null;
   const forwarded = retryAfterHeader(headers);
+  if (isPlatformClosedProblem(error.status, body)) {
+    const problemBody = { type: body!.type!, title: body!.title!, code: body!.code!, status: error.status };
+    if (forwarded === undefined) throw new MediaProblem(problemBody);
+    throw new MediaProblem(problemBody, forwarded);
+  }
   if (body && typeof body.type === 'string' && typeof body.title === 'string' && typeof body.code === 'string') {
     const problemBody = { type: body.type, title: body.title, code: body.code, status: error.status };
     if (forwarded === undefined) throw new MediaProblem(problemBody);

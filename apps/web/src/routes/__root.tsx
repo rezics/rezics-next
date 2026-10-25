@@ -1,13 +1,15 @@
-import { createRootRoute, HeadContent, Outlet, Scripts } from '@tanstack/react-router';
-import { createServerFn } from '@tanstack/react-start';
-import { getRequest, getRequestHeader } from '@tanstack/react-start/server';
+import { createRootRoute, HeadContent, Outlet, Scripts, useRouterState } from '@tanstack/react-router';
+import { createIsomorphicFn, createServerFn } from '@tanstack/react-start';
+import { getRequest, getRequestHeader, setResponseStatus } from '@tanstack/react-start/server';
 import { useLayoutEffect } from 'react';
 import { env } from 'cloudflare:workers';
 import type { SessionEnv } from '../session/client.ts';
 import { readSessionState } from '../session/state.ts';
 import { m } from '../paraglide/messages.js';
 import { getLocale, locales } from '../paraglide/runtime.js';
-import { AppShell, ErrorPage, NotFoundPage } from '../shell/shell';
+import { AppShell, NotFoundPage } from '../shell/shell';
+import { ClosedErrorPage, ClosedPage } from '../shell/closed.tsx';
+import { isPlatformClosedError } from '../kernel/platform-closed.ts';
 import '../styles.css';
 
 const readPreferences = createServerFn({ method: 'GET' }).handler(async () => {
@@ -24,6 +26,9 @@ const readPreferences = createServerFn({ method: 'GET' }).handler(async () => {
     csrfToken: session.csrfToken,
   };
 });
+const setClosedResponseStatus = createIsomorphicFn()
+  .server(() => setResponseStatus(403, 'Forbidden'))
+  .client(() => undefined);
 export const Route = createRootRoute({
   loader: () => readPreferences(),
   head: ({ loaderData }) => ({
@@ -45,10 +50,14 @@ export const Route = createRootRoute({
   }),
   component: Root,
   notFoundComponent: NotFoundPage,
-  errorComponent: ErrorPage,
+  errorComponent: ClosedErrorPage,
 });
 function Root() {
   const { theme, collapsed, session, csrfToken } = Route.useLoaderData();
+  const platformClosed = useRouterState({
+    select: (state) => state.matches.some((match) => match.status === 'error' && isPlatformClosedError(match.error)),
+  });
+  if (platformClosed) setClosedResponseStatus();
   useLayoutEffect(() => {
     document.documentElement.dataset.hydrated = '';
   }, []);
@@ -59,7 +68,7 @@ function Root() {
       </head>
       <body>
         <AppShell theme={theme} collapsed={collapsed} session={session} csrfToken={csrfToken}>
-          <Outlet />
+          {platformClosed ? <ClosedPage /> : <Outlet />}
         </AppShell>
         <Scripts />
       </body>

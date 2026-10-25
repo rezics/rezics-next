@@ -1,4 +1,5 @@
 import { kernelClient } from '../kernel/client';
+import { isPlatformClosedError } from '../kernel/platform-closed.ts';
 import { dependencyUnavailable, problem, problemResponse } from '../media/kernel';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
@@ -79,7 +80,12 @@ export async function startCheckout(request: Request, sessionEnv: Partial<Sessio
       'idempotency-key': fields.idempotencyKey,
     } as { 'idempotency-key': string };
     result = await kernelClient().orders.post({ offerId: fields.offerId }, { headers });
-  } catch {
+  } catch (error) {
+    if (isPlatformClosedError(error))
+      return Response.json(error.problem, {
+        status: error.status,
+        headers: { 'content-type': 'application/problem+json', 'cache-control': 'private, no-store' },
+      });
     throw dependencyUnavailable(503);
   }
   if (result.error || !result.data) {

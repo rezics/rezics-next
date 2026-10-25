@@ -1,9 +1,10 @@
 import { Button } from '@rezics/ui/button';
 import { useState } from 'react';
 import { m } from '../paraglide/messages.js';
+import { isPlatformClosedProblem } from '../kernel/platform-closed.ts';
 import type { OfferPageData } from './offer';
 
-type Phase = 'ready' | 'submitting' | 'retry' | 'unavailable';
+type Phase = 'ready' | 'submitting' | 'retry' | 'unavailable' | 'closed';
 
 export function OfferPage({ offer }: { offer: OfferPageData }) {
   const [phase, setPhase] = useState<Phase>(offer.state === 'delisted' ? 'unavailable' : 'ready');
@@ -29,6 +30,19 @@ export function OfferPage({ offer }: { offer: OfferPageData }) {
         return;
       }
       if (!response.ok) {
+        if (
+          response.status === 403 &&
+          isPlatformClosedProblem(
+            response.status,
+            await response
+              .clone()
+              .json()
+              .catch(() => undefined),
+          )
+        ) {
+          setPhase('closed');
+          return;
+        }
         setPhase('retry');
         return;
       }
@@ -62,12 +76,17 @@ export function OfferPage({ offer }: { offer: OfferPageData }) {
           {m.offer_retry_note()}
         </p>
       )}
+      {phase === 'closed' && (
+        <p className="rounded-xl border border-border bg-muted px-4 py-3 text-foreground" role="status">
+          {m.offer_start_closed()}
+        </p>
+      )}
       <div>
         {phase === 'retry' ? (
           <Button variant="outline" size="lg" className="w-full sm:w-auto" onClick={() => void start()}>
             {m.offer_retry()}
           </Button>
-        ) : (
+        ) : phase === 'closed' ? null : (
           <Button size="lg" className="w-full sm:w-auto" disabled={phase !== 'ready'} onClick={() => void start()}>
             {m.offer_buy()}
           </Button>

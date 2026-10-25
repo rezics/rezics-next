@@ -4,13 +4,14 @@ import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
+import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed.ts';
 import type { SessionEnv } from '../session/client.ts';
 import { prepareSession, viewerCredential } from '../session/request.ts';
 
 const licence = 'LicenseRef-rezics-terms';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-type FailureReason = 'forbidden' | 'invalid' | 'rate-limited' | 'unavailable';
+type FailureReason = 'closed' | 'forbidden' | 'invalid' | 'rate-limited' | 'unavailable';
 export type WriteFailure = { ok: false; reason: FailureReason; retryAfter?: number };
 export type ThreadResource = ReturnType<KernelClient['threads']>;
 export type ThreadCreated = NonNullable<Awaited<ReturnType<KernelClient['threads']['post']>>['data']>;
@@ -82,7 +83,8 @@ function parseRetryAfter(value: unknown): number | undefined {
   return Math.min(3600, Math.max(0, Math.ceil((date - Date.now()) / 1000)));
 }
 
-function refusal(status: number, headers: HeadersInit | undefined): WriteFailure {
+function refusal(status: number, headers: HeadersInit | undefined, body?: unknown): WriteFailure {
+  if (isPlatformClosedProblem(status, body)) return { ok: false, reason: 'closed' };
   if (status === 403 || status === 401) return { ok: false, reason: 'forbidden' };
   if (status === 400 || status === 413 || status === 422) return { ok: false, reason: 'invalid' };
   if (status === 429) {
@@ -119,9 +121,10 @@ export const startThread = createServerFn({ method: 'POST' })
           headers: { authorization, 'idempotency-key': data.idempotencyKey } as { 'idempotency-key': string },
         },
       );
-      if (result.error) return refusal(result.status, result.headers);
+      if (result.error) return refusal(result.status, result.headers, result.error.value);
       return { ok: true, thread: result.data.thread };
-    } catch {
+    } catch (error) {
+      if (isPlatformClosedError(error)) return { ok: false, reason: 'closed' };
       return { ok: false, reason: 'unavailable' };
     }
   });
@@ -156,9 +159,10 @@ export const replyToThread = createServerFn({ method: 'POST' })
             headers: { authorization, 'idempotency-key': data.idempotencyKey } as { 'idempotency-key': string },
           },
         );
-      if (result.error) return refusal(result.status, result.headers);
+      if (result.error) return refusal(result.status, result.headers, result.error.value);
       return { ok: true, post: result.data.post };
-    } catch {
+    } catch (error) {
+      if (isPlatformClosedError(error)) return { ok: false, reason: 'closed' };
       return { ok: false, reason: 'unavailable' };
     }
   });
