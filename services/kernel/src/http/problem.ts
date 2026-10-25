@@ -122,7 +122,7 @@ function appendPointer(pointer: string, segment: string): string {
   return `${pointer}/${escapePointerSegment(segment)}`;
 }
 
-function issuePointers(issue: RawIssue): { pointer: string; code: FieldErrorCode }[] {
+export function issuePointers(issue: RawIssue): { pointer: string; code: FieldErrorCode }[] {
   const keyword = issue.keyword;
   const pointer =
     typeof issue.instancePath === 'string' && pointerPattern.test(issue.instancePath) ? issue.instancePath : '';
