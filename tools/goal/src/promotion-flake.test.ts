@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { existsSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 import { git } from './merge.ts';
 import { integrationHarness } from './test-support.ts';
 
@@ -144,5 +144,26 @@ test('a failing batch publishes its passing prefix to main before it confirms an
     for (const task of [alpha, beta]) expect(h.store.task(task.id).state).toBe('merged');
     expect(h.store.task(bad.id).currentAttempt).toBe(2);
     expect(existsSync(`${h.root}/bad`)).toBe(false);
+  } finally { h.dispose(); }
+});
+
+test('a prefix that does not contain main is not published and promotion still completes', async () => {
+  const h = integrationHarness();
+  try {
+    const alpha = await h.seed('alpha');
+    // A hotfix committed on main directly reaches dev only through a later merge, so no earlier boundary contains it.
+    writeFileSync(`${h.root}/hotfix`, 'hotfix\n');
+    git(h.root, 'add', 'hotfix'); git(h.root, 'commit', '-qm', 'Hotfix on main');
+    const tree = `${h.root}-merge`;
+    git(h.root, 'worktree', 'add', '--detach', tree, 'dev');
+    git(tree, '-c', 'core.hooksPath=/dev/null', 'merge', '--no-ff', '-qm', 'Merge main into dev', 'main');
+    git(h.root, 'update-ref', 'refs/heads/dev', git(tree, 'rev-parse', 'HEAD'));
+    git(h.root, 'worktree', 'remove', '--force', tree);
+    const bad = await h.seed('bad');
+    await h.seed('omega');
+    await h.promote(async (_command, cwd) => existsSync(`${cwd}/bad`) ? failure : success);
+    expect(h.store.task(alpha.id).state).toBe('merged');
+    expect(h.store.task(bad.id).currentAttempt).toBe(2);
+    expect(git(h.root, 'merge-base', '--is-ancestor', git(h.root, 'rev-parse', 'main'), 'dev') === '').toBe(true);
   } finally { h.dispose(); }
 });

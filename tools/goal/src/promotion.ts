@@ -199,8 +199,8 @@ async function resolveCulprit(options: PromotionOptions, run: PromotionRun): Pro
   const culpritResult = results.get(high);
   // Every prefix before the culprit passed the root gate, so main takes it now; a flake or a second breakage later in
   // this run cannot hold back work that is already proven.
-  if (high > 0 && results.get(high - 1)?.passed && JSON.stringify(command) === JSON.stringify(run.rootGate)) {
-    publishPrefix(options, run, run.boundaries[high - 1]!.commit, run.taskIds.slice(0, high));
+  if (high > 0 && results.get(high - 1)?.passed && JSON.stringify(command) === JSON.stringify(run.rootGate)
+    && publishPrefix(options, run, run.boundaries[high - 1]!.commit, run.taskIds.slice(0, high))) {
     run.mainBase = run.boundaries[high - 1]!.commit;
     run.taskIds = run.taskIds.slice(high); run.boundaries = run.boundaries.slice(high);
     high = 0;
@@ -264,16 +264,18 @@ function prepareCulpritOutcome(options: PromotionOptions, run: PromotionRun): vo
     changedFiles: [], diffLines: 0 });
 }
 
-function publishPrefix(options: PromotionOptions, run: PromotionRun, target: string, taskIds: readonly string[]): void {
+/** Publish a proven prefix when main can fast-forward to it; main's own commits reach dev only through later merges. */
+function publishPrefix(options: PromotionOptions, run: PromotionRun, target: string, taskIds: readonly string[]): boolean {
   const settings = options.settings, store = options.job.tasks.store, checkout = settings.mainCheckout;
   if (git(checkout, 'symbolic-ref', 'HEAD') !== ref(settings.mainBranch))
     throw new Error(`The main checkout must have ${settings.mainBranch} checked out`);
+  if (!isAncestor(checkout, head(checkout, settings.mainBranch), target)) return false;
   store.publishPromotion(taskIds, target, () => {
-    if (head(checkout, settings.mainBranch) !== run.mainBase) throw new Error('Main moved to a different history during promotion');
     options.beforeAdvance?.();
     git(checkout, 'merge', '--ff-only', '--no-edit', target);
   });
   options.job.onPromotionComplete(taskIds, run.id);
+  return true;
 }
 
 async function publishMain(options: PromotionOptions, run: PromotionRun): Promise<void> {
@@ -282,10 +284,13 @@ async function publishMain(options: PromotionOptions, run: PromotionRun): Promis
   if (git(checkout, 'symbolic-ref', 'HEAD') !== ref(settings.mainBranch))
     throw new Error(`The main checkout must have ${settings.mainBranch} checked out`);
   const taskIds = run.promoteTaskIds ?? [];
+  const now = head(checkout, settings.mainBranch);
+  // Main took commits this snapshot does not contain: drop the run, and the next pass gates a fresh one.
+  if (now !== target && !isAncestor(checkout, target, now) && !isAncestor(checkout, now, target)) { store.clearPromotion(); return; }
   store.publishPromotion(taskIds, target, () => {
     const current = head(checkout, settings.mainBranch);
     if (current !== target && !isAncestor(checkout, target, current)) {
-      if (current !== run.mainBase) throw new Error('Main moved to a different history during promotion');
+      if (!isAncestor(checkout, current, target)) throw new Error('Main moved to a different history during promotion');
       options.beforeAdvance?.();
       git(checkout, 'merge', '--ff-only', '--no-edit', target);
     } else if (git(checkout, 'rev-parse', 'HEAD') !== current) {

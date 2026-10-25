@@ -153,7 +153,9 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   const runGate: GateRunner = options.runGate ?? execute;
   let train!: MergeTrain;
   const pump = () => train.pump();
-  const job = new WorkerJob(tasks, queue, inbox, undefined, pump);
+  // Short commands hand the train to a detached process, so recovering an orphan never makes `status` wait for a gate.
+  const afterSettle = () => process.env.GOAL_TRAIN_MODE === 'detached' ? handOff() : pump();
+  const job = new WorkerJob(tasks, queue, inbox, undefined, afterSettle);
   const handOff = () => new Promise<void>((resolve, reject) => {
     const env = { ...process.env };
     for (const key of Object.keys(env)) if (key.startsWith('GOAL_')) delete env[key];
