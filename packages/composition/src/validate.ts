@@ -11,8 +11,8 @@ import {
   type CompositionViolationCode,
   type SchemaNode,
 } from './registry.ts';
-import { PageReadLimitError, planReads } from './reads.ts';
-import { CURIE, HREF, NODE_ID, PLAIN_TEXT, safetyKind } from './strings.ts';
+import { MAX_PAGE_COST, PageReadLimitError, planReads, readCost } from './reads.ts';
+import { CURIE, HREF, LOCALE_KEY, MAX_LOCALIZED_ENTRIES, NODE_ID, PLAIN_TEXT, safetyKind } from './strings.ts';
 
 const MAX_VIOLATIONS = 64;
 const PRIORITY: Record<CompositionViolationCode, number> = {
@@ -113,7 +113,37 @@ function patternOk(schema: SchemaNode, value: string): boolean {
   return new RegExp(schema.pattern, 'u').test(value);
 }
 
+function walkLocalized(schema: SchemaNode, value: unknown, pointer: string, add: Add): void {
+  const text = schema.anyOf?.[0];
+  const map = schema.anyOf?.[1];
+  if (text === undefined || map === undefined) {
+    add(pointer, 'invalid');
+    return;
+  }
+  if (typeof value === 'string') {
+    walkString(text, value, pointer, add);
+    return;
+  }
+  if (!isRecord(value)) {
+    add(pointer, 'invalid');
+    return;
+  }
+  const keys = Object.keys(value);
+  const min = map.minProperties ?? 1;
+  const max = map.maxProperties ?? MAX_LOCALIZED_ENTRIES;
+  if (keys.length < min || keys.length > max) add(pointer, 'invalid');
+  for (const key of keys) {
+    const keyPointer = join(pointer, key);
+    if (!LOCALE_KEY.test(key)) add(keyPointer, 'invalid');
+    walkString(text, value[key], keyPointer, add);
+  }
+}
+
 function walkSchema(schema: SchemaNode, value: unknown, pointer: string, add: Add): void {
+  if (safetyKind(schema) === 'localizedText') {
+    walkLocalized(schema, value, pointer, add);
+    return;
+  }
   switch (schema['~kind']) {
     case 'Object':
       walkObject(schema, value, pointer, add);
@@ -389,7 +419,12 @@ export function validateComposition(registry: CompositionRegistry, value: unknow
   validateDocument(registry, value, (pointer, code) => put(found, pointer, code));
   if (found.size === 0) {
     try {
-      planReads(registry, value as CompositionDocument, { subject: '00000000-0000-8000-8000-000000000000' });
+      const plan = planReads(registry, value as CompositionDocument, {
+        subject: '00000000-0000-8000-8000-000000000000',
+      });
+      let cost = 0;
+      for (const read of Object.values(plan.reads)) cost += readCost(read);
+      if (cost > MAX_PAGE_COST) return [{ pointer: '/content', code: 'limit' }];
     } catch (error) {
       if (error instanceof PageReadLimitError) return [{ pointer: '/content', code: 'limit' }];
       throw error;

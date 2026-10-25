@@ -19,7 +19,7 @@ export {
   defineRegistry,
   platformRegistry,
 } from './registry.ts';
-export { curie, href, plainText } from './strings.ts';
+export { curie, href, localizedText, pickText, plainText } from './strings.ts';
 export { compositionSchema } from './schema.ts';
 export { validateComposition } from './validate.ts';
-export { MAX_PAGE_READS, planReads, shownProperties, type PageReadPlan } from './reads.ts';
+export { MAX_PAGE_COST, MAX_PAGE_READS, planReads, readCost, shownProperties, type PageReadPlan } from './reads.ts';

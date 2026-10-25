@@ -11,6 +11,14 @@ import {
 
 export const MAX_PAGE_READS = 16;
 
+/** Subjects the distinct reads of one page may return in total. */
+export const MAX_PAGE_COST = 128;
+
+/** Subjects one read can return: one subject, or a search read's limit. */
+export function readCost(read: PageRead): number {
+  return read.kind === 'subject' ? 1 : read.body.limit;
+}
+
 export interface PageReadPlan {
   reads: Record<string, PageRead>;
   nodes: Record<string, string>;

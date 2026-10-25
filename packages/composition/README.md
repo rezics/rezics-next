@@ -30,14 +30,16 @@ It runs when a page is published, not on each view.
 | Nodes in the document         | 256          | `/content`                    |
 | Node depth                    | 8            | the first node past the limit |
 | Distinct page reads           | 16           | `/content`                    |
+| Page read cost                | 128          | `/content`                    |
 
 A node in `content` has depth 1. A node in a slot of a depth-d node has depth d + 1. Size is
 checked first. A document over the node budget returns only the node limit, including when it
 is also too deep. A document inside that budget and past the depth limit returns only that
 depth violation.
 When no other violation exists, validation plans reads with the placeholder subject
-`00000000-0000-8000-8000-000000000000`. A plan over the read budget returns only
-`{ pointer: '/content', code: 'limit' }`.
+`00000000-0000-8000-8000-000000000000`. More than 16 distinct reads, or a sum of their costs
+over 128, returns only `{ pointer: '/content', code: 'limit' }`. The distinct-read count is
+checked first.
 
 ## Safety
 
@@ -50,11 +52,15 @@ Every string a registry admits is one of:
   absolute `https:` URL has a host name, an optional port and no user information. Any other
   scheme, a protocol-relative URL or a control character is refused;
 - `curie()`: `^[a-z][a-z0-9]*:[A-Za-z][A-Za-z0-9_]*$`, at most 128 characters;
+- `localizedText({ maxLength })`: `plainText({ maxLength })`, or an object of 1 to 16 entries
+  whose keys match `^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$` and whose values are plain text of
+  that maximum length;
 - a TypeBox literal or a union of literals.
 
 `defineRegistry` throws when a string is anything else. The message includes `<Type>.<prop>`.
 The same rules are patterns on the generated JSON Schema, so a consumer that only validates
-against that schema applies the same safety.
+against that schema applies the same safety. Localized text is an `anyOf` of the string and
+the object, and the object uses `propertyNames` for its keys.
 
 ## Violations
 
@@ -66,7 +72,7 @@ against that schema applies the same safety.
 | `unknown_type` | `type` is not registered; that node's props are not checked                           |
 | `unsafe`       | A string fails a plain-text, link or CURIE pattern                                    |
 | `duplicate`    | A repeated `props.id` after its first occurrence                                      |
-| `limit`        | Canonical size, node count, depth or distinct page reads                              |
+| `limit`        | Canonical size, node count, depth, distinct page reads or their total cost            |
 
 Document order visits a node before its slot children, and slots in registry order. One
 violation is kept per pointer, and `unsafe` wins over `invalid`. Results are sorted by
@@ -81,17 +87,17 @@ tokens: `density` (`compact` or `comfortable`), `radius` (`sm`, `md` or `lg`), `
 or `lg`). Every token is optional. Colours and type faces are not tokens; pages share the
 REZICS visual language.
 
-| Component        | Props                                                                   | Slots          |
-| ---------------- | ----------------------------------------------------------------------- | -------------- |
-| `Stack`          | `gap`: `sm`, `md` or `lg`                                               | `children`     |
-| `Columns`        | `split`: `even`, `start` or `end`                                       | `start`, `end` |
-| `Heading`        | `text` (plain text, 200), `level`: 2, 3 or 4                            |                |
-| `Text`           | `text` (plain text, 2,000)                                              |                |
-| `Slot`           | `name`: one of `SLOT_NAMES`                                             | `children`     |
-| `SubjectHeader`  | none                                                                    |                |
-| `Statements`     | `properties`: 1–32 unique `curie()` values                              |                |
-| `MoreStatements` | none                                                                    |                |
-| `SubjectList`    | `title` (plain text, 120), `property`: `curie()`, `limit`: integer 1–24 |                |
+| Component        | Props                                                                       | Slots          |
+| ---------------- | --------------------------------------------------------------------------- | -------------- |
+| `Stack`          | `gap`: `sm`, `md` or `lg`                                                   | `children`     |
+| `Columns`        | `split`: `even`, `start` or `end`                                           | `start`, `end` |
+| `Heading`        | `text` (localized text, 200), `level`: 2, 3 or 4                            |                |
+| `Text`           | `text` (localized text, 2,000)                                              |                |
+| `Slot`           | `name`: one of `SLOT_NAMES`                                                 | `children`     |
+| `SubjectHeader`  | none                                                                        |                |
+| `Statements`     | `properties`: 1–32 unique `curie()` values                                  |                |
+| `MoreStatements` | none                                                                        |                |
+| `SubjectList`    | `title` (localized text, 120), `property`: `curie()`, `limit`: integer 1–24 |                |
 
 `SLOT_NAMES` is `header`, `hero`, `entity`, `aside` and `footer`. `Slot` is the platform's
 rendering; reviewed first-party Zone code may wrap or replace it.
@@ -138,7 +144,31 @@ and never depends on the catalogue. A page issues at most 16 distinct reads what
 node count or subject, enforced at publish. The growth check covers 1, 16 and 200 data nodes
 planning 1, 16 and 1 reads, and refuses 17 distinct reads.
 
+`readCost(read)` is the number of subjects that read can return: 1 for a subject read and
+the search `limit` for a search read. `MAX_PAGE_COST` is 128. After the distinct-read count
+check, publish-time validation sums `readCost` over the distinct reads planned with the
+placeholder subject. Shared descriptors count once. The sum is one pass over at most 16
+reads, so a page read issues at most 16 reads and returns at most 128 subjects in total,
+whatever the document or subject.
+
+## Localized text
+
+`Heading.text` (200), `Text.text` (2,000) and `SubjectList.title` (120) are
+`localizedText`. A string is checked as `plainText`. An object reports a bad key as
+`invalid` at that key, a bad value as `unsafe` or `invalid` at that value, and too few or
+too many entries as `invalid` at the property. Any other JSON value is `invalid` at the
+property.
+
+`pickText(value, locale)` returns `{ text, lang }`. A string yields `{ text: value, lang: null }`.
+An object yields the entry for `locale`, otherwise an entry whose primary subtag equals the
+locale's (the key equal to that subtag first, then the others in code-unit order), otherwise
+`en`, otherwise the first key in code-unit order. `lang` is the key chosen.
+
+Localized text multiplies a text property's size by at most 16 entries, and the document
+stays inside `MAX_COMPOSITION_BYTES`. `pickText` is one lookup plus at most one pass over at
+most 16 keys.
+
 `bun scripts/schema.ts` writes `schema/composition-v1.schema.json` from this registry.
 `bun scripts/schema.ts --check` fails when that file is stale. The schema covers the closed
-shape and the safety patterns. Runtime validation also enforces size, node count, depth and
-unique ids and the distinct read limit.
+shape and the safety patterns. Runtime validation also enforces size, node count, depth,
+unique ids, the distinct read limit and the total read cost.

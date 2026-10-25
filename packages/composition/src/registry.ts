@@ -4,10 +4,12 @@ import Type, { type TSchema } from 'typebox';
 import {
   CURIE_PATTERN,
   HREF_PATTERN,
+  LOCALE_KEY_PATTERN,
+  MAX_LOCALIZED_ENTRIES,
   PLAIN_TEXT_PATTERN,
   type SafetyKind,
   curie,
-  plainText,
+  localizedText,
   safetyKind,
 } from './strings.ts';
 
@@ -78,6 +80,7 @@ export interface SchemaNode {
   required?: readonly string[];
   additionalProperties?: unknown;
   patternProperties?: unknown;
+  propertyNames?: SchemaNode;
   anyOf?: readonly SchemaNode[];
   items?: SchemaNode;
   const?: unknown;
@@ -91,6 +94,8 @@ export interface SchemaNode {
   minItems?: number;
   maxItems?: number;
   uniqueItems?: boolean;
+  minProperties?: number;
+  maxProperties?: number;
 }
 
 const TYPE_NAME = /^[A-Z][A-Za-z0-9]{0,63}$/u;
@@ -101,19 +106,53 @@ function asSchema(schema: TSchema): SchemaNode {
 }
 
 function refuse(label: string): never {
-  throw new Error(`${label} must be plain text, a link, a CURIE or a literal`);
+  throw new Error(`${label} must be plain text, localized text, a link, a CURIE or a literal`);
+}
+
+function isSchemaNode(value: unknown): value is SchemaNode {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isPlainText(schema: SchemaNode): boolean {
+  return (
+    schema['~kind'] === 'String' &&
+    safetyKind(schema) === 'plainText' &&
+    schema.pattern === PLAIN_TEXT_PATTERN &&
+    typeof schema.maxLength === 'number'
+  );
+}
+
+/** Plain text, or a map of 1–16 locale keys to that same plain text. */
+function isLocalizedText(schema: SchemaNode): boolean {
+  if (safetyKind(schema) !== 'localizedText' || schema['~kind'] !== 'Union') return false;
+  const members = schema.anyOf;
+  if (members === undefined || members.length !== 2) return false;
+  const text = members[0];
+  const map = members[1];
+  if (text === undefined || map === undefined || !isPlainText(text) || map['~kind'] !== 'Object') return false;
+  if (map.minProperties !== 1 || map.maxProperties !== MAX_LOCALIZED_ENTRIES) return false;
+  if (map.patternProperties !== undefined || Object.keys(map.properties ?? {}).length !== 0) return false;
+  const names = map.propertyNames;
+  if (names?.['~kind'] !== 'String' || names.pattern !== LOCALE_KEY_PATTERN) return false;
+  const values = map.additionalProperties;
+  return isSchemaNode(values) && isPlainText(values) && values.maxLength === text.maxLength;
 }
 
 function isSafeString(schema: SchemaNode): boolean {
   const kind: SafetyKind | undefined = safetyKind(schema);
   if (schema['~kind'] !== 'String' || typeof schema.pattern !== 'string' || kind === undefined) return false;
-  if (kind === 'plainText') return schema.pattern === PLAIN_TEXT_PATTERN && typeof schema.maxLength === 'number';
+  if (kind === 'plainText') return isPlainText(schema);
   if (kind === 'href') return schema.pattern === HREF_PATTERN && schema.maxLength === 2_048;
-  return schema.pattern === CURIE_PATTERN && schema.maxLength === 128;
+  if (kind === 'curie') return schema.pattern === CURIE_PATTERN && schema.maxLength === 128;
+  return false;
 }
 
 /** Every string this schema can accept is a safety string or a literal. `label` is `<Type>.<prop>`. */
 function assertAdmitted(schema: SchemaNode, label: string): void {
+  if (safetyKind(schema) === 'localizedText') {
+    if (!isLocalizedText(schema)) refuse(label);
+    return;
+  }
   const kind = schema['~kind'];
   if (kind === 'String') {
     if (!isSafeString(schema)) refuse(label);
@@ -231,11 +270,11 @@ export const platformRegistry = defineRegistry({
     },
     {
       type: 'Heading',
-      props: Type.Object({ text: plainText({ maxLength: 200 }), level: enumeration([2, 3, 4]) }, closed),
+      props: Type.Object({ text: localizedText({ maxLength: 200 }), level: enumeration([2, 3, 4]) }, closed),
     },
     {
       type: 'Text',
-      props: Type.Object({ text: plainText({ maxLength: 2_000 }) }, closed),
+      props: Type.Object({ text: localizedText({ maxLength: 2_000 }) }, closed),
     },
     {
       type: 'Slot',
@@ -261,7 +300,7 @@ export const platformRegistry = defineRegistry({
       type: 'SubjectList',
       props: Type.Object(
         {
-          title: plainText({ maxLength: 120 }),
+          title: localizedText({ maxLength: 120 }),
           property: curie(),
           limit: Type.Integer({ minimum: 1, maximum: 24 }),
         },
