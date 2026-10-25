@@ -832,8 +832,7 @@ function mediaPopulationRows(
   };
 }
 
-// Setup fails: importMediaFromUrl raises GrantDeniedError when parentCreationAuthorization finalizes wrapper evidence.
-test.skip('URL reservation stays within its bound as T grows', async () => {
+test('URL reservation stays within its bound as T grows', async () => {
   const route = 0;
   const { actor, access } = await createActor(route, mediaActions);
   await addGrant(route, mediaRoot.id, actor.accountId, 'media:import_from_url');
