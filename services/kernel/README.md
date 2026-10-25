@@ -70,6 +70,20 @@ database is removed at the end.
 Run `bun run check <path>...` to check named files and run any named test files; paths are relative to this workspace.
 The full `bun run check` is what the gate runs.
 
+| Resource          | Per check run                                                                                        | Per test file                                                                                               | Bound                                                                                                                                                                                                                 |
+| ----------------- | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Containers        | One PostgreSQL and one search container, both labelled `rezics.kernel.check.pid` and removed at exit | Reuses the run's containers                                                                                 | Each has a 1 GiB data tmpfs; search has a 512 MiB JVM heap. Stale cleanup reads one `docker ps` listing and does linear work only in labelled containers.                                                             |
+| Database copies   | Migrated `rezics` template plus at most one live `kernel_test_*` copy                                | Created from the template, dropped in `finally` after the file                                              | Disk is the template plus one copy and the largest file's writes, rather than all files' copies. `check-resources.test.ts` guards one live copy and a template of at most 256 MiB, a quarter of the PostgreSQL tmpfs. |
+| Connections       | Files run sequentially; no pool is retained between files                                            | The file closes its pools                                                                                   | Each pool has a fixed connection limit. `GrowthDatabase.close()` closes its instrumented pool (max 10) and admin pool (max 2).                                                                                        |
+| Growth-check data | Lives in the current file's database copy                                                            | Each population uses at most the largest scale times its declared per-unit ordinals, times rows per ordinal | Checks declare scales (default largest 64), populations and operation writes; reset data between checks. Seeding batches at most 1,000 ordinals or uses at most four concurrent production writes.                    |
+
+Findings: the sorted test-file list and total execution work grow with the number of files. Stale-cleanup listing
+memory and work grow with labelled containers, including concurrent checks and interrupted runs; live checks keep
+their containers. Growth checks do not automatically reset populations between checks, so distinct populations and
+operation writes can accumulate within a file unless it resets them. Capture memory grows with statements and plans
+in one operation. `GrowthDatabase` currently has no `openPool` API; if added, its pools must also be closed by
+`close()`.
+
 ## Growth checks
 
 A growth check proves that the cost of one operation stays within a declared bound as its data grows; it counts rows,
