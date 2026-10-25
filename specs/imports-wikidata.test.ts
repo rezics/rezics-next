@@ -42,7 +42,12 @@ function freeze(value: unknown): void {
     Object.values(value).forEach(freeze);
   }
 }
-function checked(driver: WikidataDriver, raw: unknown) {
+function checked(
+  driver: WikidataDriver,
+  raw: unknown,
+  phase: 'bootstrap' | 'resolved' = 'resolved',
+  revision = '24681012',
+) {
   expect(driver.converter_revision.trim().length).toBeGreaterThan(0);
   const view = driver.observe(raw);
   expect(view.outcome).toBe('converted');
@@ -50,12 +55,28 @@ function checked(driver: WikidataDriver, raw: unknown) {
   expect(new Set(view.proposals.map((p) => p.command)).size).toBe(view.proposals.length);
   const commands = view.proposals.map((p) => at<BatchCommand>(raw, p.command));
   expect(checkBatchWrite({ commands })).toEqual([]);
-  expect(commands.filter((c) => c.op === 'create').length).toBeLessThanOrEqual(1);
+  expect(commands.filter((c) => c.op === 'create')).toHaveLength(phase === 'bootstrap' ? 1 : 0);
+  if (phase === 'bootstrap') expect(commands).toHaveLength(1);
   for (const command of commands) {
     expect(command.source.field_group).toBe('facts');
     expect(command).not.toHaveProperty('rights');
     expect(command.source.digest).toMatch(/^[0-9a-f]{64}$/);
-    if (command.op !== 'create') expect(command.subject).toBe(SUBJECT);
+    expect(command.source.record_revision).toBe(revision);
+    if (phase === 'bootstrap') {
+      expect(command.op).toBe('create');
+      expect(command.subject).not.toHaveProperty('id');
+      if (command.op === 'create') {
+        expect(
+          Object.values(command.subject.statements ?? {})
+            .flat()
+            .some((s) => ['schema:abstract', 'schema:image'].includes(s.property.id)),
+        ).toBe(false);
+      }
+    } else {
+      expect(command.op).toBe('propose');
+      expect(command.subject).toBe(SUBJECT);
+      for (const key of ['type', 'labels', 'descriptions', 'aliases']) expect(command).not.toHaveProperty(key);
+    }
   }
   for (const proposal of view.proposals) {
     const command = at(raw, proposal.command);
@@ -74,12 +95,16 @@ function checked(driver: WikidataDriver, raw: unknown) {
       expect(at(raw, cite.reference)).toBeInstanceOf(Object);
       expect(at(raw, cite.source)).toBe('wikidata');
       expect(at(raw, cite.externalId)).toBe('Q571');
-      expect(String(at(raw, cite.sourceRevision))).toBe('24681012');
+      expect(String(at(raw, cite.sourceRevision))).toBe(revision);
       expect(at(raw, cite.license)).toBe('CC0-1.0');
       const url = new URL(at<string>(raw, cite.url));
       expect(url.protocol).toBe('https:');
       expect(url.hostname).toBe('www.wikidata.org');
       expect(['/wiki/Q571', '/entity/Q571', '/wiki/Special:EntityData/Q571.json']).toContain(url.pathname);
+    }
+    if (phase === 'resolved') {
+      for (const key of ['labels', 'descriptions', 'aliases', 'subjectType'] as const)
+        expect(proposal[key]).toBeUndefined();
     }
     for (const pointer of [
       proposal.labels,
@@ -91,7 +116,7 @@ function checked(driver: WikidataDriver, raw: unknown) {
       if (pointer !== undefined) inside(proposal.command, pointer);
     for (const pointer of proposal.statements) {
       const statement = at<BatchStatement>(raw, pointer);
-      if (statement.property.id === 'schema:name') {
+      if (phase === 'resolved' && statement.property.id === 'schema:name') {
         const actual = at<BatchCommand>(raw, proposal.command);
         expect(actual.op).toBe('propose');
         if (actual.op !== 'propose') throw new Error('Titles must be source candidates');
@@ -124,21 +149,25 @@ function invalid(driver: WikidataDriver, input: unknown) {
 test('Mapped Wikidata facts and terms are cited command proposals accepted by the semantic consumer', async () => {
   const driver = await loadWikidataDriver();
   const raw = driver.convert(fresh(), resolved, context);
-  const view = checked(driver, raw);
+  checked(driver, raw);
+  const bootstrap = driver.convert(fresh(), resolved);
+  const bootstrapView = checked(driver, bootstrap, 'bootstrap');
   expect(
-    view.proposals.flatMap((p) => (p.subjectType === undefined ? [] : [classMeaning(at(raw, p.subjectType))])),
+    bootstrapView.proposals.flatMap((p) =>
+      p.subjectType === undefined ? [] : [classMeaning(at(bootstrap, p.subjectType))],
+    ),
   ).toEqual(['http://schema.org/Book']);
   for (const [field, expected] of Object.entries({
     labels: { en: 'The Example Book', 'en-GB': 'Example Book' },
     descriptions: { en: 'A synthetic book work for conversion tests' },
     aliases: { en: ['Example Volume'] },
   })) {
-    const pointers = view.proposals.flatMap((p) => {
+    const pointers = bootstrapView.proposals.flatMap((p) => {
       const pointer = p[field as 'labels' | 'descriptions' | 'aliases'];
       return pointer === undefined ? [] : [pointer];
     });
     expect(pointers).toHaveLength(1);
-    expect(at(raw, pointers[0]!)).toEqual(expected);
+    expect(at(bootstrap, pointers[0]!)).toEqual(expected);
   }
   const facts = statements(driver, raw);
   expect(facts.filter((s) => s.property.id === 'schema:name').map((s) => s.value)).toEqual([
@@ -204,16 +233,18 @@ test('Changed supported source values flow into proposals instead of returning a
   sourceAuthor.qualifiers!.P1545[0]!.datavalue.value = '2';
   sourceAuthor.references![0]!.snaks.P854[0]!.datavalue.value = 'https://catalogue.example.org/books/changed';
   const raw = driver.convert(changed, resolved, context);
-  const view = checked(driver, raw);
+  checked(driver, raw);
+  const bootstrap = driver.convert(structuredClone(changed), resolved);
+  const bootstrapView = checked(driver, bootstrap, 'bootstrap');
   for (const [field, expected] of Object.entries({
     labels: { en: 'Another Example Book', 'en-GB': 'Example Book' },
     aliases: { en: ['Another Volume'] },
     descriptions: { en: 'A changed description' },
   })) {
     expect(
-      view.proposals.flatMap((p) => {
+      bootstrapView.proposals.flatMap((p) => {
         const pointer = p[field as 'labels' | 'aliases' | 'descriptions'];
-        return pointer === undefined ? [] : [at(raw, pointer)];
+        return pointer === undefined ? [] : [at(bootstrap, pointer)];
       }),
     ).toEqual([expected]);
   }
@@ -311,9 +342,7 @@ test('Revision citations track the exact entity revision while converter revisio
   const changed = fresh();
   changed.lastrevid = 24681013;
   const second = driver.convert(changed, resolved, context);
-  const view = driver.observe(second);
-  expect(view.outcome).toBe('converted');
-  expect(view.proposals.length).toBeGreaterThan(0);
+  const view = checked(driver, second, 'resolved', '24681013');
   for (const p of view.proposals) {
     expect(p.citations.length).toBeGreaterThan(0);
     for (const c of p.citations) expect(String(at(second, c.sourceRevision))).toBe('24681013');

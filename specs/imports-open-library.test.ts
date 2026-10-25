@@ -46,8 +46,8 @@ function freeze(record: unknown): void {
     Object.freeze(record);
   }
 }
-function converted(driver: OpenLibraryDriver, record: RecordPayload, supplied: ConversionContext = context) {
-  const result = driver.convert(record, supplied);
+function converted(driver: OpenLibraryDriver, record: RecordPayload, supplied: ConversionContext | null = context) {
+  const result = supplied === null ? driver.convert(record) : driver.convert(record, supplied);
   expect(result.outcome).toBe('converted');
   nonempty(driver.converter_revision);
   expect(result.converter_revision).toBe(driver.converter_revision);
@@ -55,9 +55,18 @@ function converted(driver: OpenLibraryDriver, record: RecordPayload, supplied: C
   expect(result.proposals.length).toBeGreaterThan(0);
   const proposed = structuredClone(result.proposals);
   expect(checkBatchWrite({ commands: proposed })).toEqual([]);
-  expect(proposed.filter((c) => c.op === 'create').length).toBeLessThanOrEqual(1);
+  expect(proposed.filter((c) => c.op === 'create')).toHaveLength(supplied === null ? 1 : 0);
+  if (supplied === null) expect(proposed).toHaveLength(1);
   for (const command of proposed) {
-    if (command.op !== 'create') expect(command.subject).toBe(supplied.subjectId);
+    if (supplied === null) {
+      expect(command.op).toBe('create');
+      expect(command.source.field_group).toBe('facts');
+      expect(command.subject).not.toHaveProperty('id');
+    } else {
+      expect(command.op).toBe('propose');
+      expect(command.subject).toBe(supplied.subjectId);
+      for (const key of ['type', 'labels', 'descriptions', 'aliases']) expect(command).not.toHaveProperty(key);
+    }
     expect(command.source.digest).toMatch(/^[0-9a-f]{64}$/);
     if (command.source.field_group === 'facts') expect(command).not.toHaveProperty('rights');
   }
@@ -83,7 +92,9 @@ function converted(driver: OpenLibraryDriver, record: RecordPayload, supplied: C
     }
     expect(pointer(command, ref.keyPath)).toBe(record.key);
     expect(pointer(command, ref.urlPath)).toBe(`https://openlibrary.org${record.key}`);
-    expect(pointer(command, ref.revisionPath)).toBe(record.revision);
+    expect(command.source.record_revision).toBe(String(record.revision));
+    const nativeRevision = pointer(command, ref.revisionPath);
+    expect(nativeRevision).toBe(typeof nativeRevision === 'number' ? record.revision : String(record.revision));
     expect(pointer(command, ref.lastModifiedPath)).toBe((record.last_modified as { value: string }).value);
     if (field.sourceValuePath !== undefined) {
       pointer(command, field.sourceValuePath);
@@ -92,7 +103,7 @@ function converted(driver: OpenLibraryDriver, record: RecordPayload, supplied: C
           (field.statementPath !== undefined && field.sourceValuePath.startsWith(`${field.statementPath}/qualifiers/`)),
       ).toBe(true);
     }
-    if (field.kind === 'title' || field.kind === 'isbn13' || field.kind === 'publishDate') {
+    if (supplied !== null && (field.kind === 'title' || field.kind === 'isbn13' || field.kind === 'publishDate')) {
       expect(command.op).toBe('propose');
       if (command.op !== 'propose') throw new Error('Mapped facts must be source candidates');
       expect(command.statement.property.id).toBe(
@@ -425,6 +436,12 @@ test('conversion is synchronous leaves frozen input intact and performs no netwo
   for (const result of results.slice(0, 2)) {
     expect(result.outcome).toBe('converted');
     expect(result.proposals.length).toBeGreaterThan(0);
+    expect(checkBatchWrite({ commands: result.proposals })).toEqual([]);
+    expect(result.proposals.filter((c) => c.op === 'create')).toHaveLength(0);
+    for (const command of result.proposals) {
+      expect(command.op).toBe('propose');
+      expect(command.subject).toBe(SUBJECT);
+    }
   }
   results.slice(2).forEach(rejected);
   expect(inputs).toEqual(before);
@@ -492,6 +509,11 @@ test('invalid ISBN-10 check digits never become identifier candidates', async ()
     if (result.outcome !== 'converted') noProposals(result);
     else {
       expect(checkBatchWrite({ commands: result.proposals })).toEqual([]);
+      expect(result.proposals.filter((c) => c.op === 'create')).toHaveLength(0);
+      for (const command of result.proposals) {
+        expect(command.op).toBe('propose');
+        expect(command.subject).toBe(SUBJECT);
+      }
       const statements = result.proposals.flatMap((c) =>
         c.op === 'propose' ? [c.statement] : c.op === 'create' ? Object.values(c.subject.statements ?? {}).flat() : [],
       );
@@ -514,4 +536,35 @@ test('absent author and work identifiers produce no relationship proposals', asy
   expect(output.accepted.flatMap((c) => (c.op === 'propose' ? [c.statement.property.id] : []))).not.toContain(
     'schema:exampleOfWork',
   );
+});
+
+test('Open Library bootstrap has one facts-only Book with creation labels and source provenance', async () => {
+  const driver = await loadOpenLibraryDriver();
+  for (const name of ['work', 'edition']) {
+    const record = await fixture(name);
+    const output = converted(driver, record, null);
+    const command = output.accepted[0]!;
+    expect(command.op).toBe('create');
+    if (command.op !== 'create') throw new Error('Expected bootstrap create');
+    expect(
+      command.subject.type
+        .replace(/^schema:/, 'http://schema.org/')
+        .replace(/^https:\/\/schema\.org\//, 'http://schema.org/'),
+    ).toBe('http://schema.org/Book');
+    expect<unknown>(Object.values(command.subject.labels)).toContain(record.title);
+    expect(command.source).toMatchObject({
+      source: 'open-library',
+      external_id: record.key,
+      record_revision: String(record.revision),
+      field_group: 'facts',
+    });
+    expect(output.fields.filter((f) => f.kind === 'cover' || f.kind === 'description')).toEqual([]);
+    expect(
+      Object.values(command.subject.statements ?? {})
+        .flat()
+        .some((s) => ['schema:abstract', 'schema:image'].includes(s.property.id)),
+    ).toBe(false);
+    expect(values(output, 'identity')).toEqual([record.key]);
+    expect(values(output, 'title')).toEqual([record.title]);
+  }
 });

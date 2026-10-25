@@ -6,6 +6,7 @@ import fsPromises from 'node:fs/promises';
 import { loadVndbDriver, type Path, type VndbDriver } from './imports-vndb-driver.ts';
 
 const SUBJECT = '00000000-0000-4000-8000-000000000001';
+const context = { subjectId: SUBJECT };
 const fixture = () => JSON.parse(readFileSync(new URL('./fixtures/imports/vndb/record.json', import.meta.url), 'utf8'));
 const hostileUrls: string[] = JSON.parse(
   readFileSync(new URL('./fixtures/imports/vndb/hostile-urls.json', import.meta.url), 'utf8'),
@@ -23,7 +24,7 @@ function at(root: unknown, path: Path): unknown {
 }
 
 /** Test-only bulk sink: real semantic structural validation, no writes. */
-function consume(driver: VndbDriver, output: unknown) {
+function consume(driver: VndbDriver, output: unknown, phase: 'bootstrap' | 'resolved' = 'resolved') {
   expect(output).toBeDefined();
   expect(output).not.toBeInstanceOf(Promise);
   const located = driver.locate(output);
@@ -32,7 +33,8 @@ function consume(driver: VndbDriver, output: unknown) {
   expect(located.proposals.length).toBeGreaterThan(0);
   const actual = located.proposals.map((path) => at(output, path));
   expect(checkBatchWrite({ commands: actual })).toEqual([]);
-  expect(actual.filter((c) => (c as { op: string }).op === 'create').length).toBeLessThanOrEqual(1);
+  expect(actual.filter((c) => (c as { op: string }).op === 'create')).toHaveLength(phase === 'bootstrap' ? 1 : 0);
+  if (phase === 'bootstrap') expect(actual).toHaveLength(1);
   expect(new Set(located.proposals.map((p) => JSON.stringify(p))).size).toBe(actual.length);
   const rights = located.sourceRights;
   expect(at(output, rights.databaseLicense)).toBe('ODbL-1.0');
@@ -44,6 +46,14 @@ function consume(driver: VndbDriver, output: unknown) {
     expect(typeof proposal).toBe('object');
     const accepted = driver.parseProposal(proposal);
     expect<unknown>(accepted).toEqual(proposal);
+    if (phase === 'bootstrap') {
+      expect(accepted.op).toBe('create');
+      expect(accepted.subject).not.toHaveProperty('id');
+    } else {
+      expect(accepted.op).toBe('propose');
+      expect(accepted.subject).toBe(SUBJECT);
+      for (const key of ['type', 'labels', 'descriptions', 'aliases']) expect(accepted).not.toHaveProperty(key);
+    }
     expect(accepted.source.field_group).toBe('facts');
     expect(accepted).not.toHaveProperty('rights');
     expect(accepted.source.digest).toMatch(/^[0-9a-f]{64}$/);
@@ -53,18 +63,27 @@ function consume(driver: VndbDriver, output: unknown) {
   });
 }
 
-function assertMetadata(driver: VndbDriver, output: unknown, id = 'v123', revision = 7, title = 'Sentinel Harbor') {
-  const commands = consume(driver, output);
+function assertMetadata(
+  driver: VndbDriver,
+  output: unknown,
+  id = 'v123',
+  revision = 7,
+  title = 'Sentinel Harbor',
+  phase: 'bootstrap' | 'resolved' = 'resolved',
+) {
+  const commands = consume(driver, output, phase);
   const facts = commands.flatMap((command) => command.facts);
   expect(facts).toEqual(
     expect.arrayContaining([
       expect.objectContaining({ kind: 'title', language: 'en', value: title }),
       expect.objectContaining({ kind: 'external-id', value: id }),
-      expect.objectContaining({ kind: 'type', value: 'visual-novel' }),
+      ...(phase === 'bootstrap' ? [expect.objectContaining({ kind: 'type', value: 'visual-novel' })] : []),
     ]),
   );
   expect(facts.filter((fact) => fact.kind === 'external-id').map((fact) => fact.value)).toEqual([id]);
-  expect(facts.filter((fact) => fact.kind === 'type').map((fact) => fact.value)).toEqual(['visual-novel']);
+  expect(facts.filter((fact) => fact.kind === 'type').map((fact) => fact.value)).toEqual(
+    phase === 'bootstrap' ? ['visual-novel'] : [],
+  );
   for (const { proposal, facts } of commands) {
     for (const fact of facts) {
       expect(['description', 'cover', 'user-content']).not.toContain(fact.kind);
@@ -77,7 +96,7 @@ function assertMetadata(driver: VndbDriver, output: unknown, id = 'v123', revisi
           'http://www.wikidata.org/entity/Q689445',
         );
       if (fact.kind !== 'type') expect(rawValue).toEqual(fact.value);
-      if (fact.kind === 'title') {
+      if (fact.kind === 'title' && phase === 'resolved') {
         expect(proposal.op).toBe('propose');
         if (proposal.op !== 'propose') throw new Error('Titles must be source candidates');
         expect(proposal.statement).toMatchObject({
@@ -89,7 +108,9 @@ function assertMetadata(driver: VndbDriver, output: unknown, id = 'v123', revisi
       expect(at(proposal, fact.fieldGroupPath)).toBe('facts');
       expect(at(proposal, fact.reference.source)).toBe('vndb');
       expect(at(proposal, fact.reference.externalId)).toBe(id);
-      expect(at(proposal, fact.reference.revision)).toBe(revision);
+      expect(proposal.source.record_revision).toBe(String(revision));
+      const nativeRevision = at(proposal, fact.reference.revision);
+      expect(nativeRevision).toBe(typeof nativeRevision === 'number' ? revision : String(revision));
       expect(at(proposal, fact.reference.url)).toBe(`https://vndb.org/${id}.${revision}`);
     }
   }
@@ -101,7 +122,7 @@ test('VNDB metadata becomes structurally accepted command proposals with exact r
   const output = driver.convert(fixture(), { subjectId: SUBJECT });
   const facts = assertMetadata(driver, output);
   const submitted = consume(driver, output);
-  expect(submitted.every(({ proposal }) => proposal.op === 'create' || proposal.subject === SUBJECT)).toBe(true);
+  expect(submitted.every(({ proposal }) => proposal.op === 'propose' && proposal.subject === SUBJECT)).toBe(true);
   expect(
     facts
       .filter((fact) => fact.kind === 'title')
@@ -125,17 +146,14 @@ test('VNDB changed source values and revisions change real proposals without inv
   for (const title of input.vn_titles) title.id = 'v124';
   input.vn_titles[0].title = 'Another Harbor';
   input.releases_vn[0].vid = input.vn_extlinks[0].id = 'v124';
-  const original = driver.convert(fixture());
-  const changed = driver.convert(input);
+  const original = driver.convert(fixture(), context);
+  const changed = driver.convert(input, context);
   expect(changed).not.toEqual(original);
-  const digests = (raw: unknown) =>
-    driver
-      .locate(raw)
-      .proposals.map((p) => (at(raw, p) as import('@rezics/definitions/bulk').BatchCommand).source.digest);
+  const digests = (raw: unknown) => consume(driver, raw).map(({ proposal }) => proposal.source.digest);
   expect(digests(changed)).not.toEqual(digests(original));
   const edited = fixture();
   edited.vn_titles[0].title = 'Changed title only';
-  const titleOnly = driver.convert(edited);
+  const titleOnly = driver.convert(edited, context);
   expect(digests(titleOnly)).not.toEqual(digests(original));
   assertMetadata(driver, titleOnly, 'v123', 7, 'Changed title only');
   expect(at(changed, driver.locate(changed).converterRevision)).toBe(
@@ -178,8 +196,8 @@ test('VNDB converter is synchronous deterministic and leaves deeply frozen sourc
   let first: unknown;
   let second: unknown;
   try {
-    first = driver.convert(input);
-    second = driver.convert(structuredClone(input));
+    first = driver.convert(input, context);
+    second = driver.convert(structuredClone(input), context);
     expect(calls).toEqual([]);
     expect(first).toEqual(second);
     expect(input).toEqual(before);
@@ -197,18 +215,21 @@ test('VNDB descriptions covers posts reviews accounts and private lists never re
   clean.vn.description = '';
   clean.vn.image = clean.vn.c_image = null;
   clean.images = [];
-  const output = driver.convert(dirty);
+  const output = driver.convert(dirty, context);
   assertMetadata(driver, output);
-  expect(output).toEqual(driver.convert(clean));
+  expect(output).toEqual(driver.convert(clean, context));
   expect(
-    driver.convert({
-      ...dirty,
-      future_extension: {
-        text: 'UNKNOWN_PRIVATE_SENTINEL',
-        rights: { license: 'CC0-1.0' },
-        converter_revision: 'forged',
+    driver.convert(
+      {
+        ...dirty,
+        future_extension: {
+          text: 'UNKNOWN_PRIVATE_SENTINEL',
+          rights: { license: 'CC0-1.0' },
+          converter_revision: 'forged',
+        },
       },
-    }),
+      context,
+    ),
   ).toEqual(output);
   // Inspect the complete output as well as observations; adapters cannot hide leaks.
   const serialized = JSON.stringify(output);
@@ -226,7 +247,7 @@ test('VNDB descriptions covers posts reviews accounts and private lists never re
 
 test('VNDB malformed identifiers wrong entity types and malformed field types reject instead of producing proposals', async () => {
   const driver = await loadVndbDriver();
-  assertMetadata(driver, driver.convert(fixture()));
+  assertMetadata(driver, driver.convert(fixture(), context));
   for (const id of ['', '123', 'v0', 'v-1', 'v01', 'r123', 'u123', 'w123', 'v123/../../u9', 'v123\n']) {
     const input = fixture();
     input.vn.id = id;
@@ -244,7 +265,7 @@ test('VNDB malformed identifiers wrong entity types and malformed field types re
 
 test('VNDB hostile source URLs reject without fetching or returning partial proposals', async () => {
   const driver = await loadVndbDriver();
-  assertMetadata(driver, driver.convert(fixture()));
+  assertMetadata(driver, driver.convert(fixture(), context));
   const calls: string[] = [];
   const fetch = spyOn(globalThis, 'fetch').mockImplementation(
     Object.assign(
@@ -265,4 +286,27 @@ test('VNDB hostile source URLs reject without fetching or returning partial prop
   } finally {
     fetch.mockRestore();
   }
+});
+
+test('VNDB unresolved bootstrap is one facts-only subject with creation labels and real provenance', async () => {
+  const driver = await loadVndbDriver();
+  const output = driver.convert(fixture());
+  assertMetadata(driver, output, 'v123', 7, 'Sentinel Harbor', 'bootstrap');
+  const { proposal } = consume(driver, output, 'bootstrap')[0]!;
+  if (proposal.op !== 'create') throw new Error('Expected bootstrap create');
+  expect(proposal.subject.labels).toEqual({ en: 'Sentinel Harbor', de: 'Harbor German Edition' });
+  expect(
+    Object.values(proposal.subject.statements ?? {})
+      .flat()
+      .some((s) => ['schema:abstract', 'schema:image'].includes(s.property.id)),
+  ).toBe(false);
+  expect(String(proposal.subject.type).replace(/^wd:/, 'http://www.wikidata.org/entity/')).toBe(
+    'http://www.wikidata.org/entity/Q689445',
+  );
+  expect(proposal.source).toMatchObject({
+    source: 'vndb',
+    external_id: 'v123',
+    record_revision: '7',
+    field_group: 'facts',
+  });
 });

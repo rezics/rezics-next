@@ -1,7 +1,10 @@
 /**
  * TEST ONLY. IMPORT_VNDB_DRIVER exports bindVndbDriver(): VndbDriver.
  * convert is the actual synchronous single-record function from the VNDB source
- * module of @rezics/conversion, passed through by reference. No COPY parsing,
+ * module of @rezics/conversion. Mechanical framing of this raw record as
+ * ConversionInput {external_id, record_revision, record} is permitted, deriving
+ * only its already-present native id/revision (or literal unversioned). Forward
+ * the grouped record unchanged; no mappings, policy or context resolution. No COPY parsing,
  * source rewriting, product behavior, SQL, network or storage belongs here.
  * converter_revision is that module's real explicit export, not a test constant.
  *
