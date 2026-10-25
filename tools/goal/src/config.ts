@@ -135,8 +135,8 @@ export type RuntimeOptions = {
 export function createRuntime(options: RuntimeOptions = {}): Runtime {
   const settings = options.settings ?? options.tasks?.settings ?? loadSettings();
   // Synthetic runtime fixtures may not contain the control-plane tree in their main checkout.
-  let startedCodeVersion: string | undefined;
-  try { startedCodeVersion = codeVersion(settings.mainCheckout, 'tools/goal'); } catch {}
+  const startedCodeVersion = existsSync(join(settings.mainCheckout, 'tools/goal'))
+    ? codeVersion(settings.mainCheckout, 'tools/goal') : undefined;
   const codeIsCurrent = () => startedCodeVersion === undefined
     || codeVersion(settings.mainCheckout, 'tools/goal') === startedCodeVersion;
   mkdirSync(dirname(settings.databasePath), { recursive: true });
