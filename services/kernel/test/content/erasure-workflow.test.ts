@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
-import { runCommand } from '../../src/command/command.ts';
+import { runCommand, type AuthoritativeTime, type CommandTransaction } from '../../src/command/command.ts';
 import { erasePostLogical } from '../../src/content/erase-post.ts';
 import { runAuthorErasure } from '../../src/content/erasure-workflow.ts';
 import { bindAuthorErasureWorkflow } from '../../src/content/erasure-workflow-identity.ts';
@@ -172,6 +172,19 @@ test('native initiation commits the provenance receipt required by durable initi
 test('the content initiator reader accepts only the committed operation source and creation receipt', async () => {
   const { readErasureInitiator } = await import('../../src/content/erasure-initiator.ts');
   const { durableInitiatorCommitment } = await import('../../src/access/durable-initiator-capture.ts');
+  async function inspect<T>(read: (tx: CommandTransaction, time: AuthoritativeTime) => Promise<T>) {
+    let value!: T;
+    const complete = new Error('Read complete; roll back without publishing an event');
+    try {
+      await runCommand(fixture.pool, { partition }, async (tx, { time }) => {
+        value = await read(tx, time);
+        throw complete;
+      });
+    } catch (error) {
+      if (error !== complete) throw error;
+    }
+    return { value };
+  }
   const selected = await scope(1);
   const request = context();
   const created = await beginAuthorErasure(
@@ -198,11 +211,11 @@ test('the content initiator reader accepts only the committed operation source a
     kind: 'content.author-erasure',
     sourceId: created.value.operationId,
   };
-  const observed = await runCommand(fixture.pool, { partition }, async (tx, { time }) => {
+  const observed = await inspect(async (tx, time) => {
     const record = await readErasureInitiator(tx, operation, time);
     expect(await readErasureInitiator(tx, { ...operation, sourceId: newId(route) }, time)).toBeNull();
     expect(await readErasureInitiator(tx, { ...operation, kind: 'content.other' }, time)).toBeNull();
-    return { value: record, events: [] };
+    return record;
   });
   expect(observed.value).toMatchObject({
     operation,
@@ -236,9 +249,8 @@ test('the content initiator reader accepts only the committed operation source a
      FROM content.operation WHERE route=$1 AND operation_id=$2`,
     [route, operation.id, copiedId],
   );
-  await runCommand(fixture.pool, { partition }, async (tx, { time }) => {
+  await inspect(async (tx, time) => {
     expect(await readErasureInitiator(tx, { ...operation, id: copiedId, sourceId: copiedId }, time)).toBeNull();
-    return { value: copiedId, events: [] };
   });
 });
 
