@@ -42,10 +42,10 @@ export class WorkerStore implements AttemptFence {
   commitMerge(ref: AttemptRef, merge: () => string): string {
     return this.write(ref, () => {
       const task = this.task(ref.taskId);
-      if (task.state === 'merged') throw new Error('attempt already merged');
+      if (task.state === 'integrated' || task.state === 'merged') throw new Error('attempt already integrated');
       const commit = merge();
       if (!commit) return '';
-      task.state = 'merged'; task.mergedCommit = commit; this.saveTask(task);
+      task.state = 'integrated'; task.integratedCommit = commit; this.saveTask(task);
       return commit;
     });
   }
@@ -62,7 +62,7 @@ export class WorkerStore implements AttemptFence {
       const after = brief.after ?? [];
       const dependencies = new Map(this.tasks().map(task => [task.id, task]));
       for (const dependency of after) if (!dependencies.has(dependency)) throw new Error(`unknown dependency task: ${dependency}`);
-      const state = after.every(dependency => dependencies.get(dependency)?.state === 'merged') ? 'ready' : 'held';
+      const state = after.every(dependency => ['integrated', 'merged'].includes(dependencies.get(dependency)?.state ?? '')) ? 'ready' : 'held';
       const sequence = (this.db.query('SELECT coalesce(max(sequence),0)+1 AS n FROM worker_tasks').get() as { n: number }).n;
       const task: Task = { id, sequence, brief, ...paths, taskClass, state, currentAttempt: 0, createdAt: new Date().toISOString() };
       this.db.query('INSERT INTO worker_tasks VALUES (?,?,?,?)').run(id, sequence, 0, JSON.stringify(task));
@@ -100,7 +100,7 @@ export class WorkerStore implements AttemptFence {
   nextAttempt(ref: AttemptRef, make: (n: number) => Attempt, configDirectory?: string): Attempt {
     return this.write(ref, () => {
       const task = this.task(ref.taskId);
-      if (task.state === 'merged' || task.state === 'cancelled') throw new Error(`cannot retry ${task.state} task`);
+      if (task.state === 'integrated' || task.state === 'merged' || task.state === 'cancelled') throw new Error(`cannot retry ${task.state} task`);
       if (ref.attempt) {
         const old = this.attempt(ref); old.state = 'superseded'; this.saveAttempt(old);
         const record = this.record(ref) ?? makeRecord(task, old, readMeasurement(old, { configDirectory }), 'superseded');

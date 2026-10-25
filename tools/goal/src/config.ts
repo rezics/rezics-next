@@ -168,7 +168,8 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     child.once('spawn', () => { child.unref(); resolve(); });
   });
   train = new MergeTrain({ mainCheckout: settings.mainCheckout, stateDirectory: settings.stateDirectory,
-    worktreeRoot: settings.worktreeRoot, mainBranch: settings.mainBranch, queue, fence: store, sink: job,
+    worktreeRoot: settings.worktreeRoot, mainBranch: settings.mainBranch, integrationBranch: settings.integrationBranch,
+    queue, fence: store, sink: job,
     runGate, gateIdentity: JSON.stringify(settings.gate), codeIsCurrent, handOff, ...options.train });
   const landing: IntegrationRuntime['landing'] = taskId => {
     const task = store.task(taskId), ref = { taskId, attempt: task.currentAttempt };

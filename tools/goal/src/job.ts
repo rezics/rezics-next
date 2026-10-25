@@ -253,17 +253,17 @@ export class WorkerJob implements GateOutcomeSink {
       record.firstFailure = outcome.firstFailure?.fingerprint ?? null; record.outcome = outcome.passed ? 'passed' : 'gate-failed';
       if (outcome.passed) {
         if (outcome.mergedCommit) {
-          store.updateTask(outcome, t => { t.state = 'merged'; t.mergedCommit = outcome.mergedCommit!; });
+          store.updateTask(outcome, t => { t.state = 'integrated'; t.integratedCommit = outcome.mergedCommit!; });
           const tasks = store.tasks(), byId = new Map(tasks.map(candidate => [candidate.id, candidate]));
           released = tasks.filter(candidate => candidate.state === 'held'
-            && (candidate.brief.after ?? []).every(id => byId.get(id)?.state === 'merged')).map(candidate => candidate.id);
+            && (candidate.brief.after ?? []).every(id => ['integrated', 'merged'].includes(byId.get(id)?.state ?? ''))).map(candidate => candidate.id);
           for (const taskId of released) {
             const candidate = store.task(taskId), ref = { taskId, attempt: candidate.currentAttempt };
             if (candidate.currentAttempt) store.updateHeldRetryTask(ref, current => { current.state = 'ready'; });
             else store.updateTask(ref, current => { current.state = 'ready'; });
           }
           const goalTasks = store.tasks().filter(candidate => candidate.brief.goal === task.brief.goal);
-          const goalInFlight = goalTasks.some(candidate => ['ready', 'running', 'landing', 'held'].includes(candidate.state));
+          const goalInFlight = goalTasks.some(candidate => ['ready', 'running', 'landing', 'held', 'integrated'].includes(candidate.state));
           const goalHasDependencies = goalTasks.some(candidate => (candidate.brief.after ?? []).length > 0);
           if (goalHasDependencies && !goalInFlight) {
             const event = { managerId: task.brief.manager, taskId: task.id, kind: 'goal-idle' as const,
@@ -286,7 +286,7 @@ export class WorkerJob implements GateOutcomeSink {
           record.escalation = 'spec-conflict';
           store.updateAttempt(outcome, a => { a.escalation = 'spec-conflict'; });
           store.updateTask(outcome, t => { t.state = 'stopped'; });
-          const detail = files.length ? `conflicted files: ${files.join(', ')}` : outcome.firstFailure?.assertion ?? 'conflict with current main';
+          const detail = files.length ? `conflicted files: ${files.join(', ')}` : outcome.firstFailure?.assertion ?? 'conflict with the current integration branch';
           const event = { managerId: task.brief.manager, taskId: task.id, kind: 'spec-conflict' as const,
             summary: `spec-conflict: repeated rebase conflict; ${detail}`.replace(/[\r\n]+/g, ' '), evidencePath };
           store.event(outcome, 'manager-event', event); this.inbox.deliver(event);

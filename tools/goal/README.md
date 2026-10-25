@@ -13,9 +13,10 @@ bun tools/goal/src/cli.ts attempts --json
 ```
 
 Run dispatch from a checkout of this repository after configuring local pools and writing a brief. The main checkout
-must have main checked out and be clean enough for Git to fast-forward. Workers commit on separate branches and do not
-rebase, merge or change acceptance tests. The controller rebases detached candidates, checks scope, runs gates on the
-merged result, then fast-forwards main. A passing attempt record is finalized through the real gate outcome sink.
+must have main checked out. Workers commit on separate branches and do not rebase, merge or change acceptance tests.
+The controller rebases detached candidates onto the integration branch (by default `dev`), checks scope and
+fast-forwards that branch without running a gate. Promotion to `main` is a separate step. A passing attempt record is
+finalized through the real integration outcome sink.
 
 Dispatch waits without a model for the child to exit, records its tokens and quota observations, saves its evidence,
 enqueues its landing request, and starts the train. A train releases its lease and checks the queue again, reacquiring
@@ -37,6 +38,8 @@ fields listed below; the empty policy object deliberately provides no account po
 ```json
 {
   "version": 1,
+  "integrationBranch": "dev",
+  "promotionParallelism": 4,
   "pools": [
     {
       "name": "<worker-pool>",
@@ -70,10 +73,12 @@ Only local policy determines unknown-quota admission, reserves and pacing. A ret
 quota failure excludes all aliases of that allowance before selecting another permitted pool. There is no credit
 purchase or reset-card redemption path.
 
-`mainCheckout`, `stateDirectory`, `worktreeRoot`, `mainBranch`, `branchPrefix`, `terminationGraceMs`,
+`mainCheckout`, `stateDirectory`, `worktreeRoot`, `mainBranch`, `integrationBranch`, `promotionParallelism`,
+`branchPrefix`, `terminationGraceMs`,
 `gate`, `routingFile` and `riskAreasFile` can be set locally. Git's common directory identifies the main checkout even
 when invoked from a linked worktree. Repository paths resolve against that main checkout. Pool configuration paths,
 usage files and executable paths containing a slash resolve against the local file's directory.
+`integrationBranch` defaults to `dev`; `promotionParallelism` defaults to `4` and caps concurrent promotion checks.
 
 | Environment variable | Override |
 | --- | --- |
@@ -84,7 +89,7 @@ usage files and executable paths containing a slash resolve against the local fi
 | `GOAL_CODEX_SERVICE_TIER` | Codex service tier for the invocation. |
 
 The `codex` settings layer exposes `serviceTier`, `compactTokens` by family, `solContextWindow` and `toolOutputTokens`.
-The `integration` layer exposes `gateTimeoutMs`, `gateConcurrency` (the first train remains sequential),
+The `integration` layer exposes `gateTimeoutMs`, `gateConcurrency`,
 `managerDirectory`, `inboxDirectory`, `managerSocket`, `tmuxSocket`, `tmuxCommand`, `termspacesCommand`, `tmuxSession`,
 `managerCompactTokens`, `supermanager` and `managerLimits` (`turns`, `turnsWithoutDecision`, `wallMs`). State, manager
 configuration, inbox signals and leases stay outside tracked source files. Unix manager sockets must fit the platform's
@@ -130,30 +135,29 @@ by durable task sequence, starting with `high`; retries retain the original prof
 Bulk text prompts prohibit translation services, scripts and character mappings. Workers return a structured result
 using `worker-result.schema.json`, including any concrete blocker and the approaches tried.
 
-## Landing, gates and attempt fencing
+## Integration, promotion and attempt fencing
 
 The tracked repository gate is `bun tools/goal/scripts/gate.ts`. It runs `bun install --frozen-lockfile` followed by
-`bun run check` from the clean train checkout's `tools/goal` directory. Task acceptance commands also run there, from
-the repository root, after the repository gate passes. Other repositories can override the local `gate` command.
-Neither gates nor dependency installation run in the main checkout or the worker's checkout.
+`bun run check` from an isolated checkout. Task acceptance commands are saved with the task for promotion. Integration
+rebases onto the integration branch, checks declared paths and fast-forwards that branch; it does not run gates or
+move `main`. Other repositories can override the local `gate` command. Gates and dependency installation never run in
+the main checkout or the worker's checkout.
 
-The train invalidates a gate when main moves, rebases again, and reruns it. A failing gate is compared with main at the
-same commit. Baseline results are cached durably by main commit and gate command, including the repository gate's
-identity. A changed main commit or command gets a new baseline. Main-only failures, setup problems and timeouts rerun
-the original profile without consuming a fix round.
+New tasks and retries branch from the integration branch. If it does not exist, the controller creates it from `main`.
+Held tasks become ready when each `after:` dependency is integrated or merged. Integrated tasks remain in flight until
+promotion completes; Goal completion still requires every scoped task to be merged and the gate to pass on `main`.
 
 When a rebase conflicts only in derived files, the train restores their upstream versions, regenerates them with the commands in `defaults.json`, stages them and continues; any other conflict fails at the rebase stage.
 
 Specification conflicts, tool failures and exhausted quota are attempt facts, parsed from a structured worker exit or
 native CLI failure, and stored on the attempt. A CLI failure before a session or commit is rerun once; a second
-consecutive launch failure or repeated environment fingerprint is escalated as stalled to the owning manager. Gate
-outcomes remain gate-only; assertion and fingerprint text have no special
-classification markers. A specification conflict reaches the manager inbox directly. Quota exhaustion chooses another
-allowed pool. Repeating the same first assertion after a fix round triggers one read-only Sol `medium` consultation;
+consecutive launch failure or repeated environment fingerprint is escalated as stalled to the owning manager. Integration
+does not run gates or classify assertion text. A specification conflict reaches the manager inbox directly. Quota
+exhaustion chooses another allowed pool. Repeating the same first assertion after a fix round triggers one read-only Sol `medium` consultation;
 the original profile receives its answer in a fresh session. Scope growth, stalls, failure after consultation and the
 two-fix-round limit reach the owning manager. An early success claim followed by a failed gate is recorded and continued.
 Generated files marked `linguist-generated=true` are excluded from estimate totals, while every changed file remains subject to declared-path checks.
-Rebase-stage conflicts with main receive one same-profile resolution attempt after the control plane starts that rebase in
+Rebase-stage conflicts with the integration branch receive one same-profile resolution attempt after the control plane starts that rebase in
 the task worktree; a second conflict goes to the manager as a specification conflict.
 
 Attempts persist the driver process identity alongside the worker identity. Orphan recovery waits for the worker group to exit, then settles its run log under the task lifecycle lease; unexpected driver exceptions are recorded as environment failures and delivered to the manager.
@@ -164,11 +168,12 @@ consultation bundle. Consultation input uses only these four artifacts, with pro
 disabled, a read-only sandbox and a bounded host deadline.
 
 Retry supersedes the old attempt and publishes the next sequence in `BEGIN IMMEDIATE`. The train's final fence check,
-`git merge --ff-only` and merged task-state publication run inside the same kind of transaction on the shared store.
-A concurrent retry therefore either invalidates the attempt before the merge check or observes an already merged
-attempt afterwards. Only after old worker and consultation process groups are identified, terminated and confirmed
-gone may a replacement launch. Linux `/proc` and Python 3's `os.pidfd_open` provide process identity and kernel exit
-notifications without a polling model or sleep loop. One lease module protects both lifecycle changes and the train.
+integration-branch fast-forward and integrated task-state publication run inside the same kind of transaction on the
+shared store. A concurrent retry therefore either invalidates the attempt before integration or observes an already
+integrated attempt afterwards. Only after old worker and consultation process groups are identified, terminated and
+confirmed gone may a replacement launch. Linux `/proc` and Python 3's `os.pidfd_open` provide process identity and
+kernel exit notifications without a polling model or sleep loop. One lease module protects both lifecycle changes and
+the train.
 
 ## Commands and managers
 
@@ -214,10 +219,10 @@ starts; its result remains valid while that commit is an ancestor of main, since
 commit. When the check finishes, the manager and its supermanager receive a waking `goal-met` or `goal-unmet` event.
 An unmet event includes the first gate failure in its summary and links to the completion evidence. A met event is
 delivered after the manager stops. Manager commands are attributed through `GOAL_MANAGER` or a registered Codex thread; workers get fresh session identities.
-Brief front matter can use `after: [task-id, ...]` to hold dispatch until each named task has merged; unknown task ids are
-refused, and already merged dependencies are ready immediately. For a Goal that uses `after`, once a merge leaves no ready,
-running, landing, or held tasks, the control plane delivers one waking `goal-idle` event to its manager; replayed merge
-outcomes do not deliver it again.
+Brief front matter can use `after: [task-id, ...]` to hold dispatch until each named task has integrated or merged;
+unknown task ids are refused, and already integrated or merged dependencies are ready immediately. For a Goal that uses
+`after`, once an integration leaves no ready, running, landing, held or integrated tasks, the control plane delivers one
+waking `goal-idle` event to its manager; replayed integration outcomes do not deliver it again.
 
 A manual smoke test for an authenticated local Codex manager is available without embedding any account name:
 

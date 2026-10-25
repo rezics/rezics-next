@@ -9,7 +9,7 @@ const failsWith = (file: string) => ['bun', '-e', `if (require('fs').existsSync(
 const requires = (file: string) => ['bun', '-e', `if (!require('fs').existsSync(${JSON.stringify(file)})) { console.error('AssertionError: missing feature'); process.exit(1); }`];
 const ancestor = (cwd: string, older: string, newer: string) => expect(git(cwd, 'merge-base', older, newer)).toBe(older);
 
-test.failing('a passing worker branch integrates into dev without running the gate and main does not move', async () => {
+test('a passing worker branch integrates into dev without running the gate and main does not move', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev(); const main = h.head('main');
@@ -26,7 +26,7 @@ test.failing('a passing worker branch integrates into dev without running the ga
   } finally { h.dispose(); }
 });
 
-test.failing('integration into dev still refuses a scope violation and reports a rebase conflict against dev', async () => {
+test('integration into dev still refuses a scope violation and reports a rebase conflict against dev', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev(); const main = h.head('main');
@@ -45,7 +45,7 @@ test.failing('integration into dev still refuses a scope violation and reports a
   } finally { h.dispose(); }
 });
 
-test.failing('new tasks and retries branch from dev', async () => {
+test('new tasks and retries branch from dev', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev();
@@ -63,7 +63,7 @@ test.failing('new tasks and retries branch from dev', async () => {
   } finally { h.dispose(); }
 });
 
-test.failing('a held task is released when its dependency integrates into dev', async () => {
+test('a held task is released when its dependency integrates into dev', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev(); const main = h.head('main');
@@ -79,7 +79,7 @@ test.failing('a held task is released when its dependency integrates into dev', 
   } finally { h.dispose(); }
 });
 
-test.failing('dev is created from main when missing', async () => {
+test('dev is created from main when missing', async () => {
   const h = integrationHarness();
   try {
     const main = h.head('main');

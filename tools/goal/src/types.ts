@@ -41,7 +41,7 @@ export type PoolReading = {
 export type Task = {
   id: string; sequence: number; brief: Brief; briefPath: string; state: TaskState;
   worktree: string; branch: string; base: string; taskClass: TaskClass; currentAttempt: number;
-  createdAt: string; mergedCommit?: string;
+  createdAt: string; integratedCommit?: string; mergedCommit?: string;
 };
 export type AttemptFailure = 'spec-conflict' | 'scope-growth' | 'pool-exhausted' | 'tool';
 export type Attempt = AttemptRef & {

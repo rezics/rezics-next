@@ -50,6 +50,19 @@ export class TaskHeldForDependenciesError extends Error {
 export class WorkerTasks {
   constructor(readonly settings: Settings, readonly store: WorkerStore, readonly reader: PoolReader = readPool,
     readonly launcher: typeof launch = launch) {}
+  private integrationHead(): string {
+    const reference = `refs/heads/${this.settings.integrationBranch}`;
+    try { return git(this.settings.mainCheckout, ['rev-parse', '--verify', reference]); }
+    catch {
+      const main = git(this.settings.mainCheckout, ['rev-parse', '--verify', `refs/heads/${this.settings.mainBranch}`]);
+      try { git(this.settings.mainCheckout, ['branch', '--', this.settings.integrationBranch, main]); }
+      catch (error) {
+        try { return git(this.settings.mainCheckout, ['rev-parse', '--verify', reference]); }
+        catch { throw error; }
+      }
+      return main;
+    }
+  }
   private validateBrief(briefFile: string, excludingTask?: string): { brief: ReturnType<typeof parseBrief>; taskClass: Task['taskClass'] } {
     const markdown = readFileSync(briefFile, 'utf8');
     const brief = parseBrief(markdown, readRiskOwnership(this.settings.riskAreasFile));
@@ -68,11 +81,11 @@ export class WorkerTasks {
     const briefPath = join(this.settings.stateDirectory, 'briefs', `${id}.md`);
     const lease = acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', 'dispatch'));
     try {
-      const base = git(this.settings.mainCheckout, ['rev-parse', '--verify', this.settings.mainBranch]);
+      const base = this.integrationHead();
       mkdirSync(dirname(worktree), { recursive: true });
       mkdirSync(dirname(briefPath), { recursive: true });
       writeFileSync(briefPath, brief.markdown, { flag: 'wx' });
-      git(this.settings.mainCheckout, ['worktree', 'add', '-b', branch, worktree, this.settings.mainBranch]);
+      git(this.settings.mainCheckout, ['worktree', 'add', '-b', branch, worktree, base]);
       installWorktreeDependencies(worktree);
       return this.store.createTask(brief, { branch, worktree, briefPath, base }, taskClass, id);
     } finally { lease.release(); }
@@ -85,35 +98,34 @@ export class WorkerTasks {
   async retryHeld(taskId: string): Promise<RunningWorker> {
     const task = this.store.task(taskId);
     if (task.state !== 'ready' || !task.brief.after.length) throw new Error('only a released held task can be started');
-    const moved = this.moveToMain(task);
-    const worker = await this.retryTask(taskId, moved ? {} : { escalation: 'rebase-conflict' });
-    if (!worker) throw new Error('released task was unexpectedly held again');
-    return worker;
-  }
-  /** Move a task that waited for others onto current main; null when its own commits conflict. */
-  private moveToMain(task: Task): Task | null {
-    const taskId = task.id;
-    const main = git(this.settings.mainCheckout, ['rev-parse', '--verify', this.settings.mainBranch]);
+    const integration = this.integrationHead();
     const commits = Number(git(task.worktree, ['rev-list', '--count', `${task.base}..HEAD`]));
     const branch = git(task.worktree, ['branch', '--show-current']);
     if (branch !== task.branch) throw new Error(`held task worktree is on ${branch || 'detached HEAD'}, expected ${task.branch}`);
     if (commits > 0) {
-      const common = git(task.worktree, ['merge-base', task.base, main]);
-      if (common !== task.base) throw new HeldTaskConflictError('held task base is not an ancestor of current main');
+      const common = git(task.worktree, ['merge-base', task.base, integration]);
+      if (common !== task.base) throw new HeldTaskConflictError('held task base is not an ancestor of the current integration branch');
       const currentAttempt = task.currentAttempt ? this.store.attempt({ taskId, attempt: task.currentAttempt }) : null;
       const logPath = currentAttempt?.logPath ?? join(this.settings.stateDirectory, 'runs', taskId, 'release-rebase.log');
       mkdirSync(dirname(logPath), { recursive: true });
-      try { rebaseOnto(task.worktree, main, task.base, `${logPath}.rebase`); }
+      try { rebaseOnto(task.worktree, integration, task.base, `${logPath}.rebase`); }
       catch (error) {
         const conflicts = git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z']).split('\0').filter(Boolean);
         if (!conflicts.length) throw error;
         git(task.worktree, ['rebase', '--abort']);
         return null;
       }
-    } else git(task.worktree, ['reset', '--hard', main]);
+    } else git(task.worktree, ['reset', '--hard', integration]);
+    if (task.currentAttempt) {
+      task = this.store.updateHeldRetryTask({ taskId, attempt: task.currentAttempt }, current => { current.base = integration; });
+    } else {
+      task = this.store.updateTask({ taskId, attempt: 0 }, current => { current.base = integration; });
+    }
     installWorktreeDependencies(task.worktree);
-    if (task.currentAttempt) return this.store.updateHeldRetryTask({ taskId, attempt: task.currentAttempt }, current => { current.base = main; });
-    return this.store.updateTask({ taskId, attempt: 0 }, current => { current.base = main; });
+    const worker = await this.retryTask(taskId, {});
+    if (!worker) throw new Error('released task was unexpectedly held again');
+    return worker;
+
   }
   private async retryTask(taskId: string, options: RetryOptions): Promise<RunningWorker | null> {
     const lease = acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', taskId));
@@ -128,7 +140,7 @@ export class WorkerTasks {
       const nextTaskClass = reshaped?.taskClass ?? task.taskClass;
       if (!nextBrief.acceptance.command.length) throw new Error('Imported attempts need a dispatchable contract before retry');
       const byId = new Map(this.store.tasks().map(candidate => [candidate.id, candidate]));
-      if (reshaped && nextBrief.after.some(id => byId.get(id)?.state !== 'merged')) {
+      if (reshaped && nextBrief.after.some(id => !['integrated', 'merged'].includes(byId.get(id)?.state ?? ''))) {
         const briefPath = join(this.settings.stateDirectory, 'briefs', `${taskId}-held-${crypto.randomUUID()}.md`);
         mkdirSync(dirname(briefPath), { recursive: true });
         writeFileSync(briefPath, nextBrief.markdown, { flag: 'wx' });
@@ -187,23 +199,27 @@ export class WorkerTasks {
         });
       } else task = this.store.task(taskId);
       try {
-        let prompt: string;
-        if (options.escalation === 'rebase-conflict') {
-          const main = git(this.settings.mainCheckout, ['rev-parse', '--verify', `refs/heads/${this.settings.mainBranch}`]);
-          const tip = git(task.worktree, ['rev-parse', 'HEAD']);
-          const originalBase = git(task.worktree, ['merge-base', tip, main]);
-          const rebaseLog = `${next.logPath}.rebase`;
-          mkdirSync(dirname(rebaseLog), { recursive: true });
-          let files: string[] = [];
-          try { rebaseOnto(task.worktree, main, originalBase, rebaseLog); }
-          catch (error) {
-            files = git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z']).split('\0').filter(Boolean);
-            if (!files.length) throw error;
-          }
-          if (!files.length) installWorktreeDependencies(task.worktree);
-          if (!files.length) files = options.conflictFiles ?? [];
-          prompt = workerPrompt(task, options.evidence, options.consultation, files);
-        } else prompt = workerPrompt(task, options.evidence, options.consultation);
+        const integration = this.integrationHead();
+        const tip = git(task.worktree, ['rev-parse', 'HEAD']);
+        const rebaseLog = `${next.logPath}.rebase`;
+        mkdirSync(dirname(rebaseLog), { recursive: true });
+        let files: string[] = [];
+        let changedBase = false;
+        if (task.base !== integration) {
+          changedBase = true;
+          const commits = Number(git(task.worktree, ['rev-list', '--count', `${task.base}..${tip}`]));
+          if (commits > 0) {
+            try { rebaseOnto(task.worktree, integration, task.base, rebaseLog); }
+            catch (error) {
+              files = git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z']).split('\0').filter(Boolean);
+              if (!files.length) throw error;
+            }
+          } else git(task.worktree, ['reset', '--hard', integration]);
+        }
+        task = this.store.updateTask(next, current => { current.base = integration; });
+        if (!files.length && (changedBase || options.escalation === 'rebase-conflict')) installWorktreeDependencies(task.worktree);
+        if (!files.length && options.escalation === 'rebase-conflict') files = options.conflictFiles ?? [];
+        const prompt = workerPrompt(task, options.evidence, options.consultation, files);
         return await this.launcher(this.store, task, next, pool, prompt, this.settings.codex);
       }
       catch (error) {
@@ -222,7 +238,7 @@ export class WorkerTasks {
     try {
       const task = this.store.task(taskId);
       const ref = { taskId, attempt: task.currentAttempt };
-      if (task.state === 'merged' || task.state === 'cancelled') throw new Error(`cannot stop ${task.state} task`);
+      if (task.state === 'integrated' || task.state === 'merged' || task.state === 'cancelled') throw new Error(`cannot stop ${task.state} task`);
       if (!task.currentAttempt) { this.store.updateTask(ref, t => { t.state = cancelled ? 'cancelled' : 'stopped'; }); return; }
       const attempt = this.store.attempt(ref);
       if (attempt.state === 'stopped') {
@@ -230,7 +246,7 @@ export class WorkerTasks {
         return;
       }
       this.store.write(ref, () => {
-        if (this.store.task(taskId).state === 'merged') throw new Error('cannot stop merged task');
+        if (['integrated', 'merged'].includes(this.store.task(taskId).state)) throw new Error('cannot stop integrated task');
         if (attempt.state !== 'stopped' && attempt.state !== 'cancelled') {
           const pool = this.settings.pools.find(p => p.name === attempt.pool);
           const ended = this.store.updateAttempt(ref, a => { a.endedAt = new Date().toISOString(); a.after = pool ? this.reader(pool) : null; });

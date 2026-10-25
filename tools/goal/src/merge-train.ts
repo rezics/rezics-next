@@ -56,7 +56,7 @@ export function rebaseOnto(cwd: string, base: string, originalBase: string, logP
 export type TrainOptions = {
   mainCheckout: string; stateDirectory: string; worktreeRoot: string;
   queue: SqliteLandingQueue; fence: AttemptFence; sink: GateOutcomeSink;
-  runGate?: GateRunner; gateIdentity?: string; mainBranch?: string;
+  runGate?: GateRunner; gateIdentity?: string; mainBranch?: string; integrationBranch?: string;
   codeIsCurrent?: () => boolean; handOff?: () => void | Promise<void>;
   /** Test seams around the final synchronous Git operation and train shutdown. */
   merge?: (cwd: string, candidate: string) => void; beforeRelease?: () => Promise<void>;
@@ -129,6 +129,9 @@ export class MergeTrain {
     const o = this.options;
     const request = entry.request;
     const mainBranch = o.mainBranch ?? 'main';
+    const targetBranch = o.integrationBranch ?? mainBranch;
+    const integratesIntoDev = o.integrationBranch !== undefined;
+    const targetRef = `refs/heads/${targetBranch}`;
     const started = Date.now();
     const logPath = join(o.stateDirectory, `landing-${entry.id}.log`);
     writeFileSync(logPath, '');
@@ -142,25 +145,25 @@ export class MergeTrain {
       o.fence.assertCurrent(request);
       if (git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${mainBranch}`)
         throw new Error('The main checkout must already have main checked out');
-      const main = () => git(o.mainCheckout, 'rev-parse', `refs/heads/${mainBranch}`);
+      const target = () => git(o.mainCheckout, 'rev-parse', targetRef);
       // Recover an advance that committed before its outcome was saved.
-      let alreadyMerged = false;
+      let alreadyIntegrated = false;
       if (entry.candidate) {
-        try { git(o.mainCheckout, 'merge-base', '--is-ancestor', entry.candidate, mainBranch); alreadyMerged = true; } catch {}
+        try { git(o.mainCheckout, 'merge-base', '--is-ancestor', entry.candidate, targetBranch); alreadyIntegrated = true; } catch {}
       }
-      if (alreadyMerged && entry.candidate) {
+      if (alreadyIntegrated && entry.candidate) {
         result.passed = true; result.stage = 'merge'; result.mergedCommit = entry.candidate;
         return result;
       }
       const tip = git(o.mainCheckout, 'rev-parse', '--verify', `${request.branch}^{commit}`);
-      const originalBase = git(o.mainCheckout, 'merge-base', tip, main());
+      const originalBase = git(o.mainCheckout, 'merge-base', tip, target());
       mkdirSync(resolve(o.worktreeRoot), { recursive: true });
       git(o.mainCheckout, 'worktree', 'add', '--detach', trainTree, tip);
       added = true;
       for (;;) {
         o.fence.assertCurrent(request);
         delete result.firstFailure; delete result.failsOnMain; delete result.timedOut;
-        const base = main();
+        const base = target();
         stage = 'rebase';
         git(trainTree, 'reset', '--hard', tip);
         git(trainTree, 'clean', '-fdx');
@@ -172,43 +175,48 @@ export class MergeTrain {
         result.nonGeneratedDiffLines = diffLineCount(trainTree, base, result.nonGeneratedChangedFiles);
         const outside = outsideScope(result.changedFiles, request.declaredPaths);
         if (outside.length) throw new Error(`Changes outside declared paths: ${outside.join(', ')}`);
-        stage = 'gate';
         const candidate = git(trainTree, 'rev-parse', 'HEAD');
-        appendFileSync(logPath, `\nGate on ${candidate}, main ${base}\n`);
-        const gated = await runGate(request.gate, trainTree, logPath);
-        // A gate on an old main is never authoritative, including a red gate.
-        o.fence.assertCurrent(request);
-        if (main() !== base) continue;
-        if (!gated.passed) {
-          result.timedOut = gated.timedOut;
-          result.firstFailure = firstFailure(gated.output);
-          const key = JSON.stringify([o.gateIdentity ?? '', request.gate]);
-          let baseline = o.queue.baseline(base, key);
-          if (!baseline) {
-            git(trainTree, 'reset', '--hard', base);
-            git(trainTree, 'clean', '-fdx');
-            baseline = await runGate(request.gate, trainTree, logPath);
-            o.queue.saveBaseline(base, key, baseline);
-          }
+        if (!integratesIntoDev) {
+          stage = 'gate';
+          appendFileSync(logPath, `\nGate on ${candidate}, main ${base}\n`);
+          const gated = await runGate(request.gate, trainTree, logPath);
+          // A gate on an old main is never authoritative, including a red gate.
           o.fence.assertCurrent(request);
-          if (main() !== base) continue;
-          result.failsOnMain = !baseline.passed && firstFailure(baseline.output).fingerprint === result.firstFailure.fingerprint;
-          result.stage = stage;
-          return result;
+          if (target() !== base) continue;
+          if (!gated.passed) {
+            result.timedOut = gated.timedOut;
+            result.firstFailure = firstFailure(gated.output);
+            const key = JSON.stringify([o.gateIdentity ?? '', request.gate]);
+            let baseline = o.queue.baseline(base, key);
+            if (!baseline) {
+              git(trainTree, 'reset', '--hard', base);
+              git(trainTree, 'clean', '-fdx');
+              baseline = await runGate(request.gate, trainTree, logPath);
+              o.queue.saveBaseline(base, key, baseline);
+            }
+            o.fence.assertCurrent(request);
+            if (target() !== base) continue;
+            result.failsOnMain = !baseline.passed && firstFailure(baseline.output).fingerprint === result.firstFailure.fingerprint;
+            result.stage = stage;
+            return result;
+          }
+          // Gates may write files but may not replace the commit that was validated.
+          if (git(trainTree, 'rev-parse', 'HEAD') !== candidate) throw new Error('Gate changed the candidate commit');
+          git(trainTree, 'diff', '--quiet', 'HEAD', '--');
         }
-        // Gates may write files but may not replace the commit that was validated.
-        if (git(trainTree, 'rev-parse', 'HEAD') !== candidate) throw new Error('Gate changed the candidate commit');
-        git(trainTree, 'diff', '--quiet', 'HEAD', '--');
         stage = 'merge';
         o.queue.candidate(entry.id, candidate);
-        if (main() !== base) continue;
+        if (target() !== base) continue;
         if (git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${mainBranch}`)
-          throw new Error('Main checkout HEAD changed while the gate ran');
+          throw new Error('Main checkout HEAD changed while integrating');
         const advanced = o.fence.commitMerge(request, () => {
-          // Retry uses the same BEGIN IMMEDIATE lock through this check, Git and merged-state publication.
-          if (main() !== base) return '';
+          // Retry uses the same BEGIN IMMEDIATE lock through this check, Git and task-state publication.
+          if (target() !== base) return '';
           if (git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${mainBranch}`) throw new Error('Main checkout HEAD changed');
-          if (o.merge) o.merge(o.mainCheckout, candidate);
+          if (integratesIntoDev) {
+            try { git(o.mainCheckout, 'update-ref', targetRef, candidate, base); }
+            catch (error) { if (target() !== base) return ''; throw error; }
+          } else if (o.merge) o.merge(o.mainCheckout, candidate);
           else git(o.mainCheckout, 'merge', '--ff-only', '--no-edit', candidate);
           return candidate;
         });
