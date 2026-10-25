@@ -14,12 +14,20 @@ import { declareKernelWriteRates } from './write-rate-routes.ts';
 
 export type KernelDependencies = Parameters<typeof createApp>[0] & {
   routeKey: Uint8Array;
+  /** Trusted domain time only; authentication and request budgets retain real time. */
+  clock?: () => Date;
   commerce?: CommerceDependencies;
   search?: SearchService;
 };
 
 /** The route key must stay the same across restarts, or retries lose their receipts. */
 export function createKernel(dependencies: KernelDependencies) {
+  const sourceClock = dependencies.clock ?? (() => new Date());
+  const clock = () => {
+    const instant = sourceClock();
+    if (!(instant instanceof Date) || !Number.isFinite(instant.getTime())) throw new TypeError('Invalid command clock');
+    return instant;
+  };
   const factory = dependencies.access ?? createAccess;
   let access: Access | undefined;
   const resolveAccess = (config: AccessConfig) =>
@@ -41,6 +49,7 @@ export function createKernel(dependencies: KernelDependencies) {
   const content = contentRoutes(searched as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
+    clock,
     tokens,
     get access() {
       return resolveAccess({ actions: actionCatalogue(content) });

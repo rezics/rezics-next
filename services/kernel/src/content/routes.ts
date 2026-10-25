@@ -7,7 +7,6 @@ import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
 import { AuthenticationError } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
-import type { KeyRing } from '../tokens/seal.ts';
 import { sourceFenceRoutes } from './source-fence-routes.ts';
 import {
   ContentForbiddenError,
@@ -26,6 +25,7 @@ import {
   readBoard,
   readPost,
   readThread,
+  type ContentReadDependencies,
 } from './reads.ts';
 import {
   BoardResponseSchema,
@@ -40,7 +40,7 @@ import {
   ThreadResponseSchema,
 } from './schemas.ts';
 
-type Dependencies = ContentCommandDependencies & { tokens: KeyRing };
+type Dependencies = ContentCommandDependencies & ContentReadDependencies;
 const params = t.Object({ id: t.String() }, { additionalProperties: false });
 const readFailures = {
   400: problemSchema('invalid_request'),

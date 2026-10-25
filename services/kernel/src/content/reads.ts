@@ -25,7 +25,7 @@ import { pagePostCandidates } from './post-pages.ts';
 import { pageRevisionCandidates } from './revision-pages.ts';
 import read from './read-chain.sql';
 
-export type ContentReadDependencies = Readonly<{ pool: Pool; access: Access; tokens: KeyRing }>;
+export type ContentReadDependencies = Readonly<{ pool: Pool; access: Access; tokens: KeyRing; clock?: () => Date }>;
 export type { Actor };
 
 type Kind = 'board' | 'thread' | 'post' | 'revision';
@@ -333,6 +333,7 @@ async function list(
   limit: number,
   postId?: string,
 ): Promise<Page<ItemView | RevisionView>> {
+  const clock = dependencies.clock ?? (() => new Date());
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new RangeError('Page limit must be 1 to 100');
   const root = postId
     ? await readPost(dependencies, threadId, postId, context)
@@ -348,7 +349,7 @@ async function list(
   };
   let after: Key | null = null;
   if (cursor !== undefined) {
-    const decoded = decodeCursor(dependencies.tokens, binding, cursor);
+    const decoded = decodeCursor(dependencies.tokens, binding, cursor, clock().getTime());
     if (
       !decoded.ok ||
       decoded.epoch !== root.anchor.epoch ||
@@ -399,7 +400,12 @@ async function list(
     anchor: final.anchor,
     nextCursor:
       more && after
-        ? encodeCursor(dependencies.tokens, binding, { epoch: final.anchor.epoch, after: [after.at, after.id] })
+        ? encodeCursor(
+            dependencies.tokens,
+            binding,
+            { epoch: final.anchor.epoch, after: [after.at, after.id] },
+            clock().getTime(),
+          )
         : null,
   };
 }

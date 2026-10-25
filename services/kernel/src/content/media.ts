@@ -82,7 +82,7 @@ export type MediaCompletionInput = Readonly<{
   byteCount: number;
   sha256: string;
 }>;
-export type MediaDependencies = Readonly<{ pool: Pool; access: Access }>;
+export type MediaDependencies = Readonly<{ pool: Pool; access: Access; clock?: () => Date }>;
 export type DownloadVariant = 'original' | `webp-${number}` | `avif-${number}`;
 export type DownloadDecision =
   | Readonly<{
@@ -274,7 +274,7 @@ export async function reserveMedia(
   };
   return runCommand(
     dependencies.pool,
-    { ...options(actor, r, 'content.media.reserve', body, context), authorization },
+    { ...options(actor, r, 'content.media.reserve', body, context), clock: dependencies.clock, authorization },
     async (tx, command) => {
       await reserveStatement.run(tx, {
         route: r,
@@ -356,7 +356,11 @@ export async function completeMedia(
   };
   return runCommand(
     dependencies.pool,
-    { ...options(actor, r, 'content.media.complete', [mediaId, body], context), authorization },
+    {
+      ...options(actor, r, 'content.media.complete', [mediaId, body], context),
+      clock: dependencies.clock,
+      authorization,
+    },
     async (tx, command) => {
       const rows = await completeStatement.run(tx, {
         route: r,
