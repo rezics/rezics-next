@@ -27975,6 +27975,7 @@
                   "type": "string"
                 }
               ],
+              "default": 20,
               "~elyTyp": 1
             }
           },
@@ -29451,6 +29452,7 @@
                   "type": "string"
                 }
               ],
+              "default": 20,
               "~elyTyp": 1
             }
           },

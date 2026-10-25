@@ -113,7 +113,11 @@ export async function insertAcceptance(
   const head = (expectedHead ?? 0) + 1;
   const result = await tx.query(
     `INSERT INTO semantic.acceptance (route, subject_id, context_id, candidate_id, head, verdict, revision)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT DO NOTHING RETURNING head`,
+     SELECT $1, $2, $3, $4, $5, $6, $7
+     WHERE COALESCE((SELECT head FROM semantic.acceptance
+       WHERE route = $1 AND subject_id = $2 AND context_id = $3 AND candidate_id = $4
+       ORDER BY head DESC LIMIT 1), 0) = $5 - 1
+     ON CONFLICT DO NOTHING RETURNING head`,
     [routeOf(subject), subject, context, candidate, head, verdict, revision],
   );
   if (!result.rowCount) throw new StaleEditorialHeadError();
@@ -133,7 +137,11 @@ export async function insertAdoption(
   const head = (expectedHead ?? 0) + 1;
   const result = await tx.query(
     `INSERT INTO semantic.adoption (route, subject_id, slot_id, context_id, head, mode, selection, revision)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT DO NOTHING RETURNING head`,
+     SELECT $1, $2, $3, $4, $5, $6, $7, $8
+     WHERE COALESCE((SELECT head FROM semantic.adoption
+       WHERE route = $1 AND subject_id = $2 AND slot_id = $3 AND context_id = $4
+       ORDER BY head DESC LIMIT 1), 0) = $5 - 1
+     ON CONFLICT DO NOTHING RETURNING head`,
     [routeOf(subject), subject, slotId(subject, property), context, head, mode, JSON.stringify(selection), revision],
   );
   if (!result.rowCount) throw new StaleEditorialHeadError();
@@ -170,7 +178,21 @@ export async function expandSlot(
   }
   if (state.adoption) {
     const { head, mode, selection, revision } = state.adoption;
-    await insertAdoption(tx, subject, property, GLOBAL_CONTEXT, head - 1 || null, mode, selection, revision);
+    // Materialize the virtual compact head, which can already represent several transactions.
+    await tx.query(
+      `INSERT INTO semantic.adoption (route, subject_id, slot_id, context_id, head, mode, selection, revision)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [
+        routeOf(subject),
+        subject,
+        slotId(subject, property),
+        GLOBAL_CONTEXT,
+        head,
+        mode,
+        JSON.stringify(selection),
+        revision,
+      ],
+    );
   }
   await tx.query(
     `INSERT INTO semantic.fact

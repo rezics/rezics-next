@@ -1,6 +1,7 @@
 import { afterAll, expect, test } from 'bun:test';
 import { createPool } from '../src/database/pool.ts';
 import { createKernel, type Kernel } from '../src/http/kernel.ts';
+import { openApiDocument } from '../src/http/openapi.ts';
 
 const pool = createPool('postgres://kernel.invalid/routes');
 afterAll(() => pool.end());
@@ -90,6 +91,15 @@ test("the kernel app's type, which is the Eden contract, carries exactly the rou
   );
   expect([complete, precise]).toEqual([true, true]);
   expect(served.sort()).toEqual([...typed].sort());
+});
+
+test('semantic editorial listings document their default page size', () => {
+  const paths = openApiDocument(createKernel({ pool, routeKey: new Uint8Array(32) })).paths;
+  for (const path of ['/v1/subjects/{id}/candidates', '/v1/subjects/{id}/revisions']) {
+    expect(paths[path]!.get!.parameters).toContainEqual(
+      expect.objectContaining({ name: 'limit', in: 'query', schema: expect.objectContaining({ default: 20 }) }),
+    );
+  }
 });
 
 test('subject HTTP rejects document and media values before attempting storage', async () => {

@@ -75,7 +75,8 @@ CREATE TABLE semantic.adoption (
     CONSTRAINT adoption_selection_check CHECK ((jsonb_typeof(selection) = 'array'::text)),
     CONSTRAINT adoption_selection_check1 CHECK ((jsonb_array_length(selection) <= 32)),
     CONSTRAINT adoption_selection_check2 CHECK ((NOT jsonb_path_exists(selection, '$[*]?(@."candidate".type() != "string" || @."rank" != "normal" && @."rank" != "preferred")'::jsonpath))),
-    CONSTRAINT adoption_selection_check3 CHECK ((NOT jsonb_path_exists(selection, '$[*]?(!(exists (@."candidate")) || !(exists (@."rank")))'::jsonpath)))
+    CONSTRAINT adoption_selection_check3 CHECK ((NOT jsonb_path_exists(selection, '$[*]?(!(exists (@."candidate")) || !(exists (@."rank")))'::jsonpath))),
+    CONSTRAINT adoption_selection_objects_check CHECK ((NOT jsonb_path_exists(selection, 'strict $[*]?(@.type() != "object")'::jsonpath)))
 );
 
 

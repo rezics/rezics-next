@@ -74,7 +74,7 @@ export const ItemInputSchema = t.Object(
 );
 
 const pageQuery = {
-  limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1 })),
+  limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1, default: 20 })),
   cursor: t.Optional(t.String()),
 };
 function candidateError(error: unknown): never {
@@ -363,7 +363,7 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
               subject: params.id,
               property: query.property,
               context: query.context ?? GLOBAL_CONTEXT,
-              limit: query.limit ?? 50,
+              limit: query.limit ?? 20,
               ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
               authorize: check,
             }),
@@ -402,7 +402,7 @@ function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeKey, toke
           const { component, ...result } = await admission.run('normal', job, () =>
             listRevisions(pool, tokens, {
               subject: params.id,
-              limit: query.limit ?? 50,
+              limit: query.limit ?? 20,
               ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
               authorize: check,
             }),
