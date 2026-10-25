@@ -82,7 +82,7 @@ function fixture() {
       }
       const object = objects.get(key);
       return object
-        ? new Response(object.bytes, {
+        ? new Response(Uint8Array.from(object.bytes).buffer, {
             headers: { 'content-type': object.mediaType, 'content-length': String(object.bytes.length) },
           })
         : xml('<Error><Code>NoSuchKey</Code></Error>', 404);
