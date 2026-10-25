@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { createAccess } from '../access/index.ts';
 import { payoutRoutes } from '../commerce/payout-routes.ts';
 import { commerceRoutes, type CommerceDependencies } from '../commerce/routes.ts';
+import type { ContentBoardDependencies } from '../content/boards.ts';
 import { contentRoutes } from '../content/routes.ts';
 import type { ContentRuntime } from '../content/runtime.ts';
 import type { Access, AccessConfig } from '../request/access.ts';
@@ -18,7 +19,7 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
   /** Trusted domain time only; authentication and request budgets retain real time. */
   clock?: () => Date;
   commerce?: CommerceDependencies;
-  content?: ContentRuntime;
+  content?: ContentRuntime & Pick<ContentBoardDependencies, 'cursorNow'>;
   search?: SearchService;
 };
 
@@ -55,6 +56,7 @@ export function createKernel(dependencies: KernelDependencies) {
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
     clock,
+    ...(dependencies.content?.cursorNow === undefined ? {} : { cursorNow: dependencies.content.cursorNow }),
     tokens,
     ...(dependencies.content?.fetchConfig === undefined ? {} : { fetchConfig: dependencies.content.fetchConfig }),
     ...(dependencies.content?.workflows === undefined ? {} : { workflows: dependencies.content.workflows }),

@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
-import { randomUUID } from 'node:crypto';
 import { runCommand } from '../../src/command/command.ts';
 import { readBatch, type CloudEvent } from '../../src/events/log.ts';
 import { applyBoardCandidate, createBoardEffect } from '../../src/content/board-projection.ts';
@@ -60,6 +59,11 @@ async function board() {
      VALUES ($1,$2,$3,'Current board','published',1,$2)`,
     [boardRoute, id, subject],
   );
+  for (const viewer of [fixture.actor, fixture.recipient]) {
+    // This Auth fixture's catalogue has bearer-only reads, so account requests
+    // use actual grants even for public boards. Anonymous requests use app's floor.
+    await fixture.grant(viewer, 'board:read', { route: boardRoute, id });
+  }
   return id;
 }
 async function thread(boardId: string, text = 'current searchable sentinel', at = '2026-10-24T00:00:00.000Z') {
@@ -169,6 +173,16 @@ test('signed cursors bind board normalized query sort verified viewer epoch and 
   await invalid(path(id, { cursor, query: 'searchable', sort: 'oldest' }));
   await invalid(path(id, { cursor: `${cursor.slice(0, -4)}xxxx`, query: 'searchable' }));
   await invalid(path(id, { cursor, query: 'searchable' }), bearer);
+  const members = await db.admin.query(
+    'SELECT thread_id,first_post_id FROM content.thread WHERE route=$1 AND board_id=$2',
+    [threadRoute, id],
+  );
+  for (const row of members.rows) {
+    for (const viewer of [fixture.actor, fixture.recipient]) {
+      await fixture.grant(viewer, 'thread:read', { route: threadRoute, id: row.thread_id });
+      await fixture.grant(viewer, 'post:read', { route: threadRoute, id: row.first_post_id });
+    }
+  }
   const member = await get(path(id, { limit: '1' }), bearer);
   expect(member.response.status).toBe(200);
   await invalid(path(id, { cursor: member.body.next }), otherBearer);

@@ -1,3 +1,4 @@
+import { listBoardThreads, type ContentBoardDependencies } from './boards.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import { withConnection } from '../database/pool.ts';
@@ -30,10 +31,11 @@ import {
   readBoard,
   readPost,
   readThread,
-  type ContentReadDependencies,
 } from './reads.ts';
 import {
   BoardResponseSchema,
+  BoardThreadsQuerySchema,
+  BoardThreadsResponseSchema,
   ContentPageQuerySchema,
   PostPageResponseSchema,
   RevisionPageResponseSchema,
@@ -45,7 +47,7 @@ import {
   ThreadResponseSchema,
 } from './schemas.ts';
 
-export type Dependencies = ContentCommandDependencies & ContentReadDependencies & ContentRuntime;
+export type Dependencies = ContentCommandDependencies & ContentBoardDependencies & ContentRuntime;
 const params = t.Object({ id: t.String() }, { additionalProperties: false });
 const readFailures = {
   400: problemSchema('invalid_request'),
@@ -86,6 +88,7 @@ const revisionInput = strictContentSchema(RevisionInputSchema);
 const threadResponse = strictContentSchema(ThreadResponseSchema);
 const postResponse = strictContentSchema(PostResponseSchema);
 const boardResponse = strictContentSchema(BoardResponseSchema);
+const boardThreadsResponse = strictContentSchema(BoardThreadsResponseSchema);
 const postPageResponse = strictContentSchema(PostPageResponseSchema);
 const revisionPageResponse = strictContentSchema(RevisionPageResponseSchema);
 
@@ -430,6 +433,25 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             return { post: post.value };
           }),
         ),
+    )
+    .get(
+      '/v1/boards/:id/threads',
+      {
+        params,
+        query: BoardThreadsQuerySchema,
+        response: { 200: withHeaders(boardThreadsResponse, sessionHeader), ...readFailures },
+        detail: { operationId: 'board.threads.list', 'x-action': 'thread:read', security: readSecurity },
+      },
+      async ({ params: { id }, query, actor, admission, job, session }) => {
+        existingId(id);
+        return contentOperation(() =>
+          admission.run('normal', job, async () => {
+            const page = await listBoardThreads(dependencies, id, { actor, deadline: job.deadline }, query);
+            for (const anchor of page.anchors) session.record(sessionComponent(anchor));
+            return { threads: [...page.entries], next: page.nextCursor };
+          }),
+        );
+      },
     )
     .get(
       '/v1/boards/:id',
