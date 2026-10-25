@@ -44,6 +44,9 @@ export type RetryOptions = { brief?: string; profile?: Profile; fixRound?: numbe
 export class HeldTaskConflictError extends Error {
   constructor(readonly detail: string) { super(detail); this.name = 'HeldTaskConflictError'; }
 }
+export class TaskHeldForDependenciesError extends Error {
+  constructor() { super('task held until its dependencies merge'); this.name = 'TaskHeldForDependenciesError'; }
+}
 export class WorkerTasks {
   constructor(readonly settings: Settings, readonly store: WorkerStore, readonly reader: PoolReader = readPool,
     readonly launcher: typeof launch = launch) {}
@@ -75,27 +78,47 @@ export class WorkerTasks {
     } finally { lease.release(); }
   }
   async retry(taskId: string, options: RetryOptions = {}): Promise<RunningWorker> {
-    return this.retryTask(taskId, options, false);
+    const worker = await this.retryTask(taskId, options);
+    if (!worker) throw new TaskHeldForDependenciesError();
+    return worker;
   }
   async retryHeld(taskId: string): Promise<RunningWorker> {
-    return this.retryTask(taskId, {}, true);
+    let task = this.store.task(taskId);
+    if (task.state !== 'ready' || !task.brief.after.length) throw new Error('only a released held task can be started');
+    const main = git(this.settings.mainCheckout, ['rev-parse', '--verify', this.settings.mainBranch]);
+    const commits = Number(git(task.worktree, ['rev-list', '--count', `${task.base}..HEAD`]));
+    const branch = git(task.worktree, ['branch', '--show-current']);
+    if (branch !== task.branch) throw new Error(`held task worktree is on ${branch || 'detached HEAD'}, expected ${task.branch}`);
+    if (commits > 0) {
+      const common = git(task.worktree, ['merge-base', task.base, main]);
+      if (common !== task.base) throw new HeldTaskConflictError('held task base is not an ancestor of current main');
+      const currentAttempt = task.currentAttempt ? this.store.attempt({ taskId, attempt: task.currentAttempt }) : null;
+      const logPath = currentAttempt?.logPath ?? join(this.settings.stateDirectory, 'runs', taskId, 'release-rebase.log');
+      mkdirSync(dirname(logPath), { recursive: true });
+      try { rebaseOnto(task.worktree, main, task.base, `${logPath}.rebase`); }
+      catch (error) {
+        const conflicts = git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z']).split('\0').filter(Boolean);
+        if (!conflicts.length) throw error;
+        git(task.worktree, ['rebase', '--abort']);
+        const worker = await this.retryTask(taskId, { escalation: 'rebase-conflict' });
+        if (!worker) throw new Error('released task was unexpectedly held again');
+        return worker;
+      }
+    } else git(task.worktree, ['reset', '--hard', main]);
+    installWorktreeDependencies(task.worktree);
+    if (task.currentAttempt) {
+      task = this.store.updateHeldRetryTask({ taskId, attempt: task.currentAttempt }, current => { current.base = main; });
+    } else {
+      task = this.store.updateTask({ taskId, attempt: 0 }, current => { current.base = main; });
+    }
+    const worker = await this.retryTask(taskId, {});
+    if (!worker) throw new Error('released task was unexpectedly held again');
+    return worker;
   }
-  private async retryTask(taskId: string, options: RetryOptions, refreshHeldBase: boolean): Promise<RunningWorker> {
+  private async retryTask(taskId: string, options: RetryOptions): Promise<RunningWorker | null> {
     const lease = acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', taskId));
     try {
       let task = this.store.task(taskId);
-      if (refreshHeldBase) {
-        if (task.state !== 'ready' || task.currentAttempt !== 0 || !task.brief.after.length)
-          throw new Error('only a released held task can be started from current main');
-        const main = git(this.settings.mainCheckout, ['rev-parse', '--verify', this.settings.mainBranch]);
-        const commits = Number(git(task.worktree, ['rev-list', '--count', `${task.base}..HEAD`]));
-        if (commits > 0) throw new HeldTaskConflictError(`held task has ${commits} commit(s) beyond its recorded base`);
-        const branch = git(task.worktree, ['branch', '--show-current']);
-        if (branch !== task.branch) throw new Error(`held task worktree is on ${branch || 'detached HEAD'}, expected ${task.branch}`);
-        git(task.worktree, ['reset', '--hard', main]);
-        installWorktreeDependencies(task.worktree);
-        task = this.store.updateTask({ taskId, attempt: 0 }, current => { current.base = main; });
-      }
       if (!task.branch || !task.base) throw new Error('Imported attempts need a dispatchable contract before retry');
       if (!['ready', 'running', 'landing', 'stopped'].includes(task.state)) throw new Error(`cannot retry ${task.state} task`);
       const reshaped = options.brief === undefined ? undefined : this.validateBrief(options.brief, taskId);
@@ -104,6 +127,16 @@ export class WorkerTasks {
       const nextBrief = reshaped?.brief ?? task.brief;
       const nextTaskClass = reshaped?.taskClass ?? task.taskClass;
       if (!nextBrief.acceptance.command.length) throw new Error('Imported attempts need a dispatchable contract before retry');
+      const byId = new Map(this.store.tasks().map(candidate => [candidate.id, candidate]));
+      if (reshaped && nextBrief.after.some(id => byId.get(id)?.state !== 'merged')) {
+        const briefPath = join(this.settings.stateDirectory, 'briefs', `${taskId}-held-${crypto.randomUUID()}.md`);
+        mkdirSync(dirname(briefPath), { recursive: true });
+        writeFileSync(briefPath, nextBrief.markdown, { flag: 'wx' });
+        this.store.updateHeldRetryTask({ taskId, attempt: task.currentAttempt }, current => {
+          current.brief = nextBrief; current.briefPath = briefPath; current.taskClass = nextTaskClass; current.state = 'held';
+        });
+        return null;
+      }
       const old = task.currentAttempt ? this.store.attempt({ taskId, attempt: task.currentAttempt }) : null;
       const oldConfigDirectory = old ? this.settings.pools.find(candidate => candidate.name === old.pool)?.configDirectory : undefined;
       const route = old ? { profile: old.profile, tableVersion: old.tableVersion, experiment: old.experiment }
@@ -124,7 +157,8 @@ export class WorkerTasks {
         escalation: options.escalation ?? null, before: readings.find(r => r.pool === pool.name) ?? null, after: null,
         exitCode: null, result: '', blocker: null, approaches: old?.approaches ?? [],
       });
-      const next = task.state === 'stopped' && task.currentAttempt > 0 ? this.store.retryStopped(taskId, make, oldConfigDirectory)
+      const next = task.currentAttempt > 0 && this.store.attempt({ taskId, attempt: task.currentAttempt }).state === 'stopped'
+        ? this.store.retryStopped(taskId, make, oldConfigDirectory)
         : this.store.nextAttempt({ taskId, attempt: task.currentAttempt }, make, oldConfigDirectory);
       // Include older groups after a controller crash between superseding and termination.
       for (const previous of this.store.attempts(taskId).filter(a => a.attempt < next.attempt && !a.supersededFinalized)) {

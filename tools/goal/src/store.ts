@@ -78,6 +78,17 @@ export class WorkerStore implements AttemptFence {
       this.saveTask(task); return task;
     });
   }
+  /** Update a ready or stopped task without creating or replacing an attempt. */
+  updateHeldRetryTask(ref: AttemptRef, update: (task: Task) => void): Task {
+    return this.db.transaction(() => {
+      const task = this.task(ref.taskId);
+      if (task.currentAttempt !== ref.attempt || (ref.attempt > 0 && this.attempt(ref).state !== 'stopped')
+        || !['ready', 'stopped', 'held'].includes(task.state)) throw new Error('task cannot be held for retry');
+      update(task);
+      if (task.id !== ref.taskId || task.currentAttempt !== ref.attempt) throw new Error('task identity cannot be updated');
+      this.saveTask(task); return task;
+    }).immediate();
+  }
   updateAttempt(ref: AttemptRef, update: (attempt: Attempt) => void): Attempt {
     return this.write(ref, () => {
       const attempt = this.attempt(ref); update(attempt);
@@ -158,8 +169,9 @@ export class WorkerStore implements AttemptFence {
   retryStopped(taskId: string, make: (n: number) => Attempt, configDirectory?: string): Attempt {
     return this.db.transaction(() => {
       const task = this.task(taskId);
-      if (task.state !== 'stopped') throw new Error('task is not stopped');
+      if (!['stopped', 'ready'].includes(task.state)) throw new Error('task is not stopped or released');
       const old = this.attempt({ taskId, attempt: task.currentAttempt });
+      if (old.state !== 'stopped') throw new Error('current attempt is not stopped');
       old.state = 'exited'; this.saveAttempt(old);
       return this.nextAttempt(old, make, configDirectory);
     }).immediate();

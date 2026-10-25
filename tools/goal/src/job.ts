@@ -10,7 +10,7 @@ import { consult } from './consult.ts';
 import { makeRecord, readMeasurement, reportedApproaches } from './records.ts';
 import { readRouting } from './routing.ts';
 import { settle } from './settle.ts';
-import { git, HeldTaskConflictError, type WorkerTasks, type RetryOptions } from './tasks.ts';
+import { git, HeldTaskConflictError, TaskHeldForDependenciesError, type WorkerTasks, type RetryOptions } from './tasks.ts';
 import type { ManagerEventKind } from './contracts.ts';
 import type { RunningWorker } from './launch.ts';
 
@@ -45,8 +45,8 @@ export class WorkerJob implements GateOutcomeSink {
     }
   }
   async start(taskId: string, options: RetryOptions = {}): Promise<void> {
-    const worker = await this.tasks.retry(taskId, options);
-    await this.follow(worker);
+    try { await this.follow(await this.tasks.retry(taskId, options)); }
+    catch (error) { if (!(error instanceof TaskHeldForDependenciesError)) throw error; }
   }
   private async startReleased(taskId: string): Promise<void> {
     try { await this.follow(await this.tasks.retryHeld(taskId)); }
@@ -55,7 +55,8 @@ export class WorkerJob implements GateOutcomeSink {
       const task = this.tasks.store.task(taskId), ref = { taskId, attempt: 0 };
       const event = { managerId: task.brief.manager, taskId, kind: 'spec-conflict' as const,
         summary: `spec-conflict: refusing to release task because ${error.detail}` };
-      this.tasks.store.updateTask(ref, current => { current.state = 'stopped'; });
+      if (task.currentAttempt) this.tasks.store.updateHeldRetryTask(ref, current => { current.state = 'stopped'; });
+      else this.tasks.store.updateTask(ref, current => { current.state = 'stopped'; });
       this.tasks.store.event(ref, 'manager-event', event);
       this.inbox.deliver(event);
     }
@@ -246,7 +247,11 @@ export class WorkerJob implements GateOutcomeSink {
           const tasks = store.tasks(), byId = new Map(tasks.map(candidate => [candidate.id, candidate]));
           released = tasks.filter(candidate => candidate.state === 'held'
             && (candidate.brief.after ?? []).every(id => byId.get(id)?.state === 'merged')).map(candidate => candidate.id);
-          for (const taskId of released) store.updateTask({ taskId, attempt: 0 }, candidate => { candidate.state = 'ready'; });
+          for (const taskId of released) {
+            const candidate = store.task(taskId), ref = { taskId, attempt: candidate.currentAttempt };
+            if (candidate.currentAttempt) store.updateHeldRetryTask(ref, current => { current.state = 'ready'; });
+            else store.updateTask(ref, current => { current.state = 'ready'; });
+          }
           const goalTasks = store.tasks().filter(candidate => candidate.brief.goal === task.brief.goal);
           const goalInFlight = goalTasks.some(candidate => ['ready', 'running', 'landing', 'held'].includes(candidate.state));
           const goalHasDependencies = goalTasks.some(candidate => (candidate.brief.after ?? []).length > 0);
