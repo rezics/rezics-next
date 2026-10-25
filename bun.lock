@@ -97,6 +97,7 @@
     "services/kernel": {
       "name": "@rezics/kernel",
       "dependencies": {
+        "@elysia/openapi": "2.0.0-rc.0",
         "@reylosql/postgres": "0.5.0",
         "elysia": "2.0.0-rc.0",
         "exact-mirror": "1.2.6",
@@ -231,6 +232,8 @@
     "@dbmate/linux-x64": ["@dbmate/linux-x64@2.37.0", "", { "os": "linux", "cpu": "x64" }, "sha512-tq9Y6aO+IeXvJ19/3Wt3BXMaqC+2WseSc5hRfIkErjdQV34ekCggAvfT5xO9oKWvXqFBUuhOLI/EGWA89ldVEA=="],
 
     "@dbmate/win32-x64": ["@dbmate/win32-x64@2.37.0", "", { "os": "win32", "cpu": "x64" }, "sha512-j66FzJqHRkqSA4aa8/Vyik34nXRpyRYKts80+8qchagreXfsrzfsD93IIAqfguAbRfBmDZab0ky0Ud9cf78R9Q=="],
+
+    "@elysia/openapi": ["@elysia/openapi@2.0.0-rc.0", "", { "peerDependencies": { "elysia": ">= 2.0.0-rc.0" } }, "sha512-IkRdigbDxqZpQzZ9Dg/HpJT2S4SUdRboVZ5umT0uYrUffJTRnb11seetF/gt96xqxbrWSZSlG8pxKtuabJ6NGg=="],
 
     "@emnapi/core": ["@emnapi/core@1.11.0", "", { "dependencies": { "@emnapi/wasi-threads": "1.2.2", "tslib": "^2.4.0" } }, "sha512-l9Oo58x0HOP5znGzVhYW9U3e5wVuA4LAZU2AGezTmkhO1CgQRFDhDg4nneHsu/t3WniXg9QrG2nIXL/ZS8ln8Q=="],
 

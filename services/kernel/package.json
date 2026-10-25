@@ -4,9 +4,11 @@
   "type": "module",
   "scripts": {
     "db": "bun scripts/database.ts",
+    "openapi": "bun scripts/openapi.ts",
     "check": "bun scripts/check.ts"
   },
   "dependencies": {
+    "@elysia/openapi": "2.0.0-rc.0",
     "@reylosql/postgres": "0.5.0",
     "elysia": "2.0.0-rc.0",
     "exact-mirror": "1.2.6",
