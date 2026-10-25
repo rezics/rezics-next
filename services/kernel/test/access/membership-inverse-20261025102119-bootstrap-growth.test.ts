@@ -103,7 +103,8 @@ test('one source-cursor bootstrap stays bounded and preserves historical reserva
   const commands = createMembershipInverseCommands({ pool: database.pool });
   const items: { accountId: string; reservationId: string; sourceTransactionId: string; holdTransactionId: string }[] =
     [];
-  // Each invocation changes exactly one membership, including the unmeasured warmup.
+  // Each invocation changes exactly one membership. The call below and the
+  // per-scale warmup hook bootstrap spare memberships so the measured item stays a first apply.
   async function item() {
     const accountId = newId(actorRoute);
     const groupId = newId(groupRoute);
@@ -155,10 +156,16 @@ test('one source-cursor bootstrap stays bounded and preserves historical reserva
     scales: [512, 2048, 8192],
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     repetitions: 1,
-    warmups: 0,
     async grow(db, scale, previous) {
       await seed(db, population, { from: previous, to: scale });
       input = await item();
+    },
+    async warmup() {
+      const spare = await item();
+      const outcome = await commands.bootstrapStep(spare);
+      expect(outcome.value.reservationId).toBe(spare.reservationId);
+      expect(outcome.value.sourceTransactionId).toBe(spare.sourceTransactionId);
+      expect(outcome.replayed).toBe(false);
     },
     async operation() {
       const outcome = await commands.bootstrapStep(input);

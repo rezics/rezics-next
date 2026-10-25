@@ -79,15 +79,25 @@ for (const mode of ['first', 'no-op', 'refusal'] as const) {
       "INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES (4660,$1,'actor','active',$3),(9029,$2,'actor','active',$3)",
       [person, other, transaction],
     );
-    // Warm only native transport/schema metadata; measured CLI processes stay cold.
+    // Establish the installation no-op and refusal replay against. First-install
+    // clears it again. Measured CLI processes stay one cold child per scale.
     await bootstrapGovernance(db.pool, person);
     if (mode === 'first') await clearInstallation();
     const children: GrowthSample[] = [];
+    // Same in-process statements as the measured call. Clearing around a first
+    // install keeps that probe fresh; the child CLI is not part of this warm-up.
+    const native = async (database: GrowthDatabase) => {
+      if (mode === 'first') await clearInstallation();
+      const id = mode === 'refusal' ? other : person;
+      if (mode === 'refusal') await expect(bootstrapGovernance(database.pool, id)).rejects.toThrow();
+      else expect((await bootstrapGovernance(database.pool, id)).replayed).toBe(mode === 'no-op');
+      if (mode === 'first') await clearInstallation();
+    };
     const report = await checkGrowth(db, {
       name: `governance bootstrap ${mode}`,
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       repetitions: 1,
-      warmups: 0,
+      warmup: native,
       async grow(database, scale, previous) {
         const ids = Array.from({ length: (scale - previous) * 500 }, () => newId(0));
         await database.admin.query(
@@ -134,11 +144,8 @@ for (const mode of ['first', 'no-op', 'refusal'] as const) {
           await database.admin.query(`ANALYZE ${table}`);
       },
       async operation(database, scale) {
-        if (mode === 'first') await clearInstallation();
+        await native(database);
         const id = mode === 'refusal' ? other : person;
-        if (mode === 'refusal') await expect(bootstrapGovernance(database.pool, id)).rejects.toThrow();
-        else expect((await bootstrapGovernance(database.pool, id)).replayed).toBe(mode === 'no-op');
-        if (mode === 'first') await clearInstallation();
         const output = resolve(directory, `capture-${mode}-${scale}.json`);
         const child = Bun.spawn(['bun', 'services/kernel/scripts/bootstrap-governance.ts', '--account', id], {
           cwd: root,

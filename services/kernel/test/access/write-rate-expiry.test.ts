@@ -149,14 +149,26 @@ test('one native statement uses the route-led expiry index and remains bounded t
       parameter: 'route',
     });
     expect(product.raw).not.toMatch(/\b(?:OFFSET|COUNT|SUM)\s*\(?/i);
+    // Same partition as the measured route, never chosen by the population: hot rows
+    // are pinned to `route` and cold rows leave the hot partition.
+    const spareRoute = route + 1;
     const report = await checkGrowth(db, {
       name: 'counter-expiry',
       scales: [1, 4, 16],
       repetitions: 1,
-      warmups: 0,
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       async grow(database, scale, previous) {
         await seed(database, population, { from: previous * 2048, to: scale * 2048 });
+        // One expiry batch the warmup can delete without taking the measured route's probe.
+        await database.admin.query(
+          `INSERT INTO access.write_rate_counter (route, identity_digest, family, count, expires_at)
+          SELECT $1, lpad(to_hex(i),64,'0'), 'write', 1, '2020-01-01'::timestamptz
+          FROM generate_series($2::integer,$3::integer) i`,
+          [spareRoute, 9_000_000 + previous * 1000, 9_000_000 + previous * 1000 + 999],
+        );
+      },
+      async warmup(database) {
+        expect(await expireWriteRateCounters(database.pool, spareRoute)).toBe(1000);
       },
       async operation(database) {
         const before = Number(

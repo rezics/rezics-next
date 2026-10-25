@@ -47,7 +47,6 @@ test('fixed native human and automated registrations and exact replay stay bound
     // schedule growth suite, one overlapping wake contributes at most six reads.
     slack: { statements: { absolute: 6, relative: 0 }, rows: { absolute: 6, relative: 0 } },
     repetitions: 2,
-    warmups: 0,
     grow: async (_database, scale, previous) => {
       for (let index = previous; index < scale; index++) {
         await f.host.workflows.register({

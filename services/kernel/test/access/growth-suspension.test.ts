@@ -224,10 +224,11 @@ afterAll(async () => {
 
 test('mounted suspension keeps full native formula, stage and counter cost bounded at 1/8/64 x 500', async () => {
   let positive = positives[0]!;
-  const exercise = async () => {
-    expect(
-      (await call(root.bearer, `/v1/accounts/${positive.accountId}:suspend`, {}, 'growth-positive')).response.status,
-    ).toBe(200);
+  let spare = positive;
+  const exercise = async (subject: { accountId: string }, freshKey: string) => {
+    expect((await call(root.bearer, `/v1/accounts/${subject.accountId}:suspend`, {}, freshKey)).response.status).toBe(
+      200,
+    );
     expect(
       (await call(root.bearer, `/v1/accounts/${recipient.accountId}:suspend`, {}, replayKey)).response.status,
     ).toBe(200);
@@ -238,9 +239,10 @@ test('mounted suspension keeps full native formula, stage and counter cost bound
     name: 'mounted native suspension',
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     repetitions: 1,
-    warmups: 0,
     async grow(database, scale, previous) {
       positive = positives[[1, 8, 64].indexOf(scale)]!;
+      // A fresh active account for the unmeasured suspend. The positive mutation stays one-shot.
+      spare = await person(`growth_warmup_${scale}`);
       // Unrelated account rows are produced by native pending registration;
       // no SQL fixture writes an account state, floor, fence or measured outcome.
       for (let start = previous * 500; start < scale * 500; start += 8) {
@@ -297,10 +299,13 @@ test('mounted suspension keeps full native formula, stage and counter cost bound
         (await call(root.bearer, `/v1/accounts/${recipient.accountId}:suspend`, {}, replayKey)).response.status,
       ).toBe(200);
     },
-    operation: exercise,
+    warmup: async (_database, scale) => {
+      await exercise(spare, `growth-warmup-${scale}`);
+    },
+    operation: () => exercise(positive, 'growth-positive'),
   });
   positive = positives[3]!;
-  const observed = await capture(db, exercise);
+  const observed = await capture(db, () => exercise(positive, 'growth-positive'));
   for (const fragment of [
     'access.account',
     'access.lifecycle_coordination',

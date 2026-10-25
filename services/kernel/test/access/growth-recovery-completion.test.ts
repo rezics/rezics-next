@@ -125,7 +125,6 @@ test('native completion growth independent of receipt history', async () => {
     // The native DBOS supervisor can overlap a capture with a bounded wake.
     slack: { statements: { absolute: 6, relative: 0 }, rows: { absolute: 6, relative: 0 } },
     repetitions: 3,
-    warmups: 0,
     async grow(_db, scale, previous) {
       for (let i = previous * 4; i < scale * 4; i++) {
         await recover();
