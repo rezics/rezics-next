@@ -88,19 +88,7 @@ test('rights enforce licence identifiers, distinct CC requirements and attributi
   expect(check({ ...command(), rights: { ...rights, attribution: '🐈'.repeat(500) } })).toEqual([]);
 });
 
-test('covers and summaries cannot be retracted or created, and rights stay on summaries', () => {
-  for (const field_group of ['summary', 'cover'] as const) {
-    expect(
-      check({
-        op: 'retract',
-        key: 'retract',
-        source: { ...source, field_group },
-        subject: command().subject,
-        candidate: command().subject,
-        references: command().statement.references,
-      }),
-    ).toEqual([{ pointer: '/commands/0/source/field_group', code: 'unsupported' }]);
-  }
+test('covers and summaries cannot be created, and rights stay on summaries', () => {
   expect(
     check({
       op: 'create',

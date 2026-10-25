@@ -242,11 +242,12 @@ export function checkBatchWrite(input: unknown, release?: Release): { pointer: s
           errors.splice(j, 1);
       errors.push({ pointer: `${pointer}/rights`, code: 'unsupported' });
     }
-    if (command.op !== 'propose') {
+    if (command.op === 'create') {
       if (group === 'summary' || group === 'cover')
         errors.push({ pointer: `${pointer}/source/field_group`, code: 'unsupported' });
       return;
     }
+    if (command.op !== 'propose') return;
     if (summary) {
       if (!Object.hasOwn(command, 'rights')) errors.push({ pointer: `${pointer}/rights`, code: 'required' });
       else if (

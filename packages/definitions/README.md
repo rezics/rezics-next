@@ -160,8 +160,9 @@ use Wikibase time precision 10 with day `00`, cite the source record, and omit
 the raw date string. An unresolved relation uses `somevalue` when the target is
 known by a Wikidata item URI, stored in a `schema:sameAs` qualifier; it never
 substitutes an external identifier for a REZICS subject id. If a converter has
-no identifier for a target, it proposes no relation for that target. Only
-`facts` supports `create` and `retract`. The following commands share this setup:
+no identifier for a target, it proposes no relation for that target. Only `facts` supports `create`;
+every group supports `propose` and `retract`, and a retraction carries no rights. The following
+commands share this setup:
 
 Each imported record fact cites the exact source record with its URL, its
 catalogued source identifier property, its source revision in `schema:version`,
