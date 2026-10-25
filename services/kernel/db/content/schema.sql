@@ -102,6 +102,29 @@ $$;
 
 
 --
+-- Name: guard_source_fence(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.guard_source_fence() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'Source fence identity must survive erasure' USING ERRCODE = '23514';
+  END IF;
+  IF ROW(NEW.route, NEW.source, NEW.external_id, NEW.field_group)
+      IS DISTINCT FROM ROW(OLD.route, OLD.source, OLD.external_id, OLD.field_group)
+    OR NEW.security_revision < OLD.security_revision
+    OR (NEW.taken_down IS DISTINCT FROM OLD.taken_down AND NEW.security_revision <= OLD.security_revision) THEN
+    RAISE EXCEPTION 'Source fence identity is immutable and changes require an increasing security revision'
+      USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: media_routes_match(integer, uuid[]); Type: FUNCTION; Schema: content; Owner: -
 --
 
@@ -332,6 +355,25 @@ ALTER TABLE ONLY content.revision ALTER COLUMN body SET COMPRESSION lz4;
 
 
 --
+-- Name: source_fences; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.source_fences (
+    route integer NOT NULL,
+    source text NOT NULL COLLATE pg_catalog."C",
+    external_id text NOT NULL COLLATE pg_catalog."C",
+    field_group text NOT NULL COLLATE pg_catalog."C",
+    taken_down boolean NOT NULL,
+    security_revision bigint NOT NULL,
+    CONSTRAINT source_fences_external_id_check CHECK ((((octet_length(external_id) >= 1) AND (octet_length(external_id) <= 1024)) AND (external_id !~ '[\u0001-\u001f\u007f-\u009f]'::text))),
+    CONSTRAINT source_fences_field_group_check CHECK ((field_group = ANY (ARRAY['facts'::text, 'summary'::text, 'cover'::text]))),
+    CONSTRAINT source_fences_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT source_fences_security_revision_check CHECK ((security_revision > 0)),
+    CONSTRAINT source_fences_source_check CHECK ((source ~ '^[a-z][a-z0-9_-]{0,31}$'::text))
+);
+
+
+--
 -- Name: thread; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -444,6 +486,14 @@ ALTER TABLE ONLY content.revision
 
 
 --
+-- Name: source_fences source_fences_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.source_fences
+    ADD CONSTRAINT source_fences_pkey PRIMARY KEY (route, source, external_id, field_group);
+
+
+--
 -- Name: thread thread_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -527,6 +577,13 @@ CREATE TRIGGER post_identity BEFORE UPDATE ON content.post FOR EACH ROW EXECUTE 
 --
 
 CREATE TRIGGER revision_immutable BEFORE DELETE OR UPDATE ON content.revision FOR EACH ROW EXECUTE FUNCTION content.guard_revision();
+
+
+--
+-- Name: source_fences source_fence_identity; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER source_fence_identity BEFORE DELETE OR UPDATE ON content.source_fences FOR EACH ROW EXECUTE FUNCTION content.guard_source_fence();
 
 
 --
