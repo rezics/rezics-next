@@ -43,9 +43,16 @@ test('a verified paid event delivered twice runs one unpartitioned workflow and 
   ]);
   expect(await fixture.events(order.id, 'entitlement.granted')).toHaveLength(1);
   expect(await fixture.state(order.id)).toMatchObject({ settlement: 'paid' });
+  const checkoutId = `checkout:${session.id}:${event.ref.eventId}`;
   const steps = await fixture.client.listWorkflowSteps(event.id);
   expect(steps?.map((step) => step.name)).toEqual([
     'commerce.resolveCheckout',
+    'commerce.checkoutSync',
+    'DBOS.getResult',
+  ]);
+  expect(await fixture.client.getWorkflow(checkoutId)).toMatchObject({ status: 'SUCCESS' });
+  const checkoutSteps = await fixture.client.listWorkflowSteps(checkoutId);
+  expect(checkoutSteps?.map((step) => step.name)).toEqual([
     'commerce.clock',
     'commerce.readCheckout',
     'commerce.applyCheckout',
@@ -53,10 +60,10 @@ test('a verified paid event delivered twice runs one unpartitioned workflow and 
   const receipts = (
     await fixture.pool.query(
       'SELECT idempotency_key AS receipt_key, partition_no FROM core.receipt WHERE command_kind=$1 AND idempotency_key=$2',
-      ['commerce.checkout.apply', `wf:${event.id}:apply`],
+      ['commerce.checkout.apply', `wf:${checkoutId}:apply`],
     )
   ).rows;
-  expect(receipts).toEqual([{ receipt_key: `wf:${event.id}:apply`, partition_no: partitionOf(routeOf(order.id)!) }]);
+  expect(receipts).toEqual([{ receipt_key: `wf:${checkoutId}:apply`, partition_no: partitionOf(routeOf(order.id)!) }]);
   expect(Date.parse((await fixture.state(order.id)).observed_at)).toBeGreaterThan(Date.parse('2026-01-01'));
 });
 
@@ -178,9 +185,10 @@ test('a worker killed between a durable read and apply recovers that read and gr
   ]);
   const before = fixture.transport.reads;
   const event = await fixture.deliver('checkout.session.completed', session.id);
+  const checkoutId = `checkout:${session.id}:${event.ref.eventId}`;
   try {
     await until(
-      () => fixture.client.listWorkflowSteps(event.id),
+      () => fixture.client.listWorkflowSteps(checkoutId),
       (steps) => !!steps?.some((step) => step.name === 'commerce.readCheckout'),
     );
     await fixture.stop();
