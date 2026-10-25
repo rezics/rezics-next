@@ -601,6 +601,7 @@ test('authorized create and revision replay cannot recover erased bytes from rec
     { key: createKey, revision: thread.revision },
     { key: editKey, revision: edited },
   ];
+  await minimizedCopies(thread, commands.map(({ revision }) => revision.id), bodies);
   const beforeReplay = await d().observe(thread);
   const originalCopies = await d().inspectCommandCopies(thread);
   const statuses: number[] = [];
@@ -627,9 +628,16 @@ test('authorized create and revision replay cannot recover erased bytes from rec
     expect(await ok(response)).toEqual({ id: thread.id, revision: tombstone });
     const exact = await d().read('author', thread, revision.id);
     expect(await ok(exact)).toEqual({ id: thread.id, revision: tombstone });
+    // Replaying creation must not move the current revision back to the original.
+    const current = await d().read('author', thread);
+    expect(await ok(current)).toEqual({
+      id: thread.id,
+      revision: { ...edited, body: null, availability: 'erased' },
+    });
     for (const body of bodies) {
       expect(await wire(response)).not.toContain(body);
       expect(await wire(exact)).not.toContain(body);
+      expect(await wire(current)).not.toContain(body);
     }
     expect(await d().observe(thread)).toEqual(erased);
     expect(await d().inspectCommandCopies(thread)).toEqual(erasedCopies);
@@ -645,4 +653,5 @@ test('authorized create and revision replay cannot recover erased bytes from rec
     expect(await wire(search)).not.toContain(body);
     expect(await wire(page)).not.toContain(body);
   }
+  await minimizedCopies(thread, commands.map(({ revision }) => revision.id), bodies);
 });

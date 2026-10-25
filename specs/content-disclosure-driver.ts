@@ -116,9 +116,10 @@ export interface ContentDisclosureDriver {
   /**
    * Read actual persisted receipt response payloads and outbox event payloads
    * for content commands in this target thread's scope, including delivered
-   * events. Arrays use stable row order and contain complete raw JSON payloads, with no redaction or
-   * reconstruction from adapter inputs/responses. Read-only DB observation;
-   * no policy emulation. close() removes these rows and recorded requests.
+   * events. Arrays use stable row order and contain complete raw JSON payloads,
+   * with no redaction or reconstruction from adapter inputs/responses. Read-only
+   * DB observation; no policy emulation. close() removes these rows and recorded
+   * requests.
    */
   inspectCommandCopies(target: Target): Promise<{ receipts: unknown[]; events: unknown[] }>;
   /** Privileged fixture visibility command; changes domain visibility only, never roles/grants. */
