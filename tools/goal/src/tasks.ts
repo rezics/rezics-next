@@ -96,7 +96,7 @@ export class WorkerTasks {
     return worker;
   }
   async retryHeld(taskId: string): Promise<RunningWorker> {
-    const task = this.store.task(taskId);
+    let task = this.store.task(taskId);
     if (task.state !== 'ready' || !task.brief.after.length) throw new Error('only a released held task can be started');
     const integration = this.integrationHead();
     const commits = Number(git(task.worktree, ['rev-list', '--count', `${task.base}..HEAD`]));
@@ -113,7 +113,9 @@ export class WorkerTasks {
         const conflicts = git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z']).split('\0').filter(Boolean);
         if (!conflicts.length) throw error;
         git(task.worktree, ['rebase', '--abort']);
-        return null;
+        const worker = await this.retryTask(taskId, { escalation: 'rebase-conflict', conflictFiles: conflicts });
+        if (!worker) throw new Error('released task was unexpectedly held again');
+        return worker;
       }
     } else git(task.worktree, ['reset', '--hard', integration]);
     if (task.currentAttempt) {
@@ -148,14 +150,6 @@ export class WorkerTasks {
           current.brief = nextBrief; current.briefPath = briefPath; current.taskClass = nextTaskClass; current.state = 'held';
         });
         return null;
-      }
-      // Every launch of a task that waited for others starts from a base that contains their merged work.
-      if (options.escalation !== 'rebase-conflict' && ['ready', 'stopped', 'held'].includes(task.state) && nextBrief.after.some(id => {
-        const merged = byId.get(id)?.mergedCommit;
-        return merged && spawnSync('git', ['merge-base', '--is-ancestor', merged, 'HEAD'], { cwd: task.worktree }).status !== 0;
-      })) {
-        const moved = this.moveToMain(task);
-        if (moved) task = moved; else options = { ...options, escalation: 'rebase-conflict' };
       }
       const old = task.currentAttempt ? this.store.attempt({ taskId, attempt: task.currentAttempt }) : null;
       const oldConfigDirectory = old ? this.settings.pools.find(candidate => candidate.name === old.pool)?.configDirectory : undefined;

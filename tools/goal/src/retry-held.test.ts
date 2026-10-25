@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { GateOutcome } from './contracts.ts';
 import { WorkerJob } from './job.ts';
@@ -61,7 +61,7 @@ test('a task stopped after its worker exited can be held behind an unmerged task
   } finally { h.dispose(); }
 });
 
-test('a stopped task retried after its dependencies merged starts from a base that contains them', async () => {
+test('a stopped task retried after its dependencies integrate starts from a base that contains them', async () => {
   const h = harness();
   try {
     const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
@@ -72,17 +72,26 @@ test('a stopped task retried after its dependencies merged starts from a base th
     expect(h.store.task(task.id).state).toBe('held');
     h.store.updateTask({ taskId: task.id, attempt: 0 }, t => { t.state = 'stopped'; });
     await job.start(dependency.id); await job.drain();
-    writeFileSync(join(h.root, 'dependency.txt'), 'merged\n');
-    git(h.root, 'add', 'dependency.txt'); git(h.root, 'commit', '-qm', 'Merge the dependency');
-    const main = git(h.root, 'rev-parse', 'main');
-    job.onGateOutcome(merged(dependency.id, main)); await job.drain();
-    expect(h.store.task(task.id).state).toBe('stopped');
+    const oldDev = git(h.root, 'rev-parse', 'dev');
+    const tree = join(h.root, '.temp/goal/dev-integration');
+    mkdirSync(join(h.root, '.temp/goal'), { recursive: true });
+    git(h.root, 'worktree', 'add', '--detach', tree, oldDev);
+    try {
+      writeFileSync(join(tree, 'dependency.txt'), 'integrated\n');
+      git(tree, 'add', 'dependency.txt'); git(tree, 'commit', '-qm', 'Integrate the dependency');
+      const dev = git(tree, 'rev-parse', 'HEAD');
+      git(h.root, 'update-ref', 'refs/heads/dev', dev, oldDev);
+      job.onGateOutcome(merged(dependency.id, dev)); await job.drain();
+      expect(h.store.task(dependency.id).state).toBe('integrated');
+      expect(h.store.task(task.id).state).toBe('stopped');
 
-    await job.start(task.id, { brief: waiting }); await job.drain();
-    const started = h.store.task(task.id);
-    expect(started.currentAttempt).toBe(1);
-    expect(started.base).toBe(main);
-    expect(spawnSync('git', ['merge-base', '--is-ancestor', main, 'HEAD'], { cwd: started.worktree }).status).toBe(0);
+      await job.start(task.id, { brief: waiting }); await job.drain();
+      const started = h.store.task(task.id);
+      expect(started.currentAttempt).toBe(1);
+      expect(started.base).toBe(dev);
+      expect(existsSync(join(started.worktree, 'dependency.txt'))).toBe(true);
+      expect(spawnSync('git', ['merge-base', '--is-ancestor', dev, 'HEAD'], { cwd: started.worktree }).status).toBe(0);
+    } finally { git(h.root, 'worktree', 'remove', '--force', tree); }
   } finally { h.dispose(); }
 });
 

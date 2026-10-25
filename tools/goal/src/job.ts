@@ -113,7 +113,7 @@ export class WorkerJob implements GateOutcomeSink {
     try { await this.follow(await this.tasks.retryHeld(taskId)); }
     catch (error) {
       if (!(error instanceof HeldTaskConflictError)) throw error;
-      const task = this.tasks.store.task(taskId), ref = { taskId, attempt: 0 };
+      const task = this.tasks.store.task(taskId), ref = { taskId, attempt: task.currentAttempt };
       const event = { managerId: task.brief.manager, taskId, kind: 'spec-conflict' as const,
         summary: `spec-conflict: refusing to release task because ${error.detail}` };
       if (task.currentAttempt) this.tasks.store.updateHeldRetryTask(ref, current => { current.state = 'stopped'; });
