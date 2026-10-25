@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { valueSchema, type Release } from '@rezics/definitions';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import type { Violation } from '../../src/semantic/item.ts';
 import { checkTyped } from '../../src/semantic/rules.ts';
 
 const GREGORIAN = 'http://www.wikidata.org/entity/Q1985727';
@@ -156,7 +157,9 @@ test('quantity bounds compare exact decimals and dates must exist at their preci
   ]);
   const published = (time: string, precision: number) =>
     edition({ 'schema:datePublished': [snak('schema:datePublished', date(time, precision))] });
-  const bad = [{ pointer: '/statements/schema:datePublished/0/value/content/time', code: 'invalid_format' }];
+  const bad: Violation[] = [
+    { pointer: '/statements/schema:datePublished/0/value/content/time', code: 'invalid_format' },
+  ];
   for (const [time, precision] of [
     ['+2024-02-29T00:00:00Z', 11],
     ['+1914-09-20T00:00:00Z', 11],
